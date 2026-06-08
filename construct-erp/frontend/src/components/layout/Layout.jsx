@@ -740,11 +740,17 @@ function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle }) {
   const [expandedGroup, setExpandedGroup] = useState(activeGroup || navGroups[0]?.label);
   const [hovered, setHovered] = useState(false);
   const { t } = useLanguage();
+  const location = useLocation();
 
   // When pinned open and route changes, auto-open the active group
   useEffect(() => {
     if (activeGroup && !collapsed) setExpandedGroup(activeGroup);
   }, [activeGroup, collapsed]);
+
+  // Auto-close hover expansion on every navigation (so sidebar hides after clicking a link)
+  useEffect(() => {
+    setHovered(false);
+  }, [location.pathname]);
 
   // Sidebar is fully visible when: pinned open (!collapsed) OR mouse is hovering
   const isExpanded = !collapsed || hovered;
@@ -753,14 +759,29 @@ function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle }) {
   const handleNavClick = () => setHovered(false);
 
   return (
-    <aside
+    // Outer wrapper keeps LAYOUT width fixed (64px auto-hide / 264px pinned).
+    // The inner <aside> uses position:absolute in auto-hide mode so it overlays
+    // content rather than pushing it — this is the fix for the "auto-hide" jank.
+    <div
       className="print:hidden desktop-sidebar"
+      style={{
+        width: collapsed ? 64 : 264,
+        flexShrink: 0,
+        position: 'relative',
+        zIndex: 45,
+        transition: 'width 0.22s ease',
+      }}
+    >
+    <aside
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
+        // auto-hide: absolute so expanding overlays content (no layout push)
+        // pinned:    relative so it takes space in the flex row
+        position: collapsed ? 'absolute' : 'relative',
+        top: 0, left: 0,
         width: isExpanded ? 264 : 64,
-        flexShrink: 0,
-        zIndex: 45,
+        height: '100%',
         background: '#FFFFFF',
         borderRight: '1px solid #E2E8F0',
         boxShadow: isExpanded ? '4px 0 18px rgba(15,23,42,0.10)' : '1px 0 10px rgba(15,23,42,0.04)',
@@ -870,6 +891,7 @@ function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle }) {
         </div>
       )}
     </aside>
+    </div>
   );
 }
 
