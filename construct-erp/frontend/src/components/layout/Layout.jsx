@@ -22,6 +22,8 @@ import { clsx } from 'clsx';
 import LoadingScreen from '../common/LoadingScreen';
 import { useLanguage, LANGUAGES } from '../../context/LanguageContext';
 import NotificationPanel, { useNotificationCount } from './NotificationPanel';
+import { initPushNotifications } from '../../utils/pushNotifications';
+import api from '../../api/client';
 
 // ── Navigation data ─────────────────────────────────────────────────────────
 const navGroups = [
@@ -1295,6 +1297,13 @@ export default function Layout() {
   const isProcurementPage = location.pathname.startsWith('/procurement');
   const currentLang = LANGUAGES.find(l => l.code === language) || LANGUAGES[0];
   const { title: pageTitle, group: pageGroup } = usePageTitle();
+
+  // Register device for push notifications (Android only — no-op in browser)
+  useEffect(() => {
+    if (user?.id) {
+      initPushNotifications(api).catch(() => {});
+    }
+  }, [user?.id]);
 
   // Ctrl+K → command palette
   useEffect(() => {

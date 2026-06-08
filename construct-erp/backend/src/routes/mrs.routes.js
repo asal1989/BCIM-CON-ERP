@@ -5,6 +5,7 @@ const { loadProjectScope, userCanAccessProject, appendProjectScope } = require('
 const { query, withTransaction } = require('../config/database');
 const { sendMail } = require('../services/mail.service');
 const { createNotification } = require('../controllers/notification.controller');
+const { sendPushToUsersByEmail, sendPushToUser } = require('../services/fcm.service');
 const router = express.Router();
 
 const DEFAULT_STORES_MRS_EMAILS = 'vijayan@bcim.in';
@@ -457,6 +458,14 @@ router.post('/', async (req, res) => {
     notifyStoresForNewMRS({ companyId: req.user.company_id, mrs: result });
     notifyProcurementForNewMRS({ companyId: req.user.company_id, mrs: result });
 
+    // Push notification to stores team
+    const storesEmails = parseEmails(process.env.MRS_STORES_NOTIFY_EMAILS, DEFAULT_STORES_MRS_EMAILS);
+    sendPushToUsersByEmail(req.user.company_id, storesEmails, {
+      title: `New MR Raised: ${mrsRef(result)}`,
+      body: `${result.raised_by_name || 'Site'} raised MR for ${result.project_name || 'a project'}. Needs stores approval.`,
+      data: { link: '/stores/mrs', type: 'mr_raised', related_id: result.id },
+    }).catch(() => {});
+
     res.status(201).json({ message: 'MRS submitted successfully', data: result });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -529,10 +538,20 @@ router.patch('/:id/reject', async (req, res) => {
 
     await query(
       `UPDATE material_requisitions
-       SET status = 'rejected', remarks = $1, updated_at = NOW()
-       WHERE id = $2`,
-      [remarks || 'Rejected by workflow', req.params.id]
+       SET status = 'rejected', rejected_by = $1, rejected_at = NOW(), remarks = $2, updated_at = NOW()
+       WHERE id = $3`,
+      [req.user.id, remarks || 'Rejected by workflow', req.params.id]
     );
+
+    // Push to MR raiser that their MR was rejected
+    if (mrs.rows[0].raised_by) {
+      sendPushToUser(mrs.rows[0].raised_by, {
+        title: `MR Rejected: ${mrsRef(mrs.rows[0])}`,
+        body: `Your material request was rejected by ${req.user.name || req.user.email}. ${remarks ? `Reason: ${remarks}` : ''}`,
+        data: { link: '/stores/mrs', type: 'mr_rejected', related_id: mrs.rows[0].id },
+      }).catch(() => {});
+    }
+
     res.json({ message: 'MRS rejected' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -590,6 +609,20 @@ router.patch('/:id/:stage', async (req, res) => {
     params.push(req.params.id);
     await query(`UPDATE material_requisitions SET ${setSql} WHERE id = $${params.length}`, params);
 
+    // Always push to MR raiser when any approval stage is done
+    if (mrs.rows[0].raised_by) {
+      const isFinalApproval = cfg.nextStatus === 'approved_md';
+      sendPushToUser(mrs.rows[0].raised_by, {
+        title: isFinalApproval
+          ? `MR Fully Approved: ${mrsRef(mrs.rows[0])}`
+          : `MR ${cfg.label}: ${mrsRef(mrs.rows[0])}`,
+        body: isFinalApproval
+          ? `Your material request for ${mrs.rows[0].project_name || 'the project'} has been fully approved.`
+          : `${cfg.label} completed by ${req.user.name || req.user.email} for ${mrs.rows[0].project_name || 'the project'}.`,
+        data: { link: '/stores/mrs', type: 'mr_approved', related_id: mrs.rows[0].id },
+      }).catch(() => {});
+    }
+
     if (cfg.nextStatus === 'approved_md') {
       const itemCount = await query(
         `SELECT COUNT(*)::int AS item_count FROM mrs_items WHERE mrs_id = $1::uuid`,
@@ -603,6 +636,15 @@ router.patch('/:id/:stage', async (req, res) => {
           item_count: itemCount.rows[0]?.item_count || 0,
         },
       });
+
+      // Also push to procurement + management for final approval
+      const procEmails = parseEmails(process.env.MRS_PROCUREMENT_NOTIFY_EMAILS, DEFAULT_PROCUREMENT_MRS_EMAILS);
+      const mgmtEmails = parseEmails(process.env.MRS_MGMT_NOTIFY_EMAILS, DEFAULT_MGMT_NOTIFY_EMAILS);
+      sendPushToUsersByEmail(req.user.company_id, [...new Set([...procEmails, ...mgmtEmails])], {
+        title: `MR Fully Approved: ${mrsRef(mrs.rows[0])}`,
+        body: `MR for ${mrs.rows[0].project_name || 'a project'} is MD-approved. Proceed with RFQ/PO.`,
+        data: { link: '/stores/mrs', type: 'mr_final_approved', related_id: mrs.rows[0].id },
+      }).catch(() => {});
     }
 
     res.json({ message: `MRS ${cfg.label} completed`, status: cfg.nextStatus });

@@ -1,6 +1,7 @@
 // backend/src/controllers/notification.controller.js
 const { query } = require('../config/database');
 const { sendMail } = require('../services/mail.service');
+const { sendPushToUser, sendPushToRole } = require('../services/fcm.service');
 
 const FRONTEND_URL = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || 'http://bcim.ddns.net:3000').replace(/\/$/, '');
 
@@ -86,6 +87,24 @@ async function createNotification(opts) {
     // eslint-disable-next-line no-console
     console.error('[notification] failed to create:', err.message);
   }
+
+  // FCM push notification — fire and forget
+  try {
+    const pushPayload = {
+      title: opts.title,
+      body: opts.message || opts.title,
+      data: {
+        type: opts.type || '',
+        link: opts.link || '',
+        related_id: opts.related_id || '',
+      },
+    };
+    if (opts.user_id) {
+      sendPushToUser(opts.user_id, pushPayload).catch(() => {});
+    } else if (opts.target_role) {
+      sendPushToRole(opts.company_id, opts.target_role, pushPayload).catch(() => {});
+    }
+  } catch (_) {}
 
   // Optional email fan-out — runs after DB insert so a mail failure can't undo the notification
   if (opts.sendEmail) {
