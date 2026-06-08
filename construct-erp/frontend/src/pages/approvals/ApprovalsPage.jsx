@@ -8,7 +8,7 @@ import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import useAuthStore from '../../store/authStore';
 import {
   CheckCircle2, XCircle, Eye, RefreshCw, Clock, AlertTriangle,
-  FileText, Briefcase, Layers, Shield, Receipt, ShoppingCart,
+  FileText, Briefcase, Layers, Shield, Receipt, ShoppingCart, Package,
   ChevronRight, MessageSquare, X, CheckCheck, Bell,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -33,6 +33,19 @@ const TYPE_META = {
   'NCR':              { icon: AlertTriangle,bg: 'bg-red-100',     text: 'text-red-700',     border: 'border-red-200',     dot: '#DC2626' },
   'Submittal':        { icon: FileText,     bg: 'bg-purple-100',  text: 'text-purple-700',  border: 'border-purple-200',  dot: '#7C3AED' },
   'Purchase Order':   { icon: ShoppingCart, bg: 'bg-orange-100',  text: 'text-orange-700',  border: 'border-orange-200',  dot: '#EA580C' },
+  'MRS':              { icon: Package,      bg: 'bg-cyan-100',    text: 'text-cyan-700',    border: 'border-cyan-200',    dot: '#0891B2' },
+};
+
+// Human-readable MRS status labels for the approvals page
+const MRS_STATUS_LABEL = {
+  'pending':         'Awaiting Store Manager',
+  'stores_verified': 'Awaiting Project Manager',
+  'verified_tower':  'Awaiting Project Manager',
+  'approved_pm':     'Awaiting Project Director',
+  'approved_srpm':   'Awaiting Project Director',
+  'approved_mgmt':   'Awaiting MD Approval',
+  'approved_md':     'Fully Approved',
+  'rejected':        'Rejected',
 };
 
 const STATUS_BADGE = {
@@ -138,7 +151,9 @@ function ApprovalCard({ item, onApprove, onReject, onView }) {
               {/* Status badge */}
               <span className={clsx('text-[10px] px-2 py-0.5 rounded-full font-semibold capitalize',
                 STATUS_BADGE[item.status] || 'bg-slate-100 text-slate-600')}>
-                {(item.status || '').replace(/_/g,' ')}
+                {item.doc_type === 'MRS'
+                  ? (MRS_STATUS_LABEL[item.status] || (item.status || '').replace(/_/g,' '))
+                  : (item.status || '').replace(/_/g,' ')}
               </span>
               {/* Urgent badge */}
               {isUrgent && (

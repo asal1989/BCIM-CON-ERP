@@ -18,6 +18,33 @@ const UID  = r => r.user.id;
 const ROLE = r => r.user.role;
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
+
+// Which MRS statuses need action from this role?
+function mrsStatusesForRole(role) {
+  const r = (role || '').toLowerCase();
+  if (['admin', 'super_admin'].includes(r))
+    return ['pending', 'stores_verified', 'verified_tower', 'approved_pm', 'approved_srpm', 'approved_mgmt'];
+  if (['stores_manager', 'store_keeper'].includes(r))
+    return ['pending'];
+  if (['project_manager', 'pm', 'project_head'].includes(r))
+    return ['stores_verified', 'verified_tower'];
+  if (['director', 'project_director', 'management', 'management_director'].includes(r))
+    return ['approved_pm', 'approved_srpm'];
+  if (['managing_director', 'md', 'ceo'].includes(r))
+    return ['approved_mgmt'];
+  return [];
+}
+
+// Status → next approval step
+const MRS_STAGE_MAP = {
+  'pending':         { nextStatus: 'stores_verified', colBy: 'stores_approved_by', colAt: 'stores_approved_at', label: 'Store Manager' },
+  'stores_verified': { nextStatus: 'approved_pm',     colBy: 'approved_pm_by',     colAt: 'approved_pm_at',     label: 'Project Manager' },
+  'verified_tower':  { nextStatus: 'approved_pm',     colBy: 'approved_pm_by',     colAt: 'approved_pm_at',     label: 'Project Manager' },
+  'approved_pm':     { nextStatus: 'approved_mgmt',   colBy: 'approved_mgmt_by',   colAt: 'approved_mgmt_at',   label: 'Project Director' },
+  'approved_srpm':   { nextStatus: 'approved_mgmt',   colBy: 'approved_mgmt_by',   colAt: 'approved_mgmt_at',   label: 'Project Director' },
+  'approved_mgmt':   { nextStatus: 'approved_md',     colBy: 'approved_md_by',     colAt: 'approved_md_at',     label: 'Managing Director' },
+};
+
 // Which SC bill stages can this role act on?
 function scBillStageForRole(role) {
   const map = {
@@ -209,6 +236,37 @@ router.get('/pending', async (req, res) => {
       } catch (_) { /* table may not exist */ }
     }
 
+    // ── 8. MRS — Material Requisitions pending each role's approval ─────────────
+    try {
+      const mrsStatuses = mrsStatusesForRole(role);
+      if (mrsStatuses.length) {
+        const ph = mrsStatuses.map((_, i) => `$${i + 2}`).join(',');
+        const r = await query(`
+          SELECT mr.id,
+                 COALESCE(mr.serial_no_formatted, mr.mrs_number) AS ref_no,
+                 mr.created_at AS doc_date,
+                 0 AS amount,
+                 mr.status,
+                 mr.created_at,
+                 mr.status AS current_stage,
+                 p.name AS project_name,
+                 p.name AS party_name,
+                 u.name AS submitted_by,
+                 CONCAT(
+                   (SELECT COUNT(*)::text FROM mrs_items mi WHERE mi.mrs_id = mr.id),
+                   ' items • ', UPPER(COALESCE(mr.priority, 'normal'))
+                 ) AS extra_info,
+                 'MRS' AS doc_type, 'mrs' AS entity_type,
+                 '/stores/mrs' AS action_url
+          FROM material_requisitions mr
+          JOIN projects p ON p.id = mr.project_id
+          LEFT JOIN users u ON u.id = mr.raised_by
+          WHERE p.company_id = $1 AND mr.status IN (${ph})
+          ORDER BY mr.created_at ASC`, [cid, ...mrsStatuses]);
+        items.push(...r.rows);
+      }
+    } catch (_) { /* table may not exist in some environments */ }
+
     // ── Sort all by created_at (oldest first — most urgent) ───────────────────
     items.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
@@ -331,6 +389,40 @@ router.post('/action', async (req, res) => {
           await query(`UPDATE sc_retention_releases SET status='rejected', updated_at=NOW() WHERE id=$1 AND company_id=$2`,
             [entity_id, CID(req)]);
           notifyRetentionRejected(CID(req), ret, uname);
+        }
+        break;
+      }
+
+      case 'mrs': {
+        // Fetch MRS (join projects for company_id check)
+        const mrRes = await query(
+          `SELECT mr.*, p.company_id AS proj_company_id, p.name AS project_name
+           FROM material_requisitions mr
+           JOIN projects p ON p.id = mr.project_id
+           WHERE mr.id = $1`,
+          [entity_id]
+        );
+        if (!mrRes.rows.length) return res.status(404).json({ error: 'MRS not found' });
+        const mr = mrRes.rows[0];
+
+        if (action === 'approve') {
+          const stageInfo = MRS_STAGE_MAP[mr.status];
+          if (!stageInfo) return res.status(400).json({ error: `MRS at status "${mr.status}" cannot be approved from this page` });
+          await query(
+            `UPDATE material_requisitions
+             SET status = $1, ${stageInfo.colBy} = $2, ${stageInfo.colAt} = NOW(),
+                 updated_at = NOW()
+             WHERE id = $3`,
+            [stageInfo.nextStatus, uid, entity_id]
+          );
+        } else {
+          // reject
+          await query(
+            `UPDATE material_requisitions
+             SET status = 'rejected', remarks = $1, updated_at = NOW()
+             WHERE id = $2`,
+            [comments || 'Rejected by approver', entity_id]
+          );
         }
         break;
       }
