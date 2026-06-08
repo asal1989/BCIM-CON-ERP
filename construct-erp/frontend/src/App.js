@@ -7,6 +7,7 @@ import useAuthStore from './store/authStore';
 import Layout from './components/layout/Layout';
 import LoadingScreen from './components/common/LoadingScreen';
 import ErrorBoundary from './components/common/ErrorBoundary';
+import InstallBanner from './components/common/InstallBanner';
 import { LanguageProvider } from './context/LanguageContext';
 
 const queryClient = new QueryClient({
@@ -692,6 +693,7 @@ export default function App() {
             error:   { iconTheme: { primary: '#ef4444', secondary: '#fff' } },
           }}
         />
+        <InstallBanner />
       </BrowserRouter>
     </QueryClientProvider>
     </LanguageProvider>
