@@ -4,6 +4,7 @@ const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
+const { notifyPaymentRecorded } = require('../services/notif.helper');
 
 router.use(authenticate);
 
@@ -239,6 +240,12 @@ router.post('/', authorize('super_admin', 'admin', 'accountant'), async (req, re
 
       return payment;
     });
+
+    // Notify accounts team about the payment
+    notifyPaymentRecorded(req.user.company_id, {
+      ...result,
+      vendor_name: entity_name,
+    }, req.user.name);
 
     res.status(201).json({ data: result });
   } catch (err) {

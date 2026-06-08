@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { query } = require('../config/database');
+const { notifyTicketRaised, notifyTicketResolved } = require('../services/notif.helper');
 router.use(authenticate);
 
 const SLA_HOURS = { critical: { response: 4, resolve: 8 }, high: { response: 8, resolve: 24 }, medium: { response: 24, resolve: 48 }, low: { response: 48, resolve: 120 } };
@@ -30,6 +31,8 @@ router.post('/', async (req, res) => {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'open') RETURNING *`,
     [num,req.user.id,category,priority,subject,description,project_id,it_asset_id,sla.response,sla.resolve]
   );
+  // Notify IT admin about new ticket
+  notifyTicketRaised(req.user.company_id, r.rows[0], req.user.name);
   res.status(201).json({ data: r.rows[0] });
 });
 
@@ -55,6 +58,7 @@ router.patch('/:id/resolve', async (req, res) => {
     'UPDATE it_tickets SET status=$1,resolved_at=NOW(),resolution_notes=$2,updated_at=NOW() WHERE id=$3 RETURNING *',
     ['resolved',resolution_notes,req.params.id]
   );
+  if (r.rows.length) notifyTicketResolved(req.user.company_id, r.rows[0], r.rows[0].raised_by, req.user.name);
   res.json({ data: r.rows[0] });
 });
 

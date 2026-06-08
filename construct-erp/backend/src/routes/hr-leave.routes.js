@@ -5,6 +5,7 @@ const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
+const { notifyLeaveRequested, notifyLeaveApproved, notifyLeaveRejected } = require('../services/notif.helper');
 
 router.use(authenticate);
 
@@ -171,6 +172,12 @@ router.post('/requests', async (req, res) => {
       [req.user.company_id, uid, leave_type_id, from_date, to_date, days,
        half_day || false, half_day_session || null, reason || null]
     );
+    // Notify HR and PM about leave request
+    const ltRes = await query(`SELECT name FROM hr_leave_types WHERE id=$1`, [leave_type_id]);
+    notifyLeaveRequested(req.user.company_id, {
+      ...rows[0],
+      leave_type: ltRes.rows[0]?.name || 'Leave',
+    }, req.user.name);
     res.status(201).json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -216,6 +223,8 @@ router.patch('/requests/:id/approve', async (req, res) => {
     }
 
     await client.query('COMMIT');
+    // Notify the employee their leave was approved
+    notifyLeaveApproved(req_.company_id, req_, req_.user_id, req.user.name);
     res.json({ data: lr[0] });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -234,6 +243,7 @@ router.patch('/requests/:id/reject', async (req, res) => {
        WHERE id=$3 AND company_id=$4 RETURNING *`,
       [req.user.id, rejection_reason || null, req.params.id, req.user.company_id]
     );
+    if (rows.length) notifyLeaveRejected(rows[0].company_id, rows[0], rows[0].user_id, req.user.name, rejection_reason);
     res.json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

@@ -5,6 +5,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const dayjs = require('dayjs');
 const esslService = require('../services/essl.service');
+const { notifyScBillSubmitted, notifyScWoSubmitted } = require('../services/notif.helper');
 
 router.use(authenticate);
 const CID  = req => req.user.company_id;
@@ -486,6 +487,8 @@ router.post('/work-orders', authorize(...PLANNER), async (req, res) => {
           [r.rows[0].id, it.item_code||null, it.description, it.unit||null, it.qty||0, it.rate||0, k+1]);
       }
     }
+    // Notify approvers about new work order
+    notifyScWoSubmitted(CID(req), r.rows[0]);
     res.status(201).json({ data: r.rows[0] });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
@@ -807,6 +810,8 @@ router.patch('/bills/:id/submit', authorize(...PLANNER), async (req, res) => {
     const r = await query(`UPDATE sc_bills SET status='submitted', current_stage='project_manager', submitted_by=$1, submitted_at=NOW(), updated_at=NOW() WHERE id=$2 AND company_id=$3 AND status='draft' RETURNING *`, [req.user.id, req.params.id, CID(req)]);
     if (!r.rows.length) return res.status(404).json({ error: 'Bill not found or already submitted' });
     await query(`INSERT INTO sc_bill_approvals (bill_id,stage,action,actor_id,actor_name,comments) VALUES ($1,'site_engineer','submitted',$2,$3,$4)`, [req.params.id, req.user.id, req.user.name, req.body.comments||'Submitted for approval']);
+    // Notify approvers
+    notifyScBillSubmitted(CID(req), r.rows[0]);
     res.json({ data: r.rows[0] });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });

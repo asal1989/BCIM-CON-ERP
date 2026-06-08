@@ -8,6 +8,7 @@ const { extractPO } = require('../services/poExtraction.service');
 const { getNextDqsNumber } = require('../services/documentNumber.service');
 const { sendMail } = require('../services/mail.service');
 const wa = require('../services/whatsapp.service');
+const { notifyPoCreated, notifyPoRejected, notifyPoApproved } = require('../services/notif.helper');
 const router = express.Router();
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -811,20 +812,29 @@ router.post('/', async (req, res) => {
       return finalRes.rows[0];
     });
 
-    // WhatsApp notification (non-blocking)
+    // WhatsApp + push notifications (non-blocking)
     ;(async () => {
       try {
         const [vRes, pRes] = await Promise.all([
           query('SELECT name FROM vendors WHERE id = $1', [vendor_id]),
           query('SELECT name FROM projects WHERE id = $1', [project_id]),
         ]);
+        const vendorName  = vRes.rows[0]?.name || 'Unknown Vendor';
+        const projectName = pRes.rows[0]?.name || 'Unknown Project';
         await wa.notifyPOCreated({
           poNumber:    result.po_number,
           serialNo:    result.serial_no_formatted,
-          vendorName:  vRes.rows[0]?.name || 'Unknown Vendor',
-          projectName: pRes.rows[0]?.name || 'Unknown Project',
+          vendorName,
+          projectName,
           grandTotal:  result.grand_total,
           userId:      req.user.id,
+        });
+        // In-app + push notification to approvers
+        notifyPoCreated(req.user.company_id, {
+          ...result,
+          vendor_name: vendorName,
+          project_name: projectName,
+          created_by_name: req.user.name,
         });
       } catch (e) { console.error('[wa]', e.message); }
     })();
@@ -852,6 +862,7 @@ router.patch('/:id/reject', async (req, res) => {
       `UPDATE purchase_orders SET status = 'rejected', updated_at = NOW() WHERE id = $1`,
       [req.params.id]
     );
+    notifyPoRejected(req.user.company_id, po.rows[0], req.user.name, req.body.reason || '');
     res.json({ message: 'PO rejected successfully', status: 'rejected' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -906,6 +917,11 @@ router.patch('/:id/:stage', async (req, res) => {
       `UPDATE purchase_orders SET ${setSql} WHERE id = $${params.length} RETURNING status`,
       params
     );
+
+    // Notify PO creator when finally approved
+    if (cfg.nextStatus === 'approved') {
+      notifyPoApproved(req.user.company_id, po.rows[0], req.user.name);
+    }
 
     res.json({ message: `PO ${stage} successfully`, status: result.rows[0].status });
   } catch (err) {

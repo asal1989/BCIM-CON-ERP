@@ -3,6 +3,7 @@ const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const { loadProjectScope, userCanAccessProject, appendProjectScope } = require('../middleware/projectScope');
 const { query, withTransaction } = require('../config/database');
+const { notifyGrnSubmitted, notifyGrnVerifiedStores, notifyGrnApproved } = require('../services/notif.helper');
 const router = express.Router();
 
 // ── Auto-migrate: fix legacy grn schema ───────────────────────────────────
@@ -222,6 +223,8 @@ router.post('/', async (req, res) => {
       return finalRes.rows[0];
     });
 
+    // Fire-and-forget push notification to stores team
+    notifyGrnSubmitted(req.user.company_id, result);
     res.status(201).json({ data: result });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -249,6 +252,9 @@ router.patch('/:id/verify-stores', async (req, res) => {
        WHERE id = $2 AND quality_status = 'pending'`,
       [req.user.id, req.params.id]
     );
+    // Notify QC/PM that GRN needs their approval
+    const grnRow = await query(`SELECT g.*, v.name AS vendor_name, p.name AS project_name FROM grn g LEFT JOIN vendors v ON v.id=g.vendor_id JOIN projects p ON p.id=g.project_id WHERE g.id=$1`, [req.params.id]);
+    if (grnRow.rows.length) notifyGrnVerifiedStores(req.user.company_id, grnRow.rows[0], req.user.name);
     res.json({ message: 'Stores verification complete' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -314,6 +320,10 @@ router.patch('/:id/approve-qc', async (req, res) => {
           [grn.project_id, inventoryId, it.quantity_received, grn.grn_number, 'Industrial QC Approved', req.user.id]
         );
       }
+      // Notify GRN creator + accounts
+      const grnFull = await query(`SELECT g.*, v.name AS vendor_name, p.name AS project_name FROM grn g LEFT JOIN vendors v ON v.id=g.vendor_id JOIN projects p ON p.id=g.project_id WHERE g.id=$1`, [req.params.id]);
+      if (grnFull.rows.length) notifyGrnApproved(req.user.company_id, grnFull.rows[0], req.user.name);
+
       return { status: 'approved' };
     });
     res.json({ data: result });

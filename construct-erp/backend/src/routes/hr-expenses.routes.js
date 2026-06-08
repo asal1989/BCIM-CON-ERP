@@ -8,6 +8,7 @@ const fs     = require('fs');
 const { authenticate } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
+const { notifyExpenseSubmitted, notifyExpenseApproved, notifyExpenseRejected, notifyExpensePaid } = require('../services/notif.helper');
 
 router.use(authenticate);
 
@@ -76,6 +77,7 @@ router.post('/', upload.single('bill'), async (req, res) => {
       [req.user.company_id, uid, claim_date || new Date().toISOString().split('T')[0],
        expense_type || null, project_id || null, amount, description || null, billUrl]
     );
+    notifyExpenseSubmitted(req.user.company_id, rows[0], req.user.name);
     res.status(201).json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -88,6 +90,7 @@ router.patch('/:id/approve', async (req, res) => {
       [req.user.id, req.params.id, req.user.company_id]
     );
     if (!rows.length) return res.status(400).json({ error: 'Not found or already actioned' });
+    notifyExpenseApproved(req.user.company_id, rows[0], rows[0].user_id, req.user.name);
     res.json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -99,6 +102,7 @@ router.patch('/:id/reject', async (req, res) => {
        WHERE id=$2 AND company_id=$3 AND status='pending' RETURNING *`,
       [req.user.id, req.params.id, req.user.company_id]
     );
+    if (rows.length) notifyExpenseRejected(req.user.company_id, rows[0], rows[0].user_id, req.user.name, req.body.reason || '');
     res.json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -112,6 +116,7 @@ router.patch('/:id/pay', async (req, res) => {
       [paid_date || new Date().toISOString().split('T')[0], req.params.id, req.user.company_id]
     );
     if (!rows.length) return res.status(400).json({ error: 'Not found or not approved' });
+    notifyExpensePaid(req.user.company_id, rows[0], rows[0].user_id);
     res.json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

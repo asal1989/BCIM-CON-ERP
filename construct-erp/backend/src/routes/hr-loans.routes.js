@@ -5,6 +5,7 @@ const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
+const { notifyLoanRequested, notifyLoanApproved, notifyLoanRejected } = require('../services/notif.helper');
 
 router.use(authenticate);
 
@@ -63,6 +64,7 @@ router.post('/', async (req, res) => {
       [req.user.company_id, uid, loan_type || 'advance', amount, reason || null,
        emi_amount || null, emi_months || null]
     );
+    notifyLoanRequested(req.user.company_id, rows[0], req.user.name);
     res.status(201).json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -79,6 +81,7 @@ router.patch('/:id/approve', async (req, res) => {
        req.params.id, req.user.company_id]
     );
     if (!rows.length) return res.status(400).json({ error: 'Not found or already actioned' });
+    notifyLoanApproved(req.user.company_id, rows[0], rows[0].user_id, req.user.name);
     res.json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -90,6 +93,7 @@ router.patch('/:id/reject', async (req, res) => {
        WHERE id=$2 AND company_id=$3 AND status='pending' RETURNING *`,
       [req.user.id, req.params.id, req.user.company_id]
     );
+    if (rows.length) notifyLoanRejected(req.user.company_id, rows[0], rows[0].user_id, req.user.name);
     res.json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

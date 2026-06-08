@@ -4,6 +4,7 @@ const router = express.Router();
 const { query } = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
 const dayjs = require('dayjs');
+const { notifyNcrRaised } = require('../services/notif.helper');
 // Lazy-loaded at module level to avoid circular require at load time
 // (quality-pour depends on quality.routes for the lab-test route, and vice-versa)
 let _evaluateCubeResultAndChain = null;
@@ -264,6 +265,8 @@ router.post('/ncr', async (req, res) => {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'open') RETURNING *`,
         [project_id, num, rfi_id || null, title, description, req.user.id, assigned_to || null, priority || 'medium', issue_type || 'quality', severity || 'minor']
     );
+    // Notify PM and QS about new NCR
+    notifyNcrRaised(req.user.company_id, r.rows[0], req.user.name);
     res.status(201).json({ data: r.rows[0] });
 });
 

@@ -2,6 +2,7 @@
 const express = require('express');
 const router  = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
+const { notifySnagRaised, notifySnagClosed } = require('../services/notif.helper');
 
 const db = () => require('../config/database').pool;
 
@@ -145,6 +146,8 @@ router.post('/', authorize(EDITORS), async (req, res) => {
       assigned_user_id || null, req.user.id,
     ]);
 
+    // Notify assigned user about snag
+    notifySnagRaised(req.user.company_id, rows[0], req.user.name);
     res.status(201).json({ data: rows[0] });
   } catch (err) {
     console.error(err);
@@ -215,6 +218,8 @@ router.patch('/:id/status', authorize(EDITORS), async (req, res) => {
     `, [status, rectification_notes || null, closing, req.user.id, req.params.id]);
 
     if (!rows.length) return res.status(404).json({ error: 'Snag not found' });
+    // Notify raiser when snag is closed
+    if (status === 'closed') notifySnagClosed(req.user.company_id, rows[0], req.user.name);
     res.json({ data: rows[0] });
   } catch (err) {
     console.error(err);

@@ -4,6 +4,7 @@ const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const { loadProjectScope, userCanAccessProject, appendProjectScope } = require('../middleware/projectScope');
 const { query, withTransaction } = require('../config/database');
+const { notifyIndentSubmitted, notifyIndentApproved, notifyIndentRejected } = require('../services/notif.helper');
 
 router.use(authenticate);
 router.use(loadProjectScope);
@@ -138,6 +139,7 @@ router.patch('/:id/submit', async (req, res) => {
        VALUES ('indent', $1, 'submitted', $2, 'Submitted for approval')`,
       [req.params.id, req.user.id]
     );
+    notifyIndentSubmitted(req.user.company_id, r.rows[0], req.user.name);
     res.json({ data: r.rows[0] });
   } catch (err) {
     console.error('indent PATCH /:id/submit:', err.message);
@@ -178,6 +180,7 @@ router.patch('/:id/approve', authorize('super_admin', 'admin', 'project_manager'
       );
       return r.rows[0];
     });
+    notifyIndentApproved(req.user.company_id, result, result.raised_by, req.user.name);
     res.json({ data: result });
   } catch (err) {
     console.error('indent PATCH /:id/approve:', err.message);
@@ -208,6 +211,7 @@ router.patch('/:id/reject', authorize('super_admin', 'admin', 'project_manager')
        VALUES ('indent', $1, 'rejected', $2, $3)`,
       [req.params.id, req.user.id, remarks]
     );
+    notifyIndentRejected(req.user.company_id, r.rows[0], r.rows[0].raised_by, req.user.name, remarks);
     res.json({ data: r.rows[0] });
   } catch (err) {
     console.error('indent PATCH /:id/reject:', err.message);

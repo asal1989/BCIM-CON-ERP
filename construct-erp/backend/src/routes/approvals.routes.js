@@ -3,6 +3,13 @@ const express = require('express');
 const router  = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { query } = require('../config/database');
+const {
+  notifyScBillApproved, notifyScBillFullyApproved, notifyScBillRejected,
+  notifyScWoApproved, notifyScWoRejected,
+  notifyScMbChecked, notifyScMbApproved, notifyScMbRejected,
+  notifyScNmrApproved,
+  notifyRetentionApproved, notifyRetentionRejected,
+} = require('../services/notif.helper');
 
 router.use(authenticate);
 
@@ -244,48 +251,68 @@ router.post('/action', async (req, res) => {
             [newStatus, uid, entity_id]);
           await query(`INSERT INTO sc_bill_approvals (bill_id,stage,action,actor_id,actor_name,comments) VALUES ($1,$2,'approved',$3,$4,$5)`,
             [entity_id, stage, uid, uname, comments||'Approved']);
+          // Push notification
+          if (newStatus === 'approved') {
+            notifyScBillFullyApproved(CID(req), b, uname);
+          } else {
+            notifyScBillApproved(CID(req), b, uname);
+          }
         } else {
           await query(`UPDATE sc_bills SET status='rejected', rejected_by=$1, rejection_remarks=$2, updated_at=NOW() WHERE id=$3`,
             [uid, comments||'Rejected', entity_id]);
-          const bill = await query(`SELECT current_stage FROM sc_bills WHERE id=$1`, [entity_id]);
+          const bill = await query(`SELECT * FROM sc_bills WHERE id=$1`, [entity_id]);
           await query(`INSERT INTO sc_bill_approvals (bill_id,stage,action,actor_id,actor_name,comments) VALUES ($1,$2,'rejected',$3,$4,$5)`,
             [entity_id, bill.rows[0]?.current_stage||'unknown', uid, uname, comments||'Rejected']);
+          // Push notification
+          notifyScBillRejected(CID(req), bill.rows[0] || { id: entity_id }, uname, comments);
         }
         break;
       }
 
       case 'sc_wo': {
         if (action === 'approve') {
+          const woRes = await query(`SELECT * FROM sc_work_orders WHERE id=$1 AND company_id=$2`, [entity_id, CID(req)]);
           await query(`UPDATE sc_work_orders SET status='approved', approved_by=$1, approved_at=NOW(), updated_at=NOW() WHERE id=$2 AND company_id=$3`,
             [uid, entity_id, CID(req)]);
+          if (woRes.rows.length) notifyScWoApproved(CID(req), woRes.rows[0], uname);
         } else {
+          const woRes = await query(`SELECT * FROM sc_work_orders WHERE id=$1 AND company_id=$2`, [entity_id, CID(req)]);
           await query(`UPDATE sc_work_orders SET status='draft', updated_at=NOW() WHERE id=$1 AND company_id=$2`,
             [entity_id, CID(req)]);
+          if (woRes.rows.length) notifyScWoRejected(CID(req), woRes.rows[0], uname);
         }
         break;
       }
 
       case 'sc_mb': {
+        const mbRes = await query(`SELECT * FROM sc_mb_entries WHERE id=$1 AND company_id=$2`, [entity_id, CID(req)]);
+        const mb = mbRes.rows[0] || { id: entity_id };
         if (action === 'check') {
           await query(`UPDATE sc_mb_entries SET status='checked', checked_by=$1, checked_at=NOW(), check_remarks=$2, updated_at=NOW() WHERE id=$3 AND company_id=$4`,
             [uid, comments||null, entity_id, CID(req)]);
+          notifyScMbChecked(CID(req), mb, uname);
         } else if (action === 'approve') {
           await query(`UPDATE sc_mb_entries SET status='approved', approved_by=$1, approved_at=NOW(), approve_remarks=$2, updated_at=NOW() WHERE id=$3 AND company_id=$4`,
             [uid, comments||null, entity_id, CID(req)]);
+          notifyScMbApproved(CID(req), mb, uname);
         } else {
           await query(`UPDATE sc_mb_entries SET status='rejected', rejected_by=$1, rejection_remarks=$2, updated_at=NOW() WHERE id=$3 AND company_id=$4`,
             [uid, comments||null, entity_id, CID(req)]);
+          notifyScMbRejected(CID(req), mb, uname, comments);
         }
         break;
       }
 
       case 'sc_nmr': {
+        const nmrRes = await query(`SELECT * FROM sc_nmr WHERE id=$1 AND company_id=$2`, [entity_id, CID(req)]);
+        const nmr = nmrRes.rows[0] || { id: entity_id };
         if (action === 'check') {
           await query(`UPDATE sc_nmr SET status='checked', checked_by=$1, checked_at=NOW(), check_remarks=$2, updated_at=NOW() WHERE id=$3 AND company_id=$4`,
             [uid, comments||null, entity_id, CID(req)]);
         } else if (action === 'approve') {
           await query(`UPDATE sc_nmr SET status='approved', approved_by=$1, approved_at=NOW(), approve_remarks=$2, updated_at=NOW() WHERE id=$3 AND company_id=$4 AND status IN ('submitted','checked')`,
             [uid, comments||null, entity_id, CID(req)]);
+          notifyScNmrApproved(CID(req), nmr, uname);
         } else {
           await query(`UPDATE sc_nmr SET status='draft', updated_at=NOW() WHERE id=$1 AND company_id=$2`,
             [entity_id, CID(req)]);
@@ -294,12 +321,16 @@ router.post('/action', async (req, res) => {
       }
 
       case 'sc_retention': {
+        const retRes = await query(`SELECT * FROM sc_retention_releases WHERE id=$1 AND company_id=$2`, [entity_id, CID(req)]);
+        const ret = retRes.rows[0] || { id: entity_id };
         if (action === 'approve') {
           await query(`UPDATE sc_retention_releases SET status='approved', approved_by=$1, approved_at=NOW() WHERE id=$2 AND company_id=$3`,
             [uid, entity_id, CID(req)]);
+          notifyRetentionApproved(CID(req), ret, uname);
         } else {
           await query(`UPDATE sc_retention_releases SET status='rejected', updated_at=NOW() WHERE id=$1 AND company_id=$2`,
             [entity_id, CID(req)]);
+          notifyRetentionRejected(CID(req), ret, uname);
         }
         break;
       }
