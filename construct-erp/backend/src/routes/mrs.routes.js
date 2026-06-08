@@ -236,6 +236,110 @@ async function notifyMDForNewMRS({ mrs }) {
   }
 }
 
+// ── Notify full team with item details when Project Head approves (approved_mgmt) ──
+const DEFAULT_PH_APPROVED_EMAILS =
+  'biswal@bcim.in,stephen@bcim.in,enosh@bcim.in,prithivi@bcim.in,jephins@bcim.in,' +
+  'bkmanjunath@bcim.in,praveen@bcim.in,lingesh@bcim.in,vijayan@bcim.in';
+
+async function notifyAfterProjectHeadApproval({ mrs }) {
+  try {
+    const emails = parseEmails(process.env.MRS_PH_APPROVED_EMAILS, DEFAULT_PH_APPROVED_EMAILS);
+    if (!emails.length) return;
+
+    // Fetch items from DB
+    const itemsRes = await query(
+      `SELECT material_name, quantity, unit, purpose FROM mrs_items WHERE mrs_id = $1 ORDER BY sort_order`,
+      [mrs.id]
+    );
+    const items = itemsRes.rows;
+
+    const appUrl  = getPublicFrontendUrl();
+    const ref     = esc(mrsRef(mrs));
+    const project = esc(mrs.project_name || mrs.head_office_project_name || '-');
+    const raisedBy = esc(mrs.raised_by_name || mrs.raised_by_email || '-');
+    const dept    = esc(mrs.department || '-');
+    const reqBy   = mrs.required_by ? new Date(mrs.required_by).toLocaleDateString('en-IN') : '-';
+    const priority = esc((mrs.priority || 'normal').toUpperCase());
+
+    const itemRows = items.map((it, i) => `
+      <tr style="background:${i % 2 === 0 ? '#ffffff' : '#f8fafc'}">
+        <td style="padding:8px 10px;border:1px solid #e2e8f0;text-align:center;color:#64748b;font-size:13px">${i + 1}</td>
+        <td style="padding:8px 10px;border:1px solid #e2e8f0;font-weight:600;font-size:13px">${esc(it.material_name || '-')}</td>
+        <td style="padding:8px 10px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:#0a2057;font-size:13px">${it.quantity}</td>
+        <td style="padding:8px 10px;border:1px solid #e2e8f0;text-align:center;font-size:13px">${esc(it.unit || '-')}</td>
+        <td style="padding:8px 10px;border:1px solid #e2e8f0;color:#475569;font-size:12px">${esc(it.purpose || '-')}</td>
+      </tr>`).join('');
+
+    const subject = `MR Approved by Project Head: ${mrsRef(mrs)} — ${project}`;
+
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;color:#0f172a">
+        <div style="background:#0a2057;color:#fff;padding:20px 28px;border-radius:8px 8px 0 0">
+          <p style="margin:0 0 4px;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#94a3b8">BCIM ENGINEERING — MR APPROVED BY PROJECT HEAD</p>
+          <h2 style="margin:0;font-size:20px;font-weight:700">${ref}</h2>
+        </div>
+        <div style="border:1px solid #dbe4f0;border-top:none;padding:24px 28px;background:#f8fafc;border-radius:0 0 8px 8px">
+          <div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:6px;padding:10px 16px;margin-bottom:18px">
+            <p style="margin:0;font-weight:700;color:#065f46;font-size:14px">✅ Project Head has approved this Material Requisition</p>
+            <p style="margin:4px 0 0;font-size:12px;color:#047857">This MR is now pending Managing Director final authorization.</p>
+          </div>
+          <table style="border-collapse:collapse;width:100%;font-size:14px;background:#fff;margin-bottom:20px">
+            <tr><td style="padding:9px 12px;border:1px solid #e2e8f0;font-weight:700;width:160px;background:#f1f5f9">MRS No</td><td style="padding:9px 12px;border:1px solid #e2e8f0;font-weight:700;color:#0a2057">${ref}</td></tr>
+            <tr><td style="padding:9px 12px;border:1px solid #e2e8f0;font-weight:700;background:#f1f5f9">Project</td><td style="padding:9px 12px;border:1px solid #e2e8f0">${project}</td></tr>
+            <tr><td style="padding:9px 12px;border:1px solid #e2e8f0;font-weight:700;background:#f1f5f9">Department</td><td style="padding:9px 12px;border:1px solid #e2e8f0">${dept}</td></tr>
+            <tr><td style="padding:9px 12px;border:1px solid #e2e8f0;font-weight:700;background:#f1f5f9">Raised By</td><td style="padding:9px 12px;border:1px solid #e2e8f0">${raisedBy}</td></tr>
+            <tr><td style="padding:9px 12px;border:1px solid #e2e8f0;font-weight:700;background:#f1f5f9">Required By</td><td style="padding:9px 12px;border:1px solid #e2e8f0">${reqBy}</td></tr>
+            <tr><td style="padding:9px 12px;border:1px solid #e2e8f0;font-weight:700;background:#f1f5f9">Priority</td><td style="padding:9px 12px;border:1px solid #e2e8f0"><span style="padding:2px 8px;border-radius:4px;background:${mrs.priority === 'urgent' ? '#fef2f2' : '#f0fdf4'};color:${mrs.priority === 'urgent' ? '#dc2626' : '#16a34a'};font-weight:700">${priority}</span></td></tr>
+            <tr><td style="padding:9px 12px;border:1px solid #e2e8f0;font-weight:700;background:#f1f5f9">Total Items</td><td style="padding:9px 12px;border:1px solid #e2e8f0;font-weight:700;color:#0a2057">${items.length}</td></tr>
+          </table>
+
+          <h3 style="margin:0 0 10px;font-size:14px;font-weight:700;color:#0f172a;border-bottom:2px solid #0a2057;padding-bottom:6px">Material Items</h3>
+          <table style="border-collapse:collapse;width:100%;font-size:13px">
+            <thead>
+              <tr style="background:#0a2057;color:#fff">
+                <th style="padding:9px 10px;border:1px solid #1e3a8a;width:36px">#</th>
+                <th style="padding:9px 10px;border:1px solid #1e3a8a;text-align:left">Material Name</th>
+                <th style="padding:9px 10px;border:1px solid #1e3a8a;width:60px">Qty</th>
+                <th style="padding:9px 10px;border:1px solid #1e3a8a;width:60px">Unit</th>
+                <th style="padding:9px 10px;border:1px solid #1e3a8a;text-align:left">Purpose</th>
+              </tr>
+            </thead>
+            <tbody>${itemRows || '<tr><td colspan="5" style="padding:12px;text-align:center;color:#94a3b8">No items</td></tr>'}</tbody>
+          </table>
+
+          <p style="margin:22px 0 0;text-align:center">
+            <a href="${appUrl}/stores/mrs" style="display:inline-block;background:#0a2057;color:#fff;text-decoration:none;padding:11px 28px;border-radius:6px;font-weight:700;font-size:14px">Open MRS in ERP</a>
+          </p>
+          <p style="margin:16px 0 0;font-size:11px;color:#94a3b8;text-align:center">Automated notification from BCIM ConstructERP</p>
+        </div>
+      </div>`;
+
+    const text = [
+      subject, '',
+      '✅ Project Head has approved this Material Requisition.',
+      'Pending Managing Director final authorization.',
+      '',
+      `MRS No    : ${mrsRef(mrs)}`,
+      `Project   : ${project}`,
+      `Department: ${dept}`,
+      `Raised By : ${raisedBy}`,
+      `Required  : ${reqBy}`,
+      `Priority  : ${priority}`,
+      '',
+      'Items:',
+      ...items.map((it, i) => `  ${i+1}. ${it.material_name} — ${it.quantity} ${it.unit}${it.purpose ? ` (${it.purpose})` : ''}`),
+      '',
+      `Open ERP: ${appUrl}/stores/mrs`,
+    ].join('\n');
+
+    const { sendMail } = require('../services/mail.service');
+    const result = await sendMail({ to: emails, subject, html, text });
+    console.log(`[mrs-mail] PH-approved notification for ${ref} → ${result.sent ? 'sent' : result.reason}`);
+  } catch (err) {
+    console.error('[mrs-mail] PH-approved notification failed:', err.message);
+  }
+}
+
 // Notify procurement team + stephen when MRS is fully approved (approved_md)
 function notifyProcurementAfterMDApproval({ companyId, mrs }) {
   const procEmails  = parseEmails(process.env.MRS_PROCUREMENT_NOTIFY_EMAILS, DEFAULT_PROCUREMENT_MRS_EMAILS);
@@ -724,6 +828,11 @@ router.patch('/:id/:stage', async (req, res) => {
           : `${cfg.label} completed by ${req.user.name || req.user.email} for ${mrs.rows[0].project_name || 'the project'}.`,
         data: { link: '/stores/mrs', type: 'mr_approved', related_id: mrs.rows[0].id },
       }).catch(() => {});
+    }
+
+    // Project Head approved → notify full team with item details
+    if (cfg.nextStatus === 'approved_mgmt') {
+      notifyAfterProjectHeadApproval({ mrs: { ...mrs.rows[0], status: cfg.nextStatus } });
     }
 
     if (cfg.nextStatus === 'approved_md') {
