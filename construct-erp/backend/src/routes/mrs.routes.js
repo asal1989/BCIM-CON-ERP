@@ -677,4 +677,34 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// POST /stores/mrs/:id/resend-notify — admin can re-trigger MRS notification emails
+router.post('/:id/resend-notify', async (req, res) => {
+  try {
+    const { authorize } = require('../middleware/auth');
+    // Only admin / super_admin
+    if (!['admin', 'super_admin'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Admin only' });
+    }
+    const mrs = await query(
+      `SELECT mr.*, p.name AS project_name, p.company_id,
+              u.name AS raised_by_name, u.email AS raised_by_email,
+              (SELECT COUNT(*) FROM mrs_items WHERE mrs_id = mr.id) AS item_count
+       FROM material_requisitions mr
+       JOIN projects p ON mr.project_id = p.id
+       JOIN users u ON mr.raised_by = u.id
+       WHERE mr.id = $1`,
+      [req.params.id]
+    );
+    if (!mrs.rows.length || mrs.rows[0].company_id !== req.user.company_id) {
+      return res.status(404).json({ error: 'MRS not found' });
+    }
+    const mrsData = mrs.rows[0];
+    notifyStoresForNewMRS({ companyId: req.user.company_id, mrs: mrsData });
+    notifyProcurementForNewMRS({ companyId: req.user.company_id, mrs: mrsData });
+    res.json({ message: `Notifications resent for ${mrsRef(mrsData)}` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -350,11 +350,24 @@ export default function MRSPage() {
     onError: (e) => toast.error(e?.response?.data?.error || 'Delete failed'),
   });
 
+  const resendMutation = useMutation({
+    mutationFn: (id) => mrsAPI.resendNotify(id),
+    onSuccess: (_, id) => toast.success('Notification emails resent to stores & procurement teams'),
+    onError: (e) => toast.error(e?.response?.data?.error || 'Resend failed'),
+  });
+
   function handleDelete(e, mrs) {
     e.stopPropagation(); // don't open the detail panel
     const label = mrs.serial_no_formatted || mrs.mrs_number;
     if (!window.confirm(`Delete MRS ${label}?\n\nThis cannot be undone.`)) return;
     deleteMutation.mutate(mrs.id);
+  }
+
+  function handleResendNotify(e, mrs) {
+    e.stopPropagation();
+    const label = mrs.serial_no_formatted || mrs.mrs_number;
+    if (!window.confirm(`Resend notification emails for ${label} to stores & procurement teams?`)) return;
+    resendMutation.mutate(mrs.id);
   }
 
   const addInventoryItemMutation = useMutation({
@@ -882,6 +895,16 @@ export default function MRSPage() {
                           <button className="inline-flex items-center gap-1.5 px-3 h-8 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:border-indigo-300 hover:text-indigo-700 bg-white">
                             <Eye className="w-3.5 h-3.5" /> Open
                           </button>
+                          {['admin','super_admin'].includes(user?.role) && (
+                            <button
+                              onClick={(e) => handleResendNotify(e, mrs)}
+                              disabled={resendMutation.isPending}
+                              title="Resend notification emails to stores & procurement"
+                              className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all bg-white"
+                            >
+                              <Send className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           <button
                             onClick={(e) => handleDelete(e, mrs)}
                             disabled={deleteMutation.isPending}

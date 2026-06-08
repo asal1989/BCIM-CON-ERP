@@ -738,6 +738,7 @@ export const mrsAPI = {
   delete:            (id)            => api.delete(`/stores/mrs/${id}`),
   getWorkflowConfig: ()              => api.get('/stores/mrs/workflow-config'),
   saveWorkflow:      (projectId, stages) => api.put(`/stores/mrs/workflow-config/${projectId}`, { stages }),
+  resendNotify:      (id)            => api.post(`/stores/mrs/${id}/resend-notify`),
 };
 
 export const minAPI = {
