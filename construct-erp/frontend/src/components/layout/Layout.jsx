@@ -735,7 +735,7 @@ function MobileSidebar({ open, onClose, navGroups, user, matchesPath }) {
 }
 
 // ── Desktop Sidebar ───────────────────────────────────────────────────────────
-function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle }) {
+function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle, topOffset }) {
   const activeGroup = navGroups.find(group => group.items.some(item => matchesPath(item.to)))?.label;
   const [expandedGroup, setExpandedGroup] = useState(activeGroup || navGroups[0]?.label);
   const [hovered, setHovered] = useState(false);
@@ -747,151 +747,147 @@ function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle }) {
     if (activeGroup && !collapsed) setExpandedGroup(activeGroup);
   }, [activeGroup, collapsed]);
 
-  // Auto-close hover expansion on every navigation (so sidebar hides after clicking a link)
+  // Close on EVERY navigation — this is the reliable auto-hide trigger.
+  // Works regardless of mouse position after clicking a link.
   useEffect(() => {
     setHovered(false);
   }, [location.pathname]);
 
-  // Sidebar is fully visible when: pinned open (!collapsed) OR mouse is hovering
   const isExpanded = !collapsed || hovered;
-
-  // Called when a nav item is clicked — collapses hover overlay
+  // Clicking a nav link: close immediately + navigation useEffect also fires
   const handleNavClick = () => setHovered(false);
 
   return (
-    // Outer wrapper keeps LAYOUT width fixed (64px auto-hide / 264px pinned).
-    // The inner <aside> uses position:absolute in auto-hide mode so it overlays
-    // content rather than pushing it — this is the fix for the "auto-hide" jank.
-    <div
-      className="print:hidden desktop-sidebar"
-      style={{
-        width: collapsed ? 64 : 264,
-        flexShrink: 0,
-        position: 'relative',
-        zIndex: 45,
-        transition: 'width 0.22s ease',
-      }}
-    >
-    <aside
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        // auto-hide: absolute so expanding overlays content (no layout push)
-        // pinned:    relative so it takes space in the flex row
-        position: collapsed ? 'absolute' : 'relative',
-        top: 0, left: 0,
-        width: isExpanded ? 264 : 64,
-        height: '100%',
-        background: '#FFFFFF',
-        borderRight: '1px solid #E2E8F0',
-        boxShadow: isExpanded ? '4px 0 18px rgba(15,23,42,0.10)' : '1px 0 10px rgba(15,23,42,0.04)',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        transition: 'width 0.22s ease, box-shadow 0.22s ease',
-      }}
-    >
-      {isExpanded ? (
-        /* ── Expanded: full nav list ── */
-        <div style={{ flex: 1, overflowY: 'auto', padding: 8, minWidth: 264 }}>
-          <div style={{ padding: '6px 8px 8px', borderBottom: '1px solid #EEF2F7', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ fontSize: 10, fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Modules</div>
-            {/* Pin/unpin toggle */}
-            <button
-              onClick={onToggle}
-              title={collapsed ? 'Pin sidebar open' : 'Switch to auto-hide'}
-              style={{ width: 22, height: 22, borderRadius: 6, border: '1px solid #E2E8F0', background: collapsed ? '#F1F5F9' : '#EFF6FF', color: collapsed ? '#94A3B8' : '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
-            >
-              {collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
-            </button>
+    <>
+      {/* ── Layout gap ── keeps the correct space in the flex row (invisible) */}
+      <div
+        className="print:hidden desktop-sidebar"
+        style={{ width: collapsed ? 64 : 264, flexShrink: 0, transition: 'width 0.22s ease' }}
+      />
+
+      {/* ── Actual sidebar ── always position:fixed so expanding NEVER shifts page content.
+           position:absolute had a height:100% bug when parent flex item has no explicit height. */}
+      <aside
+        className="print:hidden desktop-sidebar"
+        onMouseEnter={() => collapsed && setHovered(true)}
+        onMouseLeave={() => collapsed && setHovered(false)}
+        style={{
+          position: 'fixed',
+          top: topOffset,   // passed from Layout: 52px (no breadcrumb) or 80px (with breadcrumb)
+          left: 0,
+          bottom: 0,
+          width: isExpanded ? 264 : 64,
+          zIndex: 44,       // below header (50), above page content
+          background: '#FFFFFF',
+          borderRight: '1px solid #E2E8F0',
+          boxShadow: isExpanded ? '4px 0 18px rgba(15,23,42,0.10)' : '1px 0 10px rgba(15,23,42,0.04)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          transition: 'width 0.22s ease, box-shadow 0.22s ease',
+        }}
+      >
+        {isExpanded ? (
+          /* ── Expanded: full nav list ── */
+          <div style={{ flex: 1, overflowY: 'auto', padding: 8, minWidth: 264 }}>
+            <div style={{ padding: '6px 8px 8px', borderBottom: '1px solid #EEF2F7', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 10, fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Modules</div>
+              {/* Pin/unpin toggle */}
+              <button
+                onClick={onToggle}
+                title={collapsed ? 'Pin sidebar open' : 'Switch to auto-hide'}
+                style={{ width: 22, height: 22, borderRadius: 6, border: '1px solid #E2E8F0', background: collapsed ? '#F1F5F9' : '#EFF6FF', color: collapsed ? '#94A3B8' : '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
+              >
+                {collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
+              </button>
+            </div>
+            {navGroups.map(group => {
+              const color = GROUP_COLORS[group.label] || '#6366F1';
+              const hasActive = group.items.some(item => matchesPath(item.to));
+              const isOpen = expandedGroup === group.label;
+              return (
+                <div key={group.label} style={{ marginBottom: 4 }}>
+                  <button
+                    onClick={() => setExpandedGroup(isOpen ? null : group.label)}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', gap: 9,
+                      padding: '9px 10px', borderRadius: 8, border: 'none',
+                      background: hasActive ? hexToRgba(color, 0.1) : 'transparent',
+                      color: hasActive ? '#0F172A' : '#475569',
+                      cursor: 'pointer', textAlign: 'left',
+                    }}
+                  >
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0, boxShadow: hasActive ? `0 0 8px ${hexToRgba(color, 0.65)}` : 'none' }} />
+                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      {t(group.label)}
+                    </span>
+                    <ChevronDown size={13} style={{ color: '#94A3B8', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s' }} />
+                  </button>
+                  {isOpen && (
+                    <div style={{ padding: '3px 0 5px' }}>
+                      {group.items.map(item => {
+                        const Icon = item.icon;
+                        const active = matchesPath(item.to);
+                        return (
+                          <NavLink
+                            key={item.to}
+                            to={item.to}
+                            onClick={handleNavClick}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 9,
+                              margin: '1px 0', padding: '7px 10px 7px 22px',
+                              borderRadius: 8,
+                              background: active ? hexToRgba(color, 0.12) : 'transparent',
+                              color: active ? color : '#64748B',
+                              textDecoration: 'none',
+                              fontSize: 11, fontWeight: active ? 700 : 600,
+                              textTransform: 'uppercase', letterSpacing: '0.04em',
+                              borderLeft: active ? `3px solid ${color}` : '3px solid transparent',
+                            }}
+                          >
+                            <Icon size={14} style={{ flexShrink: 0 }} />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t(item.label)}</span>
+                          </NavLink>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-          {navGroups.map(group => {
-            const color = GROUP_COLORS[group.label] || '#6366F1';
-            const hasActive = group.items.some(item => matchesPath(item.to));
-            const isOpen = expandedGroup === group.label;
-            return (
-              <div key={group.label} style={{ marginBottom: 4 }}>
+        ) : (
+          /* ── Collapsed: icon-only strip (hover to expand) ── */
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 6px' }}>
+            {navGroups.map(group => {
+              const color = GROUP_COLORS[group.label] || '#6366F1';
+              const hasActive = group.items.some(item => matchesPath(item.to));
+              const GroupIcon = group.items[0]?.icon || FolderSearch;
+              return (
                 <button
-                  onClick={() => setExpandedGroup(isOpen ? null : group.label)}
+                  key={group.label}
+                  onClick={() => setExpandedGroup(group.label)}
+                  title={group.label}
                   style={{
-                    width: '100%', display: 'flex', alignItems: 'center', gap: 9,
-                    padding: '9px 10px', borderRadius: 8, border: 'none',
-                    background: hasActive ? hexToRgba(color, 0.1) : 'transparent',
-                    color: hasActive ? '#0F172A' : '#475569',
-                    cursor: 'pointer', textAlign: 'left',
+                    width: 44, height: 42,
+                    margin: '2px auto 6px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    borderRadius: 10,
+                    border: hasActive ? `1px solid ${hexToRgba(color, 0.35)}` : '1px solid transparent',
+                    background: hasActive ? hexToRgba(color, 0.12) : 'transparent',
+                    color: hasActive ? color : '#64748B',
+                    cursor: 'pointer', position: 'relative',
                   }}
                 >
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0, boxShadow: hasActive ? `0 0 8px ${hexToRgba(color, 0.65)}` : 'none' }} />
-                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                    {t(group.label)}
-                  </span>
-                  <ChevronDown size={13} style={{ color: '#94A3B8', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s' }} />
+                  <GroupIcon size={18} />
+                  {hasActive && <span style={{ position: 'absolute', left: 2, top: 10, bottom: 10, width: 3, borderRadius: 4, background: color }} />}
                 </button>
-                {isOpen && (
-                  <div style={{ padding: '3px 0 5px' }}>
-                    {group.items.map(item => {
-                      const Icon = item.icon;
-                      const active = matchesPath(item.to);
-                      return (
-                        <NavLink
-                          key={item.to}
-                          to={item.to}
-                          onClick={handleNavClick}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 9,
-                            margin: '1px 0', padding: '7px 10px 7px 22px',
-                            borderRadius: 8,
-                            background: active ? hexToRgba(color, 0.12) : 'transparent',
-                            color: active ? color : '#64748B',
-                            textDecoration: 'none',
-                            fontSize: 11, fontWeight: active ? 700 : 600,
-                            textTransform: 'uppercase', letterSpacing: '0.04em',
-                            borderLeft: active ? `3px solid ${color}` : '3px solid transparent',
-                          }}
-                        >
-                          <Icon size={14} style={{ flexShrink: 0 }} />
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t(item.label)}</span>
-                        </NavLink>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        /* ── Collapsed: icon-only strip (hover to expand) ── */
-        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 6px' }}>
-          {navGroups.map(group => {
-            const color = GROUP_COLORS[group.label] || '#6366F1';
-            const hasActive = group.items.some(item => matchesPath(item.to));
-            const GroupIcon = group.items[0]?.icon || FolderSearch;
-            return (
-              <button
-                key={group.label}
-                onClick={() => setExpandedGroup(group.label)}
-                title={group.label}
-                style={{
-                  width: 44, height: 42,
-                  margin: '2px auto 6px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  borderRadius: 10,
-                  border: hasActive ? `1px solid ${hexToRgba(color, 0.35)}` : '1px solid transparent',
-                  background: hasActive ? hexToRgba(color, 0.12) : 'transparent',
-                  color: hasActive ? color : '#64748B',
-                  cursor: 'pointer', position: 'relative',
-                }}
-              >
-                <GroupIcon size={18} />
-                {hasActive && <span style={{ position: 'absolute', left: 2, top: 10, bottom: 10, width: 3, borderRadius: 4, background: color }} />}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </aside>
-    </div>
+              );
+            })}
+          </div>
+        )}
+      </aside>
+    </>
   );
 }
 
@@ -1574,6 +1570,7 @@ export default function Layout() {
           matchesPath={matchesPath}
           collapsed={sidebarCollapsed}
           onToggle={() => setSidebarCollapsed(c => !c)}
+          topOffset={pageGroup ? 80 : 52}
         />
         <main style={{ flex: 1, minWidth: 0, overflow: 'auto', position: 'relative' }} className="print:overflow-visible print:h-auto">
           <Suspense fallback={<LoadingScreen />}>
