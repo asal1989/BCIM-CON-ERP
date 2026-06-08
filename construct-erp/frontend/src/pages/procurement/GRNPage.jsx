@@ -17,7 +17,7 @@ import DataToolbar from '../../components/common/DataToolbar';
 import TableActions from '../../components/common/TableActions';
 import GRNPrintTemplate from './GRNPrintTemplate';
 
-const UNITS = ['MT', 'Bags', 'CUM', 'SQM', 'Nos', 'RMT', 'KG', 'Litre', 'LS'];
+const UNITS = ['MT', 'Bags', 'CUM', 'SQM', 'Nos', 'RMT', 'KG', 'Litre', 'LS', 'Bundle'];
 
 const STATUS_CONFIG = {
   pending:         { label: 'Pending Store',     class: 'bg-yellow-50 text-yellow-600 border border-yellow-100',  icon: Clock,        stage: 1 },

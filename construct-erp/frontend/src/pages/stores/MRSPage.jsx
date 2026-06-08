@@ -20,7 +20,7 @@ import toast from 'react-hot-toast';
 import MRSPrintTemplate from './MRSPrintTemplate';
 import { useReactToPrint } from 'react-to-print';
 
-const UNITS = ['MT', 'Bags', 'CUM', 'Brass', 'Nos', 'RMT', 'Drum', 'Ltr', 'Kg', 'Sqft'];
+const UNITS = ['MT', 'Bags', 'CUM', 'Brass', 'Nos', 'RMT', 'Drum', 'Ltr', 'Kg', 'Sqft', 'Bundle'];
 
 const STATUS_CONFIG = {
   pending:         { label: 'Pending Store Manager', short: 'Pending',    color: 'bg-yellow-50 text-yellow-700 border-yellow-200',   dot: 'bg-yellow-500',  icon: Clock,       stage: 1 },
