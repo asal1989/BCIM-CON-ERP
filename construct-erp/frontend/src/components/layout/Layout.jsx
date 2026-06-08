@@ -732,8 +732,8 @@ function MobileSidebar({ open, onClose, navGroups, user, matchesPath }) {
   );
 }
 
-// ── Welcome Screen ────────────────────────────────────────────────────────────
-function DesktopSidebar_UNUSED({ navGroups, matchesPath, collapsed, onToggle, onCollapse }) {
+// ── Desktop Sidebar ───────────────────────────────────────────────────────────
+function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle }) {
   const activeGroup = navGroups.find(group => group.items.some(item => matchesPath(item.to)))?.label;
   const [expandedGroup, setExpandedGroup] = useState(activeGroup || navGroups[0]?.label);
   const { t } = useLanguage();
@@ -746,161 +746,108 @@ function DesktopSidebar_UNUSED({ navGroups, matchesPath, collapsed, onToggle, on
     <aside
       className="print:hidden desktop-sidebar"
       style={{
-        width: 64,
+        width: collapsed ? 64 : 264,
         flexShrink: 0,
-        position: 'relative',
         zIndex: 45,
         background: '#FFFFFF',
         borderRight: '1px solid #E2E8F0',
         boxShadow: '1px 0 10px rgba(15,23,42,0.04)',
         display: 'flex',
         flexDirection: 'column',
-        overflow: 'visible',
+        overflow: 'hidden',
+        transition: 'width 0.22s ease',
       }}
     >
-      <div style={{ height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 10px', borderBottom: '1px solid #EEF2F7' }}>
-        <button
-          onClick={onToggle}
-          title={collapsed ? 'Expand menu' : 'Collapse menu'}
-          style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #E2E8F0', background: '#F8FAFC', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-        >
-          {collapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
-        </button>
-      </div>
-
-      {!collapsed && (
-        <div
-          style={{
-            position: 'absolute',
-            left: 64,
-            top: 0,
-            bottom: 0,
-            width: 264,
-            background: '#FFFFFF',
-            borderRight: '1px solid #E2E8F0',
-            boxShadow: '18px 0 38px rgba(15,23,42,0.16)',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          <div style={{ height: 46, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px', borderBottom: '1px solid #EEF2F7' }}>
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Modules</div>
-              <div style={{ fontSize: 10, color: '#64748B' }}>ERP navigation</div>
-            </div>
-            <button
-              onClick={onToggle}
-              title="Collapse menu"
-              style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #E2E8F0', background: '#F8FAFC', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-            >
-              <ChevronLeft size={15} />
-            </button>
-          </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
-        {navGroups.map(group => {
-          const color = GROUP_COLORS[group.label] || '#6366F1';
-          const hasActive = group.items.some(item => matchesPath(item.to));
-          const isOpen = expandedGroup === group.label;
-
-          return (
-            <div key={group.label} style={{ marginBottom: 4 }}>
+      {collapsed ? (
+        /* ── Collapsed: icon-only strip ── */
+        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 6px' }}>
+          {navGroups.map(group => {
+            const color = GROUP_COLORS[group.label] || '#6366F1';
+            const hasActive = group.items.some(item => matchesPath(item.to));
+            const GroupIcon = group.items[0]?.icon || FolderSearch;
+            return (
               <button
-                onClick={() => setExpandedGroup(isOpen ? null : group.label)}
+                key={group.label}
+                onClick={() => { setExpandedGroup(group.label); onToggle(); }}
+                title={group.label}
                 style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 9,
-                  padding: '9px 10px',
-                  borderRadius: 8,
-                  border: 'none',
-                  background: hasActive ? hexToRgba(color, 0.1) : 'transparent',
-                  color: hasActive ? '#0F172A' : '#475569',
-                  cursor: 'pointer',
-                  textAlign: 'left',
+                  width: 44, height: 42,
+                  margin: '2px auto 6px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: 10,
+                  border: hasActive ? `1px solid ${hexToRgba(color, 0.35)}` : '1px solid transparent',
+                  background: hasActive ? hexToRgba(color, 0.12) : 'transparent',
+                  color: hasActive ? color : '#64748B',
+                  cursor: 'pointer', position: 'relative',
                 }}
               >
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0, boxShadow: hasActive ? `0 0 8px ${hexToRgba(color, 0.65)}` : 'none' }} />
-                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  {t(group.label)}
-                </span>
-                <ChevronDown size={13} style={{ color: '#94A3B8', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s' }} />
+                <GroupIcon size={18} />
+                {hasActive && <span style={{ position: 'absolute', left: 2, top: 10, bottom: 10, width: 3, borderRadius: 4, background: color }} />}
               </button>
-
-              {isOpen && (
-                <div style={{ padding: '3px 0 5px' }}>
-                  {group.items.map(item => {
-                    const Icon = item.icon;
-                    const active = matchesPath(item.to);
-                    return (
-                      <NavLink
-                        key={item.to}
-                        to={item.to}
-                        onClick={onCollapse}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 9,
-                          margin: '1px 0',
-                          padding: '7px 10px 7px 22px',
-                          borderRadius: 8,
-                          background: active ? hexToRgba(color, 0.12) : 'transparent',
-                          color: active ? color : '#64748B',
-                          textDecoration: 'none',
-                          fontSize: 11, fontWeight: active ? 700 : 600,
-                          textTransform: 'uppercase', letterSpacing: '0.04em',
-                          borderLeft: active ? `3px solid ${color}` : '3px solid transparent',
-                        }}
-                      >
-                        <Icon size={14} style={{ flexShrink: 0 }} />
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t(item.label)}</span>
-                      </NavLink>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
+      ) : (
+        /* ── Expanded: full nav list ── */
+        <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
+          <div style={{ padding: '6px 8px 8px', borderBottom: '1px solid #EEF2F7', marginBottom: 8 }}>
+            <div style={{ fontSize: 10, fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Modules</div>
           </div>
+          {navGroups.map(group => {
+            const color = GROUP_COLORS[group.label] || '#6366F1';
+            const hasActive = group.items.some(item => matchesPath(item.to));
+            const isOpen = expandedGroup === group.label;
+            return (
+              <div key={group.label} style={{ marginBottom: 4 }}>
+                <button
+                  onClick={() => setExpandedGroup(isOpen ? null : group.label)}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 9,
+                    padding: '9px 10px', borderRadius: 8, border: 'none',
+                    background: hasActive ? hexToRgba(color, 0.1) : 'transparent',
+                    color: hasActive ? '#0F172A' : '#475569',
+                    cursor: 'pointer', textAlign: 'left',
+                  }}
+                >
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0, boxShadow: hasActive ? `0 0 8px ${hexToRgba(color, 0.65)}` : 'none' }} />
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    {t(group.label)}
+                  </span>
+                  <ChevronDown size={13} style={{ color: '#94A3B8', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s' }} />
+                </button>
+                {isOpen && (
+                  <div style={{ padding: '3px 0 5px' }}>
+                    {group.items.map(item => {
+                      const Icon = item.icon;
+                      const active = matchesPath(item.to);
+                      return (
+                        <NavLink
+                          key={item.to}
+                          to={item.to}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 9,
+                            margin: '1px 0', padding: '7px 10px 7px 22px',
+                            borderRadius: 8,
+                            background: active ? hexToRgba(color, 0.12) : 'transparent',
+                            color: active ? color : '#64748B',
+                            textDecoration: 'none',
+                            fontSize: 11, fontWeight: active ? 700 : 600,
+                            textTransform: 'uppercase', letterSpacing: '0.04em',
+                            borderLeft: active ? `3px solid ${color}` : '3px solid transparent',
+                          }}
+                        >
+                          <Icon size={14} style={{ flexShrink: 0 }} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t(item.label)}</span>
+                        </NavLink>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
-
-      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 6px' }}>
-        {navGroups.map(group => {
-          const color = GROUP_COLORS[group.label] || '#6366F1';
-          const hasActive = group.items.some(item => matchesPath(item.to));
-          const GroupIcon = group.items[0]?.icon || FolderSearch;
-
-          return (
-            <button
-              key={group.label}
-              onClick={() => {
-                setExpandedGroup(group.label);
-                if (collapsed) onToggle();
-              }}
-              title={group.label}
-              style={{
-                width: 44,
-                height: 42,
-                margin: '2px auto 6px',
-                borderRadius: 10,
-                border: hasActive ? `1px solid ${hexToRgba(color, 0.35)}` : '1px solid transparent',
-                background: hasActive ? hexToRgba(color, 0.12) : 'transparent',
-                color: hasActive ? color : '#64748B',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                position: 'relative',
-              }}
-            >
-              <GroupIcon size={18} />
-              {hasActive && <span style={{ position: 'absolute', left: 2, top: 10, bottom: 10, width: 3, borderRadius: 4, background: color }} />}
-            </button>
-          );
-        })}
-      </div>
     </aside>
   );
 }
@@ -1313,12 +1260,10 @@ function ProjectChip() {
 
 // ── Main Layout ──────────────────────────────────────────────────────────────
 export default function Layout() {
-  const [showWelcome, setShowWelcome] = useState(false);
-  const [showLogout,  setShowLogout]  = useState(false);
-  const [openGroup,   setOpenGroup]   = useState(null);
-  const [dropPos,     setDropPos]     = useState({ top: 50, left: 0 });
-  const closeTimer  = useRef(null);
-  const [mobileOpen,  setMobileOpen]  = useState(false);
+  const [showWelcome,      setShowWelcome]      = useState(false);
+  const [showLogout,       setShowLogout]       = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileOpen,       setMobileOpen]       = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [langOpen,    setLangOpen]    = useState(false);
   const [notifOpen,   setNotifOpen]   = useState(false);
@@ -1343,9 +1288,6 @@ export default function Layout() {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
   }, []);
-
-  // Close dropdown on route change
-  useEffect(() => { setOpenGroup(null); }, [location.pathname]);
 
   const matchesPath = (itemTo) => {
     const p = itemTo.split('?')[0];
@@ -1378,24 +1320,12 @@ export default function Layout() {
   const clockTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
   const clockDate = now.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' });
 
-  // Close dropdown when clicking outside
-  const navRef = useRef(null);
-  useEffect(() => {
-    const h = (e) => {
-      const inNav = navRef.current && navRef.current.contains(e.target);
-      const inDrop = e.target.closest('[data-nav-dropdown]');
-      if (!inNav && !inDrop) setOpenGroup(null);
-    };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#F8F9FA' }} className="erp-layout-enter">
 
       {/* ── Top Navigation Bar ── */}
       <header
-        ref={navRef}
         className="print:hidden"
         style={{
           flexShrink: 0,
@@ -1407,52 +1337,45 @@ export default function Layout() {
           borderBottom: '1px solid rgba(255,255,255,0.08)',
         }}
       >
+        {/* Hamburger — desktop: toggles sidebar, mobile: opens slide-in */}
+        <button
+          className="lg-show"
+          onClick={() => setSidebarCollapsed(c => !c)}
+          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          style={{ width: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.12)', border: 'none', borderRight: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.85)', cursor: 'pointer', flexShrink: 0 }}
+        >
+          <Menu size={18} />
+        </button>
+        <button
+          className="lg-hide"
+          onClick={() => setMobileOpen(true)}
+          style={{ width: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.12)', border: 'none', borderRight: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.85)', cursor: 'pointer', flexShrink: 0 }}
+        >
+          <Menu size={18} />
+        </button>
+
         {/* Logo */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 9,
-          padding: '0 14px 0 14px',
+          padding: '0 14px',
           borderRight: '1px solid rgba(255,255,255,0.1)',
           flexShrink: 0,
-          minWidth: 148,
-          background: 'rgba(0,0,0,0.12)',
+          background: 'rgba(0,0,0,0.08)',
         }}>
           <div style={{ width: 28, height: 28, background: '#fff', borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0, boxShadow: '0 2px 6px rgba(0,0,0,0.2)' }}>
             <img src="/bcim-logo.png" alt="BCIM" style={{ width: 24, height: 24, objectFit: 'contain' }} />
           </div>
-          <div>
+          <div className="sm-show" style={{ display: 'none' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#fff', lineHeight: 1.2, letterSpacing: '0.02em' }}>BCIM ERP</div>
             <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', lineHeight: 1, letterSpacing: '0.03em' }}>ConstructERP · v3.0</div>
           </div>
         </div>
 
-        {/* ── Module nav groups — horizontal scrollable menu ── */}
-        <div className="lg-show" style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>
-          <NavScroller>
-            {filteredGroups.map(group => {
-              const isActive = group.items.some(item => matchesPath(item.to));
-              const isOpen   = openGroup === group.label;
-              return (
-                <NavGroupButton
-                  key={group.label}
-                  group={group}
-                  isActive={isActive}
-                  isOpen={isOpen}
-                  onOpen={() => setOpenGroup(group.label)}
-                  onClose={() => setOpenGroup(null)}
-                  dropPos={dropPos}
-                  setDropPos={setDropPos}
-                  closeTimer={closeTimer}
-                />
-              );
-            })}
-          </NavScroller>
-        </div>
-
-        {/* Page title — shown on mobile / when sidebar is the primary nav */}
-        <div className="lg-hide" style={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center', padding: '0 14px' }}>
+        {/* Page title — always visible, flex spacer */}
+        <div style={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center', padding: '0 14px' }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 800, color: '#FFFFFF', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pageTitle}</div>
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.80)', lineHeight: 1.2 }}>{pageGroup || 'ERP Workspace'}</div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.70)', lineHeight: 1.2 }}>{pageGroup || 'ERP Workspace'}</div>
           </div>
         </div>
 
@@ -1550,14 +1473,6 @@ export default function Layout() {
             <LogOut size={15} />
           </button>
 
-          {/* Mobile hamburger */}
-          <button
-            className="lg-hide"
-            onClick={() => setMobileOpen(true)}
-            style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.90)', cursor: 'pointer' }}
-          >
-            <Menu size={18} />
-          </button>
         </div>
       </header>
 
@@ -1601,8 +1516,15 @@ export default function Layout() {
         </div>
       )}
 
-      {/* ── Page content (full width) ── */}
+      {/* ── Page content: sidebar + main ── */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
+        {/* Desktop sidebar — hidden on mobile via CSS */}
+        <DesktopSidebar
+          navGroups={filteredGroups}
+          matchesPath={matchesPath}
+          collapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed(c => !c)}
+        />
         <main style={{ flex: 1, minWidth: 0, overflow: 'auto', position: 'relative' }} className="print:overflow-visible print:h-auto">
           <Suspense fallback={<LoadingScreen />}>
             <div key={location.key} className={clsx('page-enter', isProcurementPage && 'procurement-strong-text')}>
@@ -1627,22 +1549,6 @@ export default function Layout() {
         navGroups={filteredGroups}
       />
 
-      {/* ── Nav dropdown portal — rendered at body root to escape overflow clipping ── */}
-      {openGroup && (() => {
-        const grp = filteredGroups.find(g => g.label === openGroup);
-        if (!grp) return null;
-        return createPortal(
-          <GroupDropdown
-            group={grp}
-            onClose={() => setOpenGroup(null)}
-            pos={dropPos}
-            onKeepOpen={() => clearTimeout(closeTimer.current)}
-            onStartClose={() => { closeTimer.current = setTimeout(() => setOpenGroup(null), 200); }}
-          />,
-          document.body
-        );
-      })()}
-
       {/* ── Welcome Screen ── */}
       {showWelcome && (
         <WelcomeScreen
@@ -1664,8 +1570,10 @@ export default function Layout() {
         .nav-scroll { scrollbar-width: none; }
         @media (min-width: 1024px) { .lg-hide { display: none !important; } }
         @media (max-width: 1023px) { .lg-show { display: none !important; } }
-        @media (min-width: 640px) { .sm-show { display: block !important; } }
+        @media (min-width: 640px)  { .sm-show { display: block !important; } }
         @media (max-width: 1180px) { .erp-clock-pill { display: none !important; } }
+        /* Desktop sidebar hidden on mobile — MobileSidebar used instead */
+        @media (max-width: 1023px) { .desktop-sidebar { display: none !important; } }
 
         /* ── Layout entry (login → ERP) ── */
         @keyframes erp-layout-in {
