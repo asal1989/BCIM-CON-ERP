@@ -72,10 +72,10 @@ const ALL_STAGES = [
 ];
 
 const ACTIVE_STAGES = [
-  { id: 'stores-approve', label: 'Store Manager',      short: 'Store Mgr', color: 'bg-orange-500 hover:bg-orange-600',   btnLabel: 'Approve Store',    status: 'pending' },
-  { id: 'approve-pm',     label: 'Project Manager',    short: 'PM',        color: 'bg-emerald-600 hover:bg-emerald-700', btnLabel: 'Approve PM',       status: 'stores_verified' },
-  { id: 'approve-mgmt',   label: 'Project Director',   short: 'Director',  color: 'bg-indigo-600 hover:bg-indigo-700',   btnLabel: 'Approve Director', status: 'approved_pm' },
-  { id: 'approve-md',     label: 'Managing Director',  short: 'MD',        color: 'bg-green-700 hover:bg-green-800',     btnLabel: 'Approve MD',       status: 'approved_mgmt' },
+  { id: 'stores-approve', label: 'Store Manager',      short: 'Store Mgr', color: 'bg-orange-500 hover:bg-orange-600',   btnLabel: 'Approve Store',    status: 'pending',        allowedRoles: ['stores_manager', 'store_keeper'] },
+  { id: 'approve-pm',     label: 'Project Manager',    short: 'PM',        color: 'bg-emerald-600 hover:bg-emerald-700', btnLabel: 'Approve PM',       status: 'stores_verified', allowedRoles: ['project_manager', 'pm'] },
+  { id: 'approve-mgmt',   label: 'Project Director',   short: 'Director',  color: 'bg-indigo-600 hover:bg-indigo-700',   btnLabel: 'Approve Director', status: 'approved_pm',    allowedRoles: ['director', 'project_director', 'management', 'management_director'] },
+  { id: 'approve-md',     label: 'Managing Director',  short: 'MD',        color: 'bg-green-700 hover:bg-green-800',     btnLabel: 'Approve MD',       status: 'approved_mgmt',  allowedRoles: ['managing_director', 'md', 'ceo', 'admin', 'super_admin'] },
 ];
 
 /* Given enabled stage IDs, compute what status each stage requires as input */
@@ -645,52 +645,67 @@ export default function MRSPage() {
                   </div>
                 </div>
 
-                {currentAction && (
-                  <div className={`rounded-xl p-4 space-y-3 shadow-sm border ${
-                    currentAction.id === 'stores-approve'
-                      ? 'bg-orange-50 border-orange-200'
-                      : 'bg-emerald-50 border-emerald-200'
-                  }`}>
-                    <div className="flex items-center gap-3">
-                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
-                        currentAction.id === 'stores-approve'
-                          ? 'bg-orange-100 border border-orange-200'
-                          : 'bg-emerald-100 border border-emerald-200'
-                      }`}>
-                        {currentAction.id === 'stores-approve'
-                          ? <Package className="w-4 h-4 text-orange-600" />
-                          : <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        }
+                {currentAction && (() => {
+                  const userRole = (user?.role || '').toLowerCase();
+                  const isAdmin  = ['admin', 'super_admin'].includes(userRole);
+                  const canAct   = isAdmin || (currentAction.allowedRoles || []).includes(userRole);
+                  return (
+                    <div className={`rounded-xl p-4 space-y-3 shadow-sm border ${
+                      currentAction.id === 'stores-approve'
+                        ? 'bg-orange-50 border-orange-200'
+                        : canAct ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'
+                    }`}>
+                      <div className="flex items-center gap-3">
+                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                          currentAction.id === 'stores-approve'
+                            ? 'bg-orange-100 border border-orange-200'
+                            : canAct ? 'bg-emerald-100 border border-emerald-200' : 'bg-slate-100 border border-slate-200'
+                        }`}>
+                          {currentAction.id === 'stores-approve'
+                            ? <Package className="w-4 h-4 text-orange-600" />
+                            : canAct
+                              ? <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                              : <Clock className="w-4 h-4 text-slate-400" />
+                          }
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {canAct
+                              ? (currentAction.id === 'stores-approve' ? '⚠ Awaiting Stores Verification' : 'Action Required')
+                              : `Awaiting ${currentAction.label} Approval`
+                            }
+                          </p>
+                          <p className={`text-xs font-bold ${
+                            currentAction.id === 'stores-approve' ? 'text-orange-700' : canAct ? 'text-emerald-700' : 'text-slate-500'
+                          }`}>{currentAction.label}</p>
+                          {!canAct && (
+                            <p className="text-[11px] text-slate-400 mt-0.5">This step requires a {currentAction.label} — not your role</p>
+                          )}
+                          {currentAction.id === 'stores-approve' && canAct && (
+                            <p className="text-[11px] text-orange-500 mt-0.5">This MRS must be verified by Stores before proceeding</p>
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">
-                          {currentAction.id === 'stores-approve' ? '⚠ Awaiting Stores Verification' : 'Action Required'}
-                        </p>
-                        <p className={`text-xs font-bold ${
-                          currentAction.id === 'stores-approve' ? 'text-orange-700' : 'text-emerald-700'
-                        }`}>{currentAction.label}</p>
-                        {currentAction.id === 'stores-approve' && (
-                          <p className="text-[11px] text-orange-500 mt-0.5">This MRS must be verified by Stores (Vijayan) before proceeding</p>
-                        )}
-                      </div>
+                      {canAct && (
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => approveMutation.mutate({ id: selectedMRS.id, stage: currentAction.id, data: {} })}
+                            disabled={approveMutation.isPending}
+                            className={`flex-[2] h-10 rounded-lg text-white text-xs font-semibold transition-colors shadow-sm disabled:opacity-60 ${currentAction.color || 'bg-emerald-600 hover:bg-emerald-700'}`}
+                          >
+                            {approveMutation.isPending ? 'Updating…' : currentAction.btnLabel}
+                          </button>
+                          <button
+                            onClick={() => rejectMutation.mutate({ id: selectedMRS.id, remarks: 'Rejected by approver' })}
+                            className="flex-1 h-10 rounded-lg bg-white border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 transition-colors"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => approveMutation.mutate({ id: selectedMRS.id, stage: currentAction.id, data: {} })}
-                        disabled={approveMutation.isPending}
-                        className={`flex-[2] h-10 rounded-lg text-white text-xs font-semibold transition-colors shadow-sm disabled:opacity-60 ${currentAction.color || 'bg-emerald-600 hover:bg-emerald-700'}`}
-                      >
-                        {approveMutation.isPending ? 'Updating…' : currentAction.btnLabel}
-                      </button>
-                      <button
-                        onClick={() => rejectMutation.mutate({ id: selectedMRS.id, remarks: 'Rejected by approver' })}
-                        className="flex-1 h-10 rounded-lg bg-white border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 transition-colors"
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             </div>
           </div>

@@ -239,11 +239,14 @@ router.use(loadProjectScope);
    If a project has no workflow config → ALL stages apply (standard).
 ─────────────────────────────────────────────────────────────────────────── */
 const ALL_STAGES = [
-  { id: 'stores-approve', nextStatus: 'stores_verified', colBy: 'stores_approved_by', colAt: 'stores_approved_at', sigCol: 'stores_sig_img', label: 'Store Manager' },
-  { id: 'approve-pm',     nextStatus: 'approved_pm',     colBy: 'approved_pm_by',     colAt: 'approved_pm_at',     sigCol: 'pm_sig_img',     label: 'Project Manager', legacyPrev: ['verified_tower'] },
-  { id: 'approve-mgmt',   nextStatus: 'approved_mgmt',   colBy: 'approved_mgmt_by',   colAt: 'approved_mgmt_at',   sigCol: 'mgmt_sig_img',   label: 'Project Director', legacyPrev: ['approved_srpm'] },
-  { id: 'approve-md',     nextStatus: 'approved_md',     colBy: 'approved_md_by',     colAt: 'approved_md_at',     sigCol: 'md_sig_img',     label: 'Managing Director' },
+  { id: 'stores-approve', nextStatus: 'stores_verified', colBy: 'stores_approved_by', colAt: 'stores_approved_at', sigCol: 'stores_sig_img', label: 'Store Manager',      allowedRoles: ['stores_manager', 'store_keeper'] },
+  { id: 'approve-pm',     nextStatus: 'approved_pm',     colBy: 'approved_pm_by',     colAt: 'approved_pm_at',     sigCol: 'pm_sig_img',     label: 'Project Manager',    allowedRoles: ['project_manager', 'pm'], legacyPrev: ['verified_tower'] },
+  { id: 'approve-mgmt',   nextStatus: 'approved_mgmt',   colBy: 'approved_mgmt_by',   colAt: 'approved_mgmt_at',   sigCol: 'mgmt_sig_img',   label: 'Project Director',   allowedRoles: ['director', 'project_director', 'management', 'management_director'], legacyPrev: ['approved_srpm'] },
+  { id: 'approve-md',     nextStatus: 'approved_md',     colBy: 'approved_md_by',     colAt: 'approved_md_at',     sigCol: 'md_sig_img',     label: 'Managing Director',  allowedRoles: ['managing_director', 'md', 'ceo'] },
 ];
+
+// Roles that can bypass stage role restrictions (system admins)
+const GLOBAL_ADMIN_ROLES = ['admin', 'super_admin'];
 const DEFAULT_STAGE_IDS = ALL_STAGES.map(s => s.id);
 
 /* Build a dynamic chain for a given list of enabled stage IDs.
@@ -591,6 +594,18 @@ router.patch('/:id/:stage', async (req, res) => {
       return res.status(400).json({
         error: `Cannot perform "${cfg.label}" — MRS is at "${mrs.rows[0].status}", expected "${cfg.requiredPrev}"`
       });
+    }
+
+    // Role check — only the designated role can approve each stage
+    // (admin / super_admin bypass for system management)
+    if (!GLOBAL_ADMIN_ROLES.includes(req.user.role)) {
+      const userRole = (req.user.role || '').toLowerCase();
+      const allowed  = cfg.allowedRoles || [];
+      if (!allowed.includes(userRole)) {
+        return res.status(403).json({
+          error: `Only a ${cfg.label} can approve this stage. Your role (${req.user.role}) is not authorised for "${cfg.label}" approval.`
+        });
+      }
     }
 
     // Build dynamic SET clause
