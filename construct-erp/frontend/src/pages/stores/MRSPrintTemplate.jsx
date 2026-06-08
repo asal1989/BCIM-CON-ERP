@@ -589,9 +589,9 @@ const MRSPrintTemplate = React.forwardRef(({ data }, ref) => {
                   <td className="mrs-desc">{item ? material(item) : ''}</td>
                   <td className="mrs-unit">{item?.unit || ''}</td>
                   <td className="mrs-qty">{qty(item)}</td>
-                  <td className="mrs-date">{item?.required_date ? fmtDate(item.required_date) : ''}</td>
-                  <td>{item?.preferred_vendor || ''}</td>
-                  <td>{item?.remarks || ''}</td>
+                  <td className="mrs-date">{item ? fmtDate(item.required_date || item.date_required, '') : ''}</td>
+                  <td>{item?.vendor || item?.preferred_vendor || ''}</td>
+                  <td>{item?.purpose || item?.remarks || ''}</td>
                 </tr>
               );
             })}
