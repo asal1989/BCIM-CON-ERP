@@ -21,6 +21,7 @@ const STORE_UNITS = [
   'Nos', 'Bags', 'Kgs', 'MT', 'Ton', 'Cum', 'Sqm', 'Rmt', 'Ltr', 'Box',
   'Packet', 'Roll', 'Set', 'Pair', 'Pairs', 'Coils', 'LS',
 ];
+const DEFAULT_CATEGORIES = ['Masonry Works'];
 
 /* ── helpers ─────────────────────────────────────────────────── */
 const inr = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -507,7 +508,7 @@ export default function StoreLedgerPage() {
   });
 
   // ── Derived ─────────────────────────────────────────────────
-  const categories = [...new Set(inventoryData.map(s => s.category).filter(Boolean))].sort();
+  const categories = [...new Set([...DEFAULT_CATEGORIES, ...inventoryData.map(s => s.category).filter(Boolean)])].sort();
 
   const outCount = inventoryData.filter(s => parseFloat(s.closing_stock) <= 0).length;
   const lowCount = inventoryData.filter(s => {

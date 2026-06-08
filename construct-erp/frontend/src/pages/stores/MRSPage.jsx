@@ -21,6 +21,7 @@ import MRSPrintTemplate from './MRSPrintTemplate';
 import { useReactToPrint } from 'react-to-print';
 
 const UNITS = ['MT', 'Bags', 'CUM', 'Brass', 'Nos', 'RMT', 'Drum', 'Ltr', 'Kg', 'Sqft', 'Bundle', 'Roll', 'Coil', 'Yard', 'Pairs'];
+const DEFAULT_CATEGORIES = ['Masonry Works'];
 
 const STATUS_CONFIG = {
   pending:         { label: 'Pending Store Manager', short: 'Pending',    color: 'bg-yellow-50 text-yellow-700 border-yellow-200',   dot: 'bg-yellow-500',  icon: Clock,       stage: 1 },
@@ -1214,7 +1215,7 @@ export default function MRSPage() {
                         onChange={e => setNewItemForm(f => ({ ...f, category: e.target.value }))}
                       >
                         <option value="">— Select category —</option>
-                        {existingCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                        {[...new Set([...DEFAULT_CATEGORIES, ...existingCategories])].sort().map(cat => <option key={cat} value={cat}>{cat}</option>)}
                       </select>
                       <button
                         type="button"
