@@ -19,10 +19,27 @@ const GRN_CLS = {
   rejected:        'bg-red-100 text-red-700',
 };
 const MRS_CLS = {
-  pending:  'bg-amber-100 text-amber-700',
-  approved: 'bg-emerald-100 text-emerald-700',
-  issued:   'bg-blue-100 text-blue-700',
-  rejected: 'bg-red-100 text-red-700',
+  pending:         'bg-amber-100 text-amber-700',
+  stores_verified: 'bg-blue-100 text-blue-700',
+  verified_tower:  'bg-blue-100 text-blue-700',
+  approved_pm:     'bg-indigo-100 text-indigo-700',
+  approved_srpm:   'bg-indigo-100 text-indigo-700',
+  approved_mgmt:   'bg-purple-100 text-purple-700',
+  approved_md:     'bg-emerald-100 text-emerald-700',
+  issued:          'bg-teal-100 text-teal-700',
+  rejected:        'bg-red-100 text-red-700',
+};
+
+const MRS_LABEL = {
+  pending:         'Pending',
+  stores_verified: 'Stores ✓',
+  verified_tower:  'Tower ✓',
+  approved_pm:     'PM Approved',
+  approved_srpm:   'Sr PM Approved',
+  approved_mgmt:   'Mgmt Approved',
+  approved_md:     'MD Approved',
+  issued:          'Issued',
+  rejected:        'Rejected',
 };
 
 function StatBar({ label, value, total, color }) {
@@ -70,10 +87,13 @@ export default function StoresDashboard() {
   const approvedGRNs    = grns.filter(g => (g.quality_status || g.status) === 'approved');
   const awaitingGRNs    = [...pendingGRNs, ...verifiedGRNs];
 
-  // MRS breakdowns
-  const openMRS         = mrs.filter(m => m.status === 'pending' || m.status === 'approved');
-  const issuedMRS       = mrs.filter(m => m.status === 'issued');
-  const pendingMRS      = mrs.filter(m => m.status === 'pending');
+  // MRS breakdowns — use actual DB status values
+  const MRS_CLOSED = ['issued', 'rejected', 'draft'];
+  const MRS_IN_APPROVAL = ['stores_verified', 'verified_tower', 'approved_pm', 'approved_srpm', 'approved_mgmt', 'approved_md'];
+  const openMRS     = mrs.filter(m => !MRS_CLOSED.includes(m.status));
+  const pendingMRS  = mrs.filter(m => m.status === 'pending');
+  const inApproval  = mrs.filter(m => MRS_IN_APPROVAL.includes(m.status));
+  const issuedMRS   = mrs.filter(m => m.status === 'issued');
 
   // Issues
   const thisMonthIssues = issues.filter(i => dayjs(i.issue_date || i.created_at).isSame(now, 'month'));
@@ -96,10 +116,13 @@ export default function StoresDashboard() {
   ];
 
   const mrsCols = [
-    { key: 'mrs_number',     label: 'MRS #',    cls: 'font-mono text-[11px] font-bold text-indigo-700' },
-    { key: 'project_name',   label: 'Project',  cls: 'text-slate-700 max-w-[110px] truncate' },
-    { key: 'requested_date', label: 'Date',     render: r => r.requested_date ? dayjs(r.requested_date).format('DD MMM') : '—', cls: 'text-slate-500' },
-    { key: 'status',         label: 'Status',   render: r => <Badge label={r.status || 'pending'} cls={MRS_CLS[r.status] || MRS_CLS.pending} /> },
+    { key: 'mrs_number',   label: 'MRS #',   cls: 'font-mono text-[11px] font-bold text-indigo-700',
+      render: r => r.serial_no_formatted || r.mrs_number || '—' },
+    { key: 'project_name', label: 'Project', cls: 'text-slate-700 max-w-[110px] truncate' },
+    { key: 'created_at',   label: 'Date',    render: r => dayjs(r.created_at).format('DD MMM'), cls: 'text-slate-500' },
+    { key: 'status',       label: 'Status',  render: r => (
+        <Badge label={MRS_LABEL[r.status] || r.status || 'pending'} cls={MRS_CLS[r.status] || 'bg-slate-100 text-slate-600'} />
+      )},
   ];
 
   const issueCols = [
@@ -164,9 +187,9 @@ export default function StoresDashboard() {
               <span className="ml-auto text-xs text-slate-400">{mrs.length} total</span>
             </div>
             <div className="space-y-2.5">
-              <StatBar label="Pending"  value={pendingMRS.length}  total={mrs.length} color="bg-amber-400" />
-              <StatBar label="Approved" value={mrs.filter(m => m.status === 'approved').length} total={mrs.length} color="bg-indigo-400" />
-              <StatBar label="Issued"   value={issuedMRS.length}   total={mrs.length} color="bg-emerald-400" />
+              <StatBar label="Pending"     value={pendingMRS.length}  total={mrs.length} color="bg-amber-400" />
+              <StatBar label="In Approval" value={inApproval.length}  total={mrs.length} color="bg-indigo-400" />
+              <StatBar label="Issued"      value={issuedMRS.length}   total={mrs.length} color="bg-emerald-400" />
             </div>
           </div>
 
