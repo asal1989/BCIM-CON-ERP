@@ -31,6 +31,9 @@ const router = express.Router();
   await safe(`ALTER TABLE grn_items ADD COLUMN IF NOT EXISTS physical_unit VARCHAR(30)`);
   await safe(`ALTER TABLE grn_items ADD COLUMN IF NOT EXISTS conversion_factor NUMERIC(14,6) DEFAULT 1`);
 
+  // 5. Rate per item — needed for inventory unit_rate update
+  await safe(`ALTER TABLE grn_items ADD COLUMN IF NOT EXISTS rate NUMERIC(14,2) DEFAULT 0`);
+
   console.log('[GRN] Schema migration OK');
 })();
 
@@ -191,13 +194,14 @@ router.post('/', async (req, res) => {
 
         await client.query(
           `INSERT INTO grn_items (
-            grn_id, material_name, quantity_received, unit,
+            grn_id, material_name, quantity_received, unit, rate,
             physical_qty, physical_unit, conversion_factor,
             po_item_id, quality_remarks, batch_number, expiry_date, sort_order
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
           [
             grnId, it.material_name || null,
             qtyInPoUnit, it.unit,
+            it.rate ? parseFloat(it.rate) : 0,
             it.physical_qty  || null,
             it.physical_unit || null,
             it.conversion_factor ? parseFloat(it.conversion_factor) : 1,

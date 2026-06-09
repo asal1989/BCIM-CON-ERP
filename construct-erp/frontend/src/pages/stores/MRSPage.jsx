@@ -530,6 +530,8 @@ export default function MRSPage() {
     });
   };
 
+  const [showMDModal, setShowMDModal] = useState(false);
+
   if (selectedMRS) {
     const detailItems = detailedMRS?.items || selectedMRS.items || [];
     return (
@@ -600,21 +602,32 @@ export default function MRSPage() {
                   <table className="w-full text-sm min-w-[760px]">
                     <thead>
                       <tr className="border-b border-slate-100 bg-white">
-                        {['#', 'Material', 'Unit', 'Qty', 'Purpose'].map(h => (
+                        {['#', 'Material', 'Unit', 'Requested Qty', liveStatus === 'approved_md' ? 'MD Approved Qty' : null, 'Purpose'].filter(Boolean).map(h => (
                           <th key={h} className="px-4 py-3 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {detailItems.map((it, i) => (
-                        <tr key={i} className="hover:bg-slate-50">
-                          <td className="px-4 py-3 text-xs font-mono text-slate-500">{i + 1}</td>
-                          <td className="px-4 py-3 font-semibold text-slate-900">{it.material_name || it.material}</td>
-                          <td className="px-4 py-3"><span className="px-2 py-1 rounded bg-slate-100 text-xs font-semibold">{it.unit}</span></td>
-                          <td className="px-4 py-3 font-bold text-indigo-700">{it.quantity || it.qty}</td>
-                          <td className="px-4 py-3 text-slate-700">{it.purpose || '-'}</td>
-                        </tr>
-                      ))}
+                      {detailItems.map((it, i) => {
+                        const excluded = it.effective_included === false || it.md_included === false;
+                        return (
+                          <tr key={i} className={clsx('hover:bg-slate-50', excluded && 'opacity-40 line-through')}>
+                            <td className="px-4 py-3 text-xs font-mono text-slate-500">{i + 1}</td>
+                            <td className="px-4 py-3 font-semibold text-slate-900">
+                              {it.material_name || it.material}
+                              {excluded && <span className="ml-2 text-[10px] font-bold text-red-500 no-underline">(excluded by MD)</span>}
+                            </td>
+                            <td className="px-4 py-3"><span className="px-2 py-1 rounded bg-slate-100 text-xs font-semibold">{it.unit}</span></td>
+                            <td className="px-4 py-3 font-bold text-indigo-700">{it.quantity || it.qty}</td>
+                            {liveStatus === 'approved_md' && (
+                              <td className="px-4 py-3 font-bold text-green-700">
+                                {excluded ? '—' : (it.md_approved_qty ?? it.quantity ?? it.qty)}
+                              </td>
+                            )}
+                            <td className="px-4 py-3 text-slate-700">{it.purpose || '-'}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -690,13 +703,23 @@ export default function MRSPage() {
                     </div>
                     {canActOnCurrent && (
                       <div className="flex gap-3">
-                        <button
-                          onClick={() => approveMutation.mutate({ id: selectedMRS.id, stage: currentAction.id, data: {} })}
-                          disabled={approveMutation.isPending}
-                          className={`flex-[2] h-10 rounded-lg text-white text-xs font-semibold transition-colors shadow-sm disabled:opacity-60 ${currentAction.color || 'bg-emerald-600 hover:bg-emerald-700'}`}
-                        >
-                          {approveMutation.isPending ? 'Updating…' : currentAction.btnLabel}
-                        </button>
+                        {currentAction.id === 'approve-md' ? (
+                          <button
+                            onClick={() => setShowMDModal(true)}
+                            disabled={!detailedMRS || approveMutation.isPending}
+                            className="flex-[2] h-10 rounded-lg text-white text-xs font-semibold transition-colors shadow-sm disabled:opacity-60 bg-green-700 hover:bg-green-800"
+                          >
+                            {!detailedMRS ? 'Loading…' : 'Review & Authorize (MD) →'}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => approveMutation.mutate({ id: selectedMRS.id, stage: currentAction.id, data: {} })}
+                            disabled={approveMutation.isPending}
+                            className={`flex-[2] h-10 rounded-lg text-white text-xs font-semibold transition-colors shadow-sm disabled:opacity-60 ${currentAction.color || 'bg-emerald-600 hover:bg-emerald-700'}`}
+                          >
+                            {approveMutation.isPending ? 'Updating…' : currentAction.btnLabel}
+                          </button>
+                        )}
                         <button
                           onClick={() => rejectMutation.mutate({ id: selectedMRS.id, remarks: 'Rejected by approver' })}
                           className="flex-1 h-10 rounded-lg bg-white border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 transition-colors"
@@ -723,6 +746,20 @@ export default function MRSPage() {
           />
         </div>
 
+
+        {/* MD Authorization Modal */}
+        {showMDModal && detailedMRS && (
+          <MDApprovalModal
+            mrs={selectedMRS}
+            items={detailItems}
+            loading={approveMutation.isPending}
+            onClose={() => setShowMDModal(false)}
+            onApprove={(data) => {
+              approveMutation.mutate({ id: selectedMRS.id, stage: 'approve-md', data });
+              setShowMDModal(false);
+            }}
+          />
+        )}
 
         {/* Hidden print area — react-to-print renders this directly */}
         <div className="hidden">
@@ -1376,6 +1413,139 @@ function InsightCard({ icon: Icon, label, value, sub, tone = 'slate' }) {
       <div className="mt-3">
         <p className="text-xs font-bold text-slate-700 uppercase tracking-wider">{label}</p>
         <p className="text-xs text-slate-500 mt-1">{sub}</p>
+      </div>
+    </div>
+  );
+}
+
+/* ── MD Authorization Modal ─────────────────────────────────────────────── */
+function MDApprovalModal({ mrs, items, loading, onClose, onApprove }) {
+  const [approvedItems, setApprovedItems] = useState(() =>
+    items.map(it => ({
+      id: it.id,
+      material_name: it.material_name || it.material,
+      unit: it.unit,
+      qty: String(it.quantity ?? it.qty ?? ''),
+      original_qty: it.quantity ?? it.qty,
+      included: true,
+    }))
+  );
+  const [remarks, setRemarks] = useState('');
+
+  const toggle    = (idx) => setApprovedItems(p => p.map((it, i) => i === idx ? { ...it, included: !it.included } : it));
+  const setQty    = (idx, v) => setApprovedItems(p => p.map((it, i) => i === idx ? { ...it, qty: v } : it));
+  const selectAll = () => setApprovedItems(p => p.map(it => ({ ...it, included: true })));
+  const clearAll  = () => setApprovedItems(p => p.map(it => ({ ...it, included: false })));
+
+  const includedCount = approvedItems.filter(it => it.included).length;
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+
+        {/* Header */}
+        <div className="bg-green-800 px-6 py-4 flex items-start justify-between flex-shrink-0">
+          <div>
+            <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <Landmark size={16} className="opacity-80" /> MD Authorization
+            </h2>
+            <p className="text-xs text-green-200 mt-0.5">
+              {mrs.serial_no_formatted || mrs.mrs_number} — select items &amp; set approved quantities
+            </p>
+          </div>
+          <button onClick={onClose}
+            className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Toolbar */}
+        <div className="flex items-center justify-between px-5 py-2.5 bg-green-50 border-b border-green-100 flex-shrink-0">
+          <p className="text-xs text-green-800 font-medium">
+            Check items to include · edit quantities if needed · uncheck to exclude
+          </p>
+          <div className="flex items-center gap-2">
+            <button onClick={selectAll} className="text-[10px] font-bold text-green-700 hover:underline">Select All</button>
+            <span className="text-green-300">|</span>
+            <button onClick={clearAll}  className="text-[10px] font-bold text-red-500 hover:underline">Clear All</button>
+          </div>
+        </div>
+
+        {/* Items */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {approvedItems.map((it, idx) => (
+            <div key={it.id || idx} className={clsx(
+              'flex items-center gap-3 border rounded-xl px-4 py-3 transition-all',
+              it.included ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-slate-200 opacity-50'
+            )}>
+              <input
+                type="checkbox"
+                checked={it.included}
+                onChange={() => toggle(idx)}
+                className="w-4 h-4 accent-green-700 cursor-pointer flex-shrink-0"
+              />
+              <span className="flex-1 text-sm font-semibold text-slate-800 truncate min-w-0">{it.material_name}</span>
+              <span className="text-xs text-slate-500 bg-white border border-slate-200 rounded px-2 py-0.5 font-mono flex-shrink-0">{it.unit}</span>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <span className="text-[10px] text-slate-400 whitespace-nowrap">Req: <span className="font-bold text-slate-600">{it.original_qty}</span></span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <span className="text-[10px] text-green-700 font-bold whitespace-nowrap">Approve:</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={it.qty}
+                  onChange={e => setQty(idx, e.target.value)}
+                  disabled={!it.included}
+                  className="w-24 h-8 bg-white border border-slate-200 rounded-lg px-2 text-sm font-mono text-right outline-none focus:border-green-500 disabled:bg-slate-100 disabled:text-slate-400 transition"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Remarks */}
+        <div className="px-5 py-3 border-t border-slate-100 flex-shrink-0">
+          <label className="text-xs font-bold text-slate-700 block mb-1.5">MD Remarks (optional)</label>
+          <textarea
+            rows={2}
+            value={remarks}
+            onChange={e => setRemarks(e.target.value)}
+            placeholder="Authorization notes, conditions, or special instructions…"
+            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm outline-none focus:border-green-400 resize-none transition"
+          />
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100 bg-slate-50 flex-shrink-0">
+          <div>
+            <span className={clsx('text-sm font-bold', includedCount === 0 ? 'text-red-500' : 'text-green-700')}>
+              {includedCount} of {approvedItems.length} items authorized
+            </span>
+            {includedCount === 0 && <p className="text-[11px] text-red-400">Please select at least one item</p>}
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={onClose}
+              className="px-4 h-9 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-white transition">
+              Cancel
+            </button>
+            <button
+              onClick={() => onApprove({
+                approved_items: approvedItems.map(it => ({
+                  id: it.id,
+                  qty: parseFloat(it.qty) || 0,
+                  included: it.included,
+                })),
+                remarks,
+              })}
+              disabled={loading || includedCount === 0}
+              className="px-5 h-9 rounded-lg bg-green-700 text-white text-sm font-semibold hover:bg-green-800 disabled:opacity-50 transition shadow-sm"
+            >
+              {loading ? 'Authorizing…' : `Authorize ${includedCount} Item${includedCount !== 1 ? 's' : ''} →`}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -422,6 +422,9 @@ router.use(loadProjectScope);
   await safe(`ALTER TABLE material_requisitions ADD COLUMN IF NOT EXISTS stores_sig_img TEXT`);
   // Per-project workflow config stored on the projects table
   await safe(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS mrs_workflow JSONB`);
+  // MD item-level authorization: which items to proceed, at what quantity
+  await safe(`ALTER TABLE mrs_items ADD COLUMN IF NOT EXISTS md_approved_qty NUMERIC(12,3)`);
+  await safe(`ALTER TABLE mrs_items ADD COLUMN IF NOT EXISTS md_included BOOLEAN DEFAULT TRUE`);
   console.log('[mrs] schema OK');
 })();
 
@@ -552,7 +555,10 @@ router.get('/:id', async (req, res) => {
       return res.status(403).json({ error: 'You do not have access to this project.' });
     }
     const items = await query(
-      `SELECT * FROM mrs_items WHERE mrs_id = $1 ORDER BY sort_order`,
+      `SELECT *,
+              COALESCE(md_approved_qty, quantity) AS effective_qty,
+              COALESCE(md_included, TRUE) AS effective_included
+       FROM mrs_items WHERE mrs_id = $1 ORDER BY sort_order`,
       [req.params.id]
     );
     res.json({
@@ -815,6 +821,24 @@ router.patch('/:id/:stage', async (req, res) => {
 
     params.push(req.params.id);
     await query(`UPDATE material_requisitions SET ${setSql} WHERE id = $${params.length}`, params);
+
+    // Save MD item-level selections (which items approved + at what qty)
+    if (stage === 'approve-md' && Array.isArray(req.body.approved_items) && req.body.approved_items.length) {
+      for (const ai of req.body.approved_items) {
+        if (!ai.id) continue;
+        await query(
+          `UPDATE mrs_items
+           SET md_approved_qty = $1, md_included = $2
+           WHERE id = $3 AND mrs_id = $4`,
+          [
+            ai.qty != null ? parseFloat(ai.qty) : null,
+            ai.included !== false,
+            ai.id,
+            req.params.id,
+          ]
+        );
+      }
+    }
 
     // Always push to MR raiser when any approval stage is done
     if (mrs.rows[0].raised_by) {
