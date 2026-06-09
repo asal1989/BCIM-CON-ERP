@@ -1,7 +1,7 @@
 // src/pages/sc/SCWorkOrders.jsx — Unified Work Order Management (Legacy + New SC Module)
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { scAPI, projectAPI } from '../../api/client';
+import { scAPI, projectAPI, boqAPI } from '../../api/client';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import {
   Plus, Search, Eye, Edit2, CheckCircle, X, RefreshCw,
@@ -199,11 +199,11 @@ function WOForm({ wo, projects, subcontractors, onClose }) {
     tower_block:'', work_category:'',
     start_date:'', end_date:'',
     contract_amount:0, gst_pct:18, tds_pct:2, retention_pct:5, advance_amount:0,
-    items:[{ item_code:'', description:'', unit:'Sqm', qty:0, rate:0 }],
+    items:[{ item_code:'', description:'', unit:'Sqm', qty:0, rate:0, boq_item_id:'' }],
   });
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const setItem = (i,k,v) => setForm(f=>({...f, items: f.items.map((it,idx)=>idx===i?{...it,[k]:v}:it)}));
-  const addItem = () => setForm(f=>({...f, items:[...f.items,{item_code:'',description:'',unit:'Sqm',qty:0,rate:0}]}));
+  const addItem = () => setForm(f=>({...f, items:[...f.items,{item_code:'',description:'',unit:'Sqm',qty:0,rate:0,boq_item_id:''}]}));
   const removeItem = i => setForm(f=>({...f, items: f.items.filter((_,idx)=>idx!==i)}));
   const totalAmt = form.items.reduce((s,it)=>s+num(it.qty)*num(it.rate),0);
 
@@ -211,6 +211,14 @@ function WOForm({ wo, projects, subcontractors, onClose }) {
     mutationFn: d => isEdit ? scAPI.updateWO(wo.id,d) : scAPI.createWO({...d, contract_amount: totalAmt||d.contract_amount}),
     onSuccess: () => { toast.success(isEdit?'Updated':'Work order created'); qc.invalidateQueries({queryKey:['sc-wo-all-view']}); onClose(); },
     onError: e => toast.error(e?.response?.data?.error||'Failed'),
+  });
+
+  // BOQ items for the selected project — used to link SC items to client BOQ
+  const { data: boqItems=[] } = useQuery({
+    queryKey: ['boq-items-for-wo', form.project_id],
+    queryFn:  () => boqAPI.list({ project_id: form.project_id }).then(r => r.data?.data || []),
+    enabled:  !!form.project_id,
+    staleTime: 60000,
   });
 
   const WORK_CATEGORIES = ['Civil','Structural','Waterproofing','Electrical','Plumbing','Painting','Carpentry','Tiles','Aluminium','Demolition','Earth Work','Fabrication','Interior','Landscaping','General'];
@@ -313,7 +321,7 @@ function WOForm({ wo, projects, subcontractors, onClose }) {
             <table className="w-full text-xs">
               <thead style={{background:`linear-gradient(90deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)`}}>
                 <tr>
-                  {['#','Code','Description','Unit','Qty','Rate (₹)','Amount',''].map(h=>(
+                  {['#','BOQ Link','Code','Description','Unit','Qty','Rate (₹)','Amount',''].map(h=>(
                     <th key={h} className="px-3 py-2.5 text-left font-bold text-white/80 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -322,6 +330,13 @@ function WOForm({ wo, projects, subcontractors, onClose }) {
                 {form.items.map((it,i)=>(
                   <tr key={i} className={clsx('border-t border-slate-100', i%2===0?'bg-white':'bg-slate-50/30')}>
                     <td className="px-3 py-2 text-slate-400">{i+1}</td>
+                    <td className="px-2 py-2">
+                      <select value={it.boq_item_id||''} onChange={e=>setItem(i,'boq_item_id',e.target.value)}
+                        className="w-36 border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-emerald-300">
+                        <option value="">— none —</option>
+                        {boqItems.map(b=><option key={b.id} value={b.id}>{b.item_no||b.sr_no} — {(b.description||'').slice(0,28)}</option>)}
+                      </select>
+                    </td>
                     <td className="px-2 py-2"><input value={it.item_code} onChange={e=>setItem(i,'item_code',e.target.value)} className="w-16 border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-emerald-300" placeholder="B-01"/></td>
                     <td className="px-2 py-2"><input value={it.description} onChange={e=>setItem(i,'description',e.target.value)} className="w-full min-w-[200px] border border-slate-200 rounded px-2 py-1 text-xs outline-none" placeholder="Description…"/></td>
                     <td className="px-2 py-2">
@@ -336,7 +351,7 @@ function WOForm({ wo, projects, subcontractors, onClose }) {
                   </tr>
                 ))}
                 <tr className="border-t-2 border-emerald-300 bg-emerald-50">
-                  <td colSpan={6} className="px-4 py-2.5 text-right font-bold text-slate-700 text-xs uppercase tracking-wider">Total Contract Amount</td>
+                  <td colSpan={7} className="px-4 py-2.5 text-right font-bold text-slate-700 text-xs uppercase tracking-wider">Total Contract Amount</td>
                   <td className="px-3 py-2.5 font-bold text-emerald-700 text-sm">{fmt(totalAmt)}</td>
                   <td/>
                 </tr>

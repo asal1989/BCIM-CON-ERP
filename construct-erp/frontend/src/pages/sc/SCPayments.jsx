@@ -125,7 +125,6 @@ function PaymentModal({ bill, onClose }) {
 export default function SCPayments() {
   const [projectFilter, setProject] = useState('');
   const [payModal,   setPayModal]   = useState(null);
-  const [printBill,  setPrintBill]  = useState(null);  // bill awaiting payments fetch for print
   const { data:projects=[] } = useQuery({ queryKey:['projects'], queryFn:()=>projectAPI.list().then(r=>r.data?.data??[]) });
   const { data:bills=[], isLoading, refetch } = useQuery({
     queryKey:['sc-approved-bills', projectFilter],
@@ -138,16 +137,13 @@ export default function SCPayments() {
     staleTime:0,
   });
 
-  // Fetch payments for a specific bill when Print Advice is clicked
-  const { data: printPayments=[] } = useQuery({
-    queryKey: ['sc-bill-payments', printBill?.id],
-    queryFn:  () => scAPI.listPayments({ bill_id: printBill.id }).then(r=>r.data?.data||[]),
-    enabled:  !!printBill,
-    staleTime: 0,
-    onSuccess: (data) => {
-      if (printBill) { printPaymentAdvice(printBill, data); setPrintBill(null); }
-    },
-  });
+  // Fetch payments on-demand and print — avoids onSuccess (removed in RQ v5)
+  const handlePrintAdvice = async (bill) => {
+    try {
+      const r = await scAPI.listPayments({ bill_id: bill.id });
+      printPaymentAdvice(bill, r.data?.data || []);
+    } catch(e) { toast.error('Failed to load payment data'); }
+  };
 
   const totalApproved = bills.reduce((s,b) => s+parseFloat(b.net_payable||0), 0);
   const totalPaid     = bills.reduce((s,b) => s+parseFloat(b.paid_amount||0), 0)
@@ -211,7 +207,7 @@ export default function SCPayments() {
                             )}
                             {b.status==='paid'&&<span className="text-xs font-semibold text-emerald-600">✓ Paid</span>}
                             {(b.status==='paid'||b.paid_amount>0)&&(
-                              <button onClick={()=>setPrintBill(b)} title="Print Payment Advice"
+                              <button onClick={()=>handlePrintAdvice(b)} title="Print Payment Advice"
                                 className="p-1.5 rounded-lg border border-slate-200 text-slate-400 hover:text-teal-600 hover:border-teal-300 hover:bg-teal-50">
                                 <Printer className="w-3.5 h-3.5"/>
                               </button>

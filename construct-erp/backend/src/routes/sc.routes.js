@@ -496,9 +496,47 @@ router.post('/work-orders', authorize(...PLANNER), async (req, res) => {
 router.put('/work-orders/:id', authorize(...PLANNER), async (req, res) => {
   try {
     const f = req.body;
-    const r = await query(`UPDATE sc_work_orders SET subject=$1,description=$2,scope_of_work=$3,terms_conditions=$4,start_date=$5,end_date=$6,contract_amount=$7,gst_pct=$8,tds_pct=$9,retention_pct=$10,advance_amount=$11,updated_at=NOW() WHERE id=$12 AND company_id=$13 RETURNING *`,
-      [f.subject,f.description||null,f.scope_of_work||null,f.terms_conditions||null,f.start_date||null,f.end_date||null,f.contract_amount||0,f.gst_pct||18,f.tds_pct||2,f.retention_pct||5,f.advance_amount||0,req.params.id,CID(req)]);
+    const r = await query(
+      `UPDATE sc_work_orders SET
+         subject=$1, description=$2, scope_of_work=$3, terms_conditions=$4,
+         start_date=$5, end_date=$6, contract_amount=$7,
+         gst_pct=$8, tds_pct=$9, retention_pct=$10, advance_amount=$11,
+         dlp_end_date=$12, dlp_months=$13, work_category=$14, tower_block=$15,
+         updated_at=NOW()
+       WHERE id=$16 AND company_id=$17 RETURNING *`,
+      [f.subject, f.description||null, f.scope_of_work||null, f.terms_conditions||null,
+       f.start_date||null, f.end_date||null, f.contract_amount||0,
+       f.gst_pct||18, f.tds_pct||2, f.retention_pct||5, f.advance_amount||0,
+       f.dlp_end_date||null, f.dlp_months||12, f.work_category||null, f.tower_block||null,
+       req.params.id, CID(req)]);
     if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
+
+    // Items upsert — add/update/delete SC WO items with BOQ linking
+    if (Array.isArray(f.items)) {
+      const woId = req.params.id;
+      const existingRows = await query(`SELECT id FROM sc_wo_items WHERE wo_id=$1`, [woId]);
+      const existingIds  = new Set(existingRows.rows.map(x => x.id));
+      const incomingIds  = new Set(f.items.filter(it => it.id).map(it => it.id));
+      // Delete items removed by user (only if not yet billed)
+      for (const id of existingIds) {
+        if (!incomingIds.has(id)) {
+          await query(`DELETE FROM sc_wo_items WHERE id=$1 AND COALESCE(billed_qty,0)=0`, [id]);
+        }
+      }
+      // Upsert each incoming item
+      for (let k = 0; k < f.items.length; k++) {
+        const it = f.items[k];
+        if (it.id && existingIds.has(it.id)) {
+          await query(
+            `UPDATE sc_wo_items SET item_code=$1,description=$2,unit=$3,qty=$4,rate=$5,sequence_no=$6,boq_item_id=$7 WHERE id=$8`,
+            [it.item_code||null, it.description, it.unit||null, it.qty||0, it.rate||0, k+1, it.boq_item_id||null, it.id]);
+        } else {
+          await query(
+            `INSERT INTO sc_wo_items (wo_id,item_code,description,unit,qty,rate,sequence_no,boq_item_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            [woId, it.item_code||null, it.description, it.unit||null, it.qty||0, it.rate||0, k+1, it.boq_item_id||null]);
+        }
+      }
+    }
     res.json({ data: r.rows[0] });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
