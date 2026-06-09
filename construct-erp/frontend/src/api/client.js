@@ -1122,6 +1122,7 @@ export const tqsBillsAPI = {
   uploadFile:   (id, fd)   => api.post(`/tqs/bills/${id}/files`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
   linkOneDrive: (id, data) => api.post(`/tqs/bills/${id}/files/link`, data),
   syncFileToOneDrive: (id, fid) => api.post(`/tqs/bills/${id}/files/${fid}/sync-onedrive`),
+  getFilePreviewUrl: (id, fid) => api.get(`/tqs/bills/${id}/files/${fid}/preview-url`),
   deleteFile:   (id, fid)  => api.delete(`/tqs/bills/${id}/files/${fid}`),
   delete:       (id)       => api.delete(`/tqs/bills/${id}`),
   repairCertifiedNet: ()  => api.post('/tqs/bills/repair-certified-net'),

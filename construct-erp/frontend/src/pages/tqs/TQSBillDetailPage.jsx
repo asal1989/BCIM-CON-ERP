@@ -1085,10 +1085,10 @@ function FilesPanel({ bill, billId }) {
 
               <div className="flex items-center justify-between mt-0.5 pt-1 border-t border-slate-200/60">
                 <div className="flex items-center gap-2">
-                  {f.onedrive_web_url ? (
-                    <a href={f.onedrive_web_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[10px] text-blue-600 hover:underline">
-                      <Cloud className="w-3 h-3" /> Open in OneDrive
-                    </a>
+                  {f.onedrive_id || f.onedrive_web_url ? (
+                    <span className="flex items-center gap-1 text-[10px] text-emerald-600 font-medium">
+                      <Cloud className="w-3 h-3" /> OneDrive
+                    </span>
                   ) : (
                     <button
                       onClick={() => syncMutation.mutate(f.id)}
@@ -1107,14 +1107,21 @@ function FilesPanel({ bill, billId }) {
                       title="Preview / Download"
                       onClick={async () => {
                         try {
-                          const url = f.local_url || `/uploads/tqs-bills/${billId}/${f.file_name}`;
-                          const res = await api.get(url, { responseType: 'blob' });
-                          const blobUrl = URL.createObjectURL(res.data);
-                          window.open(blobUrl, '_blank');
-                          // revoke after a short delay to allow the tab to load
-                          setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+                          // Ask backend for the best available URL (local → OneDrive fresh link → webUrl)
+                          const res = await tqsBillsAPI.getFilePreviewUrl(billId, f.id);
+                          const { url, type } = res.data;
+                          if (type === 'local') {
+                            // Local file: fetch with auth header, open as blob
+                            const blob = await api.get(url, { responseType: 'blob' });
+                            const blobUrl = URL.createObjectURL(blob.data);
+                            window.open(blobUrl, '_blank');
+                            setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+                          } else {
+                            // OneDrive pre-signed URL or webUrl: open directly (no auth needed)
+                            window.open(url, '_blank');
+                          }
                         } catch {
-                          toast.error('Could not open file — it may have been deleted from the server');
+                          toast.error('Could not open file — it may have been removed from storage');
                         }
                       }}
                       className="text-slate-900 font-medium hover:text-blue-600 p-1"

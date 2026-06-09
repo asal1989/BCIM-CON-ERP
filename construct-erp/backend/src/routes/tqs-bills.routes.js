@@ -7,7 +7,7 @@ const wa      = require('../services/whatsapp.service');
 const { authenticate } = require('../middleware/auth');
 const { loadProjectScope, userCanAccessProject } = require('../middleware/projectScope');
 const { query, withTransaction } = require('../config/database');
-const { uploadToOneDrive, isConfigured } = require('../services/onedrive.service');
+const { uploadToOneDrive, getFreshDownloadUrl, isConfigured } = require('../services/onedrive.service');
 const {
   billOutstandingSql,
   getVendorLiabilitySummary,
@@ -3462,6 +3462,48 @@ router.post('/:id/files/:fid/sync-onedrive', async (req, res) => {
     });
   } catch (err) {
     logger.error('OneDrive re-sync failed:', err.message);
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// ── GET /tqs/bills/:id/files/:fid/preview-url ─────────────────────────────
+// Returns a usable preview/download URL for the file.
+// Priority: local file (if still on disk) → fresh OneDrive download URL → webUrl
+router.get('/:id/files/:fid/preview-url', async (req, res) => {
+  try {
+    await getAccessibleBill(req, req.params.id);
+    const r = await query(
+      `SELECT * FROM tqs_bill_files WHERE id=$1 AND bill_id=$2`,
+      [req.params.fid, req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'File not found' });
+    const f = r.rows[0];
+
+    // 1. Check if local file still exists on disk
+    if (f.local_url) {
+      const fullPath = path.join(__dirname, '../../', f.local_url);
+      if (require('fs').existsSync(fullPath)) {
+        return res.json({ url: f.local_url, type: 'local' });
+      }
+    }
+
+    // 2. Try to get a fresh pre-authenticated download URL from OneDrive
+    if (f.onedrive_id) {
+      try {
+        const downloadUrl = await getFreshDownloadUrl(f.onedrive_id);
+        return res.json({ url: downloadUrl, type: 'onedrive_direct' });
+      } catch (e) {
+        // Fall through to webUrl
+      }
+    }
+
+    // 3. Last resort: stored webUrl (may require Microsoft login)
+    if (f.onedrive_web_url) {
+      return res.json({ url: f.onedrive_web_url, type: 'onedrive_web' });
+    }
+
+    return res.status(404).json({ error: 'File is no longer accessible — it may have been removed from both local storage and OneDrive' });
+  } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
   }
 });

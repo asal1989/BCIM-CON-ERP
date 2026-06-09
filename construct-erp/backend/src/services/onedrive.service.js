@@ -119,4 +119,35 @@ async function uploadToOneDrive(localFilePath, originalName, module, projectName
   };
 }
 
-module.exports = { uploadToOneDrive, isConfigured };
+/**
+ * Get a fresh pre-authenticated download URL for an already-uploaded file.
+ * The @microsoft.graph.downloadUrl returned here is a short-lived (few hours)
+ * anonymous download link — no Microsoft login required to open it.
+ */
+async function getFreshDownloadUrl(onedriveId) {
+  if (!isConfigured()) throw new Error('OneDrive not configured');
+  const token = await getAccessToken();
+  return new Promise((resolve, reject) => {
+    const req = require('https').request({
+      hostname: GRAPH,
+      path: `/v1.0/users/${encodeURIComponent(USER())}/drive/items/${encodeURIComponent(onedriveId)}?select=id,name,%40microsoft.graph.downloadUrl,webUrl`,
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    }, res => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try {
+          const body = JSON.parse(data);
+          const url = body['@microsoft.graph.downloadUrl'] || body.webUrl || null;
+          if (!url) return reject(new Error('Could not get download URL from OneDrive'));
+          resolve(url);
+        } catch (e) { reject(e); }
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+module.exports = { uploadToOneDrive, getFreshDownloadUrl, isConfigured };
