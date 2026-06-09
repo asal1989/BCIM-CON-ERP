@@ -518,7 +518,21 @@ async function runAutoMigrations() {
       LEFT JOIN tqs_bill_updates u ON u.bill_id = b.id
       WHERE u.bill_id IS NULL AND b.is_deleted = FALSE
     `);
-    logger.info('✅ Auto-migrations complete (003, 004, 005)');
+    // 033: RA Bill enhancements — GST split, Labour Cess, Section E
+    await client.query(`ALTER TABLE sc_bills ADD COLUMN IF NOT EXISTS is_igst BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE sc_bills ADD COLUMN IF NOT EXISTS cgst_amount NUMERIC(18,2) DEFAULT 0`);
+    await client.query(`ALTER TABLE sc_bills ADD COLUMN IF NOT EXISTS sgst_amount NUMERIC(18,2) DEFAULT 0`);
+    await client.query(`ALTER TABLE sc_bills ADD COLUMN IF NOT EXISTS igst_amount NUMERIC(18,2) DEFAULT 0`);
+    await client.query(`ALTER TABLE sc_bills ADD COLUMN IF NOT EXISTS labour_cess_amount NUMERIC(18,2) DEFAULT 0`);
+    await client.query(`ALTER TABLE sc_bills ADD COLUMN IF NOT EXISTS retention_release_amount NUMERIC(18,2) DEFAULT 0`);
+    await client.query(`ALTER TABLE sc_bills ADD COLUMN IF NOT EXISTS credit_note_amount NUMERIC(18,2) DEFAULT 0`);
+    await client.query(`
+      UPDATE sc_bills
+         SET cgst_amount = ROUND(gst_amount / 2, 2),
+             sgst_amount = gst_amount - ROUND(gst_amount / 2, 2)
+       WHERE is_igst = FALSE AND gst_amount > 0 AND cgst_amount = 0
+    `);
+    logger.info('✅ Auto-migrations complete (003, 004, 005, 033)');
   } catch (err) {
     logger.warn('⚠️  Auto-migration warning:', err.message);
   } finally {

@@ -42,15 +42,23 @@ const Field = ({ label, children, required }) => (
 // ─── Bill computation helper ──────────────────────────────────────────────────
 function calcBill(items, f) {
   const gross = items.reduce((s,it) => s + num(it.curr_qty) * num(it.rate), 0);
-  const gstAmt  = gross * num(f.gst_pct) / 100;
-  const tdsAmt  = gross * num(f.tds_pct) / 100;
-  const retAmt  = gross * num(f.retention_pct) / 100;
-  const advRec  = num(f.advance_recovery);
-  const matRec  = num(f.material_recovery);
-  const pen     = num(f.penalty_amount);
-  const oth     = num(f.other_deductions);
-  const net     = gross + gstAmt - tdsAmt - retAmt - advRec - matRec - pen - oth;
-  return { gross, gstAmt, tdsAmt, retAmt, advRec, matRec, pen, oth, net };
+  const gstAmt     = gross * num(f.gst_pct) / 100;
+  // GST split: CGST+SGST (intra) or IGST (inter-state)
+  const cgst       = f.is_igst ? 0 : Math.round(gstAmt / 2 * 100) / 100;
+  const sgst       = f.is_igst ? 0 : gstAmt - cgst;
+  const igst       = f.is_igst ? gstAmt : 0;
+  const tdsAmt     = gross * num(f.tds_pct) / 100;
+  const retAmt     = gross * num(f.retention_pct) / 100;
+  const advRec     = num(f.advance_recovery);
+  const matRec     = num(f.material_recovery);
+  const pen        = num(f.penalty_amount);
+  const oth        = num(f.other_deductions);
+  const labourCess = gross * num(f.labour_cess_pct || 0) / 100;
+  // Section E credits (increase payable)
+  const retRelease = num(f.retention_release_amount || 0);
+  const creditNote = num(f.credit_note_amount || 0);
+  const net = gross + gstAmt + retRelease - creditNote - tdsAmt - retAmt - advRec - matRec - pen - labourCess - oth;
+  return { gross, gstAmt, cgst, sgst, igst, tdsAmt, retAmt, advRec, matRec, pen, oth, labourCess, retRelease, creditNote, net };
 }
 
 function toQSPrintBill(b) {
@@ -288,8 +296,11 @@ function RaiseBillModal({ wos, onClose }) {
     period_from: '', period_to: '',
     description: '',
     gst_pct: 18, tds_pct: 2, retention_pct: 5,
+    is_igst: false,
+    labour_cess_pct: 0,
     advance_recovery: 0, material_recovery: 0,
     penalty_amount: 0, other_deductions: 0,
+    retention_release_amount: 0, credit_note_amount: 0,
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -695,34 +706,159 @@ function RaiseBillModal({ wos, onClose }) {
               )}
 
               {/* Rates section */}
-              <div>
-                <h3 className="text-sm font-bold text-slate-700 mb-3">Tax & Deduction Rates</h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {[
-                    { k:'gst_pct',          l:'GST %',             color:'text-indigo-600' },
-                    { k:'tds_pct',          l:'TDS %',             color:'text-red-600' },
-                    { k:'retention_pct',    l:'Retention %',       color:'text-orange-600' },
-                    { k:'advance_recovery', l:'Advance Recovery ₹',color:'text-slate-600' },
-                    { k:'material_recovery',l:'Material Recovery ₹',color:'text-slate-600' },
-                    { k:'penalty_amount',   l:'Penalty ₹',         color:'text-red-600' },
-                    { k:'other_deductions', l:'Other Deductions ₹', color:'text-slate-600' },
-                  ].map(({ k, l, color }) => (
-                    <Field key={k} label={l}>
+              <div className="space-y-4">
+                {/* ── Section A: GST ── */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-slate-700">Section A — GST</h3>
+                    {/* Inter-state (IGST) toggle */}
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <div
+                        onClick={() => set('is_igst', !form.is_igst)}
+                        className={clsx(
+                          'relative w-9 h-5 rounded-full transition-colors cursor-pointer',
+                          form.is_igst ? 'bg-indigo-600' : 'bg-slate-300'
+                        )}>
+                        <span className={clsx(
+                          'absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform',
+                          form.is_igst ? 'translate-x-4' : 'translate-x-0.5'
+                        )}/>
+                      </div>
+                      <span className="text-xs font-semibold text-slate-600">
+                        {form.is_igst ? 'Inter-State (IGST)' : 'Intra-State (CGST+SGST)'}
+                      </span>
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <Field label="GST %">
                       <div className="relative">
-                        <input type="number" value={form[k]} min={0}
-                          onChange={e => set(k, parseFloat(e.target.value || 0))}
+                        <input type="number" value={form.gst_pct} min={0} max={28}
+                          onChange={e => set('gst_pct', parseFloat(e.target.value || 0))}
                           className={inp + ' pr-8'} />
-                        <span className={clsx('absolute right-3 top-2.5 text-xs font-bold', color)}>
-                          {['gst_pct','tds_pct','retention_pct'].includes(k) ? '%' : '₹'}
-                        </span>
+                        <span className="absolute right-3 top-2.5 text-xs font-bold text-indigo-600">%</span>
                       </div>
                       <p className="text-[10px] text-slate-400 mt-1">
-                        = {['gst_pct','tds_pct','retention_pct'].includes(k)
-                          ? fmt2(calc.gross * num(form[k]) / 100)
-                          : fmt2(num(form[k]))}
+                        {form.is_igst
+                          ? `IGST = ${fmt2(calc.igst)}`
+                          : `CGST ${fmt2(calc.cgst)} + SGST ${fmt2(calc.sgst)}`}
                       </p>
                     </Field>
-                  ))}
+                    {!form.is_igst && (
+                      <>
+                        <Field label="CGST Amount (auto)">
+                          <div className="relative">
+                            <input type="text" readOnly value={fmt2(calc.cgst)}
+                              className={inp + ' bg-slate-50 cursor-not-allowed text-slate-500'} />
+                          </div>
+                          <p className="text-[10px] text-slate-400 mt-1">= GST / 2</p>
+                        </Field>
+                        <Field label="SGST Amount (auto)">
+                          <div className="relative">
+                            <input type="text" readOnly value={fmt2(calc.sgst)}
+                              className={inp + ' bg-slate-50 cursor-not-allowed text-slate-500'} />
+                          </div>
+                          <p className="text-[10px] text-slate-400 mt-1">= GST / 2</p>
+                        </Field>
+                      </>
+                    )}
+                    {form.is_igst && (
+                      <Field label="IGST Amount (auto)">
+                        <div className="relative">
+                          <input type="text" readOnly value={fmt2(calc.igst)}
+                            className={inp + ' bg-slate-50 cursor-not-allowed text-slate-500'} />
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1">= Full GST (inter-state)</p>
+                      </Field>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Section B: Deductions ── */}
+                <div>
+                  <h3 className="text-sm font-bold text-slate-700 mb-3">Section B — TDS & Retention</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {[
+                      { k:'tds_pct',          l:'TDS %',          color:'text-red-600' },
+                      { k:'retention_pct',    l:'Retention %',    color:'text-orange-600' },
+                    ].map(({ k, l, color }) => (
+                      <Field key={k} label={l}>
+                        <div className="relative">
+                          <input type="number" value={form[k]} min={0}
+                            onChange={e => set(k, parseFloat(e.target.value || 0))}
+                            className={inp + ' pr-8'} />
+                          <span className={clsx('absolute right-3 top-2.5 text-xs font-bold', color)}>%</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1">= {fmt2(calc.gross * num(form[k]) / 100)}</p>
+                      </Field>
+                    ))}
+                    <Field label="Labour Cess %">
+                      <div className="relative">
+                        <input type="number" value={form.labour_cess_pct} min={0} step={0.1}
+                          onChange={e => set('labour_cess_pct', parseFloat(e.target.value || 0))}
+                          className={inp + ' pr-8'} />
+                        <span className="absolute right-3 top-2.5 text-xs font-bold text-amber-600">%</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        BOCW Act — {fmt2(calc.labourCess)}
+                        {calc.gross > 5000000 && form.labour_cess_pct === 0 && (
+                          <span className="text-amber-500 ml-1">(1% suggested for &gt;₹50L)</span>
+                        )}
+                      </p>
+                    </Field>
+                  </div>
+                </div>
+
+                {/* ── Section C: Other Deductions ── */}
+                <div>
+                  <h3 className="text-sm font-bold text-slate-700 mb-3">Section C — Other Deductions</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {[
+                      { k:'advance_recovery', l:'Advance Recovery ₹', color:'text-slate-600' },
+                      { k:'material_recovery',l:'Material Recovery ₹', color:'text-slate-600' },
+                      { k:'penalty_amount',   l:'Penalty ₹',           color:'text-red-600' },
+                      { k:'other_deductions', l:'Other Deductions ₹',  color:'text-slate-600' },
+                    ].map(({ k, l, color }) => (
+                      <Field key={k} label={l}>
+                        <div className="relative">
+                          <input type="number" value={form[k]} min={0}
+                            onChange={e => set(k, parseFloat(e.target.value || 0))}
+                            className={inp + ' pr-8'} />
+                          <span className={clsx('absolute right-3 top-2.5 text-xs font-bold', color)}>₹</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1">= {fmt2(num(form[k]))}</p>
+                      </Field>
+                    ))}
+                  </div>
+                </div>
+
+                {/* ── Section E: Credits ── */}
+                <div>
+                  <h3 className="text-sm font-bold text-slate-700 mb-1">Section E — Credits &amp; Releases</h3>
+                  <p className="text-[10px] text-slate-400 mb-3">Amounts here ADD to the net payable (retention being released, credit notes received)</p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <Field label="Retention Release ₹">
+                      <div className="relative">
+                        <input type="number" value={form.retention_release_amount} min={0}
+                          onChange={e => set('retention_release_amount', parseFloat(e.target.value || 0))}
+                          className={inp + ' pr-8'} />
+                        <span className="absolute right-3 top-2.5 text-xs font-bold text-emerald-600">₹</span>
+                      </div>
+                      <p className="text-[10px] text-emerald-600 mt-1">
+                        + {fmt2(calc.retRelease)} added to payable
+                      </p>
+                    </Field>
+                    <Field label="Credit Note ₹">
+                      <div className="relative">
+                        <input type="number" value={form.credit_note_amount} min={0}
+                          onChange={e => set('credit_note_amount', parseFloat(e.target.value || 0))}
+                          className={inp + ' pr-8'} />
+                        <span className="absolute right-3 top-2.5 text-xs font-bold text-red-500">₹</span>
+                      </div>
+                      <p className="text-[10px] text-red-500 mt-1">
+                        − {fmt2(calc.creditNote)} deducted from payable
+                      </p>
+                    </Field>
+                  </div>
                 </div>
               </div>
             </div>
@@ -749,14 +885,25 @@ function RaiseBillModal({ wos, onClose }) {
                 {/* Bill breakdown */}
                 <div className="p-5 space-y-0">
                   {[
-                    { label: 'Gross Work Amount',                    value: calc.gross,  highlight: false },
-                    { label: `+ GST (${form.gst_pct}%)`,            value: calc.gstAmt,  add: true },
-                    { label: 'Total (Gross + GST)',                  value: calc.gross + calc.gstAmt, bold: true, border: true },
-                    { label: `− TDS (${form.tds_pct}%)`,            value: calc.tdsAmt,  deduct: true },
-                    { label: `− Retention (${form.retention_pct}%)`,value: calc.retAmt,  deduct: true },
-                    calc.advRec > 0 && { label: '− Advance Recovery',value: calc.advRec,  deduct: true },
-                    calc.matRec > 0 && { label: '− Material Recovery',value: calc.matRec, deduct: true },
-                    calc.pen > 0    && { label: '− Penalty',          value: calc.pen,    deduct: true },
+                    { label: 'Gross Work Amount',                    value: calc.gross,    highlight: false },
+                    // GST rows: show split when intra-state, single row when inter-state
+                    form.is_igst
+                      ? { label: `+ IGST (${form.gst_pct}%)`,       value: calc.igst,     add: true }
+                      : { label: `+ CGST (${form.gst_pct/2}%)`,      value: calc.cgst,     add: true },
+                    !form.is_igst
+                      && { label: `+ SGST (${form.gst_pct/2}%)`,    value: calc.sgst,     add: true },
+                    { label: 'Sub-total (Gross + GST)',              value: calc.gross + calc.gstAmt, bold: true, border: true },
+                    calc.retRelease > 0
+                      && { label: '+ Retention Release',             value: calc.retRelease, add: true },
+                    { label: `− TDS (${form.tds_pct}%)`,            value: calc.tdsAmt,   deduct: true },
+                    { label: `− Retention (${form.retention_pct}%)`,value: calc.retAmt,   deduct: true },
+                    calc.labourCess > 0
+                      && { label: `− Labour Cess (${form.labour_cess_pct}%)`, value: calc.labourCess, deduct: true },
+                    calc.advRec > 0 && { label: '− Advance Recovery', value: calc.advRec,  deduct: true },
+                    calc.matRec > 0 && { label: '− Material Recovery', value: calc.matRec, deduct: true },
+                    calc.pen > 0    && { label: '− Penalty',           value: calc.pen,    deduct: true },
+                    calc.creditNote > 0
+                      && { label: '− Credit Note',                    value: calc.creditNote, deduct: true },
                     calc.oth > 0    && { label: '− Other Deductions',  value: calc.oth,    deduct: true },
                   ].filter(Boolean).map(({ label, value, bold, border, deduct, add }) => (
                     <div key={label} className={clsx('flex justify-between items-center py-2',
@@ -953,12 +1100,27 @@ function BillDetailDrawer({ billId, onClose }) {
                 <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
                   {[
                     { l:'Gross Work Amount',     v: b.gross_amount,      c:'text-slate-800' },
-                    { l:`GST (${b.gst_pct}%)`,   v: b.gst_amount,        c:'text-indigo-600', sub:true },
-                    { l:`TDS (${b.tds_pct}%)`,   v:-b.tds_amount,        c:'text-red-600', sub:true },
-                    { l:`Retention (${b.retention_pct}%)`, v:-b.retention_amount, c:'text-orange-600', sub:true },
-                    num(b.advance_recovery)>0 && { l:'Advance Recovery', v:-b.advance_recovery, c:'text-red-600', sub:true },
-                    num(b.material_recovery)>0 && { l:'Material Recovery',v:-b.material_recovery, c:'text-red-600', sub:true },
-                    num(b.penalty_amount)>0    && { l:'Penalty',          v:-b.penalty_amount,   c:'text-red-600', sub:true },
+                    // Show CGST/SGST split if present, else single GST row
+                    num(b.cgst_amount) > 0
+                      ? { l:`CGST (${num(b.gst_pct)/2}%)`, v: b.cgst_amount, c:'text-indigo-600', sub:true }
+                      : null,
+                    num(b.sgst_amount) > 0
+                      ? { l:`SGST (${num(b.gst_pct)/2}%)`, v: b.sgst_amount, c:'text-indigo-600', sub:true }
+                      : null,
+                    num(b.igst_amount) > 0
+                      ? { l:`IGST (${b.gst_pct}%)`,        v: b.igst_amount, c:'text-indigo-600', sub:true }
+                      : null,
+                    (!num(b.cgst_amount) && !num(b.igst_amount))
+                      && { l:`GST (${b.gst_pct}%)`,        v: b.gst_amount,  c:'text-indigo-600', sub:true },
+                    num(b.retention_release_amount) > 0
+                      && { l:'+ Retention Release',         v: b.retention_release_amount, c:'text-emerald-600', sub:true },
+                    { l:`TDS (${b.tds_pct}%)`,             v:-b.tds_amount,        c:'text-red-600', sub:true },
+                    { l:`Retention (${b.retention_pct}%)`, v:-b.retention_amount,  c:'text-orange-600', sub:true },
+                    num(b.labour_cess_amount)  > 0 && { l:'Labour Cess',        v:-b.labour_cess_amount,  c:'text-amber-600', sub:true },
+                    num(b.advance_recovery)    > 0 && { l:'Advance Recovery',   v:-b.advance_recovery,   c:'text-red-600', sub:true },
+                    num(b.material_recovery)   > 0 && { l:'Material Recovery',  v:-b.material_recovery,  c:'text-red-600', sub:true },
+                    num(b.penalty_amount)      > 0 && { l:'Penalty',            v:-b.penalty_amount,     c:'text-red-600', sub:true },
+                    num(b.credit_note_amount)  > 0 && { l:'Credit Note',        v:-b.credit_note_amount, c:'text-red-600', sub:true },
                   ].filter(Boolean).map(({ l, v, c, sub }) => (
                     <div key={l} className={clsx('flex justify-between px-4 py-2 border-b border-slate-50 text-xs', sub && 'bg-slate-50/50')}>
                       <span className={clsx(sub && 'pl-2', 'text-slate-600')}>{l}</span>

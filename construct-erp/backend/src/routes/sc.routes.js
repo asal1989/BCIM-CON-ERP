@@ -647,7 +647,10 @@ router.post('/bills', authorize(...PLANNER), async (req, res) => {
   try {
     const { wo_id, bill_date, bill_type, period_from, period_to, description, gross_amount,
             gst_pct, tds_pct, retention_pct, advance_recovery, material_recovery,
-            penalty_amount, other_deductions, items, attachments } = req.body;
+            penalty_amount, other_deductions,
+            is_igst, labour_cess_pct,
+            retention_release_amount, credit_note_amount,
+            items, attachments } = req.body;
     if (!wo_id || !gross_amount) return res.status(400).json({ error: 'wo_id and gross_amount required' });
 
     // ── Load WO ──────────────────────────────────────────────────────────────
@@ -696,15 +699,32 @@ router.post('/bills', authorize(...PLANNER), async (req, res) => {
     }
 
     // ── Compute amounts ───────────────────────────────────────────────────────
-    const grossAmt = parseFloat(gross_amount);
-    const gst  = grossAmt * parseFloat(gst_pct  || woRow.gst_pct  || 18) / 100;
+    const grossAmt        = parseFloat(gross_amount);
+    const effectiveGstPct = parseFloat(gst_pct || woRow.gst_pct || 18);
+    const gst             = grossAmt * effectiveGstPct / 100;
+
+    // GST split: CGST+SGST (intra-state) or IGST (inter-state)
+    const isIgst  = !!is_igst;
+    const cgst    = isIgst ? 0 : Math.round(gst / 2 * 100) / 100;
+    const sgst    = isIgst ? 0 : gst - cgst;   // avoids rounding drift
+    const igst    = isIgst ? gst : 0;
+
+    // Labour Welfare Cess (BOCW Act) — 1% typical, user-controlled
+    const labourCess = grossAmt * parseFloat(labour_cess_pct || 0) / 100;
+
+    // Section E credits (increase net payable)
+    const retRelease = parseFloat(retention_release_amount || 0);
+    const creditNote = parseFloat(credit_note_amount || 0);
+
     const tds  = grossAmt * parseFloat(tds_pct  || woRow.tds_pct  || 2)  / 100;
     const ret  = grossAmt * parseFloat(retention_pct || woRow.retention_pct || 5) / 100;
     const adv  = parseFloat(advance_recovery || 0);
     const mat  = parseFloat(material_recovery || 0);
     const pen  = parseFloat(penalty_amount || 0);
     const oth  = parseFloat(other_deductions || 0);
-    const net  = grossAmt + gst - tds - ret - adv - mat - pen - oth;
+
+    // Net = Gross + GST + Retention Released − Credit Note − TDS − Retention − Advances − Materials − Penalty − Labour Cess − Other
+    const net = grossAmt + gst + retRelease - creditNote - tds - ret - adv - mat - pen - labourCess - oth;
 
     const bill_number = await nextBillNumber(CID(req), woRow.project_id);
 
@@ -712,18 +732,30 @@ router.post('/bills', authorize(...PLANNER), async (req, res) => {
     const r = await query(
       `INSERT INTO sc_bills
          (company_id,project_id,wo_id,sc_id,bill_number,bill_date,bill_type,
-          period_from,period_to,description,gross_amount,gst_pct,gst_amount,
-          tds_pct,tds_amount,retention_pct,retention_amount,advance_recovery,
-          material_recovery,penalty_amount,other_deductions,net_payable,attachments,created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+          period_from,period_to,description,
+          gross_amount,gst_pct,gst_amount,
+          is_igst,cgst_amount,sgst_amount,igst_amount,
+          tds_pct,tds_amount,retention_pct,retention_amount,
+          advance_recovery,material_recovery,penalty_amount,other_deductions,
+          labour_cess_amount,retention_release_amount,credit_note_amount,
+          net_payable,attachments,created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+               $11,$12,$13,$14,$15,$16,$17,
+               $18,$19,$20,$21,
+               $22,$23,$24,$25,
+               $26,$27,$28,
+               $29,$30,$31)
        RETURNING *`,
       [CID(req), woRow.project_id, wo_id, woRow.sc_id, bill_number,
        bill_date || new Date().toISOString().slice(0,10), bill_type || 'ra',
        period_from||null, period_to||null, description||null,
-       grossAmt, gst_pct||woRow.gst_pct||18, gst,
+       grossAmt, effectiveGstPct, gst,
+       isIgst, cgst, sgst, igst,
        tds_pct||woRow.tds_pct||2, tds,
        retention_pct||woRow.retention_pct||5, ret,
-       adv, mat, pen, oth, net, JSON.stringify(attachments||[]), req.user.id]);
+       adv, mat, pen, oth,
+       labourCess, retRelease, creditNote,
+       net, JSON.stringify(attachments||[]), req.user.id]);
 
     const billId = r.rows[0].id;
 
