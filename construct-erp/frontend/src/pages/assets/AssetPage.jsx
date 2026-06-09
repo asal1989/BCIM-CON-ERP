@@ -1,5 +1,5 @@
 // Asset Master — Snipe-IT style
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -11,6 +11,74 @@ import {
 import { assetAPI, assetMgmtAPI, projectAPI } from '../../api/client';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
+
+// ─── QR Print Preview ─────────────────────────────────────────────
+function QRPrintPreview({ assets, onClose }) {
+  useEffect(() => {
+    // Inject print-only CSS: hide everything except our QR zone
+    const style = document.createElement('style');
+    style.id = '__qr_print_style__';
+    style.textContent = `
+      @media print {
+        body > * { visibility: hidden !important; }
+        #qr-print-zone, #qr-print-zone * { visibility: visible !important; }
+        #qr-print-zone {
+          position: fixed !important;
+          top: 0 !important; left: 0 !important;
+          width: 100% !important; background: white !important;
+          padding: 16px !important;
+        }
+        .qr-label { page-break-inside: avoid; }
+      }
+    `;
+    document.head.appendChild(style);
+    return () => { document.getElementById('__qr_print_style__')?.remove(); };
+  }, []);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[60] flex items-start justify-center overflow-y-auto p-6">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl my-4">
+        {/* Header — hidden when printing */}
+        <div className="flex items-center justify-between px-6 py-4 border-b" style={{printColorAdjust:'exact'}}>
+          <div>
+            <h2 className="font-bold text-slate-800 text-lg">QR Labels</h2>
+            <p className="text-xs text-slate-400">{assets.length} asset{assets.length!==1?'s':''} · click Print to send to printer</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700">
+              <Printer className="w-4 h-4" /> Print
+            </button>
+            <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* QR grid — this is what gets printed */}
+        <div id="qr-print-zone" className="p-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {assets.map(a => (
+              <div key={a.id} className="qr-label border border-slate-200 rounded-xl p-4 flex flex-col items-center gap-2 text-center">
+                <QRCodeSVG
+                  value={`BCIM|${a.asset_code}|${a.asset_name}|${a.serial_number||'N/A'}`}
+                  size={120} level="H"
+                  style={{display:'block'}}
+                />
+                <div className="font-mono text-sm font-bold text-indigo-700">{a.asset_code}</div>
+                <div className="text-[11px] text-slate-600 leading-tight max-w-[140px]">{a.asset_name}</div>
+                {a.brand && <div className="text-[10px] text-slate-400">{a.brand}{a.model ? ` · ${a.model}`:''}</div>}
+                {a.serial_number && <div className="text-[10px] text-slate-400 font-mono">S/N: {a.serial_number}</div>}
+                <div className="text-[9px] text-slate-300 uppercase tracking-widest">BCIM Engineering</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Status config ────────────────────────────────────────────────
 const STATUS = {
@@ -221,7 +289,7 @@ function AssetFormModal({ editAsset, projects, categories, onClose }) {
 }
 
 // ─── Asset detail panel ───────────────────────────────────────────
-function AssetDetailPanel({ asset: a, onClose, onEdit, qc }) {
+function AssetDetailPanel({ asset: a, onClose, onEdit, onPrintQR, qc }) {
   const [detailTab, setDetailTab] = useState('overview');
 
   const deleteMut = useMutation({
@@ -375,7 +443,7 @@ function AssetDetailPanel({ asset: a, onClose, onEdit, qc }) {
                 <p className="font-bold text-slate-800 text-lg">{a.asset_code}</p>
                 <p className="text-sm text-slate-500">{a.asset_name}</p>
               </div>
-              <button onClick={()=>window.print()} className="flex items-center gap-2 px-5 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50">
+              <button onClick={onPrintQR} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700">
                 <Printer className="w-4 h-4" /> Print QR Label
               </button>
             </div>
@@ -398,6 +466,7 @@ export default function AssetPage() {
   const [editAsset, setEdit]      = useState(null);   // edit modal
   const [showAdd, setShowAdd]     = useState(false);
   const [selectedIds, setIds]     = useState(new Set());
+  const [showQRPrint, setQRPrint] = useState(false);
   const importRef = useRef();
 
   const { data: assets = [], isLoading, isError, refetch } = useQuery({
@@ -635,8 +704,13 @@ export default function AssetPage() {
           <span className="text-sm font-medium">{selectedIds.size} selected</span>
           <div className="w-px h-4 bg-white/20" />
           <button onClick={()=>setIds(new Set())} className="text-xs text-slate-400 hover:text-white">Clear</button>
+          <button
+            onClick={()=>setQRPrint(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-medium transition-colors">
+            <Printer className="w-3.5 h-3.5" /> Print QR Labels
+          </button>
           <button onClick={exportCSV} className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-medium transition-colors">
-            <Printer className="w-3.5 h-3.5" /> Print QR
+            <Download className="w-3.5 h-3.5" /> Export CSV
           </button>
         </div>
       )}
@@ -644,7 +718,17 @@ export default function AssetPage() {
       {/* Add modal */}
       {showAdd && <AssetFormModal projects={projects} categories={categories} onClose={()=>setShowAdd(false)} />}
       {editAsset && <AssetFormModal editAsset={editAsset} projects={projects} categories={categories} onClose={()=>setEdit(null)} />}
-      {selected && <AssetDetailPanel asset={selected} onClose={()=>setSelected(null)} onEdit={()=>{ setEdit(selected); setSelected(null); }} qc={qc} />}
+      {selected && <AssetDetailPanel asset={selected} onClose={()=>setSelected(null)} onEdit={()=>{ setEdit(selected); setSelected(null); }} onPrintQR={()=>{ setQRPrint('single'); }} qc={qc} />}
+
+      {/* QR Print Preview */}
+      {showQRPrint && (
+        <QRPrintPreview
+          assets={showQRPrint==='single' && selected
+            ? [selected]
+            : assets.filter(a=>selectedIds.has(a.id))}
+          onClose={()=>setQRPrint(false)}
+        />
+      )}
     </div>
   );
 }
