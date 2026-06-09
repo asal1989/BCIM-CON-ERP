@@ -590,7 +590,11 @@ async function runAutoMigrations() {
     // 034 P4 DLP fields
     await client.query(`ALTER TABLE sc_work_orders ADD COLUMN IF NOT EXISTS dlp_end_date DATE`);
     await client.query(`ALTER TABLE sc_work_orders ADD COLUMN IF NOT EXISTS dlp_months SMALLINT DEFAULT 12`);
-    logger.info('✅ Auto-migrations complete (003, 004, 005, 033, 034)');
+    // 035 P5 WO Closure columns
+    await client.query(`ALTER TABLE sc_work_orders ADD COLUMN IF NOT EXISTS closed_by       UUID REFERENCES users(id)`);
+    await client.query(`ALTER TABLE sc_work_orders ADD COLUMN IF NOT EXISTS closed_at       TIMESTAMPTZ`);
+    await client.query(`ALTER TABLE sc_work_orders ADD COLUMN IF NOT EXISTS closure_remarks TEXT`);
+    logger.info('✅ Auto-migrations complete (003, 004, 005, 033, 034, 035)');
   } catch (err) {
     logger.warn('⚠️  Auto-migration warning:', err.message);
   } finally {

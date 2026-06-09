@@ -1072,6 +1072,11 @@ export const scAPI = {
   reportBOQActual:    (p)       => api.get('/sc/reports/boq-actual', { params: p }),
   reportAdvRec:       (p)       => api.get('/sc/reports/advance-recovery', { params: p }),
   reportPayReg:       (p)       => api.get('/sc/reports/payment-register', { params: p }),
+  // P5 — TDS 26Q, COP, Final Account, WO Closure
+  reportTDS26Q:       (p)       => api.get('/sc/reports/tds-26q', { params: p }),
+  reportCOP:          (p)       => api.get('/sc/reports/cop', { params: p }),
+  getWOFinalAccount:  (id)      => api.get(`/sc/work-orders/${id}/final-account`),
+  closeWO:            (id, d)   => api.patch(`/sc/work-orders/${id}/close`, d),
 };
 
 export const analyticsAPI = {

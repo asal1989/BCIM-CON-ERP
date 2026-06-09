@@ -2118,4 +2118,222 @@ router.get('/essl/preview', authorize(...ADMIN,...PLANNER), async (req, res) => 
   } catch(e){ res.status(400).json({ error: e.message }); }
 });
 
+// ════════════════════════════════════════════════════════════════════
+// 16. P5 — TDS 26Q REGISTER
+// ════════════════════════════════════════════════════════════════════
+router.get('/reports/tds-26q', async (req, res) => {
+  try {
+    const { project_id, sc_id, from_date, to_date } = req.query;
+    let sql = `
+      SELECT
+        sc.sc_code,
+        sc.name                          AS sc_name,
+        COALESCE(sc.pan_number, '—')     AS pan_number,
+        b.bill_number,
+        b.bill_date,
+        wo.wo_number,
+        p.name                           AS project_name,
+        b.gross_amount,
+        b.tds_pct,
+        b.tds_amount,
+        COALESCE(SUM(pay.amount), 0)     AS amount_paid,
+        MAX(pay.payment_date)            AS last_payment_date,
+        CASE
+          WHEN EXTRACT(MONTH FROM b.bill_date) BETWEEN 4 AND 6   THEN 'Q1 (Apr–Jun)'
+          WHEN EXTRACT(MONTH FROM b.bill_date) BETWEEN 7 AND 9   THEN 'Q2 (Jul–Sep)'
+          WHEN EXTRACT(MONTH FROM b.bill_date) BETWEEN 10 AND 12 THEN 'Q3 (Oct–Dec)'
+          ELSE                                                         'Q4 (Jan–Mar)'
+        END AS quarter,
+        CASE
+          WHEN EXTRACT(MONTH FROM b.bill_date) >= 4
+               THEN EXTRACT(YEAR FROM b.bill_date)::int
+          ELSE (EXTRACT(YEAR FROM b.bill_date) - 1)::int
+        END AS fy_start
+      FROM sc_bills b
+      JOIN sc_work_orders wo    ON wo.id  = b.wo_id
+      JOIN sc_subcontractors sc ON sc.id  = b.sc_id
+      JOIN projects p           ON p.id   = b.project_id
+      LEFT JOIN sc_payments pay ON pay.bill_id = b.id
+      WHERE b.company_id = $1
+        AND COALESCE(b.tds_amount, 0) > 0
+        AND b.status NOT IN ('draft','rejected')`;
+    const params = [CID(req)]; let i = 2;
+    if (project_id){ sql += ` AND b.project_id = $${i++}`; params.push(project_id); }
+    if (sc_id)     { sql += ` AND b.sc_id = $${i++}`;      params.push(sc_id); }
+    if (from_date) { sql += ` AND b.bill_date >= $${i++}`;  params.push(from_date); }
+    if (to_date)   { sql += ` AND b.bill_date <= $${i++}`;  params.push(to_date); }
+    sql += `
+      GROUP BY sc.sc_code, sc.name, sc.pan_number, b.bill_number, b.bill_date,
+               wo.wo_number, p.name, b.gross_amount, b.tds_pct, b.tds_amount
+      ORDER BY fy_start DESC, b.bill_date, sc.name`;
+    res.json({ data: (await query(sql, params)).rows });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════════════════════════════════════════
+// 17. P5 — WO FINAL ACCOUNT (read-only financial summary per WO)
+// ════════════════════════════════════════════════════════════════════
+router.get('/work-orders/:id/final-account', async (req, res) => {
+  try {
+    const woId = req.params.id;
+    const [woR, billsR, advancesR, retRelR] = await Promise.all([
+      query(`
+        SELECT wo.*, sc.name AS sc_name, sc.sc_code, sc.pan_number, sc.gst_number,
+               p.name AS project_name
+          FROM sc_work_orders wo
+          JOIN sc_subcontractors sc ON sc.id = wo.sc_id
+          JOIN projects p           ON p.id  = wo.project_id
+         WHERE wo.id = $1 AND wo.company_id = $2`, [woId, CID(req)]),
+      query(`
+        SELECT b.bill_number, b.bill_date, b.bill_type, b.status,
+               b.gross_amount, b.gst_amount, b.tds_amount, b.retention_amount,
+               b.advance_recovery, b.material_recovery, b.penalty_amount, b.other_deductions,
+               COALESCE(b.labour_cess_amount, 0)       AS labour_cess_amount,
+               COALESCE(b.retention_release_amount, 0) AS retention_release_amount,
+               COALESCE(b.credit_note_amount, 0)       AS credit_note_amount,
+               b.net_payable, b.paid_amount
+          FROM sc_bills b
+         WHERE b.wo_id = $1 AND b.company_id = $2
+           AND b.status NOT IN ('draft','rejected')
+         ORDER BY b.bill_date`, [woId, CID(req)]),
+      query(`SELECT COALESCE(SUM(amount), 0) AS total_advanced
+               FROM sc_advances
+              WHERE wo_id = $1 AND company_id = $2`, [woId, CID(req)]),
+      query(`SELECT COALESCE(SUM(release_amount), 0) AS total_released
+               FROM sc_retention_releases
+              WHERE wo_id = $1 AND company_id = $2 AND status = 'released'`, [woId, CID(req)]),
+    ]);
+
+    if (!woR.rows.length) return res.status(404).json({ error: 'Work order not found' });
+    const wo    = woR.rows[0];
+    const bills = billsR.rows;
+
+    const summary = bills.reduce((s, b) => ({
+      total_gross:       s.total_gross       + parseFloat(b.gross_amount||0),
+      total_gst:         s.total_gst         + parseFloat(b.gst_amount||0),
+      total_tds:         s.total_tds         + parseFloat(b.tds_amount||0),
+      total_retention:   s.total_retention   + parseFloat(b.retention_amount||0),
+      total_adv_rec:     s.total_adv_rec     + parseFloat(b.advance_recovery||0),
+      total_mat_rec:     s.total_mat_rec     + parseFloat(b.material_recovery||0),
+      total_penalty:     s.total_penalty     + parseFloat(b.penalty_amount||0),
+      total_other:       s.total_other       + parseFloat(b.other_deductions||0),
+      total_labour_cess: s.total_labour_cess + parseFloat(b.labour_cess_amount||0),
+      total_net:         s.total_net         + parseFloat(b.net_payable||0),
+      total_paid:        s.total_paid        + parseFloat(b.paid_amount||0),
+    }), {
+      total_gross:0, total_gst:0, total_tds:0, total_retention:0,
+      total_adv_rec:0, total_mat_rec:0, total_penalty:0, total_other:0,
+      total_labour_cess:0, total_net:0, total_paid:0,
+    });
+
+    const total_advanced     = parseFloat(advancesR.rows[0].total_advanced||0);
+    const total_ret_released = parseFloat(retRelR.rows[0].total_released||0);
+
+    res.json({ data: {
+      wo,
+      bills,
+      summary: {
+        ...summary,
+        total_advanced,
+        total_ret_released,
+        net_balance:       summary.total_net - summary.total_paid,
+        retention_balance: summary.total_retention - total_ret_released,
+        advance_balance:   total_advanced - summary.total_adv_rec,
+        utilisation_pct:   parseFloat(wo.contract_amount||0) > 0
+          ? Math.round(summary.total_gross / parseFloat(wo.contract_amount) * 100)
+          : 0,
+      },
+    }});
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════════════════════════════════════════
+// 18. P5 — WO CLOSURE
+// ════════════════════════════════════════════════════════════════════
+router.patch('/work-orders/:id/close', authorize(...ADMIN, 'project_manager', 'qs_engineer'), async (req, res) => {
+  try {
+    const { remarks } = req.body;
+    const woId = req.params.id;
+
+    // Guard: no bills still pending approval
+    const pending = await query(
+      `SELECT COUNT(*) FROM sc_bills
+        WHERE wo_id = $1 AND company_id = $2
+          AND status IN ('draft','submitted','under_review','queried')`,
+      [woId, CID(req)]);
+    if (parseInt(pending.rows[0].count) > 0)
+      return res.status(400).json({
+        error: `Cannot close: ${pending.rows[0].count} bill(s) still pending approval`,
+      });
+
+    const r = await query(
+      `UPDATE sc_work_orders
+          SET status          = 'completed',
+              closure_remarks = $1,
+              closed_by       = $2,
+              closed_at       = NOW(),
+              updated_at      = NOW()
+        WHERE id = $3 AND company_id = $4
+          AND status IN ('active','approved')
+        RETURNING *`,
+      [remarks||null, req.user.id, woId, CID(req)]);
+
+    if (!r.rows.length)
+      return res.status(404).json({ error: 'Work order not found or not in a closeable state (active/approved)' });
+
+    res.json({ data: r.rows[0] });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════════════════════════════════════════
+// 19. P5 — COP (COST OF PRODUCTION) REPORT
+// ════════════════════════════════════════════════════════════════════
+router.get('/reports/cop', async (req, res) => {
+  try {
+    const { project_id, sc_id } = req.query;
+    let sql = `
+      SELECT
+        wo.wo_number, wo.subject, wo.work_category,
+        wo.contract_amount, wo.status AS wo_status,
+        sc.name AS sc_name, sc.sc_code, sc.trade_type,
+        p.name  AS project_name,
+        COALESCE(billed.total_gross, 0) AS sc_gross_billed,
+        COALESCE(billed.total_net,   0) AS sc_net_certified,
+        COALESCE(billed.total_tds,   0) AS sc_total_tds,
+        COALESCE(billed.total_ret,   0) AS sc_total_retention,
+        COALESCE(paid.total_paid,    0) AS sc_total_paid,
+        wo.contract_amount - COALESCE(billed.total_gross, 0) AS sc_balance,
+        CASE WHEN wo.contract_amount > 0
+          THEN ROUND(COALESCE(billed.total_gross, 0)::numeric / wo.contract_amount * 100, 1)
+          ELSE 0
+        END AS utilisation_pct
+      FROM sc_work_orders wo
+      JOIN sc_subcontractors sc ON sc.id = wo.sc_id
+      JOIN projects p           ON p.id  = wo.project_id
+      LEFT JOIN (
+        SELECT wo_id,
+               SUM(gross_amount)     AS total_gross,
+               SUM(net_payable)      AS total_net,
+               SUM(tds_amount)       AS total_tds,
+               SUM(retention_amount) AS total_ret
+          FROM sc_bills
+         WHERE company_id = $1 AND status NOT IN ('draft','rejected')
+         GROUP BY wo_id
+      ) billed ON billed.wo_id = wo.id
+      LEFT JOIN (
+        SELECT b.wo_id, SUM(pay.amount) AS total_paid
+          FROM sc_payments pay
+          JOIN sc_bills b ON b.id = pay.bill_id
+         WHERE pay.company_id = $1
+         GROUP BY b.wo_id
+      ) paid ON paid.wo_id = wo.id
+      WHERE wo.company_id = $1`;
+    const params = [CID(req)]; let i = 2;
+    if (project_id){ sql += ` AND wo.project_id = $${i++}`; params.push(project_id); }
+    if (sc_id)     { sql += ` AND wo.sc_id = $${i++}`;      params.push(sc_id); }
+    sql += ` ORDER BY p.name, wo.wo_number`;
+    res.json({ data: (await query(sql, params)).rows });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

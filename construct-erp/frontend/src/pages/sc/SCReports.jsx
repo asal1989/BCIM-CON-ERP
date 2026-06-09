@@ -17,11 +17,14 @@ const REPORTS = [
   { key:'wo_balance',    label:'WO Balance Report',       group:'Billing' },
   { key:'outstanding',   label:'Outstanding Payments',    group:'Billing' },
   { key:'payment_reg',   label:'Payment Register',        group:'Billing' },
+  { key:'ipc_register',  label:'IPC Register',            group:'Billing' },
   { key:'retention',     label:'Retention Report',        group:'Deductions' },
   { key:'adv_recovery',  label:'Advance Recovery',        group:'Deductions' },
   { key:'labour',        label:'Labour Attendance',       group:'Labour' },
   { key:'boq_actual',    label:'BOQ vs Actual',           group:'BOQ' },
+  { key:'cop',           label:'Cost of Production',      group:'BOQ' },
   { key:'ledger',        label:'Contractor Ledger',       group:'Ledger' },
+  { key:'tds_26q',       label:'TDS 26Q Register',        group:'Compliance' },
 ];
 
 function exportCSV(rows, name) {
@@ -49,25 +52,28 @@ export default function SCReports() {
 
   const baseP = { project_id: projectFilter||undefined };
 
-  const { data: summary=[],     refetch:r1 } = useQuery({ queryKey:['sc-rpt-summary',projectFilter],      queryFn:()=>scAPI.reportSummary(baseP).then(r=>r.data?.data||[]),       staleTime:0, enabled:activeReport==='summary' });
-  const { data: woBalance=[],   refetch:r2 } = useQuery({ queryKey:['sc-rpt-wo',projectFilter,scFilter],  queryFn:()=>scAPI.reportWOBalance({...baseP,sc_id:scFilter||undefined}).then(r=>r.data?.data||[]), staleTime:0, enabled:activeReport==='wo_balance' });
-  const { data: outstanding=[], refetch:r3 } = useQuery({ queryKey:['sc-rpt-out',projectFilter],          queryFn:()=>scAPI.reportOutstanding(baseP).then(r=>r.data?.data||[]),   staleTime:0, enabled:activeReport==='outstanding' });
-  const { data: payReg=[],      refetch:r4 } = useQuery({ queryKey:['sc-rpt-pay',projectFilter,scFilter,fromDate,toDate], queryFn:()=>scAPI.reportPayReg({...baseP,sc_id:scFilter||undefined,from_date:fromDate||undefined,to_date:toDate||undefined}).then(r=>r.data?.data||[]), staleTime:0, enabled:activeReport==='payment_reg' });
-  const { data: retention=[],   refetch:r5 } = useQuery({ queryKey:['sc-rpt-ret'],                        queryFn:()=>scAPI.reportRetention().then(r=>r.data?.data||[]),          staleTime:0, enabled:activeReport==='retention' });
-  const { data: advRec=[],      refetch:r6 } = useQuery({ queryKey:['sc-rpt-adv',projectFilter,scFilter], queryFn:()=>scAPI.reportAdvRec({...baseP,sc_id:scFilter||undefined}).then(r=>r.data?.data||[]), staleTime:0, enabled:activeReport==='adv_recovery' });
-  const { data: labour=[],      refetch:r7 } = useQuery({ queryKey:['sc-rpt-lab',projectFilter,scFilter,fromDate,toDate], queryFn:()=>scAPI.reportLabour({...baseP,sc_id:scFilter||undefined,from_date:fromDate||undefined,to_date:toDate||undefined}).then(r=>r.data?.data||[]), staleTime:0, enabled:activeReport==='labour' });
-  const { data: boqActual=[],   refetch:r8 } = useQuery({ queryKey:['sc-rpt-boq',projectFilter,woFilter], queryFn:()=>scAPI.reportBOQActual({...baseP,wo_id:woFilter||undefined}).then(r=>r.data?.data||[]), staleTime:0, enabled:activeReport==='boq_actual' });
-  const { data: ledger=[],      refetch:r9 } = useQuery({ queryKey:['sc-rpt-led',scFilter,fromDate,toDate], queryFn:()=>scAPI.reportLedger({sc_id:scFilter||undefined,from_date:fromDate||undefined,to_date:toDate||undefined}).then(r=>r.data?.data||[]), staleTime:0, enabled:activeReport==='ledger'&&!!scFilter });
+  const { data: summary=[],     refetch:r1  } = useQuery({ queryKey:['sc-rpt-summary',projectFilter],             queryFn:()=>scAPI.reportSummary(baseP).then(r=>r.data?.data||[]),       staleTime:0, enabled:activeReport==='summary' });
+  const { data: woBalance=[],   refetch:r2  } = useQuery({ queryKey:['sc-rpt-wo',projectFilter,scFilter],         queryFn:()=>scAPI.reportWOBalance({...baseP,sc_id:scFilter||undefined}).then(r=>r.data?.data||[]), staleTime:0, enabled:activeReport==='wo_balance' });
+  const { data: outstanding=[], refetch:r3  } = useQuery({ queryKey:['sc-rpt-out',projectFilter],                 queryFn:()=>scAPI.reportOutstanding(baseP).then(r=>r.data?.data||[]),   staleTime:0, enabled:activeReport==='outstanding' });
+  const { data: payReg=[],      refetch:r4  } = useQuery({ queryKey:['sc-rpt-pay',projectFilter,scFilter,fromDate,toDate], queryFn:()=>scAPI.reportPayReg({...baseP,sc_id:scFilter||undefined,from_date:fromDate||undefined,to_date:toDate||undefined}).then(r=>r.data?.data||[]), staleTime:0, enabled:activeReport==='payment_reg' });
+  const { data: ipcList=[],     refetch:r5  } = useQuery({ queryKey:['sc-rpt-ipc',projectFilter],                 queryFn:()=>scAPI.listIPCs({...baseP}).then(r=>r.data?.data||[]),        staleTime:0, enabled:activeReport==='ipc_register' });
+  const { data: retention=[],   refetch:r6  } = useQuery({ queryKey:['sc-rpt-ret'],                               queryFn:()=>scAPI.reportRetention().then(r=>r.data?.data||[]),          staleTime:0, enabled:activeReport==='retention' });
+  const { data: advRec=[],      refetch:r7  } = useQuery({ queryKey:['sc-rpt-adv',projectFilter,scFilter],        queryFn:()=>scAPI.reportAdvRec({...baseP,sc_id:scFilter||undefined}).then(r=>r.data?.data||[]), staleTime:0, enabled:activeReport==='adv_recovery' });
+  const { data: labour=[],      refetch:r8  } = useQuery({ queryKey:['sc-rpt-lab',projectFilter,scFilter,fromDate,toDate], queryFn:()=>scAPI.reportLabour({...baseP,sc_id:scFilter||undefined,from_date:fromDate||undefined,to_date:toDate||undefined}).then(r=>r.data?.data||[]), staleTime:0, enabled:activeReport==='labour' });
+  const { data: boqActual=[],   refetch:r9  } = useQuery({ queryKey:['sc-rpt-boq',projectFilter,woFilter],        queryFn:()=>scAPI.reportBOQActual({...baseP,wo_id:woFilter||undefined}).then(r=>r.data?.data||[]), staleTime:0, enabled:activeReport==='boq_actual' });
+  const { data: cop=[],         refetch:r10 } = useQuery({ queryKey:['sc-rpt-cop',projectFilter,scFilter],        queryFn:()=>scAPI.reportCOP({...baseP,sc_id:scFilter||undefined}).then(r=>r.data?.data||[]), staleTime:0, enabled:activeReport==='cop' });
+  const { data: ledger=[],      refetch:r11 } = useQuery({ queryKey:['sc-rpt-led',scFilter,fromDate,toDate],      queryFn:()=>scAPI.reportLedger({sc_id:scFilter||undefined,from_date:fromDate||undefined,to_date:toDate||undefined}).then(r=>r.data?.data||[]), staleTime:0, enabled:activeReport==='ledger'&&!!scFilter });
+  const { data: tds26q=[],      refetch:r12 } = useQuery({ queryKey:['sc-rpt-tds',projectFilter,scFilter,fromDate,toDate], queryFn:()=>scAPI.reportTDS26Q({...baseP,sc_id:scFilter||undefined,from_date:fromDate||undefined,to_date:toDate||undefined}).then(r=>r.data?.data||[]), staleTime:0, enabled:activeReport==='tds_26q' });
 
-  const dataMap  = { summary, wo_balance:woBalance, outstanding, payment_reg:payReg, retention, adv_recovery:advRec, labour, boq_actual:boqActual, ledger };
-  const refetchMap={ summary:r1, wo_balance:r2, outstanding:r3, payment_reg:r4, retention:r5, adv_recovery:r6, labour:r7, boq_actual:r8, ledger:r9 };
+  const dataMap   = { summary, wo_balance:woBalance, outstanding, payment_reg:payReg, ipc_register:ipcList, retention, adv_recovery:advRec, labour, boq_actual:boqActual, cop, ledger, tds_26q:tds26q };
+  const refetchMap = { summary:r1, wo_balance:r2, outstanding:r3, payment_reg:r4, ipc_register:r5, retention:r6, adv_recovery:r7, labour:r8, boq_actual:r9, cop:r10, ledger:r11, tds_26q:r12 };
   const currentData   = dataMap[activeReport]||[];
   const currentRefetch= refetchMap[activeReport];
 
   const groups = [...new Set(REPORTS.map(r=>r.group))];
   const sel = inp => clsx('border border-slate-200 bg-white rounded-xl px-3 py-2 text-sm shadow-sm focus:outline-none', inp);
-  const needsDate = ['payment_reg','labour','ledger'].includes(activeReport);
-  const needsSC   = ['wo_balance','payment_reg','adv_recovery','labour','ledger'].includes(activeReport);
+  const needsDate = ['payment_reg','labour','ledger','tds_26q'].includes(activeReport);
+  const needsSC   = ['wo_balance','payment_reg','adv_recovery','labour','ledger','tds_26q','cop'].includes(activeReport);
   const needsWO   = activeReport==='boq_actual';
 
   return (
@@ -349,6 +355,122 @@ export default function SCReports() {
                     </tr>
                   )}
                 </tbody>
+              </table>
+            )}
+
+            {/* ── IPC Register ── */}
+            {activeReport==='ipc_register' && (
+              <table className="w-full text-sm">
+                <thead><tr style={{background:`linear-gradient(90deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)`}}>
+                  {['IPC No.','IPC Date','Bill No.','Subcontractor','WO Number','Project','Gross','Net Payable','TDS','Retention','Status'].map(h=><th key={h} className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-white/80 whitespace-nowrap">{h}</th>)}
+                </tr></thead>
+                <tbody>{ipcList.length===0?<tr><td colSpan={11} className="py-10 text-center text-slate-400 text-xs">No IPCs generated yet</td></tr>
+                  :ipcList.map((r,i)=><tr key={i} className={clsx('border-b border-slate-50',i%2===0?'bg-white':'bg-slate-50/30')}>
+                    <td className="px-4 py-2.5 font-mono text-xs font-bold text-emerald-600">{r.ipc_number}</td>
+                    <td className="px-4 py-2.5 text-xs">{dayjs(r.ipc_date).format('DD MMM YY')}</td>
+                    <td className="px-4 py-2.5 font-mono text-xs text-indigo-600">{r.bill_number}</td>
+                    <td className="px-4 py-2.5 text-xs font-semibold">{r.sc_name}</td>
+                    <td className="px-4 py-2.5 font-mono text-xs">{r.wo_number}</td>
+                    <td className="px-4 py-2.5 text-xs text-slate-500">{r.project_name}</td>
+                    <td className="px-4 py-2.5 text-right text-xs font-semibold">{fmt(r.gross_amount)}</td>
+                    <td className="px-4 py-2.5 text-right text-xs font-bold text-teal-700">{fmt(r.net_payable)}</td>
+                    <td className="px-4 py-2.5 text-right text-xs text-red-600">{fmt(r.tds_amount)}</td>
+                    <td className="px-4 py-2.5 text-right text-xs text-amber-600">{fmt(r.retention_amount)}</td>
+                    <td className="px-4 py-2.5">
+                      <span className={clsx('text-[10px] px-2 py-0.5 rounded-full font-semibold capitalize',
+                        r.status==='paid'?'bg-emerald-100 text-emerald-700':r.status==='payment_due'?'bg-amber-100 text-amber-700':'bg-blue-100 text-blue-700')}>
+                        {r.status?.replace('_',' ')||'Issued'}
+                      </span>
+                    </td>
+                  </tr>)}
+                </tbody>
+              </table>
+            )}
+
+            {/* ── COP (Cost of Production) ── */}
+            {activeReport==='cop' && (
+              <table className="w-full text-sm">
+                <thead><tr style={{background:`linear-gradient(90deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)`}}>
+                  {['WO Number','Subject','Category','Subcontractor','Project','Contract Amt','SC Billed','Net Certified','SC Paid','Balance','Util %','Status'].map(h=><th key={h} className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-white/80 whitespace-nowrap">{h}</th>)}
+                </tr></thead>
+                <tbody>{cop.length===0?<tr><td colSpan={12} className="py-10 text-center text-slate-400 text-xs">No data</td></tr>
+                  :cop.map((r,i)=>{
+                    const pct = num(r.utilisation_pct);
+                    return <tr key={i} className={clsx('border-b border-slate-50',i%2===0?'bg-white':'bg-slate-50/30')}>
+                      <td className="px-4 py-2.5 font-mono text-xs font-bold text-emerald-600">{r.wo_number}</td>
+                      <td className="px-4 py-2.5 text-xs max-w-[140px] truncate">{r.subject}</td>
+                      <td className="px-4 py-2.5 text-xs text-slate-500">{r.work_category||'—'}</td>
+                      <td className="px-4 py-2.5 text-xs">{r.sc_name}</td>
+                      <td className="px-4 py-2.5 text-xs text-slate-500">{r.project_name}</td>
+                      <td className="px-4 py-2.5 text-right text-xs font-semibold">{fmt(r.contract_amount)}</td>
+                      <td className="px-4 py-2.5 text-right text-xs font-semibold text-indigo-600">{fmt(r.sc_gross_billed)}</td>
+                      <td className="px-4 py-2.5 text-right text-xs font-semibold text-teal-700">{fmt(r.sc_net_certified)}</td>
+                      <td className="px-4 py-2.5 text-right text-xs font-semibold text-emerald-600">{fmt(r.sc_total_paid)}</td>
+                      <td className="px-4 py-2.5 text-right text-xs font-bold text-amber-600">{fmt(r.sc_balance)}</td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full" style={{width:`${Math.min(pct,100)}%`, background: pct>90?'#ef4444':pct>70?'#f59e0b':'#10b981'}}/>
+                          </div>
+                          <span className="text-xs font-bold">{pct}%</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5"><span className={clsx('text-[10px] px-2 py-0.5 rounded-full font-semibold capitalize',
+                        r.wo_status==='active'?'bg-emerald-100 text-emerald-700':r.wo_status==='completed'?'bg-teal-100 text-teal-700':'bg-slate-100 text-slate-600')}>{r.wo_status}</span></td>
+                    </tr>;
+                  })}
+                </tbody>
+                {cop.length>0&&(
+                  <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-bold">
+                    <tr>
+                      <td colSpan={5} className="px-4 py-3 text-xs uppercase tracking-wider text-slate-600">Total ({cop.length} WOs)</td>
+                      <td className="px-4 py-3 text-right text-xs">{fmt(cop.reduce((s,r)=>s+num(r.contract_amount),0))}</td>
+                      <td className="px-4 py-3 text-right text-xs text-indigo-600">{fmt(cop.reduce((s,r)=>s+num(r.sc_gross_billed),0))}</td>
+                      <td className="px-4 py-3 text-right text-xs text-teal-700">{fmt(cop.reduce((s,r)=>s+num(r.sc_net_certified),0))}</td>
+                      <td className="px-4 py-3 text-right text-xs text-emerald-600">{fmt(cop.reduce((s,r)=>s+num(r.sc_total_paid),0))}</td>
+                      <td className="px-4 py-3 text-right text-xs text-amber-600">{fmt(cop.reduce((s,r)=>s+num(r.sc_balance),0))}</td>
+                      <td colSpan={2}/>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            )}
+
+            {/* ── TDS 26Q Register ── */}
+            {activeReport==='tds_26q' && (
+              <table className="w-full text-sm">
+                <thead><tr style={{background:`linear-gradient(90deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)`}}>
+                  {['Quarter','SC Code','Name','PAN','Bill No.','Bill Date','WO No.','Project','Gross Amount','TDS Rate','TDS Amount','Paid Amount','Last Payment'].map(h=><th key={h} className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-white/80 whitespace-nowrap">{h}</th>)}
+                </tr></thead>
+                <tbody>{tds26q.length===0?<tr><td colSpan={13} className="py-10 text-center text-slate-400 text-xs">No TDS transactions found</td></tr>
+                  :tds26q.map((r,i)=><tr key={i} className={clsx('border-b border-slate-50',i%2===0?'bg-white':'bg-slate-50/30')}>
+                    <td className="px-4 py-2.5"><span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-purple-100 text-purple-700 whitespace-nowrap">{r.quarter}</span></td>
+                    <td className="px-4 py-2.5 font-mono text-xs font-bold text-indigo-600">{r.sc_code}</td>
+                    <td className="px-4 py-2.5 text-xs font-semibold">{r.sc_name}</td>
+                    <td className="px-4 py-2.5 font-mono text-xs">{r.pan_number}</td>
+                    <td className="px-4 py-2.5 font-mono text-xs font-bold text-purple-600">{r.bill_number}</td>
+                    <td className="px-4 py-2.5 text-xs">{dayjs(r.bill_date).format('DD MMM YY')}</td>
+                    <td className="px-4 py-2.5 font-mono text-xs">{r.wo_number}</td>
+                    <td className="px-4 py-2.5 text-xs text-slate-500">{r.project_name}</td>
+                    <td className="px-4 py-2.5 text-right text-xs font-semibold">{fmt2(r.gross_amount)}</td>
+                    <td className="px-4 py-2.5 text-center text-xs font-semibold text-red-600">{r.tds_pct}%</td>
+                    <td className="px-4 py-2.5 text-right text-xs font-bold text-red-600">{fmt2(r.tds_amount)}</td>
+                    <td className="px-4 py-2.5 text-right text-xs font-semibold text-emerald-600">{fmt2(r.amount_paid)}</td>
+                    <td className="px-4 py-2.5 text-xs text-slate-500">{r.last_payment_date ? dayjs(r.last_payment_date).format('DD MMM YY') : '—'}</td>
+                  </tr>)}
+                </tbody>
+                {tds26q.length>0&&(
+                  <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-bold">
+                    <tr>
+                      <td colSpan={8} className="px-4 py-3 text-xs uppercase tracking-wider text-slate-600">Total TDS Deducted</td>
+                      <td className="px-4 py-3 text-right text-xs">{fmt2(tds26q.reduce((s,r)=>s+num(r.gross_amount),0))}</td>
+                      <td/>
+                      <td className="px-4 py-3 text-right text-xs text-red-600">{fmt2(tds26q.reduce((s,r)=>s+num(r.tds_amount),0))}</td>
+                      <td className="px-4 py-3 text-right text-xs text-emerald-600">{fmt2(tds26q.reduce((s,r)=>s+num(r.amount_paid),0))}</td>
+                      <td/>
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             )}
 

@@ -1,10 +1,77 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { scAPI, projectAPI } from '../../api/client';
-import { RefreshCw, CreditCard, Plus, X, CheckCircle } from 'lucide-react';
+import { RefreshCw, CreditCard, Plus, X, CheckCircle, Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
+import dayjs from 'dayjs';
 
-const fmt = v=>`₹${Number(v||0).toLocaleString('en-IN',{maximumFractionDigits:0})}`;
+const fmt  = v => `₹${Number(v||0).toLocaleString('en-IN',{maximumFractionDigits:0})}`;
+const fmt2 = v => `₹${Number(v||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+
+// ── Payment Advice Print ──────────────────────────────────────────────────────
+function printPaymentAdvice(bill, payments) {
+  const totalPaid = payments.reduce((s,p) => s + parseFloat(p.amount||0), 0);
+  const html = `
+    <!DOCTYPE html><html><head><title>Payment Advice — ${bill.bill_number}</title>
+    <style>
+      body { font-family: Arial, sans-serif; font-size: 12px; color: #1e293b; margin: 24px; }
+      h1 { font-size: 18px; color: #065f46; margin-bottom: 4px; }
+      .subtitle { color: #64748b; font-size: 11px; margin-bottom: 20px; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+      .card { border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; }
+      .label { font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: .05em; }
+      .value { font-weight: bold; margin-top: 2px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+      th { background: #065f46; color: #fff; padding: 8px 10px; font-size: 10px; text-align: left; }
+      td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; }
+      tr:nth-child(even) td { background: #f8fafc; }
+      .total-row td { font-weight: bold; background: #f0fdf4 !important; border-top: 2px solid #065f46; }
+      .footer { margin-top: 30px; font-size: 10px; color: #94a3b8; text-align: center; }
+      @media print { .no-print { display: none; } }
+    </style></head><body>
+    <h1>Payment Advice</h1>
+    <div class="subtitle">Generated: ${dayjs().format('DD MMM YYYY HH:mm')}</div>
+    <div class="grid">
+      <div class="card"><div class="label">Subcontractor</div><div class="value">${bill.sc_name}</div></div>
+      <div class="card"><div class="label">Bill Number</div><div class="value">${bill.bill_number}</div></div>
+      <div class="card"><div class="label">WO Number</div><div class="value">${bill.wo_number||'—'}</div></div>
+      <div class="card"><div class="label">Bill Date</div><div class="value">${dayjs(bill.bill_date).format('DD MMM YYYY')}</div></div>
+      <div class="card"><div class="label">Net Payable</div><div class="value" style="color:#065f46">${fmt2(bill.net_payable)}</div></div>
+      <div class="card"><div class="label">Status</div><div class="value">${bill.status?.toUpperCase()}</div></div>
+    </div>
+    <table>
+      <thead><tr>
+        <th>#</th><th>Payment Date</th><th>Mode</th><th>UTR / Reference</th><th>Remarks</th><th style="text-align:right">Amount</th>
+      </tr></thead>
+      <tbody>
+        ${payments.length===0 ? '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:20px">No payments recorded</td></tr>'
+          : payments.map((p,i) => `<tr>
+            <td>${i+1}</td>
+            <td>${dayjs(p.payment_date).format('DD MMM YYYY')}</td>
+            <td>${(p.payment_mode||'').replace('_',' ').toUpperCase()}</td>
+            <td>${p.utr_number||p.reference_no||'—'}</td>
+            <td>${p.remarks||'—'}</td>
+            <td style="text-align:right;font-weight:bold">${fmt2(p.amount)}</td>
+          </tr>`).join('')
+        }
+        <tr class="total-row">
+          <td colspan="5" style="text-align:right">Total Paid</td>
+          <td style="text-align:right">${fmt2(totalPaid)}</td>
+        </tr>
+        <tr class="total-row">
+          <td colspan="5" style="text-align:right">Balance Outstanding</td>
+          <td style="text-align:right;color:${(parseFloat(bill.net_payable)-totalPaid)>0?'#dc2626':'#059669'}">${fmt2(Math.max(0,parseFloat(bill.net_payable)-totalPaid))}</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="footer">This is a system-generated payment advice. — BCIM Construction ERP</div>
+    </body></html>`;
+  const w = window.open('','_blank','width=800,height=600');
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 400);
+}
 
 function PaymentModal({ bill, onClose }) {
   const qc = useQueryClient();
@@ -56,8 +123,9 @@ function PaymentModal({ bill, onClose }) {
 }
 
 export default function SCPayments() {
-  const [projectFilter,setProject]=useState('');
-  const [payModal, setPayModal] = useState(null);
+  const [projectFilter, setProject] = useState('');
+  const [payModal,   setPayModal]   = useState(null);
+  const [printBill,  setPrintBill]  = useState(null);  // bill awaiting payments fetch for print
   const { data:projects=[] } = useQuery({ queryKey:['projects'], queryFn:()=>projectAPI.list().then(r=>r.data?.data??[]) });
   const { data:bills=[], isLoading, refetch } = useQuery({
     queryKey:['sc-approved-bills', projectFilter],
@@ -70,9 +138,21 @@ export default function SCPayments() {
     staleTime:0,
   });
 
-  const totalApproved=bills.reduce((s,b)=>s+parseFloat(b.net_payable||0),0);
-  const totalPaid=bills.reduce((s,b)=>s+parseFloat(b.paid_amount||0),0)+paidBills.reduce((s,b)=>s+parseFloat(b.paid_amount||0),0);
-  const outstanding=bills.reduce((s,b)=>s+(parseFloat(b.net_payable||0)-parseFloat(b.paid_amount||0)),0);
+  // Fetch payments for a specific bill when Print Advice is clicked
+  const { data: printPayments=[] } = useQuery({
+    queryKey: ['sc-bill-payments', printBill?.id],
+    queryFn:  () => scAPI.listPayments({ bill_id: printBill.id }).then(r=>r.data?.data||[]),
+    enabled:  !!printBill,
+    staleTime: 0,
+    onSuccess: (data) => {
+      if (printBill) { printPaymentAdvice(printBill, data); setPrintBill(null); }
+    },
+  });
+
+  const totalApproved = bills.reduce((s,b) => s+parseFloat(b.net_payable||0), 0);
+  const totalPaid     = bills.reduce((s,b) => s+parseFloat(b.paid_amount||0), 0)
+                      + paidBills.reduce((s,b) => s+parseFloat(b.paid_amount||0), 0);
+  const outstanding   = bills.reduce((s,b) => s+(parseFloat(b.net_payable||0)-parseFloat(b.paid_amount||0)), 0);
 
   return (
     <div className="p-6 md:p-8 min-h-screen bg-slate-50">
@@ -123,12 +203,20 @@ export default function SCPayments() {
                         <td className="px-4 py-3 text-right font-bold text-emerald-600">{fmt(b.paid_amount)}</td>
                         <td className="px-4 py-3 text-right font-bold text-red-500">{fmt(balance)}</td>
                         <td className="px-4 py-3">
-                          {balance>0.01&&b.status==='approved'&&(
-                            <button onClick={()=>setPayModal(b)} className="flex items-center gap-1 px-3 py-1.5 bg-teal-600 text-white rounded-lg text-xs font-semibold hover:bg-teal-700">
-                              <Plus className="w-3 h-3" />Pay
-                            </button>
-                          )}
-                          {b.status==='paid'&&<span className="text-xs font-semibold text-emerald-600">✓ Paid</span>}
+                          <div className="flex items-center gap-1.5">
+                            {balance>0.01&&b.status==='approved'&&(
+                              <button onClick={()=>setPayModal(b)} className="flex items-center gap-1 px-3 py-1.5 bg-teal-600 text-white rounded-lg text-xs font-semibold hover:bg-teal-700">
+                                <Plus className="w-3 h-3" />Pay
+                              </button>
+                            )}
+                            {b.status==='paid'&&<span className="text-xs font-semibold text-emerald-600">✓ Paid</span>}
+                            {(b.status==='paid'||b.paid_amount>0)&&(
+                              <button onClick={()=>setPrintBill(b)} title="Print Payment Advice"
+                                className="p-1.5 rounded-lg border border-slate-200 text-slate-400 hover:text-teal-600 hover:border-teal-300 hover:bg-teal-50">
+                                <Printer className="w-3.5 h-3.5"/>
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

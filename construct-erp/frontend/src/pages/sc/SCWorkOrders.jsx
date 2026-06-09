@@ -6,7 +6,7 @@ import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import {
   Plus, Search, Eye, Edit2, CheckCircle, X, RefreshCw,
   Briefcase, Trash2, AlertTriangle, Building2, IndianRupee,
-  ChevronRight, Archive, Layers,
+  ChevronRight, Archive, Layers, FileText, Lock,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
@@ -46,6 +46,149 @@ const VENDOR_TYPE_BADGE = {
   'labour_contractor':'bg-blue-100 text-blue-700',
   'Labor Contractor': 'bg-blue-100 text-blue-700',
 };
+
+// ─── WO Final Account Modal ────────────────────────────────────────────────────
+function WOFinalAccountModal({ wo, onClose }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['sc-wo-final-account', wo.id],
+    queryFn:  () => scAPI.getWOFinalAccount(wo.id).then(r => r.data?.data),
+    staleTime: 0,
+  });
+  const fa  = data?.summary;
+  const bills = data?.bills || [];
+  const w = data?.wo || wo;
+
+  const row = (label, value, color='text-slate-800', border=false) => (
+    <tr className={border ? 'border-t-2 border-slate-300 bg-slate-50 font-bold' : 'border-b border-slate-50'}>
+      <td className="px-4 py-2 text-xs text-slate-500">{label}</td>
+      <td className={`px-4 py-2 text-right text-xs font-semibold ${color}`}>{value}</td>
+    </tr>
+  );
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-b"
+          style={{background:'linear-gradient(135deg,#134e4a 0%,#065f46 100%)'}}>
+          <div>
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-emerald-300"/>
+              <span className="font-bold text-white">Final Account</span>
+              <span className="font-mono text-emerald-300 text-sm">— {w.wo_number}</span>
+            </div>
+            <p className="text-emerald-200 text-xs mt-0.5">{w.sc_name} · {w.project_name}</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10">
+            <X className="w-4 h-4"/>
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {isLoading ? (
+            <div className="flex items-center justify-center h-48 text-slate-400">
+              <RefreshCw className="w-5 h-5 animate-spin mr-2"/> Loading final account…
+            </div>
+          ) : (
+            <>
+              {/* KPI row */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { l:'Contract Value',   v: fmt(w.contract_amount),      c:'text-slate-800' },
+                  { l:'Total Billed',     v: fmt(fa?.total_gross||0),      c:'text-indigo-700' },
+                  { l:'Net Certified',    v: fmt(fa?.total_net||0),         c:'text-teal-700'  },
+                  { l:'Utilisation',      v: `${fa?.utilisation_pct||0}%`, c: fa?.utilisation_pct>=100?'text-red-600':'text-emerald-700' },
+                ].map(({l,v,c}) => (
+                  <div key={l} className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-center">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{l}</p>
+                    <p className={`text-lg font-bold ${c}`}>{v}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* Bill-wise table */}
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">RA Bills ({bills.length})</p>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead style={{background:`linear-gradient(90deg,#0f766e 0%,#065f46 100%)`}}>
+                        <tr>{['Bill No.','Date','Gross','Net Pay','Paid','Status'].map(h=>(
+                          <th key={h} className="px-3 py-2 text-left font-bold text-white/80 whitespace-nowrap">{h}</th>
+                        ))}</tr>
+                      </thead>
+                      <tbody>
+                        {bills.length===0 ? (
+                          <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-400">No bills</td></tr>
+                        ) : bills.map((b,i) => (
+                          <tr key={i} className={clsx('border-t border-slate-100', i%2===0?'bg-white':'bg-slate-50/30')}>
+                            <td className="px-3 py-2 font-mono text-indigo-600 font-bold">{b.bill_number}</td>
+                            <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{dayjs(b.bill_date).format('DD MMM YY')}</td>
+                            <td className="px-3 py-2 text-right">{fmt(b.gross_amount)}</td>
+                            <td className="px-3 py-2 text-right text-teal-700 font-semibold">{fmt(b.net_payable)}</td>
+                            <td className="px-3 py-2 text-right text-emerald-600">{fmt(b.paid_amount)}</td>
+                            <td className="px-3 py-2">
+                              <span className={clsx('text-[9px] px-1.5 py-0.5 rounded-full font-bold capitalize',
+                                b.status==='paid'?'bg-emerald-100 text-emerald-700':b.status==='approved'?'bg-teal-100 text-teal-700':'bg-blue-100 text-blue-700')}>
+                                {b.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Summary table */}
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Account Summary</p>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden">
+                    <table className="w-full text-xs">
+                      <tbody>
+                        {row('Contract Value',           fmt(w.contract_amount))}
+                        {row('Total Gross Billed',        fmt(fa?.total_gross||0),        'text-indigo-700')}
+                        {row('Total GST',                 fmt(fa?.total_gst||0),           'text-slate-600')}
+                        {row('Total TDS Deducted',        fmt(fa?.total_tds||0),           'text-red-600')}
+                        {row('Total Retention Held',      fmt(fa?.total_retention||0),     'text-amber-600')}
+                        {row('Total Advance Recovery',    fmt(fa?.total_adv_rec||0),       'text-orange-600')}
+                        {row('Total Material Recovery',   fmt(fa?.total_mat_rec||0),       'text-orange-500')}
+                        {fa?.total_penalty>0 && row('Penalty Deductions',     fmt(fa?.total_penalty||0),      'text-red-500')}
+                        {fa?.total_labour_cess>0 && row('Labour Cess',        fmt(fa?.total_labour_cess||0),  'text-slate-500')}
+                        {row('Net Certified Amount',      fmt(fa?.total_net||0),           'text-teal-700',  false)}
+                        {row('Total Paid',                fmt(fa?.total_paid||0),          'text-emerald-700')}
+                        {row('Net Balance Payable',       fmt(fa?.net_balance||0),         fa?.net_balance>0?'text-red-600':'text-emerald-600', true)}
+                        {row('Retention Balance',         fmt(fa?.retention_balance||0),   'text-amber-600')}
+                        {fa?.total_advanced>0 && row('Advance Given',         fmt(fa?.total_advanced||0),     'text-orange-600')}
+                        {fa?.total_ret_released>0 && row('Retention Released', fmt(fa?.total_ret_released||0),'text-emerald-600')}
+                      </tbody>
+                    </table>
+                  </div>
+                  {w.dlp_end_date && (
+                    <div className={clsx('mt-3 rounded-xl px-4 py-2.5 text-xs border flex items-center gap-2',
+                      dayjs(w.dlp_end_date).isBefore(dayjs())
+                        ? 'bg-red-50 border-red-200 text-red-700'
+                        : 'bg-amber-50 border-amber-200 text-amber-700')}>
+                      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0"/>
+                      <span>DLP: {dayjs(w.dlp_end_date).format('DD MMM YYYY')}
+                        {dayjs(w.dlp_end_date).isBefore(dayjs())
+                          ? ' — Expired' : ` — ${dayjs(w.dlp_end_date).diff(dayjs(),'day')}d remaining`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="flex-shrink-0 flex justify-end px-5 py-4 border-t bg-slate-50">
+          <button onClick={onClose} className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-100">Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Create / Edit WO Form ─────────────────────────────────────────────────────
 function WOForm({ wo, projects, subcontractors, onClose }) {
@@ -224,6 +367,10 @@ function WOForm({ wo, projects, subcontractors, onClose }) {
 // ─── New SC WO Detail Drawer ───────────────────────────────────────────────────
 function NewWODrawer({ wo, onClose, onEdit }) {
   const qc = useQueryClient();
+  const [showFA,       setShowFA]       = useState(false);
+  const [closeRemarks, setCloseRemarks] = useState('');
+  const [showCloseBox, setShowCloseBox] = useState(false);
+
   const { data } = useQuery({
     queryKey: ['sc-wo-detail', wo.id],
     queryFn: () => scAPI.getWO(wo.id).then(r => r.data?.data ?? r.data ?? []).catch(() => []),
@@ -234,8 +381,14 @@ function NewWODrawer({ wo, onClose, onEdit }) {
     onSuccess: () => { toast.success('Work order approved'); qc.invalidateQueries({queryKey:['sc-wo-all-view']}); onClose(); },
     onError: e => toast.error(e?.response?.data?.error||'Failed'),
   });
+  const closeMut = useMutation({
+    mutationFn: () => scAPI.closeWO(wo.id, { remarks: closeRemarks }),
+    onSuccess: () => { toast.success('Work order closed'); qc.invalidateQueries({queryKey:['sc-wo-all-view']}); onClose(); },
+    onError: e => toast.error(e?.response?.data?.error||'Failed'),
+  });
   const d = data || wo;
   const sm = STATUS_META[d.status] || STATUS_META.draft;
+  const canClose = ['active','approved'].includes(d.status);
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -332,17 +485,54 @@ function NewWODrawer({ wo, onClose, onEdit }) {
           {d.scope_of_work && <div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Scope of Work</p><p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 rounded-xl p-3">{d.scope_of_work}</p></div>}
         </div>
 
+        {/* Close WO confirmation box */}
+        {showCloseBox && (
+          <div className="flex-shrink-0 px-5 py-4 border-t bg-red-50 border-red-100 space-y-2">
+            <p className="text-xs font-semibold text-red-700">Confirm WO Closure — all pending bills will be checked automatically.</p>
+            <input
+              value={closeRemarks}
+              onChange={e=>setCloseRemarks(e.target.value)}
+              placeholder="Closure remarks (optional)"
+              className="w-full border border-red-200 bg-white rounded-lg px-3 py-2 text-xs outline-none"
+            />
+            <div className="flex gap-2 justify-end">
+              <button onClick={()=>setShowCloseBox(false)} className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-100">Cancel</button>
+              <button onClick={()=>closeMut.mutate()} disabled={closeMut.isPending}
+                className="flex items-center gap-1.5 px-4 py-1.5 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700 disabled:opacity-50">
+                <Lock className="w-3 h-3"/>{closeMut.isPending?'Closing…':'Confirm Close WO'}
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex-shrink-0 flex justify-between items-center px-5 py-4 border-t bg-slate-50">
           <button onClick={onClose} className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-100">Close</button>
-          {['draft','submitted'].includes(d.status) && (
-            <button onClick={()=>approveMut.mutate()} disabled={approveMut.isPending}
-              className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-50">
-              <CheckCircle className="w-4 h-4"/>{approveMut.isPending?'Approving…':'Approve WO'}
+          <div className="flex items-center gap-2">
+            {/* Final Account button (always visible for SC module WOs) */}
+            <button onClick={()=>setShowFA(true)}
+              className="flex items-center gap-1.5 px-3 py-2 border border-teal-200 bg-teal-50 text-teal-700 text-xs font-semibold rounded-lg hover:bg-teal-100">
+              <FileText className="w-3.5 h-3.5"/> Final Account
             </button>
-          )}
+            {/* Approve WO */}
+            {['draft','submitted'].includes(d.status) && (
+              <button onClick={()=>approveMut.mutate()} disabled={approveMut.isPending}
+                className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-50">
+                <CheckCircle className="w-4 h-4"/>{approveMut.isPending?'Approving…':'Approve WO'}
+              </button>
+            )}
+            {/* Close WO */}
+            {canClose && !showCloseBox && (
+              <button onClick={()=>setShowCloseBox(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-slate-700 text-white text-xs font-bold rounded-lg hover:bg-slate-800">
+                <Lock className="w-3.5 h-3.5"/> Close WO
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
+    {/* Final Account Modal */}
+    {showFA && <WOFinalAccountModal wo={d} onClose={()=>setShowFA(false)} />}
   );
 }
 
