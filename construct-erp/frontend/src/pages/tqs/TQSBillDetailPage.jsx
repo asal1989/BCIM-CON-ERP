@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { tqsBillsAPI, projectAPI, poAPI } from '../../api/client';
+import api from '../../api/client';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
 import SignaturePadModal from '../../components/common/SignaturePadModal';
@@ -1102,9 +1103,24 @@ function FilesPanel({ bill, billId }) {
 
                 <div className="flex items-center gap-2">
                   {f.file_type !== 'link' && (
-                    <a href={f.local_url || `/uploads/tqs-bills/${billId}/${f.file_name}`} target="_blank" rel="noreferrer" className="text-slate-900 font-medium hover:text-blue-600 p-1">
+                    <button
+                      title="Preview / Download"
+                      onClick={async () => {
+                        try {
+                          const url = f.local_url || `/uploads/tqs-bills/${billId}/${f.file_name}`;
+                          const res = await api.get(url, { responseType: 'blob' });
+                          const blobUrl = URL.createObjectURL(res.data);
+                          window.open(blobUrl, '_blank');
+                          // revoke after a short delay to allow the tab to load
+                          setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+                        } catch {
+                          toast.error('Could not open file — it may have been deleted from the server');
+                        }
+                      }}
+                      className="text-slate-900 font-medium hover:text-blue-600 p-1"
+                    >
                       <Download className="w-3.5 h-3.5" />
-                    </a>
+                    </button>
                   )}
                   <button onClick={() => deleteMutation.mutate(f.id)} className="text-slate-900 font-medium hover:text-red-500 p-1">
                     <Trash2 className="w-3.5 h-3.5" />
