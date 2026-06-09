@@ -10,8 +10,11 @@ import {
   Eye, Edit2, Check, Ban, Building2, Calendar,
   Download, Printer, Settings, CreditCard, Wallet,
   Calculator, HardHat, ShieldCheck, BarChart3,
+  Layers, CheckCircle2, CircleDot, Flag,
 } from 'lucide-react';
-import { subcontractorAPI, vendorAPI, projectAPI, uploadAPI } from '../../api/client';
+import { subcontractorAPI, vendorAPI, projectAPI, uploadAPI, planningP6API } from '../../api/client';
+import toast from 'react-hot-toast';
+import dayjs from 'dayjs';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 const fmt = (n) =>
@@ -1635,10 +1638,278 @@ function AdvancesTab({ projectId, projects, vendors }) {
   );
 }
 
+// ─── Building Phases Tab ──────────────────────────────────────────────────────
+const PHASE_STATUS = {
+  not_started: { cls: 'bg-slate-100 text-slate-600',   label: 'Not Started', dot: '#94a3b8' },
+  in_progress:  { cls: 'bg-blue-100 text-blue-700',    label: 'In Progress', dot: '#2563eb' },
+  completed:    { cls: 'bg-emerald-100 text-emerald-700', label: 'Completed', dot: '#059669' },
+  on_hold:      { cls: 'bg-amber-100 text-amber-700',  label: 'On Hold',     dot: '#d97706' },
+};
+const fmtDate = d => d ? dayjs(d).format('DD MMM YYYY') : '—';
+
+function PhasesTab({ projectId, projects }) {
+  const qc = useQueryClient();
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null); // phase being edited
+  const emptyForm = { project_id: projectId || '', phase_code: '', phase_name: '', description: '', planned_start: '', planned_end: '', sequence_no: 1 };
+  const [form, setForm] = useState(emptyForm);
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const { data: phases = [], isLoading } = useQuery({
+    queryKey: ['sc-phases', projectId],
+    queryFn: () => planningP6API.listPhases(projectId ? { project_id: projectId } : {}).then(r => r.data?.data ?? []),
+    staleTime: 30000,
+  });
+
+  const completeMut = useMutation({
+    mutationFn: ({ id, currentStatus }) => planningP6API.updatePhase(id, {
+      status: currentStatus === 'completed' ? 'in_progress' : 'completed',
+      actual_end: currentStatus === 'completed' ? null : dayjs().format('YYYY-MM-DD'),
+    }),
+    onSuccess: () => { toast.success('Phase status updated'); qc.invalidateQueries({ queryKey: ['sc-phases'] }); },
+    onError: e => toast.error(e?.response?.data?.error || 'Failed'),
+  });
+
+  const startMut = useMutation({
+    mutationFn: (id) => planningP6API.updatePhase(id, { status: 'in_progress', actual_start: dayjs().format('YYYY-MM-DD') }),
+    onSuccess: () => { toast.success('Phase started'); qc.invalidateQueries({ queryKey: ['sc-phases'] }); },
+    onError: e => toast.error(e?.response?.data?.error || 'Failed'),
+  });
+
+  const createMut = useMutation({
+    mutationFn: d => editing ? planningP6API.updatePhase(editing.id, d) : planningP6API.createPhase(d),
+    onSuccess: () => {
+      toast.success(editing ? 'Phase updated' : 'Phase created');
+      qc.invalidateQueries({ queryKey: ['sc-phases'] });
+      setShowForm(false); setEditing(null); setForm(emptyForm);
+    },
+    onError: e => toast.error(e?.response?.data?.error || 'Failed'),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: id => planningP6API.deletePhase(id),
+    onSuccess: () => { toast.success('Phase deleted'); qc.invalidateQueries({ queryKey: ['sc-phases'] }); },
+    onError: e => toast.error(e?.response?.data?.error || 'Failed'),
+  });
+
+  const openEdit = (ph) => {
+    setEditing(ph);
+    setForm({ project_id: ph.project_id, phase_code: ph.phase_code, phase_name: ph.phase_name, description: ph.description || '', planned_start: ph.planned_start?.slice(0,10) || '', planned_end: ph.planned_end?.slice(0,10) || '', sequence_no: ph.sequence_no || 1 });
+    setShowForm(true);
+  };
+
+  const handleSave = () => {
+    if (!form.project_id) return toast.error('Select a project');
+    if (!form.phase_code.trim()) return toast.error('Phase code is required');
+    if (!form.phase_name.trim()) return toast.error('Phase name is required');
+    createMut.mutate(form);
+  };
+
+  const total = phases.length;
+  const notStarted = phases.filter(p => p.status === 'not_started').length;
+  const inProgress = phases.filter(p => p.status === 'in_progress').length;
+  const completed  = phases.filter(p => p.status === 'completed').length;
+  const onHold     = phases.filter(p => p.status === 'on_hold').length;
+
+  const inp = 'w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400';
+
+  return (
+    <div className="space-y-5">
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {[
+          { label: 'Total Phases',  value: total,      bg: 'bg-slate-50',   txt: 'text-slate-700',   bdr: 'border-slate-200' },
+          { label: 'Not Started',   value: notStarted, bg: 'bg-slate-50',   txt: 'text-slate-600',   bdr: 'border-slate-200' },
+          { label: 'In Progress',   value: inProgress, bg: 'bg-blue-50',    txt: 'text-blue-700',    bdr: 'border-blue-200' },
+          { label: 'Completed',     value: completed,  bg: 'bg-emerald-50', txt: 'text-emerald-700', bdr: 'border-emerald-200' },
+          { label: 'On Hold',       value: onHold,     bg: 'bg-amber-50',   txt: 'text-amber-700',   bdr: 'border-amber-200' },
+        ].map(({ label, value, bg, txt, bdr }) => (
+          <div key={label} className={`rounded-2xl border p-4 text-center ${bg} ${bdr}`}>
+            <p className={`text-2xl font-bold ${txt}`}>{value}</p>
+            <p className="text-xs text-slate-500 font-semibold mt-0.5">{label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+          <Layers className="w-5 h-5 text-blue-600" /> Building Phases
+        </h2>
+        <button
+          onClick={() => { setEditing(null); setForm({ ...emptyForm, project_id: projectId || '' }); setShowForm(true); }}
+          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors">
+          <Plus className="w-4 h-4" /> Add Phase
+        </button>
+      </div>
+
+      {/* Phases list */}
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1,2,3].map(n => <div key={n} className="h-20 bg-slate-100 rounded-2xl animate-pulse" />)}
+        </div>
+      ) : phases.length === 0 ? (
+        <div className="text-center py-20 bg-white rounded-2xl border border-slate-100">
+          <Layers className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+          <p className="text-sm font-semibold text-slate-500">No building phases yet</p>
+          <p className="text-xs text-slate-400 mt-1">Add phases to track construction progress</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {phases.map((ph, idx) => {
+            const sm = PHASE_STATUS[ph.status] || PHASE_STATUS.not_started;
+            const isPending = completeMut.isPending || startMut.isPending;
+            const isOverdue = ph.planned_end && ph.status !== 'completed' && dayjs(ph.planned_end).isBefore(dayjs(), 'day');
+            const dueSoon   = ph.planned_end && ph.status !== 'completed' && dayjs(ph.planned_end).diff(dayjs(), 'day') <= 1 && !isOverdue;
+            return (
+              <div key={ph.id} className={`bg-white rounded-2xl border p-5 flex flex-col md:flex-row md:items-center gap-4 ${isOverdue ? 'border-red-300' : dueSoon ? 'border-amber-300' : 'border-slate-100'}`}>
+                {/* Step number */}
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0"
+                  style={{ background: `${sm.dot}20`, color: sm.dot }}>
+                  {ph.sequence_no || idx + 1}
+                </div>
+
+                {/* Phase info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-bold text-slate-800">{ph.phase_name}</span>
+                    <span className="text-[10px] font-bold text-slate-400 font-mono bg-slate-50 px-1.5 py-0.5 rounded">{ph.phase_code}</span>
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${sm.cls}`}>{sm.label}</span>
+                    {isOverdue && <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-red-100 text-red-700">⚠ Overdue</span>}
+                    {dueSoon   && <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-700">⏰ Due Tomorrow</span>}
+                  </div>
+                  {ph.description && <p className="text-xs text-slate-500 mt-1">{ph.description}</p>}
+                  <div className="flex flex-wrap gap-3 mt-1.5 text-[11px] text-slate-500">
+                    <span>📅 Planned: <strong>{fmtDate(ph.planned_start)}</strong> → <strong>{fmtDate(ph.planned_end)}</strong></span>
+                    {(ph.actual_start || ph.actual_end) && (
+                      <span>✅ Actual: <strong>{fmtDate(ph.actual_start)}</strong> → <strong>{fmtDate(ph.actual_end)}</strong></span>
+                    )}
+                    {ph.activity_count > 0 && <span>📋 {ph.activity_count} activities</span>}
+                    {ph.project_name && <span>🏗 {ph.project_name}</span>}
+                  </div>
+                </div>
+
+                {/* Progress bar */}
+                <div className="w-full md:w-32 flex-shrink-0">
+                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{
+                      width: ph.status === 'completed' ? '100%' : ph.status === 'in_progress' ? '50%' : ph.status === 'on_hold' ? '30%' : '0%',
+                      background: sm.dot,
+                    }} />
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1 text-right font-semibold">
+                    {ph.status === 'completed' ? '100%' : ph.status === 'in_progress' ? '~50%' : ph.status === 'on_hold' ? '~30%' : '0%'}
+                  </p>
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+                  {ph.status === 'not_started' && (
+                    <button onClick={() => startMut.mutate(ph.id)} disabled={isPending}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold border border-blue-200 transition-colors disabled:opacity-50">
+                      <CircleDot className="w-3.5 h-3.5" /> Start
+                    </button>
+                  )}
+                  {ph.status !== 'completed' && (
+                    <button onClick={() => completeMut.mutate({ id: ph.id, currentStatus: ph.status })} disabled={isPending}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold border border-emerald-200 transition-colors disabled:opacity-50">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Complete
+                    </button>
+                  )}
+                  {ph.status === 'completed' && (
+                    <button onClick={() => completeMut.mutate({ id: ph.id, currentStatus: ph.status })} disabled={isPending}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg text-xs font-semibold border border-slate-200 transition-colors disabled:opacity-50">
+                      <X className="w-3.5 h-3.5" /> Reopen
+                    </button>
+                  )}
+                  <button onClick={() => openEdit(ph)}
+                    className="p-1.5 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-lg border border-slate-200 transition-colors">
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => { if (window.confirm('Delete this phase?')) deleteMut.mutate(ph.id); }}
+                    className="p-1.5 bg-red-50 hover:bg-red-100 text-red-500 rounded-lg border border-red-200 transition-colors">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Add/Edit form modal */}
+      {showForm && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                <Layers className="w-5 h-5 text-blue-600" />
+                {editing ? 'Edit Phase' : 'New Building Phase'}
+              </h3>
+              <button onClick={() => { setShowForm(false); setEditing(null); setForm(emptyForm); }}
+                className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">
+                <X className="w-4 h-4 text-slate-500" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Project *</label>
+                <select value={form.project_id} onChange={e => set('project_id', e.target.value)} className={inp}>
+                  <option value="">— Select Project —</option>
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Phase Code *</label>
+                  <input value={form.phase_code} onChange={e => set('phase_code', e.target.value)} className={inp} placeholder="e.g. P1, CIVIL-01" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Sequence No.</label>
+                  <input type="number" min={1} value={form.sequence_no} onChange={e => set('sequence_no', parseInt(e.target.value)||1)} className={inp} />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Phase Name *</label>
+                <input value={form.phase_name} onChange={e => set('phase_name', e.target.value)} className={inp} placeholder="e.g. Foundation & Substructure" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Description</label>
+                <textarea rows={2} value={form.description} onChange={e => set('description', e.target.value)} className={inp} placeholder="Scope of work for this phase…" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Planned Start</label>
+                  <input type="date" value={form.planned_start} onChange={e => set('planned_start', e.target.value)} className={inp} />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Planned End</label>
+                  <input type="date" value={form.planned_end} onChange={e => set('planned_end', e.target.value)} className={inp} />
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => { setShowForm(false); setEditing(null); setForm(emptyForm); }}
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+                  Cancel
+                </button>
+                <button onClick={handleSave} disabled={createMut.isPending}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-60">
+                  {createMut.isPending ? 'Saving…' : editing ? 'Update Phase' : 'Create Phase'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const TABS = [
   { id: 'dashboard',      label: 'Dashboard',              icon: LayoutDashboard },
   { id: 'subcontractors', label: 'Subcontractor Master',    icon: Users },
+  { id: 'phases',         label: 'Building Phases',         icon: Layers },
   { id: 'work-orders',    label: 'Work Orders',             icon: Briefcase },
   { id: 'advances',       label: 'Advances',                icon: Wallet },
   { id: 'labour',         label: 'Labour Attendance',       icon: HardHat },
@@ -1752,6 +2023,7 @@ export default function SubcontractorHubPage({ defaultTab = 'dashboard' }) {
       <div className="p-6">
         {activeTab === 'dashboard'      && <DashboardTab      key={`dash-${projectFilter}`}    projectId={projectFilter} />}
         {activeTab === 'subcontractors' && <SubcontractorsTab key={`sub-${projectFilter}`} projectId={projectFilter} />}
+        {activeTab === 'phases'         && <PhasesTab          key={`ph-${projectFilter}`}     projectId={projectFilter} projects={projects} />}
         {activeTab === 'work-orders'    && <WorkOrdersTab     key={`wo-${projectFilter}`}     projectId={projectFilter} projects={projects} vendors={vendors} />}
         {activeTab === 'advances'       && <AdvancesTab       key={`adv-${projectFilter}`}    projectId={projectFilter} projects={projects} vendors={vendors} />}
         {activeTab === 'labour'         && <LabourAttendanceTab key={`lab-${projectFilter}`}  projectId={projectFilter} projects={projects} vendors={vendors} />}
