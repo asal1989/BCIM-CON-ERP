@@ -132,6 +132,12 @@ function WOForm({ wo, projects, subcontractors, onClose }) {
             </Field>
             <Field label="Start Date"><input type="date" value={form.start_date||''} onChange={e=>set('start_date',e.target.value)} className={inp}/></Field>
             <Field label="End Date"><input type="date" value={form.end_date||''} onChange={e=>set('end_date',e.target.value)} className={inp}/></Field>
+            <Field label="DLP End Date">
+              <input type="date" value={form.dlp_end_date||''} onChange={e=>set('dlp_end_date',e.target.value)} className={inp}/>
+            </Field>
+            <Field label="DLP (months)">
+              <input type="number" value={form.dlp_months||12} min={0} max={60} onChange={e=>set('dlp_months',parseInt(e.target.value)||12)} className={inp}/>
+            </Field>
             <div className="col-span-2">
               <Field label="Scope of Work">
                 <textarea value={form.scope_of_work||''} onChange={e=>set('scope_of_work',e.target.value)} rows={3} className={inp+' resize-none'} placeholder="Detailed scope of work…"/>
@@ -587,7 +593,7 @@ export default function SCWorkOrders() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{background:`linear-gradient(90deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)`}}>
-                    {['','WO Number','Project','Vendor / Subcontractor','Subject','Category','Contract Amt','Billed','Status','Actions'].map(h=>(
+                    {['','WO Number','Project','Vendor / Subcontractor','Subject','Category','Contract Amt','Billed','Status','DLP','Actions'].map(h=>(
                       <th key={h} className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-white/80 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -640,6 +646,24 @@ export default function SCWorkOrders() {
                         </td>
                         <td className="px-4 py-3">
                           <span className={clsx('text-[10px] px-2 py-0.5 rounded-full font-semibold capitalize', sm.bg, sm.text)}>{sm.label}</span>
+                        </td>
+                        {/* DLP chip */}
+                        <td className="px-4 py-3">
+                          {w.dlp_end_date ? (() => {
+                            const days = dayjs(w.dlp_end_date).diff(dayjs(), 'day');
+                            const expired = days < 0;
+                            const soon    = days >= 0 && days <= 30;
+                            return (
+                              <span className={clsx('text-[9px] px-1.5 py-0.5 rounded font-bold whitespace-nowrap',
+                                expired ? 'bg-red-100 text-red-700'
+                                  : soon  ? 'bg-amber-100 text-amber-700'
+                                  : 'bg-emerald-100 text-emerald-700')}>
+                                {expired ? `Expired ${Math.abs(days)}d ago`
+                                  : soon  ? `${days}d left`
+                                  : dayjs(w.dlp_end_date).format('DD MMM YY')}
+                              </span>
+                            );
+                          })() : <span className="text-slate-300 text-[10px]">—</span>}
                         </td>
                         <td className="px-4 py-3" onClick={e=>e.stopPropagation()}>
                           <div className="flex items-center gap-1">

@@ -532,7 +532,65 @@ async function runAutoMigrations() {
              sgst_amount = gst_amount - ROUND(gst_amount / 2, 2)
        WHERE is_igst = FALSE AND gst_amount > 0 AND cgst_amount = 0
     `);
-    logger.info('✅ Auto-migrations complete (003, 004, 005, 033)');
+    // 034: SC P3 — query status, QA clearance, IPC table
+    await client.query(`ALTER TABLE sc_bills ADD COLUMN IF NOT EXISTS query_remarks TEXT`);
+    await client.query(`ALTER TABLE sc_mb_entries ADD COLUMN IF NOT EXISTS qaqc_cleared     BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE sc_mb_entries ADD COLUMN IF NOT EXISTS qaqc_cleared_by  UUID REFERENCES users(id)`);
+    await client.query(`ALTER TABLE sc_mb_entries ADD COLUMN IF NOT EXISTS qaqc_cleared_at  TIMESTAMPTZ`);
+    await client.query(`ALTER TABLE sc_mb_entries ADD COLUMN IF NOT EXISTS qaqc_remarks     TEXT`);
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.check_constraints
+          WHERE constraint_schema=current_schema() AND constraint_name='sc_bills_status_check'
+            AND check_clause LIKE '%queried%'
+        ) THEN
+          ALTER TABLE sc_bills DROP CONSTRAINT IF EXISTS sc_bills_status_check;
+          ALTER TABLE sc_bills ADD CONSTRAINT sc_bills_status_check
+            CHECK (status IN ('draft','submitted','under_review','queried','approved','rejected','paid'));
+        END IF;
+      END $$`);
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.check_constraints
+          WHERE constraint_schema=current_schema() AND constraint_name='sc_bill_approvals_action_check'
+            AND check_clause LIKE '%queried%'
+        ) THEN
+          ALTER TABLE sc_bill_approvals DROP CONSTRAINT IF EXISTS sc_bill_approvals_action_check;
+          ALTER TABLE sc_bill_approvals ADD CONSTRAINT sc_bill_approvals_action_check
+            CHECK (action IN ('submitted','approved','rejected','revised','queried'));
+        END IF;
+      END $$`);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS sc_ipcs (
+        id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id       UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        project_id       UUID REFERENCES projects(id),
+        wo_id            UUID NOT NULL REFERENCES sc_work_orders(id),
+        sc_id            UUID NOT NULL REFERENCES sc_subcontractors(id),
+        bill_id          UUID NOT NULL REFERENCES sc_bills(id) UNIQUE,
+        ipc_number       VARCHAR(60) NOT NULL,
+        ipc_date         DATE NOT NULL DEFAULT CURRENT_DATE,
+        gross_amount     NUMERIC(18,2) DEFAULT 0,
+        net_payable      NUMERIC(18,2) DEFAULT 0,
+        gst_amount       NUMERIC(18,2) DEFAULT 0,
+        tds_amount       NUMERIC(18,2) DEFAULT 0,
+        retention_amount NUMERIC(18,2) DEFAULT 0,
+        notes            TEXT,
+        status           VARCHAR(20) DEFAULT 'issued',
+        approved_by      UUID REFERENCES users(id),
+        approved_at      TIMESTAMPTZ,
+        created_at       TIMESTAMPTZ DEFAULT NOW(),
+        updated_at       TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (company_id, ipc_number)
+      )`);
+    // 034 P4 DLP fields
+    await client.query(`ALTER TABLE sc_work_orders ADD COLUMN IF NOT EXISTS dlp_end_date DATE`);
+    await client.query(`ALTER TABLE sc_work_orders ADD COLUMN IF NOT EXISTS dlp_months SMALLINT DEFAULT 12`);
+    logger.info('✅ Auto-migrations complete (003, 004, 005, 033, 034)');
   } catch (err) {
     logger.warn('⚠️  Auto-migration warning:', err.message);
   } finally {

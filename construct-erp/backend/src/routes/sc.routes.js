@@ -839,28 +839,100 @@ async function recalculateWOConsumption(woId, client = { query }) {
 // Submit for approval
 router.patch('/bills/:id/submit', authorize(...PLANNER), async (req, res) => {
   try {
-    const r = await query(`UPDATE sc_bills SET status='submitted', current_stage='project_manager', submitted_by=$1, submitted_at=NOW(), updated_at=NOW() WHERE id=$2 AND company_id=$3 AND status='draft' RETURNING *`, [req.user.id, req.params.id, CID(req)]);
-    if (!r.rows.length) return res.status(404).json({ error: 'Bill not found or already submitted' });
-    await query(`INSERT INTO sc_bill_approvals (bill_id,stage,action,actor_id,actor_name,comments) VALUES ($1,'site_engineer','submitted',$2,$3,$4)`, [req.params.id, req.user.id, req.user.name, req.body.comments||'Submitted for approval']);
-    // Notify approvers
+    // Read first approval stage from settings (don't hardcode)
+    const stages = await getApprovalStages(CID(req));
+    const firstStage = stages[0] || 'site_engineer';
+    // Allow re-submission after 'queried' (send-back) as well as 'draft'
+    const r = await query(
+      `UPDATE sc_bills SET status='submitted', current_stage=$4, query_remarks=NULL,
+          submitted_by=$1, submitted_at=NOW(), updated_at=NOW()
+        WHERE id=$2 AND company_id=$3 AND status IN ('draft','queried') RETURNING *`,
+      [req.user.id, req.params.id, CID(req), firstStage]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Bill not found or cannot be submitted' });
+    await query(
+      `INSERT INTO sc_bill_approvals (bill_id,stage,action,actor_id,actor_name,comments)
+       VALUES ($1,'draft','submitted',$2,$3,$4)`,
+      [req.params.id, req.user.id, req.user.name, req.body.comments||'Submitted for approval']);
     notifyScBillSubmitted(CID(req), r.rows[0]);
     res.json({ data: r.rows[0] });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
-// Approve bill (stage-wise)
+// Approve bill (stage-wise) — next_stage computed server-side from sc_settings
 router.patch('/bills/:id/approve', authorize('super_admin','admin','project_manager','qs_engineer','accounts'), async (req, res) => {
   try {
-    const { comments, next_stage } = req.body;
+    const { comments } = req.body;
     const bill = await query(`SELECT * FROM sc_bills WHERE id=$1::uuid AND company_id=$2::uuid`, [req.params.id, CID(req)]);
     if (!bill.rows.length) return res.status(404).json({ error: 'Not found' });
     const b = bill.rows[0];
-    const stage = b.current_stage;
-    // Final approval → mark approved
-    const newStatus = next_stage ? 'under_review' : 'approved';
-    const r = await query(`UPDATE sc_bills SET status=$1::text, current_stage=$2::text, approved_by=$3::uuid, approved_at=$4::timestamptz, updated_at=NOW() WHERE id=$5::uuid AND company_id=$6::uuid RETURNING *`,
-      [newStatus, next_stage||stage, newStatus==='approved'?req.user.id:null, newStatus==='approved'?new Date():null, req.params.id, CID(req)]);
-    await query(`INSERT INTO sc_bill_approvals (bill_id,stage,action,actor_id,actor_name,comments) VALUES ($1::uuid,$2::text,'approved',$3::uuid,$4::text,$5::text)`, [req.params.id, stage, req.user.id, req.user.name || req.user.email || 'User', comments||'Approved']);
+    if (!['submitted','under_review'].includes(b.status))
+      return res.status(400).json({ error: 'Bill is not in an approvable state' });
+
+    // Compute next stage from settings (server-authoritative — never trust client)
+    const stages   = await getApprovalStages(CID(req));
+    const stage    = b.current_stage;
+    const idx      = stages.indexOf(stage);
+    const nextStage = (idx >= 0 && idx < stages.length - 1) ? stages[idx + 1] : null;
+    const isFinal  = !nextStage;
+    const newStatus = isFinal ? 'approved' : 'under_review';
+
+    const r = await query(
+      `UPDATE sc_bills
+          SET status=$1::text, current_stage=$2::text,
+              approved_by=$3::uuid, approved_at=$4::timestamptz,
+              updated_at=NOW()
+        WHERE id=$5::uuid AND company_id=$6::uuid RETURNING *`,
+      [newStatus, nextStage||stage,
+       isFinal ? req.user.id : null,
+       isFinal ? new Date() : null,
+       req.params.id, CID(req)]);
+    await query(
+      `INSERT INTO sc_bill_approvals (bill_id,stage,action,actor_id,actor_name,comments)
+       VALUES ($1::uuid,$2::text,'approved',$3::uuid,$4::text,$5::text)`,
+      [req.params.id, stage, req.user.id, req.user.name||req.user.email||'User', comments||'Approved']);
+
+    // ── Auto-generate IPC on final approval ──────────────────────────────────
+    if (isFinal) {
+      try {
+        const ipcNum = await nextIPCNumber(CID(req), b.project_id);
+        await query(
+          `INSERT INTO sc_ipcs
+             (company_id,project_id,wo_id,sc_id,bill_id,ipc_number,ipc_date,
+              gross_amount,net_payable,gst_amount,tds_amount,retention_amount,
+              approved_by,approved_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
+           ON CONFLICT (bill_id) DO NOTHING`,
+          [CID(req), b.project_id, b.wo_id, b.sc_id, b.id, ipcNum,
+           new Date().toISOString().slice(0,10),
+           b.gross_amount, b.net_payable, b.gst_amount||0,
+           b.tds_amount||0, b.retention_amount||0,
+           req.user.id]);
+      } catch(ipcErr) {
+        // IPC failure is non-fatal — log but don't block the approval response
+        console.error('IPC generation failed:', ipcErr.message);
+      }
+    }
+
+    res.json({ data: r.rows[0] });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// Query bill (send-back with remarks — does NOT fully reject)
+router.patch('/bills/:id/query', authorize('super_admin','admin','project_manager','qs_engineer','accounts'), async (req, res) => {
+  try {
+    const { comments } = req.body;
+    if (!comments?.trim()) return res.status(400).json({ error: 'Query remarks are required' });
+    const r = await query(
+      `UPDATE sc_bills
+          SET status='queried', query_remarks=$1, updated_at=NOW()
+        WHERE id=$2 AND company_id=$3 AND status IN ('submitted','under_review')
+        RETURNING *`,
+      [comments.trim(), req.params.id, CID(req)]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Bill not found or not in a queryable state' });
+    await query(
+      `INSERT INTO sc_bill_approvals (bill_id,stage,action,actor_id,actor_name,comments)
+       VALUES ($1,$2,'queried',$3,$4,$5)`,
+      [req.params.id, r.rows[0].current_stage, req.user.id, req.user.name, comments.trim()]);
     res.json({ data: r.rows[0] });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
@@ -1001,6 +1073,33 @@ router.get('/reports/labour', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════
+// 8b. IPCs (Interim Payment Certificates)
+// ════════════════════════════════════════════════════════════════════
+router.get('/ipcs', async (req, res) => {
+  try {
+    const { project_id, wo_id, status } = req.query;
+    let sql = `
+      SELECT i.*, b.bill_number, b.bill_date, b.bill_type,
+             sc.name AS sc_name, wo.wo_number, wo.subject AS wo_subject,
+             p.name AS project_name, u.name AS approved_by_name
+        FROM sc_ipcs i
+        JOIN sc_bills b ON b.id = i.bill_id
+        JOIN sc_work_orders wo ON wo.id = i.wo_id
+        JOIN sc_subcontractors sc ON sc.id = i.sc_id
+        LEFT JOIN projects p ON p.id = i.project_id
+        LEFT JOIN users u ON u.id = i.approved_by
+       WHERE i.company_id = $1`;
+    const params = [CID(req)];
+    if (project_id) { params.push(project_id); sql += ` AND i.project_id=$${params.length}`; }
+    if (wo_id)      { params.push(wo_id);      sql += ` AND i.wo_id=$${params.length}`; }
+    if (status)     { params.push(status);     sql += ` AND i.status=$${params.length}`; }
+    sql += ' ORDER BY i.ipc_date DESC, i.created_at DESC';
+    const r = await query(sql, params);
+    res.json({ data: r.rows });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════════════════════════════════════════
 // 9. SETTINGS
 // ════════════════════════════════════════════════════════════════════
 router.get('/settings', async (req, res) => {
@@ -1052,6 +1151,17 @@ async function nextMBNumber(cid, projId) {
   const code = (proj.rows[0]?.name||'XX').replace(/[^A-Za-z0-9]/g,'').substring(0,6).toUpperCase();
   const r = await query(`SELECT COUNT(*) FROM sc_mb_entries WHERE company_id=$1`, [cid]);
   return `MB-${code}-${String(parseInt(r.rows[0].count)+1).padStart(3,'0')}`;
+}
+async function nextIPCNumber(cid, projId) {
+  const proj = await query(`SELECT name FROM projects WHERE id=$1`, [projId]);
+  const code = (proj.rows[0]?.name||'XX').replace(/[^A-Za-z0-9]/g,'').substring(0,6).toUpperCase();
+  const r = await query(`SELECT COUNT(*) FROM sc_ipcs WHERE company_id=$1`, [cid]);
+  return `IPC-${code}-${String(parseInt(r.rows[0].count)+1).padStart(3,'0')}`;
+}
+// Helper to load approval stages from settings (with fallback)
+async function getApprovalStages(cid) {
+  const r = await query(`SELECT approval_stages FROM sc_settings WHERE company_id=$1`, [cid]);
+  return r.rows[0]?.approval_stages || ['site_engineer','project_manager','qs_engineer','accounts'];
 }
 
 router.get('/mb', async (req, res) => {
@@ -1168,6 +1278,22 @@ router.patch('/mb/:id/reject', authorize(...ADMIN,'project_manager','qs_engineer
     const r = await query(`UPDATE sc_mb_entries SET status='rejected', rejected_by=$1, rejection_remarks=$2, updated_at=NOW() WHERE id=$3 AND company_id=$4 RETURNING *`,
       [req.user.id, remarks||null, req.params.id, CID(req)]);
     if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json({ data: r.rows[0] });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// QA/QC clearance on MB entry
+router.patch('/mb/:id/qaqc-clear', authorize('super_admin','admin','qs_engineer','quality_inspector','qaqc'), async (req, res) => {
+  try {
+    const { remarks } = req.body;
+    const r = await query(
+      `UPDATE sc_mb_entries
+          SET qaqc_cleared=TRUE, qaqc_cleared_by=$1, qaqc_cleared_at=NOW(),
+              qaqc_remarks=$2, updated_at=NOW()
+        WHERE id=$3 AND company_id=$4
+        RETURNING *`,
+      [req.user.id, remarks||null, req.params.id, CID(req)]);
+    if (!r.rows.length) return res.status(404).json({ error: 'MB entry not found' });
     res.json({ data: r.rows[0] });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });

@@ -1015,6 +1015,9 @@ export const scAPI = {
   submitBill:         (id, d)   => api.patch(`/sc/bills/${id}/submit`, d),
   approveBill:        (id, d)   => api.patch(`/sc/bills/${id}/approve`, d),
   rejectBill:         (id, d)   => api.patch(`/sc/bills/${id}/reject`, d),
+  queryBill:          (id, d)   => api.patch(`/sc/bills/${id}/query`, d),
+  qaqcClearMB:        (id, d)   => api.patch(`/sc/mb/${id}/qaqc-clear`, d),
+  listIPCs:           (p)       => api.get('/sc/ipcs', { params: p }),
   // Payments
   listPayments:       (p)       => api.get('/sc/payments', { params: p }),
   recordPayment:      (d)       => api.post('/sc/payments', d),
