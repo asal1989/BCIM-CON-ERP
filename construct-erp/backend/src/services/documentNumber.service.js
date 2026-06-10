@@ -1,11 +1,19 @@
 const DOC_NUMBER_TARGETS = {
-  purchase_orders: { column: 'po_number', prefix: 'PODQS' },
-  work_orders: { column: 'wo_number', prefix: 'WODQS' },
+  purchase_orders: { column: 'po_number', docType: 'PO', defaultSeries: 'DQS' },
+  work_orders: { column: 'wo_number', docType: 'WO', defaultSeries: 'DQS' },
 };
 
-async function getNextDqsNumber(client, targetName) {
+// Per-project numbering series, keyed by projects.project_code — overrides the default series.
+const PROJECT_SERIES = {
+  'LH-10': 'LANLH10',
+};
+
+async function getNextDqsNumber(client, targetName, projectCode) {
   const target = DOC_NUMBER_TARGETS[targetName];
   if (!target) throw new Error(`Unsupported document number target: ${targetName}`);
+
+  const series = PROJECT_SERIES[projectCode] || target.defaultSeries;
+  const prefix = `${target.docType}${series}`;
 
   await client.query(`LOCK TABLE ${targetName} IN SHARE ROW EXCLUSIVE MODE`);
 
@@ -13,11 +21,11 @@ async function getNextDqsNumber(client, targetName) {
     `SELECT COALESCE(MAX((substring(UPPER(TRIM(${target.column})) FROM $1))::int), 0) + 1 AS next_seq
      FROM ${targetName}
      WHERE UPPER(TRIM(${target.column})) ~ $2`,
-    [`^${target.prefix}0*([0-9]+)$`, `^${target.prefix}0*[0-9]+$`]
+    [`^${prefix}0*([0-9]+)$`, `^${prefix}0*[0-9]+$`]
   );
 
   const nextSeq = Number(result.rows[0]?.next_seq || 1);
-  return `${target.prefix}${String(nextSeq).padStart(3, '0')}`;
+  return `${prefix}${String(nextSeq).padStart(3, '0')}`;
 }
 
 module.exports = { getNextDqsNumber };

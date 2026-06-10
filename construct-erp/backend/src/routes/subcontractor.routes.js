@@ -292,8 +292,9 @@ router.post('/work-orders/import/confirm', async (req, res) => {
     if (!project_id || !vendor_id) return res.status(400).json({ error: 'Project and Vendor are required' });
 
     const result = await withTransaction(async (client) => {
+      const projRes = await client.query('SELECT project_code FROM projects WHERE id = $1', [project_id]);
       const wo_number = String(header.wo_number || '').trim().toUpperCase()
-        || await getNextDqsNumber(client, 'work_orders');
+        || await getNextDqsNumber(client, 'work_orders', projRes.rows[0]?.project_code);
 
       // Calculate total from items
       let total_value = parseFloat(header.total_value) || 0;

@@ -126,7 +126,7 @@ const getWorkOrder = async (req, res) => {
     const woResult = await query(
       `SELECT wo.*,
               wo.total_value AS contract_value,
-              p.name AS project_name, p.id AS project_id,
+              p.name AS project_name, p.id AS project_id, p.project_code,
               v.name AS vendor_name, v.vendor_type,
               v.gst_number AS vendor_gstin, v.pan_number AS vendor_pan,
               v.address AS vendor_address,
@@ -228,8 +228,9 @@ const createWorkOrder = async (req, res) => {
   try {
     let created;
     await withTransaction(async (client) => {
+      const projRes = await client.query('SELECT project_code FROM projects WHERE id = $1', [project_id]);
       const wo_number = String(req.body.wo_number || '').trim().toUpperCase()
-        || await getNextDqsNumber(client, 'work_orders');
+        || await getNextDqsNumber(client, 'work_orders', projRes.rows[0]?.project_code);
 
       // Validate vendor is active
       const vCheck = await client.query(`SELECT id FROM vendors WHERE id=$1`, [vendor_id]);

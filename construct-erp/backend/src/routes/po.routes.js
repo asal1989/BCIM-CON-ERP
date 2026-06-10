@@ -650,6 +650,50 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// PATCH /purchase-orders/:id — edit core PO fields (po_number, delivery_address, etc.)
+router.patch('/:id', async (req, res) => {
+  try {
+    await getAccessiblePo(req, req.params.id);
+
+    const { po_number, delivery_address } = req.body;
+
+    const sets = [];
+    const params = [req.params.id];
+    let i = 2;
+
+    if (po_number !== undefined) {
+      const trimmed = String(po_number).trim().toUpperCase();
+      if (!trimmed) return res.status(400).json({ error: 'po_number cannot be empty' });
+      const dup = await query(
+        `SELECT po.id FROM purchase_orders po
+         JOIN projects p ON po.project_id = p.id
+         WHERE UPPER(TRIM(po.po_number)) = $1 AND po.id <> $2 AND p.company_id = $3`,
+        [trimmed, req.params.id, req.user.company_id]
+      );
+      if (dup.rows.length) return res.status(409).json({ error: `Purchase Order number ${trimmed} is already in use` });
+      sets.push(`po_number = $${i}, po_ref_no = $${i}, serial_no_formatted = $${i++}`);
+      params.push(trimmed);
+    }
+
+    if (delivery_address !== undefined) {
+      sets.push(`delivery_address = $${i++}`);
+      params.push(delivery_address || null);
+    }
+
+    if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
+    sets.push('updated_at = NOW()');
+
+    const result = await query(
+      `UPDATE purchase_orders SET ${sets.join(', ')} WHERE id = $1 RETURNING *`,
+      params
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Purchase Order not found' });
+    res.json({ data: result.rows[0] });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
 // GET /purchase-orders/:id/bills — linked DQS bills for this PO
 router.get('/:id/bills', async (req, res) => {
   try {
@@ -784,7 +828,8 @@ router.post('/', async (req, res) => {
     }
 
     const result = await withTransaction(async (client) => {
-      const po_number = await getNextDqsNumber(client, 'purchase_orders');
+      const projRes = await client.query('SELECT project_code FROM projects WHERE id = $1', [project_id]);
+      const po_number = await getNextDqsNumber(client, 'purchase_orders', projRes.rows[0]?.project_code);
 
       // 2. Insert Header
       const headerRes = await client.query(
@@ -970,8 +1015,9 @@ router.post('/import/confirm', async (req, res) => {
     }
 
     const result = await withTransaction(async (client) => {
+      const projRes = await client.query('SELECT project_code FROM projects WHERE id = $1', [project_id]);
       const po_number = String(header.po_number || '').trim().toUpperCase()
-        || await getNextDqsNumber(client, 'purchase_orders');
+        || await getNextDqsNumber(client, 'purchase_orders', projRes.rows[0]?.project_code);
 
       // Calculate totals from items
       let sub_total = 0, total_gst = 0;

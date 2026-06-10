@@ -32,6 +32,13 @@ function amountInWords(amount) {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const f2 = v => parseFloat(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// ─── LANCO Hills (LH-10) project overrides ────────────────────────────────────
+const LANCO_DELIVERY_ADDRESS = `LANCO HILLS - LH10
+LANCO Hills Residential Apartments, Tower - LH10,
+Survey nos 201, Manikonda, Rajendranagar Mandal,
+HYDERABAD - 500089
+Contact Person BCIM: Mr. Vijayan - 82700 94285`;
+
 const WOPrintTemplate = React.forwardRef(({ data }, ref) => {
   if (!data) return (
     <div ref={ref} className="p-10 text-center font-bold text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
@@ -40,6 +47,7 @@ const WOPrintTemplate = React.forwardRef(({ data }, ref) => {
   );
 
   const items      = data.items || [];
+  const isLanco    = data.project_code === 'LH-10';
   const termsLines = String(data.terms_conditions || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
   const itemsTotal    = items.reduce((s, it) => s + parseFloat(it.amount || (parseFloat(it.quantity || 0) * parseFloat(it.rate || 0))), 0);
@@ -60,9 +68,20 @@ const WOPrintTemplate = React.forwardRef(({ data }, ref) => {
             <img src="/bcim-logo.png" alt="BCIM" style={{ height: '48px', objectFit: 'contain', marginBottom: '6px', display: 'block' }} />
             <div style={{ fontSize: '9px', color: '#374151', lineHeight: '1.5' }}>
               <p style={{ fontWeight: 700, fontSize: '12px', color: '#000', margin: '0 0 2px' }}>BCIM ENGINEERING PRIVATE LIMITED</p>
-              <p style={{ margin: 0 }}>No 579, 1st 'A' Main Road, Jayanagar 8th Block, Bangalore – 560070</p>
-              <p style={{ margin: 0 }}>GSTIN: 29AAXCB2929P1Z1 &nbsp;|&nbsp; Tel: +91 80 26650194</p>
-              <p style={{ margin: 0 }}>Email: procurement@bcimengineering.in</p>
+              {isLanco ? (
+                <>
+                  <p style={{ margin: 0 }}>TOWER VIEW APARTMENT, NO 403, 4th FLOOR,</p>
+                  <p style={{ margin: 0 }}>PLOT NO 26 &amp; 27, SRI LAKSHMI NAGAR COLONY,</p>
+                  <p style={{ margin: 0 }}>HYDERABAD, RANGAREDDY DIST, TELANGANA – 500089</p>
+                  <p style={{ margin: 0 }}>GSTIN: 36AAHCB6485A1ZQ</p>
+                </>
+              ) : (
+                <>
+                  <p style={{ margin: 0 }}>No 579, 1st 'A' Main Road, Jayanagar 8th Block, Bangalore – 560070</p>
+                  <p style={{ margin: 0 }}>GSTIN: 29AAXCB2929P1Z1 &nbsp;|&nbsp; Tel: +91 80 26650194</p>
+                  <p style={{ margin: 0 }}>Email: procurement@bcimengineering.in</p>
+                </>
+              )}
             </div>
           </div>
 
@@ -119,6 +138,16 @@ const WOPrintTemplate = React.forwardRef(({ data }, ref) => {
             {data.scope_of_work || data.work_description || data.subject || '—'}
           </p>
         </div>
+
+        {/* Site / Delivery Address */}
+        {(data.delivery_address || isLanco) && (
+          <div style={{ border: '1px solid #cbd5e1', borderRadius: '6px', padding: '8px', marginBottom: '10px', fontSize: '9px' }}>
+            <p style={{ fontWeight: 700, textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.05em', marginBottom: '3px', fontSize: '8px' }}>Site / Delivery Address</p>
+            <p style={{ color: '#374151', whiteSpace: 'pre-line', margin: 0 }}>
+              {data.delivery_address || LANCO_DELIVERY_ADDRESS}
+            </p>
+          </div>
+        )}
 
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {/* ITEMS TABLE                                                         */}
