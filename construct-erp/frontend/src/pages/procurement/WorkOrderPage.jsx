@@ -841,11 +841,8 @@ function WODetailPanel({ wo, onClose, onDelete, onApprove, onMDApprove, onReject
   const billed  = Number(displayWO.total_billed || 0);
   const paid    = Number(displayWO.total_paid || 0);
   const balance = Math.max(val - billed, 0);
-  const cfg         = STATUS_CONFIG[displayWO.status] || STATUS_CONFIG.pending;
   const liveStatus  = displayWO.status;
   const currentAction = WO_STAGE_ACTIONS.find(a => a.reqStatuses.includes(liveStatus));
-  const canProcurementApprove = ['draft','pending'].includes(liveStatus);
-  const canMDApprove = liveStatus === 'submitted';
 
   // ── Print in a new isolated window — same approach as Purchase Orders ─────
   const handlePrint = () => {
@@ -883,178 +880,215 @@ function WODetailPanel({ wo, onClose, onDelete, onApprove, onMDApprove, onReject
     setTimeout(() => { try { win.focus(); win.print(); win.close(); } catch(_) {} }, 1200);
   };
 
+  const itemsTotal = lineItems.reduce((s, it) => s + Number(it.amount || (Number(it.quantity||0)*Number(it.rate||0))), 0);
+  const utilPct    = val > 0 ? Math.min(100, (billed / val) * 100) : 0;
+
   return (
     <>
-    {/* Full-screen centred modal — covers entire viewport */}
-    <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-5xl max-h-[95vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+    {/* Full-window detail — same layout as Purchase Orders */}
+    <div className="fixed inset-0 z-[60] bg-[#f4f6f9] flex flex-col overflow-hidden">
 
-        {/* ── Header ── */}
-        <div className="flex items-center justify-between px-6 py-4 bg-slate-900 flex-shrink-0">
-          <div className="flex items-center gap-4 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center flex-shrink-0">
-              <Hammer className="w-5 h-5 text-white" />
+        {/* ── Full-window Header ── */}
+        <div className="flex items-center justify-between px-6 py-3.5 border-b border-slate-200 bg-white flex-shrink-0 shadow-sm">
+          <div className="flex items-center gap-3">
+            <button onClick={onClose} className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-900 font-medium hover:text-slate-900 hover:border-slate-300 transition-all mr-1">
+              <X className="w-4 h-4" />
+            </button>
+            <div className="w-9 h-9 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center">
+              <Hammer className="w-4 h-4 text-indigo-600" />
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <span className="font-mono text-base font-bold text-white">{displayWO.wo_number}</span>
-                <span className={clsx('text-[11px] font-semibold px-2.5 py-0.5 rounded-full border', cfg.cls)}>
-                  {cfg.label}
-                </span>
-                {displayWO.cost_head && (
-                  <span className="text-[11px] bg-white/10 text-white/70 px-2 py-0.5 rounded-full">{displayWO.cost_head}</span>
-                )}
-              </div>
-              <p className="text-sm text-white/75 mt-0.5 truncate max-w-[600px]">{wo.subject || '—'}</p>
+            <div>
+              <p className="text-base font-medium text-slate-900 font-mono">{displayWO.wo_number}</p>
+              <p className="text-xs text-slate-900 font-medium mt-0.5">{displayWO.vendor_name || '—'} · {displayWO.start_date ? dayjs(displayWO.start_date).format('DD MMM YYYY') : (displayWO.created_at ? dayjs(displayWO.created_at).format('DD MMM YYYY') : '—')}</p>
             </div>
+            <StatusBadge status={liveStatus} />
           </div>
-          <button onClick={onClose}
-            className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white flex-shrink-0 transition-colors">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* ── Scrollable Body ── */}
-        <div className="flex-1 overflow-y-auto bg-slate-50 p-6 space-y-5">
-
-          {/* Financial summary strip */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="rounded-xl border-2 border-blue-800 p-4" style={{background:'linear-gradient(135deg,#1a3a6b 0%,#122d58 100%)'}}>
-              <p className="text-xs font-bold text-blue-200 uppercase tracking-wider mb-2">Contract / Total Value</p>
-              <p className="text-xl font-bold font-mono text-white leading-tight">₹ {inr(val)}</p>
-            </div>
-            <div className="rounded-xl border-2 border-indigo-400 bg-indigo-600 p-4">
-              <p className="text-xs font-bold text-indigo-200 uppercase tracking-wider mb-2">Billed So Far</p>
-              <p className="text-xl font-bold font-mono text-white leading-tight">₹ {inr(billed)}</p>
-              {val > 0 && <p className="text-sm font-semibold text-indigo-200 mt-1">{Math.round((billed/val)*100)}% of WO value</p>}
-            </div>
-            <div className={clsx('rounded-xl border-2 p-4', balance > 0 ? 'border-amber-400 bg-amber-500' : 'border-emerald-400 bg-emerald-600')}>
-              <p className={clsx('text-xs font-bold uppercase tracking-wider mb-2', balance > 0 ? 'text-amber-100' : 'text-emerald-100')}>Balance to Bill</p>
-              <p className="text-xl font-bold font-mono text-white leading-tight">₹ {inr(balance)}</p>
-              <p className={clsx('text-sm font-semibold mt-1', balance > 0 ? 'text-amber-100' : 'text-emerald-100')}>{balance > 0 ? 'Pending billing' : '✓ Fully billed'}</p>
-            </div>
-            <div className="rounded-xl border-2 border-emerald-400 bg-emerald-600 p-4">
-              <p className="text-xs font-bold text-emerald-100 uppercase tracking-wider mb-2">Amount Paid</p>
-              <p className="text-xl font-bold font-mono text-white leading-tight">₹ {inr(paid)}</p>
-              {billed > 0 && <p className="text-sm font-semibold text-emerald-100 mt-1">{Math.round((paid/billed)*100)}% of billed</p>}
-            </div>
-          </div>
-
-          {/* WO Details grid */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-            <div className="px-5 py-3 bg-slate-50 border-b border-slate-100">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Work Order Details</p>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 divide-x divide-y divide-slate-100">
+          <div className="flex items-center gap-2">
+            {/* KPI pills in header */}
+            <div className="hidden md:flex items-center gap-1 mr-4">
               {[
-                ['Vendor / Sub-Con',  displayWO.vendor_name   || '—'],
-                ['Vendor Type',       displayWO.vendor_type   || '—'],
-                ['Project',           displayWO.project_name  || '—'],
-                ['Start Date',        wo.start_date ? dayjs(wo.start_date).format('DD MMM YYYY') : '—'],
-                ['End Date',          wo.end_date   ? dayjs(wo.end_date).format('DD MMM YYYY')   : '—'],
-                ['Contract Amount',   `₹ ${inr(displayWO.contract_amount || val)}`],
-                ['Cost Head',         displayWO.cost_head     || '—'],
-                ['Work Category',     displayWO.work_category || '—'],
-                ['Tower / Block',     displayWO.tower_block   || '—'],
-                ['Work Description',  displayWO.work_description || displayWO.subject || '—'],
-                ['Vendor GSTIN',      displayWO.vendor_gstin  || '—'],
-                ['Manager',           displayWO.manager_name  || '—'],
-                ['Created',           displayWO.created_at ? dayjs(displayWO.created_at).format('DD MMM YYYY') : '—'],
-              ].map(([label, value]) => (
-                <div key={label} className="px-4 py-3">
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">{label}</p>
-                  <p className="text-sm font-medium text-slate-800 break-words">{value}</p>
+                { label: 'Contract Value', value: `₹${inr(val)}`,     color: 'text-slate-700' },
+                { label: 'Billed',         value: `₹${inr(billed)}`,  color: 'text-indigo-600' },
+                { label: 'Balance',        value: `₹${inr(balance)}`, color: balance > 0 ? 'text-amber-600 font-extrabold' : 'text-emerald-600 font-extrabold' },
+              ].map((k, i) => (
+                <div key={i} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg">
+                  <span className="text-[10px] text-slate-900 font-medium uppercase tracking-wider">{k.label}</span>
+                  <span className={clsx('text-sm font-bold', k.color)}>{k.value}</span>
                 </div>
               ))}
             </div>
+            <button onClick={handlePrint}
+              className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-slate-200 text-xs font-medium text-slate-900 hover:border-slate-300 transition-all">
+              <Printer className="w-3.5 h-3.5" /> Print
+            </button>
+            <button
+              onClick={() => { if (window.confirm(`Delete Work Order ${wo.wo_number}? This cannot be undone.`)) { onDelete(wo.id); } }}
+              className="flex items-center gap-1.5 px-3 h-8 rounded-lg bg-white border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50 transition-all">
+              <X className="w-3.5 h-3.5" /> Delete
+            </button>
+          </div>
+        </div>
+
+        {/* ── Two-column Body ── */}
+        <div className="flex-1 overflow-hidden flex">
+
+          {/* LEFT — WO details + line items */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-4 border-r border-slate-200">
+
+          {/* Info grid */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              ['Vendor / Sub-Con', displayWO.vendor_name || '—'],
+              ['Project',          displayWO.project_name || '—'],
+              ['Start Date',       displayWO.start_date ? dayjs(displayWO.start_date).format('DD MMM YYYY') : '—'],
+              ['End Date',         displayWO.end_date   ? dayjs(displayWO.end_date).format('DD MMM YYYY')   : '—'],
+              ['Contract Amount',  `₹ ${inr(displayWO.contract_amount || val)}`],
+              ['Work Category',    displayWO.work_category || '—'],
+              ['Cost Head',        displayWO.cost_head || '—'],
+              ['Tower / Block',    displayWO.tower_block || '—'],
+              ['Vendor Type',      displayWO.vendor_type || '—'],
+              ['Vendor GSTIN',     displayWO.vendor_gstin || '—'],
+              ['Manager',          displayWO.manager_name || '—'],
+              ['Created',          displayWO.created_at ? dayjs(displayWO.created_at).format('DD MMM YYYY') : '—'],
+            ].map(([label, value]) => (
+              <div key={label} className="bg-white border border-slate-200 rounded-lg p-3">
+                <p className="text-xs text-slate-900 font-medium uppercase tracking-wider mb-1">{label}</p>
+                <p className="text-sm font-medium text-slate-800 break-words">{value}</p>
+              </div>
+            ))}
           </div>
 
-          {/* BOQ Line Items table */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-            <div className="px-5 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">BOQ Line Items</p>
-              <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full">
+          {/* Line items */}
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
+              <Package className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-xs font-medium text-slate-900 uppercase tracking-wider">BOQ Line Items</span>
+              <span className="ml-auto text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100">
                 {detailLoading ? '…' : `${lineItems.length} item${lineItems.length !== 1 ? 's' : ''}`}
               </span>
             </div>
             {detailLoading ? (
-              <div className="p-8 text-center text-sm text-slate-400">Loading line items…</div>
+              <div className="flex justify-center py-8">
+                <div className="w-6 h-6 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+              </div>
             ) : lineItems.length === 0 ? (
               <div className="p-8 text-center text-sm text-slate-400">No BOQ items added for this work order.</div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-slate-800">
-                    <tr>
-                      {['#', 'Description', 'Unit', 'WO Qty', 'Billed', 'Balance', 'Rate (₹)', 'Amount (₹)'].map(h => (
-                        <th key={h} className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-white/80 whitespace-nowrap">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lineItems.map((item, idx) => {
-                      const qty        = Number(item.quantity   || 0);
-                      const billedQty  = Number(item.billed_qty || 0);
-                      const remQty     = Number(item.remaining_qty ?? Math.max(qty - billedQty, 0));
-                      const rate       = Number(item.rate   || 0);
-                      const amount     = Number(item.amount || qty * rate);
-                      const billedPct  = qty > 0 ? Math.round((billedQty / qty) * 100) : 0;
-                      return (
-                        <tr key={item.id || idx} className={clsx('border-b border-slate-50', idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40')}>
-                          <td className="px-4 py-3 text-slate-400 font-mono">{idx + 1}</td>
-                          <td className="px-4 py-3 font-medium text-slate-800 max-w-[280px]">
-                            <p>{item.description || `Item ${idx + 1}`}</p>
-                            {item.remarks && <p className="text-[11px] text-slate-500 mt-0.5">{item.remarks}</p>}
-                          </td>
-                          <td className="px-4 py-3 text-slate-500">{item.unit || 'LS'}</td>
-                          <td className="px-4 py-3 font-mono text-right text-slate-700">{qty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}</td>
-                          <td className="px-4 py-3 font-mono text-right">
-                            <span className="font-semibold text-emerald-700">{billedQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}</span>
-                            {billedPct > 0 && <span className="text-[9px] text-emerald-500 ml-1">({billedPct}%)</span>}
-                          </td>
-                          <td className="px-4 py-3 font-mono text-right">
-                            <span className={clsx('font-semibold', remQty > 0 ? 'text-amber-600' : 'text-slate-400')}>
-                              {remQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 font-mono text-right text-slate-600">{inr(rate)}</td>
-                          <td className="px-4 py-3 font-mono text-right font-semibold text-slate-800">{inr(amount)}</td>
-                        </tr>
-                      );
-                    })}
-                    <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
-                      <td colSpan={7} className="px-4 py-3 text-right text-sm text-slate-700 uppercase tracking-wider">Total</td>
-                      <td className="px-4 py-3 text-right font-mono text-base font-bold text-slate-900">
-                        {inr(lineItems.reduce((s, it) => s + Number(it.amount || (Number(it.quantity||0)*Number(it.rate||0))), 0))}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-slate-100">
+                    {['#', 'Description', 'Unit', 'WO Qty', 'Billed', 'Balance', 'Rate', 'Amount'].map(h => (
+                      <th key={h} className="px-3 py-2 text-left font-medium text-slate-900 uppercase tracking-wider bg-slate-50 whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {lineItems.map((item, idx) => {
+                    const qty       = Number(item.quantity   || 0);
+                    const billedQty = Number(item.billed_qty || 0);
+                    const remQty    = Number(item.remaining_qty ?? Math.max(qty - billedQty, 0));
+                    const rate      = Number(item.rate   || 0);
+                    const amount    = Number(item.amount || qty * rate);
+                    const billedPct = qty > 0 ? Math.round((billedQty / qty) * 100) : 0;
+                    return (
+                      <tr key={item.id || idx} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-3 py-2.5 text-slate-900 font-medium font-mono">{idx + 1}</td>
+                        <td className="px-3 py-2.5 font-medium text-slate-800 max-w-[280px]">
+                          {item.description || `Item ${idx + 1}`}
+                          {item.remarks && <div className="text-[11px] text-slate-500 mt-0.5 font-normal">{item.remarks}</div>}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-900 border border-slate-200 font-medium uppercase">{item.unit || 'LS'}</span>
+                        </td>
+                        <td className="px-3 py-2.5 font-mono text-right text-slate-700">{qty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}</td>
+                        <td className="px-3 py-2.5 font-mono text-right">
+                          <span className="font-semibold text-emerald-700">{billedQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}</span>
+                          {billedPct > 0 && <span className="text-[9px] text-emerald-500 ml-1">({billedPct}%)</span>}
+                        </td>
+                        <td className="px-3 py-2.5 font-mono text-right">
+                          <span className={clsx('font-semibold', remQty > 0 ? 'text-amber-600' : 'text-slate-400')}>
+                            {remQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 font-mono text-right text-slate-600">{inr(rate)}</td>
+                        <td className="px-3 py-2.5 font-mono text-right font-semibold text-slate-800">{inr(amount)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-200 bg-slate-50">
+                    <td colSpan={7} className="px-3 py-2.5 text-right text-xs font-medium text-slate-700 uppercase tracking-wider">Total</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-sm font-bold text-indigo-700">{inr(itemsTotal)}</td>
+                  </tr>
+                </tfoot>
+              </table>
             )}
           </div>
 
-          {/* Scope + Terms */}
+          {/* Scope of Work */}
           {(displayWO.scope_of_work || displayWO.work_description) && (
-            <div className="bg-white border border-slate-200 rounded-xl p-5">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Scope of Work</p>
-              <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
+            <div className="bg-white border border-slate-200 rounded-xl p-4">
+              <p className="text-xs font-medium text-slate-900 uppercase tracking-wider mb-2">Scope of Work</p>
+              <p className="text-sm text-slate-600 whitespace-pre-line leading-relaxed">
                 {displayWO.scope_of_work || displayWO.work_description}
               </p>
             </div>
           )}
+
+          {/* Terms & Conditions */}
           {wo.terms_conditions && (
-            <div className="bg-white border border-slate-200 rounded-xl p-5">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Terms & Conditions</p>
-              <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">{wo.terms_conditions}</p>
+            <div className="bg-white border border-slate-200 rounded-xl p-4">
+              <p className="text-xs font-medium text-slate-900 uppercase tracking-wider mb-2">Terms &amp; Conditions</p>
+              <p className="text-sm text-slate-600 whitespace-pre-line leading-relaxed">{wo.terms_conditions}</p>
             </div>
           )}
 
-          {/* ── Approval Pipeline ── */}
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+          </div>{/* end left column */}
+
+          {/* RIGHT column — billing summary + approval + action */}
+          <div className="w-[420px] xl:w-[480px] flex-shrink-0 overflow-y-auto p-6 space-y-4 bg-[#f4f6f9]">
+
+          {/* ── Billing Summary ─────────────────────────────────── */}
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
+              <IndianRupee className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-xs font-medium text-slate-900 uppercase tracking-wider">Billing Summary</span>
+            </div>
+            <div className="grid grid-cols-3 gap-px bg-slate-100 border-b border-slate-100">
+              {[
+                { label: 'Billed',  value: inr(billed),  color: 'text-indigo-600' },
+                { label: 'Paid',    value: inr(paid),    color: 'text-emerald-600' },
+                { label: 'Balance', value: inr(balance), color: balance > 0 ? 'text-amber-600' : 'text-emerald-600' },
+              ].map((k, i) => (
+                <div key={i} className="bg-white p-3 text-center">
+                  <p className="text-[10px] text-slate-900 font-medium mb-0.5">{k.label}</p>
+                  <p className={clsx('text-xs font-bold', k.color)}>{k.value}</p>
+                </div>
+              ))}
+            </div>
+            {/* Utilisation bar */}
+            {val > 0 && (
+              <div className="px-4 pb-4 pt-3">
+                <div className="flex justify-between text-[10px] text-slate-900 font-medium mb-1">
+                  <span>WO Utilisation</span>
+                  <span className="font-medium text-slate-600">{utilPct.toFixed(1)}% of ₹{inr(val)}</span>
+                </div>
+                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className={clsx('h-full rounded-full transition-all', billed > val ? 'bg-red-500' : 'bg-indigo-500')}
+                    style={{ width: `${utilPct}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Approval pipeline */}
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
             <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
               <Activity className="w-3.5 h-3.5 text-slate-400" />
-              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Approval Pipeline</span>
+              <span className="text-xs font-medium text-slate-900 uppercase tracking-wider">Approval Pipeline</span>
             </div>
             <div className="p-4">
               <div className="relative">
@@ -1089,80 +1123,61 @@ function WODetailPanel({ wo, onClose, onDelete, onApprove, onMDApprove, onReject
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* Action panel */}
-            {currentAction && (() => {
-              const authorized = canApproveWOStage(currentAction.id, user);
-              return (
-                <div className={clsx('mx-4 mb-4 border rounded-xl p-4 space-y-3', authorized ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200')}>
-                  <div className="flex items-center gap-3">
-                    <div className={clsx('w-9 h-9 rounded-lg border flex items-center justify-center', authorized ? 'bg-emerald-100 border-emerald-200' : 'bg-slate-100 border-slate-200')}>
-                      <CheckCircle2 className={clsx('w-4 h-4', authorized ? 'text-emerald-600' : 'text-slate-400')} />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">{authorized ? 'Action Required' : 'Awaiting Authorization'}</p>
-                      <p className={clsx('text-xs font-medium', authorized ? 'text-emerald-700' : 'text-slate-500')}>
-                        {authorized ? `${currentAction.label} — click to authorize` : `${WO_STAGE_LABELS[currentAction.id]} — not your approval level`}
-                      </p>
-                    </div>
+          {/* Action panel */}
+          {currentAction && (() => {
+            const authorized = canApproveWOStage(currentAction.id, user);
+            return (
+              <div className={clsx('border rounded-xl p-4 space-y-3', authorized ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200')}>
+                <div className="flex items-center gap-3">
+                  <div className={clsx('w-9 h-9 rounded-lg border flex items-center justify-center', authorized ? 'bg-emerald-100 border-emerald-200' : 'bg-slate-100 border-slate-200')}>
+                    <CheckCircle2 className={clsx('w-4 h-4', authorized ? 'text-emerald-600' : 'text-slate-400')} />
                   </div>
-                  {authorized ? (
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => currentAction.id === 'procurement-approve' ? onApprove(wo.id) : onMDApprove(wo.id)}
-                        disabled={isApproving || isMDApproving}
-                        className="flex-[2] h-9 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        {(isApproving || isMDApproving) ? 'Processing…' : currentAction.label}
-                      </button>
-                      <button
-                        onClick={() => onReject(wo.id)}
-                        disabled={isRejecting}
-                        className="flex-1 h-9 rounded-lg bg-white border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 transition-colors disabled:opacity-50">
-                        {isRejecting ? '…' : 'Reject'}
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-400 italic px-1">
-                      This WO is waiting for the {WO_STAGE_LABELS[currentAction.id]} team to act.
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">{authorized ? 'Action Required' : 'Awaiting Authorization'}</p>
+                    <p className={clsx('text-xs font-medium', authorized ? 'text-emerald-700' : 'text-slate-500')}>
+                      {authorized ? `${currentAction.label} — click to authorize` : `${WO_STAGE_LABELS[currentAction.id]} — not your approval level`}
                     </p>
-                  )}
+                  </div>
                 </div>
-              );
-            })()}
-          </div>
+                {authorized ? (
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => currentAction.id === 'procurement-approve' ? onApprove(wo.id) : onMDApprove(wo.id)}
+                      disabled={isApproving || isMDApproving}
+                      className="flex-[2] h-9 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      {(isApproving || isMDApproving) ? 'Processing…' : currentAction.label}
+                    </button>
+                    <button
+                      onClick={() => onReject(wo.id)}
+                      disabled={isRejecting}
+                      className="flex-1 h-9 rounded-lg bg-white border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50 transition-colors disabled:opacity-50">
+                      {isRejecting ? '…' : 'Reject'}
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 italic px-1">
+                    This WO is waiting for the {WO_STAGE_LABELS[currentAction.id]} team to act.
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
-          {/* Attachments */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5">
-            <RecordAttachments
-              module="work_order"
-              recordId={wo.id}
-              projectId={wo.project_id}
-              label="WO Attachments — Contracts, Site Photos, BOQ"
-              compact
-            />
-          </div>
-        </div>
+          </div>{/* end right column */}
+        </div>{/* end two-column body */}
 
-        {/* ── Footer ── */}
-        <div className="flex-shrink-0 flex items-center justify-between gap-3 px-6 py-4 border-t border-slate-100 bg-white flex-wrap">
-          <div className="flex gap-2 flex-wrap">
-            <button onClick={handlePrint}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 text-sm font-medium rounded-xl hover:bg-slate-50 transition-colors">
-              <Printer className="w-4 h-4" /> Print
-            </button>
-            <button
-              onClick={() => { if (window.confirm(`Delete Work Order ${wo.wo_number}? This cannot be undone.`)) { onDelete(wo.id); } }}
-              className="flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-200 text-red-600 text-sm font-medium rounded-xl hover:bg-red-100 transition-colors">
-              <X className="w-4 h-4" /> Delete
-            </button>
-          </div>
-          <button onClick={onClose}
-            className="px-6 py-2 bg-slate-900 text-white text-sm font-semibold rounded-xl hover:bg-slate-800 transition-colors">
-            Close
-          </button>
+        {/* Attachments */}
+        <div className="px-6 py-4 border-t border-slate-100 bg-white">
+          <RecordAttachments
+            module="work_order"
+            recordId={wo.id}
+            projectId={wo.project_id}
+            label="WO Attachments — Contracts, Site Photos, BOQ"
+          />
         </div>
-      </div>
     </div>
 
     {/* Hidden print zone — content captured via ref, printed in new window */}
