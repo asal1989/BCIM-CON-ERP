@@ -38,7 +38,7 @@ const DEFAULT_PO_TERMS = `1. All Bills and DCs should contain the Reference of t
 17. Three copies of Tax invoice (original, duplicate & triplicate) to be submitted along with each consignment supply.
 18. Order to be acknowledged and accepted or reverted if any changes within 4 hours, otherwise it will be considered as accepted.`;
 
-const UNITS = ['MT', 'Bags', 'CUM', 'SQM', 'SQFT', 'Nos', 'RMT', 'KG', 'Litre', 'Month', 'LS', 'Point', 'Day'];
+const UNITS = ['MT', 'Bags', 'CUM', 'SQM', 'SQFT', 'Nos', 'RMT', 'KG', 'Litre', 'Month', 'LS', 'Point', 'Day', 'Roll', 'Bundle', 'Coil', 'Drum', 'Yard', 'Pairs', 'Brass'];
 
 // Finance approval stage removed — accounts not involved in PO/WO
 // Flow: pending → verified_audit → released_mgmt → approved
@@ -468,6 +468,7 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, isPend
                     placeholder="HSN" value={it.hsn_code} onChange={e => setItem(i, 'hsn_code', e.target.value)} />
                   <select className="h-9 bg-slate-50 border border-slate-200 rounded-lg px-2 text-sm outline-none focus:border-indigo-400 transition-all"
                     value={it.unit} onChange={e => setItem(i, 'unit', e.target.value)}>
+                    {it.unit && !UNITS.includes(it.unit) && <option key={it.unit}>{it.unit}</option>}
                     {UNITS.map(u => <option key={u}>{u}</option>)}
                   </select>
                   <input type="number" className="h-9 bg-slate-50 border border-slate-200 rounded-lg px-2 text-sm text-right outline-none focus:border-indigo-400 transition-all"
@@ -1467,6 +1468,7 @@ function POImportModal({ onClose, vendors, projects, onImported }) {
                           <td className="px-2 py-1"><input value={it.material_name || ''} onChange={e => updateItem(i,'material_name',e.target.value)} className="w-full border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-indigo-400 min-w-[180px]" /></td>
                           <td className="px-2 py-1">
                             <select value={it.unit || 'Nos'} onChange={e => updateItem(i,'unit',e.target.value)} className="border border-slate-200 rounded px-1 py-1 text-xs outline-none focus:border-indigo-400">
+                              {it.unit && !UNITS.includes(it.unit) && <option key={it.unit}>{it.unit}</option>}
                               {UNITS.map(u => <option key={u}>{u}</option>)}
                             </select>
                           </td>
