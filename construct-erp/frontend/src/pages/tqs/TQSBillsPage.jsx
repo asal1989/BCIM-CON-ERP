@@ -1968,14 +1968,16 @@ export default function TQSBillsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const qc = useQueryClient();
-  const { user } = useAuthStore();
+  const { user, selectedProjectId } = useAuthStore();
   const [showModal, setShowModal] = useState(false);
   const [editingBill, setEditingBill] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [showImport, setShowImport] = useState(false);
   const [showAdvance, setShowAdvance] = useState(false);
   const [search, setSearch] = useState('');
-  const [projectFilter, setProjectFilter] = useState('');
+  // Default to the globally-selected project (top nav chip) so the Bill
+  // Tracker doesn't show every project's bills under the active project context.
+  const [projectFilter, setProjectFilter] = useState(selectedProjectId || '');
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '');
   const [billTypeFilter, setBillTypeFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
