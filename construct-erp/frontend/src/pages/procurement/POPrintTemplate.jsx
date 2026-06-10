@@ -140,15 +140,13 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
           </div>
         </div>
 
-        {/* Delivery + Intro */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px', fontSize: '9px' }}>
-          <div>
-            <p style={{ fontWeight: 700, textDecoration: 'underline', marginBottom: '3px' }}>DELIVERY ADDRESS:</p>
-            <p style={{ color: '#374151', whiteSpace: 'pre-line' }}>{data.delivery_address || (isLanco ? LANCO_DELIVERY_ADDRESS : data.project_name) || '—'}</p>
-          </div>
-          <div style={{ color: '#374151', fontStyle: 'italic', display: 'flex', alignItems: 'center' }}>
+        {/* Delivery Address + Order Intro (stacked) */}
+        <div style={{ marginBottom: '10px', fontSize: '9px' }}>
+          <p style={{ fontWeight: 700, textDecoration: 'underline', marginBottom: '3px' }}>DELIVERY ADDRESS:</p>
+          <p style={{ color: '#374151', whiteSpace: 'pre-line', marginBottom: '6px' }}>{data.delivery_address || (isLanco ? LANCO_DELIVERY_ADDRESS : data.project_name) || '—'}</p>
+          <p style={{ color: '#374151', fontStyle: 'italic' }}>
             {data.order_intro || 'We hereby place an order on you for supply of the following materials / services as per the terms and conditions below.'}
-          </div>
+          </p>
         </div>
 
         {/* ═══════════════════════════════════════════════════════════════════ */}
@@ -251,7 +249,7 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {/* TERMS & CONDITIONS                                                 */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        <div className="po-terms-block" style={{ border: '1px solid #cbd5e1', borderRadius: '6px', padding: '8px', marginBottom: '10px', fontSize: '8.5px' }}>
+        <div className="po-terms-block" style={{ border: '1px solid #cbd5e1', borderRadius: '6px', padding: '8px', marginBottom: '10px', fontSize: '8.5px', pageBreakBefore: 'avoid', breakBefore: 'avoid' }}>
           <p style={{ fontWeight: 700, textTransform: 'uppercase', color: '#0f172a', letterSpacing: '0.05em', marginBottom: '5px', borderBottom: '1px solid #e2e8f0', paddingBottom: '3px' }}>
             Terms &amp; Conditions
           </p>
@@ -272,25 +270,10 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
         </div>
 
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* BANK DETAILS + DISCLAIMER                                          */}
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px', fontSize: '8px' }}>
-          <div style={{ border: '1px solid #cbd5e1', borderRadius: '4px', padding: '6px' }}>
-            <p style={{ fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: '4px' }}>Company Bank Details</p>
-            <p style={{ margin: '1px 0' }}>Bank: HDFC Bank Ltd</p>
-            <p style={{ margin: '1px 0' }}>A/C No: 502000482930219</p>
-            <p style={{ margin: '1px 0' }}>IFSC: HDFC0000043 &nbsp;|&nbsp; Branch: Jayanagar, Bangalore</p>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', color: '#64748b', fontStyle: 'italic', padding: '6px' }}>
-            This is a computer-generated document. Verify authenticity by scanning the QR code above or visiting {window.location.origin}/verify/po/{data.id}
-          </div>
-        </div>
-
-        {/* ═══════════════════════════════════════════════════════════════════ */}
         {/* APPROVAL GRID — 4 COLUMNS                                         */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        <div className="po-approval-block" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', border: '1px solid #000', fontSize: '8px', height: '80px' }}>
-          {/* Stage 1: Prepared By */}
+        <div className="po-approval-block" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', border: '1px solid #000', fontSize: '8px', height: '80px' }}>
+          {/* Col 1: Prepared By */}
           <div style={{ borderRight: '1px solid #000', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px', textAlign: 'center' }}>
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
               {data.prepared_by_sig
@@ -304,21 +287,7 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
             <p style={{ margin: 0, fontSize: '7px' }}>{data.prepared_by_name || 'Procurement'}</p>
           </div>
 
-          {/* Stage 2: Procurement / Auditor */}
-          <div style={{ borderRight: '1px solid #000', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px', textAlign: 'center' }}>
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
-              {data.verified_audit_sig
-                ? <img src={data.verified_audit_sig} alt="Sig" style={{ maxHeight: '36px', maxWidth: '100%' }} />
-                : <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '7px' }}>{data.verified_audit_name ? 'Verified' : 'Pending'}</span>
-              }
-            </div>
-            <div style={{ borderTop: '1px solid #000', width: '100%', paddingTop: '3px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-              Auditor / QS
-            </div>
-            <p style={{ margin: 0, fontSize: '7px' }}>{data.verified_audit_name || 'Pending'}</p>
-          </div>
-
-          {/* Stage 3: Management */}
+          {/* Col 2: Director */}
           <div style={{ borderRight: '1px solid #000', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px', textAlign: 'center' }}>
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
               {data.released_mgmt_sig
@@ -327,12 +296,12 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
               }
             </div>
             <div style={{ borderTop: '1px solid #000', width: '100%', paddingTop: '3px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-              Management
+              Director
             </div>
             <p style={{ margin: 0, fontSize: '7px', fontWeight: 600 }}>{data.released_mgmt_name || 'Pending'}</p>
           </div>
 
-          {/* Stage 4: Managing Director */}
+          {/* Col 3: Managing Director */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px', textAlign: 'center' }}>
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
               {data.authorized_md_sig
