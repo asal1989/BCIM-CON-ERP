@@ -3,6 +3,7 @@
 // Falls back to nodemailer SMTP if Graph is not configured.
 
 const nodemailer = require('nodemailer');
+const { isBlockedEmail } = require('../config/notification-blocklist');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Microsoft Graph API helpers
@@ -134,8 +135,10 @@ const getTransport = () =>
   });
 
 const sendMail = async ({ to, cc, subject, html, text }) => {
-  const recipients = filterAlertRecipients({ recipients: normalizeRecipients(to), subject });
-  const ccRecipients = filterAlertRecipients({ recipients: normalizeRecipients(cc), subject });
+  let recipients = filterAlertRecipients({ recipients: normalizeRecipients(to), subject });
+  let ccRecipients = filterAlertRecipients({ recipients: normalizeRecipients(cc), subject });
+  recipients = recipients.filter(email => !isBlockedEmail(email));
+  ccRecipients = ccRecipients.filter(email => !isBlockedEmail(email));
   if (!recipients.length) return { sent: false, reason: 'No recipients' };
 
   const results = [];

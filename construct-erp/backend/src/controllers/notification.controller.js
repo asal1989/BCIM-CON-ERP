@@ -2,6 +2,7 @@
 const { query } = require('../config/database');
 const { sendMail } = require('../services/mail.service');
 const { sendPushToUser, sendPushToRole } = require('../services/fcm.service');
+const { isBlockedEmail } = require('../config/notification-blocklist');
 
 const FRONTEND_URL = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || 'http://bcim.ddns.net:3000').replace(/\/$/, '');
 
@@ -71,6 +72,14 @@ function buildEmailHtml({ title, message, link, severity }) {
  *   - sendEmail (optional, default false) - also email the resolved recipient(s)
  */
 async function createNotification(opts) {
+  // Skip entirely for users on the global notification blocklist
+  if (opts.user_id) {
+    try {
+      const r = await query('SELECT email FROM users WHERE id = $1', [opts.user_id]);
+      if (isBlockedEmail(r.rows[0]?.email)) return;
+    } catch (_) {}
+  }
+
   try {
     await query(
       `INSERT INTO notifications

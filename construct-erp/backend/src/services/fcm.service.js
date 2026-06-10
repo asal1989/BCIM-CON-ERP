@@ -1,6 +1,7 @@
 // backend/src/services/fcm.service.js
 // Firebase Cloud Messaging — sends push notifications to registered Android devices
 const { query } = require('../config/database');
+const { isBlockedEmail, BLOCKED_EMAILS } = require('../config/notification-blocklist');
 
 let _admin = null;
 let _initAttempted = false;
@@ -66,8 +67,11 @@ async function sendPushToUser(userId, payload) {
 
   try {
     const { rows } = await query(
-      'SELECT token FROM notification_device_tokens WHERE user_id=$1 AND enabled=TRUE',
-      [userId]
+      `SELECT t.token FROM notification_device_tokens t
+       JOIN users u ON u.id = t.user_id
+       WHERE t.user_id=$1 AND t.enabled=TRUE
+         AND (u.email IS NULL OR LOWER(u.email) <> ALL($2::text[]))`,
+      [userId, [...BLOCKED_EMAILS]]
     );
     if (!rows.length) return;
 
@@ -107,7 +111,8 @@ async function sendPushToUser(userId, payload) {
  */
 async function sendPushToUsersByEmail(companyId, emails, payload) {
   const admin = getAdmin();
-  if (!admin || !emails.length) return;
+  const filteredEmails = emails.filter(e => !isBlockedEmail(e));
+  if (!admin || !filteredEmails.length) return;
 
   try {
     const { rows } = await query(
@@ -118,7 +123,7 @@ async function sendPushToUsersByEmail(companyId, emails, payload) {
          AND LOWER(u.email) = ANY($2::text[])
          AND u.is_active = TRUE
          AND t.enabled = TRUE`,
-      [companyId, emails.map(e => e.toLowerCase())]
+      [companyId, filteredEmails.map(e => e.toLowerCase())]
     );
     if (!rows.length) return;
 
@@ -157,8 +162,9 @@ async function sendPushToRole(companyId, role, payload) {
        FROM notification_device_tokens t
        JOIN users u ON t.user_id = u.id
        WHERE u.company_id = $1 AND u.role = $2
-         AND u.is_active = TRUE AND t.enabled = TRUE`,
-      [companyId, role]
+         AND u.is_active = TRUE AND t.enabled = TRUE
+         AND (u.email IS NULL OR LOWER(u.email) <> ALL($3::text[]))`,
+      [companyId, role, [...BLOCKED_EMAILS]]
     );
     if (!rows.length) return;
 
