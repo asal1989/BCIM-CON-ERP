@@ -9,6 +9,7 @@ import {
   ChevronRight, Upload, IndianRupee, Calendar,
   AlertCircle, RefreshCw, FileSpreadsheet,
   MapPin, User, Briefcase, Package, Percent, ClipboardList, Phone, Mail, Hash,
+  Activity, Check, UserCheck,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
@@ -30,6 +31,32 @@ const STATUS_CONFIG = {
   closed:     { label: 'Closed',     cls: 'bg-gray-100   text-gray-500   border-gray-200' },
   rejected:   { label: 'Rejected',   cls: 'bg-red-50     text-red-600    border-red-200' },
 };
+
+// 2-Stage approval pipeline — mirrors PO pipeline
+const WO_STAGE_ACTIONS = [
+  { id: 'procurement-approve', label: 'Procurement Approve', reqStatuses: ['draft','pending'] },
+  { id: 'md-approve',          label: 'MD Authorize',        reqStatuses: ['submitted'] },
+];
+const WO_STAGE_LABELS = {
+  'procurement-approve': 'Procurement Approval',
+  'md-approve':          'MD Authorization',
+};
+const WO_STAGE_ROLES = {
+  'procurement-approve': { roles: ['procurement_manager','project_manager','manager','admin','super_admin'], depts: ['procurement','purchase'] },
+  'md-approve':          { roles: ['md','ceo','admin','super_admin'],                                        depts: ['md','managing director','ceo'] },
+};
+// maps status → pipeline stage number (1-indexed)
+const WO_STATUS_STAGE = { draft:1, pending:1, submitted:2, approved:3, active:3, rejected:0, completed:3, terminated:0, closed:3 };
+
+function canApproveWOStage(stageId, user) {
+  if (!user) return false;
+  if (['admin','super_admin'].includes(user.role)) return true;
+  const allowed = WO_STAGE_ROLES[stageId];
+  if (!allowed) return false;
+  const role = (user.role || '').toLowerCase();
+  const dept = (user.department || '').toLowerCase();
+  return allowed.roles.some(r => role.includes(r)) || allowed.depts.some(d => dept.includes(d));
+}
 
 function StatusBadge({ status }) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
@@ -800,7 +827,7 @@ function CreateWOModal({ onClose, vendors, projects, onCreate, isPending }) {
 }
 
 /* ── WO Detail Panel — Full-Screen Modal ────────────────────────────────── */
-function WODetailPanel({ wo, onClose, onDelete, onApprove, onMDApprove, onReject, isApproving, isMDApproving, isRejecting }) {
+function WODetailPanel({ wo, onClose, onDelete, onApprove, onMDApprove, onReject, isApproving, isMDApproving, isRejecting, user }) {
   const { data: detail, isLoading: detailLoading } = useQuery({
     queryKey: ['work-order-detail', wo?.id],
     queryFn: () => subcontractorAPI.getWorkOrder(wo.id).then(r => r.data),
@@ -814,9 +841,11 @@ function WODetailPanel({ wo, onClose, onDelete, onApprove, onMDApprove, onReject
   const billed  = Number(displayWO.total_billed || 0);
   const paid    = Number(displayWO.total_paid || 0);
   const balance = Math.max(val - billed, 0);
-  const cfg     = STATUS_CONFIG[displayWO.status] || STATUS_CONFIG.pending;
-  const canProcurementApprove = ['draft','pending'].includes(displayWO.status);
-  const canMDApprove = displayWO.status === 'submitted';
+  const cfg         = STATUS_CONFIG[displayWO.status] || STATUS_CONFIG.pending;
+  const liveStatus  = displayWO.status;
+  const currentAction = WO_STAGE_ACTIONS.find(a => a.reqStatuses.includes(liveStatus));
+  const canProcurementApprove = ['draft','pending'].includes(liveStatus);
+  const canMDApprove = liveStatus === 'submitted';
 
   // ── Print in a new isolated window — same approach as Purchase Orders ─────
   const handlePrint = () => {
@@ -837,7 +866,8 @@ function WODetailPanel({ wo, onClose, onDelete, onApprove, onMDApprove, onReject
     tbody tr { page-break-inside: avoid; }
     .wo-items-table thead { display: table-header-group; }
     .wo-items-table tbody tr { page-break-inside: avoid; page-break-after: auto; }
-    .wo-totals-block, .wo-approval-block, .wo-terms-block { page-break-inside: avoid; }
+    .wo-totals-block, .wo-approval-block { page-break-inside: avoid; break-inside: avoid; }
+    .wo-footer-block { page-break-before: auto; break-before: auto; }
     @page { size: A4 portrait; margin: 8mm 8mm 12mm 8mm; }
     @media print { body { margin: 0; } }
   </style>
@@ -1016,6 +1046,88 @@ function WODetailPanel({ wo, onClose, onDelete, onApprove, onMDApprove, onReject
             </div>
           )}
 
+          {/* ── Approval Pipeline ── */}
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+            <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
+              <Activity className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Approval Pipeline</span>
+            </div>
+            <div className="p-4">
+              <div className="relative">
+                <div className="absolute bg-slate-200 left-[17px] top-5" style={{ width: 1, height: 'calc(100% - 40px)' }} />
+                <div className="space-y-3">
+                  {WO_STAGE_ACTIONS.map((stage, idx) => {
+                    const curStage = WO_STATUS_STAGE[liveStatus] ?? 1;
+                    const isDone   = curStage > idx + 1;
+                    const isActive = curStage === idx + 1;
+                    return (
+                      <div key={stage.id} className="flex items-start gap-3 relative">
+                        <div className={clsx(
+                          'w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 z-10 border-2 mt-0.5',
+                          isDone   ? 'bg-emerald-500 border-emerald-500' :
+                          isActive ? 'bg-indigo-600 border-indigo-600'   :
+                                     'bg-white border-slate-200'
+                        )}>
+                          {isDone
+                            ? <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
+                            : <span className={clsx('text-xs font-bold', isActive ? 'text-white' : 'text-slate-400')}>{idx + 1}</span>}
+                        </div>
+                        <div className="flex-1 min-w-0 pt-1.5">
+                          <p className={clsx('text-xs font-semibold',
+                            isDone ? 'text-slate-500 line-through' : isActive ? 'text-slate-900' : 'text-slate-400'
+                          )}>{stage.label}</p>
+                        </div>
+                        {isDone   && <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100 mt-1.5">Done</span>}
+                        {isActive && <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100 animate-pulse mt-1.5">Pending</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Action panel */}
+            {currentAction && (() => {
+              const authorized = canApproveWOStage(currentAction.id, user);
+              return (
+                <div className={clsx('mx-4 mb-4 border rounded-xl p-4 space-y-3', authorized ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200')}>
+                  <div className="flex items-center gap-3">
+                    <div className={clsx('w-9 h-9 rounded-lg border flex items-center justify-center', authorized ? 'bg-emerald-100 border-emerald-200' : 'bg-slate-100 border-slate-200')}>
+                      <CheckCircle2 className={clsx('w-4 h-4', authorized ? 'text-emerald-600' : 'text-slate-400')} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">{authorized ? 'Action Required' : 'Awaiting Authorization'}</p>
+                      <p className={clsx('text-xs font-medium', authorized ? 'text-emerald-700' : 'text-slate-500')}>
+                        {authorized ? `${currentAction.label} — click to authorize` : `${WO_STAGE_LABELS[currentAction.id]} — not your approval level`}
+                      </p>
+                    </div>
+                  </div>
+                  {authorized ? (
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => currentAction.id === 'procurement-approve' ? onApprove(wo.id) : onMDApprove(wo.id)}
+                        disabled={isApproving || isMDApproving}
+                        className="flex-[2] h-9 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {(isApproving || isMDApproving) ? 'Processing…' : currentAction.label}
+                      </button>
+                      <button
+                        onClick={() => onReject(wo.id)}
+                        disabled={isRejecting}
+                        className="flex-1 h-9 rounded-lg bg-white border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 transition-colors disabled:opacity-50">
+                        {isRejecting ? '…' : 'Reject'}
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 italic px-1">
+                      This WO is waiting for the {WO_STAGE_LABELS[currentAction.id]} team to act.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+
           {/* Attachments */}
           <div className="bg-white border border-slate-200 rounded-xl p-5">
             <RecordAttachments
@@ -1035,24 +1147,6 @@ function WODetailPanel({ wo, onClose, onDelete, onApprove, onMDApprove, onReject
               className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 text-sm font-medium rounded-xl hover:bg-slate-50 transition-colors">
               <Printer className="w-4 h-4" /> Print
             </button>
-            {canProcurementApprove && onApprove && (
-              <button onClick={() => onApprove(wo.id)} disabled={isApproving}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                <CheckCircle2 className="w-4 h-4" /> {isApproving ? 'Processing…' : 'Procurement Approve'}
-              </button>
-            )}
-            {canMDApprove && onMDApprove && (
-              <button onClick={() => onMDApprove(wo.id)} disabled={isMDApproving}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition-colors">
-                <CheckCircle2 className="w-4 h-4" /> {isMDApproving ? 'Processing…' : 'MD Authorize'}
-              </button>
-            )}
-            {(canProcurementApprove || canMDApprove) && onReject && (
-              <button onClick={() => onReject(wo.id)} disabled={isRejecting}
-                className="flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 text-amber-700 text-sm font-medium rounded-xl hover:bg-amber-100 disabled:opacity-50 transition-colors">
-                <X className="w-4 h-4" /> {isRejecting ? 'Rejecting…' : 'Reject WO'}
-              </button>
-            )}
             <button
               onClick={() => { if (window.confirm(`Delete Work Order ${wo.wo_number}? This cannot be undone.`)) { onDelete(wo.id); } }}
               className="flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-200 text-red-600 text-sm font-medium rounded-xl hover:bg-red-100 transition-colors">
@@ -1077,6 +1171,7 @@ function WODetailPanel({ wo, onClose, onDelete, onApprove, onMDApprove, onReject
 
 /* ── Main Page ─────────────────────────────────────────────────────────── */
 export default function WorkOrderPage() {
+  const user = useAuthStore(s => s.user);
   const [showCreate,     setShowCreate]     = useState(false);
   const [showPdfImport,  setShowPdfImport]  = useState(false);
   const [showExcelImport,setShowExcelImport]= useState(false);
@@ -1396,6 +1491,7 @@ export default function WorkOrderPage() {
           isApproving={approveMutation.isPending}
           isMDApproving={mdApproveMutation.isPending}
           isRejecting={rejectMutation.isPending}
+          user={user}
         />
       )}
     </div>
