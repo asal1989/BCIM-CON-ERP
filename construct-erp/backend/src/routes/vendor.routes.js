@@ -4,10 +4,7 @@ const multer = require('multer');
 const { authenticate, authorize } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
-const { loadProjectScope } = require('../middleware/projectScope');
 const vendorRouter = express.Router();
-
-const GLOBAL_ROLES = ['super_admin', 'admin', 'managing_director', 'director', 'ceo', 'cfo', 'md'];
 
 const upload = multer({ dest: 'uploads/' });
 
@@ -61,16 +58,11 @@ const ensureVendorCols = async () => {
 };
 runSchemaInit('vendors', ensureVendorCols);
 
-vendorRouter.get('/', loadProjectScope, async (req, res) => {
+vendorRouter.get('/', async (req, res) => {
   try {
     const { search, vendor_type, project_id } = req.query;
     const params = [req.user.company_id];
     let i = 2;
-
-    // Determine project scope: explicit project_id param, or scoped from user's allowed projects
-    const scopeProjectId = project_id ||
-      (!GLOBAL_ROLES.includes(req.user.role) && req.allowedProjectIds?.length === 1
-        ? req.allowedProjectIds[0] : null);
 
     let sql = `SELECT v.*, COALESCE(v.trade_name,'') AS trade_name, COALESCE(v.pincode,'') AS pincode,
       COALESCE(v.trade_license,'') AS trade_license, COALESCE(v.msme_reg,'') AS msme_reg,
@@ -78,23 +70,14 @@ vendorRouter.get('/', loadProjectScope, async (req, res) => {
       COALESCE(v.website_url,'') AS website_url
       FROM vendors v WHERE v.company_id = $1 AND v.is_active = true`;
 
-    // Scope by project if the user is not a global role AND has allowed projects
-    if (!GLOBAL_ROLES.includes(req.user.role)) {
-      const allowed = req.allowedProjectIds || [];
-      if (allowed.length === 0) {
-        return res.json({ data: [] }); // no projects → no vendors
-      }
-      // If scoping to specific project(s), filter to mapped vendors only
-      sql += ` AND EXISTS (
-        SELECT 1 FROM project_vendors pv
-        WHERE pv.vendor_id = v.id AND pv.project_id = ANY($${i}::uuid[]))`;
-      params.push(allowed); i++;
-    } else if (scopeProjectId) {
-      // Admin scoped to a specific project explicitly
+    // Vendor master is company-wide — every vendor is available for selection on
+    // POs, work orders, etc. Only filter by project mapping if a project_id is
+    // explicitly requested (e.g. the project-vendor mapping screens).
+    if (project_id) {
       sql += ` AND EXISTS (
         SELECT 1 FROM project_vendors pv
         WHERE pv.vendor_id = v.id AND pv.project_id = $${i})`;
-      params.push(scopeProjectId); i++;
+      params.push(project_id); i++;
     }
 
     if (search) {
