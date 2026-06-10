@@ -1,5 +1,6 @@
 // src/pages/procurement/WOPrintTemplate.jsx
 import React from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import dayjs from 'dayjs';
 
 // ─── Amount to words ─────────────────────────────────────────────────────────
@@ -46,6 +47,7 @@ const WOPrintTemplate = React.forwardRef(({ data }, ref) => {
 
   const items         = data.items || [];
   const isLanco       = data.project_code === 'LH-10';
+  const verifyUrl     = `${window.location.origin}/verify/wo/${data.id}`;
   const termsLines    = String(data.terms_conditions || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
   const workValue     = items.reduce((s, it) => s + parseFloat(it.amount || (parseFloat(it.quantity||0) * parseFloat(it.rate||0))), 0)
@@ -54,16 +56,13 @@ const WOPrintTemplate = React.forwardRef(({ data }, ref) => {
   const gstAmt        = workValue * (gstPct / 100);
   const grandTotal    = workValue + gstAmt;
 
-  // ── Signature / approval grid — rendered in a tfoot so it repeats at the
-  //    bottom of EVERY printed page (table-footer-group behaviour) ───────────
+  // ── Signature / approval grid ─────────────────────────────────────────────
   const approvalGrid = (
     <div className="wo-approval-block" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', border: '1px solid #000', fontSize: '8px', height: '80px' }}>
       {/* Prepared By */}
       <div style={{ borderRight: '1px solid #000', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px', textAlign: 'center' }}>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
-          <span style={{ color: '#6b7280', fontStyle: 'italic', fontSize: '7px' }}>
-            {data.manager_name || 'Procurement'}
-          </span>
+          <span style={{ color: '#6b7280', fontStyle: 'italic', fontSize: '7px' }}>Digitally Signed</span>
         </div>
         <div style={{ borderTop: '1px solid #000', width: '100%', paddingTop: '3px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
           Prepared By
@@ -71,27 +70,27 @@ const WOPrintTemplate = React.forwardRef(({ data }, ref) => {
         <p style={{ margin: 0, fontSize: '7px' }}>{data.manager_name || 'Procurement'}</p>
       </div>
 
-      {/* Procurement Approved */}
+      {/* Director / Procurement */}
       <div style={{ borderRight: '1px solid #000', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px', textAlign: 'center' }}>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
-          {data.verified_procurement_by
-            ? <div style={{ border: '3px solid #2563eb', color: '#2563eb', borderRadius: '50%', padding: '2px 4px', fontWeight: 900, fontSize: '6px', transform: 'rotate(-12deg)' }}>APPROVED</div>
-            : <span style={{ color: '#6b7280', fontStyle: 'italic', fontSize: '7px' }}>Pending</span>
-          }
+          <span style={{ color: '#6b7280', fontStyle: 'italic', fontSize: '7px' }}>
+            {['submitted','approved'].includes(data.status) ? 'Approved' : 'Pending'}
+          </span>
         </div>
         <div style={{ borderTop: '1px solid #000', width: '100%', paddingTop: '3px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-          Procurement
+          Director
         </div>
-        <p style={{ margin: 0, fontSize: '7px', fontWeight: 600 }}>{data.verified_procurement_name || 'Pending'}</p>
+        <p style={{ margin: 0, fontSize: '7px', fontWeight: 600 }}>
+          {['submitted','approved'].includes(data.status) ? 'Approved' : 'Pending'}
+        </p>
       </div>
 
-      {/* MD Authorized */}
+      {/* Managing Director */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px', textAlign: 'center' }}>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
-          {data.status === 'approved'
-            ? <div style={{ border: '3px solid #16a34a', color: '#16a34a', borderRadius: '50%', padding: '2px 4px', fontWeight: 900, fontSize: '6px', transform: 'rotate(-12deg)' }}>BCIM AUTHORIZED</div>
-            : <span style={{ color: '#6b7280', fontStyle: 'italic', fontSize: '7px' }}>Pending</span>
-          }
+          <span style={{ color: '#6b7280', fontStyle: 'italic', fontSize: '7px' }}>
+            {data.status === 'approved' ? 'Authorized' : 'Pending'}
+          </span>
         </div>
         <div style={{ borderTop: '1px solid #000', width: '100%', paddingTop: '3px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Managing Director
@@ -106,10 +105,24 @@ const WOPrintTemplate = React.forwardRef(({ data }, ref) => {
       <div className="wo-page bg-white text-black font-sans"
         style={{ width: '210mm', padding: '12mm', boxSizing: 'border-box', fontSize: '10px', lineHeight: '1.4' }}>
 
-        {/* ════════════════════════════════════════════════════════════════════ */}
-        {/* HEADER                                                               */}
-        {/* ════════════════════════════════════════════════════════════════════ */}
+        {/* Fixed page footer: print CSS pins this to the BOTTOM of every printed page */}
+        <div className="wo-page-footer">
+          {approvalGrid}
+        </div>
+
+        {/* Layout table: repeated tfoot spacer reserves room for the fixed footer on each page */}
+        <table className="wo-layout" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <tfoot className="wo-layout-footer">
+            <tr><td><div className="wo-footer-space" style={{ height: '100px' }} /></td></tr>
+          </tfoot>
+          <tbody className="wo-layout-body">
+            <tr><td style={{ padding: 0 }}>
+
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {/* HEADER                                                              */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
         <div style={{ borderBottom: '2.5px solid #000', paddingBottom: '8px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          {/* Left: Logo + Company */}
           <div>
             <img src="/bcim-logo.png" alt="BCIM" style={{ height: '48px', objectFit: 'contain', marginBottom: '6px', display: 'block' }} />
             <div style={{ fontSize: '9px', color: '#000', lineHeight: '1.5' }}>
@@ -130,17 +143,22 @@ const WOPrintTemplate = React.forwardRef(({ data }, ref) => {
               )}
             </div>
           </div>
+
+          {/* Right: WO Title + QR */}
           <div style={{ textAlign: 'right' }}>
             <h1 style={{ fontSize: '20px', fontWeight: 900, letterSpacing: '1px', color: '#000', margin: '0 0 4px' }}>WORK ORDER</h1>
-            <div style={{ background: '#1e293b', color: '#fff', padding: '3px 10px', display: 'inline-block', fontWeight: 700, fontSize: '11px', borderRadius: '4px' }}>
+            <div style={{ background: '#1e293b', color: '#fff', padding: '3px 10px', display: 'inline-block', fontWeight: 700, fontSize: '11px', borderRadius: '4px', marginBottom: '6px' }}>
               {data.wo_number || '—'}
+            </div>
+            <div style={{ marginTop: '4px' }}>
+              <QRCodeSVG value={verifyUrl} size={52} />
             </div>
           </div>
         </div>
 
-        {/* ════════════════════════════════════════════════════════════════════ */}
-        {/* INFO GRID: Contractor + WO Details                                  */}
-        {/* ════════════════════════════════════════════════════════════════════ */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {/* INFO GRID: Contractor + WO Details                                 */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
           {/* Contractor */}
           <div style={{ border: '1px solid #cbd5e1', borderRadius: '6px', padding: '8px' }}>
@@ -161,14 +179,14 @@ const WOPrintTemplate = React.forwardRef(({ data }, ref) => {
           {/* WO Summary */}
           <div style={{ fontSize: '10px' }}>
             {[
-              ['WO Number',     data.wo_number || '—'],
-              ['WO Date',       data.wo_date ? dayjs(data.wo_date).format('DD MMM YYYY') : (data.created_at ? dayjs(data.created_at).format('DD MMM YYYY') : '—')],
-              ['Start Date',    data.start_date ? dayjs(data.start_date).format('DD MMM YYYY') : '—'],
+              ['WO Number',      data.wo_number || '—'],
+              ['WO Date',        data.wo_date ? dayjs(data.wo_date).format('DD MMM YYYY') : (data.created_at ? dayjs(data.created_at).format('DD MMM YYYY') : '—')],
+              ['Start Date',     data.start_date ? dayjs(data.start_date).format('DD MMM YYYY') : '—'],
               ['Completion Date',data.end_date   ? dayjs(data.end_date).format('DD MMM YYYY')   : '—'],
-              ['Project',       data.project_name || '—'],
-              ['Work Category', data.work_category || '—'],
-              ['Tower / Block', data.tower_block || '—'],
-              ['Cost Head',     data.cost_head || '—'],
+              ['Project',        data.project_name || '—'],
+              ['Work Category',  data.work_category || '—'],
+              ['Tower / Block',  data.tower_block || '—'],
+              ['Cost Head',      data.cost_head || '—'],
             ].map(([label, value]) => (
               <div key={label} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dotted #cbd5e1', padding: '3px 0', gap: '8px' }}>
                 <span style={{ fontWeight: 700, color: '#000', textTransform: 'uppercase', fontSize: '8px', letterSpacing: '0.04em', flexShrink: 0 }}>{label}</span>
@@ -191,9 +209,9 @@ const WOPrintTemplate = React.forwardRef(({ data }, ref) => {
           )}
         </div>
 
-        {/* ════════════════════════════════════════════════════════════════════ */}
-        {/* ITEMS TABLE                                                          */}
-        {/* ════════════════════════════════════════════════════════════════════ */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {/* ITEMS TABLE                                                         */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
         <table className="wo-items-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '10px', fontSize: '9px' }}>
           <thead>
             <tr style={{ background: '#1e293b', color: '#fff' }}>
@@ -212,7 +230,7 @@ const WOPrintTemplate = React.forwardRef(({ data }, ref) => {
               const amount = parseFloat(it.amount || (qty * rate));
               const rowBg  = i % 2 === 0 ? '#fff' : '#f8fafc';
               return (
-                <tr key={it.id || i} style={{ background: rowBg }}>
+                <tr key={it.id || i} style={{ background: rowBg, borderBottom: '1px solid #e2e8f0' }}>
                   <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', fontWeight: 600, color: '#000' }}>{i + 1}</td>
                   <td style={{ border: '1px solid #000', padding: '4px' }}>
                     <p style={{ fontWeight: 700, margin: '0 0 1px', color: '#000' }}>{it.description || `Item ${i + 1}`}</p>
@@ -236,12 +254,12 @@ const WOPrintTemplate = React.forwardRef(({ data }, ref) => {
           </tbody>
         </table>
 
-        {/* ════════════════════════════════════════════════════════════════════ */}
-        {/* FOOTER: TOTALS + DEDUCTIONS + TERMS + APPROVAL                      */}
-        {/* ════════════════════════════════════════════════════════════════════ */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {/* FOOTER: TOTALS + DEDUCTIONS + TERMS                                */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
         <div className="wo-footer-block">
 
-        {/* Totals row */}
+        {/* Totals */}
         <div className="wo-totals-block" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px', gap: '16px', pageBreakInside: 'avoid', breakInside: 'avoid' }}>
           <div style={{ flex: 1, border: '1px solid #cbd5e1', borderRadius: '6px', padding: '8px', background: '#f8fafc' }}>
             <p style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', color: '#000', letterSpacing: '0.05em', marginBottom: '4px' }}>Amount in Words</p>
@@ -302,12 +320,11 @@ const WOPrintTemplate = React.forwardRef(({ data }, ref) => {
           )}
         </div>
 
-        {/* ════════════════════════════════════════════════════════════════════ */}
-        {/* SIGNATURE / APPROVAL GRID — last footer only                       */}
-        {/* ════════════════════════════════════════════════════════════════════ */}
-        {approvalGrid}
-
         </div>{/* /wo-footer-block */}
+
+            </td></tr>
+          </tbody>
+        </table>
 
       </div>
     </div>

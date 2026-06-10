@@ -866,10 +866,11 @@ function WODetailPanel({ wo, onClose, onDelete, onApprove, onMDApprove, onReject
     tbody tr { page-break-inside: avoid; }
     .wo-items-table thead { display: table-header-group; }
     .wo-items-table tbody tr { page-break-inside: avoid; page-break-after: auto; }
-    /* Keep totals + terms + signature together at the end (last footer) */
-    .wo-totals-block, .wo-approval-block { page-break-inside: avoid; break-inside: avoid; }
-    .wo-footer-block { page-break-inside: avoid; break-inside: avoid; }
-    @page { size: A4 portrait; margin: 8mm 8mm 12mm 8mm; }
+    /* Signature strip fixed to bottom of every printed page */
+    .wo-page-footer { position: fixed; bottom: 0; left: 0; right: 0; background: white; }
+    /* Keep totals block together; let T&C flow naturally across pages */
+    .wo-totals-block { page-break-inside: avoid; break-inside: avoid; }
+    @page { size: A4 portrait; margin: 8mm 8mm 26mm 8mm; }
     @media print { body { margin: 0; } }
   </style>
 </head>
