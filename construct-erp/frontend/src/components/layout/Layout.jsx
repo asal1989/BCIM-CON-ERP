@@ -769,8 +769,36 @@ function usePageTitle() {
   return { title: 'ConstructERP', group: '' };
 }
 
+function useRecentPages() {
+  const location = useLocation();
+  const [recents, setRecents] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem('erp-recents') || '[]'); }
+    catch { return []; }
+  });
+  useEffect(() => {
+    let best = null;
+    for (const g of navGroups) {
+      for (const item of g.items) {
+        const p = item.to.split('?')[0];
+        const segs = p.split('/').filter(Boolean);
+        const hit = location.pathname === p || (segs.length >= 2 && location.pathname.startsWith(p + '/'));
+        if (hit && (!best || item.to.length > best.to.length)) {
+          best = { to: item.to, label: item.label, group: g.label };
+        }
+      }
+    }
+    if (!best) return;
+    setRecents(prev => {
+      const next = [best, ...prev.filter(r => r.to !== best.to)].slice(0, 6);
+      sessionStorage.setItem('erp-recents', JSON.stringify(next));
+      return next;
+    });
+  }, [location.pathname]);
+  return recents;
+}
+
 // ── Mobile slide-in sidebar ──────────────────────────────────────────────────
-function MobileSidebar({ open, onClose, navGroups, user, matchesPath }) {
+function MobileSidebar({ open, onClose, navGroups, user, matchesPath, recentPages = [] }) {
   const [expandedGroup, setExpandedGroup] = useState(null);
   const [expandedSection, setExpandedSection] = useState(null);
   const { t } = useLanguage();
@@ -798,6 +826,36 @@ function MobileSidebar({ open, onClose, navGroups, user, matchesPath }) {
             <X size={16} />
           </button>
         </div>
+
+        {/* Recent pages */}
+        {recentPages.length > 0 && (
+          <div style={{ padding: '6px 0 0' }}>
+            <div style={{ padding: '4px 16px 6px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              <Clock3 size={10} />
+              Recent
+            </div>
+            {recentPages.slice(0, 5).map(page => {
+              const navItem = navGroups.flatMap(g => g.items).find(i => i.to === page.to);
+              const Icon = navItem?.icon || Clock3;
+              const isActive = matchesPath(page.to);
+              return (
+                <NavLink key={page.to} to={page.to} onClick={onClose}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '7px 16px 7px 28px',
+                    background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
+                    color: isActive ? '#fff' : 'rgba(255,255,255,0.75)',
+                    textDecoration: 'none', fontSize: 13, fontWeight: isActive ? 600 : 400,
+                    borderLeft: isActive ? '3px solid rgba(255,255,255,0.6)' : '3px solid transparent',
+                  }}
+                >
+                  <Icon size={13} />
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{page.label}</span>
+                </NavLink>
+              );
+            })}
+            <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '6px 16px 4px' }} />
+          </div>
+        )}
 
         {/* Groups */}
         <div style={{ flex: 1, padding: '8px 0' }}>
@@ -883,7 +941,7 @@ function MobileSidebar({ open, onClose, navGroups, user, matchesPath }) {
 }
 
 // ── Desktop Sidebar ───────────────────────────────────────────────────────────
-function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle, topOffset }) {
+function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle, topOffset, recentPages = [] }) {
   const activeGroup = navGroups.find(group => group.items.some(item => matchesPath(item.to)))?.label;
   const [expandedGroup, setExpandedGroup] = useState(activeGroup || navGroups[0]?.label);
   const [expandedSection, setExpandedSection] = useState(null);
@@ -959,6 +1017,35 @@ function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle, topOffset
                 {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
               </button>
             </div>
+            {recentPages.length > 0 && (
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ padding: '2px 10px 6px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 9.5, fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  <Clock3 size={9} />
+                  Recent
+                </div>
+                {recentPages.slice(0, 5).map(page => {
+                  const navItem = navGroups.flatMap(g => g.items).find(i => i.to === page.to);
+                  const Icon = navItem?.icon || Clock3;
+                  const isActive = matchesPath(page.to);
+                  return (
+                    <NavLink key={page.to} to={page.to} onClick={handleNavClick}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 9, padding: '6px 10px',
+                        borderRadius: 7, textDecoration: 'none', fontSize: 12.5, fontWeight: isActive ? 600 : 400,
+                        color: isActive ? '#2563EB' : '#475569',
+                        background: isActive ? '#EFF6FF' : 'transparent',
+                        transition: 'background 0.12s, color 0.12s',
+                      }}
+                    >
+                      <Icon size={13} style={{ flexShrink: 0, opacity: isActive ? 1 : 0.7 }} />
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{page.label}</span>
+                      <span style={{ fontSize: 9.5, color: '#CBD5E1', fontWeight: 500, flexShrink: 0 }}>{page.group}</span>
+                    </NavLink>
+                  );
+                })}
+                <div style={{ height: 1, background: '#EEF2F7', margin: '6px 4px 8px' }} />
+              </div>
+            )}
             {navGroups.map(group => {
               const color = GROUP_COLORS[group.label] || '#6366F1';
               const hasActive = group.items.some(item => matchesPath(item.to));
@@ -1053,6 +1140,31 @@ function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle, topOffset
         ) : (
           /* ── Collapsed: icon-only strip (hover to expand) ── */
           <div style={{ flex: 1, overflowY: 'auto', padding: '8px 6px' }}>
+            {recentPages.length > 0 && (
+              <>
+                {recentPages.slice(0, 3).map(page => {
+                  const navItem = navGroups.flatMap(g => g.items).find(i => i.to === page.to);
+                  const Icon = navItem?.icon || Clock3;
+                  const isActive = matchesPath(page.to);
+                  return (
+                    <NavLink key={page.to} to={page.to} onClick={handleNavClick}
+                      title={page.label}
+                      style={{
+                        width: 44, height: 38, margin: '2px auto 4px', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center', borderRadius: 9,
+                        textDecoration: 'none', position: 'relative',
+                        background: isActive ? '#EFF6FF' : 'transparent',
+                        color: isActive ? '#2563EB' : '#64748B',
+                        border: isActive ? '1px solid #BFDBFE' : '1px solid transparent',
+                      }}
+                    >
+                      <Icon size={16} />
+                    </NavLink>
+                  );
+                })}
+                <div style={{ height: 1, background: '#E2E8F0', margin: '4px 8px 6px' }} />
+              </>
+            )}
             {navGroups.map(group => {
               const color = GROUP_COLORS[group.label] || '#6366F1';
               const hasActive = group.items.some(item => matchesPath(item.to));
@@ -1504,6 +1616,7 @@ export default function Layout() {
   const [notifOpen,   setNotifOpen]   = useState(false);
   const [now,          setNow]         = useState(() => new Date());
   const notifCount = useNotificationCount();
+  const recentPages = useRecentPages();
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
@@ -1555,6 +1668,7 @@ export default function Layout() {
 
   const doLogout = useCallback(async () => {
     sessionStorage.removeItem('erp-welcomed');
+    sessionStorage.removeItem('erp-recents');
     await logout();
     setShowLogout(false);
     navigate('/login', { replace: true });
@@ -1737,7 +1851,18 @@ export default function Layout() {
             fontSize: 11.5,
           }}
         >
-          <span style={{ color: '#64748B', fontWeight: 500 }}>{pageGroup}</span>
+          {(() => {
+            const grp = filteredGroups.find(g => g.label === pageGroup);
+            const firstTo = grp?.items[0]?.to;
+            return firstTo ? (
+              <button onClick={() => navigate(firstTo)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#64748B', fontWeight: 500, fontSize: 'inherit', lineHeight: 'inherit', borderRadius: 4, transition: 'color 0.12s' }}
+                onMouseEnter={e => e.currentTarget.style.color = '#2563EB'}
+                onMouseLeave={e => e.currentTarget.style.color = '#64748B'}
+              >{pageGroup}</button>
+            ) : (
+              <span style={{ color: '#64748B', fontWeight: 500 }}>{pageGroup}</span>
+            );
+          })()}
           <ChevronRight size={11} style={{ color: '#94A3B8' }} />
           <span style={{ color: '#1E293B', fontWeight: 600 }}>{pageTitle}</span>
           <div
@@ -1774,6 +1899,7 @@ export default function Layout() {
           collapsed={sidebarCollapsed}
           onToggle={() => setSidebarCollapsed(c => !c)}
           topOffset={pageGroup ? 80 : 52}
+          recentPages={recentPages}
         />
         <main style={{ flex: 1, minWidth: 0, overflow: 'auto', position: 'relative' }} className="print:overflow-visible print:h-auto">
           <Suspense fallback={<LoadingScreen />}>
@@ -1791,12 +1917,14 @@ export default function Layout() {
         navGroups={filteredGroups}
         user={user}
         matchesPath={matchesPath}
+        recentPages={recentPages}
       />
 
       <CommandPalette
         isOpen={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         navGroups={filteredGroups}
+        recentPages={recentPages}
       />
 
       {/* ── Welcome Screen ── */}
