@@ -25,7 +25,7 @@ const num = (v, d = 3) => parseFloat(v || 0).toLocaleString('en-IN', { minimumFr
 const pct = (v) => `${Math.min(100, parseFloat(v || 0)).toFixed(1)}%`;
 const itemAmount = (i) => parseFloat(i.amount) || (parseFloat(i.quantity || 0) * parseFloat(i.rate || 0));
 
-const UNITS = ['CUM', 'SQM', 'RMT', 'MT', 'KG', 'NOS', 'SQFt', 'LS', 'Bags', 'Ltr', 'Set', 'Brass', 'Drum'];
+import { CONSTRUCTION_UNITS as UNITS } from '../../constants/units';
 
 const EMPTY_FORM = {
   chapter_no: '', chapter_name: '', item_no: '', sr_no: '',

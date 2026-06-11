@@ -16,12 +16,9 @@ import { inventoryAPI, projectAPI } from '../../api/client';
 import { PageHeader, Theme } from '../../theme';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
+import { CONSTRUCTION_UNITS as STORE_UNITS } from '../../constants/units';
 
 const GST_RATE = 0.18;
-const STORE_UNITS = [
-  'Nos', 'Bags', 'Kgs', 'MT', 'Ton', 'Cum', 'Sqm', 'Rmt', 'Ltr', 'Box',
-  'Packet', 'Roll', 'Set', 'Pair', 'Pairs', 'Coils', 'LS',
-];
 const DEFAULT_CATEGORIES = ['Masonry Works'];
 
 /* ── helpers ─────────────────────────────────────────────────── */

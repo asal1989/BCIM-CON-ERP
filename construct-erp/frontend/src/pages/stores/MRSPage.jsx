@@ -20,7 +20,7 @@ import toast from 'react-hot-toast';
 import MRSPrintTemplate from './MRSPrintTemplate';
 import { useReactToPrint } from 'react-to-print';
 
-const UNITS = ['MT', 'Bags', 'CUM', 'Brass', 'Nos', 'RMT', 'Drum', 'Ltr', 'Kg', 'Sqft', 'Bundle', 'Roll', 'Coil', 'Yard', 'Pairs'];
+import { CONSTRUCTION_UNITS as UNITS } from '../../constants/units';
 const DEFAULT_CATEGORIES = ['Masonry Works'];
 
 const STATUS_CONFIG = {

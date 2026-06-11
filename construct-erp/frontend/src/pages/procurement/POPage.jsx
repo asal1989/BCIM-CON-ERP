@@ -38,7 +38,7 @@ const DEFAULT_PO_TERMS = `1. All Bills and DCs should contain the Reference of t
 17. Three copies of Tax invoice (original, duplicate & triplicate) to be submitted along with each consignment supply.
 18. Order to be acknowledged and accepted or reverted if any changes within 4 hours, otherwise it will be considered as accepted.`;
 
-const UNITS = ['MT', 'Bags', 'CUM', 'SQM', 'SQFT', 'Nos', 'RMT', 'KG', 'Litre', 'Month', 'LS', 'Point', 'Day', 'Roll', 'Bundle', 'Coil', 'Drum', 'Yard', 'Pairs', 'Brass'];
+import { CONSTRUCTION_UNITS as UNITS } from '../../constants/units';
 
 // 2-Stage Approval: Procurement → MD
 // Flow: pending → verified_audit (Procurement Approved) → approved (MD Authorized)

@@ -37,7 +37,8 @@ const LOG_STATUS = {
   reviewed:  { label: 'Reviewed',  bg: 'bg-emerald-100',  text: 'text-emerald-700', icon: CheckCircle2 },
 };
 
-const UNITS = ['Sqm','Sqft','Cum','Rmt','Nos','Kg','MT','Bags','Ltrs','Sets','LS','%'];
+import { CONSTRUCTION_UNITS } from '../../constants/units';
+const UNITS = [...CONSTRUCTION_UNITS, '%'];
 const EMPTY_ACT = { activity_id:'', activity_name:'', location:'', unit:'Nos', planned_qty:'', achieved_qty:'', status:'in_progress', remarks:'' };
 const MANAGER_ROLES = new Set([
   'super_admin',

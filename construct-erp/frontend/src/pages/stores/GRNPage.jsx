@@ -17,7 +17,7 @@ import { useReactToPrint } from 'react-to-print';
 import GRNPrintTemplate from './GRNPrintTemplate';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 
-const UNITS = ['MT', 'Bags', 'CUM', 'Brass', 'Nos', 'RMT', 'Drum', 'Ltr', 'Kg', 'Sqft', 'Sqm', 'Pair', 'Roll', 'Bundle'];
+import { CONSTRUCTION_UNITS as UNITS } from '../../constants/units';
 
 const STATUS_CONFIG = {
   pending:         { label: 'Pending',        short: 'Pending',      color: 'bg-amber-50 text-amber-700 border-amber-200',    dot: 'bg-amber-500',   icon: Clock },

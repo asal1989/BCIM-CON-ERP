@@ -35,7 +35,7 @@ const STATUS_META = {
   cancelled:        { label: 'Cancelled',          bg: 'bg-red-100',      text: 'text-red-700',     icon: X },
 };
 
-const UNITS = ['Nos','Kg','MT','Bags','Sqm','Sqft','Cum','Rmt','Ltrs','Sets','Rolls','Sheets','Boxes','Pairs','LS','Bundle','Roll','Coil','Yard'];
+import { CONSTRUCTION_UNITS as UNITS } from '../../constants/units';
 
 /* ── Field label ─────────────────────────────────────────────────────────── */
 const Field = ({ label, required, children, className = '' }) => (

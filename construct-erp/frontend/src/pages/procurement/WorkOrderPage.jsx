@@ -17,7 +17,7 @@ import { subcontractorAPI, vendorAPI, projectAPI } from '../../api/client';
 import toast from 'react-hot-toast';
 import WOPrintTemplate from './WOPrintTemplate';
 
-const UNITS = ['SQFT', 'SQM', 'RMT', 'Nos', 'MT', 'Point', 'Month', 'LS', 'Day'];
+import { CONSTRUCTION_UNITS as UNITS } from '../../constants/units';
 const inr = v => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const STATUS_CONFIG = {

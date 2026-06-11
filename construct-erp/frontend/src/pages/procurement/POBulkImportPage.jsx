@@ -15,7 +15,7 @@ import { clsx } from 'clsx';
 import { useOCRExtract } from '../../hooks/useOCRExtract';
 
 const inputCls = 'w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 transition-all';
-const UNITS = ['LS','Nos','Kg','MT','Sqm','Sqft','Rmt','Rft','Ltr','Cum','Bags','Sets','Lot','Months'];
+import { CONSTRUCTION_UNITS as UNITS } from '../../constants/units';
 const STATUSES = ['approved','pending','part_received','fully_received','rejected'];
 
 const BLANK_ITEM = () => ({ description: '', quantity: '', unit: 'LS', rate: '', gst_rate: '18' });
