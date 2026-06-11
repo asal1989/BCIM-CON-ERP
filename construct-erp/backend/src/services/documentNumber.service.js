@@ -7,6 +7,7 @@ const DOC_NUMBER_TARGETS = {
 const PROJECT_SERIES = {
   'LH-10':     'LANLH10',
   'WDIRY0151': 'DQS',      // Yelahanka — always PODQS / WODQS
+  'DQSTWR001': 'DQS',      // DQS Towers — PODQS / WODQS series
 };
 
 async function getNextDqsNumber(client, targetName, projectCode) {
