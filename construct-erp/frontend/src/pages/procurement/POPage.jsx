@@ -1831,9 +1831,9 @@ export default function POPage() {
                         {h.label}
                         {sortConfig.key === h.key
                           ? (sortConfig.dir === 'asc'
-                              ? <ChevronUp className="w-3 h-3 text-indigo-600" />
-                              : <ChevronDown className="w-3 h-3 text-indigo-600" />)
-                          : <ChevronsUpDown className="w-3 h-3 text-slate-300" />}
+                              ? <ChevronUp className="w-3.5 h-3.5 text-indigo-600" />
+                              : <ChevronDown className="w-3.5 h-3.5 text-indigo-600" />)
+                          : <ChevronsUpDown className="w-3.5 h-3.5 text-slate-500" />}
                       </button>
                     ) : h.label}
                   </th>
