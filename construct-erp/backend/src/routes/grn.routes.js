@@ -147,13 +147,24 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// Helper: generate next bill SL number (mirrors nextSlNumber in tqs-bills.routes.js)
+async function nextBillSlNumber(companyId) {
+  const res = await query(
+    `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(sl_number, '[^0-9]', '', 'g') AS INTEGER)), 0) AS max_num
+     FROM tqs_bills WHERE sl_number ~ '[0-9]' AND company_id = $1`,
+    [companyId]
+  );
+  return `P0-${(Number(res.rows[0]?.max_num) || 0) + 1}`;
+}
+
 // POST /grn (Multi-item inwarding)
 router.post('/', async (req, res) => {
   try {
-    const { 
-      project_id, po_id, vendor_id, grn_date, 
-      vehicle_number, driver_name, challan_number, invoice_number, 
-      site_location, gate_pass_no, wb_slip_no, remarks, items 
+    const {
+      project_id, po_id, po_number, vendor_id, grn_date,
+      vehicle_number, driver_name, challan_number, invoice_number,
+      site_location, gate_pass_no, wb_slip_no, remarks, items,
+      bill: billData,
     } = req.body;
 
     if (!project_id || !items?.length) {
@@ -163,30 +174,37 @@ router.post('/', async (req, res) => {
       return res.status(403).json({ error: 'You do not have access to this project.' });
     }
 
+    // Pre-generate bill SL number outside the transaction (same pattern as tqs-bills route)
+    let billSlNumber = null;
+    if (billData) {
+      billSlNumber = await nextBillSlNumber(req.user.company_id);
+    }
+
     const result = await withTransaction(async (client) => {
       // 1. Generate GRN Number
       const yr = new Date().getFullYear();
       const countRes = await client.query('SELECT COUNT(*) FROM grn');
       const seq = String(parseInt(countRes.rows[0].count) + 1).padStart(4, '0');
       const grn_number = `GRN/${yr}/${seq}`;
-      
+
       // 2. Insert Header (Initial Status: pending)
       const headerRes = await client.query(
         `INSERT INTO grn (
-          project_id, po_id, vendor_id, grn_number, grn_date, 
-          vehicle_number, driver_name, challan_number, invoice_number, 
-          site_location, gate_pass_no, wb_slip_no, remarks, 
+          project_id, po_id, vendor_id, grn_number, grn_date,
+          vehicle_number, driver_name, challan_number, invoice_number,
+          site_location, gate_pass_no, wb_slip_no, remarks,
           quality_status, received_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'pending', $14) RETURNING *`,
-        [project_id, po_id, vendor_id, grn_number, grn_date, vehicle_number, driver_name, challan_number, invoice_number, site_location, gate_pass_no, wb_slip_no, remarks, req.user.id]
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'pending',$14) RETURNING *`,
+        [project_id, po_id, vendor_id, grn_number, grn_date, vehicle_number, driver_name,
+         challan_number, invoice_number, site_location, gate_pass_no, wb_slip_no, remarks, req.user.id]
       );
       const grnId = headerRes.rows[0].id;
 
       // 3. Insert Items
       let totalQty = 0;
+      const processedItems = [];
       for (let i = 0; i < items.length; i++) {
         const it = items[i];
-        // Thumb rule: if stores counted in a different unit, auto-convert to PO unit
         const hasThumbRule = it.physical_qty && it.physical_unit && it.conversion_factor && it.conversion_factor !== 1;
         const qtyInPoUnit = hasThumbRule
           ? parseFloat(it.physical_qty) * parseFloat(it.conversion_factor)
@@ -197,41 +215,170 @@ router.post('/', async (req, res) => {
             grn_id, material_name, quantity_received, unit, rate,
             physical_qty, physical_unit, conversion_factor,
             po_item_id, quality_remarks, batch_number, expiry_date, sort_order
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-          [
-            grnId, it.material_name || null,
-            qtyInPoUnit, it.unit,
-            it.rate ? parseFloat(it.rate) : 0,
-            it.physical_qty  || null,
-            it.physical_unit || null,
-            it.conversion_factor ? parseFloat(it.conversion_factor) : 1,
-            it.po_item_id || null,
-            it.quality_remarks || null,
-            it.batch_number || null,
-            it.expiry_date  || null,
-            i + 1
-          ]
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+          [grnId, it.material_name || null, qtyInPoUnit, it.unit,
+           it.rate ? parseFloat(it.rate) : 0,
+           it.physical_qty || null, it.physical_unit || null,
+           it.conversion_factor ? parseFloat(it.conversion_factor) : 1,
+           it.po_item_id || null, it.quality_remarks || null,
+           it.batch_number || null, it.expiry_date || null, i + 1]
         );
         totalQty += qtyInPoUnit;
+        processedItems.push({ ...it, _qty: qtyInPoUnit, _rate: parseFloat(it.rate || 0) });
       }
 
       // 4. Update Header with totals
       const projRes = await client.query('SELECT project_code FROM projects WHERE id = $1', [project_id]);
       const serial_no_formatted = `BCIM-${projRes.rows[0].project_code || 'PRJ'}-GRN-${seq}`;
-      
       const finalRes = await client.query(
         `UPDATE grn SET total_quantity = $1, serial_no_formatted = $2 WHERE id = $3 RETURNING *`,
         [totalQty, serial_no_formatted, grnId]
       );
+      const grnRow = finalRes.rows[0];
 
-      return finalRes.rows[0];
+      // 5. Optionally create TQS Bill in the same transaction
+      let billRow = null;
+      if (billData && billSlNumber) {
+        const tax_mode = billData.tax_mode || 'intrastate';
+        const defaultGstPct = parseFloat(billData.gst_pct) || 18;
+        const itemGstOverrides = billData.item_gst_overrides || {};
+        const transport_charges = parseFloat(billData.transport_charges) || 0;
+        const transport_gst_pct = parseFloat(billData.transport_gst_pct) || 18;
+        const transport_gst_amt = transport_charges * transport_gst_pct / 100;
+        const other_charges = parseFloat(billData.other_charges) || 0;
+        const inv_date = billData.inv_date || null;
+        const inv_month = inv_date ? inv_date.slice(0, 7) : null;
+
+        // Vendor name lookup
+        const vendorRes = vendor_id
+          ? await client.query('SELECT name FROM vendors WHERE id = $1', [vendor_id])
+          : { rows: [] };
+        const vendor_name = vendorRes.rows[0]?.name || '';
+
+        // Duplicate invoice guard
+        if (invoice_number && vendor_name) {
+          const dup = await client.query(
+            `SELECT id FROM tqs_bills
+             WHERE is_deleted = FALSE AND company_id = $1
+               AND LOWER(BTRIM(COALESCE(vendor_name,''))) = $2
+               AND LOWER(BTRIM(COALESCE(inv_number,''))) = $3
+             LIMIT 1`,
+            [req.user.company_id, vendor_name.toLowerCase().trim(), invoice_number.toLowerCase().trim()]
+          );
+          if (dup.rows.length) {
+            throw Object.assign(
+              new Error(`Duplicate invoice: "${invoice_number}" for "${vendor_name}" already exists in Bill Tracker.`),
+              { status: 409 }
+            );
+          }
+        }
+
+        // Calculate line-item amounts
+        let basic_amount = 0;
+        let cgst_pct_hdr = 0, sgst_pct_hdr = 0, igst_pct_hdr = 0;
+        let cgst_amt = 0, sgst_amt = 0, igst_amt = 0;
+        const billItems = processedItems.map((it, i) => {
+          const qty = it._qty;
+          const rate = it._rate;
+          const basic = qty * rate;
+          const gstPct = parseFloat(itemGstOverrides[String(i)] ?? defaultGstPct);
+          let cgP = 0, sgP = 0, igP = 0, cgA = 0, sgA = 0, igA = 0;
+          if (tax_mode === 'interstate') { igP = gstPct; igA = basic * igP / 100; }
+          else { cgP = gstPct / 2; sgP = gstPct / 2; cgA = basic * cgP / 100; sgA = basic * sgP / 100; }
+          basic_amount += basic;
+          cgst_amt += cgA; sgst_amt += sgA; igst_amt += igA;
+          if (i === 0) { cgst_pct_hdr = cgP; sgst_pct_hdr = sgP; igst_pct_hdr = igP; }
+          return { item_name: it.material_name, unit: it.unit, qty, rate, basic,
+                   gstPct, mode: tax_mode, cgP, cgA, sgP, sgA, igP, igA,
+                   gstA: cgA + sgA + igA, line_total: basic + cgA + sgA + igA,
+                   po_item_id: it.po_item_id || null };
+        });
+        const gst_amount = cgst_amt + sgst_amt + igst_amt;
+        const total_amount = basic_amount + gst_amount + transport_charges + transport_gst_amt + other_charges;
+
+        // Insert tqs_bills header
+        const billRes = await client.query(`
+          INSERT INTO tqs_bills (
+            company_id, project_id, sl_number, vendor_id, vendor_name,
+            po_id, grn_id, po_number, inv_number, inv_date, inv_month, received_date,
+            bill_type, tax_mode,
+            basic_amount, cgst_pct, cgst_amt, sgst_pct, sgst_amt,
+            igst_pct, igst_amt, gst_amount,
+            transport_charges, transport_gst_pct, transport_gst_amt, transport_desc,
+            other_charges, other_charges_desc,
+            total_amount, remarks, workflow_status, created_by
+          ) VALUES (
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
+            $15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32
+          ) RETURNING *
+        `, [
+          req.user.company_id, project_id, billSlNumber, vendor_id || null, vendor_name,
+          po_id || null, grnId, po_number || null, invoice_number, inv_date, inv_month, grn_date,
+          'po', tax_mode,
+          basic_amount, cgst_pct_hdr, cgst_amt, sgst_pct_hdr, sgst_amt,
+          igst_pct_hdr, igst_amt, gst_amount,
+          transport_charges, transport_gst_pct, transport_gst_amt, billData.transport_desc || null,
+          other_charges, billData.other_charges_desc || null,
+          total_amount, remarks || null, 'pending', req.user.id,
+        ]);
+        const billId = billRes.rows[0].id;
+
+        // Bill updates tracking row
+        await client.query(
+          `INSERT INTO tqs_bill_updates (bill_id, balance_to_pay) VALUES ($1, $2)`,
+          [billId, total_amount]
+        );
+
+        // Line items + inventory upsert + stock transaction
+        for (let idx = 0; idx < billItems.length; idx++) {
+          const li = billItems[idx];
+          await client.query(`
+            INSERT INTO tqs_bill_line_items
+              (bill_id, item_name, unit, quantity, rate, discount_amount, basic_amount, gst_pct, gst_mode,
+               cgst_pct, cgst_amt, sgst_pct, sgst_amt, igst_pct, igst_amt, gst_amount, total_amount,
+               sort_order, po_item_id)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+          `, [billId, li.item_name, li.unit, li.qty, li.rate, 0, li.basic,
+              li.gstPct, li.mode, li.cgP, li.cgA, li.sgP, li.sgA, li.igP, li.igA,
+              li.gstA, li.line_total, idx, li.po_item_id]);
+
+          if (li.item_name && li.qty > 0) {
+            const invRes = await client.query(`
+              INSERT INTO inventory (project_id, material_name, unit, unit_rate, closing_stock, site_location, last_updated)
+              VALUES ($1,$2,$3,$4,$5,'main',NOW())
+              ON CONFLICT (project_id, material_name, site_location)
+              DO UPDATE SET
+                closing_stock = inventory.closing_stock + $5,
+                unit_rate = CASE WHEN $4 > 0 THEN $4 ELSE inventory.unit_rate END,
+                unit = COALESCE($3, inventory.unit),
+                last_updated = NOW()
+              RETURNING id
+            `, [project_id, String(li.item_name).trim(), li.unit || 'Nos', li.rate, li.qty]);
+
+            const inventoryId = invRes.rows[0]?.id;
+            if (inventoryId) {
+              await client.query(`
+                INSERT INTO stock_transactions
+                  (project_id, inventory_id, transaction_type, quantity,
+                   reference_id, reference_number, remarks, transacted_by, transacted_at)
+                VALUES ($1,$2,'bill_receipt',$3,$4,$5,$6,$7,NOW())
+              `, [project_id, inventoryId, li.qty, billId, billSlNumber,
+                  `Received via Invoice ${invoice_number || ''} — ${vendor_name}`, req.user.id]);
+            }
+          }
+        }
+
+        billRow = billRes.rows[0];
+      }
+
+      return { grn: grnRow, bill: billRow };
     });
 
     // Fire-and-forget push notification to stores team
-    notifyGrnSubmitted(req.user.company_id, result);
-    res.status(201).json({ data: result });
+    notifyGrnSubmitted(req.user.company_id, result.grn);
+    res.status(201).json({ data: result.grn, bill: result.bill || null });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
