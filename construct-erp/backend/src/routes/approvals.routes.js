@@ -230,7 +230,7 @@ router.get('/pending', async (req, res) => {
           SELECT po.id,
                  COALESCE(po.po_number, po.id::text) AS ref_no,
                  po.po_date AS doc_date,
-                 COALESCE(po.grand_total, po.total_amount, 0) AS amount,
+                 COALESCE(po.grand_total, 0) AS amount,
                  po.status, po.created_at,
                  po.status AS current_stage,
                  v.name AS party_name,
