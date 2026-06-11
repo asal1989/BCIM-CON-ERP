@@ -370,13 +370,12 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-// ── Dropdown mega-menu ───────────────────────────────────────────────────────
+// ── Dropdown menu — groups expand to their own sub-menus (accordion) ─────────
 function GroupDropdown({ group, onClose, pos, onKeepOpen, onStartClose }) {
   const location = useLocation();
   const { t } = useLanguage();
   const color = GROUP_COLORS[group.label] || '#6366F1';
   const sections = getNavSections(group);
-  const isProcurementMenu = group.label === 'Procurement';
 
   const matchesPath = (itemTo) => {
     const p = itemTo.split('?')[0];
@@ -385,7 +384,146 @@ function GroupDropdown({ group, onClose, pos, onKeepOpen, onStartClose }) {
     return segs.length >= 2 && location.pathname.startsWith(p + '/');
   };
 
-  // Determine column count based on section count
+  // Any labelled section with 2+ items becomes an expandable sub-menu group
+  const hasSubMenus = sections.some(s => s.label && s.items.length > 1);
+  const activeSection = sections.find(s => s.items.some(i => matchesPath(i.to)));
+  const [openGroups, setOpenGroups] = useState(() => new Set(activeSection?.label ? [activeSection.label] : []));
+  const toggleGroup = (label) => setOpenGroups(prev => {
+    const next = new Set(prev);
+    if (next.has(label)) next.delete(label); else next.add(label);
+    return next;
+  });
+
+  const renderItem = (item) => {
+    const active = matchesPath(item.to);
+    const Icon = item.icon;
+    return (
+      <NavLink
+        key={item.to}
+        to={item.to}
+        onClick={onClose}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '5px 12px',
+          borderRadius: 6, margin: '1px 4px',
+          background: active ? hexToRgba(color, 0.08) : 'transparent',
+          color: active ? color : '#0F172A',
+          textDecoration: 'none',
+          fontSize: 11, fontWeight: active ? 700 : 600,
+          textTransform: 'uppercase', letterSpacing: '0.04em',
+          whiteSpace: 'nowrap',
+          transition: 'background 0.12s',
+        }}
+        onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#F8FAFC'; }}
+        onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+      >
+        <Icon size={12} style={{ flexShrink: 0, color: active ? color : '#475569' }} />
+        <span>{t(item.label)}</span>
+        {item.badge && (
+          <span style={{ marginLeft: 'auto', background: '#EF4444', color: '#fff', fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 10 }}>
+            {item.badge}
+          </span>
+        )}
+      </NavLink>
+    );
+  };
+
+  const vw = window.innerWidth;
+
+  // ── Accordion mode: group headers expand to their own sub-menus ──
+  if (hasSubMenus) {
+    const dropW = 280;
+    let left = pos.left;
+    if (left + dropW > vw - 8) left = vw - dropW - 8;
+    if (left < 8) left = 8;
+
+    return (
+      <div
+        style={{
+          position: 'fixed',
+          top: pos.top,
+          left,
+          background: '#fff',
+          border: '1px solid #E2E8F0',
+          borderTop: `3px solid ${color}`,
+          borderRadius: '0 0 12px 12px',
+          boxShadow: '0 16px 48px rgba(0,0,0,0.14)',
+          width: dropW,
+          zIndex: 9999,
+          padding: '8px 0 12px',
+        }}
+        data-nav-dropdown="true"
+        onMouseEnter={onKeepOpen}
+        onMouseLeave={onStartClose}
+      >
+        {/* Group header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '5px 16px 8px',
+          borderBottom: '1px solid #F1F5F9', marginBottom: 4,
+        }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+          <span style={{ fontSize: 11, fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            {t(group.label)}
+          </span>
+        </div>
+
+        <div style={{ maxHeight: '72vh', overflowY: 'auto', padding: '0 4px' }}>
+          {sections.map((section) => {
+            const isGroup = section.label && section.items.length > 1;
+            if (!isGroup) return section.items.map(item => renderItem(item));
+
+            const isOpen    = openGroups.has(section.label);
+            const hasActive = section.items.some(i => matchesPath(i.to));
+            const HeadIcon  = section.items[0]?.icon || ChevronRight;
+            return (
+              <div key={section.label}>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(section.label)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    width: 'calc(100% - 8px)',
+                    padding: '6px 12px',
+                    borderRadius: 6, margin: '1px 4px',
+                    background: isOpen ? hexToRgba(color, 0.06) : 'transparent',
+                    color: hasActive ? color : '#0F172A',
+                    border: 'none', cursor: 'pointer', textAlign: 'left',
+                    fontSize: 11, fontWeight: 800,
+                    textTransform: 'uppercase', letterSpacing: '0.04em',
+                    whiteSpace: 'nowrap',
+                    transition: 'background 0.12s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = isOpen ? hexToRgba(color, 0.06) : '#F8FAFC'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = isOpen ? hexToRgba(color, 0.06) : 'transparent'; }}
+                >
+                  <HeadIcon size={12} style={{ flexShrink: 0, color: hasActive ? color : '#475569' }} />
+                  <span>{t(section.label)}</span>
+                  <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 700, color: '#94A3B8' }}>{section.items.length}</span>
+                  <ChevronDown size={12} style={{
+                    flexShrink: 0, color: '#94A3B8',
+                    transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.15s',
+                  }} />
+                </button>
+                {isOpen && (
+                  <div style={{
+                    margin: '0 4px 2px 14px',
+                    paddingLeft: 6,
+                    borderLeft: `2px solid ${hexToRgba(color, 0.25)}`,
+                  }}>
+                    {section.items.map(item => renderItem(item))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Flat mode (modules without sub-menu groups) — original grid layout ──
   const numCols = sections.length <= 2 ? 1 : sections.length <= 5 ? 2 : 3;
   const colW    = numCols === 1 ? 210 : numCols === 2 ? 230 : 220;
   const dropW   = numCols * colW + (numCols - 1) * 1 + 24; // columns + dividers + padding
@@ -394,8 +532,6 @@ function GroupDropdown({ group, onClose, pos, onKeepOpen, onStartClose }) {
   const cols = Array.from({ length: numCols }, () => []);
   sections.forEach((sec, i) => cols[i % numCols].push(sec));
 
-  // Keep dropdown within viewport
-  const vw = window.innerWidth;
   let left = pos.left;
   if (left + dropW > vw - 8) left = vw - dropW - 8;
   if (left < 8) left = 8;
@@ -449,39 +585,7 @@ function GroupDropdown({ group, onClose, pos, onKeepOpen, onStartClose }) {
                     {t(section.label)}
                   </div>
                 )}
-                {section.items.map(item => {
-                  const active = matchesPath(item.to);
-                  const Icon = item.icon;
-                  return (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      onClick={onClose}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        padding: '5px 12px',
-                        borderRadius: 6, margin: '1px 4px',
-                        background: active ? hexToRgba(color, 0.08) : 'transparent',
-                        color: active ? color : '#0F172A',
-                        textDecoration: 'none',
-                        fontSize: 11, fontWeight: active ? 700 : 600,
-                        textTransform: 'uppercase', letterSpacing: '0.04em',
-                        whiteSpace: 'nowrap',
-                        transition: 'background 0.12s',
-                      }}
-                      onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#F8FAFC'; }}
-                      onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
-                    >
-                      <Icon size={12} style={{ flexShrink: 0, color: active ? color : '#475569' }} />
-                      <span>{t(item.label)}</span>
-                      {item.badge && (
-                        <span style={{ marginLeft: 'auto', background: '#EF4444', color: '#fff', fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 10 }}>
-                          {item.badge}
-                        </span>
-                      )}
-                    </NavLink>
-                  );
-                })}
+                {section.items.map(item => renderItem(item))}
               </div>
             ))}
           </div>
