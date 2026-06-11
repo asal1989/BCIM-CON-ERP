@@ -92,8 +92,9 @@ export default function VendorList() {
     setEditVendor(v);
     reset({
       name: v.name, trade_name: v.trade_name, vendor_type: v.vendor_type,
-      contact_person: v.contact_person, phone: v.phone, email: v.email,
-      website_url: v.website_url, credit_days: v.credit_days || 30,
+      contact_person: v.contact_person, phone: v.phone,
+      mobile_number_1: v.mobile_number_1, mobile_number_2: v.mobile_number_2,
+      email: v.email, website_url: v.website_url, credit_days: v.credit_days || 30,
       gstin: v.gstin, pan: v.pan, trade_license: v.trade_license,
       msme_reg: v.msme_reg, address: v.address, city: v.city,
       pincode: v.pincode, state: v.state,
@@ -317,6 +318,8 @@ export default function VendorList() {
                         <Detail label="GSTIN" value={v.gstin} mono />
                         <Detail label="Website" value={v.website_url} />
                         <Detail label="Email" value={v.email} />
+                        <Detail label="Mobile Number 1" value={v.mobile_number_1} />
+                        <Detail label="Mobile Number 2" value={v.mobile_number_2} />
                         <Detail label="Address" value={[v.address, v.city, v.state, v.pincode].filter(Boolean).join(', ')} />
                         <Detail label="Credit Days" value={v.credit_days ? `${v.credit_days} days` : '—'} />
                         <Detail label="Trade License" value={v.trade_license} />
@@ -388,6 +391,12 @@ export default function VendorList() {
                   </FormField>
                   <FormField label="Phone">
                     <input {...register('phone')} className={inputCls} placeholder="9876543210" maxLength={15} />
+                  </FormField>
+                  <FormField label="Mobile Number 1">
+                    <input {...register('mobile_number_1')} className={inputCls} placeholder="9876543210" maxLength={15} />
+                  </FormField>
+                  <FormField label="Mobile Number 2">
+                    <input {...register('mobile_number_2')} className={inputCls} placeholder="9876543210" maxLength={15} />
                   </FormField>
                   <div className="col-span-2">
                     <FormField label="Email">

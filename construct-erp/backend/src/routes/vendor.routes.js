@@ -278,6 +278,7 @@ vendorRouter.post('/', authorize('super_admin', 'admin', 'procurement_manager'),
   try {
     const {
       name, gstin, pan, vendor_type, contact_person, phone, email,
+      mobile_number_1, mobile_number_2,
       address, city, state, pincode, trade_name, trade_license, msme_reg,
       bank_name, account_number, ifsc_code, bank_branch, notes, website_url, credit_days,
       trade_category, contract_start_date, contract_end_date, subcontractor_status,
@@ -289,15 +290,17 @@ vendorRouter.post('/', authorize('super_admin', 'admin', 'procurement_manager'),
     const result = await query(
       `INSERT INTO vendors (
         company_id, vendor_code, name, trade_name, gstin, pan, vendor_type,
-        contact_person, phone, email, address, city, state, pincode,
+        contact_person, phone, email, mobile_number_1, mobile_number_2,
+        address, city, state, pincode,
         trade_license, msme_reg, bank_name, account_number, ifsc_code,
         bank_branch, notes, website_url, credit_days,
         trade_category, contract_start_date, contract_end_date, subcontractor_status
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
       RETURNING *`,
       [
         req.user.company_id, code, cleanName, trade_name||'', gstin||'', pan||'', vendor_type||'',
-        contact_person||'', phone||'', email||'', address||'', city||'', state||'', pincode||'',
+        contact_person||'', phone||'', email||'', mobile_number_1||'', mobile_number_2||'',
+        address||'', city||'', state||'', pincode||'',
         trade_license||'', msme_reg||'', bank_name||'', account_number||'', ifsc_code||'',
         bank_branch||'', notes||'', website_url||'', credit_days || 30,
         trade_category || null, contract_start_date || null, contract_end_date || null,
@@ -402,6 +405,7 @@ vendorRouter.put('/:id', authorize('super_admin', 'admin', 'procurement_manager'
     }
     const allowed = [
       'name', 'trade_name', 'gstin', 'pan', 'vendor_type', 'contact_person', 'phone',
+      'mobile_number_1', 'mobile_number_2',
       'email', 'address', 'city', 'state', 'pincode', 'trade_license', 'msme_reg',
       'bank_name', 'account_number', 'ifsc_code', 'bank_branch', 'notes', 'website_url',
       'credit_days', 'is_active',
