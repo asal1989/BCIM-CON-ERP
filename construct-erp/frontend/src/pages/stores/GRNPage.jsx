@@ -1047,15 +1047,15 @@ function GRNForm({ onClose, projects, qc }) {
               className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm outline-none focus:border-indigo-400 resize-none" />
           </div>
 
-          {/* Bill Entry Toggle — shown only when invoice_number is filled */}
-          {form.invoice_number && (
-            <div className="border border-blue-200 rounded-xl overflow-hidden">
+          {/* Bill Entry Toggle */}
+          <div className="border border-blue-200 rounded-xl overflow-hidden">
               <div className="flex items-center justify-between px-5 py-3 bg-blue-50">
                 <label className="flex items-center gap-2.5 cursor-pointer">
                   <input type="checkbox" checked={createBill} onChange={e => setCreateBill(e.target.checked)}
                     className="w-4 h-4 rounded border-blue-300 accent-blue-600" />
                   <span className="text-sm font-semibold text-blue-800">
-                    Also create Bill Tracker entry for invoice <span className="font-mono">{form.invoice_number}</span>
+                    Also create Bill Tracker entry
+                    {form.invoice_number && <span className="font-mono ml-1">· {form.invoice_number}</span>}
                   </span>
                 </label>
                 <span className="text-xs text-blue-500 font-medium">Saves re-entry</span>
@@ -1227,7 +1227,6 @@ function GRNForm({ onClose, projects, qc }) {
                 </div>
               )}
             </div>
-          )}
         </div>
 
         {/* Footer */}
