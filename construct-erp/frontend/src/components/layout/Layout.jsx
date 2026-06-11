@@ -1093,12 +1093,13 @@ const WELCOME_PARTICLES = [
 
 function WelcomeScreen({ user, onDone }) {
   const [phase, setPhase] = useState('enter'); // enter → stay → exit
+  const onDoneRef = useRef(onDone);
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase('exit'), 2600);
-    const t2 = setTimeout(() => onDone(),          3200);
+    const t2 = setTimeout(() => onDoneRef.current(), 3200);
     return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [onDone]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const roleLabel = (user?.role || '').replace(/_/g, ' ');
   const firstName = (user?.name || 'there').split(' ')[0];
@@ -1284,12 +1285,13 @@ function getGreeting() {
 // ── Logout Screen ─────────────────────────────────────────────────────────────
 function LogoutScreen({ user, onDone }) {
   const [phase, setPhase] = useState('enter');
+  const onDoneRef = useRef(onDone);
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase('exit'), 2200);
-    const t2 = setTimeout(() => onDone(),          2700);
+    const t2 = setTimeout(() => onDoneRef.current(), 2700);
     return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [onDone]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const firstName = (user?.name || 'there').split(' ')[0];
 
