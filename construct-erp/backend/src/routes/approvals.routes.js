@@ -246,7 +246,7 @@ router.get('/pending', async (req, res) => {
           JOIN projects p ON p.id = po.project_id
           LEFT JOIN vendors v ON v.id = po.vendor_id
           LEFT JOIN users u ON u.id = po.created_by
-          WHERE po.company_id = $1 AND po.status IN (${ph})
+          WHERE p.company_id = $1 AND po.status IN (${ph})
           ORDER BY po.created_at ASC
           LIMIT 50`, [cid, ...poStatuses]);
         items.push(...r.rows);
