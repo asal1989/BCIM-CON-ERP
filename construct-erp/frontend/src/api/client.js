@@ -911,6 +911,17 @@ export const dmsAPI = {
   reportUserActivity: ()    => api.get('/dms/reports/user-activity'),
 };
 
+// ─── GFC Master Log ──────────────────────────────────────────────────────────
+export const gfcAPI = {
+  list:         (p)       => api.get('/gfc/drawings', { params: p }),
+  stats:        (p)       => api.get('/gfc/stats', { params: p }),
+  create:       (d)       => api.post('/gfc/drawings', d),
+  update:       (id, d)   => api.patch(`/gfc/drawings/${id}`, d),
+  remove:       (id)      => api.delete(`/gfc/drawings/${id}`),
+  addRevision:  (id, d)   => api.post(`/gfc/drawings/${id}/revisions`, d),
+  revisions:    (id)      => api.get(`/gfc/drawings/${id}/revisions`),
+};
+
 // ─── Subcontractor Management ─────────────────────────────────────────────────
 export const subMgmtAPI = {
   dashboard:       (p)      => api.get('/subcontractor-mgmt/dashboard', { params: p }),

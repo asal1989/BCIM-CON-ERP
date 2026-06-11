@@ -204,7 +204,8 @@ const navGroups = [
     { to: '/assets/documents',      icon: FolderSearch,    label: 'Module Documents' },
   ]},
   { label: 'DMS', items: [
-    { to: '/dms',   icon: FolderOpen, label: 'Document Repository' },
+    { to: '/dms',         icon: FolderOpen, label: 'Document Repository' },
+    { to: '/dms/gfc-log', icon: Layers,     label: 'GFC Master Log' },
   ]},
   { label: 'Subcontractors', items: [
     { to: '/sc/dashboard',        icon: LayoutDashboard, label: 'Dashboard' },

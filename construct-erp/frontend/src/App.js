@@ -92,6 +92,7 @@ const WOBulkImportPage      = lazy(() => import('./pages/procurement/WOBulkImpor
 const TenderRegisterPage          = lazy(() => import('./pages/tender-mgmt/TenderRegisterPage'));
 const TenderManagementPage        = lazy(() => import('./pages/tender-mgmt/TenderManagementPage'));
 const DMSPage                     = lazy(() => import('./pages/documents/DMSPage'));
+const GFCMasterLogPage            = lazy(() => import('./pages/documents/GFCMasterLogPage'));
 const TenderMgmtDetailPage        = lazy(() => import('./pages/tender-mgmt/TenderDetailPage'));
 const TenderIssuancePage          = lazy(() => import('./pages/tender-mgmt/TenderIssuancePage'));
 const TenderIssuanceDetailPage    = lazy(() => import('./pages/tender-mgmt/TenderIssuanceDetailPage'));
@@ -631,6 +632,7 @@ export default function App() {
                 {/* Documents — shared repo (legacy / direct link) */}
                 <Route path="documents"     element={<DocumentsPage />} />
                 <Route path="dms"           element={<DMSPage />} />
+                <Route path="dms/gfc-log"   element={<GFCMasterLogPage />} />
 
                 {/* Department document repositories */}
                 <Route path="planning/documents"              element={<RequireModule module="Planning"><DocumentsPage /></RequireModule>} />
