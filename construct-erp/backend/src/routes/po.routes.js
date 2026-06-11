@@ -857,7 +857,7 @@ router.post('/', async (req, res) => {
           `INSERT INTO po_items (
             po_id, material_name, hsn_code, quantity, unit, rate, gst_rate, req_date, sort_order
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-          [poId, item.material_name, item.hsn_code || null, item.quantity, item.unit, item.rate, item.gst_rate || 0, item.req_date || null, i + 1]
+          [poId, item.material_name, item.hsn_code || null, parseFloat(item.quantity) || 0, item.unit, parseFloat(item.rate) || 0, parseFloat(item.gst_rate) || 0, item.req_date || null, i + 1]
         );
         subTotal += basic;
         totalGst += gst;

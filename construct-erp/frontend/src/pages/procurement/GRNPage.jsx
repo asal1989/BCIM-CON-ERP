@@ -564,7 +564,7 @@ export default function GRNPage() {
                            </div>
                            <div className="col-span-2 space-y-2">
                               <label className="text-[9px] font-medium text-slate-900 font-medium uppercase tracking-widest italic">Qty Recd</label>
-                              <input type="number" className="w-full bg-white border border-slate-200 py-3 px-4 rounded-xl text-xs font-medium text-blue-600 font-mono outline-none focus:border-blue-400 shadow-sm transition-all" value={it.quantity_received} onChange={e => setItems(p => p.map((x, idx) => idx === i ? { ...x, quantity_received: e.target.value } : x))} />
+                              <input type="number" step="any" min="0" className="w-full bg-white border border-slate-200 py-3 px-4 rounded-xl text-xs font-medium text-blue-600 font-mono outline-none focus:border-blue-400 shadow-sm transition-all" value={it.quantity_received} onChange={e => setItems(p => p.map((x, idx) => idx === i ? { ...x, quantity_received: e.target.value } : x))} />
                            </div>
                            <div className="col-span-2 space-y-2">
                               <label className="text-[9px] font-medium text-slate-900 font-medium uppercase tracking-widest italic">Unit</label>

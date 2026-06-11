@@ -465,10 +465,10 @@ function WorkOrdersTab({ projectId, projects, vendors }) {
                         <input value={it.unit} onChange={e => setWoLineItems(l => l.map((x, i) => i === idx ? { ...x, unit: e.target.value } : x))} className={inputCls + ' text-xs'} placeholder="CUM" />
                       </td>
                       <td className="px-1 py-1">
-                        <input type="number" value={it.quantity} onChange={e => setWoLineItems(l => l.map((x, i) => i === idx ? { ...x, quantity: e.target.value } : x))} className={inputCls + ' text-xs text-right'} placeholder="0" min="0" />
+                        <input type="number" step="any" value={it.quantity} onChange={e => setWoLineItems(l => l.map((x, i) => i === idx ? { ...x, quantity: e.target.value } : x))} className={inputCls + ' text-xs text-right'} placeholder="0" min="0" />
                       </td>
                       <td className="px-1 py-1">
-                        <input type="number" value={it.rate} onChange={e => setWoLineItems(l => l.map((x, i) => i === idx ? { ...x, rate: e.target.value } : x))} className={inputCls + ' text-xs text-right'} placeholder="0" min="0" />
+                        <input type="number" step="any" value={it.rate} onChange={e => setWoLineItems(l => l.map((x, i) => i === idx ? { ...x, rate: e.target.value } : x))} className={inputCls + ' text-xs text-right'} placeholder="0" min="0" />
                       </td>
                       <td className="px-2 py-1 text-right font-medium text-slate-700">
                         {parseFloat(it.quantity || 0) * parseFloat(it.rate || 0) > 0 ? fmt(parseFloat(it.quantity) * parseFloat(it.rate)) : '—'}

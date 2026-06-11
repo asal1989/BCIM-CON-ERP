@@ -344,8 +344,8 @@ function WOForm({ wo, projects, subcontractors, onClose }) {
                         {['Sqm','Sqft','Cum','Rmt','Nos','Kg','MT','LS','Bags','Ltrs','Running Meter'].map(u=><option key={u}>{u}</option>)}
                       </select>
                     </td>
-                    <td className="px-2 py-2"><input type="number" value={it.qty} onChange={e=>setItem(i,'qty',e.target.value)} className="w-20 border border-slate-200 rounded px-2 py-1 text-xs outline-none text-right" min={0}/></td>
-                    <td className="px-2 py-2"><input type="number" value={it.rate} onChange={e=>setItem(i,'rate',e.target.value)} className="w-24 border border-slate-200 rounded px-2 py-1 text-xs outline-none text-right" min={0}/></td>
+                    <td className="px-2 py-2"><input type="number" step="any" value={it.qty} onChange={e=>setItem(i,'qty',e.target.value)} className="w-20 border border-slate-200 rounded px-2 py-1 text-xs outline-none text-right" min={0}/></td>
+                    <td className="px-2 py-2"><input type="number" step="any" value={it.rate} onChange={e=>setItem(i,'rate',e.target.value)} className="w-24 border border-slate-200 rounded px-2 py-1 text-xs outline-none text-right" min={0}/></td>
                     <td className="px-2 py-2 font-bold text-indigo-600 text-right">{fmt(num(it.qty)*num(it.rate))}</td>
                     <td className="px-2 py-2"><button onClick={()=>removeItem(i)} className="text-red-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5"/></button></td>
                   </tr>

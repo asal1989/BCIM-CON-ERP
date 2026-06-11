@@ -1465,9 +1465,9 @@ function POImportModal({ onClose, vendors, projects, onImported }) {
                               {UNITS.map(u => <option key={u}>{u}</option>)}
                             </select>
                           </td>
-                          <td className="px-2 py-1"><input type="number" value={it.quantity || ''} onChange={e => updateItem(i,'quantity',e.target.value)} className="w-16 border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-indigo-400" /></td>
-                          <td className="px-2 py-1"><input type="number" value={it.rate || ''} onChange={e => updateItem(i,'rate',e.target.value)} className="w-20 border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-indigo-400" /></td>
-                          <td className="px-2 py-1"><input type="number" value={it.gst_rate ?? 18} onChange={e => updateItem(i,'gst_rate',e.target.value)} className="w-12 border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-indigo-400" /></td>
+                          <td className="px-2 py-1"><input type="number" step="any" min="0" value={it.quantity || ''} onChange={e => updateItem(i,'quantity',e.target.value)} className="w-16 border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-indigo-400" /></td>
+                          <td className="px-2 py-1"><input type="number" step="any" min="0" value={it.rate || ''} onChange={e => updateItem(i,'rate',e.target.value)} className="w-20 border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-indigo-400" /></td>
+                          <td className="px-2 py-1"><input type="number" step="any" min="0" value={it.gst_rate ?? 18} onChange={e => updateItem(i,'gst_rate',e.target.value)} className="w-12 border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-indigo-400" /></td>
                           <td className="px-2 py-1"><input value={it.hsn_code || ''} onChange={e => updateItem(i,'hsn_code',e.target.value)} className="w-16 border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-indigo-400" /></td>
                           <td className="px-2 py-1"><button onClick={() => removeItem(i)} className="text-red-400 hover:text-red-600"><X className="w-3.5 h-3.5" /></button></td>
                         </tr>

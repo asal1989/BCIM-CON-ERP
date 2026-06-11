@@ -265,11 +265,13 @@ const createWorkOrder = async (req, res) => {
       if (items && items.length > 0) {
         let itemsTotal = 0;
         for (const item of items) {
-          itemsTotal += parseFloat(item.quantity) * parseFloat(item.rate);
+          const qty  = parseFloat(item.quantity) || 0;
+          const rate = parseFloat(item.rate)     || 0;
+          itemsTotal += qty * rate;
           await client.query(
             `INSERT INTO work_order_items (wo_id, description, unit, quantity, rate, remarks)
              VALUES ($1,$2,$3,$4,$5,$6)`,
-            [wo.id, item.description, item.unit, item.quantity, item.rate, item.remarks || null]
+            [wo.id, item.description, item.unit, qty, rate, item.remarks || null]
           );
         }
         await client.query(

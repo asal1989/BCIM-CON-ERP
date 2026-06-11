@@ -350,7 +350,7 @@ router.post('/work-orders/import/confirm', async (req, res) => {
         await client.query(
           `INSERT INTO work_order_items (wo_id, description, unit, quantity, rate, remarks)
            VALUES ($1,$2,$3,$4,$5,$6)`,
-          [wo_id, it.description, it.unit, it.quantity, it.rate, it.remarks]
+          [wo_id, it.description, it.unit, parseFloat(it.quantity) || 0, parseFloat(it.rate) || 0, it.remarks || null]
         );
       }
 
