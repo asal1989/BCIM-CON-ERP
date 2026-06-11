@@ -370,15 +370,20 @@ function ApprovalCard({ item, onApprove, onReject, onView, onMDReview }) {
               title="View details">
               <Eye style={{width:16,height:16}} />
             </button>
-            {/* MRS at MD stage: "Review & Authorize" instead of plain Approve */}
-            {item.entity_type === 'mrs' && item.status === 'approved_mgmt' ? (
+            {/* MD-stage items get "Review & Authorize"; others get plain Approve */}
+            {(item.entity_type === 'mrs' && item.status === 'approved_mgmt') ? (
               <button onClick={() => onMDReview(item)}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-green-700 text-white rounded-lg text-xs font-bold hover:bg-green-800 transition-colors">
+                <Landmark style={{width:13,height:13}} /> Review &amp; Authorize
+              </button>
+            ) : (item.entity_type === 'po' && ['verified_audit','released_mgmt'].includes(item.status)) ||
+               (item.entity_type === 'work_order' && ['submitted','active'].includes(item.status)) ? (
+              <button onClick={() => onApprove(item)}
                 className="flex items-center gap-1 px-2.5 py-1.5 bg-green-700 text-white rounded-lg text-xs font-bold hover:bg-green-800 transition-colors">
                 <Landmark style={{width:13,height:13}} /> Review &amp; Authorize
               </button>
             ) : (
               <>
-                {/* Check (for MB submitted) */}
                 {item.entity_type === 'sc_mb' && item.status === 'submitted' && (
                   <button onClick={() => onApprove(item)}
                     className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold hover:bg-amber-600 transition-colors">
