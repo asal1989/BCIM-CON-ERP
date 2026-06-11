@@ -1558,17 +1558,6 @@ export default function POPage() {
     setProjectFilter(selectedProjectId || 'all');
   }, [selectedProjectId]);
 
-  // Auto-open PO when navigated from Approvals dashboard (?view=<id>)
-  useEffect(() => {
-    const viewId = searchParams.get('view');
-    if (!viewId || !poData.length) return;
-    const found = poData.find(p => p.id === viewId);
-    if (found) {
-      setSelectedPO(found);
-      setSearchParams({}, { replace: true });
-    }
-  }, [searchParams, poData]);
-
   const projectParams = projectFilter !== 'all' ? { project_id: projectFilter } : {};
 
   const { data: poData = [], isError: poError } = useQuery({
@@ -1596,6 +1585,17 @@ export default function POPage() {
     queryFn: () => poAPI.get(selectedPO.id).then(r => { const d = r.data; return d?.data ?? d; }),
     enabled: !!selectedPO?.id,
   });
+
+  // Auto-open PO when navigated from Approvals dashboard (?view=<id>)
+  useEffect(() => {
+    const viewId = searchParams.get('view');
+    if (!viewId || !poData.length) return;
+    const found = poData.find(p => p.id === viewId);
+    if (found) {
+      setSelectedPO(found);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, poData]);
 
   const createMutation = useMutation({
     mutationFn: d => poAPI.create(d),
