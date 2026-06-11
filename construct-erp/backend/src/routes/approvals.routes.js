@@ -251,7 +251,7 @@ router.get('/pending', async (req, res) => {
           LIMIT 50`, [cid, ...poStatuses]);
         items.push(...r.rows);
       }
-    } catch (_) { /* purchase_orders table may not exist */ }
+    } catch (poErr) { console.error('[approvals PO feed]:', poErr.message); }
 
     // ── 8. Procurement Work Orders — two-stage approval feed ─────────────────
     // Stage 1 (Procurement Approve): status IN ('draft','pending') → procurement/PM/admin
@@ -294,7 +294,7 @@ router.get('/pending', async (req, res) => {
           LIMIT 50`, [cid, ...woStatuses]);
         items.push(...r.rows);
       }
-    } catch (_) { /* work_orders table may not exist */ }
+    } catch (woErr) { console.error('[approvals WO feed]:', woErr.message); }
 
     // ── 8. MRS — Material Requisitions pending each role's approval ─────────────
     try {
