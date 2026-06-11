@@ -1,7 +1,7 @@
 // src/pages/planning/EngineerDailyLogPage.jsx — Engineer Daily Activity Log
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { engineerLogAPI, projectAPI, scAPI } from '../../api/client';
+import { engineerLogAPI, projectAPI, scAPI, planningAPI } from '../../api/client';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import useAuthStore from '../../store/authStore';
 import {
@@ -38,7 +38,7 @@ const LOG_STATUS = {
 };
 
 const UNITS = ['Sqm','Sqft','Cum','Rmt','Nos','Kg','MT','Bags','Ltrs','Sets','LS','%'];
-const EMPTY_ACT = { activity_name:'', location:'', unit:'Nos', planned_qty:'', achieved_qty:'', status:'in_progress', remarks:'' };
+const EMPTY_ACT = { activity_id:'', activity_name:'', location:'', unit:'Nos', planned_qty:'', achieved_qty:'', status:'in_progress', remarks:'' };
 const MANAGER_ROLES = new Set([
   'super_admin',
   'superadmin',
@@ -85,6 +85,16 @@ function LogForm({ log, projects, selectedProjectId, onClose }) {
   const { data: scList = [] } = useQuery({
     queryKey: ['sc-list-for-log'],
     queryFn: () => scAPI.listSC().then(r => r.data?.data ?? r.data ?? []).catch(() => []),
+    staleTime: 60000,
+  });
+
+  // Load planning activities for the selected project (for schedule-linked logging)
+  const { data: planActivities = [] } = useQuery({
+    queryKey: ['plan-acts-for-log', form.project_id],
+    queryFn: () => planningAPI.listActivities({ project_id: form.project_id, limit: 500 })
+      .then(r => r.data?.data ?? r.data ?? [])
+      .catch(() => []),
+    enabled: !!form.project_id,
     staleTime: 60000,
   });
 
@@ -409,9 +419,45 @@ function LogForm({ log, projects, selectedProjectId, onClose }) {
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
                           Activity / Work Description <span className="text-red-400">*</span>
                         </label>
-                        <input value={a.activity_name}
-                          onChange={e => setAct(i, 'activity_name', e.target.value)}
-                          className={inp} placeholder="e.g. Column casting Tower A, Beam shuttering 3rd floor" />
+                        {planActivities.length > 0 ? (
+                          <div className="space-y-1.5">
+                            <select
+                              value={a.activity_id || ''}
+                              onChange={e => {
+                                const found = planActivities.find(p => p.id === e.target.value);
+                                setActivities(prev => prev.map((act, idx) => idx !== i ? act : found
+                                  ? { ...act, activity_id: found.id, activity_name: found.activity_name,
+                                      unit: found.measurement_unit || act.unit,
+                                      planned_qty: found.planned_quantity != null ? String(found.planned_quantity) : act.planned_qty }
+                                  : { ...act, activity_id: '' }
+                                ));
+                              }}
+                              className={inp}
+                            >
+                              <option value="">— Pick from schedule —</option>
+                              {planActivities.map(p => (
+                                <option key={p.id} value={p.id}>
+                                  {p.activity_code ? `[${p.activity_code}] ` : ''}{p.activity_name}
+                                  {p.location ? ` · ${p.location}` : ''}
+                                  {p.progress_pct > 0 ? ` (${p.progress_pct}% done)` : ''}
+                                </option>
+                              ))}
+                            </select>
+                            <input value={a.activity_name}
+                              onChange={e => setAct(i, 'activity_name', e.target.value)}
+                              className={inp}
+                              placeholder={a.activity_id ? 'Activity name (auto-filled, can edit)' : 'Or type a custom activity not in schedule…'} />
+                            {a.activity_id && (
+                              <p className="text-[10px] text-indigo-600 font-semibold flex items-center gap-1">
+                                <TrendingUp size={9} /> Linked to schedule — submitting will auto-update progress %
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <input value={a.activity_name}
+                            onChange={e => setAct(i, 'activity_name', e.target.value)}
+                            className={inp} placeholder="e.g. Column casting Tower A, Beam shuttering 3rd floor" />
+                        )}
                       </div>
                       <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
@@ -680,6 +726,11 @@ function LogDetail({ log, onClose, onEdit }) {
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-semibold text-slate-800 text-sm">{a.activity_name}</p>
                             <ActBadge status={a.status} />
+                            {a.activity_id && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-100 text-indigo-600">
+                                <TrendingUp size={8} /> Schedule
+                              </span>
+                            )}
                           </div>
                           {a.location && (
                             <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">

@@ -61,10 +61,12 @@ const canManageLogs = (req) => MANAGER_ROLES.has(String(req.user?.role || '').to
       sort_order INTEGER DEFAULT 0,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )`);
+  await safe(`ALTER TABLE engineer_log_activities ADD COLUMN IF NOT EXISTS activity_id UUID REFERENCES project_activities(id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_edl_company  ON engineer_daily_logs(company_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_edl_engineer ON engineer_daily_logs(engineer_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_edl_date     ON engineer_daily_logs(log_date)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_ela_log      ON engineer_log_activities(log_id)`);
+  await safe(`CREATE INDEX IF NOT EXISTS idx_ela_activity ON engineer_log_activities(activity_id)`);
   console.log('[EngineerLog] schema OK');
 })();
 
@@ -74,6 +76,56 @@ async function nextLogNumber(companyId) {
     `SELECT COUNT(*) FROM engineer_daily_logs WHERE company_id=$1`, [companyId]
   );
   return `EL-${String(parseInt(r.rows[0].count) + 1).padStart(4, '0')}`;
+}
+
+/* ── Progress sync ──────────────────────────────────────────────────────── */
+async function syncActivityProgress(client, activityIds) {
+  const ids = [...new Set(activityIds.filter(Boolean))];
+  if (!ids.length) return;
+  for (const aid of ids) {
+    // Sum achieved qty across all submitted/reviewed logs for this planning activity
+    const r = await client.query(`
+      SELECT
+        COALESCE(SUM(ela.achieved_qty), 0) AS total_achieved,
+        COALESCE(MAX(ela.planned_qty),  0) AS log_planned
+      FROM engineer_log_activities ela
+      JOIN engineer_daily_logs edl ON edl.id = ela.log_id
+      WHERE ela.activity_id = $1
+        AND edl.status IN ('submitted', 'reviewed')
+    `, [aid]);
+
+    const pa = await client.query(
+      `SELECT planned_quantity FROM project_activities WHERE id = $1`, [aid]
+    );
+    if (!pa.rows.length) continue;
+
+    const totalAchieved = parseFloat(r.rows[0].total_achieved) || 0;
+    // Prefer the activity's own planned_quantity; fall back to the log entry's planned_qty
+    const planned = parseFloat(pa.rows[0].planned_quantity) || parseFloat(r.rows[0].log_planned) || 0;
+    if (!planned) continue;
+
+    const pct = Math.min(100, Math.round((totalAchieved / planned) * 100));
+
+    await client.query(`
+      UPDATE project_activities SET
+        progress_pct    = $1,
+        actual_quantity = $2,
+        actual_start_date = COALESCE(actual_start_date, (
+          SELECT MIN(edl.log_date)
+          FROM engineer_log_activities ela2
+          JOIN engineer_daily_logs edl ON edl.id = ela2.log_id
+          WHERE ela2.activity_id = $3 AND edl.status IN ('submitted','reviewed')
+        )),
+        status = CASE
+          WHEN status = 'cancelled' THEN status
+          WHEN $1 >= 100 THEN 'completed'
+          WHEN $1 > 0    THEN 'in_progress'
+          ELSE status
+        END,
+        updated_at = NOW()
+      WHERE id = $3
+    `, [pct, totalAchieved, aid]);
+  }
 }
 
 /* ── GET /  — list logs (own or all for manager) ──────────────────────── */
@@ -256,18 +308,21 @@ router.post('/', async (req, res) => {
 
       const logId = ins.rows[0].id;
 
+      const linkedActivityIds = [];
       for (let i = 0; i < activities.length; i++) {
         const a = activities[i];
         if (!a.activity_name?.trim()) continue;
         await client.query(`
           INSERT INTO engineer_log_activities
-            (log_id, activity_name, location, unit, planned_qty, achieved_qty, status, remarks, sort_order)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-        `, [logId, a.activity_name, a.location || null, a.unit || 'Nos',
+            (log_id, activity_id, activity_name, location, unit, planned_qty, achieved_qty, status, remarks, sort_order)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        `, [logId, a.activity_id || null, a.activity_name, a.location || null, a.unit || 'Nos',
             parseFloat(a.planned_qty) || 0, parseFloat(a.achieved_qty) || 0,
             a.status || 'in_progress', a.remarks || null, i + 1]);
+        if (a.activity_id) linkedActivityIds.push(a.activity_id);
       }
 
+      await syncActivityProgress(client, linkedActivityIds);
       return ins.rows[0];
     });
 
@@ -311,6 +366,7 @@ router.put('/:id', async (req, res) => {
       `, [weather, site_conditions || null, manpower_count, JSON.stringify(mb),
           general_remarks || null, issues || null, next_day_plan || null, req.params.id]);
 
+      const linkedActivityIds = [];
       if (activities.length) {
         await client.query(`DELETE FROM engineer_log_activities WHERE log_id=$1`, [req.params.id]);
         for (let i = 0; i < activities.length; i++) {
@@ -318,12 +374,14 @@ router.put('/:id', async (req, res) => {
           if (!a.activity_name?.trim()) continue;
           await client.query(`
             INSERT INTO engineer_log_activities
-              (log_id, activity_name, location, unit, planned_qty, achieved_qty, status, remarks, sort_order)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-          `, [req.params.id, a.activity_name, a.location || null, a.unit || 'Nos',
+              (log_id, activity_id, activity_name, location, unit, planned_qty, achieved_qty, status, remarks, sort_order)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+          `, [req.params.id, a.activity_id || null, a.activity_name, a.location || null, a.unit || 'Nos',
               parseFloat(a.planned_qty) || 0, parseFloat(a.achieved_qty) || 0,
               a.status || 'in_progress', a.remarks || null, i + 1]);
+          if (a.activity_id) linkedActivityIds.push(a.activity_id);
         }
+        await syncActivityProgress(client, linkedActivityIds);
       }
     });
 
