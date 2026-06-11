@@ -46,6 +46,7 @@ const WO_STATUS_LABEL = {
   'draft':     'Awaiting Procurement Approval',
   'pending':   'Awaiting Procurement Approval',
   'submitted': 'Awaiting MD Authorization',
+  'active':    'Awaiting MD Authorization',
 };
 
 // Human-readable MRS status labels for the approvals page
