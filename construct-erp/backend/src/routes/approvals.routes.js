@@ -214,27 +214,85 @@ router.get('/pending', async (req, res) => {
       } catch (_) { /* table may not exist */ }
     }
 
-    // ── 7. Purchase Orders pending approval ───────────────────────────────────
-    if (['accounts','project_manager','admin','super_admin','management'].includes(role)) {
-      try {
+    // ── 7. Purchase Orders — two-stage approval feed ─────────────────────────
+    // Stage 1 (Procurement Approve): status = 'pending' → roles: procurement_manager, project_manager, admin, super_admin
+    // Stage 2 (MD Approve):          status = 'verified_audit' or 'released_mgmt' → roles: md, ceo, managing_director, admin, super_admin
+    const poStage1Roles = ['procurement_manager','project_manager','admin','super_admin'];
+    const poStage2Roles = ['md','ceo','managing_director','admin','super_admin'];
+    try {
+      let poStatuses = [];
+      if (poStage1Roles.includes(role)) poStatuses.push('pending');
+      if (poStage2Roles.includes(role)) poStatuses.push('verified_audit', 'released_mgmt');
+      if (poStatuses.length) {
+        const ph = poStatuses.map((_, i) => `$${i + 2}`).join(',');
         const r = await query(`
-          SELECT po.id, po.po_number AS ref_no, po.po_date AS doc_date,
-                 po.total_amount AS amount, po.status, po.created_at,
+          SELECT po.id,
+                 COALESCE(po.po_number, po.id::text) AS ref_no,
+                 po.po_date AS doc_date,
+                 COALESCE(po.grand_total, po.total_amount, 0) AS amount,
+                 po.status, po.created_at,
                  po.status AS current_stage,
-                 v.name AS party_name, p.name AS project_name,
+                 v.name AS party_name,
+                 p.name AS project_name,
                  u.name AS submitted_by,
-                 po.subject AS extra_info,
+                 CASE po.status
+                   WHEN 'pending'        THEN 'Awaiting Procurement Approval'
+                   WHEN 'verified_audit' THEN 'Awaiting MD Authorization'
+                   WHEN 'released_mgmt' THEN 'Awaiting MD Authorization'
+                 END AS extra_info,
                  'Purchase Order' AS doc_type, 'po' AS entity_type,
-                 '/procurement/po' AS action_url
+                 '/stores/po' AS action_url
           FROM purchase_orders po
-          JOIN vendors v ON v.id=po.vendor_id
-          JOIN projects p ON p.id=po.project_id
-          LEFT JOIN users u ON u.id=po.created_by
-          WHERE po.company_id=$1 AND po.status IN ('pending','submitted')
-          ORDER BY po.created_at ASC LIMIT 30`, [cid]);
+          JOIN projects p ON p.id = po.project_id
+          LEFT JOIN vendors v ON v.id = po.vendor_id
+          LEFT JOIN users u ON u.id = po.created_by
+          WHERE po.company_id = $1 AND po.status IN (${ph})
+          ORDER BY po.created_at ASC
+          LIMIT 50`, [cid, ...poStatuses]);
         items.push(...r.rows);
-      } catch (_) { /* table may not exist */ }
-    }
+      }
+    } catch (_) { /* purchase_orders table may not exist */ }
+
+    // ── 8. Procurement Work Orders — two-stage approval feed ─────────────────
+    // Stage 1 (Procurement Approve): status IN ('draft','pending') → procurement/PM/admin
+    // Stage 2 (MD Authorize):        status = 'submitted'          → MD/admin
+    const woStage1Roles = ['procurement_manager','project_manager','admin','super_admin'];
+    const woStage2Roles = ['md','ceo','managing_director','admin','super_admin'];
+    try {
+      let woStatuses = [];
+      if (woStage1Roles.includes(role)) woStatuses.push('draft', 'pending');
+      if (woStage2Roles.includes(role)) woStatuses.push('submitted');
+      // deduplicate (admin/super_admin appear in both)
+      woStatuses = [...new Set(woStatuses)];
+      if (woStatuses.length) {
+        const ph = woStatuses.map((_, i) => `$${i + 2}`).join(',');
+        const r = await query(`
+          SELECT wo.id,
+                 COALESCE(wo.wo_number, wo.id::text) AS ref_no,
+                 wo.created_at AS doc_date,
+                 COALESCE(wo.contract_amount, wo.total_value, 0) AS amount,
+                 wo.status, wo.created_at,
+                 wo.status AS current_stage,
+                 COALESCE(v.name, wo.vendor_name, 'Vendor') AS party_name,
+                 p.name AS project_name,
+                 u.name AS submitted_by,
+                 CASE wo.status
+                   WHEN 'draft'      THEN 'Awaiting Procurement Approval'
+                   WHEN 'pending'    THEN 'Awaiting Procurement Approval'
+                   WHEN 'submitted'  THEN 'Awaiting MD Authorization'
+                 END AS extra_info,
+                 'Work Order' AS doc_type, 'work_order' AS entity_type,
+                 '/stores/wo-register' AS action_url
+          FROM work_orders wo
+          JOIN projects p ON p.id = wo.project_id
+          LEFT JOIN vendors v ON v.id = wo.vendor_id
+          LEFT JOIN users u ON u.id = wo.created_by
+          WHERE p.company_id = $1 AND wo.status IN (${ph})
+          ORDER BY wo.created_at ASC
+          LIMIT 50`, [cid, ...woStatuses]);
+        items.push(...r.rows);
+      }
+    } catch (_) { /* work_orders table may not exist */ }
 
     // ── 8. MRS — Material Requisitions pending each role's approval ─────────────
     try {
@@ -422,6 +480,77 @@ router.post('/action', async (req, res) => {
              SET status = 'rejected', remarks = $1, updated_at = NOW()
              WHERE id = $2`,
             [comments || 'Rejected by approver', entity_id]
+          );
+        }
+        break;
+      }
+
+      case 'po': {
+        // Fetch PO with company check via project
+        const poRes = await query(
+          `SELECT po.*, p.company_id AS proj_company_id
+           FROM purchase_orders po
+           JOIN projects p ON p.id = po.project_id
+           WHERE po.id = $1`,
+          [entity_id]
+        );
+        if (!poRes.rows.length) return res.status(404).json({ error: 'Purchase Order not found' });
+        const po = poRes.rows[0];
+        if (po.proj_company_id !== CID(req)) return res.status(403).json({ error: 'Access denied' });
+
+        if (action === 'approve') {
+          // Determine which stage based on current status
+          const PO_STAGE_MAP = {
+            'pending':        { nextStatus: 'verified_audit', colBy: 'verified_procurement_by', colAt: 'verified_procurement_at' },
+            'verified_audit': { nextStatus: 'approved',       colBy: 'authorized_md_by',        colAt: 'authorized_md_at' },
+            'released_mgmt':  { nextStatus: 'approved',       colBy: 'authorized_md_by',        colAt: 'authorized_md_at' },
+          };
+          const stageInfo = PO_STAGE_MAP[po.status];
+          if (!stageInfo) return res.status(400).json({ error: `PO at status "${po.status}" cannot be approved from here` });
+          await query(
+            `UPDATE purchase_orders
+             SET status = $1, ${stageInfo.colBy} = $2, ${stageInfo.colAt} = NOW(), updated_at = NOW()
+             WHERE id = $3`,
+            [stageInfo.nextStatus, uid, entity_id]
+          );
+        } else {
+          await query(
+            `UPDATE purchase_orders SET status = 'rejected', updated_at = NOW() WHERE id = $1`,
+            [entity_id]
+          );
+        }
+        break;
+      }
+
+      case 'work_order': {
+        // Fetch procurement WO with company check via project
+        const woRes = await query(
+          `SELECT wo.*, p.company_id AS proj_company_id
+           FROM work_orders wo
+           JOIN projects p ON p.id = wo.project_id
+           WHERE wo.id = $1`,
+          [entity_id]
+        );
+        if (!woRes.rows.length) return res.status(404).json({ error: 'Work Order not found' });
+        const wo = woRes.rows[0];
+        if (wo.proj_company_id !== CID(req)) return res.status(403).json({ error: 'Access denied' });
+
+        if (action === 'approve') {
+          const WO_STAGE_MAP = {
+            'draft':     { nextStatus: 'submitted' },
+            'pending':   { nextStatus: 'submitted' },
+            'submitted': { nextStatus: 'approved'  },
+          };
+          const stageInfo = WO_STAGE_MAP[wo.status];
+          if (!stageInfo) return res.status(400).json({ error: `Work Order at status "${wo.status}" cannot be approved from here` });
+          await query(
+            `UPDATE work_orders SET status = $1, updated_at = NOW() WHERE id = $2`,
+            [stageInfo.nextStatus, entity_id]
+          );
+        } else {
+          await query(
+            `UPDATE work_orders SET status = 'rejected', updated_at = NOW() WHERE id = $1`,
+            [entity_id]
           );
         }
         break;

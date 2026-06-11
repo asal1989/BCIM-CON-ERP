@@ -36,6 +36,18 @@ const TYPE_META = {
   'MRS':              { icon: Package,      bg: 'bg-cyan-100',    text: 'text-cyan-700',    border: 'border-cyan-200',    dot: '#0891B2' },
 };
 
+// Human-readable status labels for PO and procurement WO
+const PO_STATUS_LABEL = {
+  'pending':        'Awaiting Procurement Approval',
+  'verified_audit': 'Awaiting MD Authorization',
+  'released_mgmt':  'Awaiting MD Authorization',
+};
+const WO_STATUS_LABEL = {
+  'draft':     'Awaiting Procurement Approval',
+  'pending':   'Awaiting Procurement Approval',
+  'submitted': 'Awaiting MD Authorization',
+};
+
 // Human-readable MRS status labels for the approvals page
 const MRS_STATUS_LABEL = {
   'pending':         'Awaiting Store Manager',
@@ -49,12 +61,15 @@ const MRS_STATUS_LABEL = {
 };
 
 const STATUS_BADGE = {
-  submitted:    'bg-blue-100 text-blue-700',
-  under_review: 'bg-amber-100 text-amber-700',
-  pending:      'bg-slate-100 text-slate-600',
-  checked:      'bg-teal-100 text-teal-700',
-  open:         'bg-red-100 text-red-700',
-  in_progress:  'bg-orange-100 text-orange-700',
+  submitted:      'bg-blue-100 text-blue-700',
+  under_review:   'bg-amber-100 text-amber-700',
+  pending:        'bg-slate-100 text-slate-600',
+  draft:          'bg-slate-100 text-slate-500',
+  checked:        'bg-teal-100 text-teal-700',
+  open:           'bg-red-100 text-red-700',
+  in_progress:    'bg-orange-100 text-orange-700',
+  verified_audit: 'bg-green-100 text-green-700',
+  released_mgmt:  'bg-green-100 text-green-700',
 };
 
 const URGENCY_COLOR = (daysOld) =>
@@ -301,6 +316,10 @@ function ApprovalCard({ item, onApprove, onReject, onView, onMDReview }) {
                 STATUS_BADGE[item.status] || 'bg-slate-100 text-slate-600')}>
                 {item.doc_type === 'MRS'
                   ? (MRS_STATUS_LABEL[item.status] || (item.status || '').replace(/_/g,' '))
+                  : item.doc_type === 'Purchase Order'
+                  ? (PO_STATUS_LABEL[item.status] || (item.status || '').replace(/_/g,' '))
+                  : item.entity_type === 'work_order'
+                  ? (WO_STATUS_LABEL[item.status] || (item.status || '').replace(/_/g,' '))
                   : (item.status || '').replace(/_/g,' ')}
               </span>
               {/* Urgent badge */}
