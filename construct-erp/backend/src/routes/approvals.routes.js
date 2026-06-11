@@ -255,13 +255,14 @@ router.get('/pending', async (req, res) => {
 
     // ── 8. Procurement Work Orders — two-stage approval feed ─────────────────
     // Stage 1 (Procurement Approve): status IN ('draft','pending') → procurement/PM/admin
-    // Stage 2 (MD Authorize):        status = 'submitted'          → MD/admin
+    // Stage 2 (MD Authorize):        status IN ('submitted','active') → MD/admin
+    // Note: legacy WOs approved by Procurement before MD stage existed are 'active'
     const woStage1Roles = ['procurement_manager','project_manager','admin','super_admin'];
     const woStage2Roles = ['md','ceo','managing_director','admin','super_admin'];
     try {
       let woStatuses = [];
       if (woStage1Roles.includes(role)) woStatuses.push('draft', 'pending');
-      if (woStage2Roles.includes(role)) woStatuses.push('submitted');
+      if (woStage2Roles.includes(role)) woStatuses.push('submitted', 'active');
       // deduplicate (admin/super_admin appear in both)
       woStatuses = [...new Set(woStatuses)];
       if (woStatuses.length) {
@@ -273,13 +274,14 @@ router.get('/pending', async (req, res) => {
                  COALESCE(wo.contract_amount, wo.total_value, 0) AS amount,
                  wo.status, wo.created_at,
                  wo.status AS current_stage,
-                 COALESCE(v.name, wo.vendor_name, 'Vendor') AS party_name,
+                 COALESCE(v.name, 'Vendor') AS party_name,
                  p.name AS project_name,
                  u.name AS submitted_by,
                  CASE wo.status
                    WHEN 'draft'      THEN 'Awaiting Procurement Approval'
                    WHEN 'pending'    THEN 'Awaiting Procurement Approval'
                    WHEN 'submitted'  THEN 'Awaiting MD Authorization'
+                   WHEN 'active'     THEN 'Awaiting MD Authorization'
                  END AS extra_info,
                  'Work Order' AS doc_type, 'work_order' AS entity_type,
                  '/stores/wo-register' AS action_url
@@ -540,6 +542,7 @@ router.post('/action', async (req, res) => {
             'draft':     { nextStatus: 'submitted' },
             'pending':   { nextStatus: 'submitted' },
             'submitted': { nextStatus: 'approved'  },
+            'active':    { nextStatus: 'approved'  },
           };
           const stageInfo = WO_STAGE_MAP[wo.status];
           if (!stageInfo) return res.status(400).json({ error: `Work Order at status "${wo.status}" cannot be approved from here` });
