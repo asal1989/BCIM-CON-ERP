@@ -1,6 +1,7 @@
 // src/pages/procurement/WorkOrderPage.jsx
 import RecordAttachments from '../../components/shared/RecordAttachments';
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import useAuthStore from '../../store/authStore';
 import {
@@ -1228,6 +1229,7 @@ export default function WorkOrderPage() {
   const [search,         setSearch]         = useState('');
   const [filterStatus,   setFilterStatus]   = useState('');
   const qc = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const { data: woData = [], isLoading } = useQuery({
     queryKey: ['work-orders'],
@@ -1243,6 +1245,17 @@ export default function WorkOrderPage() {
     queryKey: ['projects'],
     queryFn: () => projectAPI.list().then(r => r.data?.data ?? []),
   });
+
+  // Auto-open WO when navigated from Approvals dashboard (?view=<id>)
+  useEffect(() => {
+    const viewId = searchParams.get('view');
+    if (!viewId || !woData.length) return;
+    const found = woData.find(w => w.id === viewId);
+    if (found) {
+      setSelectedWO(found);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, woData]);
 
   const createMutation = useMutation({
     mutationFn: d => subcontractorAPI.createWorkOrder(d),

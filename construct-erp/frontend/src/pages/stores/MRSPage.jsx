@@ -1,7 +1,7 @@
 // src/pages/stores/MRSPage.jsx
 import RecordAttachments from '../../components/shared/RecordAttachments';
 import React, { useState, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import useAuthStore from '../../store/authStore';
 import {
@@ -263,6 +263,7 @@ export default function MRSPage() {
   const { user, selectedProjectId } = useAuthStore();
   const printRef   = useRef(null);
   const handlePrint = useReactToPrint({ contentRef: printRef });
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showForm, setShowForm] = useState(false);
   const [selectedMRS, setSelectedMRS] = useState(null);
   const [search, setSearch] = useState('');
@@ -292,6 +293,17 @@ export default function MRSPage() {
     queryFn: () => mrsAPI.get(selectedMRS.id).then(r => r.data?.data ?? r.data ?? []).catch(() => []),
     enabled: !!user?.id && !!selectedMRS?.id,
   });
+
+  // Auto-open MRS when navigated from Approvals dashboard (?view=<id>)
+  useEffect(() => {
+    const viewId = searchParams.get('view');
+    if (!viewId || !mrsData?.length) return;
+    const found = mrsData.find(m => m.id === viewId);
+    if (found) {
+      setSelectedMRS(found);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, mrsData]);
 
   // Inventory lookup — for material name combobox
   const { data: inventoryItems = [] } = useQuery({

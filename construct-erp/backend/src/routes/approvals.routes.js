@@ -242,7 +242,7 @@ router.get('/pending', async (req, res) => {
                    WHEN 'released_mgmt' THEN 'Awaiting MD Authorization'
                  END AS extra_info,
                  'Purchase Order' AS doc_type, 'po' AS entity_type,
-                 '/stores/po' AS action_url
+                 '/stores/po?view=' || po.id::text AS action_url
           FROM purchase_orders po
           JOIN projects p ON p.id = po.project_id
           LEFT JOIN vendors v ON v.id = po.vendor_id
@@ -286,7 +286,7 @@ router.get('/pending', async (req, res) => {
                    WHEN 'active'     THEN 'Awaiting MD Authorization'
                  END AS extra_info,
                  'Work Order' AS doc_type, 'work_order' AS entity_type,
-                 '/stores/wo-register' AS action_url
+                 '/stores/work-orders?view=' || wo.id::text AS action_url
           FROM work_orders wo
           JOIN projects p ON p.id = wo.project_id
           LEFT JOIN vendors v ON v.id = wo.vendor_id
@@ -319,7 +319,7 @@ router.get('/pending', async (req, res) => {
                    ' items • ', UPPER(COALESCE(mr.priority, 'normal'))
                  ) AS extra_info,
                  'MRS' AS doc_type, 'mrs' AS entity_type,
-                 '/stores/mrs' AS action_url
+                 '/stores/mrs?view=' || mr.id::text AS action_url
           FROM material_requisitions mr
           JOIN projects p ON p.id = mr.project_id
           LEFT JOIN users u ON u.id = mr.raised_by
