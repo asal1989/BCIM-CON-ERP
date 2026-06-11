@@ -223,6 +223,7 @@ router.get('/pending', async (req, res) => {
       let poStatuses = [];
       if (poStage1Roles.includes(role)) poStatuses.push('pending');
       if (poStage2Roles.includes(role)) poStatuses.push('verified_audit', 'released_mgmt');
+      console.log(`[approvals/pending] user=${req.user.email} role=${role} cid=${cid} poStatuses=${JSON.stringify(poStatuses)}`);
       if (poStatuses.length) {
         const ph = poStatuses.map((_, i) => `$${i + 2}`).join(',');
         const r = await query(`
@@ -249,6 +250,7 @@ router.get('/pending', async (req, res) => {
           WHERE p.company_id = $1 AND po.status IN (${ph})
           ORDER BY po.created_at ASC
           LIMIT 50`, [cid, ...poStatuses]);
+        console.log(`[approvals/pending] PO query returned ${r.rows.length} rows`);
         items.push(...r.rows);
       }
     } catch (poErr) { console.error('[approvals PO feed]:', poErr.message); }
