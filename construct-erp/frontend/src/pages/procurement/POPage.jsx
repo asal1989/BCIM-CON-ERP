@@ -830,6 +830,49 @@ function PODetailPanel({ po, detailedPO, onClose, onEdit, onApprove, onReject, i
           {/* RIGHT column — bills + approval + action */}
           <div className="w-[420px] xl:w-[480px] flex-shrink-0 overflow-y-auto p-6 space-y-4 bg-[#f4f6f9]">
 
+          {/* Action panel — shown first so it's always visible */}
+          {currentAction && (() => {
+            const authorized = canApproveStage(currentAction.id, user);
+            return (
+              <div className={clsx('border rounded-xl p-4 space-y-3', authorized ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200')}>
+                <div className="flex items-center gap-3">
+                  <div className={clsx('w-9 h-9 rounded-lg border flex items-center justify-center', authorized ? 'bg-emerald-100 border-emerald-200' : 'bg-slate-100 border-slate-200')}>
+                    <CheckCircle2 className={clsx('w-4 h-4', authorized ? 'text-emerald-600' : 'text-slate-400')} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">{authorized ? 'Action Required' : 'Awaiting Authorization'}</p>
+                    <p className={clsx('text-xs font-medium', authorized ? 'text-emerald-700' : 'text-slate-500')}>
+                      {authorized ? `${currentAction.label} — click to authorize` : `${STAGE_LABELS[currentAction.id]} — not your approval level`}
+                    </p>
+                  </div>
+                </div>
+                {authorized ? (
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => onApprove(currentAction.id)}
+                      disabled={isApproving}
+                      className="flex-[2] h-9 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      {isApproving ? 'Processing…' : currentAction.id === 'procurement-approve' ? 'Procurement Approve' : 'MD Authorize'}
+                    </button>
+                    <button
+                      onClick={() => setRejectModal(true)}
+                      disabled={isRejecting}
+                      className="flex-1 h-9 rounded-lg bg-white border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50 transition-colors disabled:opacity-50"
+                    >
+                      {isRejecting ? '…' : 'Reject'}
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 italic px-1">
+                    This PO is waiting for the {STAGE_LABELS[currentAction.id]} team to act.
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+
           {/* ── Linked Bills ─────────────────────────────────── */}
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
             <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
@@ -975,49 +1018,6 @@ function PODetailPanel({ po, detailedPO, onClose, onEdit, onApprove, onReject, i
               </div>
             </div>
           </div>
-
-          {/* Action panel */}
-          {currentAction && (() => {
-            const authorized = canApproveStage(currentAction.id, user);
-            return (
-              <div className={clsx('border rounded-xl p-4 space-y-3', authorized ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200')}>
-                <div className="flex items-center gap-3">
-                  <div className={clsx('w-9 h-9 rounded-lg border flex items-center justify-center', authorized ? 'bg-emerald-100 border-emerald-200' : 'bg-slate-100 border-slate-200')}>
-                    <CheckCircle2 className={clsx('w-4 h-4', authorized ? 'text-emerald-600' : 'text-slate-400')} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">{authorized ? 'Action Required' : 'Awaiting Authorization'}</p>
-                    <p className={clsx('text-xs font-medium', authorized ? 'text-emerald-700' : 'text-slate-500')}>
-                      {authorized ? `${currentAction.label} — click to authorize` : `${STAGE_LABELS[currentAction.id]} — not your approval level`}
-                    </p>
-                  </div>
-                </div>
-                {authorized ? (
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => onApprove(currentAction.id)}
-                      disabled={isApproving}
-                      className="flex-[2] h-9 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      {isApproving ? 'Processing…' : currentAction.id === 'procurement-approve' ? 'Procurement Approve' : 'MD Authorize'}
-                    </button>
-                    <button
-                      onClick={() => setRejectModal(true)}
-                      disabled={isRejecting}
-                      className="flex-1 h-9 rounded-lg bg-white border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50 transition-colors disabled:opacity-50"
-                    >
-                      {isRejecting ? '…' : 'Reject'}
-                    </button>
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-400 italic px-1">
-                    This PO is waiting for the {STAGE_LABELS[currentAction.id]} team to act.
-                  </p>
-                )}
-              </div>
-            );
-          })()}
 
           </div>{/* end right column */}
         </div>{/* end two-column body */}
