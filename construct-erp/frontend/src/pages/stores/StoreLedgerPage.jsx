@@ -824,43 +824,56 @@ export default function StoreLedgerPage() {
 
       <style>{`
         .store-ledger-scroll {
-          scrollbar-width: none;
-          -ms-overflow-style: none;
           overscroll-behavior-x: contain;
+          scroll-behavior: smooth;
         }
-        .store-ledger-scroll::-webkit-scrollbar {
-          display: none;
-        }
+        .store-ledger-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
+        .store-ledger-scroll::-webkit-scrollbar-track { background: transparent; }
+        .store-ledger-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .store-ledger-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         .store-ledger-table-shell {
-          max-height: calc(100vh - 360px);
+          max-height: calc(100vh - 300px);
           min-height: 320px;
           overflow: auto;
         }
         @media (max-width: 1024px) {
-          .store-ledger-table-shell { max-height: calc(100vh - 420px); }
+          .store-ledger-table-shell { max-height: calc(100vh - 360px); }
+        }
+        /* Sticky table headers inside overflow containers */
+        .store-ledger-table-shell table thead {
+          position: sticky;
+          top: 0;
+          z-index: 2;
         }
       `}</style>
 
       <div className="p-6 md:p-8 max-w-full mx-auto">
 
 
-      {/* ── Tabs ───────────────────────────────────────────────── */}
-      <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Stores Control</p>
-          <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950">Material Stock Ledger</h2>
-          <p className="mt-1 text-sm font-semibold text-slate-500">Stock balance, monthly movement and item-wise transactions in one register.</p>
+      {/* ── Tabs — sticky below PageHeader ─────────────────────── */}
+      <div
+        className="sticky z-[15] -mx-6 px-6 md:-mx-8 md:px-8 pb-3"
+        style={{ top: '104px', background: Theme.pageBg }}
+      >
+        <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Stores Control</p>
+            <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950">Material Stock Ledger</h2>
+            <p className="mt-1 text-sm font-semibold text-slate-500">Stock balance, monthly movement and item-wise transactions in one register.</p>
+          </div>
+          <SegmentTabs
+            value={tab}
+            onChange={setTab}
+            tabs={[
+              { key: 'summary',  label: 'Inventory Register', icon: Package },
+              { key: 'movement', label: 'Monthly Movement',   icon: BarChart2 },
+              { key: 'ledger',   label: 'Material Ledger',    icon: BookOpen },
+            ]}
+          />
         </div>
-        <SegmentTabs
-          value={tab}
-          onChange={setTab}
-          tabs={[
-            { key: 'summary',  label: 'Inventory Register', icon: Package },
-            { key: 'movement', label: 'Monthly Movement',   icon: BarChart2 },
-            { key: 'ledger',   label: 'Material Ledger',    icon: BookOpen },
-          ]}
-        />
       </div>
+
+      <div className="mb-6" />
 
       {/* ══════════════════════════════════════════════════════════
           TAB 1: STOCK REPORT (Excel-matching columns)
