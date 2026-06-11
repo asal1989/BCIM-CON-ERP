@@ -1,7 +1,7 @@
 // src/pages/procurement/POPage.jsx
 import RecordAttachments from '../../components/shared/RecordAttachments';
 import React, { useState, useEffect, useRef } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import useAuthStore from '../../store/authStore';
 import {
@@ -1535,7 +1535,6 @@ export default function POPage() {
   const { user, selectedProjectId } = useAuthStore();
   const qc = useQueryClient();
   const location = useLocation();
-  const [searchParams, setSearchParams] = useSearchParams();
   const [showForm, setShowForm]       = useState(false);
   const [showImport, setShowImport]   = useState(false);
   const [prefillData, setPrefillData] = useState(null);
@@ -1586,16 +1585,16 @@ export default function POPage() {
     enabled: !!selectedPO?.id,
   });
 
-  // Auto-open PO when navigated from Approvals dashboard (?view=<id>)
+  // Auto-open PO when navigated from Approvals dashboard
   useEffect(() => {
-    const viewId = searchParams.get('view');
+    const viewId = location.state?.viewId;
     if (!viewId || !poData.length) return;
     const found = poData.find(p => p.id === viewId);
     if (found) {
       setSelectedPO(found);
-      setSearchParams({}, { replace: true });
+      window.history.replaceState({}, '');
     }
-  }, [searchParams, poData]);
+  }, [location.state, poData]);
 
   const createMutation = useMutation({
     mutationFn: d => poAPI.create(d),

@@ -457,7 +457,10 @@ export default function ApprovalsPage() {
     onError: e => toast.error(e?.response?.data?.error || 'Action failed'),
   });
 
-  const handleView     = (item) => navigate(item.action_url);
+  const handleView     = (item) => {
+    const basePath = item.action_url.split('?')[0];
+    navigate(basePath, { state: { viewId: item.id } });
+  };
   const handleApprove  = (item) => setAction({ item, type: 'approve' });
   const handleReject   = (item) => setAction({ item, type: 'reject' });
   const handleConfirm  = (item, action, comment) => actionMut.mutate({ item, action, comment });
