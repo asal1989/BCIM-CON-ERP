@@ -10,7 +10,7 @@ import {
   Package, Building2, Calendar, BadgeCheck, FileText,
   CheckCircle2, UserCheck, Landmark, XCircle, Upload,
   Receipt, TrendingUp, IndianRupee, FileSpreadsheet,
-  Mail, Send, Edit2,
+  Mail, Send, Edit2, ChevronsUpDown, ChevronUp, ChevronDown,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
@@ -1544,6 +1544,7 @@ export default function POPage() {
   const [search, setSearch]           = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [projectFilter, setProjectFilter] = useState(selectedProjectId || 'all');
+  const [sortConfig, setSortConfig]   = useState({ key: 'po_date', dir: 'desc' });
 
   useEffect(() => {
     if (location.state?.fromCS) {
@@ -1656,6 +1657,26 @@ export default function POPage() {
     }
     return true;
   });
+
+  const sortAccessors = {
+    po_ref:      p => (p.po_ref_no || p.po_number || p.serial_no_formatted || '').toLowerCase(),
+    vendor_name: p => (p.vendor_name || '').toLowerCase(),
+    po_date:     p => (p.po_date ? new Date(p.po_date).getTime() : 0),
+    delivery:    p => (p.delivery_date ? new Date(p.delivery_date).getTime() : 0),
+    grand_total: p => (parseFloat(p.grand_total) || 0),
+    status:      p => (p.status || '').toLowerCase(),
+  };
+  const sorted = [...filtered].sort((a, b) => {
+    const acc = sortAccessors[sortConfig.key] || sortAccessors.po_date;
+    const av = acc(a), bv = acc(b);
+    if (av < bv) return sortConfig.dir === 'asc' ? -1 : 1;
+    if (av > bv) return sortConfig.dir === 'asc' ? 1 : -1;
+    return 0;
+  });
+  const toggleSort = (key) =>
+    setSortConfig(c => c.key === key
+      ? { key, dir: c.dir === 'asc' ? 'desc' : 'asc' }
+      : { key, dir: 'asc' });
 
   const exportCSV = () => {
     const headers = ['PO Number', 'Vendor', 'Project', 'PO Date', 'Grand Total', 'Status'];
@@ -1795,13 +1816,32 @@ export default function POPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
-                {['PO Reference', 'Vendor / Project', 'PO Date', 'Delivery', 'Total with GST', 'Status', ''].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-medium text-slate-900 font-medium uppercase tracking-wider whitespace-nowrap">{h}</th>
+                {[
+                  { label: 'PO Reference',     key: 'po_ref' },
+                  { label: 'Vendor / Project', key: 'vendor_name' },
+                  { label: 'PO Date',          key: 'po_date' },
+                  { label: 'Delivery',         key: 'delivery' },
+                  { label: 'Total with GST',   key: 'grand_total' },
+                  { label: 'Status',           key: 'status' },
+                  { label: '',                 key: null },
+                ].map(h => (
+                  <th key={h.label || 'actions'} className="px-4 py-3 text-left text-xs font-medium text-slate-900 font-medium uppercase tracking-wider whitespace-nowrap">
+                    {h.key ? (
+                      <button onClick={() => toggleSort(h.key)} className="inline-flex items-center gap-1 hover:text-indigo-600 transition-colors uppercase tracking-wider">
+                        {h.label}
+                        {sortConfig.key === h.key
+                          ? (sortConfig.dir === 'asc'
+                              ? <ChevronUp className="w-3 h-3 text-indigo-600" />
+                              : <ChevronDown className="w-3 h-3 text-indigo-600" />)
+                          : <ChevronsUpDown className="w-3 h-3 text-slate-300" />}
+                      </button>
+                    ) : h.label}
+                  </th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filtered.map(po => (
+              {sorted.map(po => (
                 <React.Fragment key={po.id}>
                 <tr onClick={() => setSelectedPO(po)}
                   className="cursor-pointer hover:bg-slate-50 transition-colors group">

@@ -7,7 +7,7 @@ import useAuthStore from '../../store/authStore';
 import {
   Hammer, Plus, X, Search, FileText, Download,
   Printer, Building2, Clock, CheckCircle2,
-  ChevronRight, Upload, IndianRupee, Calendar,
+  ChevronRight, ChevronUp, ChevronDown, ChevronsUpDown, Upload, IndianRupee, Calendar,
   AlertCircle, RefreshCw, FileSpreadsheet,
   MapPin, User, Briefcase, Package, Percent, ClipboardList, Phone, Mail, Hash,
   Activity, Check, UserCheck, Edit2,
@@ -1228,6 +1228,7 @@ export default function WorkOrderPage() {
   const [attachWOId,     setAttachWOId]     = useState(null);
   const [search,         setSearch]         = useState('');
   const [filterStatus,   setFilterStatus]   = useState('');
+  const [sortConfig,     setSortConfig]     = useState({ key: 'date', dir: 'desc' });
   const qc = useQueryClient();
   const location = useLocation();
 
@@ -1324,6 +1325,27 @@ export default function WorkOrderPage() {
     return matchSearch && matchStatus;
   });
 
+  const woSortAccessors = {
+    wo_number:    w => (w.wo_number || '').toLowerCase(),
+    subject:      w => (w.subject || '').toLowerCase(),
+    vendor_name:  w => (w.vendor_name || '').toLowerCase(),
+    project_name: w => (w.project_name || '').toLowerCase(),
+    date:         w => new Date(w.start_date || w.created_at || 0).getTime(),
+    value:        w => (parseFloat(w.total_value) || 0),
+    status:       w => (w.status || '').toLowerCase(),
+  };
+  const sorted = [...filtered].sort((a, b) => {
+    const acc = woSortAccessors[sortConfig.key] || woSortAccessors.date;
+    const av = acc(a), bv = acc(b);
+    if (av < bv) return sortConfig.dir === 'asc' ? -1 : 1;
+    if (av > bv) return sortConfig.dir === 'asc' ? 1 : -1;
+    return 0;
+  });
+  const toggleSort = (key) =>
+    setSortConfig(c => c.key === key
+      ? { key, dir: c.dir === 'asc' ? 'desc' : 'asc' }
+      : { key, dir: 'asc' });
+
   const totalValue    = allWOs.reduce((s, w) => s + parseFloat(w.total_value || 0), 0);
   const approvedCount = allWOs.filter(w => w.status === 'approved').length;
   const pendingCount  = allWOs.filter(w => w.status === 'pending').length;
@@ -1409,8 +1431,28 @@ export default function WorkOrderPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
-                  {['WO Number', 'Subject', 'Vendor / Sub-Con', 'Project', 'Date', 'Value', 'Status', ''].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-[11px] font-medium text-slate-900 font-medium uppercase tracking-wider whitespace-nowrap">{h}</th>
+                  {[
+                    { label: 'WO Number',        key: 'wo_number' },
+                    { label: 'Subject',          key: 'subject' },
+                    { label: 'Vendor / Sub-Con', key: 'vendor_name' },
+                    { label: 'Project',          key: 'project_name' },
+                    { label: 'Date',             key: 'date' },
+                    { label: 'Value',            key: 'value' },
+                    { label: 'Status',           key: 'status' },
+                    { label: '',                 key: null },
+                  ].map(h => (
+                    <th key={h.label || 'actions'} className="px-4 py-3 text-left text-[11px] font-medium text-slate-900 font-medium uppercase tracking-wider whitespace-nowrap">
+                      {h.key ? (
+                        <button onClick={() => toggleSort(h.key)} className="inline-flex items-center gap-1 hover:text-indigo-600 transition-colors uppercase tracking-wider">
+                          {h.label}
+                          {sortConfig.key === h.key
+                            ? (sortConfig.dir === 'asc'
+                                ? <ChevronUp className="w-3 h-3 text-indigo-600" />
+                                : <ChevronDown className="w-3 h-3 text-indigo-600" />)
+                            : <ChevronsUpDown className="w-3 h-3 text-slate-300" />}
+                        </button>
+                      ) : h.label}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -1425,7 +1467,7 @@ export default function WorkOrderPage() {
                       ))}
                     </tr>
                   ))
-                ) : filtered.map(wo => (
+                ) : sorted.map(wo => (
                   <React.Fragment key={wo.id}>
                   <tr onClick={() => setSelectedWO(wo)}
                     className="border-b border-slate-100 last:border-0 cursor-pointer hover:bg-slate-50 transition-colors group">
