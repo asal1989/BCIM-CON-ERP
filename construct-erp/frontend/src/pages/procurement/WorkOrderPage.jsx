@@ -9,7 +9,7 @@ import {
   ChevronRight, Upload, IndianRupee, Calendar,
   AlertCircle, RefreshCw, FileSpreadsheet,
   MapPin, User, Briefcase, Package, Percent, ClipboardList, Phone, Mail, Hash,
-  Activity, Check, UserCheck,
+  Activity, Check, UserCheck, Edit2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
@@ -539,25 +539,37 @@ const Lbl = ({ children, req }) => (
   </label>
 );
 
-function CreateWOModal({ onClose, vendors, projects, onCreate, isPending }) {
+function CreateWOModal({ onClose, vendors, projects, onCreate, onUpdate, isPending, editingWO }) {
+  const isEditing = !!editingWO;
   const [form, setForm] = useState({
-    project_id: '', vendor_id: '',
-    wo_number: '',
-    wo_date: dayjs().format('YYYY-MM-DD'),
-    start_date: dayjs().format('YYYY-MM-DD'),
-    end_date: '',
-    subject: '',
-    scope_of_work: '',
-    work_category: '',
-    tower_block: '',
-    cost_head: '',
-    gst_pct: 18,
-    tds_pct: 2,
-    retention_pct: 5,
-    advance_recovery_pct: 10,
-    terms_conditions: DEFAULT_WO_TERMS,
+    project_id:           editingWO?.project_id   || '',
+    vendor_id:            editingWO?.vendor_id     || '',
+    wo_number:            editingWO?.wo_number     || '',
+    wo_date:              editingWO?.wo_date ? dayjs(editingWO.wo_date).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
+    start_date:           editingWO?.start_date ? dayjs(editingWO.start_date).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
+    end_date:             editingWO?.end_date ? dayjs(editingWO.end_date).format('YYYY-MM-DD') : '',
+    subject:              editingWO?.subject       || editingWO?.work_description || '',
+    scope_of_work:        editingWO?.scope_of_work || '',
+    work_category:        editingWO?.work_category || '',
+    tower_block:          editingWO?.tower_block   || '',
+    cost_head:            editingWO?.cost_head     || '',
+    gst_pct:              editingWO?.gst_pct       ?? 18,
+    tds_pct:              editingWO?.tds_pct       ?? 2,
+    retention_pct:        editingWO?.retention_pct ?? 5,
+    advance_recovery_pct: editingWO?.advance_recovery_pct ?? 10,
+    terms_conditions:     editingWO?.terms_conditions || DEFAULT_WO_TERMS,
   });
-  const [items, setItems] = useState([{ description:'', quantity:'', unit:'SQM', rate:'', remarks:'' }]);
+  const [items, setItems] = useState(
+    editingWO?.items?.length
+      ? editingWO.items.map(it => ({
+          description: it.description || '',
+          quantity:    String(it.quantity || ''),
+          unit:        it.unit || 'SQM',
+          rate:        String(it.rate || ''),
+          remarks:     it.remarks || '',
+        }))
+      : [{ description:'', quantity:'', unit:'SQM', rate:'', remarks:'' }]
+  );
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   const vendor = (vendors || []).find(v => String(v.id) === String(form.vendor_id));
@@ -586,8 +598,8 @@ function CreateWOModal({ onClose, vendors, projects, onCreate, isPending }) {
               <Hammer className="w-5 h-5 text-white" />
             </div>
             <div>
-              <p className="text-base font-bold text-white">New Work Order</p>
-              <p className="text-xs text-white/60">Procurement · engage a contractor for works & services</p>
+              <p className="text-base font-bold text-white">{isEditing ? `Edit Work Order — ${editingWO.wo_number}` : 'New Work Order'}</p>
+              <p className="text-xs text-white/60">{isEditing ? 'Edit draft details before submitting for approval' : 'Procurement · engage a contractor for works & services'}</p>
             </div>
           </div>
           <button onClick={onClose} className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-all">
@@ -611,7 +623,10 @@ function CreateWOModal({ onClose, vendors, projects, onCreate, isPending }) {
                 <Lbl>WO Number</Lbl>
                 <div className="relative">
                   <Hash className="w-3.5 h-3.5 text-slate-300 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                  <input className={`${inp} pl-8 bg-slate-100 font-mono text-indigo-700`} value={form.wo_number || 'Auto WO-###'} readOnly />
+                  {isEditing
+                    ? <input className={`${inp} pl-8 font-mono text-indigo-700`} value={form.wo_number} onChange={e => f('wo_number', e.target.value)} />
+                    : <input className={`${inp} pl-8 bg-slate-100 font-mono text-indigo-700`} value={form.wo_number || 'Auto WO-###'} readOnly />
+                  }
                 </div>
               </div>
               <div>
@@ -818,9 +833,15 @@ function CreateWOModal({ onClose, vendors, projects, onCreate, isPending }) {
           </div>
           <div className="flex gap-3">
             <button onClick={onClose} className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50">Cancel</button>
-            <button onClick={() => onCreate({ ...form, items, total_value: formTotal })} disabled={!valid || isPending}
+            <button
+              onClick={() => {
+                const payload = { ...form, items, total_value: formTotal };
+                if (isEditing) onUpdate(payload);
+                else onCreate(payload);
+              }}
+              disabled={!valid || isPending}
               className="px-6 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 shadow-sm transition-all flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4" /> {isPending ? 'Issuing…' : 'Issue Work Order'}
+              <CheckCircle2 className="w-4 h-4" /> {isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Issue Work Order'}
             </button>
           </div>
         </div>
@@ -830,7 +851,7 @@ function CreateWOModal({ onClose, vendors, projects, onCreate, isPending }) {
 }
 
 /* ── WO Detail Panel — Full-Screen Modal ────────────────────────────────── */
-function WODetailPanel({ wo, onClose, onDelete, onApprove, onMDApprove, onReject, isApproving, isMDApproving, isRejecting, user }) {
+function WODetailPanel({ wo, onClose, onEdit, onDelete, onApprove, onMDApprove, onReject, isApproving, isMDApproving, isRejecting, user }) {
   const { data: detail, isLoading: detailLoading } = useQuery({
     queryKey: ['work-order-detail', wo?.id],
     queryFn: () => subcontractorAPI.getWorkOrder(wo.id).then(r => r.data),
@@ -918,6 +939,12 @@ function WODetailPanel({ wo, onClose, onDelete, onApprove, onMDApprove, onReject
                 </div>
               ))}
             </div>
+            {['draft','pending'].includes(liveStatus) && onEdit && (
+              <button onClick={() => onEdit({ ...wo, ...(detail || {}) })}
+                className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-amber-300 bg-amber-50 text-amber-700 text-xs font-medium hover:bg-amber-100 transition-all">
+                <Edit2 className="w-3.5 h-3.5" /> Edit WO
+              </button>
+            )}
             <button onClick={handlePrint}
               className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-slate-200 text-xs font-medium text-slate-900 hover:border-slate-300 transition-all">
               <Printer className="w-3.5 h-3.5" /> Print
@@ -1196,6 +1223,7 @@ export default function WorkOrderPage() {
   const [showPdfImport,  setShowPdfImport]  = useState(false);
   const [showExcelImport,setShowExcelImport]= useState(false);
   const [selectedWO,     setSelectedWO]     = useState(null);
+  const [editingWO,      setEditingWO]      = useState(null);
   const [attachWOId,     setAttachWOId]     = useState(null);
   const [search,         setSearch]         = useState('');
   const [filterStatus,   setFilterStatus]   = useState('');
@@ -1253,6 +1281,17 @@ export default function WorkOrderPage() {
       qc.invalidateQueries({ queryKey: ['work-orders'] });
     },
     onError: e => toast.error(e?.response?.data?.error || 'MD approval failed'),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => subcontractorAPI.updateWorkOrder(id, data),
+    onSuccess: () => {
+      toast.success('Work Order updated');
+      setEditingWO(null);
+      qc.invalidateQueries({ queryKey: ['work-orders'] });
+      qc.invalidateQueries({ queryKey: ['work-order-detail', selectedWO?.id] });
+    },
+    onError: e => toast.error(e?.response?.data?.error || 'Failed to update Work Order'),
   });
 
   const rejectMutation = useMutation({
@@ -1504,6 +1543,7 @@ export default function WorkOrderPage() {
         <WODetailPanel
           wo={selectedWO}
           onClose={() => setSelectedWO(null)}
+          onEdit={wo => setEditingWO(wo)}
           onDelete={id => deleteMutation.mutate(id)}
           onApprove={id => approveMutation.mutate(id)}
           onMDApprove={id => mdApproveMutation.mutate(id)}
@@ -1512,6 +1552,18 @@ export default function WorkOrderPage() {
           isMDApproving={mdApproveMutation.isPending}
           isRejecting={rejectMutation.isPending}
           user={user}
+        />
+      )}
+
+      {/* Edit WO modal */}
+      {editingWO && (
+        <CreateWOModal
+          onClose={() => setEditingWO(null)}
+          vendors={vendorsData}
+          projects={projectsData}
+          onUpdate={data => updateMutation.mutate({ id: editingWO.id, data })}
+          isPending={updateMutation.isPending}
+          editingWO={editingWO}
         />
       )}
     </div>

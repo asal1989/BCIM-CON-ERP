@@ -580,7 +580,7 @@ const updateWorkOrder = async (req, res) => {
       start_date, end_date, total_value, contract_value,
       cost_head, work_category, tower_block, vendor_id,
       gst_pct, tds_pct, retention_pct, advance_recovery_pct,
-      wo_number,
+      wo_number, items,
     } = req.body;
 
     if (status && !VALID_WO_STATUSES.includes(status))
@@ -624,18 +624,48 @@ const updateWorkOrder = async (req, res) => {
       params.push(finalValue);
     }
 
-    if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
-    sets.push(`updated_at = NOW()`);
+    // Replace items if provided — recalculate total_value from items
+    if (Array.isArray(items) && items.length) {
+      let computedTotal = 0;
+      await withTransaction(async (client) => {
+        await client.query(`DELETE FROM work_order_items WHERE wo_id = $1`, [req.params.id]);
+        for (let j = 0; j < items.length; j++) {
+          const qty  = parseFloat(items[j].quantity) || 0;
+          const rate = parseFloat(items[j].rate) || 0;
+          computedTotal += qty * rate;
+          await client.query(
+            `INSERT INTO work_order_items (wo_id, description, unit, quantity, rate, remarks)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [req.params.id, items[j].description || '', items[j].unit || 'LS', qty, rate, items[j].remarks || null]
+          );
+        }
+        // Update header totals
+        await client.query(
+          `UPDATE work_orders SET total_value = $1, contract_amount = $1 WHERE id = $2`,
+          [computedTotal, req.params.id]
+        );
+      });
+      // Override any manual total_value with the items-computed one
+      const existing = sets.findIndex(s => s.includes('total_value'));
+      if (existing >= 0) { sets.splice(existing, 1); params.splice(existing + 2, 1); }
+    }
 
-    const result = await query(
-      `UPDATE work_orders SET ${sets.join(', ')}
-       WHERE id = $1
-         AND project_id IN (SELECT id FROM projects WHERE company_id = $2)
-       RETURNING *`,
-      params
-    );
-    if (!result.rows[0]) return res.status(404).json({ error: 'Work order not found' });
-    const row = result.rows[0];
+    if (!sets.length && !(Array.isArray(items) && items.length))
+      return res.status(400).json({ error: 'Nothing to update' });
+
+    if (sets.length) {
+      sets.push(`updated_at = NOW()`);
+      await query(
+        `UPDATE work_orders SET ${sets.join(', ')}
+         WHERE id = $1
+           AND project_id IN (SELECT id FROM projects WHERE company_id = $2)`,
+        params
+      );
+    }
+
+    const updated = await query(`SELECT * FROM work_orders WHERE id = $1`, [req.params.id]);
+    if (!updated.rows[0]) return res.status(404).json({ error: 'Work order not found' });
+    const row = updated.rows[0];
     res.json({ data: { ...row, contract_value: row.total_value || row.contract_amount } });
   } catch (err) {
     res.status(500).json({ error: err.message });

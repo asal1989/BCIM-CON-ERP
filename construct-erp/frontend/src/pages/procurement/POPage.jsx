@@ -10,7 +10,7 @@ import {
   Package, Building2, Calendar, BadgeCheck, FileText,
   CheckCircle2, UserCheck, Landmark, XCircle, Upload,
   Receipt, TrendingUp, IndianRupee, FileSpreadsheet,
-  Mail, Send,
+  Mail, Send, Edit2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
@@ -271,27 +271,38 @@ function Field({ label, children }) {
 const INP = 'w-full h-9 bg-slate-50 border border-slate-200 rounded-lg px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 transition-all';
 
 /* ─── New PO Modal ─── */
-function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, isPending, prefill }) {
+function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpdate, isPending, prefill, editingPO }) {
+  const isEditing = !!editingPO;
   const [form, setForm] = useState({
-    mrs_id:       prefill?.mrs_id       || '',
-    vendor_id:    prefill?.vendor_id    || '',
-    project_id:   prefill?.project_id   || '',
-    po_date:      dayjs().format('YYYY-MM-DD'),
-    delivery_date: '',
-    po_req_no: prefill?.mrs_ref || '',
-    po_req_date: '',
-    approval_no: '',
-    delivery_address: '',
-    order_intro: DEFAULT_PO_INTRO,
-    notes: prefill?.mrs_ref ? `Ref: CS / ${prefill.mrs_ref}` : '',
-    payment_terms: '',
-    tcs_amount: '',
-    terms_conditions: DEFAULT_PO_TERMS,
+    mrs_id:           editingPO?.mrs_id       || prefill?.mrs_id       || '',
+    vendor_id:        editingPO?.vendor_id    || prefill?.vendor_id    || '',
+    project_id:       editingPO?.project_id   || prefill?.project_id   || '',
+    po_date:          editingPO?.po_date      ? dayjs(editingPO.po_date).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
+    delivery_date:    editingPO?.delivery_date ? dayjs(editingPO.delivery_date).format('YYYY-MM-DD') : '',
+    po_req_no:        editingPO?.po_req_no    || prefill?.mrs_ref || '',
+    po_req_date:      editingPO?.po_req_date  ? dayjs(editingPO.po_req_date).format('YYYY-MM-DD') : '',
+    approval_no:      editingPO?.approval_no  || '',
+    delivery_address: editingPO?.delivery_address || '',
+    order_intro:      editingPO?.order_intro  || DEFAULT_PO_INTRO,
+    notes:            editingPO?.notes        || (prefill?.mrs_ref ? `Ref: CS / ${prefill.mrs_ref}` : ''),
+    payment_terms:    editingPO?.payment_terms || '',
+    tcs_amount:       editingPO?.tcs_amount   || '',
+    terms_conditions: editingPO?.terms_conditions || DEFAULT_PO_TERMS,
   });
   const [items, setItems] = useState(
-    prefill?.items?.length
-      ? prefill.items
-      : [{ material_name: '', quantity: '', unit: 'Nos', rate: '', gst_rate: '18', hsn_code: '', req_date: '' }]
+    editingPO?.items?.length
+      ? editingPO.items.map(it => ({
+          material_name: it.material_name || '',
+          quantity:      String(it.quantity || ''),
+          unit:          it.unit || 'Nos',
+          rate:          String(it.rate || ''),
+          gst_rate:      String(it.gst_rate ?? '18'),
+          hsn_code:      it.hsn_code || '',
+          req_date:      it.req_date ? dayjs(it.req_date).format('YYYY-MM-DD') : '',
+        }))
+      : prefill?.items?.length
+        ? prefill.items
+        : [{ material_name: '', quantity: '', unit: 'Nos', rate: '', gst_rate: '18', hsn_code: '', req_date: '' }]
   );
 
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
@@ -334,7 +345,9 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, isPend
     if (!form.project_id) return toast.error('Select a project');
     if (items.some(it => !it.material_name?.trim() || !it.quantity || !it.rate))
       return toast.error('All items need description, quantity and rate');
-    onCreate({ ...form, delivery_date: form.delivery_date || null, items, mrs_id: form.mrs_id || prefill?.mrs_id || null });
+    const payload = { ...form, delivery_date: form.delivery_date || null, items, mrs_id: form.mrs_id || prefill?.mrs_id || null };
+    if (isEditing) onUpdate(payload);
+    else onCreate(payload);
   };
 
   return (
@@ -348,11 +361,13 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, isPend
               <ShoppingCart className="w-4 h-4 text-amber-600" />
             </div>
             <div>
-              <p className="text-sm font-medium text-slate-900">Create Purchase Order</p>
+              <p className="text-sm font-medium text-slate-900">{isEditing ? `Edit Purchase Order — ${editingPO.po_number}` : 'Create Purchase Order'}</p>
               <p className="text-xs text-slate-900 font-medium mt-0.5">
-                {prefill?.mrs_ref
-                  ? `Pre-filled from CS — ${prefill.mrs_ref} · ${prefill.vendor_name}`
-                  : '4-stage authorization workflow'}
+                {isEditing
+                  ? 'Editing draft — changes saved immediately'
+                  : prefill?.mrs_ref
+                    ? `Pre-filled from CS — ${prefill.mrs_ref} · ${prefill.vendor_name}`
+                    : '4-stage authorization workflow'}
               </p>
             </div>
           </div>
@@ -524,7 +539,7 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, isPend
             <button onClick={onClose} className="px-5 h-9 rounded-lg border border-slate-200 text-sm font-medium text-slate-900 hover:bg-white transition-all">Cancel</button>
             <button onClick={handleSubmit} disabled={isPending}
               className="px-6 h-9 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 transition-all disabled:opacity-50 shadow-sm">
-              {isPending ? 'Submitting…' : 'Submit for Audit →'}
+              {isPending ? 'Saving…' : isEditing ? 'Save Changes →' : 'Submit for Audit →'}
             </button>
           </div>
         </div>
@@ -611,7 +626,7 @@ const BILL_STATUS = {
   paid:     { label: 'Paid',     cls: 'bg-blue-50 text-blue-700 border-blue-200' },
 };
 
-function PODetailPanel({ po, detailedPO, onClose, onApprove, onReject, isApproving, isRejecting, user }) {
+function PODetailPanel({ po, detailedPO, onClose, onEdit, onApprove, onReject, isApproving, isRejecting, user }) {
   const qc = useQueryClient();
   const [sigModal,    setSigModal]    = useState(null);  // { stage }
   const [mailModal,   setMailModal]   = useState(false);
@@ -702,6 +717,12 @@ function PODetailPanel({ po, detailedPO, onClose, onApprove, onReject, isApprovi
                 </div>
               ))}
             </div>
+            {liveStatus === 'pending' && onEdit && (
+              <button onClick={() => onEdit(detailedPO ?? po)}
+                className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-amber-300 bg-amber-50 text-amber-700 text-xs font-medium hover:bg-amber-100 transition-all">
+                <Edit2 className="w-3.5 h-3.5" /> Edit PO
+              </button>
+            )}
             <button onClick={handlePrint} disabled={!detailedPO}
               className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-slate-200 text-xs font-medium text-slate-900 hover:border-slate-300 disabled:opacity-40 transition-all">
               <Printer className="w-3.5 h-3.5" /> {!detailedPO ? '…' : 'Print'}
@@ -1514,6 +1535,7 @@ export default function POPage() {
   const [showForm, setShowForm]       = useState(false);
   const [showImport, setShowImport]   = useState(false);
   const [prefillData, setPrefillData] = useState(null);
+  const [editingPO, setEditingPO]     = useState(null);
   const [selectedPO, setSelectedPO]   = useState(null);
   const [attachPOId, setAttachPOId]   = useState(null); // PO id whose attachment panel is open
   const [search, setSearch]           = useState('');
@@ -1589,6 +1611,19 @@ export default function POPage() {
       qc.invalidateQueries({ queryKey: ['purchase-orders'] });
     },
     onError: e => toast.error(e?.response?.data?.error || 'Reject failed'),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => poAPI.update(id, data),
+    onSuccess: (res) => {
+      toast.success('PO updated successfully');
+      setEditingPO(null);
+      // Refresh detail and list
+      qc.invalidateQueries({ queryKey: ['purchase-orders'] });
+      qc.invalidateQueries({ queryKey: ['purchase-orders', selectedPO?.id] });
+      if (selectedPO && res?.data?.data) setSelectedPO(res.data.data);
+    },
+    onError: e => toast.error(e?.response?.data?.error || 'Failed to update PO'),
   });
 
   const filtered = poData.filter(p => {
@@ -1837,6 +1872,7 @@ export default function POPage() {
           po={selectedPO}
           detailedPO={detailedPO}
           onClose={() => setSelectedPO(null)}
+          onEdit={(po) => setEditingPO(po)}
           onApprove={(stage) => {
             approveMutation.mutate({ id: selectedPO.id, stage });
           }}
@@ -1857,6 +1893,19 @@ export default function POPage() {
           onCreate={d => createMutation.mutate(d)}
           isPending={createMutation.isPending}
           prefill={prefillData}
+        />
+      )}
+
+      {/* Edit PO modal */}
+      {editingPO && (
+        <NewPOModal
+          onClose={() => setEditingPO(null)}
+          vendors={vendorsData}
+          projects={projectsData}
+          mrsList={mrsData}
+          onUpdate={d => updateMutation.mutate({ id: editingPO.id, data: d })}
+          isPending={updateMutation.isPending}
+          editingPO={editingPO}
         />
       )}
 

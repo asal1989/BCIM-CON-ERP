@@ -338,6 +338,7 @@ export const poAPI = {
   list:    (params, config = {})   => api.get('/purchase-orders', { ...config, params }),
   get:     (id)       => api.get(`/purchase-orders/${id}`),
   create:  (data)     => api.post('/purchase-orders', data),
+  update:  (id, data) => api.patch(`/purchase-orders/${id}`, data),
   approve: (id, stage, data) => api.patch(`/purchase-orders/${id}/${stage}`, data),
   mailPreview:  (id)     => api.get(`/purchase-orders/${id}/mail-preview`),
   sendToVendor: (id, d)  => api.post(`/purchase-orders/${id}/send-to-vendor`, d),

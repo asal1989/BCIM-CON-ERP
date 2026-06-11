@@ -653,42 +653,74 @@ router.get('/:id', async (req, res) => {
 // PATCH /purchase-orders/:id — edit core PO fields (po_number, delivery_address, etc.)
 router.patch('/:id', async (req, res) => {
   try {
-    await getAccessiblePo(req, req.params.id);
+    const po = await getAccessiblePo(req, req.params.id);
 
-    const { po_number, delivery_address } = req.body;
+    // Full edit only allowed while still pending (not yet procurement-approved)
+    if (po.status !== 'pending') {
+      return res.status(400).json({ error: `Cannot edit a PO at status "${po.status}". Only pending POs can be edited.` });
+    }
 
-    const sets = [];
-    const params = [req.params.id];
-    let i = 2;
+    const {
+      vendor_id, po_date, delivery_date, payment_terms, tcs_amount,
+      po_req_no, po_req_date, approval_no, delivery_address,
+      order_intro, notes, terms_conditions, bank_details, items,
+    } = req.body;
 
-    if (po_number !== undefined) {
-      const trimmed = String(po_number).trim().toUpperCase();
-      if (!trimmed) return res.status(400).json({ error: 'po_number cannot be empty' });
-      const dup = await query(
-        `SELECT po.id FROM purchase_orders po
-         JOIN projects p ON po.project_id = p.id
-         WHERE UPPER(TRIM(po.po_number)) = $1 AND po.id <> $2 AND p.company_id = $3`,
-        [trimmed, req.params.id, req.user.company_id]
+    const result = await withTransaction(async (client) => {
+      const sets = [];
+      const params = [req.params.id];
+      let i = 2;
+
+      if (vendor_id        !== undefined) { sets.push(`vendor_id = $${i++}`);         params.push(vendor_id); }
+      if (po_date          !== undefined) { sets.push(`po_date = $${i++}`);            params.push(po_date || null); }
+      if (delivery_date    !== undefined) { sets.push(`delivery_date = $${i++}`);      params.push(delivery_date || null); }
+      if (payment_terms    !== undefined) { sets.push(`payment_terms = $${i++}`);      params.push(payment_terms || null); }
+      if (tcs_amount       !== undefined) { sets.push(`tcs_amount = $${i++}`);         params.push(parseFloat(tcs_amount) || 0); }
+      if (po_req_no        !== undefined) { sets.push(`po_req_no = $${i++}`);          params.push(po_req_no || null); }
+      if (po_req_date      !== undefined) { sets.push(`po_req_date = $${i++}`);        params.push(po_req_date || null); }
+      if (approval_no      !== undefined) { sets.push(`approval_no = $${i++}`);        params.push(approval_no || null); }
+      if (delivery_address !== undefined) { sets.push(`delivery_address = $${i++}`);   params.push(delivery_address || null); }
+      if (order_intro      !== undefined) { sets.push(`order_intro = $${i++}`);        params.push(order_intro || null); }
+      if (notes            !== undefined) { sets.push(`notes = $${i++}`);              params.push(notes || null); }
+      if (terms_conditions !== undefined) { sets.push(`terms_conditions = $${i++}`);   params.push(terms_conditions || null); }
+      if (bank_details     !== undefined) { sets.push(`bank_details = $${i++}`);       params.push(bank_details || null); }
+
+      // Replace items and recalculate totals
+      if (Array.isArray(items) && items.length) {
+        await client.query(`DELETE FROM po_items WHERE po_id = $1`, [req.params.id]);
+        let subTotal = 0, totalGst = 0;
+        for (let j = 0; j < items.length; j++) {
+          const it = items[j];
+          const basic = (parseFloat(it.quantity) || 0) * (parseFloat(it.rate) || 0);
+          const gst   = basic * ((parseFloat(it.gst_rate) || 0) / 100);
+          await client.query(
+            `INSERT INTO po_items (po_id, material_name, hsn_code, quantity, unit, rate, gst_rate, req_date, sort_order)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            [req.params.id, it.material_name, it.hsn_code || null,
+             parseFloat(it.quantity) || 0, it.unit || 'Nos',
+             parseFloat(it.rate) || 0, parseFloat(it.gst_rate) || 0,
+             it.req_date || null, j + 1]
+          );
+          subTotal += basic;
+          totalGst += gst;
+        }
+        const tcsValue = parseFloat(tcs_amount) || 0;
+        sets.push(`sub_total = $${i++}, total_gst = $${i++}, grand_total = $${i++}`);
+        params.push(subTotal, totalGst, subTotal + totalGst + tcsValue);
+      }
+
+      if (!sets.length) throw Object.assign(new Error('Nothing to update'), { statusCode: 400 });
+      sets.push('updated_at = NOW()');
+
+      const r = await client.query(
+        `UPDATE purchase_orders SET ${sets.join(', ')} WHERE id = $1 RETURNING *`,
+        params
       );
-      if (dup.rows.length) return res.status(409).json({ error: `Purchase Order number ${trimmed} is already in use` });
-      sets.push(`po_number = $${i}, po_ref_no = $${i}, serial_no_formatted = $${i++}`);
-      params.push(trimmed);
-    }
+      if (!r.rows[0]) throw Object.assign(new Error('Purchase Order not found'), { statusCode: 404 });
+      return r.rows[0];
+    });
 
-    if (delivery_address !== undefined) {
-      sets.push(`delivery_address = $${i++}`);
-      params.push(delivery_address || null);
-    }
-
-    if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
-    sets.push('updated_at = NOW()');
-
-    const result = await query(
-      `UPDATE purchase_orders SET ${sets.join(', ')} WHERE id = $1 RETURNING *`,
-      params
-    );
-    if (!result.rows[0]) return res.status(404).json({ error: 'Purchase Order not found' });
-    res.json({ data: result.rows[0] });
+    res.json({ data: result });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
   }
