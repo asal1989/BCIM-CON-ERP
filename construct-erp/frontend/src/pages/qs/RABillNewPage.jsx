@@ -212,13 +212,13 @@ export default function RABillNewPage() {
   });
 
   const handleSyncRecovery = () => {
-    if (auditSummary?.net_recovery_due) {
-      // Split logic: For now, put it all in Steel if it's a general suggested recovery, 
-      // or split by some heuristic. In the absence of specific logic, we'll let user decide or put in Steel.
+    if (auditSummary?.net_recovery_due > 0) {
       set('material_recovery_steel', auditSummary.net_recovery_due);
-      toast.success(`Synced total recovery suggested to Steel: ${inr(auditSummary.net_recovery_due)}`);
+      toast.success(`Synced recovery to Steel field: ${inr(auditSummary.net_recovery_due)}`);
+    } else if (auditSummary?.reason) {
+      toast(auditSummary.reason, { icon: 'ℹ️', duration: 5000 });
     } else {
-      toast.error('No recovery amount suggested by audit engine.');
+      toast('Audit engine found no excess material usage for this project.', { icon: 'ℹ️', duration: 4000 });
     }
   };
 

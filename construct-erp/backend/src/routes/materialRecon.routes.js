@@ -108,70 +108,86 @@ router.get('/audit/:project_id', async (req, res) => {
   try {
     const { project_id } = req.params;
 
-    // 1. Get total certified quantities per BoQ item
-    const workDoneRes = await query(
-      `SELECT boq_item_id, SUM(current_qty) as total_qty 
-       FROM ra_bill_items bi
-       JOIN ra_bills b ON bi.ra_bill_id = b.id
-       WHERE b.project_id = $1 AND b.status IN ('certified','paid')
+    // 1. Work-done quantities: prefer pm_approved measurements (works even before first certified bill)
+    //    Fall back to certified RA bill items if no measurements exist.
+    const measureRes = await query(
+      `SELECT boq_item_id, SUM(net_quantity) AS total_qty
+       FROM measurements
+       WHERE project_id = $1 AND status IN ('pm_approved','qs_approved','approved')
        GROUP BY boq_item_id`,
       [project_id]
     );
+    let workDoneRows = measureRes.rows;
 
-    // 2. Get all consumption norms
+    if (workDoneRows.length === 0) {
+      const billRes = await query(
+        `SELECT boq_item_id, SUM(current_qty) AS total_qty
+         FROM ra_bill_items bi
+         JOIN ra_bills b ON bi.ra_bill_id = b.id
+         WHERE b.project_id = $1 AND b.status IN ('certified','paid')
+         GROUP BY boq_item_id`,
+        [project_id]
+      );
+      workDoneRows = billRes.rows;
+    }
+
+    const has_work_done = workDoneRows.length > 0;
+
+    // 2. Consumption norms for this project
     const normsRes = await query(
-      `SELECT n.*, b.description as boq_description 
+      `SELECT n.*, b.description AS boq_description
        FROM consumption_norms n
        JOIN boq_items b ON n.boq_item_id = b.id
        WHERE b.project_id = $1`,
       [project_id]
     );
     const norms = normsRes.rows;
+    const has_norms = norms.length > 0;
 
-    // 3. Calculate Theoretical Consumption
-    const theoreticsMap = {}; // { material_name: { theoretical, unit, recovery_rate } }
-    workDoneRes.rows.forEach(wd => {
+    // 3. Theoretical consumption from work done × norms
+    const theoreticsMap = {};
+    workDoneRows.forEach(wd => {
       const itemNorms = norms.filter(n => n.boq_item_id === wd.boq_item_id);
       itemNorms.forEach(norm => {
         if (!theoreticsMap[norm.material_name]) {
-          theoreticsMap[norm.material_name] = { 
-            theoretical: 0, 
-            unit: norm.unit, 
+          theoreticsMap[norm.material_name] = {
+            theoretical: 0,
+            unit: norm.unit,
             allowed_wastage_pct: norm.allowed_wastage_pct,
-            recovery_rate: parseFloat(norm.recovery_rate || 0)
+            recovery_rate: parseFloat(norm.recovery_rate || 0),
           };
         }
-        const consumption = parseFloat(wd.total_qty) * parseFloat(norm.norm_quantity);
-        theoreticsMap[norm.material_name].theoretical += consumption;
+        theoreticsMap[norm.material_name].theoretical += parseFloat(wd.total_qty) * parseFloat(norm.norm_quantity);
       });
     });
 
-    // 4. Get Total Actual Issues from Store (MIN)
+    // 4. Actual issues from store (MIN)
     const issuesRes = await query(
-      `SELECT material_name, SUM(quantity_issued) as total_issued, unit
+      `SELECT material_name, SUM(quantity_issued) AS total_issued, unit
        FROM min_items mi
        JOIN material_issue_notes m ON mi.min_id = m.id
        WHERE m.project_id = $1 AND m.status = 'issued'
        GROUP BY material_name, unit`,
       [project_id]
     );
+    const has_issues = issuesRes.rows.length > 0;
 
-    // 5. Get Previously Recovered Amount for this project (to Avoid Double Recovery)
+    // 5. Previously recovered to avoid double recovery
     const prevRecoveredRes = await query(
-       `SELECT SUM(material_recovery_total) as recovered 
-        FROM ra_bills WHERE project_id = $1 AND status IN ('submitted','qs_review','pm_approval','accounts_verify','certified','paid')`,
-       [project_id]
+      `SELECT SUM(material_recovery_total) AS recovered
+       FROM ra_bills
+       WHERE project_id = $1 AND status IN ('submitted','qs_review','pm_approval','accounts_verify','certified','paid')`,
+      [project_id]
     );
     const totalPreviouslyRecovered = parseFloat(prevRecoveredRes.rows[0].recovered || 0);
 
-    // 6. Build Reconciled Report
+    // 6. Build reconciled report
     const report = issuesRes.rows.map(issue => {
       const theo = theoreticsMap[issue.material_name] || { theoretical: 0, allowed_wastage_pct: 5, recovery_rate: 0 };
       const theoretical = theo.theoretical;
       const actual = parseFloat(issue.total_issued);
       const variance = actual - theoretical;
       const variance_pct = theoretical > 0 ? (variance / theoretical * 100) : 100;
-      
       const allowed_wastage = theoretical * (theo.allowed_wastage_pct / 100);
       const excess_wastage = Math.max(0, variance - allowed_wastage);
       const suggested_recovery = excess_wastage * theo.recovery_rate;
@@ -181,26 +197,39 @@ router.get('/audit/:project_id', async (req, res) => {
         unit: issue.unit,
         theoretical_qty: theoretical,
         actual_issued_qty: actual,
-        variance: variance,
-        variance_pct: variance_pct,
+        variance,
+        variance_pct,
         allowed_wastage_pct: theo.allowed_wastage_pct,
-        excess_wastage: excess_wastage,
+        excess_wastage,
         recovery_rate: theo.recovery_rate,
-        suggested_recovery: suggested_recovery,
-        status: variance_pct > (theo.allowed_wastage_pct * 1.5) ? 'critical' : (variance_pct > theo.allowed_wastage_pct ? 'warning' : 'ok')
+        suggested_recovery,
+        status: variance_pct > (theo.allowed_wastage_pct * 1.5) ? 'critical' : (variance_pct > theo.allowed_wastage_pct ? 'warning' : 'ok'),
       };
     });
 
     const totalSuggestedRecovery = report.reduce((sum, r) => sum + r.suggested_recovery, 0);
     const netRecoveryDue = Math.max(0, totalSuggestedRecovery - totalPreviouslyRecovered);
 
-    res.json({ 
-      data: report, 
+    // Diagnostic reason — tells the frontend WHY net_recovery_due is 0
+    let reason = null;
+    if (netRecoveryDue === 0) {
+      if (!has_norms)        reason = 'No consumption norms configured for this project. Set them up in Settings → Norms.';
+      else if (!has_issues)  reason = 'No material issues (MINs) recorded for this project. Issue materials from store first.';
+      else if (!has_work_done) reason = 'No approved measurements found. Approve measurement books first.';
+      else                   reason = 'No excess material usage detected — contractor is within allowed wastage limits.';
+    }
+
+    res.json({
+      data: report,
       summary: {
         total_suggested_recovery: totalSuggestedRecovery,
         previously_recovered: totalPreviouslyRecovered,
-        net_recovery_due: netRecoveryDue
-      }
+        net_recovery_due: netRecoveryDue,
+        has_norms,
+        has_issues,
+        has_work_done,
+        reason,
+      },
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
