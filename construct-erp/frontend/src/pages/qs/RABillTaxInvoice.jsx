@@ -45,6 +45,10 @@ const cell = (extra = {}) => ({
 const hcell = (extra = {}) => ({
   ...cell(), fontWeight: 'bold', textAlign: 'center', ...extra,
 });
+// numeric/amount cells must never wrap mid-number
+const numCell = (extra = {}) => cell({
+  whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal', textAlign: 'right', ...extra,
+});
 
 const RABillTaxInvoice = forwardRef(({ data: b, invoiceNo, invoiceDate }, ref) => {
   if (!b) return null;
@@ -175,19 +179,19 @@ const RABillTaxInvoice = forwardRef(({ data: b, invoiceNo, invoiceDate }, ref) =
       <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', borderLeft: B2, borderRight: B2, borderBottom: B }}>
         <thead>
           <tr>
-            <th style={{ ...hcell(), width: '5%' }} rowSpan={2}>S.No</th>
-            <th style={{ ...hcell(), width: '26%' }} rowSpan={2}>Description of Goods / Services</th>
-            <th style={{ ...hcell(), width: '8%' }} rowSpan={2}>HSN Code</th>
-            <th style={{ ...hcell(), width: '5%' }} rowSpan={2}>Qty</th>
-            <th style={{ ...hcell(), width: '8%' }} rowSpan={2}>Rate</th>
-            <th style={{ ...hcell(), width: '9%' }} rowSpan={2}>Total</th>
-            <th style={{ ...hcell(), width: '8%' }} rowSpan={2}>Discount</th>
-            <th style={{ ...hcell(), width: '11%' }} rowSpan={2}>Taxable Value</th>
-            <th style={{ ...hcell(), width: '10%' }} colSpan={2}>GST</th>
+            <th style={{ ...hcell(), width: '4%' }} rowSpan={2}>S.No</th>
+            <th style={{ ...hcell(), width: '22%' }} rowSpan={2}>Description of Goods / Services</th>
+            <th style={{ ...hcell(), width: '7%' }} rowSpan={2}>HSN Code</th>
+            <th style={{ ...hcell(), width: '4%' }} rowSpan={2}>Qty</th>
+            <th style={{ ...hcell(), width: '6%' }} rowSpan={2}>Rate</th>
+            <th style={{ ...hcell(), width: '11%' }} rowSpan={2}>Total</th>
+            <th style={{ ...hcell(), width: '6%' }} rowSpan={2}>Discount</th>
+            <th style={{ ...hcell(), width: '12%' }} rowSpan={2}>Taxable Value</th>
+            <th style={{ ...hcell(), width: '28%' }} colSpan={2}>GST</th>
           </tr>
           <tr>
-            <th style={{ ...hcell(), width: '5%' }}>CGST<br />{gstRate / 2}%</th>
-            <th style={{ ...hcell(), width: '5%' }}>SGST<br />{gstRate / 2}%</th>
+            <th style={{ ...hcell(), width: '14%' }}>CGST<br />{gstRate / 2}%</th>
+            <th style={{ ...hcell(), width: '14%' }}>SGST<br />{gstRate / 2}%</th>
           </tr>
         </thead>
         <tbody>
@@ -203,11 +207,11 @@ const RABillTaxInvoice = forwardRef(({ data: b, invoiceNo, invoiceDate }, ref) =
             <td style={{ ...cell(), textAlign: 'center' }}>995411</td>
             <td style={{ ...cell(), textAlign: 'center' }}>—</td>
             <td style={{ ...cell(), textAlign: 'center' }}>—</td>
-            <td style={{ ...cell(), textAlign: 'right' }}>{fmt0(taxable)}</td>
+            <td style={{ ...numCell() }}>{fmt0(taxable)}</td>
             <td style={{ ...cell(), textAlign: 'center' }}>—</td>
-            <td style={{ ...cell(), textAlign: 'right' }}>{fmt0(taxable)}</td>
-            <td style={{ ...cell(), textAlign: 'right' }}>{fmt(cgst)}</td>
-            <td style={{ ...cell(), textAlign: 'right' }}>{fmt(sgst)}</td>
+            <td style={{ ...numCell() }}>{fmt0(taxable)}</td>
+            <td style={{ ...numCell() }}>{fmt(cgst)}</td>
+            <td style={{ ...numCell() }}>{fmt(sgst)}</td>
           </tr>
           {/* Blank filler rows */}
           {[...Array(5)].map((_, i) => (
@@ -220,9 +224,9 @@ const RABillTaxInvoice = forwardRef(({ data: b, invoiceNo, invoiceDate }, ref) =
           {/* Totals row */}
           <tr>
             <td colSpan={7} style={{ ...hcell(), textAlign: 'right', borderTop: B2 }}>Total</td>
-            <td style={{ ...hcell(), textAlign: 'right', borderTop: B2 }}>{fmt0(taxable)}</td>
-            <td style={{ ...hcell(), textAlign: 'right', borderTop: B2 }}>{fmt(cgst)}</td>
-            <td style={{ ...hcell(), textAlign: 'right', borderTop: B2 }}>{fmt(sgst)}</td>
+            <td style={{ ...hcell(), ...numCell(), borderTop: B2 }}>{fmt0(taxable)}</td>
+            <td style={{ ...hcell(), ...numCell(), borderTop: B2 }}>{fmt(cgst)}</td>
+            <td style={{ ...hcell(), ...numCell(), borderTop: B2 }}>{fmt(sgst)}</td>
           </tr>
         </tbody>
       </table>
@@ -238,15 +242,15 @@ const RABillTaxInvoice = forwardRef(({ data: b, invoiceNo, invoiceDate }, ref) =
               </span>
             </td>
             <td style={{ ...cell(), fontWeight: 'bold' }}>Taxable Value</td>
-            <td style={{ ...cell(), textAlign: 'right', fontWeight: 'bold' }}>₹ {fmt0(taxable)}</td>
+            <td style={{ ...numCell(), fontWeight: 'bold' }}>₹ {fmt0(taxable)}</td>
           </tr>
           <tr>
             <td style={{ ...cell() }}>Tax Value (GST {gstRate}%)</td>
-            <td style={{ ...cell(), textAlign: 'right', fontWeight: 'bold' }}>₹ {fmt0(cgst + sgst)}</td>
+            <td style={{ ...numCell(), fontWeight: 'bold' }}>₹ {fmt0(cgst + sgst)}</td>
           </tr>
           <tr>
             <td style={{ ...cell(), fontWeight: 'bold' }}>Total Invoice Value</td>
-            <td style={{ ...cell(), textAlign: 'right', fontWeight: 'bold', fontSize: '12pt' }}>₹ {fmt0(total)}</td>
+            <td style={{ ...numCell(), fontWeight: 'bold', fontSize: '12pt' }}>₹ {fmt0(total)}</td>
           </tr>
         </tbody>
       </table>
