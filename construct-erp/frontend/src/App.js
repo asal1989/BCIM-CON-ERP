@@ -50,6 +50,7 @@ const MeasurementBookPage = lazy(() =>
 const RABillPage           = lazy(() => import('./pages/qs/RABillPage'));
 const RABillNewPage        = lazy(() => import('./pages/qs/RABillNewPage'));
 const RABillDetail         = lazy(() => import('./pages/qs/RABillDetail'));
+const PriceEscalationPage  = lazy(() => import('./pages/qs/PriceEscalationPage'));
 const VendorQSCertificationPage = lazy(() => import('./pages/qs/VendorQSCertificationPage'));
 const VendorQSCertificationDetailPage = lazy(() => import('./pages/qs/VendorQSCertificationDetailPage'));
 const RetentionReleasePage = lazy(() => import('./pages/qs/RetentionReleasePage'));
@@ -451,6 +452,7 @@ export default function App() {
                 <Route path="qs/ra-bills/:id" element={<RequireModule module="QS & Billing"><RABillDetail /></RequireModule>} />
                 <Route path="qs/vendor-certifications" element={<RequireModule module="QS & Billing"><VendorQSCertificationPage /></RequireModule>} />
                 <Route path="qs/vendor-certifications/:id" element={<RequireModule module="QS & Billing"><VendorQSCertificationDetailPage /></RequireModule>} />
+                <Route path="qs/price-escalation" element={<RequireModule module="QS & Billing"><PriceEscalationPage /></RequireModule>} />
                 <Route path="qs/retention-releases" element={<RequireModule module="QS & Billing"><RetentionReleasePage /></RequireModule>} />
                 <Route path="qs/material-recon" element={<RequireModule module="QS & Billing"><MaterialReconPage /></RequireModule>} />
                 <Route path="qs/variations" element={<RequireModule module="QS & Billing"><VariationPage /></RequireModule>} />

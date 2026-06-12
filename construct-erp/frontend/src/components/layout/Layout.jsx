@@ -96,6 +96,7 @@ const navGroups = [
     { to: '/qs/boq-dashboard',        icon: BarChart3,       label: 'BOQ Margin Dashboard' },
     { to: '/qs/measurements',         icon: Ruler,           label: 'Measurement Book' },
     { to: '/qs/ra-bills',             icon: Receipt,         label: 'RA Bills' },
+    { to: '/qs/price-escalation',     icon: TrendingUp,      label: 'Price Escalation' },
     { to: '/qs/vendor-certifications',icon: FileSignature,   label: 'Vendor QS Certification' },
     { to: '/qs/retention-releases',   icon: ShieldCheck,     label: 'Retention Release' },
     { to: '/qs/variations',           icon: ArrowLeftRight,  label: 'Variation Orders' },

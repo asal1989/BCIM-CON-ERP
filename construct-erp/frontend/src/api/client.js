@@ -288,6 +288,15 @@ export const clientAdvanceAPI = {
   remove:   (id)     => api.delete(`/client-advances/${id}`),
 };
 
+export const priceEscalationAPI = {
+  list:   (params) => api.get('/price-escalations', { params }),
+  stats:  (params) => api.get('/price-escalations/stats', { params }),
+  create: (data)   => api.post('/price-escalations', data),
+  bulk:   (data)   => api.post('/price-escalations/bulk', data),
+  update: (id, d)  => api.put(`/price-escalations/${id}`, d),
+  remove: (id)     => api.delete(`/price-escalations/${id}`),
+};
+
 export const retentionAPI = {
   list:    (params) => api.get('/retention-releases', { params }),
   summary: (params) => api.get('/retention-releases/summary', { params }),
