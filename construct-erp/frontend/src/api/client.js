@@ -262,6 +262,7 @@ export const boqMappingAPI = {
 export const measurementAPI = {
   list:    (params)   => api.get('/measurements', { params }),
   create:  (data)     => api.post('/measurements', data),
+  update:  (id, data) => api.put(`/measurements/${id}`, data),
   approve: (id, data) => api.patch(`/measurements/${id}/approve`, data),
   import:  (data)     => api.post('/measurements/import', data, { headers: { 'Content-Type': undefined } }),
 };

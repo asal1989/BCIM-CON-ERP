@@ -97,6 +97,62 @@ router.patch('/:id/approve', authorize('qs_engineer','project_manager','admin'),
   }
 });
 
+// PUT /:id — edit a draft or rejected measurement entry
+router.put('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Only allow editing draft or rejected entries
+    const check = await query('SELECT status FROM measurements WHERE id = $1', [id]);
+    if (check.rowCount === 0) return res.status(404).json({ error: 'Measurement not found' });
+    if (!['draft', 'rejected'].includes(check.rows[0].status)) {
+      return res.status(400).json({ error: 'Only draft or rejected entries can be edited' });
+    }
+
+    const {
+      boq_item_id, mb_number, entry_date, description, location,
+      drawing_ref, remarks, nos, length, breadth, height, deduction,
+    } = req.body;
+
+    const net_quantity = Math.max(
+      0,
+      parseFloat(nos || 1) * parseFloat(length || 0) *
+      parseFloat(breadth || 0) * parseFloat(height || 0) -
+      parseFloat(deduction || 0)
+    );
+
+    const result = await query(
+      `UPDATE measurements SET
+        boq_item_id = COALESCE($1, boq_item_id),
+        mb_number   = COALESCE($2, mb_number),
+        entry_date  = COALESCE($3, entry_date),
+        description = COALESCE($4, description),
+        location    = COALESCE($5, location),
+        drawing_ref = $6,
+        remarks     = $7,
+        nos         = $8,
+        length      = $9,
+        breadth     = $10,
+        height      = $11,
+        deduction   = $12,
+        net_quantity = $13,
+        updated_at  = NOW()
+       WHERE id = $14
+       RETURNING *`,
+      [
+        boq_item_id || null, mb_number || null, entry_date || null,
+        description || null, location || null, drawing_ref || null, remarks || null,
+        parseFloat(nos || 1), parseFloat(length || 0), parseFloat(breadth || 0),
+        parseFloat(height || 0), parseFloat(deduction || 0), net_quantity, id,
+      ]
+    );
+
+    res.json({ message: 'Measurement updated', data: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // DELETE /:id
 router.delete('/:id', async (req, res) => {
   try {

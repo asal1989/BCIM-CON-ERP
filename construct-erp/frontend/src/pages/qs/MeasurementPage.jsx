@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Ruler, Plus, X, CheckCircle2, XCircle, Search,
   Calculator, Clock, FileText, ArrowUpRight, ChevronDown,
-  Download, RefreshCw, BookOpen,
+  Download, RefreshCw, BookOpen, Pencil,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
@@ -58,6 +58,7 @@ export default function MeasurementPage() {
   const navigate = useNavigate();
   const [projectId,    setProjectId]    = useState('');
   const [showForm,     setShowForm]     = useState(false);
+  const [editEntry,    setEditEntry]    = useState(null); // null = add mode, row = edit mode
   const [activeTab,    setActiveTab]    = useState('all');
   const [search,       setSearch]       = useState('');
   const [selected,     setSelected]     = useState(null);
@@ -105,12 +106,34 @@ export default function MeasurementPage() {
 
   // ── mutations ──────────────────────────────────────────────────────────────
 
-  const resetForm = () => setForm({
-    boq_item_id: '', mb_number: '',
-    entry_date:  dayjs().format('YYYY-MM-DD'),
-    description: '', location: '', drawing_ref: '', remarks: '',
-    nos: 1, length: '', breadth: '', height: '', deduction: 0,
-  });
+  const resetForm = () => {
+    setForm({
+      boq_item_id: '', mb_number: '',
+      entry_date:  dayjs().format('YYYY-MM-DD'),
+      description: '', location: '', drawing_ref: '', remarks: '',
+      nos: 1, length: '', breadth: '', height: '', deduction: 0,
+    });
+    setEditEntry(null);
+  };
+
+  const openEdit = (m) => {
+    setEditEntry(m);
+    setForm({
+      boq_item_id: m.boq_item_id || '',
+      mb_number:   m.mb_number   || '',
+      entry_date:  m.entry_date  ? dayjs(m.entry_date).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
+      description: m.description || m.boq_description || '',
+      location:    m.location    || '',
+      drawing_ref: m.drawing_ref || '',
+      remarks:     m.remarks     || '',
+      nos:         m.nos         ?? 1,
+      length:      m.length      || '',
+      breadth:     m.breadth     || '',
+      height:      m.height      || '',
+      deduction:   m.deduction   || 0,
+    });
+    setShowForm(true);
+  };
 
   const createMutation = useMutation({
     mutationFn: (d) => measurementAPI.create({
@@ -125,6 +148,17 @@ export default function MeasurementPage() {
       qc.invalidateQueries({ queryKey: ['measurements'] });
     },
     onError: (e) => toast.error(e?.response?.data?.error || 'Submission failed'),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => measurementAPI.update(id, data),
+    onSuccess: () => {
+      toast.success('Measurement entry updated');
+      setShowForm(false);
+      resetForm();
+      qc.invalidateQueries({ queryKey: ['measurements'] });
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Update failed'),
   });
 
   const importMutation = useMutation({
@@ -416,10 +450,21 @@ export default function MeasurementPage() {
                     </td>
                     {/* Actions */}
                     <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
-                      <TableActions
-                        disableEdit
-                        onDelete={() => deleteMutation.mutate(m.id)}
-                      />
+                      <div className="flex items-center gap-1">
+                        {['draft', 'rejected'].includes(m.status) && (
+                          <button
+                            onClick={() => openEdit(m)}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 transition-colors"
+                            title="Edit entry"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <TableActions
+                          disableEdit
+                          onDelete={() => deleteMutation.mutate(m.id)}
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -608,9 +653,11 @@ export default function MeasurementPage() {
               <div className="px-6 py-4 border-b border-[#e2e6ec] flex items-center justify-between flex-shrink-0 bg-white">
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center">
-                    <Plus className="w-4 h-4 text-white" />
+                    {editEntry ? <Pencil className="w-4 h-4 text-white" /> : <Plus className="w-4 h-4 text-white" />}
                   </div>
-                  <h2 className="text-[14px] font-medium text-[#1a1c21]">New Measurement Entry</h2>
+                  <h2 className="text-[14px] font-medium text-[#1a1c21]">
+                    {editEntry ? `Edit Entry — ${editEntry.mb_number || editEntry.sr_no || ''}` : 'New Measurement Entry'}
+                  </h2>
                 </div>
                 <button
                   onClick={() => { setShowForm(false); resetForm(); }}
@@ -775,20 +822,32 @@ export default function MeasurementPage() {
                 >
                   Cancel
                 </button>
-                <button
-                  onClick={() => createMutation.mutate({ ...form, status: 'draft' })}
-                  disabled={createMutation.isPending || !form.boq_item_id || !form.description}
-                  className="h-9 px-5 rounded-xl border border-[#d8dce1] bg-white text-[12px] font-medium text-[#6a6f7d] hover:bg-[#f4f6f9] transition-colors disabled:opacity-50"
-                >
-                  Save Draft
-                </button>
-                <button
-                  onClick={() => createMutation.mutate(form)}
-                  disabled={createMutation.isPending || !form.boq_item_id || !form.description}
-                  className="flex-1 h-9 px-5 rounded-xl bg-indigo-600 text-white text-[12px] font-medium hover:bg-indigo-500 transition-colors disabled:opacity-60"
-                >
-                  {createMutation.isPending ? 'Submitting…' : 'Submit'}
-                </button>
+                {editEntry ? (
+                  <button
+                    onClick={() => updateMutation.mutate({ id: editEntry.id, data: form })}
+                    disabled={updateMutation.isPending || !form.boq_item_id}
+                    className="flex-1 h-9 px-5 rounded-xl bg-indigo-600 text-white text-[12px] font-medium hover:bg-indigo-500 transition-colors disabled:opacity-60"
+                  >
+                    {updateMutation.isPending ? 'Saving…' : 'Save Changes'}
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => createMutation.mutate({ ...form, status: 'draft' })}
+                      disabled={createMutation.isPending || !form.boq_item_id || !form.description}
+                      className="h-9 px-5 rounded-xl border border-[#d8dce1] bg-white text-[12px] font-medium text-[#6a6f7d] hover:bg-[#f4f6f9] transition-colors disabled:opacity-50"
+                    >
+                      Save Draft
+                    </button>
+                    <button
+                      onClick={() => createMutation.mutate(form)}
+                      disabled={createMutation.isPending || !form.boq_item_id || !form.description}
+                      className="flex-1 h-9 px-5 rounded-xl bg-indigo-600 text-white text-[12px] font-medium hover:bg-indigo-500 transition-colors disabled:opacity-60"
+                    >
+                      {createMutation.isPending ? 'Submitting…' : 'Submit'}
+                    </button>
+                  </>
+                )}
               </div>
             </motion.div>
           </div>
