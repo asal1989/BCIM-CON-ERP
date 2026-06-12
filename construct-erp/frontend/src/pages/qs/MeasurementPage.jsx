@@ -451,15 +451,13 @@ export default function MeasurementPage() {
                     {/* Actions */}
                     <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-1">
-                        {['draft', 'rejected'].includes(m.status) && (
-                          <button
-                            onClick={() => openEdit(m)}
-                            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 transition-colors"
-                            title="Edit entry"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        <button
+                          onClick={() => openEdit(m)}
+                          className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 transition-colors"
+                          title="Edit entry"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
                         <TableActions
                           disableEdit
                           onDelete={() => deleteMutation.mutate(m.id)}

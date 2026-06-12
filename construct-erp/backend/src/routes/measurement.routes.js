@@ -102,12 +102,8 @@ router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Only allow editing draft or rejected entries
     const check = await query('SELECT status FROM measurements WHERE id = $1', [id]);
     if (check.rowCount === 0) return res.status(404).json({ error: 'Measurement not found' });
-    if (!['draft', 'rejected'].includes(check.rows[0].status)) {
-      return res.status(400).json({ error: 'Only draft or rejected entries can be edited' });
-    }
 
     const {
       boq_item_id, mb_number, entry_date, description, location,
