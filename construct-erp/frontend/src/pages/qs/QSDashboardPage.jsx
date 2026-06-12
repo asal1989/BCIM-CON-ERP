@@ -20,6 +20,14 @@ const fmt = (n) =>
   n == null || isNaN(n) ? '—'
   : `₹${Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+const crore = (n) => {
+  if (n == null || isNaN(n)) return '—';
+  const v = Number(n);
+  if (Math.abs(v) >= 1e7) return `₹${(v / 1e7).toFixed(2)} Cr`;
+  if (Math.abs(v) >= 1e5) return `₹${(v / 1e5).toFixed(2)} L`;
+  return `₹${v.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+};
+
 const pct = (a, b) => (b ? Math.min(100, Math.round((Number(a) / Number(b)) * 100)) : 0);
 
 const STATUS_COLORS = {
@@ -192,12 +200,12 @@ export default function QSDashboardPage() {
 
         {/* ── KPI Row ── */}
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-          <ThemeKpiCard icon={FileSpreadsheet} label="Contract Value"    value={fmt(kpi.contractValue)}      color="blue"    sub={`${boqItems.length} BOQ items`} />
-          <ThemeKpiCard icon={Receipt}         label="Total Billed"      value={fmt(kpi.totalBilled)}        color="emerald" sub={`${raBills.length} RA bills`} />
-          <ThemeKpiCard icon={IndianRupee}     label="Amount Received"   value={fmt(kpi.totalReceived)}      color="green"   sub={`${kpi.collectionRate}% collected`} />
-          <ThemeKpiCard icon={AlertTriangle}   label="Outstanding"       value={fmt(kpi.outstanding)}        color="amber"   sub="Pending collection" />
-          <ThemeKpiCard icon={ShieldCheck}     label="Retention Held"    value={fmt(kpi.retentionHeld)}      color="violet"  sub={`${retentions.filter(r => r.status !== 'released').length} contracts`} />
-          <ThemeKpiCard icon={ArrowLeftRight}  label="Variations"        value={fmt(kpi.variationsApproved)} color="orange"  sub={`${variations.filter(v => v.status === 'approved').length} approved`} />
+          <ThemeKpiCard icon={FileSpreadsheet} label="Contract Value"    value={crore(kpi.contractValue)}      color="blue"    sub={`${boqItems.length} BOQ items`} />
+          <ThemeKpiCard icon={Receipt}         label="Total Billed"      value={crore(kpi.totalBilled)}        color="emerald" sub={`${raBills.length} RA bills`} />
+          <ThemeKpiCard icon={IndianRupee}     label="Amount Received"   value={crore(kpi.totalReceived)}      color="green"   sub={`${kpi.collectionRate}% collected`} />
+          <ThemeKpiCard icon={AlertTriangle}   label="Outstanding"       value={crore(kpi.outstanding)}        color="amber"   sub="Pending collection" />
+          <ThemeKpiCard icon={ShieldCheck}     label="Retention Held"    value={crore(kpi.retentionHeld)}      color="violet"  sub={`${retentions.filter(r => r.status !== 'released').length} contracts`} />
+          <ThemeKpiCard icon={ArrowLeftRight}  label="Variations"        value={crore(kpi.variationsApproved)} color="orange"  sub={`${variations.filter(v => v.status === 'approved').length} approved`} />
         </div>
 
         {/* ── Alert banners ── */}
