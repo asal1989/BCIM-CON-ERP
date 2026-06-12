@@ -174,7 +174,7 @@ router.get('/audit/:project_id', async (req, res) => {
 
     // 5. Previously recovered to avoid double recovery
     const prevRecoveredRes = await query(
-      `SELECT SUM(material_recovery_total) AS recovered
+      `SELECT SUM(COALESCE(material_recovery_cement, 0) + COALESCE(material_recovery_steel, 0)) AS recovered
        FROM ra_bills
        WHERE project_id = $1 AND status IN ('submitted','qs_review','pm_approval','accounts_verify','certified','paid')`,
       [project_id]
