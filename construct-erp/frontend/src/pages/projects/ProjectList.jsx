@@ -20,6 +20,13 @@ const inr = v => {
   return `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
+const crore = v => {
+  const n = parseFloat(v || 0);
+  if (Math.abs(n) >= 1e7) return `₹${(n / 1e7).toFixed(2)} Cr`;
+  if (Math.abs(n) >= 1e5) return `₹${(n / 1e5).toFixed(2)} L`;
+  return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+};
+
 const STATUS = {
   active:    { label: 'Active',     bg: 'bg-green-50',   text: 'text-green-700',   border: 'border-green-200',  dot: 'bg-green-500',   bar: 'bg-green-500',   left: 'border-l-green-500'  },
   delayed:   { label: 'Delayed',    bg: 'bg-red-50',     text: 'text-red-700',     border: 'border-red-200',    dot: 'bg-red-500',     bar: 'bg-red-500',     left: 'border-l-red-500'    },
@@ -99,7 +106,7 @@ export default function ProjectList() {
             { label: 'Active',         value: kpis.active,        icon: Activity,     color: 'text-green-600',  bg: 'bg-green-50'  },
             { label: 'Completed',      value: kpis.completed,     icon: CheckCircle2, color: 'text-emerald-600',bg: 'bg-emerald-50'},
             { label: 'Delayed',        value: kpis.delayed,       icon: AlertTriangle,color: 'text-red-600',    bg: 'bg-red-50'    },
-            { label: 'Portfolio Value',value: inr(kpis.totalValue),icon: IndianRupee, color: 'text-purple-600', bg: 'bg-purple-50', isText: true },
+            { label: 'Portfolio Value',value: crore(kpis.totalValue),icon: IndianRupee, color: 'text-purple-600', bg: 'bg-purple-50', isText: true },
           ].map(k => (
             <div key={k.label} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between">
