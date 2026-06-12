@@ -525,82 +525,53 @@ export default function RABillDetail() {
         <RABillPrintTemplate ref={printRef} data={b} variations={variations} audit={audit} />
       </div>
 
-      {/* Print zone — Tax Invoice (hidden on screen) */}
-      <div className="tax-invoice-print-zone">
-        <RABillTaxInvoice ref={taxInvoiceRef} data={b} invoiceNo={invoiceNo} invoiceDate={invoiceDate} />
-      </div>
+      <style>{`@media screen { .ra-bill-print-zone { display: none !important; } }`}</style>
 
-      <style>{`
-        @media screen { .ra-bill-print-zone { display: none !important; } }
-        @media screen { .tax-invoice-print-zone { display: none !important; } }
-        @media print  { .tax-invoice-print-zone { display: block !important; } }
-      `}</style>
-
-      {/* ── Tax Invoice Modal ── */}
+      {/* ── Tax Invoice Full-Screen Preview ── */}
       {showTaxModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-[#e2e6ec] w-full max-w-sm">
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[#e2e6ec]">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-amber-500 flex items-center justify-center">
-                  <FileSpreadsheet className="w-4 h-4 text-white" />
-                </div>
-                <div>
-                  <div className="text-[13px] font-semibold text-[#1a1c21]">Generate Tax Invoice</div>
-                  <div className="text-[10px] text-[#8e94a3]">{b.bill_number}</div>
-                </div>
-              </div>
-              <button onClick={() => setShowTaxModal(false)} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f4f6f9] text-[#8e94a3]">
-                <X size={15} />
-              </button>
+        <div className="fixed inset-0 z-50 bg-[#e8eaf0] flex flex-col">
+          {/* Toolbar */}
+          <div className="flex items-center gap-3 px-5 py-2.5 bg-white border-b border-[#e2e6ec] shadow-sm flex-shrink-0">
+            <button
+              onClick={() => setShowTaxModal(false)}
+              className="flex items-center gap-1.5 text-[12px] text-[#6a6f7d] hover:text-[#1a1c21] transition-colors"
+            >
+              <X size={15} /> Close
+            </button>
+            <div className="h-5 w-px bg-[#e2e6ec]" />
+            <div className="flex items-center gap-2">
+              <label className="text-[11px] font-medium text-[#6a6f7d] whitespace-nowrap">Invoice No *</label>
+              <input
+                type="text"
+                value={invoiceNo}
+                onChange={e => setInvoiceNo(e.target.value)}
+                placeholder="BCIM/2526/01"
+                className="border border-[#d8dce6] rounded-lg px-2.5 py-1.5 text-[12px] w-36 focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
             </div>
-
-            {/* Body */}
-            <div className="px-5 py-4 space-y-4">
-              {/* Summary strip */}
-              <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 space-y-1 text-[11px]">
-                <div className="flex justify-between"><span className="text-amber-700">Taxable Value</span><span className="font-medium text-amber-900">₹{Number((parseFloat(b.gross_amount||0)+parseFloat(b.price_escalation||0))).toLocaleString('en-IN',{maximumFractionDigits:2})}</span></div>
-                <div className="flex justify-between"><span className="text-amber-700">GST @ {b.gst_rate||18}%</span><span className="font-medium text-amber-900">₹{Number((parseFloat(b.gross_amount||0)+parseFloat(b.price_escalation||0))*(parseFloat(b.gst_rate||18)/100)).toLocaleString('en-IN',{maximumFractionDigits:2})}</span></div>
-                <div className="flex justify-between border-t border-amber-200 pt-1 mt-1 font-semibold"><span className="text-amber-800">Invoice Total</span><span className="text-amber-900">₹{Number((parseFloat(b.gross_amount||0)+parseFloat(b.price_escalation||0))*(1+parseFloat(b.gst_rate||18)/100)).toLocaleString('en-IN',{maximumFractionDigits:2})}</span></div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-medium text-[#6a6f7d] uppercase tracking-wide mb-1">Invoice Number *</label>
-                <input
-                  type="text"
-                  value={invoiceNo}
-                  onChange={e => setInvoiceNo(e.target.value)}
-                  placeholder="e.g. BCIM/2526/01"
-                  className="w-full border border-[#d8dce6] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-medium text-[#6a6f7d] uppercase tracking-wide mb-1">Invoice Date</label>
-                <input
-                  type="date"
-                  value={invoiceDate}
-                  onChange={e => setInvoiceDate(e.target.value)}
-                  className="w-full border border-[#d8dce6] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400"
-                />
-              </div>
+            <div className="flex items-center gap-2">
+              <label className="text-[11px] font-medium text-[#6a6f7d]">Date</label>
+              <input
+                type="date"
+                value={invoiceDate}
+                onChange={e => setInvoiceDate(e.target.value)}
+                className="border border-[#d8dce6] rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
             </div>
-
-            {/* Footer */}
-            <div className="flex gap-2 px-5 pb-5">
+            <div className="ml-auto">
               <button
-                onClick={() => setShowTaxModal(false)}
-                className="flex-1 h-10 rounded-xl border border-[#e2e6ec] text-[12px] font-medium text-[#6a6f7d] hover:bg-[#f4f6f9] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => { if (!invoiceNo.trim()) { toast.error('Please enter an invoice number'); return; } setShowTaxModal(false); setTimeout(handleTaxInvoicePrint, 80); }}
-                className="flex-1 h-10 rounded-xl bg-amber-500 text-white text-[12px] font-medium hover:bg-amber-400 transition-colors flex items-center justify-center gap-2"
+                onClick={() => { if (!invoiceNo.trim()) { toast.error('Please enter an invoice number'); return; } handleTaxInvoicePrint(); }}
+                className="h-9 px-4 rounded-xl bg-amber-500 text-white text-[12px] font-semibold hover:bg-amber-400 transition-colors flex items-center gap-2"
               >
                 <Printer size={14} /> Print / Save PDF
               </button>
+            </div>
+          </div>
+
+          {/* Invoice preview — scrollable */}
+          <div className="flex-1 overflow-auto flex justify-center py-8 px-4">
+            <div style={{ boxShadow: '0 4px 32px rgba(0,0,0,0.18)', background: '#fff' }}>
+              <RABillTaxInvoice ref={taxInvoiceRef} data={b} invoiceNo={invoiceNo} invoiceDate={invoiceDate} />
             </div>
           </div>
         </div>
