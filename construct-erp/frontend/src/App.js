@@ -257,16 +257,17 @@ const MODULE_HOME = {
 // Roles that land on the Approvals page first (they primarily approve work)
 const APPROVER_ROLES = [
   'site_engineer', 'qs_engineer', 'project_manager',
-  'accounts', 'management', 'finance_head',
+  'accounts', 'management', 'finance_head', 'procurement_manager',
   'md', 'ceo', 'cfo', 'director', 'managing_director',
 ];
 
 function getHomeRoute(user) {
   if (!user) return '/login';
+  const role = String(user.role || '').toLowerCase();
   // Super admin & admin → full dashboard
-  if (['admin', 'super_admin'].includes(user.role)) return '/dashboard';
+  if (['admin', 'super_admin'].includes(role)) return '/dashboard';
   // Approver roles → My Approvals page as home
-  if (APPROVER_ROLES.includes(user.role)) return '/approvals';
+  if (APPROVER_ROLES.includes(role)) return '/approvals';
   const mods = user.accessible_modules;
   if (!mods || mods.length === 0) return '/approvals'; // unconfigured → approvals
   for (const mod of mods) {

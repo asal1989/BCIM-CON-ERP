@@ -15,7 +15,9 @@ router.use(authenticate);
 
 const CID  = r => r.user.company_id;
 const UID  = r => r.user.id;
-const ROLE = r => r.user.role;
+// Roles are stored free-text and may differ in case (e.g. "Procurement_manager") —
+// normalise so the role lists below always match.
+const ROLE = r => String(r.user.role || '').toLowerCase();
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 

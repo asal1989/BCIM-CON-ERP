@@ -36,9 +36,13 @@ const authenticate = async (req, res, next) => {
 // super_admin is a universal bypass — it is the highest role and must never be
 // locked out of a route just because the route's author forgot to list it.
 const authorize = (...roles) => {
+  // Role values are stored free-text and may differ in case (e.g. "Procurement_manager"),
+  // so compare case-insensitively.
+  const allowed = roles.map(r => String(r).toLowerCase());
   return (req, res, next) => {
-    if (req.user.role === 'super_admin') return next();
-    if (!roles.includes(req.user.role)) {
+    const userRole = String(req.user.role || '').toLowerCase();
+    if (userRole === 'super_admin') return next();
+    if (!allowed.includes(userRole)) {
       return res.status(403).json({
         error: `Access denied. Required roles: ${roles.join(', ')}. Your role: ${req.user.role}`
       });

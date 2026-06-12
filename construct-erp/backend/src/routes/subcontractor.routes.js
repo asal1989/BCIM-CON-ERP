@@ -69,7 +69,7 @@ router.patch('/work-orders/:id/approve', authorize('super_admin', 'admin', 'proj
 });
 
 // PATCH /work-orders/:id/md-approve — Stage 2 (MD): submitted → approved
-router.patch('/work-orders/:id/md-approve', authorize('super_admin', 'admin'), async (req, res) => {
+router.patch('/work-orders/:id/md-approve', authorize('super_admin', 'admin', 'managing_director', 'md', 'ceo'), async (req, res) => {
   try {
     const result = await query(
       `UPDATE work_orders SET status='approved', updated_at=NOW()
@@ -84,7 +84,7 @@ router.patch('/work-orders/:id/md-approve', authorize('super_admin', 'admin'), a
 });
 
 // PATCH /work-orders/:id/reject — reject a WO
-router.patch('/work-orders/:id/reject', authorize('super_admin', 'admin', 'project_manager'), async (req, res) => {
+router.patch('/work-orders/:id/reject', authorize('super_admin', 'admin', 'project_manager', 'procurement_manager', 'managing_director', 'md', 'ceo'), async (req, res) => {
   try {
     const result = await query(
       `UPDATE work_orders SET status='rejected', updated_at=NOW()
