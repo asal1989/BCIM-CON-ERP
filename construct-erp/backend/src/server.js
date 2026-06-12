@@ -634,6 +634,9 @@ if (require.main === module) {
 
     const { initTodayBillAlert } = require('./utils/today-bill-alert.service');
     initTodayBillAlert();
+
+    const { initMdApprovalDigest } = require('./utils/md-approval-digest.service');
+    initMdApprovalDigest();
   });
 }
 

@@ -13,6 +13,20 @@ const {
 
 router.use(authenticate);
 
+// POST /api/v1/approvals/md-digest/run — manually trigger the MD pending-approvals
+// digest mail (admin only; the cron sends it automatically at 9 AM / 9 PM IST)
+router.post('/md-digest/run', async (req, res) => {
+  try {
+    const role = String(req.user.role || '').toLowerCase();
+    if (!['super_admin', 'admin'].includes(role)) {
+      return res.status(403).json({ error: 'Admin only' });
+    }
+    const { runMdApprovalDigest } = require('../utils/md-approval-digest.service');
+    const result = await runMdApprovalDigest({ manual: true });
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 const CID  = r => r.user.company_id;
 const UID  = r => r.user.id;
 // Roles are stored free-text and may differ in case (e.g. "Procurement_manager") —
