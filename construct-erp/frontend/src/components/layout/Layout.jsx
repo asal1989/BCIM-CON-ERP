@@ -1046,7 +1046,7 @@ function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle, topOffset
                 <div style={{ height: 1, background: '#EEF2F7', margin: '6px 4px 8px' }} />
               </div>
             )}
-            {navGroups.map(group => {
+            {navGroups.map((group, gi) => {
               const hasActive = group.items.some(item => matchesPath(item.to));
               const GroupIcon = group.items[0]?.icon || FolderSearch;
 
@@ -1061,42 +1061,45 @@ function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle, topOffset
                     style={{
                       display: 'flex', alignItems: 'center', gap: 8,
                       margin: '1px 0',
-                      padding: nested ? '5px 8px 5px 32px' : '5px 8px 5px 24px',
+                      padding: nested ? '6px 8px 6px 36px' : '6px 8px 6px 26px',
                       borderRadius: 6,
-                      background: active ? '#F1F5F9' : 'transparent',
-                      color: active ? '#0F172A' : '#374151',
+                      background: active ? '#E8EDF2' : 'transparent',
+                      color: '#111827',
                       textDecoration: 'none',
-                      fontSize: 11.5, fontWeight: active ? 600 : 400,
-                      borderLeft: active ? '3px solid #0F172A' : '3px solid transparent',
+                      fontSize: 12, fontWeight: active ? 700 : 500,
+                      borderLeft: active ? '3px solid #111827' : '3px solid transparent',
                     }}
                   >
-                    <Icon size={12} style={{ flexShrink: 0, color: active ? '#0F172A' : '#6B7280' }} />
+                    <Icon size={13} style={{ flexShrink: 0, color: '#111827', opacity: active ? 1 : 0.55 }} />
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t(item.label)}</span>
                   </NavLink>
                 );
               };
 
               return (
-                <div key={group.label} style={{ marginBottom: 6 }}>
-                  {/* ── Module header — bigger, bold, black ── */}
+                <div key={group.label}>
+                  {/* divider between modules */}
+                  {gi > 0 && <div style={{ height: 1, background: '#D1D5DB', margin: '6px 4px 8px' }} />}
+
+                  {/* ── Module header ── */}
                   <div style={{
-                    display: 'flex', alignItems: 'center', gap: 7,
-                    padding: '8px 8px', borderRadius: 7,
-                    background: hasActive ? '#F1F5F9' : '#F8FAFC',
-                    borderLeft: hasActive ? '3px solid #0F172A' : '3px solid #E2E8F0',
-                    marginBottom: 2,
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '9px 10px', borderRadius: 7,
+                    background: hasActive ? '#1E293B' : '#F1F5F9',
+                    marginBottom: 4,
                   }}>
-                    <GroupIcon size={15} style={{ color: '#0F172A', flexShrink: 0 }} />
+                    <GroupIcon size={15} style={{ color: hasActive ? '#fff' : '#111827', flexShrink: 0 }} />
                     <span style={{
-                      flex: 1, fontSize: 13.5, fontWeight: 800, color: '#0F172A',
-                      textTransform: 'uppercase', letterSpacing: '0.04em',
+                      flex: 1, fontSize: 13, fontWeight: 800, letterSpacing: '0.05em',
+                      textTransform: 'uppercase',
+                      color: hasActive ? '#fff' : '#111827',
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>
                       {t(group.label)}
                     </span>
                   </div>
 
-                  {/* ── All items always visible ── */}
+                  {/* ── All items ── */}
                   <div>
                     {getNavSections(group).map(section => {
                       const isSub = section.label && section.items.length > 1;
@@ -1105,15 +1108,15 @@ function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle, topOffset
                       const SubIcon = section.items[0]?.icon || FolderSearch;
                       return (
                         <div key={section.label}>
-                          {/* Sub-section label — smaller than module, gray */}
+                          {/* Sub-section label */}
                           <div style={{
                             display: 'flex', alignItems: 'center', gap: 5,
-                            padding: '4px 8px 2px 16px',
-                            color: subActive ? '#374151' : '#9CA3AF',
-                            fontSize: 9.5, fontWeight: 700,
-                            textTransform: 'uppercase', letterSpacing: '0.06em',
+                            padding: '5px 8px 2px 20px',
+                            color: subActive ? '#1E293B' : '#6B7280',
+                            fontSize: 10, fontWeight: 700,
+                            textTransform: 'uppercase', letterSpacing: '0.07em',
                           }}>
-                            <SubIcon size={9} style={{ flexShrink: 0 }} />
+                            <SubIcon size={10} style={{ flexShrink: 0 }} />
                             {t(section.label)}
                           </div>
                           {section.items.map(item => renderLink(item, true))}
