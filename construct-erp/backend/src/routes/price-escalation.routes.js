@@ -86,8 +86,9 @@ router.post('/', authorize(...rolesWrite), async (req, res) => {
   try {
     const b = req.body;
     const consumed = parseFloat(b.consumed_qty || 0);
+    // Diff. in Rate (Purchase) = purchase_rate - base_rate
     const diff = b.rate_diff !== undefined ? parseFloat(b.rate_diff)
-               : parseFloat(b.approved_rate || 0) - parseFloat(b.base_rate || 0);
+               : parseFloat(b.purchase_rate || 0) - parseFloat(b.base_rate || 0);
     const amount = b.amount !== undefined ? parseFloat(b.amount) : consumed * diff;
     const { rows } = await query(`
       INSERT INTO price_escalations
@@ -110,8 +111,9 @@ router.post('/bulk', authorize(...rolesWrite), async (req, res) => {
     let inserted = 0;
     for (const b of lines) {
       const consumed = parseFloat(b.consumed_qty || 0);
+      // Diff. in Rate (Purchase) = purchase_rate - base_rate
       const diff = b.rate_diff !== undefined ? parseFloat(b.rate_diff)
-                 : parseFloat(b.approved_rate || 0) - parseFloat(b.base_rate || 0);
+                 : parseFloat(b.purchase_rate || 0) - parseFloat(b.base_rate || 0);
       const amount = b.amount !== undefined ? parseFloat(b.amount) : consumed * diff;
       await query(`
         INSERT INTO price_escalations

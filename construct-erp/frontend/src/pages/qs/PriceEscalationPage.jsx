@@ -124,7 +124,8 @@ export default function PriceEscalationPage() {
     onError: (e) => toast.error(e?.response?.data?.error || 'Failed to delete'),
   });
 
-  const rateDiff = (parseFloat(form.approved_rate || 0) - parseFloat(form.base_rate || 0));
+  // Escalation amount = Consumed Qty (Cum) x Differential in Rate (Purchase) (Rs.)
+  const rateDiff = (parseFloat(form.purchase_rate || 0) - parseFloat(form.base_rate || 0));
   const lineAmount = parseFloat(form.consumed_qty || 0) * rateDiff;
 
   const submit = () => {
@@ -194,8 +195,8 @@ export default function PriceEscalationPage() {
                 <th className="text-left px-3 py-2.5 font-medium">Invoice</th>
                 <th className="text-right px-3 py-2.5 font-medium">Consumed</th>
                 <th className="text-right px-3 py-2.5 font-medium">Base ₹</th>
-                <th className="text-right px-3 py-2.5 font-medium">Approved ₹</th>
-                <th className="text-right px-3 py-2.5 font-medium">Diff ₹</th>
+                <th className="text-right px-3 py-2.5 font-medium">Purchase ₹</th>
+                <th className="text-right px-3 py-2.5 font-medium">Diff (Purch.) ₹</th>
                 <th className="text-right px-3 py-2.5 font-medium">Amount</th>
                 <th className="px-3 py-2.5"></th>
               </tr>
@@ -216,7 +217,7 @@ export default function PriceEscalationPage() {
                   </td>
                   <td className="px-3 py-2 text-right text-slate-700">{num(r.consumed_qty)} {r.unit}</td>
                   <td className="px-3 py-2 text-right text-slate-500">{fmt(r.base_rate)}</td>
-                  <td className="px-3 py-2 text-right text-slate-500">{fmt(r.approved_rate)}</td>
+                  <td className="px-3 py-2 text-right text-slate-500">{fmt(r.purchase_rate)}</td>
                   <td className={`px-3 py-2 text-right font-medium ${parseFloat(r.rate_diff) >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                     {parseFloat(r.rate_diff) >= 0 ? '+' : ''}{fmt(r.rate_diff)}
                   </td>
@@ -317,12 +318,12 @@ export default function PriceEscalationPage() {
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm mt-1" />
               </div>
               <div>
-                <label className="text-xs font-medium text-slate-600">Approved Rate ₹</label>
-                <input type="number" value={form.approved_rate} onChange={e => set('approved_rate', e.target.value)}
+                <label className="text-xs font-medium text-slate-600">Purchase Rate ₹</label>
+                <input type="number" value={form.purchase_rate} onChange={e => set('purchase_rate', e.target.value)}
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm mt-1" />
               </div>
               <div className="col-span-2 bg-slate-50 rounded-lg p-3 flex justify-between text-sm">
-                <span className="text-slate-600">Rate Diff: <b className={rateDiff >= 0 ? 'text-emerald-600' : 'text-red-500'}>{fmt(rateDiff)}</b> / {form.unit}</span>
+                <span className="text-slate-600">Diff. in Rate (Purch.): <b className={rateDiff >= 0 ? 'text-emerald-600' : 'text-red-500'}>{fmt(rateDiff)}</b> / {form.unit}</span>
                 <span className="text-slate-600">Line Amount: <b className={lineAmount >= 0 ? 'text-emerald-600' : 'text-red-500'}>{fmt(lineAmount)}</b></span>
               </div>
             </div>
