@@ -24,6 +24,23 @@ const ensureRaBillCols = async () => {
   for (const sql of alters) {
     try { await query(sql); } catch (_) {}
   }
+  // Ensure status constraint includes 'draft' and 'verified' (production DB may have old constraint)
+  try {
+    await query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.check_constraints
+          WHERE constraint_schema = current_schema()
+            AND constraint_name = 'ra_bills_status_check'
+            AND check_clause LIKE '%draft%'
+        ) THEN
+          ALTER TABLE ra_bills DROP CONSTRAINT IF EXISTS ra_bills_status_check;
+          ALTER TABLE ra_bills ADD CONSTRAINT ra_bills_status_check
+            CHECK (status IN ('draft','submitted','verified','certified','rejected','paid'));
+        END IF;
+      END $$
+    `);
+  } catch (_) {}
 };
 runSchemaInit('ra_bills', ensureRaBillCols);
 
