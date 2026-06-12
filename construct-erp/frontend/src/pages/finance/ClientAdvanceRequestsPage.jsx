@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { clientAdvanceAPI, projectAPI } from '../../api/client';
 import {
-  Coins, Plus, X, Check, Trash2, FileText, Send, CheckCircle2, Banknote, Clock,
+  Coins, Plus, X, Check, Trash2, FileText, Send, CheckCircle2, Banknote, Clock, History, Hourglass,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
@@ -12,16 +12,18 @@ import { clsx } from 'clsx';
 const inr = v => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const STATUS = {
-  submitted: { label: 'Submitted',  cls: 'bg-amber-50 text-amber-700 border-amber-200',     icon: Send },
-  approved:  { label: 'Approved',   cls: 'bg-blue-50 text-blue-700 border-blue-200',         icon: CheckCircle2 },
-  received:  { label: 'Received',   cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: Banknote },
-  rejected:  { label: 'Rejected',   cls: 'bg-red-50 text-red-700 border-red-200',            icon: X },
+  submitted: { label: 'Submitted',         cls: 'bg-amber-50 text-amber-700 border-amber-200',     icon: Send },
+  approved:  { label: 'Approved',          cls: 'bg-blue-50 text-blue-700 border-blue-200',         icon: CheckCircle2 },
+  partial:   { label: 'Partially Received', cls: 'bg-violet-50 text-violet-700 border-violet-200',   icon: Hourglass },
+  received:  { label: 'Received',          cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: Banknote },
+  rejected:  { label: 'Rejected',          cls: 'bg-red-50 text-red-700 border-red-200',            icon: X },
 };
 
 export default function ClientAdvanceRequestsPage() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [receiveFor, setReceiveFor] = useState(null);
+  const [historyFor, setHistoryFor] = useState(null);
 
   const { data: rows = [] } = useQuery({
     queryKey: ['client-advances'],
@@ -53,7 +55,12 @@ export default function ClientAdvanceRequestsPage() {
   });
   const receive = useMutation({
     mutationFn: ({ id, ...d }) => clientAdvanceAPI.receive(id, d),
-    onSuccess: () => { invalidate(); setReceiveFor(null); toast.success('Marked received — project advance updated'); },
+    onSuccess: (r) => {
+      invalidate();
+      const st = r.data?.data?.status;
+      toast.success(st === 'received' ? 'Fully received — project advance updated' : 'Payment recorded — project advance updated');
+      setReceiveFor(null);
+    },
     onError: (e) => toast.error(e.response?.data?.error || 'Failed'),
   });
   const remove = useMutation({
@@ -124,7 +131,16 @@ export default function ClientAdvanceRequestsPage() {
                       <StIcon size={11} /> {st.label}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right font-mono text-emerald-700">{r.status === 'received' ? inr(r.received_amount) : '—'}</td>
+                  <td className="px-4 py-3 text-right font-mono">
+                    {parseFloat(r.received_amount) > 0 ? (
+                      <div>
+                        <span className="text-emerald-700">{inr(r.received_amount)}</span>
+                        {r.status === 'partial' && (
+                          <div className="text-[11px] text-violet-500">bal {inr(parseFloat(r.advance_amount) - parseFloat(r.received_amount))}</div>
+                        )}
+                      </div>
+                    ) : '—'}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-1">
                       {r.status === 'submitted' && (
@@ -132,10 +148,15 @@ export default function ClientAdvanceRequestsPage() {
                           title="Mark approved by client"
                           className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><CheckCircle2 size={15} /></button>
                       )}
-                      {(r.status === 'submitted' || r.status === 'approved') && (
+                      {['submitted','approved','partial'].includes(r.status) && (
                         <button onClick={() => setReceiveFor(r)}
-                          title="Mark advance received"
+                          title="Record a client payment"
                           className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg"><Banknote size={15} /></button>
+                      )}
+                      {parseFloat(r.received_amount) > 0 && (
+                        <button onClick={() => setHistoryFor(r)}
+                          title="Payment history"
+                          className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg"><History size={15} /></button>
                       )}
                       <button onClick={() => { if (window.confirm('Delete this request?')) remove.mutate(r.id); }}
                         title="Delete"
@@ -151,6 +172,53 @@ export default function ClientAdvanceRequestsPage() {
 
       {showForm && <FormModal projects={projects} onClose={() => setShowForm(false)} onSubmit={d => create.mutate(d)} saving={create.isPending} />}
       {receiveFor && <ReceiveModal row={receiveFor} onClose={() => setReceiveFor(null)} onSubmit={d => receive.mutate({ id: receiveFor.id, ...d })} saving={receive.isPending} />}
+      {historyFor && <HistoryModal row={historyFor} onClose={() => setHistoryFor(null)} />}
+    </div>
+  );
+}
+
+function HistoryModal({ row, onClose }) {
+  const { data: receipts = [], isLoading } = useQuery({
+    queryKey: ['client-advance-receipts', row.id],
+    queryFn: () => clientAdvanceAPI.receipts(row.id).then(r => r.data?.data || []),
+  });
+  const totalRecv = receipts.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
+  const balance = parseFloat(row.advance_amount || 0) - totalRecv;
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <h3 className="font-semibold text-slate-800">Payment History · {row.proforma_no}</h3>
+          <button onClick={onClose} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X size={18} /></button>
+        </div>
+        <div className="p-5">
+          <div className="grid grid-cols-3 gap-3 mb-4 text-center">
+            <div><p className="text-[11px] text-slate-400">Requested</p><p className="font-mono font-semibold text-slate-700 text-sm">{inr(row.advance_amount)}</p></div>
+            <div><p className="text-[11px] text-slate-400">Received</p><p className="font-mono font-semibold text-emerald-700 text-sm">{inr(totalRecv)}</p></div>
+            <div><p className="text-[11px] text-slate-400">Balance</p><p className={clsx('font-mono font-semibold text-sm', balance > 0.01 ? 'text-red-600' : 'text-emerald-600')}>{inr(balance)}</p></div>
+          </div>
+          {isLoading ? (
+            <p className="text-center text-sm text-slate-400 py-4">Loading…</p>
+          ) : receipts.length === 0 ? (
+            <p className="text-center text-sm text-slate-400 py-4">No payments recorded</p>
+          ) : (
+            <div className="space-y-2">
+              {receipts.map((r, i) => (
+                <div key={r.id} className="flex items-center justify-between px-3 py-2 bg-slate-50 rounded-lg border border-slate-100">
+                  <div>
+                    <div className="text-sm font-mono font-semibold text-slate-800">{inr(r.amount)}</div>
+                    <div className="text-[11px] text-slate-400">
+                      {r.received_date ? new Date(r.received_date).toLocaleDateString('en-IN') : '—'}
+                      {r.bank_reference && ` · ${r.bank_reference}`}
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-medium text-slate-400">#{i + 1}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -241,30 +309,46 @@ function FormModal({ projects, onClose, onSubmit, saving }) {
 }
 
 function ReceiveModal({ row, onClose, onSubmit, saving }) {
+  const alreadyRecv = parseFloat(row.received_amount || 0);
+  const balance = parseFloat(row.advance_amount || 0) - alreadyRecv;
   const [f, setF] = useState({
-    received_amount: row.advance_amount || '', received_date: new Date().toISOString().slice(0,10), bank_reference: '',
+    received_amount: balance > 0 ? balance : '', received_date: new Date().toISOString().slice(0,10), bank_reference: '',
   });
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+  const thisAmt = parseFloat(f.received_amount) || 0;
+  const newBalance = balance - thisAmt;
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <h3 className="font-semibold text-slate-800">Mark Advance Received</h3>
+          <h3 className="font-semibold text-slate-800">Record Client Payment</h3>
           <button onClick={onClose} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X size={18} /></button>
         </div>
         <div className="p-5 space-y-4">
-          <p className="text-xs text-slate-500">{row.proforma_no} · {row.project_name}. This amount will be added to the project's <b>Advance Received from Client</b>.</p>
-          <Field label="Amount Received *"><input type="number" min="0" step="0.01" value={f.received_amount} onChange={e => set('received_amount', e.target.value)} className="inp font-mono" /></Field>
+          <p className="text-xs text-slate-500">{row.proforma_no} · {row.project_name}. This payment is added to the project's <b>Advance Received from Client</b>.</p>
+          {/* running summary */}
+          <div className="grid grid-cols-3 gap-2 text-center bg-slate-50 rounded-lg border border-slate-100 py-2">
+            <div><p className="text-[11px] text-slate-400">Requested</p><p className="font-mono text-xs font-semibold text-slate-700">{inr(row.advance_amount)}</p></div>
+            <div><p className="text-[11px] text-slate-400">Received</p><p className="font-mono text-xs font-semibold text-emerald-700">{inr(alreadyRecv)}</p></div>
+            <div><p className="text-[11px] text-slate-400">Balance</p><p className="font-mono text-xs font-semibold text-red-600">{inr(balance)}</p></div>
+          </div>
+          <Field label="This Payment Amount *"><input type="number" min="0" step="0.01" value={f.received_amount} onChange={e => set('received_amount', e.target.value)} className="inp font-mono" /></Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Date Received"><input type="date" value={f.received_date} onChange={e => set('received_date', e.target.value)} className="inp" /></Field>
             <Field label="Bank Reference"><input value={f.bank_reference} onChange={e => set('bank_reference', e.target.value)} placeholder="UTR / cheque no" className="inp" /></Field>
           </div>
+          {thisAmt > 0 && (
+            <div className="text-xs text-slate-500 px-1">
+              After this payment, balance to recover: <b className={newBalance > 0.01 ? 'text-red-600' : 'text-emerald-600'}>{inr(newBalance)}</b>
+              {newBalance <= 0.01 && <span className="text-emerald-600"> — fully received ✓</span>}
+            </div>
+          )}
         </div>
         <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-100">
           <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
           <button disabled={!f.received_amount || saving} onClick={() => onSubmit(f)}
             className="px-4 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1.5">
-            <Banknote size={15} /> Confirm Received
+            <Banknote size={15} /> Record Payment
           </button>
         </div>
       </div>

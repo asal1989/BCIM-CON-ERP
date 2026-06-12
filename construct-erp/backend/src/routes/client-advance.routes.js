@@ -33,6 +33,18 @@ const ensureTable = async () => {
     )`);
   // idempotent column add for already-created tables
   await query(`ALTER TABLE client_advance_requests ADD COLUMN IF NOT EXISTS hsn_code VARCHAR(20)`);
+  // per-payment receipts (client may pay the advance in multiple tranches)
+  await query(`
+    CREATE TABLE IF NOT EXISTS client_advance_receipts (
+      id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      advance_id     UUID NOT NULL REFERENCES client_advance_requests(id) ON DELETE CASCADE,
+      amount         NUMERIC(15,2) NOT NULL DEFAULT 0,
+      received_date  DATE,
+      bank_reference VARCHAR(200),
+      remarks        TEXT,
+      created_by     UUID,
+      created_at     TIMESTAMPTZ DEFAULT NOW()
+    )`);
 };
 runSchemaInit('client_advance_requests', ensureTable);
 
@@ -72,10 +84,11 @@ router.get('/stats', async (req, res) => {
     const { rows } = await query(`
       SELECT
         COALESCE(SUM(advance_amount),0)                                                   AS total_requested,
-        COALESCE(SUM(CASE WHEN status='received' THEN received_amount ELSE 0 END),0)       AS total_received,
-        COALESCE(SUM(CASE WHEN status IN ('submitted','approved') THEN advance_amount ELSE 0 END),0) AS total_pending,
+        COALESCE(SUM(received_amount),0)                                                   AS total_received,
+        COALESCE(SUM(CASE WHEN status <> 'rejected' THEN GREATEST(advance_amount - received_amount,0) ELSE 0 END),0) AS total_pending,
         COUNT(*) FILTER (WHERE status='submitted') AS submitted_count,
         COUNT(*) FILTER (WHERE status='approved')  AS approved_count,
+        COUNT(*) FILTER (WHERE status='partial')   AS partial_count,
         COUNT(*) FILTER (WHERE status='received')  AS received_count
       FROM client_advance_requests WHERE company_id = $1`,
       [req.user.company_id]);
@@ -131,19 +144,34 @@ router.put('/:id', authorize('super_admin','admin','finance_manager','accountant
 // POST /:id/receive — mark received & roll into project.client_advance_received
 router.post('/:id/receive', authorize('super_admin','admin','finance_manager','accountant'), async (req, res) => {
   try {
-    const { received_amount, received_date, bank_reference } = req.body;
+    const { received_amount, received_date, bank_reference, remarks } = req.body;
     const out = await withTransaction(async (client) => {
       const { rows: [car] } = await client.query(
         `SELECT * FROM client_advance_requests WHERE id = $1 AND company_id = $2`,
         [req.params.id, req.user.company_id]);
       if (!car) throw new Error('Not found.');
-      const recv = parseFloat(received_amount ?? car.advance_amount ?? 0);
+      const recv = parseFloat(received_amount || 0);
+      if (recv <= 0) throw new Error('Receipt amount must be greater than zero.');
+      const dt = received_date || new Date();
+
+      // record this tranche
+      await client.query(`
+        INSERT INTO client_advance_receipts (advance_id, amount, received_date, bank_reference, remarks, created_by)
+        VALUES ($1,$2,$3,$4,$5,$6)`,
+        [car.id, recv, dt, bank_reference || null, remarks || null, req.user.id]);
+
+      // new cumulative received
+      const newReceived = parseFloat(car.received_amount || 0) + recv;
+      const fully = newReceived >= parseFloat(car.advance_amount || 0) - 0.01; // tolerance
+      const newStatus = fully ? 'received' : 'partial';
+
       const { rows: [updated] } = await client.query(`
         UPDATE client_advance_requests
-        SET status='received', received_amount=$1, received_date=$2, bank_reference=$3, updated_at=NOW()
-        WHERE id=$4 RETURNING *`,
-        [recv, received_date || new Date(), bank_reference || null, req.params.id]);
-      // roll up into the project's client_advance_received
+        SET received_amount=$1, received_date=$2, bank_reference=$3, status=$4, updated_at=NOW()
+        WHERE id=$5 RETURNING *`,
+        [newReceived, dt, bank_reference || car.bank_reference, newStatus, car.id]);
+
+      // roll the tranche into the project's client_advance_received
       if (car.project_id) {
         await client.query(`
           UPDATE projects
@@ -153,6 +181,21 @@ router.post('/:id/receive', authorize('super_admin','admin','finance_manager','a
       return updated;
     });
     res.json({ data: out });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /:id/receipts — payment history for one advance request
+router.get('/:id/receipts', async (req, res) => {
+  try {
+    const { rows } = await query(`
+      SELECT r.*, u.name AS created_by_name
+      FROM client_advance_receipts r
+      LEFT JOIN users u ON u.id = r.created_by
+      JOIN client_advance_requests car ON car.id = r.advance_id
+      WHERE r.advance_id = $1 AND car.company_id = $2
+      ORDER BY r.received_date ASC, r.created_at ASC`,
+      [req.params.id, req.user.company_id]);
+    res.json({ data: rows });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

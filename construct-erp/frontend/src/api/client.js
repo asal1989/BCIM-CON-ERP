@@ -279,12 +279,13 @@ export const raBillAPI = {
 };
 
 export const clientAdvanceAPI = {
-  list:    (params) => api.get('/client-advances', { params }),
-  stats:   (params) => api.get('/client-advances/stats', { params }),
-  create:  (data)   => api.post('/client-advances', data),
-  update:  (id, d)  => api.put(`/client-advances/${id}`, d),
-  receive: (id, d)  => api.post(`/client-advances/${id}/receive`, d),
-  remove:  (id)     => api.delete(`/client-advances/${id}`),
+  list:     (params) => api.get('/client-advances', { params }),
+  stats:    (params) => api.get('/client-advances/stats', { params }),
+  create:   (data)   => api.post('/client-advances', data),
+  update:   (id, d)  => api.put(`/client-advances/${id}`, d),
+  receive:  (id, d)  => api.post(`/client-advances/${id}/receive`, d),
+  receipts: (id)     => api.get(`/client-advances/${id}/receipts`),
+  remove:   (id)     => api.delete(`/client-advances/${id}`),
 };
 
 export const retentionAPI = {
