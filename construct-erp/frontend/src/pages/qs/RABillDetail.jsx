@@ -1,5 +1,5 @@
 // src/pages/qs/RABillDetail.jsx
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useReactToPrint } from 'react-to-print';
@@ -59,6 +59,16 @@ export default function RABillDetail() {
   const [showProformaModal, setShowProformaModal] = useState(false);
   const [proformaNo,        setProformaNo]        = useState('');
   const [proformaDate,      setProformaDate]      = useState(dayjs().format('YYYY-MM-DD'));
+
+  // Scale the A4 (210mm ≈ 794px) preview to fit the screen width so nothing is cut off
+  const [previewScale, setPreviewScale] = useState(1);
+  useEffect(() => {
+    const calc = () => setPreviewScale(Math.min(1, (window.innerWidth - 48) / 794));
+    calc();
+    window.addEventListener('resize', calc);
+    return () => window.removeEventListener('resize', calc);
+  }, []);
+  const A4_W = 794, A4_H = 1123; // px at 96dpi
 
   // Backend now wraps detail in { data: {...} }
   const { data: b, isLoading } = useQuery({
@@ -589,9 +599,11 @@ export default function RABillDetail() {
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-auto flex justify-center py-8 px-4">
-            <div style={{ boxShadow: '0 4px 32px rgba(0,0,0,0.18)', background: '#fff' }}>
-              <RABillProformaInvoice ref={proformaRef} data={b} proformaNo={proformaNo} proformaDate={proformaDate} />
+          <div className="flex-1 overflow-auto flex justify-center py-6 px-4">
+            <div style={{ width: A4_W * previewScale, height: A4_H * previewScale }}>
+              <div style={{ width: A4_W, transform: `scale(${previewScale})`, transformOrigin: 'top left', boxShadow: '0 4px 32px rgba(0,0,0,0.18)', background: '#fff' }}>
+                <RABillProformaInvoice ref={proformaRef} data={b} proformaNo={proformaNo} proformaDate={proformaDate} />
+              </div>
             </div>
           </div>
         </div>
@@ -636,9 +648,11 @@ export default function RABillDetail() {
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-auto flex justify-center py-8 px-4">
-            <div style={{ boxShadow: '0 4px 32px rgba(0,0,0,0.18)', background: '#fff' }}>
-              <RABillTaxInvoice ref={taxInvoiceRef} data={b} invoiceNo={invoiceNo} invoiceDate={invoiceDate} />
+          <div className="flex-1 overflow-auto flex justify-center py-6 px-4">
+            <div style={{ width: A4_W * previewScale, height: A4_H * previewScale }}>
+              <div style={{ width: A4_W, transform: `scale(${previewScale})`, transformOrigin: 'top left', boxShadow: '0 4px 32px rgba(0,0,0,0.18)', background: '#fff' }}>
+                <RABillTaxInvoice ref={taxInvoiceRef} data={b} invoiceNo={invoiceNo} invoiceDate={invoiceDate} />
+              </div>
             </div>
           </div>
         </div>
