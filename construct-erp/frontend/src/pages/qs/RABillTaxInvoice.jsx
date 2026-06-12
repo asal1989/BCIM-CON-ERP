@@ -45,9 +45,10 @@ const cell = (extra = {}) => ({
 const hcell = (extra = {}) => ({
   ...cell(), fontWeight: 'bold', textAlign: 'center', ...extra,
 });
-// numeric/amount cells must never wrap mid-number
+// numeric/amount cells must never wrap mid-number; smaller font + tight padding so they fit
 const numCell = (extra = {}) => cell({
-  whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal', textAlign: 'right', ...extra,
+  whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal',
+  textAlign: 'right', fontSize: '9.5pt', padding: '3px 4px', ...extra,
 });
 
 const RABillTaxInvoice = forwardRef(({ data: b, invoiceNo, invoiceDate }, ref) => {
@@ -64,7 +65,7 @@ const RABillTaxInvoice = forwardRef(({ data: b, invoiceNo, invoiceDate }, ref) =
     fontSize: '10.5pt',
     color: '#000',
     background: '#fff',
-    padding: '8mm 10mm',
+    padding: '8mm 7mm',
     width: '210mm',
     minHeight: '297mm',
     boxSizing: 'border-box',
@@ -180,18 +181,18 @@ const RABillTaxInvoice = forwardRef(({ data: b, invoiceNo, invoiceDate }, ref) =
         <thead>
           <tr>
             <th style={{ ...hcell(), width: '4%' }} rowSpan={2}>S.No</th>
-            <th style={{ ...hcell(), width: '22%' }} rowSpan={2}>Description of Goods / Services</th>
+            <th style={{ ...hcell(), width: '20%' }} rowSpan={2}>Description of Goods / Services</th>
             <th style={{ ...hcell(), width: '7%' }} rowSpan={2}>HSN Code</th>
             <th style={{ ...hcell(), width: '4%' }} rowSpan={2}>Qty</th>
-            <th style={{ ...hcell(), width: '6%' }} rowSpan={2}>Rate</th>
-            <th style={{ ...hcell(), width: '11%' }} rowSpan={2}>Total</th>
+            <th style={{ ...hcell(), width: '5%' }} rowSpan={2}>Rate</th>
+            <th style={{ ...hcell(), width: '10%' }} rowSpan={2}>Total</th>
             <th style={{ ...hcell(), width: '6%' }} rowSpan={2}>Discount</th>
-            <th style={{ ...hcell(), width: '12%' }} rowSpan={2}>Taxable Value</th>
-            <th style={{ ...hcell(), width: '28%' }} colSpan={2}>GST</th>
+            <th style={{ ...hcell(), width: '11%' }} rowSpan={2}>Taxable Value</th>
+            <th style={{ ...hcell(), width: '33%' }} colSpan={2}>GST</th>
           </tr>
           <tr>
-            <th style={{ ...hcell(), width: '14%' }}>CGST<br />{gstRate / 2}%</th>
-            <th style={{ ...hcell(), width: '14%' }}>SGST<br />{gstRate / 2}%</th>
+            <th style={{ ...hcell(), width: '16.5%' }}>CGST<br />{gstRate / 2}%</th>
+            <th style={{ ...hcell(), width: '16.5%' }}>SGST<br />{gstRate / 2}%</th>
           </tr>
         </thead>
         <tbody>
