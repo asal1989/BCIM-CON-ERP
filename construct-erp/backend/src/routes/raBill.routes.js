@@ -123,7 +123,7 @@ router.post('/', authorize('super_admin','admin','qs_engineer','project_manager'
            (project_id, bill_number, bill_date, work_description,
             bill_period_from, bill_period_to,
             gross_amount, gst_rate, gst_amount, gross_with_gst,
-            retention_percent, retention_amount,
+            retention_pct, retention_amount,
             mobilization_advance_recovery, adhoc_advance_recovery,
             material_recovery_steel, material_recovery_cement,
             price_escalation, other_deductions,
