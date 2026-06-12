@@ -1,5 +1,5 @@
 // src/pages/qs/RABillDetail.jsx
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useReactToPrint } from 'react-to-print';
@@ -8,13 +8,14 @@ import {
   ArrowLeft, Download, CheckCircle2, Building2,
   User, Calendar, Banknote, ShieldCheck,
   Printer, Layers, FileText, XCircle, Clock,
-  Receipt, ChevronRight, CreditCard, Hash, BadgeIndianRupee, TrendingDown,
+  Receipt, ChevronRight, CreditCard, Hash, BadgeIndianRupee, TrendingDown, FileSpreadsheet, X,
 } from 'lucide-react';
 import { raBillAPI, variationAPI, materialReconAPI, default as apiClient } from '../../api/client';
 import useAuthStore from '../../store/authStore';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
 import RABillPrintTemplate from './RABillPrintTemplate';
+import RABillTaxInvoice from './RABillTaxInvoice';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -46,9 +47,13 @@ export default function RABillDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const printRef = useRef();
+  const printRef       = useRef();
+  const taxInvoiceRef  = useRef();
   const { user } = useAuthStore();
   const role = user?.role || '';
+  const [showTaxModal, setShowTaxModal] = useState(false);
+  const [invoiceNo,    setInvoiceNo]    = useState('');
+  const [invoiceDate,  setInvoiceDate]  = useState(dayjs().format('YYYY-MM-DD'));
 
   // Backend now wraps detail in { data: {...} }
   const { data: b, isLoading } = useQuery({
@@ -71,6 +76,11 @@ export default function RABillDetail() {
   const handlePrint = useReactToPrint({
     contentRef: printRef,
     documentTitle: `RA_Bill_${b?.bill_number || 'export'}`,
+  });
+
+  const handleTaxInvoicePrint = useReactToPrint({
+    contentRef: taxInvoiceRef,
+    documentTitle: `Tax_Invoice_${invoiceNo || b?.bill_number || 'export'}`,
   });
 
   const invalidate = () => {
@@ -136,7 +146,7 @@ export default function RABillDetail() {
   const rejectedOrPaid = ['rejected', 'paid'].includes(b.status);
 
   const deductions = [
-    { label: `Retention (${b.retention_percent}%)`, value: b.retention_amount },
+    { label: `Retention (${b.retention_pct || b.retention_percent || 0}%)`, value: b.retention_amount },
     { label: 'Mobilization Advance Recovery',       value: b.mobilization_advance_recovery },
     { label: 'Adhoc (Advance Recovery)',            value: b.adhoc_advance_recovery },
     { label: 'Steel Recovery',                      value: b.material_recovery_steel },
@@ -181,12 +191,20 @@ export default function RABillDetail() {
 
         <div className="flex items-center gap-2">
           <button onClick={() => handlePrint()}
-            className="w-9 h-9 flex items-center justify-center rounded-xl border border-[#e2e6ec] bg-white text-[#6a6f7d] hover:text-indigo-600 hover:border-indigo-200 transition-colors">
+            className="w-9 h-9 flex items-center justify-center rounded-xl border border-[#e2e6ec] bg-white text-[#6a6f7d] hover:text-indigo-600 hover:border-indigo-200 transition-colors"
+            title="Print RA Bill">
             <Printer size={16} />
           </button>
           <button onClick={handleDownloadPDF}
-            className="w-9 h-9 flex items-center justify-center rounded-xl border border-[#e2e6ec] bg-white text-[#6a6f7d] hover:text-indigo-600 hover:border-indigo-200 transition-colors">
+            className="w-9 h-9 flex items-center justify-center rounded-xl border border-[#e2e6ec] bg-white text-[#6a6f7d] hover:text-indigo-600 hover:border-indigo-200 transition-colors"
+            title="Download PDF">
             <Download size={16} />
+          </button>
+          <button
+            onClick={() => { setInvoiceNo(''); setInvoiceDate(dayjs().format('YYYY-MM-DD')); setShowTaxModal(true); }}
+            className="h-9 px-3 flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors text-[11px] font-medium"
+            title="Generate Tax Invoice">
+            <FileSpreadsheet size={14} /> Tax Invoice
           </button>
 
           {/* Workflow action buttons — role-gated */}
@@ -502,11 +520,91 @@ export default function RABillDetail() {
         </div>
       </div>
 
-      {/* Print zone */}
+      {/* Print zone — RA Bill */}
       <div className="ra-bill-print-zone">
         <RABillPrintTemplate ref={printRef} data={b} variations={variations} audit={audit} />
       </div>
-      <style>{`@media screen { .ra-bill-print-zone { display: none !important; } }`}</style>
+
+      {/* Print zone — Tax Invoice (hidden on screen) */}
+      <div className="tax-invoice-print-zone">
+        <RABillTaxInvoice ref={taxInvoiceRef} data={b} invoiceNo={invoiceNo} invoiceDate={invoiceDate} />
+      </div>
+
+      <style>{`
+        @media screen { .ra-bill-print-zone { display: none !important; } }
+        @media screen { .tax-invoice-print-zone { display: none !important; } }
+        @media print  { .tax-invoice-print-zone { display: block !important; } }
+      `}</style>
+
+      {/* ── Tax Invoice Modal ── */}
+      {showTaxModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-[#e2e6ec] w-full max-w-sm">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#e2e6ec]">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-500 flex items-center justify-center">
+                  <FileSpreadsheet className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <div className="text-[13px] font-semibold text-[#1a1c21]">Generate Tax Invoice</div>
+                  <div className="text-[10px] text-[#8e94a3]">{b.bill_number}</div>
+                </div>
+              </div>
+              <button onClick={() => setShowTaxModal(false)} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#f4f6f9] text-[#8e94a3]">
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-5 py-4 space-y-4">
+              {/* Summary strip */}
+              <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 space-y-1 text-[11px]">
+                <div className="flex justify-between"><span className="text-amber-700">Taxable Value</span><span className="font-medium text-amber-900">₹{Number((parseFloat(b.gross_amount||0)+parseFloat(b.price_escalation||0))).toLocaleString('en-IN',{maximumFractionDigits:2})}</span></div>
+                <div className="flex justify-between"><span className="text-amber-700">GST @ {b.gst_rate||18}%</span><span className="font-medium text-amber-900">₹{Number((parseFloat(b.gross_amount||0)+parseFloat(b.price_escalation||0))*(parseFloat(b.gst_rate||18)/100)).toLocaleString('en-IN',{maximumFractionDigits:2})}</span></div>
+                <div className="flex justify-between border-t border-amber-200 pt-1 mt-1 font-semibold"><span className="text-amber-800">Invoice Total</span><span className="text-amber-900">₹{Number((parseFloat(b.gross_amount||0)+parseFloat(b.price_escalation||0))*(1+parseFloat(b.gst_rate||18)/100)).toLocaleString('en-IN',{maximumFractionDigits:2})}</span></div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-medium text-[#6a6f7d] uppercase tracking-wide mb-1">Invoice Number *</label>
+                <input
+                  type="text"
+                  value={invoiceNo}
+                  onChange={e => setInvoiceNo(e.target.value)}
+                  placeholder="e.g. BCIM/2526/01"
+                  className="w-full border border-[#d8dce6] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-medium text-[#6a6f7d] uppercase tracking-wide mb-1">Invoice Date</label>
+                <input
+                  type="date"
+                  value={invoiceDate}
+                  onChange={e => setInvoiceDate(e.target.value)}
+                  className="w-full border border-[#d8dce6] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-2 px-5 pb-5">
+              <button
+                onClick={() => setShowTaxModal(false)}
+                className="flex-1 h-10 rounded-xl border border-[#e2e6ec] text-[12px] font-medium text-[#6a6f7d] hover:bg-[#f4f6f9] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { if (!invoiceNo.trim()) { toast.error('Please enter an invoice number'); return; } setShowTaxModal(false); setTimeout(handleTaxInvoicePrint, 80); }}
+                className="flex-1 h-10 rounded-xl bg-amber-500 text-white text-[12px] font-medium hover:bg-amber-400 transition-colors flex items-center justify-center gap-2"
+              >
+                <Printer size={14} /> Print / Save PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
