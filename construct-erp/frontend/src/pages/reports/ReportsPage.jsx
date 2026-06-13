@@ -756,8 +756,8 @@ export const REPORTS = [
   // -- Vendor Reports --
   {
     key:'procurement-vendor', dept:'procurement', category:'Vendor Reports', title:'Vendor Master Report', icon:Star, color:'amber',
-    desc:'All vendors with contact, category, and status',
-    filters:[],
+    desc:'Vendors with contact, category, and status — optionally filtered to those mapped to a project',
+    filters:['project'],
     endpoint:'/vendors',
     dataKey:null,
     columns:[
