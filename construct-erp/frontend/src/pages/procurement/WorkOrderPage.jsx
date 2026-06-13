@@ -574,6 +574,29 @@ function CreateWOModal({ onClose, vendors, projects, onCreate, onUpdate, isPendi
   );
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
+  // Contractors mapped to the selected project — restricts the vendor dropdown
+  // so users only pick contractors approved for that project.
+  const { data: projectVendors } = useQuery({
+    queryKey: ['project-vendors-for-wo', form.project_id],
+    queryFn: () => vendorAPI.projectMap({ project_id: form.project_id }).then(r => r.data?.data || []),
+    enabled: !!form.project_id,
+  });
+  let vendorOptions = form.project_id && projectVendors?.length ? projectVendors : (vendors || []);
+  // Always keep the WO's original vendor selectable, even if not mapped, so
+  // editing an older WO never hides its current contractor.
+  if (editingWO?.vendor_id && !vendorOptions.some(v => String(v.id) === String(editingWO.vendor_id))) {
+    const original = (vendors || []).find(v => String(v.id) === String(editingWO.vendor_id));
+    if (original) vendorOptions = [...vendorOptions, original];
+  }
+
+  // Clear the chosen contractor if it isn't valid for a newly-selected project.
+  useEffect(() => {
+    if (form.project_id && form.vendor_id && String(form.vendor_id) !== String(editingWO?.vendor_id || '')
+        && projectVendors?.length && !projectVendors.some(v => String(v.id) === String(form.vendor_id))) {
+      setForm(p => ({ ...p, vendor_id: '' }));
+    }
+  }, [form.project_id, projectVendors]);
+
   const vendor = (vendors || []).find(v => String(v.id) === String(form.vendor_id));
   const project = (projects || []).find(p => String(p.id) === String(form.project_id));
 
@@ -662,7 +685,7 @@ function CreateWOModal({ onClose, vendors, projects, onCreate, onUpdate, isPendi
                 <Lbl req>Contractor / Vendor</Lbl>
                 <select className={inp} value={form.vendor_id} onChange={e => f('vendor_id', e.target.value)}>
                   <option value="">Select contractor…</option>
-                  {(vendors||[]).map(v => <option key={v.id} value={v.id}>{v.name}{v.vendor_type ? ` · ${v.vendor_type.replace(/_/g,' ')}` : ''}</option>)}
+                  {vendorOptions.map(v => <option key={v.id} value={v.id}>{v.name}{v.vendor_type ? ` · ${v.vendor_type.replace(/_/g,' ')}` : ''}</option>)}
                 </select>
               </div>
               <div>

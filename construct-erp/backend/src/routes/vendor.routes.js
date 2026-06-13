@@ -365,7 +365,7 @@ vendorRouter.get('/unmapped', async (req, res) => {
 // POST /vendors/project-map/backfill — one-time: populate project_vendors from
 // existing PO history (fixes vendors mapped only to whichever project happened
 // to have its POs imported through the document-upload flow).
-vendorRouter.post('/project-map/backfill', authorize('super_admin', 'admin'), async (req, res) => {
+vendorRouter.post('/project-map/backfill', authorize('super_admin', 'admin', 'procurement_manager'), async (req, res) => {
   try {
     const result = await query(
       `INSERT INTO project_vendors (project_id, vendor_id, added_by)
