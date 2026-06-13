@@ -352,6 +352,7 @@ export const vendorAPI = {
   unmapped:     (params)  => api.get('/vendors/unmapped', { params }),
   mapToProject: (data)    => api.post('/vendors/project-map', data),
   unmapFromProject: (data)=> api.delete('/vendors/project-map', { data }),
+  backfillProjectMap: ()  => api.post('/vendors/project-map/backfill'),
 };
 
 export const poAPI = {

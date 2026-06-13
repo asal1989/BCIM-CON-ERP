@@ -1004,10 +1004,18 @@ router.post('/', async (req, res) => {
 
       const tcsValue = parseFloat(tcs_amount) || 0;
       const finalRes = await client.query(
-        `UPDATE purchase_orders 
+        `UPDATE purchase_orders
          SET sub_total = $1, total_gst = $2, grand_total = $3, serial_no_formatted = $4, po_ref_no = $4
          WHERE id = $5 RETURNING *`,
         [subTotal, totalGst, subTotal + totalGst + tcsValue, po_number, poId]
+      );
+
+      // Keep the vendor↔project mapping in sync so project-wise vendor lists
+      // reflect every project the vendor has actually been ordered for.
+      await client.query(
+        `INSERT INTO project_vendors (project_id, vendor_id, added_by)
+         VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+        [project_id, vendor_id, req.user.id]
       );
 
       return finalRes.rows[0];
@@ -1197,6 +1205,12 @@ router.post('/import/confirm', async (req, res) => {
         );
       }
 
+      await client.query(
+        `INSERT INTO project_vendors (project_id, vendor_id, added_by)
+         VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+        [project_id, vendor_id, req.user.id]
+      );
+
       return poRow.rows[0];
     });
 
@@ -1296,6 +1310,12 @@ router.post('/bulk-import', async (req, res) => {
               [newId, it.description, qty, it.unit || 'LS', rate.toFixed(2), gstRate, gstAmt.toFixed(2), total.toFixed(2), idx + 1]
             );
           }
+
+          await client.query(
+            `INSERT INTO project_vendors (project_id, vendor_id, added_by)
+             VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+            [project_id, rec.vendor_id, req.user.id]
+          );
         });
 
         created++;

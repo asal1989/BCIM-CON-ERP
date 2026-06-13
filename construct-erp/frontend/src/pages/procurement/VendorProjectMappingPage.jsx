@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Building2, Users, Plus, Trash2, Search, ChevronDown,
-  Link2, Link2Off, Loader2, AlertCircle, CheckCircle2,
+  Link2, Link2Off, Loader2, AlertCircle, CheckCircle2, RefreshCw,
 } from 'lucide-react';
 import { vendorAPI, projectAPI } from '../../api/client';
 import toast from 'react-hot-toast';
@@ -93,6 +93,17 @@ export default function VendorProjectMappingPage() {
     onError: (e) => toast.error(e?.response?.data?.error || 'Failed to remove vendor'),
   });
 
+  // Backfill mutation — populate project_vendors from existing PO history
+  const backfillMut = useMutation({
+    mutationFn: () => vendorAPI.backfillProjectMap(),
+    onSuccess: (r) => {
+      toast.success(r?.data?.message || 'Vendor-project mappings synced from PO history');
+      qc.invalidateQueries({ queryKey: ['project-vendors-mapped'] });
+      qc.invalidateQueries({ queryKey: ['project-vendors-unmapped'] });
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to sync mappings'),
+  });
+
   const selectedProject = projects.find(p => p.id === selectedProjectId);
 
   const filteredMapped = useMemo(() => {
@@ -143,6 +154,17 @@ export default function VendorProjectMappingPage() {
             Assign vendors to projects so each project team sees only their relevant vendors.
           </p>
         </div>
+        <button
+          onClick={() => backfillMut.mutate()}
+          disabled={backfillMut.isPending}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:text-indigo-600 transition-all disabled:opacity-50"
+          title="Map vendors to projects based on their existing purchase order history"
+        >
+          {backfillMut.isPending
+            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            : <RefreshCw className="w-3.5 h-3.5" />}
+          Sync from PO History
+        </button>
       </div>
 
       {/* Project Selector */}
