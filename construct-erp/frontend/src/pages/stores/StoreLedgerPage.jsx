@@ -66,15 +66,14 @@ const TONE = {
 function MetricCard({ icon: Icon, label, value, sub, tone = 'navy' }) {
   const t = TONE[tone] || TONE.navy;
   return (
-    <div className={clsx('rounded-xl border p-4 shadow-sm transition hover:shadow-md', t.wrap)}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</p>
-          <p className={clsx('mt-2 text-2xl font-black tracking-tight', t.value)}>{value}</p>
-          {sub && <p className={clsx('mt-1 text-xs font-semibold', t.sub)}>{sub}</p>}
+    <div className={clsx('rounded-lg border px-3 py-2 shadow-sm transition hover:shadow-md', t.wrap)}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{label}</p>
+          <p className={clsx('text-lg font-black leading-tight tracking-tight', t.value)}>{value}</p>
         </div>
-        <div className={clsx('flex h-9 w-9 items-center justify-center rounded-lg shadow-sm', t.icon)}>
-          <Icon size={17} />
+        <div className={clsx('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg shadow-sm', t.icon)}>
+          <Icon size={15} />
         </div>
       </div>
     </div>
@@ -921,17 +920,19 @@ export default function StoreLedgerPage() {
         .store-ledger-scroll::-webkit-scrollbar-thumb { background: #6366f1; border-radius: 10px; border: 2px solid #e2e8f0; }
         .store-ledger-scroll::-webkit-scrollbar-thumb:hover { background: #4f46e5; }
         .store-ledger-scroll::-webkit-scrollbar-corner { background: #e2e8f0; }
+        /* Size the grid to fill exactly the space left after the page chrome,
+           so KPI cards, filters, table, footer and pagination all fit in one
+           screen and ONLY the table body scrolls — no page-level scrolling. */
         .store-ledger-table-shell {
-          max-height: calc(100vh - 230px);
-          min-height: 360px;
+          max-height: calc(100vh - 400px);
+          min-height: 200px;
           overflow: auto;
         }
         @media (max-width: 1024px) {
-          .store-ledger-table-shell { max-height: calc(100vh - 280px); }
+          .store-ledger-table-shell { max-height: calc(100vh - 430px); min-height: 180px; }
         }
-        /* Short / landscape laptop screens — give the grid the maximum room */
-        @media (max-height: 760px) {
-          .store-ledger-table-shell { max-height: calc(100vh - 190px); min-height: 300px; }
+        @media (min-height: 900px) {
+          .store-ledger-table-shell { max-height: calc(100vh - 380px); }
         }
         /* Sticky table headers inside overflow containers */
         .store-ledger-table-shell table thead {
@@ -944,7 +945,7 @@ export default function StoreLedgerPage() {
         .store-ledger-table-shell table th { padding-top: 0.5rem; padding-bottom: 0.5rem; }
       `}</style>
 
-      <div className="p-6 md:p-8 max-w-full mx-auto">
+      <div className="px-4 py-3 md:px-6 md:py-4 max-w-full mx-auto">
 
 
       {/* ── Tabs — sticky below PageHeader ─────────────────────── */}
@@ -1009,7 +1010,7 @@ export default function StoreLedgerPage() {
           </div>
 
           {/* Filters */}
-          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-center md:flex-wrap">
+          <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm md:flex-row md:items-center md:flex-wrap">
             <div className="relative flex-1 min-w-[180px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-900 font-semibold" />
               <input
