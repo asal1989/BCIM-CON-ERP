@@ -32,6 +32,21 @@ function amountInWords(amount) {
 
 const f2 = v => parseFloat(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// Collapse a list of item numbers into compact ranges, e.g.
+// [1,2,5,6,...,20,23,25,26] -> "1-2, 5-20, 23, 25-26"
+const formatItemNos = (nums) => {
+  if (!nums || !nums.length) return '';
+  const s = [...nums].sort((a, b) => a - b);
+  const out = [];
+  let start = s[0], prev = s[0];
+  for (let k = 1; k <= s.length; k++) {
+    if (k < s.length && s[k] === prev + 1) { prev = s[k]; continue; }
+    out.push(start === prev ? `${start}` : `${start}-${prev}`);
+    if (k < s.length) { start = s[k]; prev = s[k]; }
+  }
+  return out.join(', ');
+};
+
 const LANCO_SITE_ADDRESS = `LANCO HILLS - LH10
 LANCO Hills Residential Apartments, Tower - LH10,
 Survey nos 201, Manikonda, Rajendranagar Mandal,
@@ -53,7 +68,21 @@ const WOPrintTemplate = React.forwardRef(({ data }, ref) => {
   const workValue     = items.reduce((s, it) => s + parseFloat(it.amount || (parseFloat(it.quantity||0) * parseFloat(it.rate||0))), 0)
                         || parseFloat(data.total_value || data.contract_amount || 0);
   const gstPct        = parseFloat(data.gst_pct ?? 18);
-  const gstAmt        = workValue * (gstPct / 100);
+
+  // GST break-up by rate — items may carry different GST % (5 / 12 / 18 / 28).
+  // Track both the tax amount and the item numbers that fall under each rate.
+  const gstByRate = {}; // rate -> { amount, nums: [] }
+  items.forEach((it, idx) => {
+    const qty = parseFloat(it.quantity || 0);
+    const rate = parseFloat(it.rate || 0);
+    const r   = parseFloat(it.gst_rate ?? gstPct ?? 0);
+    if (!gstByRate[r]) gstByRate[r] = { amount: 0, nums: [] };
+    gstByRate[r].amount += qty * rate * r / 100;
+    gstByRate[r].nums.push(idx + 1);
+  });
+  const gstRates = Object.keys(gstByRate).map(Number).filter(r => r > 0).sort((a, b) => a - b);
+
+  const gstAmt        = Object.values(gstByRate).reduce((s, g) => s + g.amount, 0) || (workValue * (gstPct / 100));
   const grandTotal    = workValue + gstAmt;
 
   // ── Signature / approval grid ─────────────────────────────────────────────
@@ -220,6 +249,7 @@ const WOPrintTemplate = React.forwardRef(({ data }, ref) => {
               <th style={{ border: '1px solid #000', padding: '5px 4px', width: '44px', textAlign: 'center' }}>Unit</th>
               <th style={{ border: '1px solid #000', padding: '5px 4px', width: '50px', textAlign: 'center' }}>Qty</th>
               <th style={{ border: '1px solid #000', padding: '5px 4px', width: '80px', textAlign: 'right' }}>Rate (Rs)</th>
+              <th style={{ border: '1px solid #000', padding: '5px 4px', width: '40px', textAlign: 'center' }}>GST%</th>
               <th style={{ border: '1px solid #000', padding: '5px 4px', width: '90px', textAlign: 'right' }}>Amount (Rs)</th>
             </tr>
           </thead>
@@ -239,13 +269,14 @@ const WOPrintTemplate = React.forwardRef(({ data }, ref) => {
                   <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', textTransform: 'uppercase', color: '#000' }}>{it.unit || '—'}</td>
                   <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', fontWeight: 700, color: '#000' }}>{qty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}</td>
                   <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'right', fontFamily: 'inherit', color: '#000' }}>{f2(rate)}</td>
+                  <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', color: '#000' }}>{parseFloat(it.gst_rate ?? gstPct ?? 0)}%</td>
                   <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'right', fontWeight: 700, fontFamily: 'inherit', color: '#000' }}>{f2(amount)}</td>
                 </tr>
               );
             }) : (
               [...Array(6)].map((_, i) => (
                 <tr key={i} style={{ height: '24px' }}>
-                  {[...Array(6)].map((__, j) => (
+                  {[...Array(7)].map((__, j) => (
                     <td key={j} style={{ border: '1px solid #94a3b8', padding: '4px' }}>&nbsp;</td>
                   ))}
                 </tr>
@@ -267,15 +298,25 @@ const WOPrintTemplate = React.forwardRef(({ data }, ref) => {
               {amountInWords(grandTotal)}
             </p>
           </div>
-          <div style={{ minWidth: '210px', fontSize: '10px' }}>
+          <div style={{ minWidth: '300px', fontSize: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #e2e8f0' }}>
               <span style={{ fontWeight: 700, color: '#000', textTransform: 'uppercase', fontSize: '9px' }}>Work Value</span>
               <span style={{ fontWeight: 700, fontFamily: 'inherit', color: '#000' }}>₹ {f2(workValue)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #e2e8f0' }}>
-              <span style={{ fontWeight: 700, color: '#000', textTransform: 'uppercase', fontSize: '9px' }}>GST ({gstPct}%)</span>
-              <span style={{ fontWeight: 700, fontFamily: 'inherit', color: '#000' }}>₹ {f2(gstAmt)}</span>
-            </div>
+            {gstRates.map(r => (
+              <div key={r} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #e2e8f0', gap: '10px' }}>
+                <span style={{ fontWeight: 700, color: '#000', fontSize: '8.5px', lineHeight: '1.35' }}>
+                  GST @ {r}% {gstRates.length > 1 ? `on item no. ${formatItemNos(gstByRate[r].nums)}` : ''}
+                </span>
+                <span style={{ fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap', color: '#000' }}>₹ {f2(gstByRate[r].amount)}</span>
+              </div>
+            ))}
+            {gstRates.length !== 1 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #e2e8f0' }}>
+                <span style={{ fontWeight: 700, color: '#000', textTransform: 'uppercase', fontSize: '9px' }}>Total GST</span>
+                <span style={{ fontWeight: 700, fontFamily: 'inherit', color: '#000' }}>₹ {f2(gstAmt)}</span>
+              </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 8px', background: '#1e293b', color: '#fff', borderRadius: '4px', marginTop: '4px' }}>
               <span style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '10px' }}>Grand Total</span>
               <span style={{ fontWeight: 800, fontFamily: 'inherit', fontSize: '12px' }}>₹ {f2(grandTotal)}</span>

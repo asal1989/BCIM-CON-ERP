@@ -567,9 +567,10 @@ function CreateWOModal({ onClose, vendors, projects, onCreate, onUpdate, isPendi
           quantity:    String(it.quantity || ''),
           unit:        it.unit || 'SQM',
           rate:        String(it.rate || ''),
+          gst_rate:    String(it.gst_rate ?? editingWO?.gst_pct ?? '18'),
           remarks:     it.remarks || '',
         }))
-      : [{ description:'', quantity:'', unit:'SQM', rate:'', remarks:'' }]
+      : [{ description:'', quantity:'', unit:'SQM', rate:'', gst_rate: String(editingWO?.gst_pct ?? '18'), remarks:'' }]
   );
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
@@ -577,7 +578,30 @@ function CreateWOModal({ onClose, vendors, projects, onCreate, onUpdate, isPendi
   const project = (projects || []).find(p => String(p.id) === String(form.project_id));
 
   const formTotal  = items.reduce((s, it) => s + parseFloat(it.quantity||0) * parseFloat(it.rate||0), 0);
-  const gstAmt     = formTotal * (parseFloat(form.gst_pct||0) / 100);
+
+  // GST break-up by rate, tracking which item numbers fall under each rate
+  const gstByRate = {}; // rate -> { amount, nums: [] }
+  items.forEach((it, idx) => {
+    const q = parseFloat(it.quantity)||0, rt = parseFloat(it.rate)||0, r = parseFloat(it.gst_rate)||0;
+    if (q <= 0 || rt <= 0 || r <= 0) return;
+    if (!gstByRate[r]) gstByRate[r] = { amount: 0, nums: [] };
+    gstByRate[r].amount += q * rt * r / 100;
+    gstByRate[r].nums.push(idx + 1);
+  });
+  const gstRates = Object.keys(gstByRate).map(Number).sort((a, b) => a - b);
+  // Collapse item numbers into compact ranges: [1,2,5..20,23] -> "1-2, 5-20, 23"
+  const fmtNos = (nums) => {
+    const s = [...nums].sort((a, b) => a - b), out = [];
+    let start = s[0], prev = s[0];
+    for (let k = 1; k <= s.length; k++) {
+      if (k < s.length && s[k] === prev + 1) { prev = s[k]; continue; }
+      out.push(start === prev ? `${start}` : `${start}-${prev}`);
+      if (k < s.length) { start = s[k]; prev = s[k]; }
+    }
+    return out.join(', ');
+  };
+
+  const gstAmt     = Object.values(gstByRate).reduce((s, g) => s + g.amount, 0);
   const grandTotal = formTotal + gstAmt;
   const retentionAmt = formTotal * (parseFloat(form.retention_pct||0) / 100);
   const tdsAmt       = formTotal * (parseFloat(form.tds_pct||0) / 100);
@@ -714,7 +738,7 @@ function CreateWOModal({ onClose, vendors, projects, onCreate, onUpdate, isPendi
           {/* ── 4. Scope of Work / BOQ Items ── */}
           <FormSection icon={Package} title="Scope of Work — Line Items" subtitle="Itemised work with quantities & rates"
             right={
-              <button onClick={() => setItems(p => [...p, { description:'', quantity:'', unit:'SQM', rate:'', remarks:'' }])}
+              <button onClick={() => setItems(p => [...p, { description:'', quantity:'', unit:'SQM', rate:'', gst_rate: String(form.gst_pct ?? '18'), remarks:'' }])}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 transition-all shadow-sm">
                 <Plus className="w-3 h-3" /> Add Item
               </button>
@@ -728,6 +752,7 @@ function CreateWOModal({ onClose, vendors, projects, onCreate, onUpdate, isPendi
                     <th className="pb-2 px-1 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-24">Unit</th>
                     <th className="pb-2 px-1 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-24">Qty</th>
                     <th className="pb-2 px-1 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-32">Rate (₹)</th>
+                    <th className="pb-2 px-1 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider w-20">GST%</th>
                     <th className="pb-2 px-1 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider w-32">Amount</th>
                     <th className="pb-2 px-1 w-10"></th>
                   </tr>
@@ -752,6 +777,10 @@ function CreateWOModal({ onClose, vendors, projects, onCreate, onUpdate, isPendi
                       <td className="px-1 py-1.5">
                         <input type="number" min="0" className={`${inp} text-right`} placeholder="0.00" value={it.rate}
                           onChange={e => setItems(p => p.map((x,j) => j===i?{...x,rate:e.target.value}:x))} />
+                      </td>
+                      <td className="px-1 py-1.5">
+                        <input type="number" min="0" max="100" className={`${inp} text-center`} placeholder="18" value={it.gst_rate}
+                          onChange={e => setItems(p => p.map((x,j) => j===i?{...x,gst_rate:e.target.value}:x))} />
                       </td>
                       <td className="px-1 py-1.5">
                         <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono text-right text-slate-700 font-semibold">
@@ -799,7 +828,9 @@ function CreateWOModal({ onClose, vendors, projects, onCreate, onUpdate, isPendi
                 <p className="text-sm font-mono font-bold text-slate-800">₹{inr(formTotal)}</p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">GST ({form.gst_pct||0}%)</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  {gstRates.length > 1 ? 'Total GST' : `GST (${gstRates[0] ?? form.gst_pct ?? 0}%)`}
+                </p>
                 <p className="text-sm font-mono font-bold text-slate-800">₹{inr(gstAmt)}</p>
               </div>
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
@@ -811,6 +842,17 @@ function CreateWOModal({ onClose, vendors, projects, onCreate, onUpdate, isPendi
                 <p className="text-base font-mono font-bold text-white">₹{inr(grandTotal)}</p>
               </div>
             </div>
+            {gstRates.length > 1 && (
+              <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">GST Break-up</p>
+                {gstRates.map(r => (
+                  <div key={r} className="flex justify-between gap-3 text-xs text-slate-500">
+                    <span className="leading-snug">GST @ {r}% on item no. {fmtNos(gstByRate[r].nums)}</span>
+                    <span className="font-medium text-amber-600 whitespace-nowrap">₹{inr(gstByRate[r].amount)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             <p className="mt-2 text-[11px] text-slate-400">TDS deduction on payment ≈ <span className="font-mono">₹{inr(tdsAmt)}</span> ({form.tds_pct||0}% of work value).</p>
           </FormSection>
 

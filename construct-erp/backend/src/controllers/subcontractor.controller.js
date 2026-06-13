@@ -267,11 +267,12 @@ const createWorkOrder = async (req, res) => {
         for (const item of items) {
           const qty  = parseFloat(item.quantity) || 0;
           const rate = parseFloat(item.rate)     || 0;
+          const gstRate = item.gst_rate !== undefined && item.gst_rate !== '' ? parseFloat(item.gst_rate) || 0 : (parseFloat(gst_pct) || 18);
           itemsTotal += qty * rate;
           await client.query(
-            `INSERT INTO work_order_items (wo_id, description, unit, quantity, rate, remarks)
-             VALUES ($1,$2,$3,$4,$5,$6)`,
-            [wo.id, item.description, item.unit, qty, rate, item.remarks || null]
+            `INSERT INTO work_order_items (wo_id, description, unit, quantity, rate, gst_rate, remarks)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [wo.id, item.description, item.unit, qty, rate, gstRate, item.remarks || null]
           );
         }
         await client.query(
@@ -632,11 +633,12 @@ const updateWorkOrder = async (req, res) => {
         for (let j = 0; j < items.length; j++) {
           const qty  = parseFloat(items[j].quantity) || 0;
           const rate = parseFloat(items[j].rate) || 0;
+          const gstRate = items[j].gst_rate !== undefined && items[j].gst_rate !== '' ? parseFloat(items[j].gst_rate) || 0 : (parseFloat(gst_pct) || 18);
           computedTotal += qty * rate;
           await client.query(
-            `INSERT INTO work_order_items (wo_id, description, unit, quantity, rate, remarks)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [req.params.id, items[j].description || '', items[j].unit || 'LS', qty, rate, items[j].remarks || null]
+            `INSERT INTO work_order_items (wo_id, description, unit, quantity, rate, gst_rate, remarks)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [req.params.id, items[j].description || '', items[j].unit || 'LS', qty, rate, gstRate, items[j].remarks || null]
           );
         }
         // Update header totals

@@ -608,7 +608,9 @@ async function runAutoMigrations() {
     await client.query(`ALTER TABLE sc_work_orders ADD COLUMN IF NOT EXISTS closure_remarks TEXT`);
     // 036 Client advance received on project
     await client.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS client_advance_received NUMERIC(15,2) DEFAULT 0`);
-    logger.info('✅ Auto-migrations complete (003, 004, 005, 033, 034, 035, 036)');
+    // 037 Per-item GST rate on Work Orders (mirrors po_items.gst_rate)
+    await client.query(`ALTER TABLE work_order_items ADD COLUMN IF NOT EXISTS gst_rate NUMERIC(5,2) DEFAULT 18`);
+    logger.info('✅ Auto-migrations complete (003, 004, 005, 033, 034, 035, 036, 037)');
   } catch (err) {
     logger.warn('⚠️  Auto-migration warning:', err.message);
   } finally {
