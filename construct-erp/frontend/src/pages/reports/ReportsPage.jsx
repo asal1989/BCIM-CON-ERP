@@ -1613,11 +1613,11 @@ export function ReportGenerator({ report }) {
         /* ── 4. Print header ── */
         #report-print-header {
           display: flex !important;
-          background: #1e3a8a !important;
-          color: #fff !important;
+          background: #fff !important;
+          color: #000 !important;
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
-          padding: 10px 14px !important;
+          padding: 0 0 10px !important;
         }
 
         /* ── 5. Table — allow rows to flow across pages ── */
@@ -1853,15 +1853,31 @@ export function ReportGenerator({ report }) {
         {rows && rows.length > 0 && (
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden" id="report-output">
             {/* Print header (only visible on print) */}
-            <div id="report-print-header" className="hidden items-center justify-between bg-[#1e3a8a] text-white px-6 py-4 mb-0">
-              <div>
-                <p className="text-base font-bold">{report.title}</p>
-                {hasDateFilter && (
-                  <p className="text-xs opacity-80 mt-0.5">Period: {new Date(fromDate).toLocaleDateString('en-IN')} — {new Date(toDate).toLocaleDateString('en-IN')}</p>
-                )}
+            <div id="report-print-header" className="hidden flex-col px-6 py-4 mb-0 border-b-[2.5px] border-[#1e3a8a]">
+              <div className="flex items-start justify-between gap-4">
+                {/* Left: Logo + Company */}
+                <div className="flex items-start gap-3">
+                  <img src="/bcim-logo.png" alt="BCIM" className="h-12 object-contain" />
+                  <div className="text-[9px] text-slate-700 leading-snug">
+                    <p className="text-[12px] font-bold text-slate-900 m-0">BCIM ENGINEERING PRIVATE LIMITED</p>
+                    <p className="m-0">No 579, 1st 'A' Main Road, Jayanagar 8th Block, Bangalore – 560070</p>
+                    <p className="m-0">GSTIN: 29AAXCB2929P1Z1 &nbsp;|&nbsp; Tel: +91 80 26650194</p>
+                  </div>
+                </div>
+                {/* Right: Report meta */}
+                <div className="text-right">
+                  <p className="text-base font-bold text-[#1e3a8a] m-0">{report.title}</p>
+                  <p className="text-[10px] font-semibold text-slate-600 mt-0.5 m-0">
+                    Project: {hasProjectFilter && projectId ? (projects.find(p => p.id === projectId)?.name || projects.find(p => p.id === projectId)?.project_name || 'Selected Project') : 'All Projects'}
+                  </p>
+                  {hasDateFilter && (
+                    <p className="text-[10px] text-slate-500 m-0">Period: {new Date(fromDate).toLocaleDateString('en-IN')} — {new Date(toDate).toLocaleDateString('en-IN')}</p>
+                  )}
+                  <p className="text-[9px] text-slate-400 mt-0.5 m-0">Generated: {new Date().toLocaleString('en-IN')}</p>
+                </div>
               </div>
-              <p className="text-xs opacity-70">Generated: {new Date().toLocaleString('en-IN')}</p>
             </div>
+
 
             {/* Summary strip (screen only) */}
             <div className="flex items-center justify-between flex-wrap gap-3 px-5 py-3.5 border-b border-slate-100 bg-slate-50/60 print:hidden">
