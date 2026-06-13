@@ -1330,7 +1330,7 @@ function POImportModal({ onClose, vendors, projects, onImported }) {
           if (!desc) continue;
 
           parsedItems.push({
-            material_name: desc.slice(0, 200),
+            material_name: desc.slice(0, 2000),
             unit: unit.slice(0, 20),
             quantity: qty,
             rate,

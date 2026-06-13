@@ -28,6 +28,8 @@ runSchemaInit('purchase_orders_columns', async () => {
       ADD COLUMN IF NOT EXISTS tcs_amount NUMERIC(15,2) DEFAULT 0
   `);
   await query(`ALTER TABLE po_items ADD COLUMN IF NOT EXISTS mrs_item_id UUID`);
+  // Allow long material descriptions (was VARCHAR(200) ≈ 30 words) — widen to TEXT
+  try { await query(`ALTER TABLE po_items ALTER COLUMN material_name TYPE TEXT`); } catch (_) {}
 });
 
 // Idempotent backfill (re-runs every boot): stamp po_items.mrs_item_id for PO

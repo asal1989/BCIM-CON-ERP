@@ -234,15 +234,12 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
             <tr style={{ background: '#1e293b', color: '#fff' }}>
               <th style={{ border: '1px solid #000', padding: '5px 4px', width: '22px', textAlign: 'center' }}>SL</th>
               <th style={{ border: '1px solid #000', padding: '5px 4px', textAlign: 'left' }}>Material Description</th>
-              <th style={{ border: '1px solid #000', padding: '5px 4px', width: '72px', textAlign: 'left' }}>Model / Make</th>
-              <th style={{ border: '1px solid #000', padding: '5px 4px', width: '36px', textAlign: 'center' }}>Unit</th>
-              <th style={{ border: '1px solid #000', padding: '5px 4px', width: '36px', textAlign: 'center' }}>Qty</th>
-              <th style={{ border: '1px solid #000', padding: '5px 4px', width: '70px', textAlign: 'right' }}>{isTaxIncl ? 'Rate (Incl.GST)' : 'Rate (Rs)'}</th>
-              <th style={{ border: '1px solid #000', padding: '5px 4px', width: '36px', textAlign: 'center' }}>GST%</th>
-              {!isTaxIncl && <th style={{ border: '1px solid #000', padding: '5px 4px', width: '70px', textAlign: 'right' }}>Basic (Rs)</th>}
-              {!isTaxIncl && <th style={{ border: '1px solid #000', padding: '5px 4px', width: '68px', textAlign: 'right' }}>GST Amt (Rs)</th>}
-              <th style={{ border: '1px solid #000', padding: '5px 4px', width: '80px', textAlign: 'right' }}>Total (Rs)</th>
-              <th style={{ border: '1px solid #000', padding: '5px 4px', width: '52px', textAlign: 'center' }}>Req. Date</th>
+              <th style={{ border: '1px solid #000', padding: '5px 4px', width: '40px', textAlign: 'center' }}>Unit</th>
+              <th style={{ border: '1px solid #000', padding: '5px 4px', width: '44px', textAlign: 'center' }}>Qty</th>
+              <th style={{ border: '1px solid #000', padding: '5px 4px', width: '80px', textAlign: 'right' }}>{isTaxIncl ? 'Rate (Incl.GST)' : 'Rate (Rs)'}</th>
+              <th style={{ border: '1px solid #000', padding: '5px 4px', width: '40px', textAlign: 'center' }}>GST%</th>
+              <th style={{ border: '1px solid #000', padding: '5px 4px', width: '90px', textAlign: 'right' }}>Basic Value</th>
+              <th style={{ border: '1px solid #000', padding: '5px 4px', width: '56px', textAlign: 'center' }}>Req. Date</th>
             </tr>
           </thead>
           <tbody>
@@ -250,8 +247,6 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
               const qty    = parseFloat(it.quantity || 0);
               const rate   = parseFloat(it.rate || 0);
               const basic  = qty * rate;
-              const gstAmt = parseFloat(it.gst_amount || 0);
-              const total  = parseFloat(it.total_amount || (basic + gstAmt));
               const rowBg  = i % 2 === 0 ? '#fff' : '#f8fafc';
               return (
                 <tr key={it.id || i} style={{ background: rowBg, borderBottom: '1px solid #e2e8f0' }}>
@@ -261,14 +256,11 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
                     {it.mix_design && <p style={{ color: '#000', fontSize: '8px', margin: '0 0 1px' }}>{it.mix_design}</p>}
                     {it.purpose && <p style={{ color: '#000', fontSize: '8px', margin: '1px 0 0', fontStyle: 'italic' }}>{it.purpose}</p>}
                   </td>
-                  <td style={{ border: '1px solid #000', padding: '4px', color: '#000', fontWeight: 600 }}>{it.make_model || it.brand || it.model_make || '—'}</td>
                   <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', textTransform: 'uppercase' }}>{it.unit || '—'}</td>
                   <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', fontWeight: 700 }}>{qty.toLocaleString('en-IN')}</td>
                   <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'right', fontFamily: 'inherit' }}>{f2(rate)}</td>
                   <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center' }}>{isTaxIncl ? 'Incl.' : `${parseFloat(it.gst_rate || 0)}%`}</td>
-                  {!isTaxIncl && <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'right', fontFamily: 'inherit' }}>{f2(basic)}</td>}
-                  {!isTaxIncl && <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'right', fontFamily: 'inherit' }}>{f2(gstAmt)}</td>}
-                  <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'right', fontWeight: 700, fontFamily: 'inherit' }}>{f2(total)}</td>
+                  <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'right', fontWeight: 700, fontFamily: 'inherit' }}>{f2(basic)}</td>
                   <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', fontSize: '8px' }}>
                     {it.req_date ? dayjs(it.req_date).format('DD.MM.YY') : '—'}
                   </td>
@@ -278,7 +270,7 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
               /* Empty placeholder rows */
               [...Array(6)].map((_, i) => (
                 <tr key={i} style={{ height: '24px' }}>
-                  {[...Array(isTaxIncl ? 9 : 11)].map((__, j) => (
+                  {[...Array(8)].map((__, j) => (
                     <td key={j} style={{ border: '1px solid #94a3b8', padding: '4px' }}>&nbsp;</td>
                   ))}
                 </tr>
