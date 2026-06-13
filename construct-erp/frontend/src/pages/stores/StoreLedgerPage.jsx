@@ -922,12 +922,16 @@ export default function StoreLedgerPage() {
         .store-ledger-scroll::-webkit-scrollbar-thumb:hover { background: #4f46e5; }
         .store-ledger-scroll::-webkit-scrollbar-corner { background: #e2e8f0; }
         .store-ledger-table-shell {
-          max-height: calc(100vh - 300px);
-          min-height: 320px;
+          max-height: calc(100vh - 230px);
+          min-height: 360px;
           overflow: auto;
         }
         @media (max-width: 1024px) {
-          .store-ledger-table-shell { max-height: calc(100vh - 360px); }
+          .store-ledger-table-shell { max-height: calc(100vh - 280px); }
+        }
+        /* Short / landscape laptop screens — give the grid the maximum room */
+        @media (max-height: 760px) {
+          .store-ledger-table-shell { max-height: calc(100vh - 190px); min-height: 300px; }
         }
         /* Sticky table headers inside overflow containers */
         .store-ledger-table-shell table thead {
@@ -935,6 +939,9 @@ export default function StoreLedgerPage() {
           top: 0;
           z-index: 2;
         }
+        /* Compact rows so more items are visible per screen */
+        .store-ledger-table-shell table td { padding-top: 0.45rem; padding-bottom: 0.45rem; }
+        .store-ledger-table-shell table th { padding-top: 0.5rem; padding-bottom: 0.5rem; }
       `}</style>
 
       <div className="p-6 md:p-8 max-w-full mx-auto">
@@ -942,14 +949,13 @@ export default function StoreLedgerPage() {
 
       {/* ── Tabs — sticky below PageHeader ─────────────────────── */}
       <div
-        className="sticky z-[15] -mx-6 px-6 md:-mx-8 md:px-8 pb-3"
+        className="sticky z-[15] -mx-6 px-6 md:-mx-8 md:px-8 pb-2"
         style={{ top: '104px', background: Theme.pageBg }}
       >
-        <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Stores Control</p>
-            <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950">Material Stock Ledger</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500">Stock balance, monthly movement and item-wise transactions in one register.</p>
+        <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-baseline gap-2">
+            <h2 className="text-base font-black tracking-tight text-slate-950">Material Stock Ledger</h2>
+            <span className="hidden text-xs font-semibold text-slate-400 lg:inline">· Stock balance, movement & item-wise register</span>
           </div>
           <SegmentTabs
             value={tab}
@@ -963,16 +969,16 @@ export default function StoreLedgerPage() {
         </div>
       </div>
 
-      <div className="mb-6" />
+      <div className="mb-3" />
 
       {/* ══════════════════════════════════════════════════════════
           TAB 1: STOCK REPORT (Excel-matching columns)
       ══════════════════════════════════════════════════════════ */}
       {tab === 'summary' && (
-        <div className="space-y-4">
+        <div className="space-y-3">
 
           {/* KPI cards */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
             <MetricCard icon={Package} label="Total Materials" value={inventoryData.length} sub={`${filteredSummary.length} shown`} tone="navy" />
             <MetricCard icon={AlertTriangle} label="Out of Stock" value={outCount} sub="Needs attention" tone="danger" />
             <MetricCard icon={AlertCircle} label="Below Reorder" value={lowCount} sub="Purchase planning" tone="amber" />
