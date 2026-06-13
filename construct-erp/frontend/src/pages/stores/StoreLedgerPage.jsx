@@ -156,14 +156,14 @@ function UnitSelectCell({ value, onSave }) {
 
 /* ── Import Modal ────────────────────────────────────────────── */
 function downloadImportTemplate() {
-  const headers = ['Category', 'MATERIAL DESCRIPTION', 'Unit', 'OPENING STOCK', 'CLOSING STOCK', 'RATE'];
+  const headers = ['Category', 'Major Head', 'MATERIAL DESCRIPTION', 'Unit', 'DC/IDC', 'OPENING STOCK', 'CLOSING STOCK', 'RATE', 'Remarks'];
   const samples = [
-    ['Cement', 'OPC 53 Grade Cement', 'Bags', '500', '320', '380'],
-    ['Steel', '8mm dia TMT Bar Fe500', 'MT', '12.5', '8.2', '58000'],
-    ['Steel', '12mm dia TMT Bar Fe500', 'MT', '8.0', '5.5', '58500'],
-    ['Aggregate', '20mm Crushed Stone', 'CUM', '50', '30', '1200'],
-    ['Sand', 'M-Sand / River Sand', 'CUM', '40', '22', '900'],
-    ['Electrical', 'Binding Wire Coil', 'Coils', '25', '18', '950'],
+    ['Cement', 'MATERIAL', 'OPC 53 Grade Cement', 'Bags', 'DC', '500', '320', '380', ''],
+    ['Steel', 'MATERIAL', '8mm dia TMT Bar Fe500', 'MT', 'DC', '12.5', '8.2', '58000', ''],
+    ['Steel', 'MATERIAL', '12mm dia TMT Bar Fe500', 'MT', 'DC', '8.0', '5.5', '58500', ''],
+    ['Aggregate', 'MATERIAL', '20mm Crushed Stone', 'CUM', 'DC', '50', '30', '1200', ''],
+    ['Sand', 'MATERIAL', 'M-Sand / River Sand', 'CUM', 'DC', '40', '22', '900', ''],
+    ['Electrical', 'MATERIAL', 'Binding Wire Coil', 'Coils', 'IDC', '25', '18', '950', ''],
   ];
   const csv = [headers, ...samples].map(row => row.map(c => `"${c}"`).join(',')).join('\n');
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
@@ -228,7 +228,7 @@ function ImportModal({ projects, onClose, onDone }) {
               Import Stock from Excel
             </h2>
             <p className="text-xs text-slate-900 font-medium mt-0.5">
-              Columns used: Category · Material Description · Unit · Opening Stock · Closing Stock · Rate
+              Columns used: Category · Major Head · Material Description · Unit · DC/IDC · Opening Stock · Closing Stock · Rate · Remarks
             </p>
           </div>
           <button onClick={onClose} className="text-slate-900 font-medium hover:text-white transition">
@@ -350,12 +350,15 @@ function ImportModal({ projects, onClose, onDone }) {
                     <tr className="bg-slate-800 text-white">
                       <th className="px-3 py-2 text-left font-medium w-8">#</th>
                       <th className="px-3 py-2 text-left font-bold">CATEGORY</th>
+                      <th className="px-3 py-2 text-left font-bold">MAJOR HEAD</th>
                       <th className="px-3 py-2 text-left font-bold">MATERIAL DESCRIPTION</th>
                       <th className="px-3 py-2 text-center font-bold">UNIT</th>
+                      <th className="px-3 py-2 text-center font-bold">DC/IDC</th>
                       <th className="px-3 py-2 text-right font-bold">OPENING STOCK</th>
                       <th className="px-3 py-2 text-right font-bold">CLOSING STOCK</th>
                       <th className="px-3 py-2 text-right font-bold">RATE (₹)</th>
                       <th className="px-3 py-2 text-right font-medium bg-indigo-700">CLOSING VALUE</th>
+                      <th className="px-3 py-2 text-left font-bold">REMARKS</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -365,8 +368,10 @@ function ImportModal({ projects, onClose, onDone }) {
                         <tr key={i} className={clsx('hover:bg-slate-50', i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40')}>
                           <td className="px-3 py-2 text-slate-900 font-medium font-mono">{i + 1}</td>
                           <td className="px-3 py-2 text-slate-600">{row.category || <span className="text-slate-300 italic">—</span>}</td>
+                          <td className="px-3 py-2 text-slate-600">{row.major_head || <span className="text-slate-300 italic">—</span>}</td>
                           <td className="px-3 py-2 font-medium text-slate-900 font-medium">{row.material_name}</td>
                           <td className="px-3 py-2 text-center font-medium text-slate-900 uppercase">{row.unit}</td>
+                          <td className="px-3 py-2 text-center font-medium text-slate-900 uppercase">{row.dc_idc || <span className="text-slate-300">—</span>}</td>
                           <td className="px-3 py-2 text-right font-mono text-slate-900 font-bold">{row.opening_stock}</td>
                           <td className="px-3 py-2 text-right font-mono font-medium text-slate-900">{row.closing_stock}</td>
                           <td className="px-3 py-2 text-right font-mono text-slate-700">
@@ -375,6 +380,7 @@ function ImportModal({ projects, onClose, onDone }) {
                           <td className="px-3 py-2 text-right font-mono font-medium text-indigo-700 bg-indigo-50/30">
                             {closingVal > 0 ? `₹${inr(closingVal)}` : '—'}
                           </td>
+                          <td className="px-3 py-2 text-slate-600">{row.remarks || <span className="text-slate-300 italic">—</span>}</td>
                         </tr>
                       );
                     })}
@@ -1061,8 +1067,10 @@ export default function StoreLedgerPage() {
                       {/* Matches Excel columns exactly */}
                       <th className="px-3 py-3 text-center text-[11px] font-medium uppercase tracking-[0.10em] w-12">SL NO</th>
                       <th className="px-3 py-3 text-left   text-[11px] font-medium uppercase tracking-[0.10em]">CATEGORY</th>
+                      <th className="px-3 py-3 text-left   text-[11px] font-medium uppercase tracking-[0.10em]">MAJOR HEAD</th>
                       <th className="px-3 py-3 text-left   text-[11px] font-medium uppercase tracking-[0.10em]">MATERIAL DESCRIPTION</th>
                       <th className="px-3 py-3 text-center text-[11px] font-medium uppercase tracking-[0.10em] w-16">UNIT</th>
+                      <th className="px-3 py-3 text-center text-[11px] font-medium uppercase tracking-[0.10em] w-16">DC/IDC</th>
                       <th className="px-3 py-3 text-right  text-[11px] font-medium uppercase tracking-[0.10em]">OPENING STOCK</th>
                       <th className="px-3 py-3 text-right  text-[11px] font-medium uppercase tracking-[0.10em]">CLOSING STOCK</th>
                       <th className="px-3 py-3 text-right  text-[11px] font-medium uppercase tracking-[0.10em]">RATE (₹)</th>
@@ -1071,6 +1079,7 @@ export default function StoreLedgerPage() {
                       <th className="px-3 py-3 text-right  text-[11px] font-medium uppercase tracking-[0.10em] bg-indigo-700">CLOSING STOCK VALUE TOTAL</th>
                       <th className="px-3 py-3 text-right  text-[11px] font-medium uppercase tracking-[0.10em] bg-amber-700">GST @18%</th>
                       <th className="px-3 py-3 text-right  text-[11px] font-medium uppercase tracking-[0.10em] bg-emerald-700">GRAND TOTAL</th>
+                      <th className="px-3 py-3 text-left   text-[11px] font-medium uppercase tracking-[0.10em]">REMARKS</th>
                       <th className="px-3 py-3 text-center text-[11px] font-medium uppercase tracking-[0.10em] w-10"></th>
                     </tr>
                   </thead>
@@ -1100,6 +1109,15 @@ export default function StoreLedgerPage() {
                             />
                           </td>
 
+                          {/* Major Head — inline editable */}
+                          <td className="px-3 py-3 text-[13px] font-medium text-slate-900">
+                            <EditableCell
+                              value={s.major_head}
+                              placeholder="Set head"
+                              onSave={v => updateMutation.mutate({ id: s.id, data: { major_head: v } })}
+                            />
+                          </td>
+
                           <td className="px-3 py-3">
                             <div className="font-medium text-slate-900 text-[13px] tracking-tight">{s.material_name}</div>
                             <div className="text-[11px] text-slate-900 font-medium mt-0.5">{s.project_name}</div>
@@ -1110,6 +1128,19 @@ export default function StoreLedgerPage() {
                               value={s.unit}
                               onSave={v => updateMutation.mutate({ id: s.id, data: { unit: v } })}
                             />
+                          </td>
+
+                          {/* DC/IDC — inline select */}
+                          <td className="px-3 py-3 text-center text-[13px] font-medium text-slate-900">
+                            <select
+                              value={s.dc_idc || ''}
+                              onChange={e => updateMutation.mutate({ id: s.id, data: { dc_idc: e.target.value } })}
+                              className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 px-1 text-center text-xs font-bold uppercase text-slate-950 outline-none transition focus:border-slate-900 focus:bg-white"
+                            >
+                              <option value="">—</option>
+                              <option value="DC">DC</option>
+                              <option value="IDC">IDC</option>
+                            </select>
                           </td>
 
                           <td className="px-3 py-3 text-right font-mono text-[13px] text-slate-900 font-medium">{qty(opening)}</td>
@@ -1146,6 +1177,15 @@ export default function StoreLedgerPage() {
                           </td>
                           <td className="px-3 py-3 text-right font-mono text-[13px] font-medium text-emerald-800 bg-emerald-50/40 tracking-tight">
                             {grandTotal > 0 ? `₹${inr(grandTotal)}` : '—'}
+                          </td>
+
+                          {/* Remarks — inline editable */}
+                          <td className="px-3 py-3 text-[13px] text-slate-700">
+                            <EditableCell
+                              value={s.remarks}
+                              placeholder="Add remark"
+                              onSave={v => updateMutation.mutate({ id: s.id, data: { remarks: v } })}
+                            />
                           </td>
 
                           <td className="px-3 py-3 text-center">

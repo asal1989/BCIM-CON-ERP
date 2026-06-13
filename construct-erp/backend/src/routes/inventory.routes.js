@@ -29,7 +29,11 @@ const COL_MAP = {
   materialdescrpition: 'material_name', materialdescrption: 'material_name',
   materialdesc: 'material_name', material: 'material_name', description: 'material_name',
   // others
-  category: 'category', unit: 'unit',
+  category: 'category', categories: 'category', head: 'category',
+  majorhead: 'major_head', majorheads: 'major_head',
+  dcidc: 'dc_idc',
+  remarks: 'remarks',
+  unit: 'unit',
   openingstock: 'opening_stock', closingstock: 'closing_stock',
   rate: 'unit_rate', slno: null, totalissued: null,
   openingstockvaluetotal: null, closingstockvaluetotal: null, gst: null, grandtotal: null,
@@ -127,9 +131,16 @@ function parseInventoryWorkbook(wb) {
       const openingStock = toNumber(getByHeader(row, detected.headerMap, ['openingstock']));
       const closingStock = toNumber(getByHeader(row, detected.headerMap, ['closingstock', 'stockatsite']));
       const unitRate = toNumber(getByHeader(row, detected.headerMap, ['rate', 'unitrate']));
+      const majorHead = cellText(getByHeader(row, detected.headerMap, ['majorhead', 'majorheads'])) || null;
+      const dcIdc = cellText(getByHeader(row, detected.headerMap, ['dcidc'])) || null;
+      const remarks = cellText(getByHeader(row, detected.headerMap, ['remarks'])) || null;
+
+      // If the sheet has its own Category/Head column, use that value directly
+      // (per-row), otherwise fall back to the section-header heuristic below.
+      const rowCategory = cellText(getByHeader(row, detected.headerMap, ['category', 'categories', 'head']));
 
       const hasQtyOrRate = openingStock || closingStock || unitRate;
-      const looksLikeCategory = !slNo && !cellText(unit) && !hasQtyOrRate;
+      const looksLikeCategory = !rowCategory && !slNo && !cellText(unit) && !hasQtyOrRate;
       if (looksLikeCategory) {
         category = material.replace(/\s+/g, ' ').trim();
         continue;
@@ -137,7 +148,10 @@ function parseInventoryWorkbook(wb) {
 
       items.push({
         material_name: material.replace(/\s+/g, ' ').trim(),
-        category,
+        category: rowCategory || category,
+        major_head: majorHead,
+        dc_idc: dcIdc,
+        remarks,
         unit,
         opening_stock: openingStock,
         closing_stock: closingStock,
@@ -156,6 +170,9 @@ function parseInventoryWorkbook(wb) {
     .map(r => ({
       material_name: cellText(r.material_name),
       category: cellText(r.category) || null,
+      major_head: cellText(r.major_head) || null,
+      dc_idc: cellText(r.dc_idc) || null,
+      remarks: cellText(r.remarks) || null,
       unit: cellText(r.unit) || 'NOS',
       opening_stock: toNumber(r.opening_stock),
       closing_stock: toNumber(r.closing_stock),
@@ -581,7 +598,7 @@ router.post('/transfer', async (req, res) => {
 // POST /inventory — create a new inventory item (used from MRS "New Item" flow)
 router.post('/', async (req, res) => {
   try {
-    const { project_id, material_name, category, unit, opening_stock = 0 } = req.body;
+    const { project_id, material_name, category, major_head, dc_idc, remarks, unit, opening_stock = 0 } = req.body;
     if (!project_id || !material_name) {
       return res.status(400).json({ error: 'project_id and material_name are required' });
     }
@@ -600,10 +617,10 @@ router.post('/', async (req, res) => {
       return res.status(409).json({ error: 'Material already exists in store ledger for this project' });
     }
     const result = await query(
-      `INSERT INTO inventory (project_id, material_name, category, unit, opening_stock, closing_stock, last_updated)
-       VALUES ($1, $2, $3, $4, $5, $5, NOW())
-       RETURNING id, material_name, category, unit, opening_stock, closing_stock`,
-      [project_id, material_name.trim(), (category || '').trim() || null, (unit || '').trim() || null, parseFloat(opening_stock) || 0]
+      `INSERT INTO inventory (project_id, material_name, category, major_head, dc_idc, remarks, unit, opening_stock, closing_stock, last_updated)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, NOW())
+       RETURNING id, material_name, category, major_head, dc_idc, remarks, unit, opening_stock, closing_stock`,
+      [project_id, material_name.trim(), (category || '').trim() || null, (major_head || '').trim() || null, (dc_idc || '').trim() || null, (remarks || '').trim() || null, (unit || '').trim() || null, parseFloat(opening_stock) || 0]
     );
     res.status(201).json({ data: result.rows[0] });
   } catch (err) {
@@ -614,7 +631,7 @@ router.post('/', async (req, res) => {
 // PATCH /inventory/:id — update minimum/reorder levels
 router.patch('/:id', async (req, res) => {
   try {
-    const { minimum_level, reorder_level, unit_rate, category, unit } = req.body;
+    const { minimum_level, reorder_level, unit_rate, category, major_head, dc_idc, remarks, unit } = req.body;
     const check = await query(
       `SELECT i.id, i.project_id FROM inventory i JOIN projects p ON i.project_id = p.id WHERE i.id = $1 AND p.company_id = $2`,
       [req.params.id, req.user.company_id]
@@ -630,10 +647,13 @@ router.patch('/:id', async (req, res) => {
          reorder_level = COALESCE($2, reorder_level),
          unit_rate     = COALESCE($3, unit_rate),
          category      = COALESCE($4, category),
-         unit          = COALESCE($5, unit),
+         major_head    = COALESCE($5, major_head),
+         dc_idc        = COALESCE($6, dc_idc),
+         remarks       = COALESCE($7, remarks),
+         unit          = COALESCE($8, unit),
          last_updated  = NOW()
-       WHERE id = $6`,
-      [minimum_level, reorder_level, unit_rate, category, unit, req.params.id]
+       WHERE id = $9`,
+      [minimum_level, reorder_level, unit_rate, category, major_head, dc_idc, remarks, unit, req.params.id]
     );
     res.json({ message: 'Inventory updated' });
   } catch (err) {
@@ -685,6 +705,9 @@ router.post('/import', xlsUpload.single('file'), async (req, res) => {
         const closing       = toNumber(r.closing_stock);
         const rate          = toNumber(r.unit_rate);
         const category      = cellText(r.category) || null;
+        const majorHead     = cellText(r.major_head) || null;
+        const dcIdc         = cellText(r.dc_idc) || null;
+        const remarks       = cellText(r.remarks) || null;
 
         if (!material_name) { skipped++; continue; }
 
@@ -702,10 +725,13 @@ router.post('/import', xlsUpload.single('file'), async (req, res) => {
               `UPDATE inventory SET
                  opening_stock = $1, closing_stock = $2,
                  unit_rate = CASE WHEN $3::numeric > 0 THEN $3::numeric ELSE unit_rate END,
-                 category  = CASE WHEN $4::text IS NOT NULL THEN $4::text ELSE category END,
+                 category   = CASE WHEN $4::text IS NOT NULL THEN $4::text ELSE category END,
+                 major_head = CASE WHEN $7::text IS NOT NULL THEN $7::text ELSE major_head END,
+                 dc_idc     = CASE WHEN $8::text IS NOT NULL THEN $8::text ELSE dc_idc END,
+                 remarks    = CASE WHEN $9::text IS NOT NULL THEN $9::text ELSE remarks END,
                  unit = $5, last_updated = NOW()
                WHERE id = $6`,
-              [opening, closing, rate, category, unit, existing.rows[0].id]
+              [opening, closing, rate, category, unit, existing.rows[0].id, majorHead, dcIdc, remarks]
             );
             updated++;
           } else {
@@ -715,9 +741,9 @@ router.post('/import', xlsUpload.single('file'), async (req, res) => {
         } else {
           await query(
             `INSERT INTO inventory
-               (project_id, material_name, unit, site_location, opening_stock, closing_stock, unit_rate, category)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8::text)`,
-            [project_id, material_name, unit, site_location, opening, closing, rate, category]
+               (project_id, material_name, unit, site_location, opening_stock, closing_stock, unit_rate, category, major_head, dc_idc, remarks)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8::text,$9::text,$10::text,$11::text)`,
+            [project_id, material_name, unit, site_location, opening, closing, rate, category, majorHead, dcIdc, remarks]
           );
           inserted++;
         }
