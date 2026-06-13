@@ -91,6 +91,7 @@ const POBulkImportPage      = lazy(() => import('./pages/procurement/POBulkImpor
 const PORegisterPage        = lazy(() => import('./pages/procurement/PORegisterPage'));
 const WORegisterPage        = lazy(() => import('./pages/procurement/WORegisterPage'));
 const WOBulkImportPage      = lazy(() => import('./pages/procurement/WOBulkImportPage'));
+const ProcurementReportsPage = lazy(() => import('./pages/procurement/ProcurementReportsPage'));
 const TenderRegisterPage          = lazy(() => import('./pages/tender-mgmt/TenderRegisterPage'));
 const TenderManagementPage        = lazy(() => import('./pages/tender-mgmt/TenderManagementPage'));
 const DMSPage                     = lazy(() => import('./pages/documents/DMSPage'));
@@ -501,6 +502,7 @@ export default function App() {
                 <Route path="procurement/work-orders" element={<RequireModule module="Procurement"><WorkOrderPage /></RequireModule>} />
                 <Route path="procurement/wo-register" element={<RequireModule module="Procurement"><WORegisterPage /></RequireModule>} />
                 <Route path="procurement/wo-bulk-import" element={<RequireModule module="Procurement"><WOBulkImportPage /></RequireModule>} />
+                <Route path="procurement/reports" element={<RequireModule module="Procurement"><ProcurementReportsPage /></RequireModule>} />
 
                 {/* Stores */}
                 <Route path="stores" element={<RequireModule module="Stores"><StoresDashboard /></RequireModule>} />

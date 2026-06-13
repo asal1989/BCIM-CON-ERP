@@ -47,7 +47,7 @@ const DEPTS = [
 
 // ── Report definitions (with columns + api endpoint) ──────────────────────────
 // Endpoints match actual backend routes in server.js
-const REPORTS = [
+export const REPORTS = [
   // ── TQS ──────────────────────────────────────────────────────────────────────
   {
     key:'tqs-bill-register', dept:'tqs', title:'Bill Register', icon:FileText, color:'indigo',
@@ -297,7 +297,7 @@ const REPORTS = [
   // ── Procurement ───────────────────────────────────────────────────────────────
   // -- Purchase Requisition Reports --
   {
-    key:'procurement-mrs-register', dept:'procurement', title:'Purchase Requisition Register', icon:ClipboardList, color:'amber',
+    key:'procurement-mrs-register', dept:'procurement', category:'Purchase Requisition Reports', title:'Purchase Requisition Register', icon:ClipboardList, color:'amber',
     desc:'All material requisitions with items, quantities, and status',
     filters:['dateRange','project'],
     endpoint:'/stores/mrs',
@@ -319,7 +319,7 @@ const REPORTS = [
     ],
   },
   {
-    key:'procurement-mrs-pending', dept:'procurement', title:'Pending Requisition Report', icon:Clock, color:'amber',
+    key:'procurement-mrs-pending', dept:'procurement', category:'Purchase Requisition Reports', title:'Pending Requisition Report', icon:Clock, color:'amber',
     desc:'Material requisitions awaiting approval',
     filters:['dateRange','project'],
     endpoint:'/stores/mrs',
@@ -342,7 +342,7 @@ const REPORTS = [
     ],
   },
   {
-    key:'procurement-mrs-approved', dept:'procurement', title:'Approved Requisition Report', icon:CheckCircle2, color:'amber',
+    key:'procurement-mrs-approved', dept:'procurement', category:'Purchase Requisition Reports', title:'Approved Requisition Report', icon:CheckCircle2, color:'amber',
     desc:'Material requisitions that have been approved',
     filters:['dateRange','project'],
     endpoint:'/stores/mrs',
@@ -367,7 +367,7 @@ const REPORTS = [
     ],
   },
   {
-    key:'procurement-mrs-rejected', dept:'procurement', title:'Rejected Requisition Report', icon:AlertTriangle, color:'amber',
+    key:'procurement-mrs-rejected', dept:'procurement', category:'Purchase Requisition Reports', title:'Rejected Requisition Report', icon:AlertTriangle, color:'amber',
     desc:'Material requisitions that have been rejected',
     filters:['dateRange','project'],
     endpoint:'/stores/mrs',
@@ -390,7 +390,7 @@ const REPORTS = [
     ],
   },
   {
-    key:'procurement-mrs-project-wise', dept:'procurement', title:'Project-wise Requisition Report', icon:Layers, color:'amber',
+    key:'procurement-mrs-project-wise', dept:'procurement', category:'Purchase Requisition Reports', title:'Project-wise Requisition Report', icon:Layers, color:'amber',
     desc:'Requisition counts and quantities grouped by project',
     filters:['dateRange'],
     endpoint:'/stores/mrs',
@@ -420,7 +420,7 @@ const REPORTS = [
 
   // -- RFQ Reports --
   {
-    key:'procurement-rfq-register', dept:'procurement', title:'RFQ Register', icon:Send, color:'amber',
+    key:'procurement-rfq-register', dept:'procurement', category:'RFQ Reports', title:'RFQ Register', icon:Send, color:'amber',
     desc:'All RFQs issued to vendors with response status',
     filters:['dateRange','project'],
     endpoint:'/quotations/rfqs',
@@ -437,7 +437,7 @@ const REPORTS = [
     ],
   },
   {
-    key:'procurement-rfq-pending', dept:'procurement', title:'RFQ Pending Report', icon:Clock, color:'amber',
+    key:'procurement-rfq-pending', dept:'procurement', category:'RFQ Reports', title:'RFQ Pending Report', icon:Clock, color:'amber',
     desc:'RFQs awaiting vendor responses',
     filters:['project'],
     endpoint:'/quotations/rfqs',
@@ -456,7 +456,7 @@ const REPORTS = [
 
   // -- Quotation Reports --
   {
-    key:'procurement-quotation-register', dept:'procurement', title:'Vendor Quotation Report', icon:FileText, color:'amber',
+    key:'procurement-quotation-register', dept:'procurement', category:'Quotation Reports', title:'Vendor Quotation Report', icon:FileText, color:'amber',
     desc:'All vendor quotations received against requisitions',
     filters:['dateRange','project'],
     endpoint:'/quotations',
@@ -475,7 +475,7 @@ const REPORTS = [
 
   // -- Purchase Order Reports --
   {
-    key:'procurement-po', dept:'procurement', title:'Purchase Order Register', icon:FileText, color:'amber',
+    key:'procurement-po', dept:'procurement', category:'Purchase Order Reports', title:'Purchase Order Register', icon:FileText, color:'amber',
     desc:'All POs with vendor, project, value, and status',
     filters:['dateRange','project'],
     endpoint:'/purchase-orders',
@@ -492,7 +492,7 @@ const REPORTS = [
     ],
   },
   {
-    key:'procurement-po-open', dept:'procurement', title:'Open PO Report', icon:FileText, color:'amber',
+    key:'procurement-po-open', dept:'procurement', category:'Purchase Order Reports', title:'Open PO Report', icon:FileText, color:'amber',
     desc:'POs that are active and not yet rejected or cancelled',
     filters:['dateRange','project'],
     endpoint:'/purchase-orders',
@@ -508,7 +508,7 @@ const REPORTS = [
     ],
   },
   {
-    key:'procurement-po-pending-approval', dept:'procurement', title:'Pending Approval PO Report', icon:Clock, color:'amber',
+    key:'procurement-po-pending-approval', dept:'procurement', category:'Purchase Order Reports', title:'Pending Approval PO Report', icon:Clock, color:'amber',
     desc:'POs awaiting procurement or management approval',
     filters:['dateRange','project'],
     endpoint:'/purchase-orders',
@@ -524,7 +524,7 @@ const REPORTS = [
     ],
   },
   {
-    key:'procurement-po-cancelled', dept:'procurement', title:'Cancelled / Rejected PO Report', icon:AlertTriangle, color:'amber',
+    key:'procurement-po-cancelled', dept:'procurement', category:'Purchase Order Reports', title:'Cancelled / Rejected PO Report', icon:AlertTriangle, color:'amber',
     desc:'POs that have been rejected or cancelled',
     filters:['dateRange','project'],
     endpoint:'/purchase-orders',
@@ -540,7 +540,7 @@ const REPORTS = [
     ],
   },
   {
-    key:'procurement-po-vendor-wise', dept:'procurement', title:'Vendor-wise PO Report', icon:Star, color:'amber',
+    key:'procurement-po-vendor-wise', dept:'procurement', category:'Purchase Order Reports', title:'Vendor-wise PO Report', icon:Star, color:'amber',
     desc:'PO count and value grouped by vendor',
     filters:['dateRange','project'],
     endpoint:'/purchase-orders',
@@ -566,7 +566,7 @@ const REPORTS = [
     ],
   },
   {
-    key:'procurement-po-project-wise', dept:'procurement', title:'Project-wise PO Report', icon:Layers, color:'amber',
+    key:'procurement-po-project-wise', dept:'procurement', category:'Purchase Order Reports', title:'Project-wise PO Report', icon:Layers, color:'amber',
     desc:'PO count and value grouped by project',
     filters:['dateRange'],
     endpoint:'/purchase-orders',
@@ -588,7 +588,7 @@ const REPORTS = [
     ],
   },
   {
-    key:'procurement-po-monthly', dept:'procurement', title:'Monthly PO Analysis Report', icon:TrendingUp, color:'amber',
+    key:'procurement-po-monthly', dept:'procurement', category:'Purchase Order Reports', title:'Monthly PO Analysis Report', icon:TrendingUp, color:'amber',
     desc:'PO count and value trend by month',
     filters:['dateRange','project'],
     endpoint:'/purchase-orders',
@@ -613,7 +613,7 @@ const REPORTS = [
 
   // -- Delivery Reports --
   {
-    key:'procurement-item-wise-po', dept:'procurement', title:'Item-wise PO Report', icon:PackageCheck, color:'amber',
+    key:'procurement-item-wise-po', dept:'procurement', category:'Delivery Reports', title:'Item-wise PO Report', icon:PackageCheck, color:'amber',
     desc:'Line-item level PO data with ordered, received, and remaining quantities',
     filters:['dateRange','project'],
     endpoint:'/purchase-orders/items-report',
@@ -632,7 +632,7 @@ const REPORTS = [
     ],
   },
   {
-    key:'procurement-pending-delivery', dept:'procurement', title:'Pending Delivery Report', icon:Clock, color:'amber',
+    key:'procurement-pending-delivery', dept:'procurement', category:'Delivery Reports', title:'Pending Delivery Report', icon:Clock, color:'amber',
     desc:'PO line items with quantities yet to be delivered',
     filters:['dateRange','project'],
     endpoint:'/purchase-orders/items-report',
@@ -652,7 +652,7 @@ const REPORTS = [
     ],
   },
   {
-    key:'procurement-overdue-delivery', dept:'procurement', title:'Overdue Delivery Report', icon:AlertTriangle, color:'amber',
+    key:'procurement-overdue-delivery', dept:'procurement', category:'Delivery Reports', title:'Overdue Delivery Report', icon:AlertTriangle, color:'amber',
     desc:'PO line items pending delivery past the committed delivery date',
     filters:['project'],
     endpoint:'/purchase-orders/items-report',
@@ -674,7 +674,7 @@ const REPORTS = [
 
   // -- Vendor Reports --
   {
-    key:'procurement-vendor', dept:'procurement', title:'Vendor Master Report', icon:Star, color:'amber',
+    key:'procurement-vendor', dept:'procurement', category:'Vendor Reports', title:'Vendor Master Report', icon:Star, color:'amber',
     desc:'All vendors with contact, category, and status',
     filters:[],
     endpoint:'/vendors',
@@ -689,7 +689,7 @@ const REPORTS = [
     ],
   },
   {
-    key:'procurement-vendor-performance', dept:'procurement', title:'Vendor Performance Report', icon:TrendingUp, color:'amber',
+    key:'procurement-vendor-performance', dept:'procurement', category:'Vendor Reports', title:'Vendor Performance Report', icon:TrendingUp, color:'amber',
     desc:'PO value, delivery timeliness, and invoicing per vendor',
     filters:[],
     endpoint:'/vendors/performance',
@@ -1241,7 +1241,7 @@ export default function ReportsPage() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-function ReportGenerator({ report }) {
+export function ReportGenerator({ report }) {
   const now = new Date();
   const today = dateInputValue(now);
   const firstOfMonth = dateInputValue(new Date(now.getFullYear(), now.getMonth(), 1));

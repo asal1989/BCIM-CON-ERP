@@ -68,6 +68,7 @@ const navGroups = [
     { to: '/procurement/vendor-mapping',   icon: Link2,         label: 'Vendor–Project Mapping' },
     { to: '/procurement/inventory',        icon: Package,       label: 'Inventory' },
     { to: '/procurement/documents',        icon: FolderSearch,  label: 'Documents' },
+    { to: '/procurement/reports',          icon: FileBarChart,  label: 'Reports' },
   ]},
   { label: 'Tender Management', items: [
     { to: '/tender-management',           icon: Gavel,         label: 'Tender Register' },
@@ -275,6 +276,7 @@ const NAV_SECTIONS = {
     { label: 'Performance & Payment', paths: ['/procurement/vendor-performance','/procurement/vendor-payments'] },
     { label: 'Stock',            paths: ['/procurement/inventory'] },
     { label: 'Documents',        paths: ['/procurement/documents'] },
+    { label: 'Reports',          paths: ['/procurement/reports'] },
   ],
   'Stores': [
     { label: 'Overview',        paths: ['/stores'] },
