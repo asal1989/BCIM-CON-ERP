@@ -931,7 +931,7 @@ function WODetailPanel({ wo, onClose, onEdit, onDelete, onApprove, onMDApprove, 
     .wo-items-table thead { display: table-header-group; }
     .wo-items-table tbody tr { page-break-inside: avoid; page-break-after: auto; }
     /* Signature strip fixed to bottom of every printed page */
-    .wo-page-footer { position: fixed; bottom: 0; left: 0; right: 0; background: white; }
+    .wo-page-footer { position: fixed; bottom: -10mm; left: 0; right: 0; background: white; }
     /* Keep totals block together; let T&C flow naturally across pages */
     .wo-totals-block { page-break-inside: avoid; break-inside: avoid; }
     @page { size: A4 portrait; margin: 8mm 8mm 26mm 8mm; }
