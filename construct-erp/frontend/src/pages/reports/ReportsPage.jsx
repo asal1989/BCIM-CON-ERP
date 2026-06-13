@@ -10,8 +10,14 @@ import {
   CheckCircle2, Circle, ChevronDown, Eye, FileSpreadsheet,
   ArrowUpRight, Wallet, DollarSign, AlertCircle, Info,
 } from 'lucide-react';
+import {
+  BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
+  Tooltip as RTooltip, ResponsiveContainer, Legend,
+} from 'recharts';
 import { clsx } from 'clsx';
 import api from '../../api/client';
+
+const CHART_COLORS = ['#d97706', '#2563eb', '#059669', '#dc2626', '#7c3aed', '#0d9488', '#ea580c', '#0891b2', '#4f46e5', '#b45309'];
 
 // ── Colour palette — one distinct, muted enterprise colour per department ─────
 const C = {
@@ -506,6 +512,10 @@ export const REPORTS = [
       { key:'cs_status',      label:'CS Status',     type:'status' },
       { key:'created_at',     label:'Date',          type:'date' },
     ],
+    chart:{ type:'bar', xKey:'mrs_number', limit:8, bars:[
+      { key:'l1_amount',      label:'L1 Amount (₹)' },
+      { key:'highest_amount', label:'Highest Quote (₹)' },
+    ] },
   },
   {
     key:'procurement-l1-vendor', dept:'procurement', category:'Quotation Reports', title:'L1 Vendor Report', icon:Target, color:'amber',
@@ -678,6 +688,7 @@ export const REPORTS = [
       { key:'po_count',    label:'No. of POs',   type:'number' },
       { key:'grand_total', label:'Grand Total (₹)', type:'amount' },
     ],
+    chart:{ type:'bar', xKey:'month', bars:[{ key:'grand_total', label:'Grand Total (₹)', type:'amount' }] },
   },
 
   // -- Delivery Reports --
@@ -699,6 +710,7 @@ export const REPORTS = [
       { key:'total_amount',        label:'Amount (₹)',  type:'amount' },
       { key:'delivery_status',     label:'Status',      type:'status' },
     ],
+    chart:{ type:'pie', groupBy:'delivery_status', label:'Delivery Status' },
   },
   {
     key:'procurement-pending-delivery', dept:'procurement', category:'Delivery Reports', title:'Pending Delivery Report', icon:Clock, color:'amber',
@@ -791,6 +803,11 @@ export const REPORTS = [
       { key:'tag',        label:'Rating',         type:'status' },
       { key:'remarks',    label:'Remarks' },
     ],
+    chart:{ type:'bar', xKey:'vendor', limit:10, bars:[
+      { key:'delivery', label:'Delivery' },
+      { key:'quality',  label:'Quality' },
+      { key:'pricing',  label:'Pricing' },
+    ] },
   },
   {
     key:'procurement-vendor-lead-time', dept:'procurement', category:'Vendor Reports', title:'Vendor Lead Time Analysis', icon:Clock, color:'amber',
@@ -838,6 +855,7 @@ export const REPORTS = [
       { key:'avg_rate',       label:'Avg Rate (₹)', type:'amount' },
       { key:'total_amount',   label:'Total Amount (₹)', type:'amount' },
     ],
+    chart:{ type:'bar', xKey:'material_name', limit:8, bars:[{ key:'total_amount', label:'Total Amount (₹)', type:'amount' }] },
   },
   {
     key:'procurement-material-price-trend', dept:'procurement', category:'Cost Analysis Reports', title:'Material Price Trend Report', icon:TrendingUp, color:'amber',
@@ -1212,6 +1230,61 @@ function fmt(val, type) {
     return <span className={clsx('px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wide', cls)}>{val}</span>;
   }
   return String(val);
+}
+
+// ── Generic report chart (bar / pie) driven by report.chart config ────────────
+function ReportChart({ report, rows }) {
+  const { chart } = report;
+  if (!chart || !rows?.length) return null;
+
+  if (chart.type === 'pie') {
+    const counts = {};
+    rows.forEach(r => {
+      const key = r[chart.groupBy] ?? 'Unknown';
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    const data = Object.entries(counts).map(([name, value]) => ({ name, value }));
+    return (
+      <div className="flex flex-col items-center">
+        <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">{chart.label || 'Breakdown'}</p>
+        <ResponsiveContainer width="100%" height={220}>
+          <PieChart>
+            <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, value }) => `${name}: ${value}`}>
+              {data.map((entry, i) => (
+                <Cell key={entry.name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+              ))}
+            </Pie>
+            <RTooltip />
+            <Legend />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  }
+
+  // bar chart
+  const limit = chart.limit || 12;
+  const data = rows.slice(0, limit).map(r => {
+    const entry = { name: String(firstValue(r, { key: chart.xKey }) ?? '') };
+    chart.bars.forEach(bar => {
+      entry[bar.key] = parseFloat(firstValue(r, bar)) || 0;
+    });
+    return entry;
+  });
+  return (
+    <ResponsiveContainer width="100%" height={240}>
+      <BarChart data={data} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+        <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-20} textAnchor="end" height={50} />
+        <YAxis tick={{ fontSize: 10 }} />
+        <RTooltip formatter={(v) => Number(v).toLocaleString('en-IN')} />
+        {chart.bars.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
+        {chart.bars.map((bar, i) => (
+          <Bar key={bar.key} dataKey={bar.key} name={bar.label} fill={CHART_COLORS[i % CHART_COLORS.length]} radius={[4, 4, 0, 0]} />
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1816,6 +1889,13 @@ export function ReportGenerator({ report }) {
                 ))}
               </div>
             </div>
+
+            {/* Chart */}
+            {report.chart && (
+              <div className="px-5 py-4 border-b border-slate-100 print:hidden">
+                <ReportChart report={report} rows={rows} />
+              </div>
+            )}
 
             <div className="overflow-x-auto">
               <table className="w-full text-xs border-collapse">
