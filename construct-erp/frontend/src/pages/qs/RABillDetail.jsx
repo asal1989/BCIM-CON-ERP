@@ -94,14 +94,27 @@ export default function RABillDetail() {
     documentTitle: `RA_Bill_${b?.bill_number || 'export'}`,
   });
 
+  // A4 edge-to-edge: the invoice templates are 210mm wide with their own internal
+  // margins, so kill the browser's default print margins or the content gets
+  // scaled down / clipped on the right when actually printing or saving as PDF.
+  const A4_PAGE_STYLE = `
+    @page { size: A4 portrait; margin: 0; }
+    @media print {
+      html, body { margin: 0 !important; padding: 0 !important;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  `;
+
   const handleTaxInvoicePrint = useReactToPrint({
     contentRef: taxInvoiceRef,
     documentTitle: `Tax_Invoice_${invoiceNo || b?.bill_number || 'export'}`,
+    pageStyle: A4_PAGE_STYLE,
   });
 
   const handleProformaPrint = useReactToPrint({
     contentRef: proformaRef,
     documentTitle: `Proforma_${proformaNo || b?.bill_number || 'export'}`,
+    pageStyle: A4_PAGE_STYLE,
   });
 
   const invalidate = () => {
