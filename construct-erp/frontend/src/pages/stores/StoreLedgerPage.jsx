@@ -1,5 +1,5 @@
 // src/pages/stores/StoreLedgerPage.jsx
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   BookOpen, TrendingUp, TrendingDown, Search, Filter,
@@ -477,6 +477,8 @@ export default function StoreLedgerPage() {
   const [projectFilter, setProjectFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [showImport, setShowImport]       = useState(false);
+  const [page, setPage]                   = useState(1);
+  const PAGE_SIZE = 50;
   // Monthly Movement tab state
   const [month, setMonth]                 = useState(dayjs().format('YYYY-MM'));
   const [movTab, setMovTab]               = useState('register'); // register | valuation | slow
@@ -542,6 +544,15 @@ export default function StoreLedgerPage() {
   const totalClosingValue  = filteredSummary.reduce((sum, s) => sum + (parseFloat(s.closing_stock || 0) * parseFloat(s.unit_rate || 0)), 0);
   const totalGST           = totalClosingValue * GST_RATE;
   const totalGrandTotal    = totalClosingValue + totalGST;
+
+  // Pagination for the Stock Report table
+  const totalPages   = Math.max(1, Math.ceil(filteredSummary.length / PAGE_SIZE));
+  const currentPage  = Math.min(page, totalPages);
+  const pagedSummary = filteredSummary.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, filterStatus, categoryFilter, projectFilter, inventoryData.length]);
 
   const transactions = ledgerData?.transactions || [];
   const ledgerInventory = ledgerData?.inventory || selectedMaterial;
@@ -1084,7 +1095,7 @@ export default function StoreLedgerPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredSummary.map((s, idx) => {
+                    {pagedSummary.map((s, idx) => {
                       const rate        = parseFloat(s.unit_rate || 0);
                       const opening     = parseFloat(s.opening_stock || 0);
                       const closing     = parseFloat(s.closing_stock || 0);
@@ -1098,7 +1109,7 @@ export default function StoreLedgerPage() {
 
                       return (
                         <tr key={s.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-3 py-3 text-center text-[13px] text-slate-900 font-medium font-mono">{idx + 1}</td>
+                          <td className="px-3 py-3 text-center text-[13px] text-slate-900 font-medium font-mono">{(currentPage - 1) * PAGE_SIZE + idx + 1}</td>
 
                           {/* Category — inline editable */}
                           <td className="px-3 py-3 text-[13px] font-medium text-slate-900">
@@ -1233,11 +1244,53 @@ export default function StoreLedgerPage() {
               </div>
             )}
             {!invLoading && (
-              <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50 text-xs text-slate-900 font-medium flex items-center justify-between">
-                <span>Showing {filteredSummary.length} of {inventoryData.length} materials</span>
+              <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50 text-xs text-slate-900 font-medium flex items-center justify-between flex-wrap gap-2">
+                <span>
+                  Showing {filteredSummary.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1}
+                  –{Math.min(currentPage * PAGE_SIZE, filteredSummary.length)} of {filteredSummary.length} materials
+                  {filteredSummary.length !== inventoryData.length && ` (filtered from ${inventoryData.length})`}
+                </span>
                 <span className="flex items-center gap-1 text-slate-900 font-semibold">
                   <Edit2 size={10} /> Click any CATEGORY or RATE cell to edit inline
                 </span>
+              </div>
+            )}
+            {!invLoading && totalPages > 1 && (
+              <div className="px-4 py-2.5 border-t border-slate-100 bg-white flex items-center justify-center gap-1 flex-wrap">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-2.5 py-1 rounded-lg text-xs font-medium border border-slate-200 text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition"
+                >
+                  Prev
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 2)
+                  .map((p, i, arr) => (
+                    <React.Fragment key={p}>
+                      {i > 0 && arr[i - 1] !== p - 1 && (
+                        <span className="px-1 text-xs text-slate-400">…</span>
+                      )}
+                      <button
+                        onClick={() => setPage(p)}
+                        className={clsx(
+                          'px-3 py-1 rounded-lg text-xs font-medium border transition',
+                          p === currentPage
+                            ? 'bg-indigo-600 border-indigo-600 text-white'
+                            : 'border-slate-200 text-slate-900 hover:bg-slate-50'
+                        )}
+                      >
+                        {p}
+                      </button>
+                    </React.Fragment>
+                  ))}
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-2.5 py-1 rounded-lg text-xs font-medium border border-slate-200 text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition"
+                >
+                  Next
+                </button>
               </div>
             )}
           </div>
