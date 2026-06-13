@@ -30,15 +30,17 @@ runSchemaInit('purchase_orders_columns', async () => {
   await query(`ALTER TABLE po_items ADD COLUMN IF NOT EXISTS mrs_item_id UUID`);
 });
 
-// One-time / idempotent backfill: stamp po_items.mrs_item_id for historical PO
+// Idempotent backfill (re-runs every boot): stamp po_items.mrs_item_id for PO
 // lines that were created before item-level MR tracking existed (or typed in
 // manually) but whose PO is header-linked to an MR. We match on a normalized
-// material name (lowercase, strip every non-alphanumeric char) so that spacing,
-// case, punctuation or make/model edits no longer break the link. Once stamped,
-// the MR "balance" calc uses the reliable direct join instead of name matching,
-// so a material whose PO was already raised can never reappear on a new PO.
-// Only links when the normalized name maps to exactly ONE MR item (avoids
-// mis-attributing when a single MR legitimately repeats a material name).
+// material name (lowercase, strip every non-alphanumeric char), and tolerate a
+// PO name that STARTS WITH the MR name — buyers often append a spec suffix on
+// the PO (e.g. MR "2.5 sqmm x 3 core flexible cable" → PO "...cable - 100mtr
+// Coil"), which an exact match would miss. Once stamped, the MR "balance" calc
+// uses the reliable direct join instead of name matching, so a material whose
+// PO was already raised can never reappear on a new PO. Only links when the
+// prefix maps to exactly ONE MR item (avoids mis-attributing when a single MR
+// legitimately repeats a material name).
 runSchemaInit('po_items_mrs_item_backfill', async () => {
   await query(`
     UPDATE po_items poi
@@ -49,8 +51,8 @@ runSchemaInit('po_items_mrs_item_backfill', async () => {
       JOIN purchase_orders po ON po.id = poi2.po_id
       JOIN mrs_items mi
         ON (mi.mrs_id = po.mrs_id OR mi.mrs_id = ANY(po.mrs_ids))
-       AND regexp_replace(lower(trim(mi.material_name)),  '[^a-z0-9]+', '', 'g')
-         = regexp_replace(lower(trim(poi2.material_name)), '[^a-z0-9]+', '', 'g')
+       AND regexp_replace(lower(trim(poi2.material_name)), '[^a-z0-9]+', '', 'g')
+           LIKE regexp_replace(lower(trim(mi.material_name)), '[^a-z0-9]+', '', 'g') || '%'
       WHERE poi2.mrs_item_id IS NULL
         AND po.status NOT IN ('rejected', 'cancelled')
         AND (po.mrs_id IS NOT NULL OR po.mrs_ids IS NOT NULL)
