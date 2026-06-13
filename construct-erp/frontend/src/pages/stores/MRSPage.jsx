@@ -1198,7 +1198,7 @@ export default function MRSPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   <Field label="Project *">
                     <select
-                      className="w-full h-9 bg-slate-50 border border-slate-200 rounded-lg px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 transition-all"
+                      className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-3.5 text-sm font-medium text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 focus:bg-white transition-all"
                       value={formData.project_id}
                       onChange={e => setFormData(p => ({ ...p, project_id: e.target.value }))}
                     >
@@ -1208,7 +1208,7 @@ export default function MRSPage() {
                   </Field>
                   <Field label="Department">
                     <select
-                      className="w-full h-9 bg-slate-50 border border-slate-200 rounded-lg px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 transition-all"
+                      className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-3.5 text-sm font-medium text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 focus:bg-white transition-all"
                       value={formData.department}
                       onChange={e => setFormData(p => ({ ...p, department: e.target.value }))}
                     >
@@ -1236,7 +1236,7 @@ export default function MRSPage() {
                   </Field>
                   <Field label="HO Project Name">
                     <input
-                      className="w-full h-9 bg-slate-50 border border-slate-200 rounded-lg px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 transition-all"
+                      className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-3.5 text-sm font-medium text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 focus:bg-white transition-all"
                       placeholder="HO project name"
                       value={formData.head_office_project_name}
                       onChange={e => setFormData(p => ({ ...p, head_office_project_name: e.target.value }))}
@@ -1244,7 +1244,7 @@ export default function MRSPage() {
                   </Field>
                   <Field label="Site Incharge">
                     <input
-                      className="w-full h-9 bg-slate-50 border border-slate-200 rounded-lg px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 transition-all"
+                      className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-3.5 text-sm font-medium text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 focus:bg-white transition-all"
                       placeholder="Enter name"
                       value={formData.site_incharge}
                       onChange={e => setFormData(p => ({ ...p, site_incharge: e.target.value }))}
@@ -1253,21 +1253,31 @@ export default function MRSPage() {
                   <Field label="Required By *">
                     <input
                       type="date"
-                      className="w-full h-9 bg-slate-50 border border-slate-200 rounded-lg px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 transition-all"
+                      className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-3.5 text-sm font-medium text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 focus:bg-white transition-all"
                       value={formData.required_by}
                       onChange={e => setFormData(p => ({ ...p, required_by: e.target.value }))}
                     />
                   </Field>
                   <Field label="Priority">
-                    <select
-                      className="w-full h-9 bg-slate-50 border border-slate-200 rounded-lg px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 transition-all"
-                      value={formData.priority}
-                      onChange={e => setFormData(p => ({ ...p, priority: e.target.value }))}
-                    >
-                      <option value="normal">Normal</option>
-                      <option value="urgent">Urgent</option>
-                      <option value="critical">Critical</option>
-                    </select>
+                    <div className="flex gap-1.5 h-10">
+                      {[
+                        { v: 'normal',   label: 'Normal',   on: 'bg-slate-800 text-white border-slate-800',   off: 'bg-slate-50 text-slate-500 border-slate-200 hover:border-slate-300' },
+                        { v: 'urgent',   label: 'Urgent',   on: 'bg-amber-500 text-white border-amber-500',   off: 'bg-slate-50 text-slate-500 border-slate-200 hover:border-amber-300' },
+                        { v: 'critical', label: 'Critical', on: 'bg-rose-600 text-white border-rose-600 shadow-sm shadow-rose-200', off: 'bg-slate-50 text-slate-500 border-slate-200 hover:border-rose-300' },
+                      ].map(p => (
+                        <button
+                          key={p.v}
+                          type="button"
+                          onClick={() => setFormData(d => ({ ...d, priority: p.v }))}
+                          className={clsx(
+                            'flex-1 rounded-xl border text-xs font-bold transition-all',
+                            formData.priority === p.v ? p.on : p.off
+                          )}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
                   </Field>
                 </div>
               </div>
@@ -1291,14 +1301,15 @@ export default function MRSPage() {
                     <Plus className="w-3 h-3" /> Add Row
                   </button>
                 </div>
-                <div className="hidden lg:grid gap-1.5 mb-2" style={{ gridTemplateColumns: 'minmax(280px,2fr) 120px 110px minmax(240px,2fr) 44px' }}>
-                  {['Material Name', 'Quantity', 'Unit', 'Purpose', ''].map(h => (
-                    <div key={h} className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-1">{h}</div>
+                <div className="hidden lg:grid gap-2 mb-2 px-1" style={{ gridTemplateColumns: '32px minmax(280px,2fr) 120px 110px minmax(240px,2fr) 44px' }}>
+                  {['#', 'Material Name', 'Quantity', 'Unit', 'Purpose', ''].map((h, i) => (
+                    <div key={i} className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{h}</div>
                   ))}
                 </div>
                 <div className="space-y-2">
                   {items.map((item, idx) => (
-                    <div key={idx} className="grid grid-cols-1 lg:grid-cols-[minmax(280px,2fr)_120px_110px_minmax(240px,2fr)_44px] gap-2 items-start rounded-lg lg:rounded-none border lg:border-0 border-slate-200 p-3 lg:p-0 bg-slate-50/60 lg:bg-transparent">
+                    <div key={idx} className="grid grid-cols-1 lg:grid-cols-[32px_minmax(280px,2fr)_120px_110px_minmax(240px,2fr)_44px] gap-2 items-center rounded-xl border border-slate-200 lg:border-slate-100 p-3 lg:px-2 lg:py-2 bg-slate-50/70 lg:bg-slate-50/40 hover:lg:bg-indigo-50/30 transition-colors">
+                      <div className="hidden lg:flex items-center justify-center h-7 w-7 rounded-lg bg-white border border-slate-200 text-xs font-black text-slate-400">{idx + 1}</div>
                       <MaterialCombobox
                         value={item.material}
                         inventoryItems={inventoryItems}
@@ -1318,12 +1329,12 @@ export default function MRSPage() {
                       <input
                         type="number"
                         placeholder="0"
-                        className="h-9 bg-white lg:bg-slate-50 border border-slate-200 rounded-lg px-3 text-sm text-slate-900 placeholder:text-slate-400 font-medium outline-none focus:border-indigo-400 transition-all text-right"
+                        className="h-9 bg-white border border-slate-200 rounded-lg px-3 text-sm text-slate-900 placeholder:text-slate-400 font-semibold outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all text-right"
                         value={item.qty}
                         onChange={e => { const n = [...items]; n[idx].qty = e.target.value; setItems(n); }}
                       />
                       <select
-                        className="h-9 bg-white lg:bg-slate-50 border border-slate-200 rounded-lg px-2 text-sm text-slate-900 outline-none focus:border-indigo-400 transition-all"
+                        className="h-9 bg-white border border-slate-200 rounded-lg px-2 text-sm font-medium text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all"
                         value={item.unit}
                         onChange={e => { const n = [...items]; n[idx].unit = e.target.value; setItems(n); }}
                       >
@@ -1332,14 +1343,14 @@ export default function MRSPage() {
                       <input
                         type="text"
                         placeholder="Intended use"
-                        className="h-9 bg-white lg:bg-slate-50 border border-slate-200 rounded-lg px-3 text-sm text-slate-900 placeholder:text-slate-400 font-medium outline-none focus:border-indigo-400 transition-all"
+                        className="h-9 bg-white border border-slate-200 rounded-lg px-3 text-sm text-slate-900 placeholder:text-slate-400 font-medium outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all"
                         value={item.purpose}
                         onChange={e => { const n = [...items]; n[idx].purpose = e.target.value; setItems(n); }}
                       />
                       <button
                         onClick={() => { if (items.length > 1) setItems(items.filter((_, i) => i !== idx)); }}
                         disabled={items.length === 1}
-                        className="w-9 h-9 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all mt-0"
+                        className="w-9 h-9 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-400 hover:text-rose-500 hover:border-rose-200 hover:bg-rose-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all justify-self-end lg:justify-self-center"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1368,22 +1379,34 @@ export default function MRSPage() {
 
             {/* Modal footer */}
             <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 bg-white flex-shrink-0">
-              <span className="text-xs text-slate-500 font-bold">
-                {items.filter(i => i.material && i.qty).length} item(s) ready
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full bg-indigo-50 border border-indigo-100 text-xs font-bold text-indigo-700">
+                  <Package className="w-3.5 h-3.5" />
+                  {items.filter(i => i.material && i.qty).length} item(s) ready
+                </span>
+                {formData.priority !== 'normal' && (
+                  <span className={clsx(
+                    'inline-flex items-center px-3 h-8 rounded-full text-xs font-bold capitalize',
+                    formData.priority === 'critical' ? 'bg-rose-50 text-rose-700 border border-rose-100' : 'bg-amber-50 text-amber-700 border border-amber-100'
+                  )}>
+                    {formData.priority} priority
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={resetForm}
-                  className="px-5 h-10 rounded-lg border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all"
+                  className="px-5 h-10 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSubmit}
                   disabled={createMutation.isPending}
-                  className="px-6 h-10 rounded-lg bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-all disabled:opacity-50 shadow-md shadow-indigo-200"
+                  className="inline-flex items-center gap-2 px-6 h-10 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 text-white text-sm font-bold hover:from-indigo-700 hover:to-indigo-800 transition-all disabled:opacity-50 shadow-lg shadow-indigo-200"
                 >
-                  {createMutation.isPending ? 'Submitting…' : 'Submit Requisition →'}
+                  <Send className="w-4 h-4" />
+                  {createMutation.isPending ? 'Submitting…' : 'Submit Requisition'}
                 </button>
               </div>
             </div>
@@ -1417,7 +1440,7 @@ export default function MRSPage() {
             <div className="p-5 space-y-4">
               <Field label="Material Name *">
                 <input
-                  className="w-full h-9 bg-slate-50 border border-slate-200 rounded-lg px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 transition-all"
+                  className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-3.5 text-sm font-medium text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 focus:bg-white transition-all"
                   placeholder="e.g. TMT Steel Bars Fe500"
                   value={newItemForm.material_name}
                   onChange={e => setNewItemForm(f => ({ ...f, material_name: e.target.value }))}
@@ -1472,7 +1495,7 @@ export default function MRSPage() {
 
               <Field label="Unit">
                 <select
-                  className="w-full h-9 bg-slate-50 border border-slate-200 rounded-lg px-3 text-sm text-slate-900 outline-none focus:border-indigo-400 transition-all"
+                  className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl px-3.5 text-sm font-medium text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 focus:bg-white transition-all"
                   value={newItemForm.unit}
                   onChange={e => setNewItemForm(f => ({ ...f, unit: e.target.value }))}
                 >
@@ -1742,10 +1765,11 @@ function MaterialCombobox({ value, inventoryItems, onChange, onNewItem }) {
   return (
     <div ref={ref} className="relative">
       <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
         <input
           type="text"
           placeholder="Search store ledger…"
-          className="h-9 w-full bg-slate-50 border border-slate-200 rounded-lg pl-3 pr-8 text-sm text-slate-900 placeholder:text-slate-400 font-medium outline-none focus:border-indigo-400 transition-all"
+          className="h-9 w-full bg-white border border-slate-200 rounded-lg pl-8 pr-8 text-sm text-slate-900 placeholder:text-slate-400 font-medium outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all"
           value={q}
           onChange={handleInputChange}
           onFocus={() => setOpen(true)}
