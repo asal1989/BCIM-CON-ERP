@@ -508,15 +508,36 @@ router.get('/', async (req, res) => {
     let poSet = new Set();
     if (ids.length) {
       const items = await query(
-        `SELECT mi.*, COALESCE(poi.ordered_qty, 0) AS ordered_qty
-         FROM mrs_items mi
-         LEFT JOIN (
+        `WITH direct AS (
            SELECT poi.mrs_item_id, SUM(poi.quantity) AS ordered_qty
            FROM po_items poi
            JOIN purchase_orders po ON po.id = poi.po_id
            WHERE po.status NOT IN ('rejected', 'cancelled')
            GROUP BY poi.mrs_item_id
-         ) poi ON poi.mrs_item_id = mi.id
+         ),
+         fallback_raw AS (
+           SELECT po.mrs_id AS mrs_id, poi.material_name, poi.quantity
+           FROM po_items poi
+           JOIN purchase_orders po ON po.id = poi.po_id
+           WHERE poi.mrs_item_id IS NULL AND po.status NOT IN ('rejected', 'cancelled')
+             AND po.mrs_id = ANY($1::uuid[])
+           UNION ALL
+           SELECT unnest(po.mrs_ids) AS mrs_id, poi.material_name, poi.quantity
+           FROM po_items poi
+           JOIN purchase_orders po ON po.id = poi.po_id
+           WHERE poi.mrs_item_id IS NULL AND po.status NOT IN ('rejected', 'cancelled')
+             AND po.mrs_ids && $1::uuid[]
+         ),
+         fallback AS (
+           SELECT mrs_id, lower(trim(material_name)) AS mname, SUM(quantity) AS ordered_qty
+           FROM fallback_raw
+           WHERE mrs_id = ANY($1::uuid[])
+           GROUP BY mrs_id, lower(trim(material_name))
+         )
+         SELECT mi.*, COALESCE(direct.ordered_qty, 0) + COALESCE(fallback.ordered_qty, 0) AS ordered_qty
+         FROM mrs_items mi
+         LEFT JOIN direct ON direct.mrs_item_id = mi.id
+         LEFT JOIN fallback ON fallback.mrs_id = mi.mrs_id AND fallback.mname = lower(trim(mi.material_name))
          WHERE mi.mrs_id = ANY($1::uuid[]) ORDER BY mi.sort_order`,
         [ids]
       );
@@ -575,18 +596,28 @@ router.get('/:id', async (req, res) => {
       return res.status(403).json({ error: 'You do not have access to this project.' });
     }
     const items = await query(
-      `SELECT mi.*,
-              COALESCE(mi.md_approved_qty, mi.quantity) AS effective_qty,
-              COALESCE(mi.md_included, TRUE) AS effective_included,
-              COALESCE(poi.ordered_qty, 0) AS ordered_qty
-       FROM mrs_items mi
-       LEFT JOIN (
+      `WITH direct AS (
          SELECT poi.mrs_item_id, SUM(poi.quantity) AS ordered_qty
          FROM po_items poi
          JOIN purchase_orders po ON po.id = poi.po_id
-         WHERE po.status != 'rejected'
+         WHERE po.status NOT IN ('rejected', 'cancelled')
          GROUP BY poi.mrs_item_id
-       ) poi ON poi.mrs_item_id = mi.id
+       ),
+       fallback AS (
+         SELECT lower(trim(poi.material_name)) AS mname, SUM(poi.quantity) AS ordered_qty
+         FROM po_items poi
+         JOIN purchase_orders po ON po.id = poi.po_id
+         WHERE poi.mrs_item_id IS NULL AND po.status NOT IN ('rejected', 'cancelled')
+           AND (po.mrs_id = $1 OR $1 = ANY(po.mrs_ids))
+         GROUP BY lower(trim(poi.material_name))
+       )
+       SELECT mi.*,
+              COALESCE(mi.md_approved_qty, mi.quantity) AS effective_qty,
+              COALESCE(mi.md_included, TRUE) AS effective_included,
+              COALESCE(direct.ordered_qty, 0) + COALESCE(fallback.ordered_qty, 0) AS ordered_qty
+       FROM mrs_items mi
+       LEFT JOIN direct ON direct.mrs_item_id = mi.id
+       LEFT JOIN fallback ON fallback.mname = lower(trim(mi.material_name))
        WHERE mi.mrs_id = $1 ORDER BY mi.sort_order`,
       [req.params.id]
     );
