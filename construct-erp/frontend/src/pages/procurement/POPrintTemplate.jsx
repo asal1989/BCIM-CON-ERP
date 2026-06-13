@@ -161,7 +161,10 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {/* HEADER                                                              */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        <div style={{ borderBottom: '2.5px solid #000', paddingBottom: '8px', marginBottom: '10px', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto minmax(0,1fr)', alignItems: 'flex-start', gap: '10px' }}>
+        <div style={{ textAlign: 'center', marginBottom: '6px' }}>
+          <h1 style={{ fontSize: '20px', fontWeight: 900, letterSpacing: '1px', color: '#000', margin: 0 }}>PURCHASE ORDER</h1>
+        </div>
+        <div style={{ borderBottom: '2.5px solid #000', paddingBottom: '8px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
           {/* Left: Logo + Company */}
           <div>
             <img src="/bcim-logo.png" alt="BCIM" style={{ height: '48px', objectFit: 'contain', marginBottom: '6px', display: 'block' }} />
@@ -182,11 +185,6 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
                 </>
               )}
             </div>
-          </div>
-
-          {/* Center: PO Title */}
-          <div style={{ textAlign: 'center', alignSelf: 'center' }}>
-            <h1 style={{ fontSize: '20px', fontWeight: 900, letterSpacing: '1px', color: '#000', margin: 0, whiteSpace: 'nowrap' }}>PURCHASE ORDER</h1>
           </div>
 
           {/* Right: PO Number + QR */}
