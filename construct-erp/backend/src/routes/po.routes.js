@@ -17,6 +17,7 @@ runSchemaInit('purchase_orders_columns', async () => {
   await query(`
     ALTER TABLE purchase_orders
       ADD COLUMN IF NOT EXISTS mrs_id UUID REFERENCES material_requisitions(id),
+      ADD COLUMN IF NOT EXISTS mrs_ids UUID[],
       ADD COLUMN IF NOT EXISTS po_ref_no VARCHAR(100),
       ADD COLUMN IF NOT EXISTS po_req_no VARCHAR(100),
       ADD COLUMN IF NOT EXISTS po_req_date DATE,
@@ -664,6 +665,7 @@ router.patch('/:id', async (req, res) => {
       vendor_id, po_date, delivery_date, payment_terms, tcs_amount,
       po_req_no, po_req_date, approval_no, delivery_address,
       order_intro, notes, terms_conditions, bank_details, items,
+      mrs_id, mrs_ids,
     } = req.body;
 
     const result = await withTransaction(async (client) => {
@@ -684,6 +686,11 @@ router.patch('/:id', async (req, res) => {
       if (notes            !== undefined) { sets.push(`notes = $${i++}`);              params.push(notes || null); }
       if (terms_conditions !== undefined) { sets.push(`terms_conditions = $${i++}`);   params.push(terms_conditions || null); }
       if (bank_details     !== undefined) { sets.push(`bank_details = $${i++}`);       params.push(bank_details || null); }
+      if (mrs_id !== undefined || mrs_ids !== undefined) {
+        const list = (Array.isArray(mrs_ids) ? mrs_ids : (mrs_id ? [mrs_id] : [])).filter(Boolean);
+        sets.push(`mrs_ids = $${i++}`);  params.push(list.length ? list : null);
+        sets.push(`mrs_id = $${i++}`);   params.push(list[0] || null);
+      }
 
       // Replace items and recalculate totals
       if (Array.isArray(items) && items.length) {
@@ -847,7 +854,7 @@ router.post('/', async (req, res) => {
   try {
     const {
       project_id, vendor_id, po_date, delivery_date, status,
-      terms_conditions, notes, bank_details, items, mrs_id,
+      terms_conditions, notes, bank_details, items, mrs_id, mrs_ids,
       payment_terms, tcs_amount,
       po_req_no, po_req_date, approval_no, delivery_address, order_intro
     } = req.body;
@@ -855,6 +862,12 @@ router.post('/', async (req, res) => {
     if (!project_id || !vendor_id || !items?.length) {
       return res.status(400).json({ error: 'Missing required project, vendor or items.' });
     }
+
+    // A PO can be raised against one or many MRS. Normalise to an array and
+    // keep the first as the legacy single mrs_id for backward compatibility.
+    const mrsIdList = (Array.isArray(mrs_ids) ? mrs_ids : (mrs_id ? [mrs_id] : []))
+      .filter(Boolean);
+    const primaryMrsId = mrsIdList[0] || null;
     if (!userCanAccessProject(req, project_id)) {
       return res.status(403).json({ error: 'Access denied for this project.' });
     }
@@ -870,10 +883,10 @@ router.post('/', async (req, res) => {
           terms_conditions, notes, bank_details,
           payment_terms, tcs_amount,
           po_req_no, po_req_date, approval_no, delivery_address, order_intro,
-          status, created_by, mrs_id, po_ref_no, serial_no_formatted
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20) RETURNING *`,
-        [project_id, vendor_id, po_number, po_date || null, delivery_date || null, terms_conditions || null, notes || null, bank_details || null, payment_terms || null, parseFloat(tcs_amount) || 0, po_req_no || null, po_req_date || null, approval_no || null, delivery_address || null, order_intro || null, 'pending', req.user.id, mrs_id || null]
-          .concat([po_number, po_number])
+          status, created_by, mrs_id, po_ref_no, serial_no_formatted, mrs_ids
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21) RETURNING *`,
+        [project_id, vendor_id, po_number, po_date || null, delivery_date || null, terms_conditions || null, notes || null, bank_details || null, payment_terms || null, parseFloat(tcs_amount) || 0, po_req_no || null, po_req_date || null, approval_no || null, delivery_address || null, order_intro || null, 'pending', req.user.id, primaryMrsId]
+          .concat([po_number, po_number, mrsIdList.length ? mrsIdList : null])
       );
       const poId = headerRes.rows[0].id;
 

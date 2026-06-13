@@ -275,6 +275,9 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
   const isEditing = !!editingPO;
   const [form, setForm] = useState({
     mrs_id:           editingPO?.mrs_id       || prefill?.mrs_id       || '',
+    mrs_ids:          editingPO?.mrs_ids?.length ? editingPO.mrs_ids
+                        : (editingPO?.mrs_id ? [editingPO.mrs_id]
+                          : (prefill?.mrs_id ? [prefill.mrs_id] : [])),
     vendor_id:        editingPO?.vendor_id    || prefill?.vendor_id    || '',
     project_id:       editingPO?.project_id   || prefill?.project_id   || '',
     po_date:          editingPO?.po_date      ? dayjs(editingPO.po_date).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
@@ -311,29 +314,67 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
   const removeItem = i => setItems(p => p.filter((_, idx) => idx !== i));
   const activeMrsList = mrsList.filter(m => m.status !== 'rejected');
 
-  const applyMRS = (mrsId) => {
+  const mrLabel = (m) => m ? (m.serial_no_formatted || m.mrs_number || m.id?.slice(0, 8)) : '';
+  const refsFor = (ids) => ids
+    .map(id => mrLabel(activeMrsList.find(m => m.id === id)))
+    .filter(Boolean)
+    .join(', ');
+
+  // Add an MR to the PO — appends its items to the existing list (multiple MRS per PO)
+  const addMRS = (mrsId) => {
+    if (!mrsId || form.mrs_ids.includes(mrsId)) return;
     const selected = activeMrsList.find(m => m.id === mrsId);
+    if (!selected) return;
+    // All MRS on one PO must belong to the same project
+    if (form.project_id && selected.project_id && selected.project_id !== form.project_id) {
+      toast.error('All MRs in one PO must belong to the same project');
+      return;
+    }
+    const newIds = [...form.mrs_ids, mrsId];
     setForm(p => ({
       ...p,
-      mrs_id: mrsId,
-      project_id: selected?.project_id || p.project_id,
-      po_req_no: selected ? (selected.serial_no_formatted || selected.mrs_number || '') : '',
-      po_req_date: selected?.created_at ? dayjs(selected.created_at).format('YYYY-MM-DD') : '',
-      delivery_date: selected?.required_by ? dayjs(selected.required_by).format('YYYY-MM-DD') : p.delivery_date,
-      notes: selected ? `Against MR ${selected.serial_no_formatted || selected.mrs_number || ''}` : p.notes,
+      mrs_ids: newIds,
+      mrs_id: newIds[0],
+      project_id: p.project_id || selected.project_id || '',
+      po_req_no: refsFor(newIds),
+      po_req_date: p.po_req_date || (selected.created_at ? dayjs(selected.created_at).format('YYYY-MM-DD') : ''),
+      delivery_date: p.delivery_date || (selected.required_by ? dayjs(selected.required_by).format('YYYY-MM-DD') : ''),
+      notes: `Against MR ${refsFor(newIds)}`,
     }));
-    if (selected?.items?.length) {
-      setItems(selected.items.map(it => ({
-        material_name: it.material_name || it.description || '',
-        quantity: it.quantity || '',
-        unit: it.unit || 'Nos',
-        rate: '',
-        gst_rate: '18',
-        hsn_code: it.hsn_code || '',
-        req_date: selected.required_by ? dayjs(selected.required_by).format('YYYY-MM-DD') : '',
-        mrs_item_id: it.id || null,
-      })));
-    }
+    const appended = (selected.items || []).map(it => ({
+      material_name: it.material_name || it.description || '',
+      make_model: '',
+      quantity: it.quantity || '',
+      unit: it.unit || 'Nos',
+      rate: '',
+      gst_rate: '18',
+      hsn_code: it.hsn_code || '',
+      req_date: selected.required_by ? dayjs(selected.required_by).format('YYYY-MM-DD') : '',
+      mrs_item_id: it.id || null,
+      _mrs_id: mrsId,
+    }));
+    setItems(prev => {
+      // Drop the single empty starter row before adding the first MR's items
+      const base = (prev.length === 1 && !prev[0].material_name && !prev[0].quantity && !prev[0].rate) ? [] : prev;
+      return appended.length ? [...base, ...appended] : base.length ? base : prev;
+    });
+  };
+
+  // Remove an MR — drops the rows that came from it
+  const removeMRS = (mrsId) => {
+    const newIds = form.mrs_ids.filter(id => id !== mrsId);
+    setForm(p => ({
+      ...p,
+      mrs_ids: newIds,
+      mrs_id: newIds[0] || '',
+      po_req_no: refsFor(newIds),
+      notes: newIds.length ? `Against MR ${refsFor(newIds)}` : p.notes,
+    }));
+    setItems(prev => {
+      const kept = prev.filter(it => it._mrs_id !== mrsId);
+      return kept.length ? kept
+        : [{ material_name: '', make_model: '', quantity: '', unit: 'Nos', rate: '', gst_rate: '18', hsn_code: '', req_date: '' }];
+    });
   };
 
   const subTotal = items.reduce((s, it) => s + (parseFloat(it.quantity)||0)*(parseFloat(it.rate)||0), 0);
@@ -345,7 +386,13 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
     if (!form.project_id) return toast.error('Select a project');
     if (items.some(it => !it.material_name?.trim() || !it.quantity || !it.rate))
       return toast.error('All items need description, quantity and rate');
-    const payload = { ...form, delivery_date: form.delivery_date || null, items, mrs_id: form.mrs_id || prefill?.mrs_id || null };
+    const payload = {
+      ...form,
+      delivery_date: form.delivery_date || null,
+      items,
+      mrs_ids: form.mrs_ids,
+      mrs_id: form.mrs_ids[0] || prefill?.mrs_id || null,
+    };
     if (isEditing) onUpdate(payload);
     else onCreate(payload);
   };
@@ -389,15 +436,33 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
           <div className="border border-slate-200 rounded-xl p-5">
             <h3 className="text-xs font-medium text-slate-900 font-medium uppercase tracking-wider mb-4">PO Details</h3>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <Field label="MR Number">
-                <select className={INP} value={form.mrs_id} onChange={e => applyMRS(e.target.value)}>
-                  <option value="">Select MR / Manual PO...</option>
-                  {activeMrsList.map(m => (
-                    <option key={m.id} value={m.id}>
-                      {(m.serial_no_formatted || m.mrs_number || m.id?.slice(0, 8))} — {m.project_name || 'Project'} — {(m.status || 'raised').replaceAll('_', ' ')}
-                    </option>
-                  ))}
+              <Field label="MR Number(s)">
+                <select
+                  className={INP}
+                  value=""
+                  onChange={e => { addMRS(e.target.value); e.target.value = ''; }}
+                >
+                  <option value="">+ Add MR / Manual PO...</option>
+                  {activeMrsList
+                    .filter(m => !form.mrs_ids.includes(m.id))
+                    .map(m => (
+                      <option key={m.id} value={m.id}>
+                        {(m.serial_no_formatted || m.mrs_number || m.id?.slice(0, 8))} — {m.project_name || 'Project'} — {(m.status || 'raised').replaceAll('_', ' ')}
+                      </option>
+                    ))}
                 </select>
+                {form.mrs_ids.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {form.mrs_ids.map(id => (
+                      <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-[11px] font-medium text-amber-800">
+                        {mrLabel(activeMrsList.find(m => m.id === id)) || id.slice(0, 8)}
+                        <button type="button" onClick={() => removeMRS(id)} className="hover:text-amber-950">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </Field>
               <Field label="Vendor *">
                 <select className={INP} value={form.vendor_id} onChange={e => set('vendor_id', e.target.value)}>
