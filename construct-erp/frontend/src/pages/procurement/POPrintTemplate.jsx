@@ -161,7 +161,7 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {/* HEADER                                                              */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        <div style={{ borderBottom: '2.5px solid #000', paddingBottom: '8px', marginBottom: '10px', display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'flex-start', gap: '10px' }}>
+        <div style={{ borderBottom: '2.5px solid #000', paddingBottom: '8px', marginBottom: '10px', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto minmax(0,1fr)', alignItems: 'flex-start', gap: '10px' }}>
           {/* Left: Logo + Company */}
           <div>
             <img src="/bcim-logo.png" alt="BCIM" style={{ height: '48px', objectFit: 'contain', marginBottom: '6px', display: 'block' }} />
