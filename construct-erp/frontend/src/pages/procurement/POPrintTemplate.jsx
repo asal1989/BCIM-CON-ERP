@@ -80,7 +80,8 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
   if (!isTaxIncl) {
     items.forEach((it, idx) => {
       const r   = parseFloat(it.gst_rate || 0);
-      const amt = parseFloat(it.gst_amount || (parseFloat(it.quantity||0) * parseFloat(it.rate||0) * r / 100));
+      const stored = parseFloat(it.gst_amount || 0);
+      const amt = stored > 0 ? stored : (parseFloat(it.quantity||0) * parseFloat(it.rate||0) * r / 100);
       if (!gstByRate[r]) gstByRate[r] = { amount: 0, nums: [] };
       gstByRate[r].amount += amt;
       gstByRate[r].nums.push(idx + 1);
