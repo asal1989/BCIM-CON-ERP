@@ -466,8 +466,8 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-white">
-      <div className="w-full h-full flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-[60] flex flex-col bg-slate-100">
+      <div className="w-full h-full flex flex-col overflow-hidden bg-white">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
@@ -491,7 +491,7 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-slate-100">
           {/* CS banner */}
           {prefill?.mrs_ref && (
             <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800">

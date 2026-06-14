@@ -1182,7 +1182,7 @@ export default function MRSPage() {
       {/* ── Detail Slide-over ── */}
       {/* ── New MRS Form Modal ── */}
       {showForm && (
-        <div className="fixed inset-0 z-[60] flex flex-col bg-white" style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
+        <div className="fixed inset-0 z-[60] flex flex-col bg-slate-100" style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
           <div className="w-full h-full flex flex-col overflow-hidden">
 
             {/* Modal header */}
@@ -1205,7 +1205,7 @@ export default function MRSPage() {
             </div>
 
             {/* Modal body */}
-            <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
+            <div className="flex-1 overflow-y-auto p-6 bg-slate-100">
               <div className="flex flex-col lg:flex-row gap-5">
 
               {/* ── Main column ── */}
