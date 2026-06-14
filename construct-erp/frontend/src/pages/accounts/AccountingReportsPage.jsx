@@ -2,9 +2,11 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { clsx } from 'clsx';
-import { BarChart3, Scale, FileBarChart } from 'lucide-react';
+import { BarChart3, Scale, FileBarChart, Download } from 'lucide-react';
 import { chartOfAccountsAPI } from '../../api/client';
 import { inr } from '../dashboards/DashKPI';
+import { downloadCsv } from '../../utils/exportCsv';
+import dayjs from 'dayjs';
 
 const TABS = [
   { key: 'trial-balance', label: 'Trial Balance', icon: Scale },
@@ -72,17 +74,50 @@ export default function AccountingReportsPage() {
   const trialDebit = sum(byType.asset) + sum(byType.expense);
   const trialCredit = -(sum(byType.liability) + sum(byType.equity) + sum(byType.income));
 
+  const exportReport = () => {
+    const stamp = dayjs().format('YYYY-MM-DD');
+    if (tab === 'trial-balance') {
+      const lines = [['Code', 'Name', 'Type', 'Amount']];
+      [...byType.asset, ...byType.expense].forEach(r => lines.push([r.code, r.name, 'Debit', Math.abs(Number(r.balance || 0))]));
+      [...byType.liability, ...byType.equity, ...byType.income].forEach(r => lines.push([r.code, r.name, 'Credit', Math.abs(Number(r.balance || 0))]));
+      lines.push(['', 'Total Debit', '', trialDebit]);
+      lines.push(['', 'Total Credit', '', Math.abs(trialCredit)]);
+      downloadCsv(`trial-balance-${stamp}.csv`, lines);
+    } else if (tab === 'pnl') {
+      const lines = [['Code', 'Name', 'Section', 'Amount']];
+      byType.income.forEach(r => lines.push([r.code, r.name, 'Income', Math.abs(Number(r.balance || 0))]));
+      byType.expense.forEach(r => lines.push([r.code, r.name, 'Expense', Math.abs(Number(r.balance || 0))]));
+      lines.push(['', netProfit >= 0 ? 'Net Profit' : 'Net Loss', '', Math.abs(netProfit)]);
+      downloadCsv(`profit-and-loss-${stamp}.csv`, lines);
+    } else {
+      const lines = [['Code', 'Name', 'Section', 'Amount']];
+      byType.asset.forEach(r => lines.push([r.code, r.name, 'Asset', Math.abs(Number(r.balance || 0))]));
+      byType.liability.forEach(r => lines.push([r.code, r.name, 'Liability', Math.abs(Number(r.balance || 0))]));
+      byType.equity.forEach(r => lines.push([r.code, r.name, 'Equity', Math.abs(Number(r.balance || 0))]));
+      lines.push(['', 'Retained Earnings (Net Profit/Loss)', 'Equity', Math.abs(retainedEarnings)]);
+      lines.push(['', 'Total Assets', '', Math.abs(totalAssets)]);
+      lines.push(['', 'Total Liabilities + Equity', '', Math.abs(totalLiabilities) + Math.abs(totalEquity) + Math.abs(retainedEarnings)]);
+      downloadCsv(`balance-sheet-${stamp}.csv`, lines);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="bg-white border-b border-slate-200 px-6 py-4">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-md bg-blue-50 flex items-center justify-center">
-            <FileBarChart className="w-4 h-4 text-blue-600" />
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-md bg-blue-50 flex items-center justify-center">
+              <FileBarChart className="w-4 h-4 text-blue-600" />
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold text-slate-800">Financial Reports</h1>
+              <p className="text-xs text-slate-400">Trial Balance, Profit &amp; Loss and Balance Sheet from posted journal entries</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-semibold text-slate-800">Financial Reports</h1>
-            <p className="text-xs text-slate-400">Trial Balance, Profit &amp; Loss and Balance Sheet from posted journal entries</p>
-          </div>
+          <button onClick={exportReport}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm border border-slate-200 rounded-md text-slate-700 hover:bg-slate-50">
+            <Download className="w-3.5 h-3.5" /> Export CSV
+          </button>
         </div>
       </div>
 

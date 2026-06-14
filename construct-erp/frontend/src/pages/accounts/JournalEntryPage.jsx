@@ -4,9 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
 import { clsx } from 'clsx';
-import { ScrollText, Plus, X, Trash2, Check, ChevronRight } from 'lucide-react';
+import { ScrollText, Plus, X, Trash2, Check, ChevronRight, Download } from 'lucide-react';
 import { journalEntryAPI, chartOfAccountsAPI } from '../../api/client';
 import { inr } from '../dashboards/DashKPI';
+import { downloadCsv } from '../../utils/exportCsv';
 
 const F  = 'w-full border border-slate-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white';
 const FS = F;
@@ -237,6 +238,12 @@ export default function JournalEntryPage() {
     posted: rows.filter(r => r.status === 'posted').length,
   }), [rows]);
 
+  const exportCsv = () => {
+    const lines = [['Entry No', 'Date', 'Reference', 'Narration', 'Debit', 'Credit', 'Status']];
+    rows.forEach(r => lines.push([r.entry_no, dayjs(r.entry_date).format('DD MMM YYYY'), r.reference || '', r.narration || '', r.total_debit, r.total_credit, r.status]));
+    downloadCsv(`journal-entries-${dayjs().format('YYYY-MM-DD')}.csv`, lines);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="bg-white border-b border-slate-200 px-6 py-4">
@@ -250,10 +257,16 @@ export default function JournalEntryPage() {
               <p className="text-xs text-slate-400">Manual journals with double-entry validation</p>
             </div>
           </div>
-          <button onClick={() => setShowForm(true)} disabled={accounts.length === 0}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
-            <Plus className="w-4 h-4" /> New Journal Entry
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={exportCsv} disabled={rows.length === 0}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm border border-slate-200 rounded-md text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+              <Download className="w-3.5 h-3.5" /> Export CSV
+            </button>
+            <button onClick={() => setShowForm(true)} disabled={accounts.length === 0}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
+              <Plus className="w-4 h-4" /> New Journal Entry
+            </button>
+          </div>
         </div>
         {accounts.length === 0 && (
           <p className="text-xs text-amber-600 mt-2">Set up the Chart of Accounts before creating journal entries.</p>

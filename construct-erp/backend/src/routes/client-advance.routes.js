@@ -4,6 +4,7 @@ const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
+const { postAutoJournal } = require('../services/journalAutoPost');
 router.use(authenticate);
 
 // Idempotent table creation
@@ -181,6 +182,20 @@ router.post('/:id/receive', authorize('super_admin','admin','finance_manager','a
           SET client_advance_received = COALESCE(client_advance_received,0) + $1, updated_at=NOW()
           WHERE id = $2`, [recv, car.project_id]);
       }
+
+      // ── Auto-post journal entry: Dr Bank, Cr Accounts Receivable (advance from client) ──
+      await postAutoJournal(client, {
+        companyId: req.user.company_id,
+        userId: req.user.id,
+        entryDate: dt,
+        reference: bank_reference || car.id,
+        narration: `Client advance received — ${car.client_name || car.project_name || ''}`,
+        lines: [
+          { code: '1010', debit: recv, description: `Advance receipt — ${car.client_name || ''}` },
+          { code: '1100', credit: recv, description: `Advance receipt — ${car.client_name || ''}` },
+        ],
+      });
+
       return updated;
     });
     res.json({ data: out });

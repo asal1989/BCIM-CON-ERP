@@ -69,6 +69,7 @@ const JournalEntryPage        = lazy(() => import('./pages/accounts/JournalEntry
 const AccountTransactionsPage = lazy(() => import('./pages/accounts/AccountTransactionsPage'));
 const AccountingReportsPage   = lazy(() => import('./pages/accounts/AccountingReportsPage'));
 const AccountSettingsPage     = lazy(() => import('./pages/accounts/AccountSettingsPage'));
+const TaxSummaryPage          = lazy(() => import('./pages/accounts/TaxSummaryPage'));
 const BankAccountsPage        = lazy(() => import('./pages/accounts/BankAccountsPage'));
 const CustomersPage           = lazy(() => import('./pages/accounts/CustomersPage'));
 const InvoicesPage            = lazy(() => import('./pages/accounts/InvoicesPage'));
@@ -501,6 +502,7 @@ export default function App() {
                 <Route path="accounts/reports/control-dashboard" element={<RequireModule module="Finance"><ControlDashboardPage /></RequireModule>} />
                 <Route path="accounts/reports/budget" element={<RequireModule module="Finance"><BudgetPage /></RequireModule>} />
                 {/* Taxes */}
+                <Route path="accounts/taxes/summary" element={<RequireModule module="Finance"><TaxSummaryPage /></RequireModule>} />
                 <Route path="accounts/taxes/gst" element={<RequireModule module="Finance"><GSTPage /></RequireModule>} />
                 <Route path="accounts/taxes/tds" element={<RequireModule module="Finance"><TDSPage /></RequireModule>} />
                 {/* Settings */}
