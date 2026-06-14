@@ -78,6 +78,7 @@ export default function VendorList() {
   const [filterProjectId, setFilterProjectId] = useState('');
   const [search, setSearch]         = useState('');
   const [expanded, setExpanded]     = useState(null);
+  const [selectedProjectIds, setSelectedProjectIds] = useState([]);
   const qc = useQueryClient();
   const { register, handleSubmit, reset, formState: { errors } } = useForm({
     defaultValues: { credit_days: 30 },
@@ -94,7 +95,7 @@ export default function VendorList() {
     queryFn: () => vendorAPI.list(filterProjectId ? { project_id: filterProjectId } : {}).then(r => r.data?.data || []).catch(() => []),
   });
 
-  const openCreate = () => { setEditVendor(null); reset({ credit_days: 30 }); setShowForm(true); };
+  const openCreate = () => { setEditVendor(null); reset({ credit_days: 30 }); setSelectedProjectIds([]); setShowForm(true); };
   const openEdit   = v  => {
     setEditVendor(v);
     reset({
@@ -110,9 +111,12 @@ export default function VendorList() {
       account_number: v.account_number || v.bank_account,
       notes: v.notes,
     });
+    setSelectedProjectIds((v.mapped_project_ids || []).map(String));
     setShowForm(true);
   };
-  const closeForm = () => { reset(); setShowForm(false); setEditVendor(null); };
+  const closeForm = () => { reset(); setShowForm(false); setEditVendor(null); setSelectedProjectIds([]); };
+  const toggleProject = id => setSelectedProjectIds(prev =>
+    prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
 
   const createMut = useMutation({
     mutationFn: d => vendorAPI.create(d),
@@ -368,23 +372,28 @@ export default function VendorList() {
         </div>
       )}
 
-      {/* Register Vendor Modal */}
+      {/* Register Vendor — full screen */}
       {showForm && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-6">
+        <div className="fixed inset-0 bg-white z-50 flex flex-col">
 
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-5 border-b border-slate-100">
-              <div>
-                <h2 className="text-base font-medium text-slate-900">{editVendor ? 'Edit Vendor' : 'Register Vendor'}</h2>
-                <p className="text-xs text-slate-900 font-medium mt-0.5">{editVendor ? `Editing: ${editVendor.name}` : 'Add a new vendor to the master ledger'}</p>
-              </div>
-              <button onClick={closeForm} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-900 font-medium hover:text-slate-900 transition-all">
-                <X className="w-4 h-4" />
-              </button>
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-800">{editVendor ? 'Edit Vendor' : 'Register Vendor'}</h2>
+              <p className="text-xs text-slate-400 mt-0.5">{editVendor ? `Editing: ${editVendor.name}` : 'Add a new vendor to the master ledger'}</p>
             </div>
+            <button onClick={closeForm} className="w-9 h-9 flex items-center justify-center rounded-md border border-slate-300 text-slate-500 hover:bg-slate-50 transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
 
-            <form onSubmit={handleSubmit(d => editVendor ? updateMut.mutate(d) : createMut.mutate(d))} className="p-5 space-y-6 max-h-[75vh] overflow-y-auto">
+          <form onSubmit={handleSubmit(d => {
+              const payload = { ...d, project_ids: selectedProjectIds };
+              editVendor ? updateMut.mutate(payload) : createMut.mutate(payload);
+            })} className="flex-1 flex flex-col overflow-hidden">
+
+            <div className="flex-1 overflow-y-auto px-6 py-6">
+              <div className="max-w-5xl mx-auto space-y-6">
 
               {/* Section: Basic */}
               <Section icon={<Shield className="w-4 h-4 text-indigo-500" />} title="Basic Information">
@@ -486,6 +495,31 @@ export default function VendorList() {
                 </div>
               </Section>
 
+              {/* Section: Project Assignment */}
+              <Section icon={<Building2 className="w-4 h-4 text-violet-500" />} title="Project Assignment">
+                <p className="text-xs text-slate-400 -mt-2 mb-2">Select the project(s) this vendor belongs to / will be ordered for. You can update this later.</p>
+                {projects.length === 0 ? (
+                  <p className="text-sm text-slate-400">No active projects found.</p>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {projects.map(p => {
+                      const checked = selectedProjectIds.includes(String(p.id));
+                      return (
+                        <label key={p.id}
+                          className={clsx(
+                            'flex items-center gap-2 px-3 py-2 border rounded-md text-sm cursor-pointer transition-colors',
+                            checked ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                          )}>
+                          <input type="checkbox" className="accent-indigo-600" checked={checked}
+                            onChange={() => toggleProject(String(p.id))} />
+                          <span className="truncate">{p.name || p.project_name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </Section>
+
               {/* Section: Notes */}
               <Section icon={<FileText className="w-4 h-4 text-slate-400" />} title="Notes">
                 <FormField label="Internal Notes">
@@ -493,21 +527,23 @@ export default function VendorList() {
                 </FormField>
               </Section>
 
-              {/* Footer Buttons */}
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={closeForm}
-                  className="flex-1 py-2.5 bg-slate-100 text-slate-900 text-sm font-medium rounded-lg hover:bg-slate-200 transition-all">
-                  Cancel
-                </button>
-                <button type="submit" disabled={createMut.isPending || updateMut.isPending}
-                  className="flex-1 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 shadow-sm transition-all disabled:opacity-60">
-                  {editVendor
-                    ? (updateMut.isPending ? 'Saving…' : 'Save Changes')
-                    : (createMut.isPending ? 'Registering…' : 'Register Vendor')}
-                </button>
               </div>
-            </form>
-          </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="border-t border-slate-200 bg-white px-6 py-4 flex justify-end gap-3">
+              <button type="button" onClick={closeForm}
+                className="px-5 py-2.5 bg-white border border-slate-300 text-slate-600 text-sm font-medium rounded-md hover:bg-slate-50 transition-colors">
+                Cancel
+              </button>
+              <button type="submit" disabled={createMut.isPending || updateMut.isPending}
+                className="px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors disabled:opacity-60">
+                {editVendor
+                  ? (updateMut.isPending ? 'Saving…' : 'Save Changes')
+                  : (createMut.isPending ? 'Registering…' : 'Register Vendor')}
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

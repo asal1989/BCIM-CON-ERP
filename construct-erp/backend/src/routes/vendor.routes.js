@@ -67,7 +67,8 @@ vendorRouter.get('/', async (req, res) => {
     let sql = `SELECT v.*, COALESCE(v.trade_name,'') AS trade_name, COALESCE(v.pincode,'') AS pincode,
       COALESCE(v.trade_license,'') AS trade_license, COALESCE(v.msme_reg,'') AS msme_reg,
       COALESCE(v.bank_branch,'') AS bank_branch, COALESCE(v.notes,'') AS notes,
-      COALESCE(v.website_url,'') AS website_url
+      COALESCE(v.website_url,'') AS website_url,
+      COALESCE((SELECT array_agg(pv.project_id) FROM project_vendors pv WHERE pv.vendor_id = v.id), '{}') AS mapped_project_ids
       FROM vendors v WHERE v.company_id = $1 AND v.is_active = true`;
 
     // Vendor master is company-wide — every vendor is available for selection on
@@ -287,6 +288,7 @@ vendorRouter.post('/', authorize('super_admin', 'admin', 'procurement_manager'),
       address, city, state, pincode, trade_name, trade_license, msme_reg,
       bank_name, account_number, ifsc_code, bank_branch, notes, website_url, credit_days,
       trade_category, contract_start_date, contract_end_date, subcontractor_status,
+      project_ids,
     } = req.body;
 
     const code = await nextVendorCode(req.user.company_id);
@@ -312,7 +314,24 @@ vendorRouter.post('/', authorize('super_admin', 'admin', 'procurement_manager'),
         subcontractor_status || 'active',
       ]
     );
-    res.status(201).json({ data: result.rows[0] });
+
+    const vendor = result.rows[0];
+
+    if (Array.isArray(project_ids) && project_ids.length > 0) {
+      for (const pid of project_ids) {
+        if (!pid) continue;
+        await query(
+          `INSERT INTO project_vendors (project_id, vendor_id, added_by)
+           VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+          [pid, vendor.id, req.user.id]
+        );
+      }
+      vendor.mapped_project_ids = project_ids.filter(Boolean);
+    } else {
+      vendor.mapped_project_ids = [];
+    }
+
+    res.status(201).json({ data: vendor });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -437,7 +456,7 @@ vendorRouter.put('/:id', authorize('super_admin', 'admin', 'procurement_manager'
       'credit_days', 'is_active',
       'trade_category', 'contract_start_date', 'contract_end_date', 'subcontractor_status',
     ];
-    
+
     let updates = [];
     let params = [req.params.id];
     let i = 2;
@@ -449,13 +468,32 @@ vendorRouter.put('/:id', authorize('super_admin', 'admin', 'procurement_manager'
       }
     });
 
-    if (updates.length === 0) return res.status(400).json({ error: 'No valid fields provided' });
+    let vendor;
+    if (updates.length > 0) {
+      const sql = `UPDATE vendors SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $1 RETURNING *`;
+      const result = await query(sql, params);
+      if (result.rowCount === 0) return res.status(404).json({ error: 'Vendor not found' });
+      vendor = result.rows[0];
+    } else {
+      const result = await query('SELECT * FROM vendors WHERE id = $1', [req.params.id]);
+      if (result.rowCount === 0) return res.status(404).json({ error: 'Vendor not found' });
+      vendor = result.rows[0];
+    }
 
-    const sql = `UPDATE vendors SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $1 RETURNING *`;
-    const result = await query(sql, params);
-    
-    if (result.rowCount === 0) return res.status(404).json({ error: 'Vendor not found' });
-    res.json({ data: result.rows[0] });
+    if (Array.isArray(fields.project_ids)) {
+      await query('DELETE FROM project_vendors WHERE vendor_id = $1', [req.params.id]);
+      for (const pid of fields.project_ids) {
+        if (!pid) continue;
+        await query(
+          `INSERT INTO project_vendors (project_id, vendor_id, added_by)
+           VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+          [pid, req.params.id, req.user.id]
+        );
+      }
+      vendor.mapped_project_ids = fields.project_ids.filter(Boolean);
+    }
+
+    res.json({ data: vendor });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
