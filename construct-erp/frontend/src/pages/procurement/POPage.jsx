@@ -297,7 +297,23 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
     payment_terms:    editingPO?.payment_terms || '',
     tcs_amount:       editingPO?.tcs_amount   || '',
     terms_conditions: editingPO?.terms_conditions || DEFAULT_PO_TERMS,
+    // ── Mockup parity fields ──
+    department:       editingPO?.department   || '',
+    currency:         editingPO?.currency     || 'INR',
+    billing_address:  editingPO?.billing_address || '',
+    freight_mode:     editingPO?.freight_mode || 'FOB – Destination',
+    transport_mode:   editingPO?.transport_mode || 'Road',
+    tax_type:         editingPO?.tax_type     || 'intra',
+    gst_inclusive:    false,
+    freight_charges:  editingPO?.freight_charges || '',
+    loading_unloading_charges: editingPO?.loading_unloading_charges || '',
+    insurance_charges: editingPO?.insurance_charges || '',
+    tds_percent:      editingPO?.tds_percent  || '0',
+    internal_remarks: editingPO?.internal_remarks || '',
+    delivery_instructions: editingPO?.delivery_instructions || '',
   });
+  const [step, setStep] = useState(1);
+  const PO_WIZARD_STEPS = ['Vendor & Terms', 'Items & Pricing', 'Charges & Attachments', 'Review & Submit'];
   const [items, setItems] = useState(
     editingPO?.items?.length
       ? editingPO.items.map(it => ({
@@ -312,7 +328,7 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
         }))
       : prefill?.items?.length
         ? prefill.items
-        : [{ material_name: '', make_model: '', quantity: '', unit: 'Nos', rate: '', gst_rate: '18', hsn_code: '', req_date: '' }]
+        : [{ material_name: '', make_model: '', quantity: '', unit: 'Nos', rate: '', gst_rate: '18', hsn_code: '', req_date: '', item_code: '', discount_pct: '0' }]
   );
 
   // Vendors mapped to the selected project — restricts the Vendor dropdown so
@@ -443,21 +459,45 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
     setItems(prev => {
       const kept = prev.filter(it => it._mrs_id !== mrsId);
       return kept.length ? kept
-        : [{ material_name: '', make_model: '', quantity: '', unit: 'Nos', rate: '', gst_rate: '18', hsn_code: '', req_date: '' }];
+        : [{ material_name: '', make_model: '', quantity: '', unit: 'Nos', rate: '', gst_rate: '18', hsn_code: '', req_date: '', item_code: '', discount_pct: '0' }];
     });
   };
 
-  const subTotal = items.reduce((s, it) => s + (parseFloat(it.quantity)||0)*(parseFloat(it.rate)||0), 0);
-  const totalGST = items.reduce((s, it) => s + (parseFloat(it.quantity)||0)*(parseFloat(it.rate)||0)*(parseFloat(it.gst_rate)||0)/100, 0);
+  // Selected vendor object — drives the vendor preview card + state detection
+  const selectedVendor = (vendorOptions.find(v => v.id === form.vendor_id) || vendors.find(v => v.id === form.vendor_id)) || null;
+
+  // Per-line maths (taxable = qty × rate less line discount)
+  const lineCalc = (it) => {
+    const q = parseFloat(it.quantity) || 0, rt = parseFloat(it.rate) || 0;
+    const disc = parseFloat(it.discount_pct) || 0, gr = parseFloat(it.gst_rate) || 0;
+    const gross = q * rt;
+    const taxable = gross * (1 - disc / 100);
+    const gstAmt = taxable * gr / 100;
+    return { gross, discountAmt: gross - taxable, taxable, gstAmt, total: taxable + gstAmt };
+  };
+  const grossTotal = items.reduce((s, it) => s + lineCalc(it).gross, 0);
+  const totalDiscount = items.reduce((s, it) => s + lineCalc(it).discountAmt, 0);
+  const subTotal = items.reduce((s, it) => s + lineCalc(it).taxable, 0); // taxable amount
+  const totalGST = items.reduce((s, it) => s + lineCalc(it).gstAmt, 0);
   const tcsValue = parseFloat(form.tcs_amount || 0) || 0;
+  const freight  = parseFloat(form.freight_charges || 0) || 0;
+  const loading  = parseFloat(form.loading_unloading_charges || 0) || 0;
+  const insurance = parseFloat(form.insurance_charges || 0) || 0;
+  const freightGst = freight * 0.18;
+  const tdsValue = subTotal * ((parseFloat(form.tds_percent) || 0) / 100);
+  const isInter = form.tax_type === 'inter';
+  const cgst = isInter ? 0 : totalGST / 2;
+  const sgst = isInter ? 0 : totalGST / 2;
+  const igst = isInter ? totalGST : 0;
+  const grandTotal = subTotal + totalGST + tcsValue + freight + loading + insurance + freightGst - tdsValue;
 
   // GST break-up by rate, tracking which item numbers fall under each rate
   const gstByRate = {}; // rate -> { amount, nums: [] }
   items.forEach((it, idx) => {
-    const q = parseFloat(it.quantity)||0, rt = parseFloat(it.rate)||0, r = parseFloat(it.gst_rate)||0;
-    if (q <= 0 || rt <= 0 || r <= 0) return;
+    const c = lineCalc(it), r = parseFloat(it.gst_rate) || 0;
+    if (c.taxable <= 0 || r <= 0) return;
     if (!gstByRate[r]) gstByRate[r] = { amount: 0, nums: [] };
-    gstByRate[r].amount += q * rt * r / 100;
+    gstByRate[r].amount += c.gstAmt;
     gstByRate[r].nums.push(idx + 1);
   });
   const gstRates = Object.keys(gstByRate).map(Number).sort((a, b) => a - b);
@@ -473,21 +513,56 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
     return out.join(', ');
   };
 
-  const handleSubmit = () => {
-    if (!form.vendor_id)  return toast.error('Select a vendor');
-    if (!form.project_id) return toast.error('Select a project');
-    if (items.some(it => !it.material_name?.trim() || !it.quantity || !it.rate))
-      return toast.error('All items need description, quantity and rate');
+  const PO_STEP_VALIDATORS = {
+    1: () => {
+      if (!form.vendor_id)  return 'Select a vendor';
+      if (!form.project_id) return 'Select a project';
+      if (!form.po_date)    return 'Enter the PO date';
+      return null;
+    },
+    2: () => {
+      if (items.some(it => !it.material_name?.trim() || !it.quantity || !it.rate))
+        return 'All items need description, quantity and rate';
+      return null;
+    },
+    3: () => null,
+  };
+  const goNext = () => {
+    const err = PO_STEP_VALIDATORS[step]?.();
+    if (err) return toast.error(err);
+    setStep(s => Math.min(s + 1, PO_WIZARD_STEPS.length));
+  };
+  const goBack = () => setStep(s => Math.max(s - 1, 1));
+  const PO_DRAFT_KEY = 'po_new_draft';
+  const saveDraft = () => {
+    try { localStorage.setItem(PO_DRAFT_KEY, JSON.stringify({ form, items })); toast.success('Draft saved locally'); }
+    catch { toast.error('Could not save draft'); }
+  };
+
+  const handleSubmit = (sendToVendor = false) => {
+    for (const n of [1, 2]) {
+      const err = PO_STEP_VALIDATORS[n]?.();
+      if (err) { setStep(n); return toast.error(err); }
+    }
     const payload = {
       ...form,
       delivery_date: form.delivery_date || null,
       items,
       mrs_ids: form.mrs_ids,
       mrs_id: form.mrs_ids[0] || prefill?.mrs_id || null,
+      _send_to_vendor: sendToVendor,
     };
+    localStorage.removeItem(PO_DRAFT_KEY);
     if (isEditing) onUpdate(payload);
     else onCreate(payload);
   };
+
+  const vendorInitials = (selectedVendor?.name || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join('') || '?';
+  const PO_CHARGE_FIELDS = [
+    ['Freight Charges (₹)', 'freight_charges', '18% GST'],
+    ['Loading / Unloading (₹)', 'loading_unloading_charges', null],
+    ['Insurance (₹)', 'insurance_charges', null],
+  ];
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-white" style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
@@ -495,253 +570,395 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-3.5 flex-shrink-0 bg-white border-b border-slate-200">
-          <div>
-            <p className="text-[15px] font-semibold text-slate-800">{isEditing ? `Edit Purchase Order — ${editingPO.po_number}` : 'Create Purchase Order'}</p>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {isEditing
-                ? 'Editing draft — changes saved immediately'
-                : prefill?.mrs_ref
-                  ? `Pre-filled from CS — ${prefill.mrs_ref} · ${prefill.vendor_name}`
-                  : '4-stage authorization workflow'}
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="text-xs text-slate-400">Procurement <span className="text-slate-300">›</span> Purchase Orders <span className="text-slate-300">›</span> <b className="text-slate-700">{isEditing ? editingPO.po_number : 'New PO'}</b></div>
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-mono">{isEditing ? editingPO.po_number : 'Auto-generated'}</span>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-md flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50">
-          {/* CS banner */}
-          {prefill?.mrs_ref && (
+        {/* Steps bar */}
+        <div className="flex items-center gap-1 px-6 border-b border-slate-200 bg-white flex-shrink-0 overflow-x-auto">
+          {PO_WIZARD_STEPS.map((label, i) => {
+            const n = i + 1, done = n < step, active = n === step;
+            return (
+              <div key={label} className={clsx('flex items-center gap-2 py-2.5 pr-5 text-xs font-semibold whitespace-nowrap',
+                done ? 'text-emerald-600' : active ? 'text-blue-600' : 'text-slate-400')}>
+                <span className={clsx('w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold',
+                  done ? 'bg-emerald-500 text-white' : active ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500')}>
+                  {done ? <Check className="w-3 h-3" /> : n}
+                </span>
+                {label}
+                {n < PO_WIZARD_STEPS.length && <ChevronRight className="w-3.5 h-3.5 text-slate-300 ml-2" />}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 bg-slate-50">
+          <div className="flex flex-col lg:flex-row gap-4">
+          <div className="flex-1 min-w-0 space-y-4">
+
+          {prefill?.mrs_ref && step === 1 && (
             <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-md text-xs text-emerald-800">
               <ShoppingCart className="w-4 h-4 text-emerald-600 flex-shrink-0" />
               <span><strong>Pre-filled from approved CS</strong> — rates and quantities pulled from comparative statement. Review before submitting.</span>
             </div>
           )}
 
-          {/* PO Details */}
+          {/* ════════ STEP 1 — Vendor & Terms ════════ */}
+          {step === 1 && <>
           <div className={Z_CARD}>
-            <h3 className={Z_HEAD}>PO Details</h3>
+            <h3 className={Z_HEAD}>PO Header</h3>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3.5 p-4">
-              <Field label="MR Number(s)">
-                <select
-                  className={INP}
-                  value=""
-                  onChange={e => { addMRS(e.target.value); e.target.value = ''; }}
-                >
-                  <option value="">+ Add MR / Manual PO...</option>
-                  {activeMrsList
-                    .filter(m => !form.mrs_ids.includes(m.id))
-                    .map(m => (
-                      <option key={m.id} value={m.id}>
-                        {(m.serial_no_formatted || m.mrs_number || m.id?.slice(0, 8))} — {m.project_name || 'Project'} — {(m.status || 'raised').replaceAll('_', ' ')}
-                        {(m.items || []).some(it => Number(it.ordered_qty) > 0) ? ' — PO already raised for some items' : ''}
-                      </option>
-                    ))}
+              <Field label="PO Number"><input className={clsx(INP, 'bg-slate-50 text-slate-400 font-mono')} value={isEditing ? editingPO.po_number : 'Auto-generated'} readOnly /></Field>
+              <Field label="PO Date *"><input type="date" className={INP} value={form.po_date} onChange={e => set('po_date', e.target.value)} /></Field>
+              <Field label="Required By *"><input type="date" className={INP} value={form.delivery_date} onChange={e => set('delivery_date', e.target.value)} /></Field>
+              <Field label="Project / Work Order *">
+                <SearchableSelect value={form.project_id} onChange={v => set('project_id', v)}
+                  options={projects.map(p => ({ value: p.id, label: p.name }))}
+                  placeholder="Select project…" searchPlaceholder="Search projects…" footerLabel="projects" />
+              </Field>
+              <Field label="Department">
+                <select className={INP} value={form.department} onChange={e => set('department', e.target.value)}>
+                  <option value="">— Select —</option>
+                  {['Civil Works', 'MEP', 'Finishing', 'Admin'].map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
-                {form.mrs_ids.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {form.mrs_ids.map(id => (
-                      <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-[11px] font-medium text-amber-800">
-                        {mrLabel(activeMrsList.find(m => m.id === id)) || id.slice(0, 8)}
-                        <button type="button" onClick={() => removeMRS(id)} className="hover:text-amber-950">
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ))}
+              </Field>
+              <Field label="Currency">
+                <select className={INP} value={form.currency} onChange={e => set('currency', e.target.value)}>
+                  <option value="INR">INR – Indian Rupee</option>
+                  <option value="USD">USD – US Dollar</option>
+                </select>
+              </Field>
+            </div>
+          </div>
+
+          <div className={Z_CARD}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+              <h3 className="text-[13px] font-semibold text-slate-700"><Building2 className="w-3.5 h-3.5 inline mr-1.5 text-blue-500" />Vendor Information</h3>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4">
+              <div className="space-y-3">
+                <Field label="Vendor *">
+                  <VendorSelect value={form.vendor_id} onChange={v => set('vendor_id', v)}
+                    options={vendorOptions.map(v => ({ value: v.id, label: v.name, sublabel: v.vendor_type ? v.vendor_type.replace(/_/g, ' ') : '' }))}
+                    placeholder="Select vendor…" searchPlaceholder="Search vendors…" footerLabel="vendors"
+                    onAddNew={handleAddVendor} addNewLabel="vendor" />
+                </Field>
+                {selectedVendor && (
+                  <div className="flex gap-3 items-start rounded-md border border-blue-100 bg-blue-50 px-3.5 py-3">
+                    <div className="w-9 h-9 rounded-lg bg-blue-600 text-white flex items-center justify-center text-sm font-bold flex-shrink-0">{vendorInitials}</div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-blue-700 truncate">{selectedVendor.name}</p>
+                      <p className="text-[11px] text-slate-600 truncate">
+                        {selectedVendor.city || selectedVendor.state ? `📍 ${[selectedVendor.city, selectedVendor.state].filter(Boolean).join(', ')}` : ''}
+                        {selectedVendor.phone ? `  ☎ ${selectedVendor.phone}` : ''}
+                      </p>
+                      {selectedVendor.gstin && <p className="text-[11px] font-mono text-slate-500 mt-0.5">GSTIN: {selectedVendor.gstin}</p>}
+                      <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                        {selectedVendor.gstin && <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">✓ GST Registered</span>}
+                        <span className={clsx('text-[10px] px-2 py-0.5 rounded-full font-medium', isInter ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700')}>{isInter ? 'Inter State' : 'Same State'}</span>
+                      </div>
+                    </div>
                   </div>
                 )}
-              </Field>
-              <Field label="Vendor *">
-                <VendorSelect
-                  value={form.vendor_id}
-                  onChange={v => set('vendor_id', v)}
-                  options={vendorOptions.map(v => ({ value: v.id, label: v.name, sublabel: v.vendor_type ? v.vendor_type.replace(/_/g, ' ') : '' }))}
-                  placeholder="Select vendor…"
-                  searchPlaceholder="Search vendors…"
-                  footerLabel="vendors"
-                  onAddNew={handleAddVendor}
-                  addNewLabel="vendor"
-                />
-              </Field>
-              <Field label="Project *">
-                <SearchableSelect
-                  value={form.project_id}
-                  onChange={v => set('project_id', v)}
-                  options={projects.map(p => ({ value: p.id, label: p.name }))}
-                  placeholder="Select project…"
-                  searchPlaceholder="Search projects…"
-                  footerLabel="projects"
-                />
-              </Field>
-              <Field label="PO Date *">
-                <input type="date" className={INP} value={form.po_date} onChange={e => set('po_date', e.target.value)} />
-              </Field>
-              <Field label="PO Req No">
-                <input className={INP} placeholder="e.g. MR-044" value={form.po_req_no} onChange={e => set('po_req_no', e.target.value)} />
-              </Field>
-              <Field label="PO Req Date">
-                <input type="date" className={INP} value={form.po_req_date} onChange={e => set('po_req_date', e.target.value)} />
-              </Field>
-              <Field label="Approval No">
-                <input className={INP} placeholder="Approval reference" value={form.approval_no} onChange={e => set('approval_no', e.target.value)} />
-              </Field>
-              <Field label="Expected Delivery">
-                <input type="date" className={INP} value={form.delivery_date} onChange={e => set('delivery_date', e.target.value)} />
-              </Field>
-              <Field label="Narration / Description">
-                <input className={clsx(INP, 'md:col-span-2')} placeholder="Brief description of what this PO covers…" value={form.notes} onChange={e => set('notes', e.target.value)} />
-              </Field>
+                <Field label="MR Number(s)">
+                  <select className={INP} value="" onChange={e => { addMRS(e.target.value); e.target.value = ''; }}>
+                    <option value="">+ Add MR / Manual PO...</option>
+                    {activeMrsList.filter(m => !form.mrs_ids.includes(m.id)).map(m => (
+                      <option key={m.id} value={m.id}>
+                        {(m.serial_no_formatted || m.mrs_number || m.id?.slice(0, 8))} — {m.project_name || 'Project'} — {(m.status || 'raised').replaceAll('_', ' ')}
+                      </option>
+                    ))}
+                  </select>
+                  {form.mrs_ids.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {form.mrs_ids.map(id => (
+                        <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-[11px] font-medium text-amber-800">
+                          {mrLabel(activeMrsList.find(m => m.id === id)) || id.slice(0, 8)}
+                          <button type="button" onClick={() => removeMRS(id)} className="hover:text-amber-950"><X className="w-3 h-3" /></button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </Field>
+              </div>
+              <div className="space-y-3">
+                <Field label="Billing Address">
+                  <textarea rows={2} className={clsx(INP, 'h-auto py-2 resize-none')} placeholder="Vendor billing address" value={form.billing_address} onChange={e => set('billing_address', e.target.value)} />
+                </Field>
+                <Field label="Delivery Address">
+                  <textarea rows={2} className={clsx(INP, 'h-auto py-2 resize-none')} placeholder="Site delivery address, contact & phone" value={form.delivery_address} onChange={e => set('delivery_address', e.target.value)} />
+                </Field>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 px-4 pb-4">
               <Field label="Payment Terms">
-                <input
-                  className={INP}
-                  list="payment-terms-list"
-                  placeholder="e.g. 60 Days from supply"
-                  value={form.payment_terms}
-                  onChange={e => set('payment_terms', e.target.value)}
-                />
+                <input className={INP} list="payment-terms-list" placeholder="e.g. Net 30 Days" value={form.payment_terms} onChange={e => set('payment_terms', e.target.value)} />
                 <datalist id="payment-terms-list">
-                  <option value="100% Advance" />
-                  <option value="100% against delivery" />
-                  <option value="15 Days from supply" />
-                  <option value="30 Days from supply" />
-                  <option value="45 Days from supply" />
-                  <option value="60 Days from supply" />
+                  {['Net 30 Days', 'Net 15 Days', 'Advance 50% + Net 30', 'On Delivery', '100% Advance'].map(o => <option key={o} value={o} />)}
                 </datalist>
+              </Field>
+              <Field label="Freight / Delivery">
+                <select className={INP} value={form.freight_mode} onChange={e => set('freight_mode', e.target.value)}>
+                  {['FOB – Destination', 'FOB – Origin', 'Ex-Works'].map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </Field>
+              <Field label="Mode of Transport">
+                <select className={INP} value={form.transport_mode} onChange={e => set('transport_mode', e.target.value)}>
+                  {['Road', 'Rail', 'Air'].map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </Field>
+            </div>
+          </div>
+          </>}
+
+          {/* ════════ STEP 2 — Items & Pricing ════════ */}
+          {step === 2 && <>
+          <div className={Z_CARD}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+              <h3 className="text-[13px] font-semibold text-slate-700"><Package className="w-3.5 h-3.5 inline mr-1.5 text-blue-500" />Material / Service Items</h3>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                  GST:
+                  <div className="flex border border-slate-200 rounded-md overflow-hidden">
+                    {['Excl.', 'Incl.'].map((l, i) => (
+                      <button key={l} type="button" onClick={() => set('gst_inclusive', i === 1)}
+                        className={clsx('px-2.5 py-1 text-[11px] font-medium', (form.gst_inclusive ? i === 1 : i === 0) ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-500')}>{l}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                  Tax:
+                  <div className="flex border border-slate-200 rounded-md overflow-hidden">
+                    {[['intra', 'CGST+SGST'], ['inter', 'IGST']].map(([v, l]) => (
+                      <button key={v} type="button" onClick={() => set('tax_type', v)}
+                        className={clsx('px-2.5 py-1 text-[11px] font-medium', form.tax_type === v ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-500')}>{l}</button>
+                    ))}
+                  </div>
+                </div>
+                <button onClick={addItem} className="flex items-center gap-1.5 px-3 h-7 rounded-md text-xs font-medium text-blue-600 border border-blue-200 hover:bg-blue-50 transition-colors">
+                  <Plus className="w-3 h-3" /> Add Line Item
+                </button>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <div className="min-w-[1180px]">
+                <div className="grid gap-2 px-4 py-2 bg-slate-50 border-b border-slate-100 text-[11px] font-semibold text-slate-500 uppercase tracking-wide"
+                  style={{ gridTemplateColumns: '32px 90px minmax(200px,2fr) 80px 64px 70px 90px 60px 60px 100px 90px 100px 32px' }}>
+                  {['#', 'Item Code', 'Description', 'HSN/SAC', 'UOM', 'Qty', 'Unit Rate', 'Disc%', 'GST%', 'Taxable', 'GST Amt', 'Total', ''].map((h, i) => (
+                    <div key={i} className={i >= 9 && i <= 11 ? 'text-right' : ''}>{h}</div>
+                  ))}
+                </div>
+                {items.map((it, i) => {
+                  const c = lineCalc(it);
+                  return (
+                  <div key={i} className={clsx('px-4 py-2 border-b border-slate-100 last:border-b-0', i % 2 === 1 && 'bg-slate-50/50')}>
+                    <div className="grid gap-2 items-center" style={{ gridTemplateColumns: '32px 90px minmax(200px,2fr) 80px 64px 70px 90px 60px 60px 100px 90px 100px 32px' }}>
+                      <div className="text-center text-xs font-mono text-slate-400">{i + 1}</div>
+                      <input className={clsx(Z_INP, 'font-mono !px-2')} placeholder="Code" value={it.item_code || ''} onChange={e => setItem(i, 'item_code', e.target.value)} />
+                      <MaterialCombobox value={it.material_name} inventoryItems={inventoryItems} placeholder="Description"
+                        onChange={(materialName, unit) => { setItem(i, 'material_name', materialName); if (unit) setItem(i, 'unit', unit); }} />
+                      <input className={clsx(Z_INP, '!px-2')} placeholder="HSN" value={it.hsn_code} onChange={e => setItem(i, 'hsn_code', e.target.value)} />
+                      <select className={clsx(Z_INP, '!px-1')} value={it.unit} onChange={e => setItem(i, 'unit', e.target.value)}>
+                        {it.unit && !UNITS.includes(it.unit) && <option key={it.unit}>{it.unit}</option>}
+                        {UNITS.map(u => <option key={u}>{u}</option>)}
+                      </select>
+                      <input type="number" className={clsx(Z_INP, 'text-right !px-2')} placeholder="0" value={it.quantity} onChange={e => setItem(i, 'quantity', e.target.value)} />
+                      <input type="number" className={clsx(Z_INP, 'text-right !px-2')} placeholder="0.00" value={it.rate} onChange={e => setItem(i, 'rate', e.target.value)} />
+                      <input type="number" className={clsx(Z_INP, 'text-center !px-1')} placeholder="0" value={it.discount_pct || ''} onChange={e => setItem(i, 'discount_pct', e.target.value)} />
+                      <input type="number" className={clsx(Z_INP, 'text-center !px-1')} value={it.gst_rate} onChange={e => setItem(i, 'gst_rate', e.target.value)} />
+                      <div className="text-right font-mono text-xs text-slate-600">{c.taxable ? inr(c.taxable) : '—'}</div>
+                      <div className="text-right font-mono text-xs text-amber-600">{c.gstAmt ? inr(c.gstAmt) : '—'}</div>
+                      <div className="text-right font-mono text-xs font-semibold text-slate-800">{c.total ? inr(c.total) : '—'}</div>
+                      <button onClick={() => removeItem(i)} disabled={items.length === 1}
+                        className="w-8 h-8 rounded-md flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-30 transition-all">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          </>}
+
+          {/* ════════ STEP 3 — Charges & Attachments ════════ */}
+          {step === 3 && <>
+          <div className={Z_CARD}>
+            <h3 className={Z_HEAD}>Additional Charges</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 p-4">
+              {PO_CHARGE_FIELDS.map(([label, key, addon]) => (
+                <Field key={key} label={label}>
+                  <div className="flex">
+                    <input type="number" min="0" className={clsx(INP, addon && 'rounded-r-none')} placeholder="0" value={form[key]} onChange={e => set(key, e.target.value)} />
+                    {addon && <span className="px-2 flex items-center text-[11px] text-slate-400 border border-l-0 border-slate-300 rounded-r-md bg-slate-50 whitespace-nowrap">{addon}</span>}
+                  </div>
+                </Field>
+              ))}
+              <Field label="TDS Deduction %">
+                <select className={INP} value={form.tds_percent} onChange={e => set('tds_percent', e.target.value)}>
+                  <option value="0">None</option>
+                  <option value="1">1% – Sec 194C</option>
+                  <option value="2">2% – Sec 194C (Company)</option>
+                  <option value="10">10% – Sec 194J</option>
+                </select>
               </Field>
               <Field label="TCS / Other Tax (₹)">
                 <input type="number" min="0" className={INP} placeholder="0" value={form.tcs_amount} onChange={e => set('tcs_amount', e.target.value)} />
               </Field>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 px-4 pb-4">
-              <Field label="Delivery Address">
-                <textarea rows={4} className={clsx(INP, 'h-auto py-2 resize-none')} placeholder="Project delivery address, site contact and phone number" value={form.delivery_address} onChange={e => set('delivery_address', e.target.value)} />
-              </Field>
-              <Field label="Order Intro Line">
-                <textarea rows={4} className={clsx(INP, 'h-auto py-2 resize-none')} value={form.order_intro} onChange={e => set('order_intro', e.target.value)} />
-              </Field>
-            </div>
-          </div>
-
-          {/* Line Items */}
-          <div className={Z_CARD}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-              <h3 className="text-[13px] font-semibold text-slate-700">Line Items</h3>
-              <button onClick={addItem} className="flex items-center gap-1.5 px-3 h-7 rounded-md text-xs font-medium text-blue-600 border border-blue-200 hover:bg-blue-50 transition-colors">
-                <Plus className="w-3 h-3" /> Add Row
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <div className="min-w-[920px]">
-                <div className="grid gap-2 px-4 py-2 bg-slate-50 border-b border-slate-100" style={{ gridTemplateColumns: '2fr 1.2fr 80px 70px 100px 90px 70px 105px 32px' }}>
-                  {['Description', 'Make / Model', 'HSN', 'Unit', 'Qty', 'Rate (₹)', 'GST%', 'Req Date', ''].map(h => (
-                    <div key={h} className={Z_LABEL}>{h}</div>
-                  ))}
-                </div>
-                <div>
-                  {items.map((it, i) => (
-                    <div key={i} className={clsx('px-4 py-2 border-b border-slate-100 last:border-b-0', i % 2 === 1 && 'bg-slate-50/50')}>
-                      <div className="grid gap-2 items-center" style={{ gridTemplateColumns: '2fr 1.2fr 80px 70px 100px 90px 70px 105px 32px' }}>
-                        <MaterialCombobox
-                          value={it.material_name}
-                          inventoryItems={inventoryItems}
-                          placeholder="Material description"
-                          onChange={(materialName, unit) => {
-                            setItem(i, 'material_name', materialName);
-                            if (unit) setItem(i, 'unit', unit);
-                          }}
-                        />
-                        <input className={Z_INP}
-                          placeholder="Brand / spec" value={it.make_model || ''} onChange={e => setItem(i, 'make_model', e.target.value)} />
-                        <input className={Z_INP}
-                          placeholder="HSN" value={it.hsn_code} onChange={e => setItem(i, 'hsn_code', e.target.value)} />
-                        <select className={Z_INP}
-                          value={it.unit} onChange={e => setItem(i, 'unit', e.target.value)}>
-                          {it.unit && !UNITS.includes(it.unit) && <option key={it.unit}>{it.unit}</option>}
-                          {UNITS.map(u => <option key={u}>{u}</option>)}
-                        </select>
-                        <input type="number" className={clsx(Z_INP, 'text-right')}
-                          placeholder="0" value={it.quantity} onChange={e => setItem(i, 'quantity', e.target.value)} />
-                        <input type="number" className={clsx(Z_INP, 'text-right')}
-                          placeholder="0.00" value={it.rate} onChange={e => setItem(i, 'rate', e.target.value)} />
-                        <input type="number" className={clsx(Z_INP, 'text-center px-1')}
-                          value={it.gst_rate} onChange={e => setItem(i, 'gst_rate', e.target.value)} />
-                        <input type="date" className={clsx(Z_INP, 'text-xs px-1')}
-                          value={it.req_date || ''} onChange={e => setItem(i, 'req_date', e.target.value)} />
-                        <button onClick={() => removeItem(i)} disabled={items.length === 1}
-                          className="w-8 h-9 rounded-md border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      {it._ordered_qty > 0 && (
-                        <div className="text-[11px] text-purple-600 font-medium mt-1">
-                          ⚠ MR requested {it._requested_qty} {it.unit}, {it._ordered_qty} already covered by a previous PO — balance ({Math.max(it._requested_qty - it._ordered_qty, 0)}) filled in above
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Totals */}
-            <div className="flex justify-end p-4">
-              <div className="bg-slate-50 border border-slate-200 rounded-md p-4 min-w-[320px] space-y-2">
-                <div className="flex justify-between text-xs text-slate-500">
-                  <span>Sub Total</span><span className="font-medium text-slate-800">{inr(subTotal)}</span>
-                </div>
-                {gstRates.length === 0 ? (
-                  <div className="flex justify-between text-xs text-slate-500">
-                    <span>GST</span><span className="font-medium text-amber-600">{inr(totalGST)}</span>
-                  </div>
-                ) : (
-                  <>
-                    {gstRates.map(r => (
-                      <div key={r} className="flex justify-between gap-3 text-xs text-slate-500">
-                        <span className="leading-snug">GST @ {r}%{gstRates.length > 1 ? ` on item no. ${fmtNos(gstByRate[r].nums)}` : ''}</span>
-                        <span className="font-medium text-amber-600 whitespace-nowrap">{inr(gstByRate[r].amount)}</span>
-                      </div>
-                    ))}
-                    {gstRates.length > 1 && (
-                      <div className="flex justify-between text-xs text-slate-600 border-t border-slate-200 pt-1">
-                        <span className="font-medium">Total GST</span><span className="font-medium text-amber-600 whitespace-nowrap">{inr(totalGST)}</span>
-                      </div>
-                    )}
-                  </>
-                )}
-                <div className="flex justify-between text-xs text-slate-500">
-                  <span>TCS / Other Tax</span><span className="font-medium text-slate-800">{inr(tcsValue)}</span>
-                </div>
-                <div className="flex justify-between text-sm font-semibold text-slate-900 border-t border-slate-200 pt-2">
-                  <span>Grand Total</span><span className="text-blue-700">{inr(subTotal + totalGST + tcsValue)}</span>
-                </div>
-              </div>
-            </div>
           </div>
 
           <div className={Z_CARD}>
-            <h3 className={Z_HEAD}>Terms & Conditions</h3>
+            <h3 className={Z_HEAD}>Attachments</h3>
             <div className="p-4">
-              <textarea
-                rows={12}
-                className={clsx(Z_INP, 'h-auto py-3 font-mono text-xs leading-relaxed resize-y')}
-                value={form.terms_conditions}
-                onChange={e => set('terms_conditions', e.target.value)}
-              />
-              <p className="mt-2 text-[11px] text-slate-500">Edit this block for each vendor before submitting the purchase order.</p>
+              <div className="flex flex-col items-center justify-center gap-1.5 rounded-md border-2 border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-slate-400">
+                <Upload className="w-6 h-6 text-blue-400" />
+                <span className="text-sm font-medium text-slate-600">Drag &amp; drop quotations, approvals, or rate comparisons here</span>
+                <span className="text-xs text-slate-400">PDF, JPG, PNG, XLSX – max 10MB each</span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-2">File attachments can be added from the PO detail screen after creation.</p>
             </div>
+          </div>
+
+          <div className={Z_CARD}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 p-4">
+              <Field label="Terms & Conditions">
+                <textarea rows={5} className={clsx(INP, 'h-auto py-2 resize-y font-mono text-[11px] leading-relaxed')} value={form.terms_conditions} onChange={e => set('terms_conditions', e.target.value)} />
+              </Field>
+              <Field label="Internal Remarks">
+                <textarea rows={5} className={clsx(INP, 'h-auto py-2 resize-y')} placeholder="Internal notes (not printed on PO)" value={form.internal_remarks} onChange={e => set('internal_remarks', e.target.value)} />
+              </Field>
+              <Field label="Delivery Instructions">
+                <textarea rows={5} className={clsx(INP, 'h-auto py-2 resize-y')} placeholder="Site-specific instructions" value={form.delivery_instructions} onChange={e => set('delivery_instructions', e.target.value)} />
+              </Field>
+            </div>
+          </div>
+          </>}
+
+          {/* ════════ STEP 4 — Review & Submit ════════ */}
+          {step === 4 && <>
+          <div className={Z_CARD}>
+            <h3 className={Z_HEAD}>PO Header</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-3 p-4 text-sm">
+              {[
+                ['Vendor', selectedVendor?.name || '—'],
+                ['Project', projects.find(p => p.id === form.project_id)?.name || '—'],
+                ['PO Date', form.po_date ? dayjs(form.po_date).format('DD MMM YYYY') : '—'],
+                ['Required By', form.delivery_date ? dayjs(form.delivery_date).format('DD MMM YYYY') : '—'],
+                ['Department', form.department || '—'],
+                ['Payment Terms', form.payment_terms || '—'],
+                ['Freight', form.freight_mode || '—'],
+                ['Transport', form.transport_mode || '—'],
+              ].map(([l, v]) => (
+                <div key={l}><p className="text-[11px] text-slate-400 uppercase tracking-wide">{l}</p><p className="font-semibold text-slate-800 truncate">{v}</p></div>
+              ))}
+            </div>
+          </div>
+
+          <div className={Z_CARD}>
+            <h3 className={Z_HEAD}>Line Items ({items.filter(it => it.material_name && it.quantity).length})</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead><tr className="bg-slate-50 text-slate-500 uppercase tracking-wide text-[10.5px]">
+                  <th className="text-left px-3 py-2">#</th><th className="text-left px-3 py-2">Description</th>
+                  <th className="text-right px-3 py-2">Qty</th><th className="text-right px-3 py-2">Rate</th>
+                  <th className="text-right px-3 py-2">Taxable</th><th className="text-right px-3 py-2">GST</th><th className="text-right px-3 py-2">Total</th>
+                </tr></thead>
+                <tbody>
+                  {items.filter(it => it.material_name && it.quantity).map((it, idx) => {
+                    const c = lineCalc(it);
+                    return (
+                      <tr key={idx} className="border-t border-slate-100">
+                        <td className="px-3 py-2 font-mono text-slate-400">{idx + 1}</td>
+                        <td className="px-3 py-2 font-medium text-slate-800">{it.material_name}</td>
+                        <td className="px-3 py-2 text-right font-mono">{it.quantity} {it.unit}</td>
+                        <td className="px-3 py-2 text-right font-mono">{inr(parseFloat(it.rate) || 0)}</td>
+                        <td className="px-3 py-2 text-right font-mono">{inr(c.taxable)}</td>
+                        <td className="px-3 py-2 text-right font-mono text-amber-600">{inr(c.gstAmt)}</td>
+                        <td className="px-3 py-2 text-right font-mono font-semibold">{inr(c.total)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Approval chain */}
+          <div className={Z_CARD}>
+            <h3 className={Z_HEAD}>Approval Workflow</h3>
+            <div className="p-4">
+              <p className="text-xs text-slate-400 mb-3">After submission, this PO will follow the standard approval chain:</p>
+              <div className="flex items-center">
+                {[{ s: 'AC', l: 'Procurement', st: 'Pending', state: 'pending' }, { s: 'PM', l: 'Proj. Mgr', st: 'Waiting' }, { s: 'MD', l: 'MD', st: 'Waiting' }].map((node, i, arr) => (
+                  <React.Fragment key={i}>
+                    <div className="flex flex-col items-center gap-1 flex-1">
+                      <div className={clsx('w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-bold border-2',
+                        node.state === 'pending' ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-slate-200 bg-slate-50 text-slate-400')}>{node.s}</div>
+                      <span className="text-[11px] text-slate-500">{node.l}</span>
+                      <span className={clsx('text-[10.5px] font-semibold', node.state === 'pending' ? 'text-amber-600' : 'text-slate-400')}>{node.st}</span>
+                    </div>
+                    {i < arr.length - 1 && <div className="w-10 h-0.5 bg-slate-200" />}
+                  </React.Fragment>
+                ))}
+              </div>
+              <p className="text-xs text-slate-400 mt-3">PO value above ₹5L requires MD approval. Estimated turnaround: <strong>2 business days</strong>.</p>
+            </div>
+          </div>
+          </>}
+
+          </div>
+
+          {/* ── Tax Summary sidebar (visible all steps) ── */}
+          <div className="w-full lg:w-[320px] shrink-0">
+            <div className="rounded-md border border-slate-200 overflow-hidden bg-white sticky top-0">
+              <div className="px-4 py-2.5 bg-slate-800 text-white text-xs font-semibold uppercase tracking-wide">Tax Summary</div>
+              <div className="flex justify-between px-4 py-2 border-b border-slate-100 text-xs"><span className="text-slate-500">Subtotal (before tax)</span><span className="font-mono">{inr(grossTotal)}</span></div>
+              <div className="flex justify-between px-4 py-2 border-b border-slate-100 text-xs"><span className="text-slate-500">Total Discount</span><span className="font-mono text-rose-600">– {inr(totalDiscount)}</span></div>
+              <div className="flex justify-between px-4 py-2 border-b border-slate-100 text-xs"><span className="text-slate-500">Taxable Amount</span><span className="font-mono">{inr(subTotal)}</span></div>
+              <div className="flex justify-between px-4 py-2 border-b border-slate-100 text-xs"><span className="text-slate-500">CGST</span><span className="font-mono">{cgst ? inr(cgst) : '–'}</span></div>
+              <div className="flex justify-between px-4 py-2 border-b border-slate-100 text-xs"><span className="text-slate-500">SGST</span><span className="font-mono">{sgst ? inr(sgst) : '–'}</span></div>
+              <div className="flex justify-between px-4 py-2 border-b border-slate-100 text-xs"><span className="text-slate-500">IGST</span><span className="font-mono">{igst ? inr(igst) : '–'}</span></div>
+              <div className="flex justify-between px-4 py-2 border-b border-slate-100 text-xs"><span className="text-slate-500">Freight + Loading</span><span className="font-mono">{inr(freight + loading + insurance)}</span></div>
+              <div className="flex justify-between px-4 py-2 border-b border-slate-100 text-xs"><span className="text-slate-500">GST on Freight</span><span className="font-mono">{freightGst ? inr(freightGst) : '–'}</span></div>
+              {tcsValue > 0 && <div className="flex justify-between px-4 py-2 border-b border-slate-100 text-xs"><span className="text-slate-500">TCS / Other Tax</span><span className="font-mono">{inr(tcsValue)}</span></div>}
+              {tdsValue > 0 && <div className="flex justify-between px-4 py-2 border-b border-slate-100 text-xs"><span className="text-slate-500">TDS Deduction</span><span className="font-mono text-rose-600">– {inr(tdsValue)}</span></div>}
+              <div className="flex justify-between px-4 py-3 bg-blue-50 text-sm font-bold"><span className="text-blue-700">Grand Total</span><span className="font-mono text-blue-700">{inr(grandTotal)}</span></div>
+            </div>
+          </div>
+
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-3.5 border-t border-slate-200 bg-white flex-shrink-0">
-          <span className="text-xs text-slate-400">{items.filter(it => it.material_name && it.quantity).length} item(s) ready</span>
+        {/* Bottom action bar */}
+        <div className="flex items-center justify-between px-6 py-3 border-t border-slate-200 bg-white flex-shrink-0">
+          <div className="text-xs text-slate-600">
+            Grand Total: <strong className="font-mono text-slate-900">{inr(grandTotal)}</strong>
+            &nbsp;|&nbsp; {items.filter(it => it.material_name && it.quantity).length} line items
+            &nbsp;|&nbsp; {isInter ? 'IGST' : 'CGST + SGST'} applicable
+          </div>
           <div className="flex items-center gap-2">
-            <button onClick={onClose} className="px-5 h-9 rounded-md border border-slate-300 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">Cancel</button>
-            <button onClick={handleSubmit} disabled={isPending}
-              className="px-6 h-9 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50">
-              {isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Submit for Audit'}
-            </button>
+            <button onClick={onClose} className="px-4 h-9 rounded-md border border-slate-300 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">Discard</button>
+            {!isEditing && <button onClick={saveDraft} className="inline-flex items-center gap-1.5 px-4 h-9 rounded-md border border-blue-300 text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors"><Download className="w-4 h-4" /> Save Draft</button>}
+            {step > 1 && <button onClick={goBack} className="px-4 h-9 rounded-md border border-slate-300 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">Back</button>}
+            {step < PO_WIZARD_STEPS.length ? (
+              <button onClick={goNext} className="inline-flex items-center gap-2 px-5 h-9 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors">Next <ChevronRight className="w-4 h-4" /></button>
+            ) : (
+              <>
+                {!isEditing && <button onClick={() => handleSubmit(true)} disabled={isPending} className="inline-flex items-center gap-1.5 px-4 h-9 rounded-md border border-slate-300 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"><Mail className="w-4 h-4" /> Send to Vendor</button>}
+                <button onClick={() => handleSubmit(false)} disabled={isPending}
+                  className="inline-flex items-center gap-2 px-5 h-9 rounded-md bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50">
+                  <Check className="w-4 h-4" />
+                  {isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Submit for Approval'}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
