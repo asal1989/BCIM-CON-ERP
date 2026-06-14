@@ -18,15 +18,15 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
+          cache-dependency-path: construct-erp/backend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
-        working-directory: backend
+        working-directory: construct-erp/backend
 
       - name: Run tests
         run: npm test --if-present
-        working-directory: backend
+        working-directory: construct-erp/backend
 
   # ── 2. Build & push Docker images (main branch only) ───────
   build-and-push:
@@ -50,7 +50,7 @@ jobs:
       - name: Build & push backend
         uses: docker/build-push-action@v5
         with:
-          context: ./backend
+          context: ./construct-erp/backend
           push: true
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/construct-erp-backend:latest
@@ -61,7 +61,7 @@ jobs:
       - name: Build & push frontend
         uses: docker/build-push-action@v5
         with:
-          context: ./frontend
+          context: ./construct-erp/frontend
           push: true
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/construct-erp-frontend:latest
