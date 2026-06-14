@@ -17,6 +17,7 @@ import dayjs from 'dayjs';
 import { poAPI, vendorAPI, projectAPI, mrsAPI, inventoryAPI } from '../../api/client';
 import MaterialCombobox from '../../components/shared/MaterialCombobox';
 import SearchableSelect from '../../components/shared/SearchableSelect';
+import VendorSelect from '../../components/shared/VendorSelect';
 import { FIELD_HL } from '../../constants/fieldStyles';
 import toast from 'react-hot-toast';
 import POPrintTemplate from './POPrintTemplate';
@@ -556,7 +557,7 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
                 )}
               </Field>
               <Field label="Vendor *">
-                <SearchableSelect
+                <VendorSelect
                   value={form.vendor_id}
                   onChange={v => set('vendor_id', v)}
                   options={vendorOptions.map(v => ({ value: v.id, label: v.name, sublabel: v.vendor_type ? v.vendor_type.replace(/_/g, ' ') : '' }))}

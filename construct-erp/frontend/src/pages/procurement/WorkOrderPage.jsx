@@ -17,6 +17,7 @@ import dayjs from 'dayjs';
 import { subcontractorAPI, vendorAPI, projectAPI } from '../../api/client';
 import { FIELD_HL } from '../../constants/fieldStyles';
 import SearchableSelect from '../../components/shared/SearchableSelect';
+import VendorSelect from '../../components/shared/VendorSelect';
 import toast from 'react-hot-toast';
 import WOPrintTemplate from './WOPrintTemplate';
 
@@ -701,7 +702,7 @@ function CreateWOModal({ onClose, vendors, projects, onCreate, onUpdate, isPendi
               </div>
               <div className="col-span-2 md:col-span-2">
                 <Lbl req>Contractor / Vendor</Lbl>
-                <SearchableSelect
+                <VendorSelect
                   value={form.vendor_id}
                   onChange={v => f('vendor_id', v)}
                   options={vendorOptions.map(v => ({ value: v.id, label: v.name, sublabel: v.vendor_type ? v.vendor_type.replace(/_/g,' ') : '' }))}
