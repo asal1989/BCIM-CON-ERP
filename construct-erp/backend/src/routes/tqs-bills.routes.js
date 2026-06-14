@@ -3797,5 +3797,109 @@ router.post('/repair-certified-net', async (req, res) => {
   }
 });
 
+// ── POST /tqs/bills/backfill-jv ───────────────────────────────────────────────
+// One-time backfill: post auto JVs for already-certified (accounts-processed)
+// bills that don't have one yet. Idempotent — re-running skips bills already done.
+// Body: { dry_run?: bool, project_id?: uuid, limit?: int }
+router.post('/backfill-jv', async (req, res) => {
+  try {
+    const { company_id } = req.user;
+    const dryRun = req.body?.dry_run === true || req.body?.dry_run === 'true';
+    const limit  = Math.min(parseInt(req.body?.limit) || 5000, 5000);
+    const nn = (v) => parseFloat(v || 0) || 0;
+
+    const conditions = [
+      'b.company_id = $1',
+      'b.is_deleted = FALSE',
+      'b.total_amount > 0',
+      // Accounts has processed the bill (not merely sitting at QS/accounts inbox)
+      "(u.accts_jv_date IS NOT NULL OR b.workflow_status IN ('procurement','qs_sign','paid'))",
+      // No auto JV exists yet for this bill
+      `NOT EXISTS (
+         SELECT 1 FROM journal_entries je
+         WHERE je.company_id = b.company_id
+           AND je.source = 'auto_tqs_bill'
+           AND je.reference = b.sl_number
+       )`,
+    ];
+    const params = [company_id];
+    applyProjectScope(req, conditions, params, 'b', req.body?.project_id || null);
+
+    const candidates = await query(`
+      SELECT b.id, b.sl_number, b.bill_type, b.total_amount, b.gst_amount,
+             b.vendor_name, b.wo_number, b.po_number,
+             COALESCE(u.tds_deduction, 0)   AS tds_deduction,
+             COALESCE(u.retention_money, 0) AS retention_money,
+             COALESCE(u.accts_jv_date, u.qs_certified_date, b.received_date, b.inv_date, CURRENT_DATE) AS jv_date
+      FROM tqs_bills b
+      JOIN tqs_bill_updates u ON u.bill_id = b.id
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY b.created_at ASC
+      LIMIT ${limit}
+    `, params);
+
+    if (dryRun) {
+      const totalValue = candidates.rows.reduce((s, r) => s + nn(r.total_amount), 0);
+      return res.json({
+        success: true, dry_run: true,
+        eligible: candidates.rows.length,
+        total_value: totalValue,
+        sample: candidates.rows.slice(0, 10).map(r => ({
+          sl_number: r.sl_number, vendor: r.vendor_name, total: nn(r.total_amount), jv_date: r.jv_date,
+        })),
+        message: `${candidates.rows.length} bill(s) would get a JV (preview only — nothing posted).`,
+      });
+    }
+
+    let posted = 0, skipped = 0;
+    const failures = [];
+    for (const bill of candidates.rows) {
+      const total       = nn(bill.total_amount);
+      const gst         = nn(bill.gst_amount);
+      const expenseBase = total - gst;
+      const tds         = nn(bill.tds_deduction);
+      const retention   = nn(bill.retention_money);
+      const apCredit    = total - tds - retention;
+      const isWO        = (bill.bill_type === 'wo') || (!!bill.wo_number && !bill.po_number);
+      const expenseCode = isWO ? '5100' : '5000';
+      const ref         = bill.sl_number;
+
+      const lines = [
+        { code: expenseCode, debit: expenseBase, description: `${isWO ? 'Subcontractor' : 'Material'} — ${bill.vendor_name || ''} ${ref}` },
+      ];
+      if (gst > 0)       lines.push({ code: '1300', debit: gst, description: `Input GST / ITC — ${ref}` });
+      lines.push({ code: '2000', credit: apCredit, description: `Payable to ${bill.vendor_name || 'vendor'} — ${ref}` });
+      if (tds > 0)       lines.push({ code: '2200', credit: tds, description: `TDS deducted — ${ref}` });
+      if (retention > 0) lines.push({ code: '2300', credit: retention, description: `Retention withheld — ${ref}` });
+
+      const jeId = await postAutoJournalStandalone({
+        companyId: company_id,
+        userId:    req.user.id,
+        entryDate: bill.jv_date,
+        reference: ref,
+        narration: `Bill booking (backfill) — ${bill.vendor_name || ''} (${ref})`,
+        source:    'auto_tqs_bill',
+        lines,
+      });
+      if (jeId) posted++;
+      else { skipped++; failures.push(ref); }
+    }
+
+    res.json({
+      success: true,
+      eligible: candidates.rows.length,
+      posted,
+      skipped,
+      skipped_refs: failures.slice(0, 20),
+      message: skipped
+        ? `Posted ${posted} JV(s); skipped ${skipped} (Chart of Accounts may be missing codes — seed it and re-run).`
+        : `Posted ${posted} JV(s) for previously-certified bills.`,
+    });
+  } catch (err) {
+    console.error('[backfill-jv]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
 

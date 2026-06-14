@@ -1272,6 +1272,7 @@ export const tqsBillsAPI = {
   deleteFile:   (id, fid)  => api.delete(`/tqs/bills/${id}/files/${fid}`),
   delete:       (id)       => api.delete(`/tqs/bills/${id}`),
   repairCertifiedNet: ()  => api.post('/tqs/bills/repair-certified-net'),
+  backfillJV:   (data)    => api.post('/tqs/bills/backfill-jv', data || {}),
   // ── Import ──
   downloadTemplate: ()         => api.get('/tqs/bills/import/template', { responseType: 'blob' }),
   bulkImport:       (fd)       => api.post('/tqs/bills/bulk-import', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),

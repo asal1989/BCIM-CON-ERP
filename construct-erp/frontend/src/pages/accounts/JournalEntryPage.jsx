@@ -8,7 +8,7 @@ import {
   ScrollText, Plus, X, Trash2, Check, ChevronRight, Download,
   Zap, RefreshCw, Play, ToggleLeft, ToggleRight, Calendar, BookOpen
 } from 'lucide-react';
-import { journalEntryAPI, chartOfAccountsAPI } from '../../api/client';
+import { journalEntryAPI, chartOfAccountsAPI, tqsBillsAPI } from '../../api/client';
 import { inr } from '../dashboards/DashKPI';
 import { downloadCsv, downloadPdf } from '../../utils/exportCsv';
 
@@ -360,6 +360,29 @@ function AutomationLogTab() {
     if (full) setViewRecord(full);
   };
 
+  const [backfilling, setBackfilling] = useState(false);
+  const handleBackfill = async () => {
+    setBackfilling(true);
+    try {
+      // 1) Dry run to preview how many old bills qualify
+      const prev = await tqsBillsAPI.backfillJV({ dry_run: true }).then(r => r.data);
+      if (!prev?.eligible) { toast.success('No old bills need a JV — all caught up.'); return; }
+      const ok = window.confirm(
+        `${prev.eligible} previously-certified bill(s) totalling ₹${Number(prev.total_value || 0).toLocaleString('en-IN')} have no journal voucher yet.\n\nPost JVs for all of them now?`
+      );
+      if (!ok) return;
+      // 2) Real run
+      const res = await tqsBillsAPI.backfillJV({}).then(r => r.data);
+      toast.success(res?.message || `Posted ${res?.posted ?? 0} JV(s)`);
+      if (res?.skipped) toast.error(`${res.skipped} skipped — check Chart of Accounts is seeded, then run again.`);
+      refetch();
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Backfill failed');
+    } finally {
+      setBackfilling(false);
+    }
+  };
+
   const stats = useMemo(() => {
     const bySource = {};
     rows.forEach(r => { bySource[r.source] = (bySource[r.source] || 0) + 1; });
@@ -399,6 +422,11 @@ function AutomationLogTab() {
           value={filters.to} onChange={e => setFilters(f => ({ ...f, to: e.target.value }))} />
         <button onClick={() => refetch()} className="flex items-center gap-1 px-3 py-2 text-sm border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50">
           <RefreshCw className="w-3.5 h-3.5" /> Refresh
+        </button>
+        <button onClick={handleBackfill} disabled={backfilling}
+          title="Post JVs for previously-certified bill-tracker bills that don't have one yet"
+          className="flex items-center gap-1 px-3 py-2 text-sm border border-indigo-200 bg-indigo-50 text-indigo-700 rounded-md hover:bg-indigo-100 disabled:opacity-50">
+          <Zap className="w-3.5 h-3.5" /> {backfilling ? 'Backfilling…' : 'Backfill Bill JVs'}
         </button>
         <span className="ml-auto text-xs text-slate-400">{rows.length} entries</span>
       </div>
