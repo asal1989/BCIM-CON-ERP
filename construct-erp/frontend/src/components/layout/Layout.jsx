@@ -136,6 +136,7 @@ const navGroups = [
     { to: '/accounts/taxes/gst',                icon: DollarSign,      label: 'GST' },
     { to: '/accounts/taxes/tds',                icon: ShieldCheck,     label: 'TDS' },
     { to: '/accounts/documents',                icon: FolderSearch,    label: 'Documents' },
+    { to: '/accounts/settings',                 icon: Settings,        label: 'Settings' },
   ]},
   { label: 'HR & Admin', items: [
     { to: '/hr-admin',                   icon: LayoutDashboard, label: 'HR Dashboard' },
@@ -311,6 +312,7 @@ const NAV_SECTIONS = {
     { label: 'Reports',    paths: ['/accounts/reports/financial','/accounts/reports/billing','/accounts/reports/management-mis','/accounts/reports/control-dashboard','/accounts/reports/budget'] },
     { label: 'Taxes',      paths: ['/accounts/taxes/gst','/accounts/taxes/tds'] },
     { label: 'Documents',  paths: ['/accounts/documents'] },
+    { label: 'Settings',   paths: ['/accounts/settings'] },
   ],
   'HR & Admin': [
     { label: 'People',     paths: ['/hr-admin','/hr-admin/employees','/ess'] },

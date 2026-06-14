@@ -68,6 +68,7 @@ const ChartOfAccountsPage     = lazy(() => import('./pages/accounts/ChartOfAccou
 const JournalEntryPage        = lazy(() => import('./pages/accounts/JournalEntryPage'));
 const AccountTransactionsPage = lazy(() => import('./pages/accounts/AccountTransactionsPage'));
 const AccountingReportsPage   = lazy(() => import('./pages/accounts/AccountingReportsPage'));
+const AccountSettingsPage     = lazy(() => import('./pages/accounts/AccountSettingsPage'));
 const BankAccountsPage        = lazy(() => import('./pages/accounts/BankAccountsPage'));
 const CustomersPage           = lazy(() => import('./pages/accounts/CustomersPage'));
 const InvoicesPage            = lazy(() => import('./pages/accounts/InvoicesPage'));
@@ -502,6 +503,8 @@ export default function App() {
                 {/* Taxes */}
                 <Route path="accounts/taxes/gst" element={<RequireModule module="Finance"><GSTPage /></RequireModule>} />
                 <Route path="accounts/taxes/tds" element={<RequireModule module="Finance"><TDSPage /></RequireModule>} />
+                {/* Settings */}
+                <Route path="accounts/settings" element={<RequireModule module="Finance"><AccountSettingsPage /></RequireModule>} />
 
                 {/* Legacy /finance/* redirects */}
                 <Route path="finance" element={<Navigate to="/accounts" replace />} />

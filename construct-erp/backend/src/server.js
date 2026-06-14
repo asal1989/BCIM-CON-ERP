@@ -40,6 +40,7 @@ const debitNotesRoutes = require('./routes/debit-notes.routes');
 const chartOfAccountsRoutes = require('./routes/chart-of-accounts.routes');
 const journalEntriesRoutes = require('./routes/journal-entries.routes');
 const bankAccountsRoutes = require('./routes/bank-accounts.routes');
+const companySettingsRoutes = require('./routes/company-settings.routes');
 const inventoryRoutes = require('./routes/inventory.routes');
 const workerRoutes = require('./routes/worker.routes');
 const attendanceRoutes = require('./routes/attendance.routes');
@@ -277,6 +278,7 @@ app.use(`${API}/debit-notes`, debitNotesRoutes);
 app.use(`${API}/chart-of-accounts`, chartOfAccountsRoutes);
 app.use(`${API}/journal-entries`, journalEntriesRoutes);
 app.use(`${API}/bank-accounts`, bankAccountsRoutes);
+app.use(`${API}/company-settings`, companySettingsRoutes);
 app.use(`${API}/inventory`, inventoryRoutes);
 app.use(`${API}/subcontractors`, subcontractorRoutes);
 

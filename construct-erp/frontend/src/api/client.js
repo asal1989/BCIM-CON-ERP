@@ -428,6 +428,12 @@ export const bankAccountAPI = {
   remove: (id)     => api.delete(`/bank-accounts/${id}`),
 };
 
+export const companySettingsAPI = {
+  get:            ()     => api.get('/company-settings'),
+  updateProfile:  (data) => api.put('/company-settings/profile', data),
+  updateSettings: (data) => api.put('/company-settings/settings', data),
+};
+
 export const inventoryAPI = {
   list:          (params) => api.get('/inventory', { params }),
   create:        (data)   => api.post('/inventory', data),
