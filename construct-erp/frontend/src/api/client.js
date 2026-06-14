@@ -1589,4 +1589,13 @@ export const rateContractAPI = {
   delete: (id)    => api.delete(`/procurement/rate-contracts/${id}`),
 };
 
+export const stockVerifAPI = {
+  list:      (params)    => api.get('/stock-verifications', { params }),
+  get:       (id)        => api.get(`/stock-verifications/${id}`),
+  create:    (d)         => api.post('/stock-verifications', d),
+  update:    (id, d)     => api.patch(`/stock-verifications/${id}`, d),
+  remove:    (id)        => api.delete(`/stock-verifications/${id}`),
+  saveItems: (id, items) => api.put(`/stock-verifications/${id}/items`, { items }),
+};
+
 export default api;

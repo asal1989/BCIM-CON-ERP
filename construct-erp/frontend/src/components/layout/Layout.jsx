@@ -303,6 +303,7 @@ const NAV_SECTIONS = {
     { label: 'Stock Control',   paths: ['/stores/ledger','/stores/issue'] },
     { label: 'Transfer',        paths: ['/stores/mtr'] },
     { label: 'Credit Notes',    paths: ['/stores/credit-notes'] },
+    { label: 'Stock Verify',    paths: ['/stores/stock-verification'] },
     { label: 'Documents',       paths: ['/stores/documents'] },
   ],
   'Accounts': [

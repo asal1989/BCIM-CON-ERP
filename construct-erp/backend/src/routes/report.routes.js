@@ -1530,4 +1530,264 @@ router.get('/procurement/rate-contracts', async (req, res) => {
   } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
 });
 
+// ── S21: Physical Stock Verification Report ──────────────────────────────────
+router.get('/stores/stock-verification', async (req, res) => {
+  try {
+    const { project_id, from_date, to_date } = req.query;
+    const params = [req.user.company_id];
+    const conditions = ['sv.company_id = $1'];
+    applyProjectScope(req, conditions, params, 'p', project_id);
+    if (from_date) { params.push(from_date); conditions.push(`sv.verification_date >= $${params.length}`); }
+    if (to_date)   { params.push(to_date);   conditions.push(`sv.verification_date <= $${params.length}`); }
+    const { rows } = await query(`
+      SELECT
+        sv.verification_date,
+        sv.location,
+        sv.verified_by,
+        sv.status AS verification_status,
+        p.name AS project_name,
+        i.material_name,
+        i.unit,
+        ROUND(svi.book_stock::numeric, 3)     AS book_stock,
+        ROUND(svi.physical_stock::numeric, 3) AS physical_stock,
+        ROUND((svi.physical_stock - svi.book_stock)::numeric, 3) AS variance_qty,
+        ROUND(((svi.physical_stock - svi.book_stock) * COALESCE(i.unit_rate, 0))::numeric, 2) AS variance_value,
+        CASE WHEN svi.book_stock > 0
+          THEN ROUND((1 - ABS(svi.physical_stock - svi.book_stock) / svi.book_stock) * 100, 1)
+          ELSE 100
+        END AS accuracy_pct,
+        COALESCE(svi.reason, '') AS reason,
+        COALESCE(svi.adjustment_status, 'pending') AS adjustment_status,
+        sv.notes
+      FROM stock_verification_items svi
+      JOIN stock_verifications sv ON sv.id = svi.verification_id
+      JOIN inventory i ON i.id = svi.inventory_id
+      JOIN projects p ON p.id = sv.project_id
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY sv.verification_date DESC, i.material_name
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── S22: Stock Variance Report ────────────────────────────────────────────────
+router.get('/stores/stock-variance', async (req, res) => {
+  try {
+    const { project_id, from_date, to_date, variance_type } = req.query;
+    const params = [req.user.company_id];
+    const conditions = ['sv.company_id = $1'];
+    applyProjectScope(req, conditions, params, 'p', project_id);
+    if (from_date) { params.push(from_date); conditions.push(`sv.verification_date >= $${params.length}`); }
+    if (to_date)   { params.push(to_date);   conditions.push(`sv.verification_date <= $${params.length}`); }
+    // Only rows with actual variance
+    conditions.push(`svi.physical_stock <> svi.book_stock`);
+    if (variance_type === 'shortage') conditions.push(`svi.physical_stock < svi.book_stock`);
+    if (variance_type === 'excess')   conditions.push(`svi.physical_stock > svi.book_stock`);
+    const { rows } = await query(`
+      SELECT
+        sv.verification_date,
+        COALESCE(sv.location, i.site_location, '-') AS location,
+        p.name AS project_name,
+        i.material_name,
+        i.unit,
+        ROUND(svi.book_stock::numeric, 3)     AS book_stock,
+        ROUND(svi.physical_stock::numeric, 3) AS physical_stock,
+        ROUND((svi.physical_stock - svi.book_stock)::numeric, 3) AS variance_qty,
+        ROUND(((svi.physical_stock - svi.book_stock) * COALESCE(i.unit_rate, 0))::numeric, 2) AS variance_value,
+        CASE WHEN svi.physical_stock < svi.book_stock THEN 'Shortage' ELSE 'Excess' END AS variance_type,
+        CASE WHEN svi.book_stock > 0
+          THEN ROUND(ABS(svi.physical_stock - svi.book_stock) / svi.book_stock * 100, 1)
+          ELSE 0
+        END AS variance_pct,
+        COALESCE(svi.reason, '') AS reason,
+        COALESCE(svi.adjustment_status, 'pending') AS adjustment_status
+      FROM stock_verification_items svi
+      JOIN stock_verifications sv ON sv.id = svi.verification_id
+      JOIN inventory i ON i.id = svi.inventory_id
+      JOIN projects p ON p.id = sv.project_id
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY ABS(svi.physical_stock - svi.book_stock) * COALESCE(i.unit_rate, 0) DESC
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── S24: BOQ vs Material Consumption ─────────────────────────────────────────
+router.get('/stores/boq-vs-consumption', async (req, res) => {
+  try {
+    const { project_id, from_date, to_date } = req.query;
+    const params = [req.user.company_id];
+    const conditions = ['p.company_id = $1', 'b.is_active = TRUE'];
+    applyProjectScope(req, conditions, params, 'p', project_id);
+    let dateClause = '';
+    if (from_date) { params.push(from_date); dateClause += ` AND min2.issue_date >= $${params.length}`; }
+    if (to_date)   { params.push(to_date);   dateClause += ` AND min2.issue_date <= $${params.length}`; }
+    const { rows } = await query(`
+      WITH consumption AS (
+        SELECT
+          lower(trim(mi.material_name)) AS material_key,
+          min2.project_id,
+          SUM(mi.quantity_issued) AS consumed_qty,
+          CASE WHEN SUM(mi.quantity_issued) > 0
+            THEN SUM(COALESCE(mi.amount, 0)) / SUM(mi.quantity_issued)
+            ELSE 0
+          END AS avg_rate
+        FROM min_items mi
+        JOIN material_issue_notes min2 ON min2.id = mi.min_id
+        WHERE min2.project_id IN (
+          SELECT id FROM projects WHERE company_id = $1
+        ) ${dateClause}
+        GROUP BY lower(trim(mi.material_name)), min2.project_id
+      )
+      SELECT
+        b.chapter_no,
+        b.chapter_name,
+        b.item_no,
+        b.description AS boq_item,
+        b.unit,
+        p.name AS project_name,
+        ROUND(b.quantity::numeric, 3)  AS boq_qty,
+        ROUND(b.rate::numeric, 2)      AS boq_rate,
+        ROUND(COALESCE(c.consumed_qty, 0)::numeric, 3) AS consumed_qty,
+        ROUND((COALESCE(c.consumed_qty, 0) - b.quantity)::numeric, 3) AS variance_qty,
+        CASE WHEN b.quantity > 0
+          THEN ROUND(((COALESCE(c.consumed_qty, 0) - b.quantity) / b.quantity) * 100, 1)
+          ELSE 0
+        END AS variance_pct,
+        ROUND((b.quantity * b.rate)::numeric, 2) AS estimated_value,
+        ROUND((COALESCE(c.consumed_qty, 0) * COALESCE(c.avg_rate, b.rate, 0))::numeric, 2) AS actual_value
+      FROM boq_items b
+      JOIN projects p ON p.id = b.project_id
+      LEFT JOIN consumption c ON c.material_key = lower(trim(b.description))
+        AND c.project_id = b.project_id
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY p.name, b.chapter_no, b.item_no
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── P15: Procurement Cost Analysis by Cost Head ───────────────────────────────
+router.get('/procurement/costhead-analysis', async (req, res) => {
+  try {
+    const { project_id, from_date, to_date } = req.query;
+    const params = [req.user.company_id];
+    const conditions = ['po.company_id = $1', "COALESCE(po.status,'') NOT IN ('cancelled','rejected')"];
+    if (project_id) { params.push(project_id); conditions.push(`po.project_id = $${params.length}`); }
+    else {
+      params.push(req.user.company_id);
+      conditions.push(`po.project_id IN (SELECT id FROM projects WHERE company_id = $${params.length})`);
+    }
+    if (from_date) { params.push(from_date); conditions.push(`po.po_date >= $${params.length}`); }
+    if (to_date)   { params.push(to_date);   conditions.push(`po.po_date <= $${params.length}`); }
+    const { rows } = await query(`
+      WITH po_ch AS (
+        SELECT
+          po.project_id,
+          COALESCE(po.cost_head,
+            CASE v.vendor_type
+              WHEN 'subcontractor'      THEN 'Subcontracting - Civil'
+              WHEN 'equipment_supplier' THEN 'Plant & Machinery - Hired'
+              WHEN 'labour_contractor'  THEN 'Labour - Skilled'
+              WHEN 'service_provider'   THEN 'Site Overhead'
+              ELSE 'Material - Concrete & Aggregates'
+            END
+          ) AS cost_head,
+          po.grand_total
+        FROM purchase_orders po
+        JOIN vendors v ON v.id = po.vendor_id
+        WHERE ${conditions.join(' AND ')}
+      )
+      SELECT
+        p.name         AS project_name,
+        pc.cost_head,
+        COALESCE(bi.budgeted_amount, 0)  AS budgeted_amount,
+        SUM(pc.grand_total)              AS procured_value,
+        COUNT(*)::int                    AS po_count,
+        CASE WHEN COALESCE(bi.budgeted_amount, 0) > 0
+          THEN ROUND((SUM(pc.grand_total) / bi.budgeted_amount) * 100, 1)
+          ELSE 0
+        END AS pct_consumed,
+        COALESCE(bi.budgeted_amount, 0) - SUM(pc.grand_total) AS variance
+      FROM po_ch pc
+      JOIN projects p ON p.id = pc.project_id
+      LEFT JOIN budget_items bi ON bi.project_id = pc.project_id AND bi.cost_head = pc.cost_head
+      GROUP BY p.name, pc.cost_head, bi.budgeted_amount
+      ORDER BY p.name, SUM(pc.grand_total) DESC
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── P16: Budget vs Procurement (committed + received + paid) ──────────────────
+router.get('/procurement/budget-vs-procurement', async (req, res) => {
+  try {
+    const { project_id } = req.query;
+    const params = [req.user.company_id];
+    const conditions = ['p.company_id = $1', 'p.is_active = TRUE'];
+    applyProjectScope(req, conditions, params, 'p', project_id);
+    const { rows } = await query(`
+      WITH po_committed AS (
+        SELECT
+          po.project_id,
+          COALESCE(po.cost_head,
+            CASE v.vendor_type
+              WHEN 'subcontractor'      THEN 'Subcontracting - Civil'
+              WHEN 'equipment_supplier' THEN 'Plant & Machinery - Hired'
+              WHEN 'labour_contractor'  THEN 'Labour - Skilled'
+              WHEN 'service_provider'   THEN 'Site Overhead'
+              ELSE 'Material - Concrete & Aggregates'
+            END
+          ) AS cost_head,
+          SUM(COALESCE(po.grand_total, 0)) AS committed_value
+        FROM purchase_orders po
+        JOIN vendors v ON v.id = po.vendor_id
+        WHERE po.project_id IN (SELECT id FROM projects WHERE company_id = $1)
+          AND COALESCE(po.status, '') NOT IN ('cancelled', 'rejected')
+        GROUP BY po.project_id, 2
+      ),
+      grn_received AS (
+        SELECT
+          po.project_id,
+          COALESCE(po.cost_head,
+            CASE v.vendor_type
+              WHEN 'subcontractor'      THEN 'Subcontracting - Civil'
+              WHEN 'equipment_supplier' THEN 'Plant & Machinery - Hired'
+              WHEN 'labour_contractor'  THEN 'Labour - Skilled'
+              WHEN 'service_provider'   THEN 'Site Overhead'
+              ELSE 'Material - Concrete & Aggregates'
+            END
+          ) AS cost_head,
+          SUM(COALESCE(gi.quantity_received * poi.rate, 0)) AS received_value
+        FROM grn_items gi
+        JOIN grn g ON g.id = gi.grn_id AND g.quality_status NOT IN ('rejected')
+        JOIN po_items poi ON poi.id = gi.po_item_id
+        JOIN purchase_orders po ON po.id = poi.po_id
+        JOIN vendors v ON v.id = po.vendor_id
+        WHERE po.project_id IN (SELECT id FROM projects WHERE company_id = $1)
+        GROUP BY po.project_id, 2
+      )
+      SELECT
+        p.name        AS project_name,
+        b.cost_head,
+        COALESCE(b.budgeted_amount, 0)  AS budgeted_amount,
+        COALESCE(pc.committed_value, 0) AS committed_value,
+        COALESCE(gr.received_value, 0)  AS received_value,
+        COALESCE(b.actual_amount, 0)    AS bill_paid_actual,
+        CASE WHEN COALESCE(b.budgeted_amount, 0) > 0
+          THEN ROUND((COALESCE(pc.committed_value, 0) / b.budgeted_amount) * 100, 1)
+          ELSE 0
+        END AS committed_pct,
+        COALESCE(b.budgeted_amount, 0) - GREATEST(COALESCE(pc.committed_value, 0), COALESCE(b.actual_amount, 0)) AS remaining_budget
+      FROM projects p
+      JOIN budget_items b ON b.project_id = p.id
+      LEFT JOIN po_committed pc ON pc.project_id = p.id AND pc.cost_head = b.cost_head
+      LEFT JOIN grn_received gr ON gr.project_id = p.id AND gr.cost_head = b.cost_head
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY p.name, b.cost_head
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
 module.exports = router;
