@@ -1900,37 +1900,37 @@ export default function POPage() {
   };
 
   const stats = [
-    { key: 'pending',        label: 'Pending Audit', icon: Clock,        dot: 'bg-yellow-400'  },
-    { key: 'verified_audit', label: 'Audit OK',       icon: UserCheck,    dot: 'bg-blue-400'    },
-    { key: 'released_mgmt',  label: 'Mgmt Released',  icon: Building2,    dot: 'bg-violet-400'  },
-    { key: 'approved',       label: 'Authorized',     icon: CheckCircle2, dot: 'bg-emerald-400' },
-    { key: 'part_received',  label: 'Receiving',      icon: Package,      dot: 'bg-cyan-400'    },
-    { key: 'fully_received', label: 'Received',       icon: Check,        dot: 'bg-green-400'   },
+    { key: 'pending',        label: 'Pending Audit', icon: Clock,        iconBg: 'bg-amber-50',   iconText: 'text-amber-600'   },
+    { key: 'verified_audit', label: 'Audit OK',       icon: UserCheck,    iconBg: 'bg-blue-50',    iconText: 'text-blue-600'    },
+    { key: 'released_mgmt',  label: 'Mgmt Released',  icon: Building2,    iconBg: 'bg-violet-50',  iconText: 'text-violet-600'  },
+    { key: 'approved',       label: 'Authorized',     icon: CheckCircle2, iconBg: 'bg-emerald-50', iconText: 'text-emerald-600' },
+    { key: 'part_received',  label: 'Receiving',      icon: Package,      iconBg: 'bg-cyan-50',    iconText: 'text-cyan-600'    },
+    { key: 'fully_received', label: 'Received',       icon: Check,        iconBg: 'bg-green-50',   iconText: 'text-green-600'   },
   ];
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto min-h-screen bg-[#f4f6f9]">
+    <div className="p-6 md:p-8 max-w-7xl mx-auto min-h-screen bg-slate-50">
 
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
-          <div className="flex items-center gap-2 text-xs text-slate-900 font-medium mb-1">
+          <div className="flex items-center gap-2 text-xs text-slate-400 font-medium mb-1">
             <ShoppingCart className="w-3.5 h-3.5" /> Procurement
           </div>
-          <h1 className="text-2xl font-medium text-slate-900">Purchase Orders</h1>
-          <p className="text-sm text-slate-900 font-medium mt-0.5">4-stage authorization workflow</p>
+          <h1 className="text-2xl font-semibold text-slate-800">Purchase Orders</h1>
+          <p className="text-sm text-slate-400 mt-0.5">4-stage authorization workflow</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={exportCSV}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-900 text-sm font-medium rounded-lg hover:border-slate-300 transition-all shadow-sm">
+            className="flex items-center gap-2 px-4 h-9 bg-white border border-slate-300 text-slate-600 text-sm font-medium rounded-md hover:bg-slate-50 transition-colors">
             <Download className="w-4 h-4" /> Export CSV
           </button>
           <button onClick={() => setShowImport(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-indigo-200 text-indigo-600 text-sm font-medium rounded-lg hover:bg-indigo-50 transition-all shadow-sm">
+            className="flex items-center gap-2 px-4 h-9 bg-white border border-blue-200 text-blue-600 text-sm font-medium rounded-md hover:bg-blue-50 transition-colors">
             <Upload className="w-4 h-4" /> Import Excel
           </button>
           <button onClick={() => { setPrefillData(null); setShowForm(true); }}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-all shadow-sm">
+            className="flex items-center gap-2 px-4 h-9 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors">
             <Plus className="w-4 h-4" /> New Purchase Order
           </button>
         </div>
@@ -1948,22 +1948,21 @@ export default function POPage() {
       )}
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-        {stats.map(({ key, label, icon: Icon, dot }) => {
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+        {stats.map(({ key, label, icon: Icon, iconBg, iconText }) => {
           const count = poData.filter(p => p.status === key).length;
           return (
             <button key={key}
               onClick={() => setStatusFilter(statusFilter === key ? 'all' : key)}
               className={clsx(
-                'bg-white border rounded-xl p-4 text-left shadow-sm transition-all hover:shadow-md',
-                statusFilter === key ? 'border-indigo-400 ring-2 ring-indigo-100' : 'border-slate-200'
+                'bg-white border rounded-md p-4 text-left transition-colors',
+                statusFilter === key ? 'border-blue-400 ring-1 ring-blue-100' : 'border-slate-200 hover:border-slate-300'
               )}>
-              <div className="flex items-center justify-between mb-2">
-                <Icon className="w-4 h-4 text-slate-400" />
-                <span className={clsx('w-2 h-2 rounded-full', dot)} />
+              <div className={clsx('w-8 h-8 rounded-md flex items-center justify-center mb-3', iconBg)}>
+                <Icon className={clsx('w-4 h-4', iconText)} />
               </div>
-              <div className="text-2xl font-medium text-slate-900">{count}</div>
-              <div className="text-xs text-slate-900 font-medium mt-0.5">{label}</div>
+              <div className="text-2xl font-semibold text-slate-800">{count}</div>
+              <div className="text-xs text-slate-400 mt-0.5">{label}</div>
             </button>
           );
         })}

@@ -1393,27 +1393,27 @@ export default function WorkOrderPage() {
       <div className="bg-white border-b border-slate-200 px-6 py-4">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-1.5 text-xs text-slate-900 font-medium mb-1">
+            <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium mb-1">
               <Hammer className="w-3.5 h-3.5" />
               <span>Procurement</span>
               <ChevronRight className="w-3 h-3" />
-              <span className="text-slate-900 font-medium">Work Orders</span>
+              <span className="text-slate-400">Work Orders</span>
             </div>
-            <h1 className="text-2xl font-medium text-slate-900 tracking-tight">Work Orders</h1>
-            <p className="text-sm text-slate-900 font-medium mt-0.5">Subcontractor & labour work order management</p>
+            <h1 className="text-2xl font-semibold text-slate-800 tracking-tight">Work Orders</h1>
+            <p className="text-sm text-slate-400 mt-0.5">Subcontractor & labour work order management</p>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
             <button onClick={() => setShowPdfImport(true)}
-              className="flex items-center gap-2 px-3.5 py-2 bg-white border border-slate-200 text-slate-900 text-sm font-medium rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm">
+              className="flex items-center gap-2 px-3.5 h-9 bg-white border border-slate-300 text-slate-600 text-sm font-medium rounded-md hover:bg-slate-50 transition-colors">
               <FileText className="w-3.5 h-3.5" /> Import PDF
             </button>
             <button onClick={() => setShowExcelImport(true)}
-              className="flex items-center gap-2 px-3.5 py-2 bg-white border border-emerald-200 text-emerald-700 text-sm font-medium rounded-lg hover:bg-emerald-50 transition-all shadow-sm">
+              className="flex items-center gap-2 px-3.5 h-9 bg-white border border-emerald-200 text-emerald-700 text-sm font-medium rounded-md hover:bg-emerald-50 transition-colors">
               <FileSpreadsheet className="w-3.5 h-3.5" /> Import Excel
             </button>
             <button onClick={() => setShowCreate(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow-sm transition-all">
+              className="flex items-center gap-2 px-4 h-9 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors">
               <Plus className="w-3.5 h-3.5" /> New Work Order
             </button>
           </div>
@@ -1423,19 +1423,19 @@ export default function WorkOrderPage() {
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
 
         {/* ── KPI Cards ── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
-            { label: 'Total WOs',     value: allWOs.length,   accent: 'border-indigo-500',  bg: 'bg-indigo-50',  text: 'text-indigo-700',  icon: FileText },
-            { label: 'Total Value',   value: `₹${inr(totalValue)}`, accent: 'border-blue-500', bg: 'bg-blue-50', text: 'text-blue-700', icon: IndianRupee },
-            { label: 'Pending Appvl', value: pendingCount,    accent: 'border-amber-500',   bg: 'bg-amber-50',   text: 'text-amber-700',   icon: Clock },
-            { label: 'Approved',      value: approvedCount,   accent: 'border-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-700', icon: CheckCircle2 },
-          ].map(({ label, value, accent, bg, text, icon: Icon }) => (
-            <div key={label} className={`bg-white border border-slate-200 rounded-xl p-4 shadow-sm border-l-4 ${accent}`}>
-              <div className={`inline-flex items-center justify-center w-8 h-8 rounded-lg ${bg} mb-2`}>
-                <Icon className={`w-4 h-4 ${text}`} />
+            { label: 'Total WOs',     value: allWOs.length,         iconBg: 'bg-blue-50',    iconText: 'text-blue-600',    icon: FileText },
+            { label: 'Total Value',   value: `₹${inr(totalValue)}`, iconBg: 'bg-indigo-50',  iconText: 'text-indigo-600',  icon: IndianRupee },
+            { label: 'Pending Appvl', value: pendingCount,          iconBg: 'bg-amber-50',   iconText: 'text-amber-600',   icon: Clock },
+            { label: 'Approved',      value: approvedCount,         iconBg: 'bg-emerald-50', iconText: 'text-emerald-600', icon: CheckCircle2 },
+          ].map(({ label, value, iconBg, iconText, icon: Icon }) => (
+            <div key={label} className="bg-white border border-slate-200 rounded-md p-4">
+              <div className={`w-8 h-8 rounded-md flex items-center justify-center mb-3 ${iconBg}`}>
+                <Icon className={`w-4 h-4 ${iconText}`} />
               </div>
-              <div className={`text-xl font-medium font-mono ${text}`}>{value}</div>
-              <div className="text-xs text-slate-900 font-medium mt-0.5">{label}</div>
+              <div className="text-xl font-semibold font-mono text-slate-800">{value}</div>
+              <div className="text-xs text-slate-400 mt-0.5">{label}</div>
             </div>
           ))}
         </div>
