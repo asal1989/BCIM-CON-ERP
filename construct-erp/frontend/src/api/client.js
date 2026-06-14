@@ -411,6 +411,7 @@ export const chartOfAccountsAPI = {
   remove: (id)     => api.delete(`/chart-of-accounts/${id}`),
   seed:   ()       => api.post('/chart-of-accounts/seed'),
   transactions: (id) => api.get(`/chart-of-accounts/${id}/transactions`),
+  taxMonthlySummary: (params) => api.get('/chart-of-accounts/tax/monthly-summary', { params }),
 };
 
 export const journalEntryAPI = {
@@ -859,6 +860,8 @@ export const reportAPI = {
   boqActual:     (params) => api.get('/reports/boq-actual', { params }),
   safetyReport:  (params) => api.get('/reports/safety', { params }),
   projectPL:     (params) => api.get('/reports/project-pl', { params }),
+  arAging:       (params) => api.get('/reports/ar-aging', { params }),
+  apAging:       (params) => api.get('/reports/ap-aging', { params }),
 };
 
 export const uploadAPI = {

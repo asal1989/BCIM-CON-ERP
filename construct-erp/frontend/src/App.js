@@ -482,6 +482,7 @@ export default function App() {
                 <Route path="accounts/sales/customers" element={<RequireModule module="Finance"><CustomersPage /></RequireModule>} />
                 <Route path="accounts/sales/invoices" element={<RequireModule module="Finance"><InvoicesPage /></RequireModule>} />
                 <Route path="accounts/sales/receipts" element={<RequireModule module="Finance"><ClientAdvanceRequestsPage /></RequireModule>} />
+                <Route path="accounts/sales/proforma-invoices" element={<RequireModule module="Finance"><ClientAdvanceRequestsPage /></RequireModule>} />
                 <Route path="accounts/sales/credit-notes" element={<RequireModule module="Finance"><CreditNotePage /></RequireModule>} />
                 <Route path="accounts/sales/statements" element={<RequireModule module="Finance"><CustomerStatementsPage /></RequireModule>} />
                 {/* Purchases / Payables */}

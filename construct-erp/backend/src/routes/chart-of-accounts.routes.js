@@ -133,6 +133,43 @@ router.get('/:id/transactions', authenticate, async (req, res) => {
   }
 });
 
+// ── TAX SUMMARY (monthly GST/TDS movement for return filing) ──────────────────
+router.get('/tax/monthly-summary', authenticate, async (req, res) => {
+  try {
+    const { year } = req.query;
+    const yr = parseInt(year) || new Date().getFullYear();
+
+    const r = await query(
+      `SELECT to_char(je.entry_date, 'YYYY-MM') AS month,
+              coa.code,
+              SUM(jel.debit) AS debit, SUM(jel.credit) AS credit
+       FROM journal_entry_lines jel
+       JOIN journal_entries je ON je.id = jel.journal_entry_id
+       JOIN chart_of_accounts coa ON coa.id = jel.account_id
+       WHERE je.company_id = $1 AND je.status = 'posted'
+         AND coa.code IN ('2100','1300','2200')
+         AND EXTRACT(YEAR FROM je.entry_date) = $2
+       GROUP BY 1, 2
+       ORDER BY 1`,
+      [req.user.company_id, yr]
+    );
+
+    const months = {};
+    r.rows.forEach(row => {
+      const m = months[row.month] ||= { month: row.month, output_gst: 0, input_gst: 0, tds_payable: 0 };
+      const net = parseFloat(row.credit) - parseFloat(row.debit);
+      if (row.code === '2100') m.output_gst += net;     // liability: credit increases
+      if (row.code === '1300') m.input_gst += -net;     // asset: debit increases
+      if (row.code === '2200') m.tds_payable += net;    // liability
+    });
+
+    const data = Object.values(months).map(m => ({ ...m, net_gst_payable: m.output_gst - m.input_gst }));
+    res.json({ data });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── SEED standard COA (only if empty) ─────────────────────────────────────────
 router.post('/seed', authenticate, async (req, res) => {
   try {

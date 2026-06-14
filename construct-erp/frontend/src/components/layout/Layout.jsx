@@ -116,6 +116,7 @@ const navGroups = [
     { to: '/accounts/banking/petty-cash',       icon: Coins,           label: 'Petty Cash' },
     { to: '/accounts/sales/customers',          icon: Users,           label: 'Customers' },
     { to: '/accounts/sales/invoices',           icon: FileText,        label: 'Invoices' },
+    { to: '/accounts/sales/proforma-invoices',  icon: FileText,        label: 'Proforma Invoices' },
     { to: '/accounts/sales/receipts',           icon: Receipt,         label: 'Receipts' },
     { to: '/accounts/sales/credit-notes',       icon: TrendingDown,    label: 'Credit Notes' },
     { to: '/accounts/sales/statements',         icon: Receipt,         label: 'Customer Statements' },
@@ -307,7 +308,7 @@ const NAV_SECTIONS = {
   'Accounts': [
     { label: 'Dashboard',  paths: ['/accounts'] },
     { label: 'Banking',    paths: ['/accounts/banking/accounts','/accounts/banking/reconciliation','/accounts/banking/cash-flow','/accounts/banking/cheque-tracker','/accounts/banking/petty-cash'] },
-    { label: 'Sales',      paths: ['/accounts/sales/customers','/accounts/sales/invoices','/accounts/sales/receipts','/accounts/sales/credit-notes','/accounts/sales/statements'] },
+    { label: 'Sales',      paths: ['/accounts/sales/customers','/accounts/sales/invoices','/accounts/sales/proforma-invoices','/accounts/sales/receipts','/accounts/sales/credit-notes','/accounts/sales/statements'] },
     { label: 'Purchases',  paths: ['/accounts/purchases/vendors','/accounts/purchases/bills','/accounts/purchases/bills/booking','/accounts/purchases/payments-made','/accounts/purchases/payment-run','/accounts/purchases/debit-notes'] },
     { label: 'Accountant', paths: ['/accounts/accountant/chart-of-accounts','/accounts/accountant/journal-entries','/accounts/accountant/transactions'] },
     { label: 'Reports',    paths: ['/accounts/reports/financial','/accounts/reports/billing','/accounts/reports/management-mis','/accounts/reports/control-dashboard','/accounts/reports/budget'] },

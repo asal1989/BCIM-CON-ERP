@@ -2,19 +2,67 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { clsx } from 'clsx';
-import { BarChart3, Scale, FileBarChart, Download } from 'lucide-react';
-import { chartOfAccountsAPI } from '../../api/client';
+import { BarChart3, Scale, FileBarChart, Download, FileDown, Clock3, Wallet } from 'lucide-react';
+import { chartOfAccountsAPI, reportAPI } from '../../api/client';
 import { inr } from '../dashboards/DashKPI';
-import { downloadCsv } from '../../utils/exportCsv';
+import { downloadCsv, downloadPdf } from '../../utils/exportCsv';
 import dayjs from 'dayjs';
 
 const TABS = [
   { key: 'trial-balance', label: 'Trial Balance', icon: Scale },
   { key: 'pnl', label: 'Profit & Loss', icon: BarChart3 },
   { key: 'balance-sheet', label: 'Balance Sheet', icon: FileBarChart },
+  { key: 'ar-aging', label: 'Aged Receivables', icon: Clock3 },
+  { key: 'ap-aging', label: 'Aged Payables', icon: Wallet },
 ];
 
-const DEBIT_TYPES = ['asset', 'expense'];
+const AGE_BUCKETS = ['current', '1-30', '31-60', '61-90', '90+'];
+const AGE_LABELS = { current: 'Current', '1-30': '1-30 days', '31-60': '31-60 days', '61-90': '61-90 days', '90+': '90+ days' };
+
+function AgingTable({ rows, buckets, total, dateLabel, nameLabel, amountLabel }) {
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {AGE_BUCKETS.map(b => (
+          <div key={b} className="bg-white border border-slate-200 rounded-md p-4">
+            <div className="text-xs text-slate-400">{AGE_LABELS[b]}</div>
+            <div className="text-lg font-semibold text-slate-800 mt-1">{inr(buckets?.[b] || 0)}</div>
+          </div>
+        ))}
+      </div>
+      <div className="bg-white border border-slate-200 rounded-md overflow-hidden">
+        {rows.length === 0 ? (
+          <p className="px-4 py-10 text-sm text-slate-400 text-center">No outstanding items</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 bg-slate-50">
+                {[nameLabel, dateLabel, 'Age (days)', 'Bucket', amountLabel].map(h => (
+                  <th key={h} className="px-4 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider text-slate-400">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {rows.map(r => (
+                <tr key={r.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-2 text-slate-800">{r.party}<div className="text-[11px] text-slate-400">{r.ref}</div></td>
+                  <td className="px-4 py-2 text-slate-600 whitespace-nowrap">{dayjs(r.date).format('DD MMM YYYY')}</td>
+                  <td className="px-4 py-2 text-slate-600">{r.age_days}</td>
+                  <td className="px-4 py-2 text-slate-500 text-xs">{AGE_LABELS[r.bucket]}</td>
+                  <td className="px-4 py-2 text-right font-mono font-semibold text-slate-800">{inr(r.amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <div className="flex items-center justify-between px-4 py-2.5 border-t border-slate-100 bg-slate-50">
+          <span className="text-sm font-semibold text-slate-800">Total Outstanding</span>
+          <span className="text-sm font-mono font-semibold text-slate-800">{inr(total)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function Section({ title, rows, total, totalLabel }) {
   return (
@@ -51,8 +99,29 @@ export default function AccountingReportsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['chart-of-accounts', 'reports'],
     queryFn: () => chartOfAccountsAPI.list().then(r => r.data),
+    enabled: !['ar-aging', 'ap-aging'].includes(tab),
   });
   const rows = (data?.data ?? []).filter(a => a.is_active !== false);
+
+  const { data: arData, isLoading: arLoading } = useQuery({
+    queryKey: ['ar-aging'],
+    queryFn: () => reportAPI.arAging().then(r => r.data),
+    enabled: tab === 'ar-aging',
+  });
+  const { data: apData, isLoading: apLoading } = useQuery({
+    queryKey: ['ap-aging'],
+    queryFn: () => reportAPI.apAging().then(r => r.data),
+    enabled: tab === 'ap-aging',
+  });
+
+  const arRows = (arData?.data ?? []).map(r => ({
+    id: r.id, party: r.client_name || r.project_name, ref: r.bill_number,
+    date: r.bill_date, age_days: r.age_days, bucket: r.bucket, amount: r.net_payable,
+  }));
+  const apRows = (apData?.data ?? []).map(r => ({
+    id: r.id, party: r.vendor_name || r.project_name, ref: r.invoice_number,
+    date: r.due_date || r.invoice_date, age_days: r.age_days, bucket: r.bucket, amount: r.total_amount,
+  }));
 
   const byType = useMemo(() => {
     const g = { asset: [], liability: [], equity: [], income: [], expense: [] };
@@ -74,7 +143,9 @@ export default function AccountingReportsPage() {
   const trialDebit = sum(byType.asset) + sum(byType.expense);
   const trialCredit = -(sum(byType.liability) + sum(byType.equity) + sum(byType.income));
 
-  const exportReport = () => {
+  const reportTitle = TABS.find(t => t.key === tab)?.label || 'Report';
+
+  const buildRows = () => {
     const stamp = dayjs().format('YYYY-MM-DD');
     if (tab === 'trial-balance') {
       const lines = [['Code', 'Name', 'Type', 'Amount']];
@@ -82,14 +153,16 @@ export default function AccountingReportsPage() {
       [...byType.liability, ...byType.equity, ...byType.income].forEach(r => lines.push([r.code, r.name, 'Credit', Math.abs(Number(r.balance || 0))]));
       lines.push(['', 'Total Debit', '', trialDebit]);
       lines.push(['', 'Total Credit', '', Math.abs(trialCredit)]);
-      downloadCsv(`trial-balance-${stamp}.csv`, lines);
-    } else if (tab === 'pnl') {
+      return { lines, filename: `trial-balance-${stamp}` };
+    }
+    if (tab === 'pnl') {
       const lines = [['Code', 'Name', 'Section', 'Amount']];
       byType.income.forEach(r => lines.push([r.code, r.name, 'Income', Math.abs(Number(r.balance || 0))]));
       byType.expense.forEach(r => lines.push([r.code, r.name, 'Expense', Math.abs(Number(r.balance || 0))]));
       lines.push(['', netProfit >= 0 ? 'Net Profit' : 'Net Loss', '', Math.abs(netProfit)]);
-      downloadCsv(`profit-and-loss-${stamp}.csv`, lines);
-    } else {
+      return { lines, filename: `profit-and-loss-${stamp}` };
+    }
+    if (tab === 'balance-sheet') {
       const lines = [['Code', 'Name', 'Section', 'Amount']];
       byType.asset.forEach(r => lines.push([r.code, r.name, 'Asset', Math.abs(Number(r.balance || 0))]));
       byType.liability.forEach(r => lines.push([r.code, r.name, 'Liability', Math.abs(Number(r.balance || 0))]));
@@ -97,8 +170,27 @@ export default function AccountingReportsPage() {
       lines.push(['', 'Retained Earnings (Net Profit/Loss)', 'Equity', Math.abs(retainedEarnings)]);
       lines.push(['', 'Total Assets', '', Math.abs(totalAssets)]);
       lines.push(['', 'Total Liabilities + Equity', '', Math.abs(totalLiabilities) + Math.abs(totalEquity) + Math.abs(retainedEarnings)]);
-      downloadCsv(`balance-sheet-${stamp}.csv`, lines);
+      return { lines, filename: `balance-sheet-${stamp}` };
     }
+    if (tab === 'ar-aging') {
+      const lines = [['Customer / Project', 'Bill Number', 'Bill Date', 'Age (days)', 'Bucket', 'Amount']];
+      arRows.forEach(r => lines.push([r.party, r.ref, dayjs(r.date).format('DD MMM YYYY'), r.age_days, AGE_LABELS[r.bucket], r.amount]));
+      lines.push(['', '', '', '', 'Total', arRows.reduce((s, r) => s + Number(r.amount || 0), 0)]);
+      return { lines, filename: `aged-receivables-${stamp}` };
+    }
+    const lines = [['Vendor / Project', 'Invoice Number', 'Due Date', 'Age (days)', 'Bucket', 'Amount']];
+    apRows.forEach(r => lines.push([r.party, r.ref, dayjs(r.date).format('DD MMM YYYY'), r.age_days, AGE_LABELS[r.bucket], r.amount]));
+    lines.push(['', '', '', '', 'Total', apRows.reduce((s, r) => s + Number(r.amount || 0), 0)]);
+    return { lines, filename: `aged-payables-${stamp}` };
+  };
+
+  const exportCsv = () => {
+    const { lines, filename } = buildRows();
+    downloadCsv(`${filename}.csv`, lines);
+  };
+  const exportPdf = () => {
+    const { lines, filename } = buildRows();
+    downloadPdf(`${filename}.pdf`, reportTitle, lines);
   };
 
   return (
@@ -114,10 +206,16 @@ export default function AccountingReportsPage() {
               <p className="text-xs text-slate-400">Trial Balance, Profit &amp; Loss and Balance Sheet from posted journal entries</p>
             </div>
           </div>
-          <button onClick={exportReport}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm border border-slate-200 rounded-md text-slate-700 hover:bg-slate-50">
-            <Download className="w-3.5 h-3.5" /> Export CSV
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={exportCsv}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm border border-slate-200 rounded-md text-slate-700 hover:bg-slate-50">
+              <Download className="w-3.5 h-3.5" /> CSV
+            </button>
+            <button onClick={exportPdf}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm border border-slate-200 rounded-md text-slate-700 hover:bg-slate-50">
+              <FileDown className="w-3.5 h-3.5" /> PDF
+            </button>
+          </div>
         </div>
       </div>
 
@@ -137,10 +235,16 @@ export default function AccountingReportsPage() {
       </div>
 
       <div className="px-6 py-5">
-        {isLoading ? (
+        {(tab === 'ar-aging' && arLoading) || (tab === 'ap-aging' && apLoading) || (!['ar-aging','ap-aging'].includes(tab) && isLoading) ? (
           <div className="flex justify-center py-16">
             <div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
           </div>
+        ) : tab === 'ar-aging' ? (
+          <AgingTable rows={arRows} buckets={arData?.buckets} total={arData?.total || 0}
+            dateLabel="Bill Date" nameLabel="Customer / Project" amountLabel="Net Payable (₹)" />
+        ) : tab === 'ap-aging' ? (
+          <AgingTable rows={apRows} buckets={apData?.buckets} total={apData?.total || 0}
+            dateLabel="Due Date" nameLabel="Vendor / Project" amountLabel="Amount (₹)" />
         ) : tab === 'trial-balance' ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Section title="Debit Balances (Assets &amp; Expenses)" rows={[...byType.asset, ...byType.expense]} total={trialDebit} totalLabel="Total Debit" />

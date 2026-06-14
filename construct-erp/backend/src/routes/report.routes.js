@@ -156,6 +156,84 @@ router.get('/tds', async (req, res) => {
   }
 });
 
+// ── Aged Receivables (certified RA Bills not yet paid) ────────────────────────
+router.get('/ar-aging', async (req, res) => {
+  try {
+    const { project_id } = req.query;
+    const scopeConditions = ['p.company_id = $1'];
+    const params = [req.user.company_id];
+    applyProjectScope(req, scopeConditions, params, 'p', project_id);
+
+    const r = await query(
+      `SELECT rb.id, rb.bill_number, rb.bill_date, rb.net_payable, p.name AS project_name,
+              p.client_name, (CURRENT_DATE - rb.bill_date) AS age_days
+       FROM ra_bills rb
+       JOIN projects p ON p.id = rb.project_id
+       WHERE ${scopeConditions.join(' AND ')} AND rb.status IN ('certified','accounts_verify')
+       ORDER BY rb.bill_date ASC`,
+      params
+    );
+
+    const buckets = { current: 0, '1-30': 0, '31-60': 0, '61-90': 0, '90+': 0 };
+    const rows = r.rows.map(row => {
+      const age = parseInt(row.age_days);
+      const amt = parseFloat(row.net_payable || 0);
+      let bucket;
+      if (age <= 0) bucket = 'current';
+      else if (age <= 30) bucket = '1-30';
+      else if (age <= 60) bucket = '31-60';
+      else if (age <= 90) bucket = '61-90';
+      else bucket = '90+';
+      buckets[bucket] += amt;
+      return { ...row, age_days: age, bucket };
+    });
+
+    res.json({ data: rows, buckets, total: rows.reduce((s, r) => s + parseFloat(r.net_payable || 0), 0) });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// ── Aged Payables (unpaid vendor bills) ────────────────────────────────────────
+router.get('/ap-aging', async (req, res) => {
+  try {
+    const { project_id } = req.query;
+    const scopeConditions = ['p.company_id = $1'];
+    const params = [req.user.company_id];
+    applyProjectScope(req, scopeConditions, params, 'p', project_id);
+
+    const r = await query(
+      `SELECT i.id, i.invoice_number, i.invoice_date, i.due_date, i.total_amount,
+              v.name AS vendor_name, p.name AS project_name,
+              (CURRENT_DATE - COALESCE(i.due_date, i.invoice_date)) AS age_days
+       FROM invoices i
+       JOIN projects p ON p.id = i.project_id
+       LEFT JOIN vendors v ON v.id = i.vendor_id
+       WHERE ${scopeConditions.join(' AND ')} AND i.payment_status != 'paid' AND i.status != 'cancelled'
+       ORDER BY i.invoice_date ASC`,
+      params
+    );
+
+    const buckets = { current: 0, '1-30': 0, '31-60': 0, '61-90': 0, '90+': 0 };
+    const rows = r.rows.map(row => {
+      const age = parseInt(row.age_days);
+      const amt = parseFloat(row.total_amount || 0);
+      let bucket;
+      if (age <= 0) bucket = 'current';
+      else if (age <= 30) bucket = '1-30';
+      else if (age <= 60) bucket = '31-60';
+      else if (age <= 90) bucket = '61-90';
+      else bucket = '90+';
+      buckets[bucket] += amt;
+      return { ...row, age_days: age, bucket };
+    });
+
+    res.json({ data: rows, buckets, total: rows.reduce((s, r) => s + parseFloat(r.total_amount || 0), 0) });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
 // Vendor Ledger (DQS + Finance)
 router.get('/vendor-ledger', async (req, res) => {
   try {
