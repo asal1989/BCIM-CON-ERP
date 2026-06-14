@@ -67,6 +67,7 @@ const AccountsDashboard   = lazy(() => import('./pages/dashboards/AccountsDashbo
 const ChartOfAccountsPage     = lazy(() => import('./pages/accounts/ChartOfAccountsPage'));
 const JournalEntryPage        = lazy(() => import('./pages/accounts/JournalEntryPage'));
 const AccountTransactionsPage = lazy(() => import('./pages/accounts/AccountTransactionsPage'));
+const AccountingReportsPage   = lazy(() => import('./pages/accounts/AccountingReportsPage'));
 const BankAccountsPage        = lazy(() => import('./pages/accounts/BankAccountsPage'));
 const CustomersPage           = lazy(() => import('./pages/accounts/CustomersPage'));
 const InvoicesPage            = lazy(() => import('./pages/accounts/InvoicesPage'));
@@ -493,6 +494,7 @@ export default function App() {
                 <Route path="accounts/accountant/journal-entries" element={<RequireModule module="Finance"><JournalEntryPage /></RequireModule>} />
                 <Route path="accounts/accountant/transactions" element={<RequireModule module="Finance"><AccountTransactionsPage /></RequireModule>} />
                 {/* Reports */}
+                <Route path="accounts/reports/financial" element={<RequireModule module="Finance"><AccountingReportsPage /></RequireModule>} />
                 <Route path="accounts/reports/billing" element={<RequireModule module="Finance"><BillingReportsPage /></RequireModule>} />
                 <Route path="accounts/reports/management-mis" element={<RequireModule module="Finance"><ManagementMISPage /></RequireModule>} />
                 <Route path="accounts/reports/control-dashboard" element={<RequireModule module="Finance"><ControlDashboardPage /></RequireModule>} />
