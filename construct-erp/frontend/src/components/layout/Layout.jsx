@@ -49,6 +49,7 @@ const navGroups = [
     { to: '/planning/documents',    icon: FolderSearch,     label: 'Documents' },
   ]},
   { label: 'Procurement', items: [
+    { to: '/procurement/dashboard',        icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/procurement/material-request', icon: ClipboardList, label: 'Material Request (MRS)' },
     { to: '/procurement/vendors',          icon: Users,         label: 'Vendors' },
     { to: '/procurement/live-rate-checker',icon: Search,        label: 'Live Rate Checker' },
@@ -266,6 +267,7 @@ const NAV_SECTIONS = {
     { label: 'Documents',  paths: ['/planning/documents'] },
   ],
   'Procurement': [
+    { label: 'Dashboard',        paths: ['/procurement/dashboard'] },
     { label: 'Request',          paths: ['/procurement/material-request'] },
     { label: 'Vendors & Rates',  paths: ['/procurement/vendors','/procurement/vendor-mapping','/procurement/live-rate-checker','/procurement/rate-contracts'] },
     { label: 'RFQ',              paths: ['/procurement/rfqs'] },

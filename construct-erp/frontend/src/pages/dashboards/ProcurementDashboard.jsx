@@ -122,7 +122,7 @@ export default function ProcurementDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <DashSection
           title="Recent Purchase Orders"
-          action={<Link to="/procurement/purchase-orders" className="text-xs text-indigo-600 flex items-center gap-1 hover:underline">All POs <ArrowRight className="w-3 h-3" /></Link>}
+          action={<Link to="/procurement/po" className="text-xs text-indigo-600 flex items-center gap-1 hover:underline">All POs <ArrowRight className="w-3 h-3" /></Link>}
         >
           <DashTable cols={poCols} rows={pos.slice(0, 8)} empty="No purchase orders found" />
         </DashSection>

@@ -92,6 +92,7 @@ const PORegisterPage        = lazy(() => import('./pages/procurement/PORegisterP
 const WORegisterPage        = lazy(() => import('./pages/procurement/WORegisterPage'));
 const WOBulkImportPage      = lazy(() => import('./pages/procurement/WOBulkImportPage'));
 const ProcurementReportsPage = lazy(() => import('./pages/procurement/ProcurementReportsPage'));
+const ProcurementDashboardPage = lazy(() => import('./pages/dashboards/ProcurementDashboard'));
 const TenderRegisterPage          = lazy(() => import('./pages/tender-mgmt/TenderRegisterPage'));
 const TenderManagementPage        = lazy(() => import('./pages/tender-mgmt/TenderManagementPage'));
 const DMSPage                     = lazy(() => import('./pages/documents/DMSPage'));
@@ -481,6 +482,7 @@ export default function App() {
                 <Route path="finance/intelligence" element={<RequireModule module="Finance"><FinanceIntelligencePage /></RequireModule>} />
 
                 {/* Procurement */}
+                <Route path="procurement/dashboard" element={<RequireModule module="Procurement"><ProcurementDashboardPage /></RequireModule>} />
                 <Route path="procurement/vendors" element={<RequireAnyModule modules={['Procurement', 'Bill Tracker']}><VendorList /></RequireAnyModule>} />
                 <Route path="procurement/vendor-mapping" element={<VendorProjectMappingPage />} />
                 <Route path="procurement/live-rate-checker" element={<RequireModule module="Procurement"><LiveRateCheckerPage /></RequireModule>} />
