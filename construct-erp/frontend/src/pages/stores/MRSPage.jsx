@@ -1182,7 +1182,7 @@ export default function MRSPage() {
       {/* ── Detail Slide-over ── */}
       {/* ── New MRS Form Modal ── */}
       {showForm && (
-        <div className="fixed inset-0 z-[60] flex flex-col bg-white">
+        <div className="fixed inset-0 z-[60] flex flex-col bg-white" style={{ fontFamily: "'Book Antiqua', 'Palatino Linotype', Palatino, serif" }}>
           <div className="w-full h-full flex flex-col overflow-hidden">
 
             {/* Modal header */}
@@ -1325,17 +1325,17 @@ export default function MRSPage() {
                     <Plus className="w-3 h-3" /> Add Row
                   </button>
                 </div>
-                <div className="hidden lg:grid gap-2 mb-2 px-1" style={{ gridTemplateColumns: '32px minmax(260px,2fr) 110px 100px 90px minmax(200px,2fr) 44px' }}>
+                <div className="hidden lg:grid gap-3 mb-2 px-1" style={{ gridTemplateColumns: '40px minmax(280px,2fr) 130px 120px 110px minmax(220px,2fr) 44px' }}>
                   {['#', 'Material Name', 'Quantity', 'Unit', 'Stock', 'Purpose', ''].map((h, i) => (
                     <div key={i} className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{h}</div>
                   ))}
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {items.map((item, idx) => {
                     const stock = itemStockStatus(item.material);
                     return (
-                    <div key={idx} className="grid grid-cols-1 lg:grid-cols-[32px_minmax(260px,2fr)_110px_100px_90px_minmax(200px,2fr)_44px] gap-2 items-center rounded-xl border border-slate-200 lg:border-slate-100 p-3 lg:px-2 lg:py-2 bg-slate-50/70 lg:bg-slate-50/40 hover:lg:bg-indigo-50/30 transition-colors">
-                      <div className="hidden lg:flex items-center justify-center h-7 w-7 rounded-lg bg-white border border-slate-200 text-xs font-black text-slate-400">{idx + 1}</div>
+                    <div key={idx} className="grid grid-cols-1 lg:grid-cols-[40px_minmax(280px,2fr)_130px_120px_110px_minmax(220px,2fr)_44px] gap-3 items-center rounded-xl border border-slate-200 lg:border-slate-100 p-3 lg:px-3 lg:py-3 bg-slate-50/70 lg:bg-slate-50/40 hover:lg:bg-indigo-50/30 transition-colors">
+                      <div className="hidden lg:flex items-center justify-center h-9 w-9 rounded-lg bg-indigo-600 text-sm font-black text-white">{idx + 1}</div>
                       <MaterialCombobox
                         value={item.material}
                         inventoryItems={inventoryItems}
@@ -1355,38 +1355,38 @@ export default function MRSPage() {
                       <input
                         type="number"
                         placeholder="0"
-                        className={clsx('h-9 rounded-lg px-3 text-sm text-slate-900 placeholder:text-slate-400 font-semibold outline-none transition-all text-right border', FIELD_HL)}
+                        className={clsx('h-10 rounded-lg px-3 text-sm text-slate-900 placeholder:text-slate-400 font-semibold outline-none transition-all text-right border', FIELD_HL)}
                         value={item.qty}
                         onChange={e => { const n = [...items]; n[idx].qty = e.target.value; setItems(n); }}
                       />
                       <select
-                        className={clsx('h-9 rounded-lg px-2 text-sm font-medium text-slate-900 outline-none transition-all border', FIELD_HL)}
+                        className={clsx('h-10 rounded-lg px-2 text-sm font-medium text-slate-900 outline-none transition-all border', FIELD_HL)}
                         value={item.unit}
                         onChange={e => { const n = [...items]; n[idx].unit = e.target.value; setItems(n); }}
                       >
                         {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                       </select>
                       <div className={clsx(
-                        'h-9 flex items-center justify-center rounded-lg border text-xs font-black',
-                        !item.material ? 'border-slate-100 text-slate-300 bg-white' :
-                        !stock ? 'border-slate-100 text-slate-300 bg-white' :
-                        stock.state === 'out' ? 'border-rose-100 bg-rose-50 text-rose-600' :
-                        stock.state === 'low' ? 'border-amber-100 bg-amber-50 text-amber-600' :
-                        'border-emerald-100 bg-emerald-50 text-emerald-600'
+                        'h-10 flex items-center justify-center rounded-lg border-2 text-sm font-black',
+                        !item.material ? 'border-slate-200 text-slate-400 bg-slate-50' :
+                        !stock ? 'border-slate-200 text-slate-500 bg-slate-50' :
+                        stock.state === 'out' ? 'border-rose-200 bg-rose-50 text-rose-600' :
+                        stock.state === 'low' ? 'border-amber-200 bg-amber-50 text-amber-600' :
+                        'border-emerald-200 bg-emerald-50 text-emerald-600'
                       )}>
                         {!item.material ? '—' : !stock ? 'New' : stock.state === 'out' ? 'Out' : stock.value}
                       </div>
                       <input
                         type="text"
                         placeholder="Intended use"
-                        className={clsx('h-9 rounded-lg px-3 text-sm text-slate-900 placeholder:text-slate-400 font-medium outline-none transition-all border', FIELD_HL)}
+                        className={clsx('h-10 rounded-lg px-3 text-sm text-slate-900 placeholder:text-slate-400 font-medium outline-none transition-all border', FIELD_HL)}
                         value={item.purpose}
                         onChange={e => { const n = [...items]; n[idx].purpose = e.target.value; setItems(n); }}
                       />
                       <button
                         onClick={() => { if (items.length > 1) setItems(items.filter((_, i) => i !== idx)); }}
                         disabled={items.length === 1}
-                        className="w-9 h-9 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-400 hover:text-rose-500 hover:border-rose-200 hover:bg-rose-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all justify-self-end lg:justify-self-center"
+                        className="w-10 h-10 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-400 hover:text-rose-500 hover:border-rose-200 hover:bg-rose-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all justify-self-end lg:justify-self-center"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1395,7 +1395,7 @@ export default function MRSPage() {
                   })}
                 </div>
                 {/* Total quantity footer */}
-                <div className="hidden lg:grid gap-2 mt-2 pt-2 px-1 border-t border-slate-100" style={{ gridTemplateColumns: '32px minmax(260px,2fr) 110px 100px 90px minmax(200px,2fr) 44px' }}>
+                <div className="hidden lg:grid gap-3 mt-2 pt-2 px-1 border-t border-slate-100" style={{ gridTemplateColumns: '40px minmax(280px,2fr) 130px 120px 110px minmax(220px,2fr) 44px' }}>
                   <div />
                   <div className="text-xs font-bold text-slate-500 uppercase tracking-wider self-center">Total Requested Quantity</div>
                   <div className="text-sm font-black text-indigo-700 text-right self-center">
@@ -2022,7 +2022,7 @@ function MaterialCombobox({ value, inventoryItems, onChange, onNewItem }) {
         <input
           type="text"
           placeholder="Search store ledger…"
-          className="h-9 w-full border-[#378ADD] bg-[#E6F1FB] shadow-[0_0_0_3px_rgba(55,138,221,0.15)] rounded-lg pl-8 pr-8 text-sm text-slate-900 placeholder:text-slate-400 font-medium outline-none focus:border-[#2569b3] transition-all border"
+          className="h-10 w-full border-[#378ADD] bg-[#E6F1FB] shadow-[0_0_0_3px_rgba(55,138,221,0.15)] rounded-lg pl-8 pr-8 text-sm text-slate-900 placeholder:text-slate-400 font-medium outline-none focus:border-[#2569b3] transition-all border"
           value={q}
           onChange={handleInputChange}
           onFocus={() => setOpen(true)}
