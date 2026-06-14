@@ -25,9 +25,23 @@ runSchemaInit('purchase_orders_columns', async () => {
       ADD COLUMN IF NOT EXISTS delivery_address TEXT,
       ADD COLUMN IF NOT EXISTS order_intro TEXT,
       ADD COLUMN IF NOT EXISTS payment_terms TEXT,
-      ADD COLUMN IF NOT EXISTS tcs_amount NUMERIC(15,2) DEFAULT 0
+      ADD COLUMN IF NOT EXISTS tcs_amount NUMERIC(15,2) DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS department TEXT,
+      ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'INR',
+      ADD COLUMN IF NOT EXISTS billing_address TEXT,
+      ADD COLUMN IF NOT EXISTS freight_mode TEXT,
+      ADD COLUMN IF NOT EXISTS transport_mode TEXT,
+      ADD COLUMN IF NOT EXISTS tax_type TEXT DEFAULT 'intra',
+      ADD COLUMN IF NOT EXISTS freight_charges NUMERIC(15,2) DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS loading_unloading_charges NUMERIC(15,2) DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS insurance_charges NUMERIC(15,2) DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS tds_percent NUMERIC(6,2) DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS internal_remarks TEXT,
+      ADD COLUMN IF NOT EXISTS delivery_instructions TEXT
   `);
   await query(`ALTER TABLE po_items ADD COLUMN IF NOT EXISTS mrs_item_id UUID`);
+  await query(`ALTER TABLE po_items ADD COLUMN IF NOT EXISTS item_code TEXT`);
+  await query(`ALTER TABLE po_items ADD COLUMN IF NOT EXISTS discount_pct NUMERIC(6,2) DEFAULT 0`);
   // Allow long material descriptions (was VARCHAR(200) ≈ 30 words) — widen to TEXT
   try { await query(`ALTER TABLE po_items ALTER COLUMN material_name TYPE TEXT`); } catch (_) {}
 });
@@ -970,7 +984,10 @@ router.post('/', async (req, res) => {
       project_id, vendor_id, po_date, delivery_date, status,
       terms_conditions, notes, bank_details, items, mrs_id, mrs_ids,
       payment_terms, tcs_amount,
-      po_req_no, po_req_date, approval_no, delivery_address, order_intro
+      po_req_no, po_req_date, approval_no, delivery_address, order_intro,
+      department, currency, billing_address, freight_mode, transport_mode, tax_type,
+      freight_charges, loading_unloading_charges, insurance_charges, tds_percent,
+      internal_remarks, delivery_instructions
     } = req.body;
 
     if (!project_id || !vendor_id || !items?.length) {
@@ -997,37 +1014,52 @@ router.post('/', async (req, res) => {
           terms_conditions, notes, bank_details,
           payment_terms, tcs_amount,
           po_req_no, po_req_date, approval_no, delivery_address, order_intro,
-          status, created_by, mrs_id, po_ref_no, serial_no_formatted, mrs_ids
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21) RETURNING *`,
+          status, created_by, mrs_id, po_ref_no, serial_no_formatted, mrs_ids,
+          department, currency, billing_address, freight_mode, transport_mode, tax_type,
+          freight_charges, loading_unloading_charges, insurance_charges, tds_percent,
+          internal_remarks, delivery_instructions
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
+          $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33) RETURNING *`,
         [project_id, vendor_id, po_number, po_date || null, delivery_date || null, terms_conditions || null, notes || null, bank_details || null, payment_terms || null, parseFloat(tcs_amount) || 0, po_req_no || null, po_req_date || null, approval_no || null, delivery_address || null, order_intro || null, 'pending', req.user.id, primaryMrsId]
           .concat([po_number, po_number, mrsIdList.length ? mrsIdList : null])
+          .concat([department || null, currency || 'INR', billing_address || null, freight_mode || null, transport_mode || null, tax_type || 'intra',
+            parseFloat(freight_charges) || 0, parseFloat(loading_unloading_charges) || 0, parseFloat(insurance_charges) || 0, parseFloat(tds_percent) || 0,
+            internal_remarks || null, delivery_instructions || null])
       );
       const poId = headerRes.rows[0].id;
 
-      // 3. Insert Items & Calculate Totals
+      // 3. Insert Items & Calculate Totals (taxable = qty*rate less line discount)
       let subTotal = 0;
       let totalGst = 0;
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        const basic = parseFloat(item.quantity) * parseFloat(item.rate);
+        const gross = (parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0);
+        const disc  = parseFloat(item.discount_pct || 0) || 0;
+        const basic = gross * (1 - disc / 100);
         const gst   = basic * (parseFloat(item.gst_rate || 0) / 100);
-        
+
         await client.query(
           `INSERT INTO po_items (
-            po_id, material_name, make_model, hsn_code, quantity, unit, rate, gst_rate, req_date, sort_order, mrs_item_id
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-          [poId, item.material_name, item.make_model || null, item.hsn_code || null, parseFloat(item.quantity) || 0, item.unit, parseFloat(item.rate) || 0, parseFloat(item.gst_rate) || 0, item.req_date || null, i + 1, item.mrs_item_id || null]
+            po_id, material_name, make_model, hsn_code, quantity, unit, rate, gst_rate, req_date, sort_order, mrs_item_id, item_code, discount_pct
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+          [poId, item.material_name, item.make_model || null, item.hsn_code || null, parseFloat(item.quantity) || 0, item.unit, parseFloat(item.rate) || 0, parseFloat(item.gst_rate) || 0, item.req_date || null, i + 1, item.mrs_item_id || null, item.item_code || null, disc]
         );
         subTotal += basic;
         totalGst += gst;
       }
 
       const tcsValue = parseFloat(tcs_amount) || 0;
+      const freight = parseFloat(freight_charges) || 0;
+      const loading = parseFloat(loading_unloading_charges) || 0;
+      const insurance = parseFloat(insurance_charges) || 0;
+      const freightGst = freight * 0.18; // freight taxed at 18% per mockup
+      const tdsValue = (subTotal) * ((parseFloat(tds_percent) || 0) / 100);
+      const grandTotal = subTotal + totalGst + tcsValue + freight + loading + insurance + freightGst - tdsValue;
       const finalRes = await client.query(
         `UPDATE purchase_orders
          SET sub_total = $1, total_gst = $2, grand_total = $3, serial_no_formatted = $4, po_ref_no = $4
          WHERE id = $5 RETURNING *`,
-        [subTotal, totalGst, subTotal + totalGst + tcsValue, po_number, poId]
+        [subTotal, totalGst, grandTotal, po_number, poId]
       );
 
       // Keep the vendor↔project mapping in sync so project-wise vendor lists
