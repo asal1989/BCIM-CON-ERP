@@ -1182,7 +1182,7 @@ export default function MRSPage() {
       {/* ── Detail Slide-over ── */}
       {/* ── New MRS Form Modal ── */}
       {showForm && (
-        <div className="fixed inset-0 z-[60] flex flex-col bg-white" style={{ fontFamily: "'Book Antiqua', 'Palatino Linotype', Palatino, serif" }}>
+        <div className="fixed inset-0 z-[60] flex flex-col bg-white" style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
           <div className="w-full h-full flex flex-col overflow-hidden">
 
             {/* Modal header */}
@@ -1335,7 +1335,7 @@ export default function MRSPage() {
                     const stock = itemStockStatus(item.material);
                     return (
                     <div key={idx} className="grid grid-cols-1 lg:grid-cols-[40px_minmax(280px,2fr)_130px_120px_110px_minmax(220px,2fr)_44px] gap-3 items-center rounded-xl border border-slate-200 lg:border-slate-100 p-3 lg:px-3 lg:py-3 bg-slate-50/70 lg:bg-slate-50/40 hover:lg:bg-indigo-50/30 transition-colors">
-                      <div className="hidden lg:flex items-center justify-center h-9 w-9 rounded-lg bg-indigo-600 text-sm font-black text-white">{idx + 1}</div>
+                      <div className="hidden lg:flex items-center justify-center h-9 w-9 rounded-lg bg-indigo-600 text-sm font-black text-white" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{idx + 1}</div>
                       <MaterialCombobox
                         value={item.material}
                         inventoryItems={inventoryItems}
@@ -1356,6 +1356,7 @@ export default function MRSPage() {
                         type="number"
                         placeholder="0"
                         className={clsx('h-10 rounded-lg px-3 text-sm text-slate-900 placeholder:text-slate-500 font-semibold outline-none transition-all text-right border', FIELD_HL)}
+                        style={{ fontFamily: "'IBM Plex Mono', monospace" }}
                         value={item.qty}
                         onChange={e => { const n = [...items]; n[idx].qty = e.target.value; setItems(n); }}
                       />
@@ -1398,7 +1399,7 @@ export default function MRSPage() {
                 <div className="hidden lg:grid gap-3 mt-2 pt-2 px-1 border-t border-slate-100" style={{ gridTemplateColumns: '40px minmax(280px,2fr) 130px 120px 110px minmax(220px,2fr) 44px' }}>
                   <div />
                   <div className="text-xs font-bold text-slate-700 uppercase tracking-wider self-center">Total Requested Quantity</div>
-                  <div className="text-sm font-black text-indigo-700 text-right self-center">
+                  <div className="text-sm font-black text-indigo-700 text-right self-center" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
                     {items.reduce((sum, i) => sum + (parseFloat(i.qty) || 0), 0)}
                   </div>
                   <div className="col-span-4" />
