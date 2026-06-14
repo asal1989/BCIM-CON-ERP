@@ -533,5 +533,406 @@ router.get('/budget-vs-actual-procurement', async (req, res) => {
     res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
+// ── P2: Pending Purchase Requisitions ────────────────────────────────────────
+router.get('/procurement/pending-pr', async (req, res) => {
+  try {
+    const { project_id, from_date, to_date, from, to } = req.query;
+    const params = [req.user.company_id];
+    const pConds = ['p.company_id = $1'];
+    applyProjectScope(req, pConds, params, 'p', project_id);
+    const dateFrom = from_date || from;
+    const dateTo   = to_date   || to;
+    let dateSql = '';
+    if (dateFrom && dateTo) {
+      params.push(dateFrom, dateTo);
+      dateSql = `AND mr.created_at::date BETWEEN $${params.length - 1} AND $${params.length}`;
+    }
+    const { rows } = await query(`
+      WITH po_ord AS (
+        SELECT poi.mrs_item_id, SUM(poi.quantity) AS qty
+        FROM po_items poi
+        JOIN purchase_orders po ON po.id = poi.po_id
+        WHERE po.status NOT IN ('rejected','cancelled') AND poi.mrs_item_id IS NOT NULL
+        GROUP BY poi.mrs_item_id
+      )
+      SELECT
+        mr.serial_no_formatted                                                          AS mrs_number,
+        p.name                                                                          AS project_name,
+        u.name                                                                          AS raised_by,
+        mi.material_name,
+        mi.unit,
+        ROUND(COALESCE(mi.md_approved_qty, mi.quantity)::numeric, 3)                   AS requested_qty,
+        ROUND(COALESCE(ord.qty, 0)::numeric, 3)                                         AS ordered_qty,
+        ROUND((COALESCE(mi.md_approved_qty, mi.quantity) - COALESCE(ord.qty,0))::numeric,3) AS balance_qty,
+        mr.required_by,
+        (CURRENT_DATE - mr.created_at::date)::int                                       AS days_pending,
+        COALESCE(mr.priority,'normal')                                                  AS priority
+      FROM mrs_items mi
+      JOIN material_requisitions mr ON mr.id = mi.mrs_id
+      JOIN projects p ON p.id = mr.project_id
+      LEFT JOIN users u ON u.id = mr.raised_by
+      LEFT JOIN po_ord ord ON ord.mrs_item_id = mi.id
+      WHERE ${pConds.join(' AND ')}
+        AND mr.status NOT IN ('rejected','cancelled')
+        AND COALESCE(mi.md_included, TRUE) = TRUE
+        AND COALESCE(mi.md_approved_qty, mi.quantity) > COALESCE(ord.qty, 0)
+        ${dateSql}
+      ORDER BY days_pending DESC, mr.created_at DESC
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── P3: PR Approval Status ────────────────────────────────────────────────────
+router.get('/procurement/pr-approval-status', async (req, res) => {
+  try {
+    const { project_id } = req.query;
+    const params = [req.user.company_id];
+    const pConds = ['p.company_id = $1'];
+    applyProjectScope(req, pConds, params, 'p', project_id);
+    const { rows } = await query(`
+      SELECT
+        mr.serial_no_formatted                          AS mrs_number,
+        mr.status,
+        p.name                                          AS project_name,
+        u.name                                          AS raised_by,
+        COALESCE(mr.priority,'normal')                  AS priority,
+        (CURRENT_DATE - mr.created_at::date)::int       AS days_open,
+        (SELECT COUNT(*) FROM mrs_items WHERE mrs_id = mr.id)::int AS item_count
+      FROM material_requisitions mr
+      JOIN projects p ON p.id = mr.project_id
+      LEFT JOIN users u ON u.id = mr.raised_by
+      WHERE ${pConds.join(' AND ')}
+        AND mr.status NOT IN ('rejected','cancelled','approved_md','issued')
+      ORDER BY days_open DESC, mr.created_at DESC
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── P7: Open PO Report ────────────────────────────────────────────────────────
+router.get('/procurement/open-pos', async (req, res) => {
+  try {
+    const { project_id, from_date, to_date, from, to } = req.query;
+    const params = [req.user.company_id];
+    const pConds = ['p.company_id = $1'];
+    applyProjectScope(req, pConds, params, 'p', project_id);
+    const dateFrom = from_date || from;
+    const dateTo   = to_date   || to;
+    let dateSql = '';
+    if (dateFrom && dateTo) {
+      params.push(dateFrom, dateTo);
+      dateSql = `AND po.po_date BETWEEN $${params.length - 1} AND $${params.length}`;
+    }
+    const { rows } = await query(`
+      WITH recv AS (
+        SELECT gi.po_item_id, SUM(gi.quantity_received) AS qty
+        FROM grn_items gi
+        JOIN grn g ON g.id = gi.grn_id
+        WHERE g.quality_status NOT IN ('rejected') AND gi.po_item_id IS NOT NULL
+        GROUP BY gi.po_item_id
+      ),
+      po_agg AS (
+        SELECT
+          poi.po_id,
+          SUM(poi.quantity)                                                    AS ordered_qty,
+          SUM(COALESCE(r.qty, 0))                                               AS received_qty,
+          SUM((poi.quantity - COALESCE(r.qty,0)) * COALESCE(poi.rate, 0))      AS pending_value
+        FROM po_items poi
+        LEFT JOIN recv r ON r.po_item_id = poi.id
+        GROUP BY poi.po_id
+      )
+      SELECT
+        po.po_number,
+        v.name                                                                   AS vendor_name,
+        p.name                                                                   AS project_name,
+        po.po_date,
+        po.status,
+        ROUND(COALESCE(pa.ordered_qty, 0)::numeric, 3)                          AS ordered_qty,
+        ROUND(COALESCE(pa.received_qty, 0)::numeric, 3)                         AS received_qty,
+        ROUND((COALESCE(pa.ordered_qty,0) - COALESCE(pa.received_qty,0))::numeric, 3) AS pending_qty,
+        ROUND(COALESCE(pa.pending_value, po.grand_total)::numeric, 2)           AS pending_value
+      FROM purchase_orders po
+      JOIN projects p ON p.id = po.project_id
+      LEFT JOIN vendors v ON v.id = po.vendor_id
+      LEFT JOIN po_agg pa ON pa.po_id = po.id
+      WHERE ${pConds.join(' AND ')}
+        AND po.status NOT IN ('fully_received','cancelled','rejected')
+        ${dateSql}
+      ORDER BY po.po_date ASC
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── P9: Pending Delivery ──────────────────────────────────────────────────────
+router.get('/procurement/pending-delivery', async (req, res) => {
+  try {
+    const { project_id } = req.query;
+    const params = [req.user.company_id];
+    const pConds = ['p.company_id = $1'];
+    applyProjectScope(req, pConds, params, 'p', project_id);
+    const { rows } = await query(`
+      WITH recv AS (
+        SELECT gi.po_item_id, SUM(gi.quantity_received) AS qty
+        FROM grn_items gi
+        JOIN grn g ON g.id = gi.grn_id
+        WHERE g.quality_status NOT IN ('rejected') AND gi.po_item_id IS NOT NULL
+        GROUP BY gi.po_item_id
+      )
+      SELECT
+        po.po_number,
+        v.name                                                                    AS vendor_name,
+        poi.material_name,
+        poi.unit,
+        ROUND(poi.quantity::numeric, 3)                                            AS ordered_qty,
+        ROUND(COALESCE(r.qty, 0)::numeric, 3)                                      AS received_qty,
+        ROUND((poi.quantity - COALESCE(r.qty,0))::numeric, 3)                      AS pending_qty,
+        poi.req_date,
+        CASE WHEN poi.req_date IS NOT NULL AND poi.req_date < CURRENT_DATE
+          THEN (CURRENT_DATE - poi.req_date)::int ELSE 0 END                       AS days_overdue,
+        p.name                                                                    AS project_name
+      FROM po_items poi
+      JOIN purchase_orders po ON po.id = poi.po_id
+      JOIN projects p ON p.id = po.project_id
+      LEFT JOIN vendors v ON v.id = po.vendor_id
+      LEFT JOIN recv r ON r.po_item_id = poi.id
+      WHERE ${pConds.join(' AND ')}
+        AND po.status NOT IN ('fully_received','cancelled','rejected')
+        AND poi.quantity > COALESCE(r.qty, 0)
+      ORDER BY days_overdue DESC, po.po_date ASC
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── P10: PO Aging ─────────────────────────────────────────────────────────────
+router.get('/procurement/po-aging', async (req, res) => {
+  try {
+    const { project_id } = req.query;
+    const params = [req.user.company_id];
+    const pConds = ['p.company_id = $1'];
+    applyProjectScope(req, pConds, params, 'p', project_id);
+    const { rows } = await query(`
+      SELECT
+        po.po_number,
+        v.name                                      AS vendor_name,
+        p.name                                      AS project_name,
+        po.po_date,
+        po.status,
+        (CURRENT_DATE - po.po_date)::int            AS age_days,
+        CASE
+          WHEN (CURRENT_DATE - po.po_date) <=  7 THEN '0-7 days'
+          WHEN (CURRENT_DATE - po.po_date) <= 15 THEN '8-15 days'
+          WHEN (CURRENT_DATE - po.po_date) <= 30 THEN '16-30 days'
+          ELSE '30+ days'
+        END                                          AS aging_bucket,
+        ROUND(po.grand_total::numeric, 2)            AS open_value
+      FROM purchase_orders po
+      JOIN projects p ON p.id = po.project_id
+      LEFT JOIN vendors v ON v.id = po.vendor_id
+      WHERE ${pConds.join(' AND ')}
+        AND po.status NOT IN ('fully_received','cancelled','rejected')
+      ORDER BY age_days DESC
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── P11: Vendor Performance ───────────────────────────────────────────────────
+router.get('/procurement/vendor-performance', async (req, res) => {
+  try {
+    const { project_id, from_date, to_date, from, to } = req.query;
+    const params = [req.user.company_id];
+    const pConds = ['p.company_id = $1'];
+    applyProjectScope(req, pConds, params, 'p', project_id);
+    const dateFrom = from_date || from;
+    const dateTo   = to_date   || to;
+    let dateSql = '';
+    if (dateFrom && dateTo) {
+      params.push(dateFrom, dateTo);
+      dateSql = `AND po.po_date BETWEEN $${params.length - 1} AND $${params.length}`;
+    }
+    const { rows } = await query(`
+      SELECT
+        v.name                                                                       AS vendor_name,
+        COUNT(DISTINCT po.id)                                                        AS po_count,
+        ROUND(SUM(po.grand_total)::numeric, 2)                                       AS total_value,
+        COUNT(g.id)                                                                  AS grn_count,
+        COUNT(g.id) FILTER (WHERE g.quality_status IN ('approved','verified_stores','part_received')) AS accepted_grns,
+        COUNT(g.id) FILTER (WHERE g.quality_status = 'rejected')                    AS rejected_grns,
+        ROUND(100.0 * COUNT(g.id) FILTER (WHERE g.quality_status IN ('approved','verified_stores','part_received'))
+          / NULLIF(COUNT(g.id), 0), 1)                                               AS acceptance_pct,
+        ROUND(100.0 * COUNT(g.id) FILTER (WHERE g.quality_status = 'rejected')
+          / NULLIF(COUNT(g.id), 0), 1)                                               AS rejection_pct
+      FROM purchase_orders po
+      JOIN projects p ON p.id = po.project_id
+      JOIN vendors v ON v.id = po.vendor_id
+      LEFT JOIN grn g ON g.po_id = po.id
+      WHERE ${pConds.join(' AND ')}
+        AND po.status NOT IN ('cancelled','rejected')
+        ${dateSql}
+      GROUP BY v.id, v.name
+      ORDER BY total_value DESC NULLS LAST
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── P12: Vendor-wise Spend Analysis ──────────────────────────────────────────
+router.get('/procurement/vendor-spend', async (req, res) => {
+  try {
+    const { project_id, from_date, to_date, from, to } = req.query;
+    const params = [req.user.company_id];
+    const pConds = ['p.company_id = $1'];
+    applyProjectScope(req, pConds, params, 'p', project_id);
+    const dateFrom = from_date || from;
+    const dateTo   = to_date   || to;
+    let dateSql = '';
+    if (dateFrom && dateTo) {
+      params.push(dateFrom, dateTo);
+      dateSql = `AND po.po_date BETWEEN $${params.length - 1} AND $${params.length}`;
+    }
+    const { rows } = await query(`
+      SELECT
+        v.name                                                              AS vendor_name,
+        COUNT(DISTINCT po.id)                                               AS po_count,
+        ROUND(SUM(po.grand_total)::numeric, 2)                             AS total_value,
+        ROUND(AVG(po.grand_total)::numeric, 2)                             AS avg_value,
+        ROUND(100.0 * SUM(po.grand_total) / NULLIF(SUM(SUM(po.grand_total)) OVER (), 0), 1) AS spend_pct
+      FROM purchase_orders po
+      JOIN projects p ON p.id = po.project_id
+      JOIN vendors v ON v.id = po.vendor_id
+      WHERE ${pConds.join(' AND ')}
+        AND po.status NOT IN ('cancelled','rejected')
+        ${dateSql}
+      GROUP BY v.id, v.name
+      ORDER BY total_value DESC
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── P13: Item-wise Purchase Analysis ─────────────────────────────────────────
+router.get('/procurement/item-analysis', async (req, res) => {
+  try {
+    const { project_id, from_date, to_date, from, to } = req.query;
+    const params = [req.user.company_id];
+    const pConds = ['p.company_id = $1'];
+    applyProjectScope(req, pConds, params, 'p', project_id);
+    const dateFrom = from_date || from;
+    const dateTo   = to_date   || to;
+    let dateSql = '';
+    if (dateFrom && dateTo) {
+      params.push(dateFrom, dateTo);
+      dateSql = `AND po.po_date BETWEEN $${params.length - 1} AND $${params.length}`;
+    }
+    const { rows } = await query(`
+      SELECT
+        MAX(poi.material_name)                                                             AS material_name,
+        MAX(poi.unit)                                                                      AS unit,
+        COUNT(DISTINCT po.id)                                                              AS po_count,
+        COUNT(DISTINCT po.vendor_id)                                                       AS vendor_count,
+        ROUND(SUM(poi.quantity)::numeric, 3)                                               AS total_qty,
+        ROUND(SUM(COALESCE(poi.total_amount, poi.quantity * poi.rate))::numeric, 2)        AS total_value,
+        ROUND(AVG(poi.rate)::numeric, 2)                                                   AS avg_rate,
+        ROUND(MIN(poi.rate)::numeric, 2)                                                   AS min_rate,
+        ROUND(MAX(poi.rate)::numeric, 2)                                                   AS max_rate
+      FROM po_items poi
+      JOIN purchase_orders po ON po.id = poi.po_id
+      JOIN projects p ON p.id = po.project_id
+      WHERE ${pConds.join(' AND ')}
+        AND po.status NOT IN ('cancelled','rejected')
+        AND COALESCE(poi.rate, 0) > 0
+        ${dateSql}
+      GROUP BY lower(trim(poi.material_name))
+      ORDER BY total_value DESC
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── P14: Project-wise Procurement ────────────────────────────────────────────
+router.get('/procurement/project-procurement', async (req, res) => {
+  try {
+    const { from_date, to_date, from, to } = req.query;
+    const params = [req.user.company_id];
+    const pConds = ['p.company_id = $1'];
+    applyProjectScope(req, pConds, params, 'p', null);
+    const dateFrom = from_date || from;
+    const dateTo   = to_date   || to;
+    let dateSql = '';
+    if (dateFrom && dateTo) {
+      params.push(dateFrom, dateTo);
+      dateSql = `AND po.po_date BETWEEN $${params.length - 1} AND $${params.length}`;
+    }
+    const { rows } = await query(`
+      SELECT
+        p.name                                                                                   AS project_name,
+        p.project_code,
+        COUNT(DISTINCT po.id)                                                                    AS po_count,
+        COUNT(DISTINCT po.vendor_id)                                                             AS vendor_count,
+        ROUND(SUM(po.grand_total)::numeric, 2)                                                   AS total_value,
+        ROUND(SUM(CASE WHEN po.status NOT IN ('fully_received') THEN po.grand_total ELSE 0 END)::numeric, 2) AS open_value,
+        ROUND(SUM(CASE WHEN po.status = 'fully_received'        THEN po.grand_total ELSE 0 END)::numeric, 2) AS closed_value
+      FROM projects p
+      LEFT JOIN purchase_orders po ON po.project_id = p.id
+        AND po.status NOT IN ('cancelled','rejected')
+        ${dateSql}
+      WHERE ${pConds.join(' AND ')}
+      GROUP BY p.id, p.name, p.project_code
+      HAVING COUNT(po.id) > 0
+      ORDER BY total_value DESC NULLS LAST
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── P20: Purchase Return Register ─────────────────────────────────────────────
+router.get('/procurement/purchase-returns', async (req, res) => {
+  try {
+    const { project_id, from_date, to_date, from, to } = req.query;
+    const params = [req.user.company_id];
+    const conditions = ['cn.company_id = $1'];
+    if (project_id) {
+      if (!userCanAccessProject(req, project_id)) return res.status(403).json({ error: 'Access denied' });
+      params.push(project_id);
+      conditions.push(`cn.project_id = $${params.length}`);
+    } else if (!req.isGlobalRole) {
+      const allowed = req.allowedProjectIds || [];
+      if (!allowed.length) return res.json({ data: [] });
+      params.push(allowed);
+      conditions.push(`cn.project_id = ANY($${params.length}::uuid[])`);
+    }
+    const dateFrom = from_date || from;
+    const dateTo   = to_date   || to;
+    if (dateFrom && dateTo) {
+      params.push(dateFrom, dateTo);
+      conditions.push(`cn.cn_date BETWEEN $${params.length - 1} AND $${params.length}`);
+    }
+    const { rows } = await query(`
+      SELECT
+        cn.cn_number,
+        cn.cn_date,
+        cn.vendor_name,
+        p.name                                           AS project_name,
+        cn.po_number,
+        cn.grn_number,
+        cni.material_name,
+        ROUND(COALESCE(cni.quantity, 0)::numeric, 3)     AS quantity,
+        cni.unit,
+        ROUND(COALESCE(cni.amount, 0)::numeric, 2)       AS return_value,
+        cn.cn_type,
+        cn.status,
+        cni.reason
+      FROM credit_notes cn
+      LEFT JOIN projects p ON p.id = cn.project_id
+      LEFT JOIN credit_note_items cni ON cni.cn_id = cn.id
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY cn.cn_date DESC
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
 
 module.exports = router;
