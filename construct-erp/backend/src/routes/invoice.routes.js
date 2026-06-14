@@ -4,6 +4,7 @@ const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
+const { postAutoJournal } = require('../services/journalAutoPost');
 router.use(authenticate);
 
 // Ensure invoice_items table exists (idempotent)
@@ -151,11 +152,45 @@ router.patch('/:id/verify', authorize('super_admin','admin','accountant'), async
 // PATCH /invoices/:id/authorize — Step 3: Accounts Authorization
 router.patch('/:id/authorize', authorize('super_admin','admin'), async (req, res) => {
   try {
-    await query(
-      `UPDATE invoices SET status = 'authorized', authorized_by = $1, updated_at = NOW() WHERE id = $2`,
-      [req.user.id, req.params.id]
-    );
-    res.json({ message: 'Invoice authorized for payment' });
+    const result = await withTransaction(async (client) => {
+      // Fetch invoice + vendor name before updating
+      const { rows: [inv] } = await client.query(
+        `SELECT i.*, v.name AS vendor_name, p.company_id
+         FROM invoices i
+         JOIN vendors v ON v.id = i.vendor_id
+         JOIN projects p ON p.id = i.project_id
+         WHERE i.id = $1`, [req.params.id]
+      );
+      if (!inv) throw new Error('Invoice not found');
+
+      await client.query(
+        `UPDATE invoices SET status = 'authorized', authorized_by = $1, updated_at = NOW() WHERE id = $2`,
+        [req.user.id, req.params.id]
+      );
+
+      // Auto-post JV: Dr Material Cost + Dr Input GST, Cr Accounts Payable
+      const net = parseFloat(inv.net_amount || 0);
+      const tax = parseFloat(inv.tax_amount || 0);
+      const total = parseFloat(inv.total_amount || 0);
+      if (total > 0) {
+        const lines = [
+          { code: '5000', debit: net,   description: `Material — ${inv.invoice_number}` },
+          { code: '2000', credit: total, description: `Payable to ${inv.vendor_name}` },
+        ];
+        if (tax > 0) lines.splice(1, 0, { code: '1300', debit: tax, description: 'Input GST / ITC' });
+        await postAutoJournal(client, {
+          companyId: inv.company_id,
+          userId: req.user.id,
+          entryDate: inv.invoice_date,
+          reference: inv.invoice_number,
+          narration: `Invoice booking — ${inv.vendor_name} (${inv.invoice_number})`,
+          source: 'auto_invoice',
+          lines,
+        });
+      }
+      return inv;
+    });
+    res.json({ message: 'Invoice authorized for payment', data: result });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

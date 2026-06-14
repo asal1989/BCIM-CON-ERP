@@ -460,12 +460,21 @@ export const chartOfAccountsAPI = {
 };
 
 export const journalEntryAPI = {
-  list:         (params) => api.get('/journal-entries', { params }),
-  get:          (id)     => api.get(`/journal-entries/${id}`),
-  create:       (data)   => api.post('/journal-entries', data),
-  updateStatus: (id, status) => api.patch(`/journal-entries/${id}/status`, { status }),
-  remove:       (id)     => api.delete(`/journal-entries/${id}`),
-  dayBook:      (params) => api.get('/journal-entries/day-book', { params }),
+  list:           (params) => api.get('/journal-entries', { params }),
+  get:            (id)     => api.get(`/journal-entries/${id}`),
+  create:         (data)   => api.post('/journal-entries', data),
+  updateStatus:   (id, status) => api.patch(`/journal-entries/${id}/status`, { status }),
+  remove:         (id)     => api.delete(`/journal-entries/${id}`),
+  dayBook:        (params) => api.get('/journal-entries/day-book', { params }),
+  automationLog:  (params) => api.get('/journal-entries/automation-log', { params }),
+  // Recurring templates
+  templates:        (params) => api.get('/journal-entries/templates', { params }),
+  getTemplate:      (id)     => api.get(`/journal-entries/templates/${id}`),
+  createTemplate:   (data)   => api.post('/journal-entries/templates', data),
+  updateTemplate:   (id, d)  => api.patch(`/journal-entries/templates/${id}`, d),
+  deleteTemplate:   (id)     => api.delete(`/journal-entries/templates/${id}`),
+  executeTemplate:  (id, d)  => api.post(`/journal-entries/templates/${id}/execute`, d),
+  dueTemplates:     ()       => api.get('/journal-entries/templates/due'),
 };
 
 export const bankAccountAPI = {

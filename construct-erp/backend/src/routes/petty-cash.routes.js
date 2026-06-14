@@ -3,6 +3,7 @@ const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
+const { postAutoJournalStandalone } = require('../services/journalAutoPost');
 const router = express.Router();
 router.use(authenticate);
 
@@ -660,6 +661,29 @@ router.post('/expenses/:id/approve', async (req, res) => {
         [row.amount, row.custodian_id]).catch(()=>{});
     }
     await auditLog(req.user.company_id, 'pc_expense', row.id, action, 'submitted', newStatus, remarks, req.user.id);
+
+    // Auto-post JV on approval: Dr Expense A/c (category GL or fallback), Cr Cash in Hand (1000)
+    if (action === 'approve') {
+      const catRow = row.category_id
+        ? await query(`SELECT category_name, gl_account FROM pc_expense_categories WHERE id=$1`, [row.category_id]).then(r => r.rows[0])
+        : null;
+      // Use category GL account if it's a valid 4-digit COA code, else fallback to 6100
+      const expCode = catRow?.gl_account?.match(/^\d{4}$/) ? catRow.gl_account : '6100';
+      const catName = catRow?.category_name || 'Petty Cash Expense';
+      postAutoJournalStandalone({
+        companyId: req.user.company_id,
+        userId:    req.user.id,
+        entryDate: row.expense_date,
+        reference: row.voucher_number,
+        narration: `Petty cash — ${row.description}`,
+        source:    'auto_petty_cash',
+        lines: [
+          { code: expCode, debit:  row.amount, description: `${catName}: ${row.description}` },
+          { code: '1000',  credit: row.amount, description: `Petty cash paid — ${row.voucher_number}` },
+        ],
+      }).catch(() => {});
+    }
+
     res.json(row);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

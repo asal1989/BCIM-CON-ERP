@@ -254,6 +254,7 @@ router.post('/', authorize('super_admin', 'admin', 'accountant'), async (req, re
         entryDate: payment_date,
         reference: reference_number || payment.id,
         narration: `Payment to ${entity_name}`,
+        source: 'auto_payment',
         lines: jeLines,
       });
 

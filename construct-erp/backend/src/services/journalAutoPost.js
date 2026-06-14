@@ -1,4 +1,5 @@
 // src/services/journalAutoPost.js — auto-post journal entries for accounting transactions
+const { pool } = require('../config/database');
 const n = (v) => parseFloat(v) || 0;
 
 async function nextEntryNo(client, companyId) {
@@ -21,9 +22,8 @@ async function getAccountId(client, companyId, code) {
 
 /**
  * Posts an auto-generated journal entry within an existing transaction client.
- * Returns the journal_entry id, or null if the Chart of Accounts isn't seeded
- * (missing account codes) or the lines don't balance — auto-posting is best-effort
- * and never blocks the underlying business transaction.
+ * Returns the journal_entry id, or null if COA is missing or lines don't balance.
+ * Never throws — auto-posting must never block the parent transaction.
  *
  * @param {object} client - pg transaction client
  * @param {object} opts
@@ -32,16 +32,17 @@ async function getAccountId(client, companyId, code) {
  * @param {string} opts.entryDate
  * @param {string} [opts.reference]
  * @param {string} [opts.narration]
+ * @param {string} [opts.source]  - 'auto_payment' | 'auto_invoice' | 'auto_petty_cash' | 'auto_recurring' | 'manual'
  * @param {Array<{code: string, debit?: number, credit?: number, description?: string}>} opts.lines
  */
-async function postAutoJournal(client, { companyId, userId, entryDate, reference, narration, lines }) {
+async function postAutoJournal(client, { companyId, userId, entryDate, reference, narration, source, lines }) {
   try {
     const resolved = [];
     for (const l of lines) {
       const debit = n(l.debit), credit = n(l.credit);
       if (!(debit > 0) && !(credit > 0)) continue;
       const accountId = await getAccountId(client, companyId, l.code);
-      if (!accountId) return null; // COA not seeded for this code — skip auto-post
+      if (!accountId) return null; // COA not seeded for this code — skip silently
       resolved.push({ account_id: accountId, debit, credit, description: l.description || null });
     }
     if (resolved.length < 2) return null;
@@ -52,9 +53,9 @@ async function postAutoJournal(client, { companyId, userId, entryDate, reference
 
     const entry_no = await nextEntryNo(client, companyId);
     const r = await client.query(
-      `INSERT INTO journal_entries (company_id, entry_no, entry_date, reference, narration, status, created_by)
-       VALUES ($1,$2,$3,$4,$5,'posted',$6) RETURNING id`,
-      [companyId, entry_no, entryDate, reference || null, narration || null, userId]
+      `INSERT INTO journal_entries (company_id, entry_no, entry_date, reference, narration, status, source, created_by)
+       VALUES ($1,$2,$3,$4,$5,'posted',$6,$7) RETURNING id`,
+      [companyId, entry_no, entryDate, reference || null, narration || null, source || 'auto', userId]
     );
     const jeId = r.rows[0].id;
 
@@ -72,4 +73,23 @@ async function postAutoJournal(client, { companyId, userId, entryDate, reference
   }
 }
 
-module.exports = { postAutoJournal };
+/**
+ * Standalone version — opens its own DB client when there's no parent transaction.
+ * Use this in routes that don't use withTransaction (e.g. petty cash approval).
+ */
+async function postAutoJournalStandalone(opts) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const jeId = await postAutoJournal(client, opts);
+    await client.query('COMMIT');
+    return jeId;
+  } catch (_) {
+    await client.query('ROLLBACK').catch(() => {});
+    return null;
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { postAutoJournal, postAutoJournalStandalone };

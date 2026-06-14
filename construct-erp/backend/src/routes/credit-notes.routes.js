@@ -226,6 +226,7 @@ router.post('/', authenticate, async (req, res) => {
         entryDate: cn_date,
         reference: cn_number,
         narration: `Credit Note ${cn_number} — ${vendor_name}`,
+        source: 'auto_credit_note',
         lines: [
           { code: '2000', debit: total_amount, description: `Credit Note ${cn_number}` },
           { code: '5000', credit: n(basic_amount), description: `Credit Note ${cn_number} — material cost reversal` },
