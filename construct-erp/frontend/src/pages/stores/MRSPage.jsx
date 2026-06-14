@@ -2,7 +2,6 @@
 import RecordAttachments from '../../components/shared/RecordAttachments';
 import MaterialCombobox from '../../components/shared/MaterialCombobox';
 import SearchableSelect from '../../components/shared/SearchableSelect';
-import { FIELD_HL } from '../../constants/fieldStyles';
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -26,6 +25,21 @@ import { useReactToPrint } from 'react-to-print';
 
 import { CONSTRUCTION_UNITS as UNITS } from '../../constants/units';
 const DEFAULT_CATEGORIES = ['Masonry Works'];
+
+// Zoho-style flat field input/label classes (used in the New MRS form)
+const Z_INP = 'w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30';
+const Z_LABEL = 'text-xs font-medium text-slate-500';
+const Z_CARD = 'border border-slate-200 rounded-md bg-white';
+const Z_HEAD = 'text-[13px] font-semibold text-slate-700 px-4 py-3 border-b border-slate-100';
+
+function ZField({ label, children }) {
+  return (
+    <div className="space-y-1">
+      <label className={Z_LABEL}>{label}</label>
+      {children}
+    </div>
+  );
+}
 
 const STATUS_CONFIG = {
   pending:         { label: 'Pending Store Manager', short: 'Pending',    color: 'bg-yellow-50 text-yellow-700 border-yellow-200',   dot: 'bg-yellow-500',  icon: Clock,       stage: 1 },
@@ -1182,70 +1196,47 @@ export default function MRSPage() {
       {/* ── Detail Slide-over ── */}
       {/* ── New MRS Form Modal ── */}
       {showForm && (
-        <div className="fixed inset-0 z-[60] flex flex-col bg-slate-100" style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
+        <div className="fixed inset-0 z-[60] flex flex-col bg-white" style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
           <div className="w-full h-full flex flex-col overflow-hidden">
 
             {/* Modal header */}
-            <div className="flex items-center justify-between px-6 py-4 flex-shrink-0 bg-gradient-to-r from-indigo-600 to-indigo-700">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/15 border border-white/20 flex items-center justify-center">
-                  <ClipboardList className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <p className="text-base font-bold text-white tracking-tight">Create Material Requisition</p>
-                  <p className="text-xs text-indigo-100 mt-0.5">Multi-stage approval document</p>
-                </div>
+            <div className="flex items-center justify-between px-6 py-3.5 flex-shrink-0 bg-white border-b border-slate-200">
+              <div>
+                <p className="text-[15px] font-semibold text-slate-800">Create Material Requisition</p>
+                <p className="text-xs text-slate-400 mt-0.5">Multi-stage approval document</p>
               </div>
               <button
                 onClick={resetForm}
-                className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-all"
+                className="w-8 h-8 rounded-md flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Modal body */}
-            <div className="flex-1 overflow-y-auto p-6 bg-slate-100 mr-form-bold-black">
-              <style>{`
-                .mr-form-bold-black, .mr-form-bold-black p, .mr-form-bold-black span,
-                .mr-form-bold-black label, .mr-form-bold-black h3, .mr-form-bold-black div,
-                .mr-form-bold-black button, .mr-form-bold-black input, .mr-form-bold-black select,
-                .mr-form-bold-black textarea, .mr-form-bold-black option {
-                  color: #000 !important;
-                  font-weight: 700 !important;
-                }
-                .mr-form-bold-black input::placeholder,
-                .mr-form-bold-black textarea::placeholder {
-                  color: #000 !important;
-                  opacity: 0.55;
-                }
-              `}</style>
-              <div className="flex flex-col lg:flex-row gap-5">
+            <div className="flex-1 overflow-y-auto p-5 bg-slate-50">
+              <div className="flex flex-col lg:flex-row gap-4">
 
               {/* ── Main column ── */}
               <div className="flex-1 min-w-0 space-y-5">
 
               {/* Project Details */}
-              <div className="border border-slate-200 rounded-xl p-5 bg-white shadow-sm">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center">
-                    <Building2 className="w-3.5 h-3.5 text-indigo-600" />
-                  </div>
-                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Project Details</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  <Field label="Project *">
+              <div className={Z_CARD}>
+                <h3 className={Z_HEAD}>Project Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5 p-4">
+                  <ZField label="Project *">
                     <SearchableSelect
                       value={formData.project_id}
                       onChange={v => setFormData(p => ({ ...p, project_id: v }))}
                       options={visibleProjects.map(proj => ({ value: proj.id, label: proj.name }))}
                       placeholder="Select project…"
                       searchPlaceholder="Search projects…"
+                      className="!h-9 !rounded-md !border-slate-300 !shadow-none !bg-white focus:!border-blue-500 focus:!ring-1 focus:!ring-blue-500/30"
                     />
-                  </Field>
-                  <Field label="Department">
+                  </ZField>
+                  <ZField label="Department">
                     <select
-                      className={clsx('w-full h-10 rounded-xl px-3.5 text-sm font-medium text-slate-900 outline-none transition-all border', FIELD_HL)}
+                      className={Z_INP}
                       value={formData.department}
                       onChange={e => setFormData(p => ({ ...p, department: e.target.value }))}
                     >
@@ -1270,44 +1261,44 @@ export default function MRSPage() {
                       <option value="Security">Security</option>
                       <option value="Other">Other</option>
                     </select>
-                  </Field>
-                  <Field label="HO Project Name">
+                  </ZField>
+                  <ZField label="HO Project Name">
                     <input
-                      className={clsx('w-full h-10 rounded-xl px-3.5 text-sm font-medium text-slate-900 outline-none transition-all border', FIELD_HL)}
+                      className={Z_INP}
                       placeholder="HO project name"
                       value={formData.head_office_project_name}
                       onChange={e => setFormData(p => ({ ...p, head_office_project_name: e.target.value }))}
                     />
-                  </Field>
-                  <Field label="Site Incharge">
+                  </ZField>
+                  <ZField label="Site Incharge">
                     <input
-                      className={clsx('w-full h-10 rounded-xl px-3.5 text-sm font-medium text-slate-900 outline-none transition-all border', FIELD_HL)}
+                      className={Z_INP}
                       placeholder="Enter name"
                       value={formData.site_incharge}
                       onChange={e => setFormData(p => ({ ...p, site_incharge: e.target.value }))}
                     />
-                  </Field>
-                  <Field label="Required By *">
+                  </ZField>
+                  <ZField label="Required By *">
                     <input
                       type="date"
-                      className={clsx('w-full h-10 rounded-xl px-3.5 text-sm font-medium text-slate-900 outline-none transition-all border', FIELD_HL)}
+                      className={Z_INP}
                       value={formData.required_by}
                       onChange={e => setFormData(p => ({ ...p, required_by: e.target.value }))}
                     />
-                  </Field>
-                  <Field label="Priority">
-                    <div className="flex gap-1.5 h-10">
+                  </ZField>
+                  <ZField label="Priority">
+                    <div className="flex gap-1.5 h-9">
                       {[
-                        { v: 'normal',   label: 'Normal',   on: 'bg-slate-800 text-white border-slate-800',   off: 'bg-slate-50 text-slate-500 border-slate-200 hover:border-slate-300' },
-                        { v: 'urgent',   label: 'Urgent',   on: 'bg-amber-500 text-white border-amber-500',   off: 'bg-slate-50 text-slate-500 border-slate-200 hover:border-amber-300' },
-                        { v: 'critical', label: 'Critical', on: 'bg-rose-600 text-white border-rose-600 shadow-sm shadow-rose-200', off: 'bg-slate-50 text-slate-500 border-slate-200 hover:border-rose-300' },
+                        { v: 'normal',   label: 'Normal',   on: 'bg-slate-700 text-white border-slate-700',   off: 'bg-white text-slate-500 border-slate-300 hover:border-slate-400' },
+                        { v: 'urgent',   label: 'Urgent',   on: 'bg-amber-500 text-white border-amber-500',   off: 'bg-white text-slate-500 border-slate-300 hover:border-amber-300' },
+                        { v: 'critical', label: 'Critical', on: 'bg-rose-600 text-white border-rose-600', off: 'bg-white text-slate-500 border-slate-300 hover:border-rose-300' },
                       ].map(p => (
                         <button
                           key={p.v}
                           type="button"
                           onClick={() => setFormData(d => ({ ...d, priority: p.v }))}
                           className={clsx(
-                            'flex-1 rounded-xl border text-xs font-bold transition-all',
+                            'flex-1 rounded-md border text-xs font-semibold transition-colors',
                             formData.priority === p.v ? p.on : p.off
                           )}
                         >
@@ -1315,40 +1306,38 @@ export default function MRSPage() {
                         </button>
                       ))}
                     </div>
-                  </Field>
+                  </ZField>
                 </div>
               </div>
 
               {/* Material Items */}
-              <div className="border border-[#378ADD] rounded-xl p-5 bg-white shadow-[0_0_0_4px_rgba(55,138,221,0.1)]">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center">
-                      <Package className="w-3.5 h-3.5 text-indigo-600" />
-                    </div>
-                    <div>
-                      <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Material Items</h3>
-                      <p className="text-xs text-slate-600 mt-0.5">Select from store ledger or add new items</p>
-                    </div>
+              <div className={Z_CARD}>
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                  <div>
+                    <h3 className="text-[13px] font-semibold text-slate-700">Material Items</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">Select from store ledger or add new items</p>
                   </div>
                   <button
                     onClick={() => setItems([...items, { material: '', qty: '', unit: 'Nos', purpose: '' }])}
-                    className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 transition-colors"
+                    className="flex items-center gap-1.5 px-3 h-8 rounded-md text-xs font-semibold text-blue-600 border border-blue-200 hover:bg-blue-50 transition-colors"
                   >
                     <Plus className="w-3 h-3" /> Add Row
                   </button>
                 </div>
-                <div className="hidden lg:grid gap-3 mb-2 px-1" style={{ gridTemplateColumns: '40px minmax(280px,2fr) 130px 120px 110px minmax(220px,2fr) 44px' }}>
+                <div className="hidden lg:grid gap-2 px-4 py-2 bg-slate-50 border-b border-slate-100" style={{ gridTemplateColumns: '36px minmax(280px,2fr) 110px 100px 90px minmax(200px,2fr) 36px' }}>
                   {['#', 'Material Name', 'Quantity', 'Unit', 'Stock', 'Purpose', ''].map((h, i) => (
-                    <div key={i} className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">{h}</div>
+                    <div key={i} className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{h}</div>
                   ))}
                 </div>
-                <div className="space-y-2.5">
+                <div>
                   {items.map((item, idx) => {
                     const stock = itemStockStatus(item.material);
                     return (
-                    <div key={idx} className="grid grid-cols-1 lg:grid-cols-[40px_minmax(280px,2fr)_130px_120px_110px_minmax(220px,2fr)_44px] gap-3 items-center rounded-xl border border-slate-200 lg:border-slate-100 p-3 lg:px-3 lg:py-3 bg-slate-50/70 lg:bg-slate-50/40 hover:lg:bg-indigo-50/30 transition-colors">
-                      <div className="hidden lg:flex items-center justify-center h-9 w-9 rounded-lg bg-indigo-600 text-sm font-black text-white" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{idx + 1}</div>
+                    <div key={idx} className={clsx(
+                      'grid grid-cols-1 lg:grid-cols-[36px_minmax(280px,2fr)_110px_100px_90px_minmax(200px,2fr)_36px] gap-2 items-center px-4 py-2.5 border-b border-slate-100 last:border-b-0',
+                      idx % 2 === 1 && 'bg-slate-50/60'
+                    )}>
+                      <div className="hidden lg:flex items-center justify-center text-sm font-semibold text-slate-400" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{idx + 1}</div>
                       <MaterialCombobox
                         value={item.material}
                         inventoryItems={inventoryItems}
@@ -1368,20 +1357,20 @@ export default function MRSPage() {
                       <input
                         type="number"
                         placeholder="0"
-                        className={clsx('h-10 rounded-lg px-3 text-sm text-slate-900 placeholder:text-slate-500 font-semibold outline-none transition-all text-right border', FIELD_HL)}
+                        className={clsx(Z_INP, 'text-right')}
                         style={{ fontFamily: "'IBM Plex Mono', monospace" }}
                         value={item.qty}
                         onChange={e => { const n = [...items]; n[idx].qty = e.target.value; setItems(n); }}
                       />
                       <select
-                        className={clsx('h-10 rounded-lg px-2 text-sm font-medium text-slate-900 outline-none transition-all border', FIELD_HL)}
+                        className={clsx(Z_INP, 'px-2')}
                         value={item.unit}
                         onChange={e => { const n = [...items]; n[idx].unit = e.target.value; setItems(n); }}
                       >
                         {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                       </select>
                       <div className={clsx(
-                        'h-10 flex items-center justify-center rounded-lg border-2 text-sm font-black',
+                        'h-9 flex items-center justify-center rounded-md border text-xs font-semibold',
                         !item.material ? 'border-slate-200 text-slate-400 bg-slate-50' :
                         !stock ? 'border-slate-200 text-slate-500 bg-slate-50' :
                         stock.state === 'out' ? 'border-rose-200 bg-rose-50 text-rose-600' :
@@ -1393,14 +1382,14 @@ export default function MRSPage() {
                       <input
                         type="text"
                         placeholder="Intended use"
-                        className={clsx('h-10 rounded-lg px-3 text-sm text-slate-900 placeholder:text-slate-500 font-medium outline-none transition-all border', FIELD_HL)}
+                        className={Z_INP}
                         value={item.purpose}
                         onChange={e => { const n = [...items]; n[idx].purpose = e.target.value; setItems(n); }}
                       />
                       <button
                         onClick={() => { if (items.length > 1) setItems(items.filter((_, i) => i !== idx)); }}
                         disabled={items.length === 1}
-                        className="w-10 h-10 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-400 hover:text-rose-500 hover:border-rose-200 hover:bg-rose-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all justify-self-end lg:justify-self-center"
+                        className="w-9 h-9 rounded-md flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors justify-self-end lg:justify-self-center"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1409,10 +1398,10 @@ export default function MRSPage() {
                   })}
                 </div>
                 {/* Total quantity footer */}
-                <div className="hidden lg:grid gap-3 mt-2 pt-2 px-1 border-t border-slate-100" style={{ gridTemplateColumns: '40px minmax(280px,2fr) 130px 120px 110px minmax(220px,2fr) 44px' }}>
+                <div className="hidden lg:grid gap-2 px-4 py-2.5 bg-slate-50 border-t border-slate-100" style={{ gridTemplateColumns: '36px minmax(280px,2fr) 110px 100px 90px minmax(200px,2fr) 36px' }}>
                   <div />
-                  <div className="text-xs font-bold text-slate-700 uppercase tracking-wider self-center">Total Requested Quantity</div>
-                  <div className="text-sm font-black text-indigo-700 text-right self-center" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                  <div className="text-xs font-semibold text-slate-600 self-center">Total Requested Quantity</div>
+                  <div className="text-sm font-bold text-blue-600 text-right self-center" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
                     {items.reduce((sum, i) => sum + (parseFloat(i.qty) || 0), 0)}
                   </div>
                   <div className="col-span-4" />
@@ -1420,28 +1409,20 @@ export default function MRSPage() {
               </div>
 
               {/* Remarks */}
-              <div className="border border-slate-200 rounded-xl p-5 bg-white shadow-sm">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center">
-                    <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                  </div>
-                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Remarks</h3>
+              <div className={Z_CARD}>
+                <h3 className={Z_HEAD}>Remarks</h3>
+                <div className="p-4">
+                  <textarea
+                    rows={3}
+                    placeholder="Additional notes or special instructions…"
+                    className={clsx(Z_INP, 'h-auto py-2 resize-none')}
+                    value={formData.remarks}
+                    onChange={e => setFormData(p => ({ ...p, remarks: e.target.value }))}
+                  />
                 </div>
-                <textarea
-                  rows={3}
-                  placeholder="Additional notes or special instructions…"
-                  className={clsx('w-full rounded-lg p-3 text-sm text-slate-900 placeholder:text-slate-500 font-medium outline-none transition-all resize-none border', FIELD_HL)}
-                  value={formData.remarks}
-                  onChange={e => setFormData(p => ({ ...p, remarks: e.target.value }))}
-                />
 
-                <div className="border-t border-slate-100 mt-4 pt-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center">
-                      <Paperclip className="w-3.5 h-3.5 text-indigo-600" />
-                    </div>
-                    <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Attachments</h3>
-                  </div>
+                <h3 className={Z_HEAD}>Attachments</h3>
+                <div className="p-4">
                   <label
                     onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                     onDragLeave={() => setDragOver(false)}
@@ -1452,12 +1433,12 @@ export default function MRSPage() {
                       if (files.length) setAttachments(a => [...a, ...files]);
                     }}
                     className={clsx(
-                      'flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed px-4 py-6 text-center cursor-pointer transition-colors',
-                      dragOver ? 'border-indigo-400 bg-indigo-50/60' : 'border-slate-200 bg-slate-50 hover:border-indigo-300 hover:bg-indigo-50/30'
+                      'flex flex-col items-center justify-center gap-1.5 rounded-md border-2 border-dashed px-4 py-6 text-center cursor-pointer transition-colors',
+                      dragOver ? 'border-blue-400 bg-blue-50/60' : 'border-slate-200 bg-slate-50 hover:border-blue-300 hover:bg-blue-50/30'
                     )}
                   >
-                    <Upload className="w-5 h-5 text-indigo-500" />
-                    <span className="text-sm font-bold text-slate-700">Drag &amp; drop files here, or click to browse</span>
+                    <Upload className="w-5 h-5 text-blue-500" />
+                    <span className="text-sm font-medium text-slate-700">Drag &amp; drop files here, or click to browse</span>
                     <span className="text-xs text-slate-400">Supported formats: PDF, JPG, PNG, XLSX</span>
                     <input
                       type="file"
@@ -1474,7 +1455,7 @@ export default function MRSPage() {
                   {attachments.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-3">
                       {attachments.map((f, i) => (
-                        <span key={i} className="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-lg bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700">
+                        <span key={i} className="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md bg-slate-100 border border-slate-200 text-xs font-medium text-slate-700">
                           <FileText className="w-3 h-3 text-slate-400" />
                           {f.name}
                           <button onClick={() => setAttachments(a => a.filter((_, j) => j !== i))} className="text-slate-400 hover:text-rose-500">
@@ -1489,12 +1470,11 @@ export default function MRSPage() {
               </div>
 
               {/* ── Sidebar ── */}
-              <div className="w-full lg:w-[300px] shrink-0 space-y-5">
+              <div className="w-full lg:w-[280px] shrink-0 space-y-4">
                 {/* Request Summary */}
-                <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm">
-                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <ClipboardCheck className="w-3.5 h-3.5 text-indigo-600" /> Request Summary
-                  </h3>
+                <div className={Z_CARD}>
+                  <h3 className={Z_HEAD}>Request Summary</h3>
+                  <div className="p-4 pt-3">
                   {(() => {
                     const ready = items.filter(i => i.material && i.qty);
                     const stats = ready.reduce((acc, i) => {
@@ -1541,14 +1521,13 @@ export default function MRSPage() {
                       </div>
                     );
                   })()}
+                  </div>
                 </div>
 
                 {/* Approval Workflow */}
-                <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm">
-                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <Layers3 className="w-3.5 h-3.5 text-indigo-600" /> Approval Workflow
-                  </h3>
-                  <ul className="space-y-0">
+                <div className={Z_CARD}>
+                  <h3 className={Z_HEAD}>Approval Workflow</h3>
+                  <ul className="space-y-0 p-4 pt-3">
                     {[
                       { label: 'Request Created', sub: 'On submission', state: 'done' },
                       ...ACTIVE_STAGES.map(s => ({ label: s.label, sub: 'Pending', state: 'pending' })),
@@ -1558,15 +1537,15 @@ export default function MRSPage() {
                         {i < arr.length - 1 && <span className="absolute left-[11px] top-6 bottom-0 w-px bg-slate-200" />}
                         <span className={clsx(
                           'relative z-10 flex items-center justify-center w-6 h-6 rounded-full shrink-0',
-                          step.state === 'done' ? 'bg-indigo-600 text-white' :
-                          i === 1 ? 'bg-white text-indigo-600 border-2 border-indigo-400' :
+                          step.state === 'done' ? 'bg-blue-600 text-white' :
+                          i === 1 ? 'bg-white text-blue-600 border-2 border-blue-400' :
                           'bg-slate-100 text-slate-400 border border-slate-200'
                         )}>
                           {step.state === 'done' ? <Check className="w-3.5 h-3.5" /> : i === 1 ? <Clock className="w-3 h-3" /> : <span className="w-1.5 h-1.5 rounded-full bg-current" />}
                         </span>
                         <div className="pt-0.5">
-                          <p className={clsx('text-xs font-bold', step.state === 'done' || i === 1 ? 'text-slate-900' : 'text-slate-400')}>{step.label}</p>
-                          <p className={clsx('text-[11px] mt-0.5', i === 1 ? 'text-indigo-600 font-semibold' : 'text-slate-400')}>{step.sub}</p>
+                          <p className={clsx('text-xs font-semibold', step.state === 'done' || i === 1 ? 'text-slate-900' : 'text-slate-400')}>{step.label}</p>
+                          <p className={clsx('text-[11px] mt-0.5', i === 1 ? 'text-blue-600 font-medium' : 'text-slate-400')}>{step.sub}</p>
                         </div>
                       </li>
                     ))}
@@ -1574,10 +1553,9 @@ export default function MRSPage() {
                 </div>
 
                 {/* Submission Checklist */}
-                <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm">
-                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <ClipboardList className="w-3.5 h-3.5 text-indigo-600" /> Submission Checklist
-                  </h3>
+                <div className={Z_CARD}>
+                  <h3 className={Z_HEAD}>Submission Checklist</h3>
+                  <div className="p-4 pt-3">
                   {(() => {
                     const ready = items.filter(i => i.material && i.qty);
                     const hasOutOfStock = ready.some(i => itemStockStatus(i.material)?.state === 'out');
@@ -1592,10 +1570,10 @@ export default function MRSPage() {
                     return (
                       <div className="space-y-2.5">
                         {checks.map((c, i) => (
-                          <label key={i} className="flex items-start gap-2 text-xs font-semibold text-slate-700 cursor-default">
+                          <label key={i} className="flex items-start gap-2 text-xs font-medium text-slate-700 cursor-default">
                             <span className={clsx(
                               'mt-0.5 flex items-center justify-center w-4 h-4 rounded border shrink-0',
-                              c.done ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 bg-white'
+                              c.done ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300 bg-white'
                             )}>
                               {c.done && <Check className="w-3 h-3" />}
                             </span>
@@ -1605,19 +1583,19 @@ export default function MRSPage() {
                       </div>
                     );
                   })()}
+                  </div>
                 </div>
 
                 {/* Info box */}
-                <div className="flex gap-2.5 rounded-xl border border-indigo-100 bg-indigo-50 p-3.5 text-xs text-indigo-800 leading-relaxed">
-                  <Info className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+                <div className="flex gap-2.5 rounded-md border border-blue-100 bg-blue-50 p-3.5 text-xs text-blue-800 leading-relaxed">
+                  <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
                   <span>Items marked <strong>Out of Stock</strong> will automatically generate a Purchase Request once this requisition is approved by the Project Manager.</span>
                 </div>
 
                 {/* Recent MRs */}
-                <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm">
-                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <History className="w-3.5 h-3.5 text-indigo-600" /> Recent MRs
-                  </h3>
+                <div className={Z_CARD}>
+                  <h3 className={Z_HEAD}>Recent MRs</h3>
+                  <div className="p-4 pt-3">
                   {(() => {
                     const recent = (formData.project_id ? rawMRS.filter(m => m.project_id === formData.project_id) : rawMRS)
                       .slice()
@@ -1629,7 +1607,7 @@ export default function MRSPage() {
                         {recent.map(m => (
                           <div key={m.id} className="flex items-center justify-between gap-2">
                             <div className="min-w-0">
-                              <p className="text-xs font-bold text-slate-900 font-mono truncate">{m.serial_no_formatted || m.mrs_number}</p>
+                              <p className="text-xs font-semibold text-slate-900 font-mono truncate">{m.serial_no_formatted || m.mrs_number}</p>
                               <p className="text-[11px] text-slate-400 mt-0.5">{dayjs(m.created_at).format('DD MMM YYYY')} · {m.item_count ?? '—'} items</p>
                             </div>
                             <StatusBadge status={m.status} />
@@ -1638,6 +1616,7 @@ export default function MRSPage() {
                       </div>
                     );
                   })()}
+                  </div>
                 </div>
               </div>
 
@@ -1645,15 +1624,15 @@ export default function MRSPage() {
             </div>
 
             {/* Modal footer */}
-            <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 bg-white flex-shrink-0">
+            <div className="flex items-center justify-between px-6 py-3 border-t border-slate-200 bg-white flex-shrink-0">
               <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full bg-indigo-50 border border-indigo-100 text-xs font-bold text-indigo-700">
+                <span className="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-md bg-slate-100 text-xs font-medium text-slate-600">
                   <Package className="w-3.5 h-3.5" />
                   {items.filter(i => i.material && i.qty).length} item(s) ready
                 </span>
                 {formData.priority !== 'normal' && (
                   <span className={clsx(
-                    'inline-flex items-center px-3 h-8 rounded-full text-xs font-bold capitalize',
+                    'inline-flex items-center px-2.5 h-7 rounded-md text-xs font-medium capitalize',
                     formData.priority === 'critical' ? 'bg-rose-50 text-rose-700 border border-rose-100' : 'bg-amber-50 text-amber-700 border border-amber-100'
                   )}>
                     {formData.priority} priority
@@ -1663,14 +1642,14 @@ export default function MRSPage() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={resetForm}
-                  className="px-5 h-10 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all"
+                  className="px-4 h-9 rounded-md border border-slate-300 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSubmit}
                   disabled={createMutation.isPending}
-                  className="inline-flex items-center gap-2 px-6 h-10 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 text-white text-sm font-bold hover:from-indigo-700 hover:to-indigo-800 transition-all disabled:opacity-50 shadow-lg shadow-indigo-200"
+                  className="inline-flex items-center gap-2 px-5 h-9 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
                   <Send className="w-4 h-4" />
                   {createMutation.isPending ? 'Submitting…' : 'Submit Requisition'}
