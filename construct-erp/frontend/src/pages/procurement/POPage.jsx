@@ -14,7 +14,8 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
-import { poAPI, vendorAPI, projectAPI, mrsAPI } from '../../api/client';
+import { poAPI, vendorAPI, projectAPI, mrsAPI, inventoryAPI } from '../../api/client';
+import MaterialCombobox from '../../components/shared/MaterialCombobox';
 import toast from 'react-hot-toast';
 import POPrintTemplate from './POPrintTemplate';
 
@@ -316,6 +317,13 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
     queryFn: () => vendorAPI.projectMap({ project_id: form.project_id }).then(r => r.data?.data || []),
     enabled: !!form.project_id,
   });
+  // Inventory lookup — for material name combobox
+  const { data: inventoryItems = [] } = useQuery({
+    queryKey: ['inventory-lookup'],
+    queryFn: () => inventoryAPI.itemsLookup().then(r => r.data?.data ?? []),
+    staleTime: 5 * 60 * 1000,
+  });
+
   let vendorOptions = form.project_id && projectVendors?.length ? projectVendors : vendors;
   // Always include the PO's original vendor even if it's not in the project's
   // mapped list, so editing an existing PO never hides its current vendor.
@@ -611,8 +619,15 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
               {items.map((it, i) => (
                 <div key={i}>
                   <div className="grid gap-2 items-center" style={{ gridTemplateColumns: '2fr 1.2fr 80px 70px 100px 90px 70px 105px 32px' }}>
-                    <input className="h-9 bg-slate-50 border border-slate-200 rounded-lg px-3 text-sm outline-none focus:border-indigo-400 transition-all"
-                      placeholder="Material description" value={it.material_name} onChange={e => setItem(i, 'material_name', e.target.value)} />
+                    <MaterialCombobox
+                      value={it.material_name}
+                      inventoryItems={inventoryItems}
+                      placeholder="Material description"
+                      onChange={(materialName, unit) => {
+                        setItem(i, 'material_name', materialName);
+                        if (unit) setItem(i, 'unit', unit);
+                      }}
+                    />
                     <input className="h-9 bg-slate-50 border border-slate-200 rounded-lg px-2 text-sm outline-none focus:border-indigo-400 transition-all"
                       placeholder="Brand / spec" value={it.make_model || ''} onChange={e => setItem(i, 'make_model', e.target.value)} />
                     <input className="h-9 bg-slate-50 border border-slate-200 rounded-lg px-2 text-sm outline-none focus:border-indigo-400 transition-all"

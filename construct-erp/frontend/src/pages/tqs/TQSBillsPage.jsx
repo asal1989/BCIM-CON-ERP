@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { tqsBillsAPI, projectAPI, tqsVendorsAPI, poAPI, inventoryAPI, subcontractorAPI } from '../../api/client';
+import MaterialCombobox from '../../components/shared/MaterialCombobox';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
 import { FileText, Plus, Search, ChevronRight, X, ChevronUp, ChevronDown, Pencil, Trash2, AlertTriangle, Upload, Download, CheckCircle2, IndianRupee, SlidersHorizontal, FileSpreadsheet, ChevronsRight, ExternalLink, Edit2 } from 'lucide-react';
@@ -881,19 +882,13 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                             {it.category || 'Auto-filled'}
                           </div>
                         </td>
-                        <td className="px-2 py-1.5">
-                          <input
-                            list={`item-list-${i}`}
-                            className="w-full min-w-[120px] border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-blue-400"
-                            placeholder="Item / material name"
+                        <td className="px-2 py-1.5 min-w-[160px]">
+                          <MaterialCombobox
                             value={it.item_name}
-                            onChange={e => handleItemName(i, e.target.value)}
+                            inventoryItems={inventoryItems}
+                            placeholder="Item / material name"
+                            onChange={(materialName) => handleItemName(i, materialName)}
                           />
-                          <datalist id={`item-list-${i}`}>
-                            {inventoryItems.map((item, idx) => (
-                              <option key={idx} value={item.material_name} />
-                            ))}
-                          </datalist>
                         </td>
                         <td className="px-2 py-1.5">
                           <input className="w-14 border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-blue-400"
