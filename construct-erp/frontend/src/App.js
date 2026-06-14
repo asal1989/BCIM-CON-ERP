@@ -63,8 +63,14 @@ const BudgetPage          = lazy(() => import('./pages/finance/BudgetPage'));
 const PaymentsPage        = lazy(() => import('./pages/finance/PaymentsPage'));
 const PettyCashPage       = lazy(() => import('./pages/finance/PettyCashPage'));
 const ClientAdvanceRequestsPage = lazy(() => import('./pages/finance/ClientAdvanceRequestsPage'));
-const FinanceHubPage      = lazy(() => import('./pages/finance/FinanceHubPage'));
 const AccountsDashboard   = lazy(() => import('./pages/dashboards/AccountsDashboard'));
+const ChartOfAccountsPage     = lazy(() => import('./pages/accounts/ChartOfAccountsPage'));
+const JournalEntryPage        = lazy(() => import('./pages/accounts/JournalEntryPage'));
+const AccountTransactionsPage = lazy(() => import('./pages/accounts/AccountTransactionsPage'));
+const BankAccountsPage        = lazy(() => import('./pages/accounts/BankAccountsPage'));
+const CustomersPage           = lazy(() => import('./pages/accounts/CustomersPage'));
+const InvoicesPage            = lazy(() => import('./pages/accounts/InvoicesPage'));
+const DebitNotesPage          = lazy(() => import('./pages/accounts/DebitNotesPage'));
 const CustomerStatementsPage = lazy(() => import('./pages/finance/CustomerStatementsPage'));
 const BankReconciliationPage = lazy(() => import('./pages/finance/BankReconciliationPage'));
 const PaymentRunPage         = lazy(() => import('./pages/finance/PaymentRunPage'));
@@ -244,7 +250,7 @@ const MODULE_HOME = {
   'Tender Management': '/tender-management',
   'Stores':            '/stores',
   'QS & Billing':      '/qs',
-  'Finance':           '/finance',
+  'Finance':           '/accounts',
   'Bill Tracker':      '/tqs',
   'DQS Tracker':       '/tqs',
   'Quality (QA/QC)':   '/quality',
@@ -461,25 +467,59 @@ export default function App() {
                 <Route path="qs/norms" element={<RequireModule module="QS & Billing"><ConsumptionNormsPage /></RequireModule>} />
                 <Route path="qs/reports" element={<RequireModule module="QS & Billing"><QSReportsPage /></RequireModule>} />
 
-                {/* Finance */}
-                <Route path="finance" element={<RequireModule module="Finance"><FinanceHubPage /></RequireModule>} />
-                <Route path="finance/accounts-dashboard" element={<RequireModule module="Finance"><AccountsDashboard /></RequireModule>} />
-                <Route path="finance/customer-statements" element={<RequireModule module="Finance"><CustomerStatementsPage /></RequireModule>} />
-                <Route path="finance/bank-reconciliation" element={<RequireModule module="Finance"><BankReconciliationPage /></RequireModule>} />
-                <Route path="finance/payment-run" element={<RequireModule module="Finance"><PaymentRunPage /></RequireModule>} />
-                <Route path="finance/cheque-tracker" element={<RequireModule module="Finance"><ChequeTrackerPage /></RequireModule>} />
-                <Route path="finance/control-dashboard" element={<RequireModule module="Finance"><ControlDashboardPage /></RequireModule>} />
-                <Route path="finance/management-mis" element={<RequireModule module="Finance"><ManagementMISPage /></RequireModule>} />
-                <Route path="finance/gst" element={<RequireModule module="Finance"><GSTPage /></RequireModule>} />
-                <Route path="finance/tds" element={<RequireModule module="Finance"><TDSPage /></RequireModule>} />
-                <Route path="finance/budget" element={<RequireModule module="Finance"><BudgetPage /></RequireModule>} />
-                <Route path="finance/payments" element={<RequireModule module="Finance"><PaymentsPage /></RequireModule>} />
-                <Route path="finance/petty-cash" element={<RequireModule module="Finance"><PettyCashPage /></RequireModule>} />
-                <Route path="finance/client-advances" element={<RequireModule module="Finance"><ClientAdvanceRequestsPage /></RequireModule>} />
-                <Route path="finance/invoices" element={<RequireModule module="Finance"><VendorInvoicePage /></RequireModule>} />
-                <Route path="finance/invoices/booking" element={<RequireModule module="Finance"><BillBookingPage /></RequireModule>} />
-                <Route path="finance/billing-reports" element={<RequireModule module="Finance"><BillingReportsPage /></RequireModule>} />
-                <Route path="finance/intelligence" element={<RequireModule module="Finance"><FinanceIntelligencePage /></RequireModule>} />
+                {/* Accounts (Zoho Books style) */}
+                <Route path="accounts" element={<RequireModule module="Finance"><AccountsDashboard /></RequireModule>} />
+                {/* Banking */}
+                <Route path="accounts/banking/accounts" element={<RequireModule module="Finance"><BankAccountsPage /></RequireModule>} />
+                <Route path="accounts/banking/reconciliation" element={<RequireModule module="Finance"><BankReconciliationPage /></RequireModule>} />
+                <Route path="accounts/banking/cash-flow" element={<RequireModule module="Finance"><FinanceIntelligencePage /></RequireModule>} />
+                <Route path="accounts/banking/cheque-tracker" element={<RequireModule module="Finance"><ChequeTrackerPage /></RequireModule>} />
+                <Route path="accounts/banking/petty-cash" element={<RequireModule module="Finance"><PettyCashPage /></RequireModule>} />
+                {/* Sales / Receivables */}
+                <Route path="accounts/sales/customers" element={<RequireModule module="Finance"><CustomersPage /></RequireModule>} />
+                <Route path="accounts/sales/invoices" element={<RequireModule module="Finance"><InvoicesPage /></RequireModule>} />
+                <Route path="accounts/sales/receipts" element={<RequireModule module="Finance"><ClientAdvanceRequestsPage /></RequireModule>} />
+                <Route path="accounts/sales/credit-notes" element={<RequireModule module="Finance"><CreditNotePage /></RequireModule>} />
+                <Route path="accounts/sales/statements" element={<RequireModule module="Finance"><CustomerStatementsPage /></RequireModule>} />
+                {/* Purchases / Payables */}
+                <Route path="accounts/purchases/vendors" element={<Navigate to="/procurement/vendors" replace />} />
+                <Route path="accounts/purchases/bills" element={<RequireModule module="Finance"><VendorInvoicePage /></RequireModule>} />
+                <Route path="accounts/purchases/bills/booking" element={<RequireModule module="Finance"><BillBookingPage /></RequireModule>} />
+                <Route path="accounts/purchases/payments-made" element={<RequireModule module="Finance"><PaymentsPage /></RequireModule>} />
+                <Route path="accounts/purchases/payment-run" element={<RequireModule module="Finance"><PaymentRunPage /></RequireModule>} />
+                <Route path="accounts/purchases/debit-notes" element={<RequireModule module="Finance"><DebitNotesPage /></RequireModule>} />
+                {/* Accountant */}
+                <Route path="accounts/accountant/chart-of-accounts" element={<RequireModule module="Finance"><ChartOfAccountsPage /></RequireModule>} />
+                <Route path="accounts/accountant/journal-entries" element={<RequireModule module="Finance"><JournalEntryPage /></RequireModule>} />
+                <Route path="accounts/accountant/transactions" element={<RequireModule module="Finance"><AccountTransactionsPage /></RequireModule>} />
+                {/* Reports */}
+                <Route path="accounts/reports/billing" element={<RequireModule module="Finance"><BillingReportsPage /></RequireModule>} />
+                <Route path="accounts/reports/management-mis" element={<RequireModule module="Finance"><ManagementMISPage /></RequireModule>} />
+                <Route path="accounts/reports/control-dashboard" element={<RequireModule module="Finance"><ControlDashboardPage /></RequireModule>} />
+                <Route path="accounts/reports/budget" element={<RequireModule module="Finance"><BudgetPage /></RequireModule>} />
+                {/* Taxes */}
+                <Route path="accounts/taxes/gst" element={<RequireModule module="Finance"><GSTPage /></RequireModule>} />
+                <Route path="accounts/taxes/tds" element={<RequireModule module="Finance"><TDSPage /></RequireModule>} />
+
+                {/* Legacy /finance/* redirects */}
+                <Route path="finance" element={<Navigate to="/accounts" replace />} />
+                <Route path="finance/accounts-dashboard" element={<Navigate to="/accounts" replace />} />
+                <Route path="finance/customer-statements" element={<Navigate to="/accounts/sales/statements" replace />} />
+                <Route path="finance/bank-reconciliation" element={<Navigate to="/accounts/banking/reconciliation" replace />} />
+                <Route path="finance/payment-run" element={<Navigate to="/accounts/purchases/payment-run" replace />} />
+                <Route path="finance/cheque-tracker" element={<Navigate to="/accounts/banking/cheque-tracker" replace />} />
+                <Route path="finance/control-dashboard" element={<Navigate to="/accounts/reports/control-dashboard" replace />} />
+                <Route path="finance/management-mis" element={<Navigate to="/accounts/reports/management-mis" replace />} />
+                <Route path="finance/gst" element={<Navigate to="/accounts/taxes/gst" replace />} />
+                <Route path="finance/tds" element={<Navigate to="/accounts/taxes/tds" replace />} />
+                <Route path="finance/budget" element={<Navigate to="/accounts/reports/budget" replace />} />
+                <Route path="finance/payments" element={<Navigate to="/accounts/purchases/payments-made" replace />} />
+                <Route path="finance/petty-cash" element={<Navigate to="/accounts/banking/petty-cash" replace />} />
+                <Route path="finance/client-advances" element={<Navigate to="/accounts/sales/receipts" replace />} />
+                <Route path="finance/invoices" element={<Navigate to="/accounts/purchases/bills" replace />} />
+                <Route path="finance/invoices/booking" element={<Navigate to="/accounts/purchases/bills/booking" replace />} />
+                <Route path="finance/billing-reports" element={<Navigate to="/accounts/reports/billing" replace />} />
+                <Route path="finance/intelligence" element={<Navigate to="/accounts/banking/cash-flow" replace />} />
 
                 {/* Procurement */}
                 <Route path="procurement/dashboard" element={<RequireModule module="Procurement"><ProcurementDashboardPage /></RequireModule>} />
@@ -648,7 +688,8 @@ export default function App() {
                 <Route path="procurement/documents"           element={<RequireModule module="Procurement"><DocumentsPage /></RequireModule>} />
                 <Route path="stores/documents"                element={<RequireModule module="Stores"><DocumentsPage /></RequireModule>} />
                 <Route path="qs/documents"                    element={<RequireModule module="QS & Billing"><DocumentsPage /></RequireModule>} />
-                <Route path="finance/documents"               element={<RequireModule module="Finance"><DocumentsPage /></RequireModule>} />
+                <Route path="finance/documents"               element={<Navigate to="/accounts/documents" replace />} />
+                <Route path="accounts/documents"              element={<RequireModule module="Finance"><DocumentsPage /></RequireModule>} />
                 <Route path="tqs/documents"                   element={<RequireModule module="Bill Tracker"><DocumentsPage /></RequireModule>} />
                 <Route path="quality/doc-repository"          element={<RequireModule module="Quality (QA/QC)"><DocumentsPage /></RequireModule>} />
                 <Route path="hse/documents"                   element={<RequireModule module="HSE & Safety"><DocumentsPage /></RequireModule>} />

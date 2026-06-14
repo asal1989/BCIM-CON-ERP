@@ -396,6 +396,38 @@ export const creditNoteAPI = {
   remove:       (id)     => api.delete(`/credit-notes/${id}`),
 };
 
+export const debitNoteAPI = {
+  list:         (params) => api.get('/debit-notes', { params }),
+  get:          (id)     => api.get(`/debit-notes/${id}`),
+  create:       (data)   => api.post('/debit-notes', data),
+  updateStatus: (id, status) => api.patch(`/debit-notes/${id}/status`, { status }),
+  remove:       (id)     => api.delete(`/debit-notes/${id}`),
+};
+
+export const chartOfAccountsAPI = {
+  list:   (params) => api.get('/chart-of-accounts', { params }),
+  create: (data)   => api.post('/chart-of-accounts', data),
+  update: (id, d)  => api.put(`/chart-of-accounts/${id}`, d),
+  remove: (id)     => api.delete(`/chart-of-accounts/${id}`),
+  seed:   ()       => api.post('/chart-of-accounts/seed'),
+  transactions: (id) => api.get(`/chart-of-accounts/${id}/transactions`),
+};
+
+export const journalEntryAPI = {
+  list:         (params) => api.get('/journal-entries', { params }),
+  get:          (id)     => api.get(`/journal-entries/${id}`),
+  create:       (data)   => api.post('/journal-entries', data),
+  updateStatus: (id, status) => api.patch(`/journal-entries/${id}/status`, { status }),
+  remove:       (id)     => api.delete(`/journal-entries/${id}`),
+};
+
+export const bankAccountAPI = {
+  list:   (params) => api.get('/bank-accounts', { params }),
+  create: (data)   => api.post('/bank-accounts', data),
+  update: (id, d)  => api.put(`/bank-accounts/${id}`, d),
+  remove: (id)     => api.delete(`/bank-accounts/${id}`),
+};
+
 export const inventoryAPI = {
   list:          (params) => api.get('/inventory', { params }),
   create:        (data)   => api.post('/inventory', data),

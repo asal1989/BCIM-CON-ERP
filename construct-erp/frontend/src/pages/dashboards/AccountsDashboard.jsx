@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { tqsBillsAPI, paymentAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
-import { DashKPI, DashSection, DashTable, Badge, inr } from './DashKPI';
+import { DashKPI, DashSection, DashTable, Badge, FlatKPI, inr } from './DashKPI';
 import dayjs from 'dayjs';
 import { clsx } from 'clsx';
 
@@ -402,38 +402,38 @@ export default function AccountsDashboard() {
   ];
 
   return (
-    <div className="p-6 space-y-5 bg-[#f4f6f9] min-h-full">
+    <div className="p-6 space-y-5 bg-slate-50 min-h-full">
 
       {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-medium text-slate-800">
+          <h1 className="text-xl font-semibold text-slate-800">
             Good {dayjs().hour() < 12 ? 'morning' : dayjs().hour() < 17 ? 'afternoon' : 'evening'}, {user?.name?.split(' ')[0]} 👋
           </h1>
-          <p className="text-sm text-slate-900 font-medium mt-0.5">Accounts Dashboard — {dayjs().format('dddd, D MMMM YYYY')}</p>
+          <p className="text-sm text-slate-400 mt-0.5">Accounts Overview — {dayjs().format('dddd, D MMMM YYYY')}</p>
         </div>
-        <Badge label="Accountant" cls="bg-emerald-100 text-emerald-700 text-xs px-3 py-1" />
+        <Badge label="Accountant" cls="bg-emerald-50 text-emerald-700 text-xs px-3 py-1" />
       </div>
 
       {/* ── KPIs ── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <DashKPI icon={DollarSign}    label="Total Outstanding"    value={unpaidBills.length}           sub={inrFmt(totalOutstanding)} color="red"    loading={loadB} />
-        <DashKPI icon={FileText}      label="PCs Pending Payment"  value={pendingPCCount}               sub={inrFmt(totalPCDue)}       color="amber"  loading={loadPC} />
-        <DashKPI icon={Clock}         label="At Accounts Stage"    value={readyForPayment.length}       sub={inrFmt(totalDue)}         color="violet" loading={loadB} />
-        <DashKPI icon={CheckCircle2}  label="Paid This Month"      value={paidThisMonth.length}         sub={inrFmt(paidAmt)}          color="emerald" loading={loadB} />
-        <DashKPI icon={AlertTriangle} label="Overdue 90+ Days"     value={overdue90.length}             sub={inrFmt(totalOverdue)}     color="red"    loading={loadA} />
-        <DashKPI icon={AlertTriangle} label="Stuck Bills (7+ days)" value={stuckBills.length}           sub={`${unpaidBills.length} unpaid total`} color="orange" loading={loadB} />
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <FlatKPI icon={DollarSign}    label="Total Outstanding"    value={unpaidBills.length}           sub={inrFmt(totalOutstanding)} color="red"    loading={loadB} />
+        <FlatKPI icon={FileText}      label="PCs Pending Payment"  value={pendingPCCount}               sub={inrFmt(totalPCDue)}       color="amber"  loading={loadPC} />
+        <FlatKPI icon={Clock}         label="At Accounts Stage"    value={readyForPayment.length}       sub={inrFmt(totalDue)}         color="purple" loading={loadB} />
+        <FlatKPI icon={CheckCircle2}  label="Paid This Month"      value={paidThisMonth.length}         sub={inrFmt(paidAmt)}          color="emerald" loading={loadB} />
+        <FlatKPI icon={AlertTriangle} label="Overdue 90+ Days"     value={overdue90.length}             sub={inrFmt(totalOverdue)}     color="red"    loading={loadA} />
+        <FlatKPI icon={AlertTriangle} label="Stuck Bills (7+ days)" value={stuckBills.length}           sub={`${unpaidBills.length} unpaid total`} color="orange" loading={loadB} />
       </div>
 
       {/* ── AP Aging Bar ── */}
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
-        <p className="text-sm font-medium text-slate-900 mb-3">AP Aging Distribution</p>
+      <div className="bg-white rounded-md border border-slate-200 p-4">
+        <p className="text-sm font-medium text-slate-800 mb-3">AP Aging Distribution</p>
         <div className="flex gap-3 flex-wrap">
           {agingBuckets.map(b => (
-            <div key={b.bucket} className="flex-1 min-w-[100px] bg-slate-50 rounded-lg p-3 text-center border border-slate-100">
+            <div key={b.bucket} className="flex-1 min-w-[100px] bg-slate-50 rounded-md p-3 text-center border border-slate-200">
               <div className={`h-1.5 rounded-full mb-2 ${AGING_COLOR[b.bucket] || 'bg-slate-400'}`} />
-              <p className="text-lg font-medium text-slate-700">{b.count}</p>
-              <p className="text-[11px] text-slate-900 font-medium font-medium">{b.bucket} days</p>
+              <p className="text-lg font-semibold text-slate-800">{b.count}</p>
+              <p className="text-[11px] text-slate-400">{b.bucket} days</p>
               <p className="text-[11px] text-slate-400">{inrFmt(b.total)}</p>
             </div>
           ))}
@@ -441,7 +441,7 @@ export default function AccountsDashboard() {
       </div>
 
       {/* ── PC Payment Table ── */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-md border border-slate-200 overflow-hidden">
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
@@ -580,7 +580,7 @@ export default function AccountsDashboard() {
       {/* ── Recent Payments ── */}
       <DashSection
         title="Recent Payments"
-        action={<Link to="/finance/payments" className="text-xs text-indigo-600 flex items-center gap-1 hover:underline">All <ArrowRight className="w-3 h-3" /></Link>}
+        action={<Link to="/accounts/purchases/payments-made" className="text-xs text-blue-600 flex items-center gap-1 hover:underline">All <ArrowRight className="w-3 h-3" /></Link>}
       >
         <DashTable cols={paymentCols} rows={payments.slice(0, 8)} empty="No recent payments" />
       </DashSection>
