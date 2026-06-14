@@ -11,7 +11,7 @@ import {
   ChevronRight, AlertCircle, FileText, Trash2, Activity,
   ChevronDown, Tag, CalendarDays, Filter, Eye, Rows3,
   UserRound, Layers3, Send, ClipboardCheck, Settings, GripVertical, RefreshCw,
-  ShoppingCart,
+  ShoppingCart, Upload, Paperclip, History, Info, MapPin,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
@@ -282,6 +282,8 @@ export default function MRSPage() {
   const [showWorkflowConfig, setShowWorkflowConfig] = useState(false);
   const [projectFilter, setProjectFilter] = useState(selectedProjectId || 'all');
   const [items, setItems] = useState([{ material: '', qty: '', unit: 'Nos', purpose: '' }]);
+  const [attachments, setAttachments] = useState([]);
+  const [dragOver, setDragOver] = useState(false);
   const [formData, setFormData] = useState({
     project_id: '', department: 'Projects', head_office_project_name: '',
     site_incharge: '', required_by: '', priority: 'normal', remarks: '',
@@ -426,6 +428,19 @@ export default function MRSPage() {
 
   const visibleProjects = projectsData ?? [];
 
+  // ── Stock lookup helpers for the requisition item table ─────
+  const stockOf = (materialName) => inventoryItems.find(i => i.material_name === materialName);
+  const itemStockStatus = (materialName) => {
+    const inv = stockOf(materialName);
+    if (!inv) return null;
+    const c = parseFloat(inv.closing_stock) || 0;
+    const m = parseFloat(inv.min_stock) || 0;
+    const r = parseFloat(inv.reorder_level) || 0;
+    if (c <= 0) return { state: 'out', value: 0 };
+    if ((m > 0 && c <= m) || (r > 0 && c <= r)) return { state: 'low', value: c };
+    return { state: 'ok', value: c };
+  };
+
   useEffect(() => {
     setProjectFilter(selectedProjectId || 'all');
   }, [selectedProjectId]);
@@ -550,6 +565,8 @@ export default function MRSPage() {
     setShowForm(false);
     setItems([{ material: '', qty: '', unit: 'Nos', purpose: '' }]);
     setFormData({ project_id: '', department: 'Projects', head_office_project_name: '', site_incharge: '', required_by: '', priority: 'normal', remarks: '' });
+    setAttachments([]);
+    setDragOver(false);
   };
 
   const handleSubmit = () => {
@@ -1185,7 +1202,11 @@ export default function MRSPage() {
             </div>
 
             {/* Modal body */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-slate-50/50">
+            <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
+              <div className="flex flex-col lg:flex-row gap-5">
+
+              {/* ── Main column ── */}
+              <div className="flex-1 min-w-0 space-y-5">
 
               {/* Project Details */}
               <div className="border border-slate-200 rounded-xl p-5 bg-white shadow-sm">
@@ -1301,14 +1322,16 @@ export default function MRSPage() {
                     <Plus className="w-3 h-3" /> Add Row
                   </button>
                 </div>
-                <div className="hidden lg:grid gap-2 mb-2 px-1" style={{ gridTemplateColumns: '32px minmax(280px,2fr) 120px 110px minmax(240px,2fr) 44px' }}>
-                  {['#', 'Material Name', 'Quantity', 'Unit', 'Purpose', ''].map((h, i) => (
+                <div className="hidden lg:grid gap-2 mb-2 px-1" style={{ gridTemplateColumns: '32px minmax(260px,2fr) 110px 100px 90px minmax(200px,2fr) 44px' }}>
+                  {['#', 'Material Name', 'Quantity', 'Unit', 'Stock', 'Purpose', ''].map((h, i) => (
                     <div key={i} className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{h}</div>
                   ))}
                 </div>
                 <div className="space-y-2">
-                  {items.map((item, idx) => (
-                    <div key={idx} className="grid grid-cols-1 lg:grid-cols-[32px_minmax(280px,2fr)_120px_110px_minmax(240px,2fr)_44px] gap-2 items-center rounded-xl border border-slate-200 lg:border-slate-100 p-3 lg:px-2 lg:py-2 bg-slate-50/70 lg:bg-slate-50/40 hover:lg:bg-indigo-50/30 transition-colors">
+                  {items.map((item, idx) => {
+                    const stock = itemStockStatus(item.material);
+                    return (
+                    <div key={idx} className="grid grid-cols-1 lg:grid-cols-[32px_minmax(260px,2fr)_110px_100px_90px_minmax(200px,2fr)_44px] gap-2 items-center rounded-xl border border-slate-200 lg:border-slate-100 p-3 lg:px-2 lg:py-2 bg-slate-50/70 lg:bg-slate-50/40 hover:lg:bg-indigo-50/30 transition-colors">
                       <div className="hidden lg:flex items-center justify-center h-7 w-7 rounded-lg bg-white border border-slate-200 text-xs font-black text-slate-400">{idx + 1}</div>
                       <MaterialCombobox
                         value={item.material}
@@ -1340,6 +1363,16 @@ export default function MRSPage() {
                       >
                         {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                       </select>
+                      <div className={clsx(
+                        'h-9 flex items-center justify-center rounded-lg border text-xs font-black',
+                        !item.material ? 'border-slate-100 text-slate-300 bg-white' :
+                        !stock ? 'border-slate-100 text-slate-300 bg-white' :
+                        stock.state === 'out' ? 'border-rose-100 bg-rose-50 text-rose-600' :
+                        stock.state === 'low' ? 'border-amber-100 bg-amber-50 text-amber-600' :
+                        'border-emerald-100 bg-emerald-50 text-emerald-600'
+                      )}>
+                        {!item.material ? '—' : !stock ? 'New' : stock.state === 'out' ? 'Out' : stock.value}
+                      </div>
                       <input
                         type="text"
                         placeholder="Intended use"
@@ -1355,7 +1388,17 @@ export default function MRSPage() {
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                  ))}
+                    );
+                  })}
+                </div>
+                {/* Total quantity footer */}
+                <div className="hidden lg:grid gap-2 mt-2 pt-2 px-1 border-t border-slate-100" style={{ gridTemplateColumns: '32px minmax(260px,2fr) 110px 100px 90px minmax(200px,2fr) 44px' }}>
+                  <div />
+                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider self-center">Total Requested Quantity</div>
+                  <div className="text-sm font-black text-indigo-700 text-right self-center">
+                    {items.reduce((sum, i) => sum + (parseFloat(i.qty) || 0), 0)}
+                  </div>
+                  <div className="col-span-4" />
                 </div>
               </div>
 
@@ -1374,6 +1417,213 @@ export default function MRSPage() {
                   value={formData.remarks}
                   onChange={e => setFormData(p => ({ ...p, remarks: e.target.value }))}
                 />
+
+                <div className="border-t border-slate-100 mt-4 pt-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center">
+                      <Paperclip className="w-3.5 h-3.5 text-indigo-600" />
+                    </div>
+                    <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Attachments</h3>
+                  </div>
+                  <label
+                    onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={e => {
+                      e.preventDefault();
+                      setDragOver(false);
+                      const files = Array.from(e.dataTransfer.files || []);
+                      if (files.length) setAttachments(a => [...a, ...files]);
+                    }}
+                    className={clsx(
+                      'flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed px-4 py-6 text-center cursor-pointer transition-colors',
+                      dragOver ? 'border-indigo-400 bg-indigo-50/60' : 'border-slate-200 bg-slate-50 hover:border-indigo-300 hover:bg-indigo-50/30'
+                    )}
+                  >
+                    <Upload className="w-5 h-5 text-indigo-500" />
+                    <span className="text-sm font-bold text-slate-700">Drag &amp; drop files here, or click to browse</span>
+                    <span className="text-xs text-slate-400">Supported formats: PDF, JPG, PNG, XLSX</span>
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.jpg,.jpeg,.png,.xlsx"
+                      className="hidden"
+                      onChange={e => {
+                        const files = Array.from(e.target.files || []);
+                        if (files.length) setAttachments(a => [...a, ...files]);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                  {attachments.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {attachments.map((f, i) => (
+                        <span key={i} className="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-lg bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700">
+                          <FileText className="w-3 h-3 text-slate-400" />
+                          {f.name}
+                          <button onClick={() => setAttachments(a => a.filter((_, j) => j !== i))} className="text-slate-400 hover:text-rose-500">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              </div>
+
+              {/* ── Sidebar ── */}
+              <div className="w-full lg:w-[300px] shrink-0 space-y-5">
+                {/* Request Summary */}
+                <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm">
+                  <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <ClipboardCheck className="w-3.5 h-3.5 text-indigo-600" /> Request Summary
+                  </h3>
+                  {(() => {
+                    const ready = items.filter(i => i.material && i.qty);
+                    const stats = ready.reduce((acc, i) => {
+                      const s = itemStockStatus(i.material);
+                      if (!s) acc.unknown++;
+                      else acc[s.state]++;
+                      return acc;
+                    }, { ok: 0, low: 0, out: 0, unknown: 0 });
+                    const days = formData.required_by ? dayjs(formData.required_by).startOf('day').diff(dayjs().startOf('day'), 'day') : null;
+                    return (
+                      <div className="space-y-1.5 text-sm">
+                        <div className="flex items-center justify-between py-1 border-b border-slate-50">
+                          <span className="text-slate-500 font-medium">Total Items</span>
+                          <span className="font-bold text-slate-900">{ready.length}</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1 border-b border-slate-50">
+                          <span className="text-slate-500 font-medium">In Stock</span>
+                          <span className="font-bold text-emerald-600">{stats.ok}</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1 border-b border-slate-50">
+                          <span className="text-slate-500 font-medium">Out of Stock</span>
+                          <span className="font-bold text-rose-600">{stats.out}</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1 border-b border-slate-50">
+                          <span className="text-slate-500 font-medium">Low Stock</span>
+                          <span className="font-bold text-amber-600">{stats.low}</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1 border-b border-slate-50">
+                          <span className="text-slate-500 font-medium">Priority</span>
+                          <span className={clsx('font-bold capitalize',
+                            formData.priority === 'critical' ? 'text-rose-600' : formData.priority === 'urgent' ? 'text-amber-600' : 'text-slate-700'
+                          )}>{formData.priority}</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1 border-b border-slate-50">
+                          <span className="text-slate-500 font-medium">Required By</span>
+                          <span className="font-bold text-slate-900">{formData.required_by ? dayjs(formData.required_by).format('DD MMM YYYY') : '—'}</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1">
+                          <span className="text-slate-500 font-medium">Days Remaining</span>
+                          <span className={clsx('font-bold',
+                            days === null ? 'text-slate-400' : days < 0 ? 'text-rose-600' : days <= 2 ? 'text-amber-600' : 'text-slate-900'
+                          )}>{days === null ? '—' : days < 0 ? `${Math.abs(days)}d overdue` : `${days} days`}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Approval Workflow */}
+                <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm">
+                  <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <Layers3 className="w-3.5 h-3.5 text-indigo-600" /> Approval Workflow
+                  </h3>
+                  <ul className="space-y-0">
+                    {[
+                      { label: 'Request Created', sub: 'On submission', state: 'done' },
+                      ...ACTIVE_STAGES.map(s => ({ label: s.label, sub: 'Pending', state: 'pending' })),
+                      { label: 'Issue from Store', sub: 'Pending', state: 'pending' },
+                    ].map((step, i, arr) => (
+                      <li key={i} className="relative flex gap-3 pb-4 last:pb-0">
+                        {i < arr.length - 1 && <span className="absolute left-[11px] top-6 bottom-0 w-px bg-slate-200" />}
+                        <span className={clsx(
+                          'relative z-10 flex items-center justify-center w-6 h-6 rounded-full shrink-0',
+                          step.state === 'done' ? 'bg-indigo-600 text-white' :
+                          i === 1 ? 'bg-white text-indigo-600 border-2 border-indigo-400' :
+                          'bg-slate-100 text-slate-400 border border-slate-200'
+                        )}>
+                          {step.state === 'done' ? <Check className="w-3.5 h-3.5" /> : i === 1 ? <Clock className="w-3 h-3" /> : <span className="w-1.5 h-1.5 rounded-full bg-current" />}
+                        </span>
+                        <div className="pt-0.5">
+                          <p className={clsx('text-xs font-bold', step.state === 'done' || i === 1 ? 'text-slate-900' : 'text-slate-400')}>{step.label}</p>
+                          <p className={clsx('text-[11px] mt-0.5', i === 1 ? 'text-indigo-600 font-semibold' : 'text-slate-400')}>{step.sub}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Submission Checklist */}
+                <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm">
+                  <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <ClipboardList className="w-3.5 h-3.5 text-indigo-600" /> Submission Checklist
+                  </h3>
+                  {(() => {
+                    const ready = items.filter(i => i.material && i.qty);
+                    const hasOutOfStock = ready.some(i => itemStockStatus(i.material)?.state === 'out');
+                    const checks = [
+                      { label: 'Required by date filled', done: !!formData.required_by },
+                      { label: 'Project & site incharge added', done: !!formData.project_id && !!formData.site_incharge },
+                      { label: 'All quantities entered', done: items.length > 0 && items.every(i => !i.material || (!!i.qty && parseFloat(i.qty) > 0)) },
+                      { label: 'Out-of-stock items acknowledged', done: !hasOutOfStock || !!formData.remarks },
+                      { label: 'Attachments uploaded', done: attachments.length > 0 },
+                      { label: 'Remarks / notes added', done: !!formData.remarks?.trim() },
+                    ];
+                    return (
+                      <div className="space-y-2.5">
+                        {checks.map((c, i) => (
+                          <label key={i} className="flex items-start gap-2 text-xs font-semibold text-slate-700 cursor-default">
+                            <span className={clsx(
+                              'mt-0.5 flex items-center justify-center w-4 h-4 rounded border shrink-0',
+                              c.done ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 bg-white'
+                            )}>
+                              {c.done && <Check className="w-3 h-3" />}
+                            </span>
+                            <span className={c.done ? '' : 'text-slate-400'}>{c.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Info box */}
+                <div className="flex gap-2.5 rounded-xl border border-indigo-100 bg-indigo-50 p-3.5 text-xs text-indigo-800 leading-relaxed">
+                  <Info className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+                  <span>Items marked <strong>Out of Stock</strong> will automatically generate a Purchase Request once this requisition is approved by the Project Manager.</span>
+                </div>
+
+                {/* Recent MRs */}
+                <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm">
+                  <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <History className="w-3.5 h-3.5 text-indigo-600" /> Recent MRs
+                  </h3>
+                  {(() => {
+                    const recent = (formData.project_id ? rawMRS.filter(m => m.project_id === formData.project_id) : rawMRS)
+                      .slice()
+                      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+                      .slice(0, 3);
+                    if (!recent.length) return <p className="text-xs text-slate-400">No previous requisitions yet.</p>;
+                    return (
+                      <div className="space-y-2.5">
+                        {recent.map(m => (
+                          <div key={m.id} className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-slate-900 font-mono truncate">{m.serial_no_formatted || m.mrs_number}</p>
+                              <p className="text-[11px] text-slate-400 mt-0.5">{dayjs(m.created_at).format('DD MMM YYYY')} · {m.item_count ?? '—'} items</p>
+                            </div>
+                            <StatusBadge status={m.status} />
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
               </div>
             </div>
 

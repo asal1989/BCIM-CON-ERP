@@ -255,7 +255,10 @@ router.get('/items-lookup', async (req, res) => {
       SELECT
         TRIM(i.material_name) AS material_name,
         TRIM(COALESCE(i.category, '')) AS category,
-        TRIM(COALESCE(i.unit, ''))     AS unit
+        TRIM(COALESCE(i.unit, ''))     AS unit,
+        i.closing_stock,
+        i.reorder_level,
+        i.min_stock
       FROM inventory i
       JOIN projects p ON i.project_id = p.id
       WHERE p.company_id = $1
