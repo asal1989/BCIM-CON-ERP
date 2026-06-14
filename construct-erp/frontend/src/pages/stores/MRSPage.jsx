@@ -32,6 +32,29 @@ const Z_LABEL = 'text-xs font-medium text-slate-500';
 const Z_CARD = 'border border-slate-200 rounded-md bg-white';
 const Z_HEAD = 'text-[13px] font-semibold text-slate-700 px-4 py-3 border-b border-slate-100';
 
+const DEPARTMENT_OPTIONS = [
+  { value: 'Projects', label: 'Projects' },
+  { value: 'Civil', label: 'Civil' },
+  { value: 'Structural', label: 'Structural' },
+  { value: 'MEP', label: 'MEP (Mechanical/Electrical/Plumbing)' },
+  { value: 'Electrical', label: 'Electrical' },
+  { value: 'Plumbing', label: 'Plumbing' },
+  { value: 'HVAC', label: 'HVAC' },
+  { value: 'Finishing', label: 'Finishing' },
+  { value: 'Safety', label: 'Safety / HSE' },
+  { value: 'QA/QC', label: 'QA / QC' },
+  { value: 'Procurement', label: 'Procurement' },
+  { value: 'Stores', label: 'Stores' },
+  { value: 'Site Office', label: 'Site Office' },
+  { value: 'Admin', label: 'Admin' },
+  { value: 'HR', label: 'HR' },
+  { value: 'Finance', label: 'Finance' },
+  { value: 'IT', label: 'IT' },
+  { value: 'Maintenance', label: 'Maintenance' },
+  { value: 'Security', label: 'Security' },
+  { value: 'Other', label: 'Other' },
+];
+
 function ZField({ label, children }) {
   return (
     <div className="space-y-1">
@@ -1236,32 +1259,15 @@ export default function MRSPage() {
                     />
                   </ZField>
                   <ZField label="Department">
-                    <select
-                      className={Z_INP}
+                    <SearchableSelect
                       value={formData.department}
-                      onChange={e => setFormData(p => ({ ...p, department: e.target.value }))}
-                    >
-                      <option value="Projects">Projects</option>
-                      <option value="Civil">Civil</option>
-                      <option value="Structural">Structural</option>
-                      <option value="MEP">MEP (Mechanical/Electrical/Plumbing)</option>
-                      <option value="Electrical">Electrical</option>
-                      <option value="Plumbing">Plumbing</option>
-                      <option value="HVAC">HVAC</option>
-                      <option value="Finishing">Finishing</option>
-                      <option value="Safety">Safety / HSE</option>
-                      <option value="QA/QC">QA / QC</option>
-                      <option value="Procurement">Procurement</option>
-                      <option value="Stores">Stores</option>
-                      <option value="Site Office">Site Office</option>
-                      <option value="Admin">Admin</option>
-                      <option value="HR">HR</option>
-                      <option value="Finance">Finance</option>
-                      <option value="IT">IT</option>
-                      <option value="Maintenance">Maintenance</option>
-                      <option value="Security">Security</option>
-                      <option value="Other">Other</option>
-                    </select>
+                      onChange={v => setFormData(p => ({ ...p, department: v }))}
+                      options={DEPARTMENT_OPTIONS}
+                      placeholder="Select department…"
+                      searchPlaceholder="Search departments…"
+                      footerLabel="departments"
+                      className="!h-9 !rounded-md !border-slate-300 !shadow-none !bg-white focus:!border-blue-500 focus:!ring-1 focus:!ring-blue-500/30"
+                    />
                   </ZField>
                   <ZField label="HO Project Name">
                     <input
