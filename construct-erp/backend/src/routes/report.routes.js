@@ -1530,6 +1530,501 @@ router.get('/procurement/rate-contracts', async (req, res) => {
   } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
 });
 
+// ── P8: Closed PO Report ────────────────────────────────────────────────────
+router.get('/procurement/closed-po', async (req, res) => {
+  try {
+    const { project_id, from_date, to_date, vendor_id } = req.query;
+    const params = [req.user.company_id];
+    const conditions = ['po.company_id = $1', "po.status IN ('fully_received','cancelled','rejected')"];
+    applyProjectScope(req, conditions, params, 'p', project_id);
+    if (from_date) { params.push(from_date); conditions.push(`po.po_date >= $${params.length}`); }
+    if (to_date)   { params.push(to_date);   conditions.push(`po.po_date <= $${params.length}`); }
+    const { rows } = await query(`
+      SELECT
+        po.serial_no_formatted AS po_number,
+        v.name    AS vendor_name,
+        p.name    AS project_name,
+        po.po_date,
+        po.status,
+        po.grand_total,
+        po.updated_at::date AS closure_date,
+        (po.updated_at::date - po.po_date) AS closure_lead_days,
+        COALESCE(grn_sum.total_received_value, 0) AS total_received_value
+      FROM purchase_orders po
+      JOIN vendors v ON v.id = po.vendor_id
+      JOIN projects p ON p.id = po.project_id
+      LEFT JOIN (
+        SELECT g.po_id,
+          SUM(COALESCE(gi.quantity_received * poi.rate, 0)) AS total_received_value
+        FROM grn g
+        JOIN grn_items gi ON gi.grn_id = g.id
+        JOIN po_items poi ON poi.id = gi.po_item_id
+        WHERE g.quality_status NOT IN ('rejected')
+        GROUP BY g.po_id
+      ) grn_sum ON grn_sum.po_id = po.id
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY po.updated_at DESC
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── P17: Procurement Lead Time Report ────────────────────────────────────────
+router.get('/procurement/lead-time', async (req, res) => {
+  try {
+    const { project_id, from_date, to_date } = req.query;
+    const params = [req.user.company_id];
+    const conditions = ['p.company_id = $1'];
+    applyProjectScope(req, conditions, params, 'p', project_id);
+    if (from_date) { params.push(from_date); conditions.push(`mr.created_at >= $${params.length}`); }
+    if (to_date)   { params.push(to_date);   conditions.push(`mr.created_at <= $${params.length}`); }
+    const { rows } = await query(`
+      WITH po_grn AS (
+        SELECT g.po_id, MIN(g.grn_date) AS first_grn_date
+        FROM grn g
+        WHERE g.quality_status NOT IN ('rejected') AND g.grn_date IS NOT NULL
+        GROUP BY g.po_id
+      ),
+      mrs_po_map AS (
+        SELECT DISTINCT mi.mrs_id, poi.po_id
+        FROM mrs_items mi
+        JOIN po_items poi ON poi.mrs_item_id::text = mi.id::text
+      )
+      SELECT
+        mr.serial_no_formatted AS mrs_number,
+        po.serial_no_formatted AS po_number,
+        p.name  AS project_name,
+        v.name  AS vendor_name,
+        mr.created_at::date AS mrs_date,
+        po.po_date,
+        pg.first_grn_date,
+        CASE WHEN po.po_date IS NOT NULL
+          THEN (po.po_date - mr.created_at::date) END AS mrs_to_po_days,
+        CASE WHEN pg.first_grn_date IS NOT NULL AND po.po_date IS NOT NULL
+          THEN (pg.first_grn_date - po.po_date) END   AS po_to_receipt_days,
+        CASE WHEN pg.first_grn_date IS NOT NULL
+          THEN (pg.first_grn_date - mr.created_at::date) END AS total_lead_days
+      FROM mrs_po_map mp
+      JOIN material_requisitions mr ON mr.id = mp.mrs_id
+      JOIN purchase_orders po ON po.id = mp.po_id
+      JOIN projects p ON p.id = mr.project_id
+      JOIN vendors v ON v.id = po.vendor_id
+      LEFT JOIN po_grn pg ON pg.po_id = po.id
+      WHERE ${conditions.join(' AND ')}
+        AND po.po_date IS NOT NULL
+      ORDER BY total_lead_days DESC NULLS LAST
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── P18: Procurement Savings Report ──────────────────────────────────────────
+router.get('/procurement/savings', async (req, res) => {
+  try {
+    const { project_id, from_date, to_date } = req.query;
+    const params = [req.user.company_id];
+    const conditions = ['p.company_id = $1'];
+    applyProjectScope(req, conditions, params, 'p', project_id);
+    if (from_date) { params.push(from_date); conditions.push(`mr.created_at >= $${params.length}`); }
+    if (to_date)   { params.push(to_date);   conditions.push(`mr.created_at <= $${params.length}`); }
+    const { rows } = await query(`
+      WITH all_quotes AS (
+        SELECT qi.mrs_item_id::text AS item_key,
+          MAX(qi.rate) AS highest_rate,
+          COUNT(DISTINCT q.vendor_id) AS vendor_count
+        FROM quotation_items qi
+        JOIN quotations q ON q.id = qi.quotation_id
+        GROUP BY qi.mrs_item_id::text
+      ),
+      selected_quotes AS (
+        SELECT qi.mrs_item_id::text AS item_key,
+          qi.rate AS selected_rate,
+          v.name AS selected_vendor
+        FROM quotation_items qi
+        JOIN quotations q ON q.id = qi.quotation_id AND q.is_selected = TRUE
+        JOIN vendors v ON v.id = q.vendor_id
+      )
+      SELECT
+        mr.serial_no_formatted AS mrs_number,
+        p.name                 AS project_name,
+        mr.created_at::date    AS mrs_date,
+        mi.material_name,
+        mi.unit,
+        COALESCE(mi.md_approved_qty, mi.quantity) AS qty,
+        ROUND(aq.highest_rate::numeric, 2)  AS highest_rate,
+        ROUND(sq.selected_rate::numeric, 2) AS selected_rate,
+        sq.selected_vendor,
+        aq.vendor_count,
+        ROUND((aq.highest_rate - sq.selected_rate)::numeric, 2) AS savings_per_unit,
+        ROUND(((aq.highest_rate - sq.selected_rate) * COALESCE(mi.md_approved_qty, mi.quantity))::numeric, 2) AS total_savings,
+        CASE WHEN aq.highest_rate > 0
+          THEN ROUND(((aq.highest_rate - sq.selected_rate) / aq.highest_rate * 100)::numeric, 1)
+          ELSE 0
+        END AS pct_savings
+      FROM mrs_items mi
+      JOIN material_requisitions mr ON mr.id = mi.mrs_id
+      JOIN projects p ON p.id = mr.project_id
+      JOIN all_quotes aq ON aq.item_key = mi.id::text
+      JOIN selected_quotes sq ON sq.item_key = mi.id::text
+      WHERE ${conditions.join(' AND ')}
+        AND sq.selected_rate IS NOT NULL
+        AND aq.highest_rate > sq.selected_rate
+      ORDER BY total_savings DESC
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── S6: Material Issue Register ───────────────────────────────────────────────
+router.get('/stores/issue-register', async (req, res) => {
+  try {
+    const { project_id, from_date, to_date, issued_to } = req.query;
+    const params = [req.user.company_id];
+    const conditions = ['p.company_id = $1'];
+    applyProjectScope(req, conditions, params, 'p', project_id);
+    if (from_date) { params.push(from_date); conditions.push(`mi.created_at >= $${params.length}`); }
+    if (to_date)   { params.push(to_date);   conditions.push(`mi.created_at <= $${params.length}`); }
+    if (issued_to) { params.push(`%${issued_to}%`); conditions.push(`mi.issued_to ILIKE $${params.length}`); }
+    const { rows } = await query(`
+      SELECT
+        mi.min_number,
+        mi.created_at::date  AS issue_date,
+        mi.issued_to,
+        p.name               AS project_name,
+        items.material_name,
+        items.unit,
+        ROUND(COALESCE(items.quantity_requested, items.quantity_issued, 0)::numeric, 3) AS qty_requested,
+        ROUND(COALESCE(items.quantity_issued, 0)::numeric, 3)   AS qty_issued,
+        ROUND(COALESCE(items.rate, 0)::numeric, 2)              AS rate,
+        ROUND(COALESCE(items.amount, 0)::numeric, 2)            AS value,
+        COALESCE(mi.vehicle_number, '') AS vehicle_number,
+        mi.status
+      FROM material_issue_notes mi
+      JOIN projects p ON p.id = mi.project_id
+      JOIN min_items items ON items.min_id = mi.id
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY mi.created_at DESC, mi.min_number
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── S7: Material Return Register ──────────────────────────────────────────────
+router.get('/stores/return-register', async (req, res) => {
+  try {
+    const { project_id, from_date, to_date } = req.query;
+    const params = [req.user.company_id];
+    const conditions = ['p.company_id = $1', "st.transaction_type = 'return'"];
+    applyProjectScope(req, conditions, params, 'p', project_id);
+    if (from_date) { params.push(from_date); conditions.push(`st.transacted_at >= $${params.length}`); }
+    if (to_date)   { params.push(to_date);   conditions.push(`st.transacted_at <= $${params.length}`); }
+    const { rows } = await query(`
+      SELECT
+        COALESCE(st.reference_number, '') AS return_ref,
+        st.transacted_at::date            AS return_date,
+        p.name                            AS project_name,
+        i.material_name,
+        i.unit,
+        ROUND(ABS(st.quantity)::numeric, 3) AS qty_returned,
+        ROUND(COALESCE(i.unit_rate, 0)::numeric, 2) AS rate,
+        ROUND((ABS(st.quantity) * COALESCE(i.unit_rate, 0))::numeric, 2) AS value,
+        COALESCE(st.issued_to, '-') AS returned_from,
+        COALESCE(st.remarks, '')    AS remarks
+      FROM stock_transactions st
+      JOIN inventory i ON i.id = st.inventory_id
+      JOIN projects p ON p.id = st.project_id
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY st.transacted_at DESC
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── S8: Stock Transfer Register ───────────────────────────────────────────────
+router.get('/stores/transfer-register', async (req, res) => {
+  try {
+    const { project_id, from_date, to_date } = req.query;
+    const params = [req.user.company_id];
+    let where = `(m.from_project_id IN (SELECT id FROM projects WHERE company_id = $1)
+               OR m.to_project_id   IN (SELECT id FROM projects WHERE company_id = $1))`;
+    if (project_id) {
+      params.push(project_id);
+      where += ` AND (m.from_project_id = $${params.length} OR m.to_project_id = $${params.length})`;
+    }
+    if (from_date) { params.push(from_date); where += ` AND m.transfer_date >= $${params.length}`; }
+    if (to_date)   { params.push(to_date);   where += ` AND m.transfer_date <= $${params.length}`; }
+    const { rows } = await query(`
+      SELECT
+        m.mtr_number,
+        m.transfer_date,
+        m.transfer_type,
+        fp.name AS from_project,
+        COALESCE(m.from_location, '') AS from_location,
+        tp.name AS to_project,
+        COALESCE(m.to_location, '')   AS to_location,
+        COALESCE(m.vehicle_number, '') AS vehicle_number,
+        m.status,
+        COUNT(mi.id)::int AS item_count,
+        ROUND(COALESCE(SUM(mi.amount), 0)::numeric, 2) AS total_amount
+      FROM material_transfers m
+      LEFT JOIN projects fp ON fp.id = m.from_project_id
+      LEFT JOIN projects tp ON tp.id = m.to_project_id
+      LEFT JOIN material_transfer_items mi ON mi.mtr_id = m.id
+      WHERE ${where}
+      GROUP BY m.id, m.mtr_number, m.transfer_date, m.transfer_type, m.from_location, m.to_location, m.vehicle_number, m.status, fp.name, tp.name
+      ORDER BY m.transfer_date DESC, m.mtr_number
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── S11: Contractor-wise Material Issue ───────────────────────────────────────
+router.get('/stores/contractor-issue', async (req, res) => {
+  try {
+    const { project_id, from_date, to_date } = req.query;
+    const params = [req.user.company_id];
+    const conditions = ['p.company_id = $1'];
+    applyProjectScope(req, conditions, params, 'p', project_id);
+    if (from_date) { params.push(from_date); conditions.push(`mi.created_at >= $${params.length}`); }
+    if (to_date)   { params.push(to_date);   conditions.push(`mi.created_at <= $${params.length}`); }
+    const { rows } = await query(`
+      SELECT
+        COALESCE(mi.issued_to, 'Unassigned') AS contractor,
+        p.name AS project_name,
+        items.material_name,
+        items.unit,
+        ROUND(SUM(COALESCE(items.quantity_issued, 0))::numeric, 3) AS total_qty,
+        ROUND(SUM(COALESCE(items.amount, 0))::numeric, 2)          AS total_value,
+        COUNT(DISTINCT mi.id)::int AS min_count,
+        MAX(mi.created_at::date)   AS last_issue_date
+      FROM material_issue_notes mi
+      JOIN projects p ON p.id = mi.project_id
+      JOIN min_items items ON items.min_id = mi.id
+      WHERE ${conditions.join(' AND ')}
+      GROUP BY COALESCE(mi.issued_to, 'Unassigned'), p.name, items.material_name, items.unit
+      ORDER BY COALESCE(mi.issued_to, 'Unassigned'), SUM(COALESCE(items.amount, 0)) DESC
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── S17: Dead Stock Report ────────────────────────────────────────────────────
+router.get('/stores/dead-stock', async (req, res) => {
+  try {
+    const { project_id, threshold_days } = req.query;
+    const threshold = Math.max(Number(threshold_days) || 180, 30);
+    const params = [req.user.company_id, threshold];
+    const conditions = ['p.company_id = $1', 'i.closing_stock > 0'];
+    applyProjectScope(req, conditions, params, 'p', project_id);
+    const { rows } = await query(`
+      WITH last_tx AS (
+        SELECT inventory_id, MAX(transacted_at)::date AS last_movement
+        FROM stock_transactions
+        WHERE project_id IN (SELECT id FROM projects WHERE company_id = $1)
+        GROUP BY inventory_id
+      )
+      SELECT
+        i.material_name,
+        i.unit,
+        p.name AS project_name,
+        COALESCE(i.site_location, '-') AS location,
+        ROUND(i.closing_stock::numeric, 3) AS current_qty,
+        ROUND(COALESCE(i.unit_rate, 0)::numeric, 2) AS unit_rate,
+        ROUND((i.closing_stock * COALESCE(i.unit_rate, 0))::numeric, 2) AS stock_value,
+        COALESCE(lt.last_movement, i.created_at::date) AS last_movement_date,
+        (CURRENT_DATE - COALESCE(lt.last_movement, i.created_at::date)) AS days_idle,
+        CASE
+          WHEN (CURRENT_DATE - COALESCE(lt.last_movement, i.created_at::date)) > 365 THEN 'Write-off'
+          WHEN (CURRENT_DATE - COALESCE(lt.last_movement, i.created_at::date)) > 270 THEN 'Dispose'
+          ELSE 'Transfer'
+        END AS suggested_action
+      FROM inventory i
+      JOIN projects p ON p.id = i.project_id
+      LEFT JOIN last_tx lt ON lt.inventory_id = i.id
+      WHERE ${conditions.join(' AND ')}
+        AND (CURRENT_DATE - COALESCE(lt.last_movement, i.created_at::date)) >= $2
+      ORDER BY days_idle DESC, stock_value DESC
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── S23: Material Wastage Report ──────────────────────────────────────────────
+router.get('/stores/wastage', async (req, res) => {
+  try {
+    const { project_id, from_date, to_date } = req.query;
+    const params = [req.user.company_id];
+    const conditions = ['p.company_id = $1', "st.transaction_type = 'adjustment'", 'st.quantity < 0'];
+    applyProjectScope(req, conditions, params, 'p', project_id);
+    if (from_date) { params.push(from_date); conditions.push(`st.transacted_at >= $${params.length}`); }
+    if (to_date)   { params.push(to_date);   conditions.push(`st.transacted_at <= $${params.length}`); }
+    const { rows } = await query(`
+      SELECT
+        st.transacted_at::date AS date,
+        p.name AS project_name,
+        COALESCE(i.site_location, '-') AS location,
+        i.material_name,
+        i.unit,
+        ROUND(ABS(st.quantity)::numeric, 3) AS qty_wasted,
+        ROUND(COALESCE(i.unit_rate, 0)::numeric, 2) AS rate,
+        ROUND((ABS(st.quantity) * COALESCE(i.unit_rate, 0))::numeric, 2) AS value,
+        COALESCE(st.remarks, '') AS reason,
+        COALESCE(u.name, '') AS recorded_by
+      FROM stock_transactions st
+      JOIN inventory i ON i.id = st.inventory_id
+      JOIN projects p ON p.id = st.project_id
+      LEFT JOIN users u ON u.id = st.transacted_by
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY st.transacted_at DESC
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── S25: Material Cost Analysis ───────────────────────────────────────────────
+router.get('/stores/material-cost-analysis', async (req, res) => {
+  try {
+    const { project_id, from_date, to_date } = req.query;
+    const params = [req.user.company_id];
+    const conditions = ['p.company_id = $1'];
+    applyProjectScope(req, conditions, params, 'p', project_id);
+    if (from_date) { params.push(from_date); conditions.push(`g.grn_date >= $${params.length}`); }
+    if (to_date)   { params.push(to_date);   conditions.push(`g.grn_date <= $${params.length}`); }
+    const { rows } = await query(`
+      SELECT
+        poi.material_name,
+        poi.unit,
+        p.name AS project_name,
+        TO_CHAR(DATE_TRUNC('month', g.grn_date), 'YYYY-MM') AS month,
+        COUNT(gi.id)::int AS grn_count,
+        ROUND(SUM(gi.quantity_received)::numeric, 3) AS total_qty,
+        ROUND(MIN(poi.rate)::numeric, 2)             AS min_rate,
+        ROUND(MAX(poi.rate)::numeric, 2)             AS max_rate,
+        ROUND(AVG(poi.rate)::numeric, 2)             AS avg_rate,
+        ROUND(SUM(gi.quantity_received * poi.rate)::numeric, 2) AS total_value,
+        CASE WHEN AVG(poi.rate) > 0
+          THEN ROUND(((MAX(poi.rate) - MIN(poi.rate)) / AVG(poi.rate) * 100)::numeric, 1)
+          ELSE 0
+        END AS cost_volatility_pct
+      FROM grn_items gi
+      JOIN grn g ON g.id = gi.grn_id AND g.quality_status NOT IN ('rejected') AND g.grn_date IS NOT NULL
+      JOIN po_items poi ON poi.id = gi.po_item_id
+      JOIN purchase_orders po ON po.id = poi.po_id
+      JOIN projects p ON p.id = g.project_id
+      WHERE ${conditions.join(' AND ')}
+      GROUP BY poi.material_name, poi.unit, p.name, DATE_TRUNC('month', g.grn_date)
+      ORDER BY poi.material_name, month
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── S26: Inventory Turnover Report ────────────────────────────────────────────
+router.get('/stores/inventory-turnover', async (req, res) => {
+  try {
+    const { project_id } = req.query;
+    const params = [req.user.company_id];
+    const conditions = ['p.company_id = $1', 'i.closing_stock > 0'];
+    applyProjectScope(req, conditions, params, 'p', project_id);
+    const { rows } = await query(`
+      WITH consumption AS (
+        SELECT st.inventory_id,
+          SUM(ABS(st.quantity) * COALESCE(i2.unit_rate, 0)) AS consumption_value
+        FROM stock_transactions st
+        JOIN inventory i2 ON i2.id = st.inventory_id
+        WHERE st.transaction_type IN ('issue', 'transfer_out')
+          AND st.project_id IN (SELECT id FROM projects WHERE company_id = $1)
+        GROUP BY st.inventory_id
+      )
+      SELECT
+        i.material_name,
+        i.unit,
+        p.name AS project_name,
+        ROUND(i.closing_stock::numeric, 3) AS closing_stock,
+        ROUND(COALESCE(i.unit_rate, 0)::numeric, 2) AS unit_rate,
+        ROUND((i.closing_stock * COALESCE(i.unit_rate, 0))::numeric, 2) AS closing_stock_value,
+        ROUND(COALESCE(c.consumption_value, 0)::numeric, 2) AS consumption_value,
+        CASE WHEN (i.closing_stock * COALESCE(i.unit_rate, 0)) > 0
+          THEN ROUND((COALESCE(c.consumption_value, 0) / (i.closing_stock * COALESCE(i.unit_rate, 0)))::numeric, 2)
+          ELSE 0
+        END AS turnover_ratio,
+        CASE WHEN COALESCE(c.consumption_value, 0) > 0
+          THEN ROUND((365 * (i.closing_stock * COALESCE(i.unit_rate, 0)) / c.consumption_value)::numeric, 0)
+          ELSE NULL
+        END AS days_inventory_outstanding
+      FROM inventory i
+      JOIN projects p ON p.id = i.project_id
+      LEFT JOIN consumption c ON c.inventory_id = i.id
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY COALESCE(c.consumption_value, 0) / NULLIF(i.closing_stock * COALESCE(i.unit_rate, 0), 0) DESC NULLS LAST
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// ── S30: Material Requirement Planning (MRP) Report ──────────────────────────
+router.get('/stores/mrp', async (req, res) => {
+  try {
+    const { project_id } = req.query;
+    const params = [req.user.company_id];
+    let projectFilter;
+    if (project_id) {
+      params.push(project_id);
+      projectFilter = `mr.project_id = $${params.length}`;
+    } else {
+      projectFilter = `mr.project_id IN (SELECT id FROM projects WHERE company_id = $1)`;
+    }
+    const { rows } = await query(`
+      WITH pending_mrs AS (
+        SELECT
+          lower(trim(mi.material_name)) AS material_key,
+          mi.material_name,
+          mr.project_id,
+          SUM(COALESCE(mi.quantity, 0)) AS requested_qty,
+          MIN(mr.created_at::date)       AS earliest_mrs_date
+        FROM mrs_items mi
+        JOIN material_requisitions mr ON mr.id = mi.mrs_id
+        WHERE ${projectFilter}
+          AND mr.status NOT IN ('cancelled', 'rejected', 'issued')
+        GROUP BY lower(trim(mi.material_name)), mi.material_name, mr.project_id
+      ),
+      current_stock AS (
+        SELECT i.project_id,
+          lower(trim(i.material_name)) AS material_key,
+          SUM(i.closing_stock) AS stock_qty
+        FROM inventory i
+        WHERE i.project_id IN (SELECT id FROM projects WHERE company_id = $1)
+        GROUP BY i.project_id, lower(trim(i.material_name))
+      ),
+      avg_lead AS (
+        SELECT lower(trim(poi.material_name)) AS material_key,
+          ROUND(AVG(g.grn_date - po.po_date)::numeric, 0) AS avg_lead_days
+        FROM grn g
+        JOIN po_items poi ON poi.po_id = g.po_id
+        JOIN purchase_orders po ON po.id = g.po_id
+        WHERE g.grn_date IS NOT NULL AND po.po_date IS NOT NULL
+          AND po.project_id IN (SELECT id FROM projects WHERE company_id = $1)
+        GROUP BY lower(trim(poi.material_name))
+      )
+      SELECT
+        p.name AS project_name,
+        pm.material_name,
+        ROUND(pm.requested_qty::numeric, 3) AS pending_requisition_qty,
+        ROUND(COALESCE(cs.stock_qty, 0)::numeric, 3) AS current_stock,
+        ROUND(GREATEST(pm.requested_qty - COALESCE(cs.stock_qty, 0), 0)::numeric, 3) AS net_requirement,
+        COALESCE(al.avg_lead_days, 14)::int AS avg_lead_days,
+        (pm.earliest_mrs_date + COALESCE(al.avg_lead_days, 14)::int) AS suggested_order_by
+      FROM pending_mrs pm
+      JOIN projects p ON p.id = pm.project_id
+      LEFT JOIN current_stock cs ON cs.project_id = pm.project_id AND cs.material_key = pm.material_key
+      LEFT JOIN avg_lead al ON al.material_key = pm.material_key
+      WHERE GREATEST(pm.requested_qty - COALESCE(cs.stock_qty, 0), 0) > 0
+      ORDER BY GREATEST(pm.requested_qty - COALESCE(cs.stock_qty, 0), 0) DESC
+    `, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
 // ── S21: Physical Stock Verification Report ──────────────────────────────────
 router.get('/stores/stock-verification', async (req, res) => {
   try {
