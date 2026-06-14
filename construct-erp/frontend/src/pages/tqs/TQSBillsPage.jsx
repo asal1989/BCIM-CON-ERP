@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { tqsBillsAPI, projectAPI, tqsVendorsAPI, poAPI, inventoryAPI, subcontractorAPI } from '../../api/client';
 import MaterialCombobox from '../../components/shared/MaterialCombobox';
+import { FIELD_HL } from '../../constants/fieldStyles';
+import { clsx } from 'clsx';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
 import { FileText, Plus, Search, ChevronRight, X, ChevronUp, ChevronDown, Pencil, Trash2, AlertTriangle, Upload, Download, CheckCircle2, IndianRupee, SlidersHorizontal, FileSpreadsheet, ChevronsRight, ExternalLink, Edit2 } from 'lucide-react';
@@ -67,7 +69,7 @@ const EMPTY_FORM = {
 
 const EMPTY_ITEM = { category: '', item_name: '', unit: '', quantity: '', rate: '', discount_amount: '', gst_pct: '18', po_item_id: '', wo_item_id: '', remaining_qty: null };
 
-const F = 'w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 focus:ring-2 focus:ring-blue-400 outline-none bg-white placeholder:text-slate-400';
+const F = `w-full h-10 rounded-lg px-3 text-sm font-medium text-slate-900 outline-none transition-all border placeholder:text-slate-500 ${FIELD_HL}`;
 
 function Lbl({ children, req }) {
   return <label className="block text-[11px] font-medium text-slate-500 mb-1 tracking-wide">{children}{req && <span className="text-red-400 ml-0.5">*</span>}</label>;
@@ -808,7 +810,7 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
               <div className="flex items-center gap-3">
                 {/* Tax Mode */}
                 <select
-                  className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 text-slate-900 focus:ring-2 focus:ring-blue-400 outline-none bg-white"
+                  className={`text-xs h-9 rounded-lg px-2 text-slate-900 outline-none transition-all border ${FIELD_HL}`}
                   value={form.tax_mode} onChange={e => set('tax_mode', e.target.value)}
                 >
                   <option value="intrastate">Intrastate (CGST + SGST)</option>
@@ -891,7 +893,7 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                           />
                         </td>
                         <td className="px-2 py-1.5">
-                          <input className="w-14 border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-blue-400"
+                          <input className={`w-16 rounded px-2 py-1.5 text-xs outline-none transition-all border ${FIELD_HL}`}
                             placeholder="Nos"
                             value={it.unit} onChange={e => updateItem(i, 'unit', e.target.value)} />
                         </td>
@@ -905,11 +907,11 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                                 <input
                                   type="number" step="0.001"
                                   max={rem !== null && rem !== undefined ? rem : undefined}
-                                  className={`w-20 border rounded px-2 py-1 text-xs text-right outline-none focus:ring-1 ${
+                                  className={clsx('w-20 rounded px-2 py-1.5 text-xs text-right outline-none transition-all border',
                                     exceeded
-                                      ? 'border-red-400 bg-red-50 text-red-700 focus:ring-red-400'
-                                      : 'border-slate-200 focus:ring-blue-400'
-                                  }`}
+                                      ? 'border-red-400 bg-red-50 text-red-700 shadow-[0_0_0_3px_rgba(248,113,113,0.15)] focus:border-red-500'
+                                      : FIELD_HL
+                                  )}
                                   placeholder="0"
                                   value={it.quantity}
                                   onChange={e => updateItem(i, 'quantity', e.target.value)}
@@ -924,19 +926,19 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                           })()}
                         </td>
                         <td className="px-2 py-1.5">
-                          <input type="number" step="0.01" className="w-24 border border-slate-200 rounded px-2 py-1 text-xs text-right outline-none focus:ring-1 focus:ring-blue-400"
+                          <input type="number" step="0.01" className={`w-24 rounded px-2 py-1.5 text-xs text-right outline-none transition-all border ${FIELD_HL}`}
                             placeholder="0.00"
                             value={it.rate} onChange={e => updateItem(i, 'rate', e.target.value)} />
                         </td>
                         <td className="px-2 py-1.5">
-                          <input type="number" step="0.01" className="w-24 border border-slate-200 rounded px-2 py-1 text-xs text-right outline-none focus:ring-1 focus:ring-blue-400"
+                          <input type="number" step="0.01" className={`w-24 rounded px-2 py-1.5 text-xs text-right outline-none transition-all border ${FIELD_HL}`}
                             placeholder="0.00"
                             value={discount > 0 && !it.discount_amount ? discount.toFixed(2) : it.discount_amount}
                             onChange={e => updateItem(i, 'discount_amount', e.target.value)} />
                         </td>
                         <td className="px-2 py-1.5 text-right text-slate-900 font-medium">{basic !== 0 ? inr(basic) : '-'}</td>
                         <td className="px-2 py-1.5">
-                          <input type="number" step="0.5" className="w-14 border border-slate-200 rounded px-2 py-1 text-xs text-center outline-none focus:ring-1 focus:ring-blue-400"
+                          <input type="number" step="0.5" className={`w-16 rounded px-2 py-1.5 text-xs text-center outline-none transition-all border ${FIELD_HL}`}
                             placeholder="18"
                             value={it.gst_pct} onChange={e => updateItem(i, 'gst_pct', e.target.value)} />
                         </td>
@@ -1270,7 +1272,7 @@ function ImportBillsModal({ projects, defaultProjectId, onClose, onDone }) {
             <div className="flex-1">
               <p className="text-sm font-medium text-slate-900 font-medium mb-1.5">Select project</p>
               <select
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 outline-none bg-white"
+                className={`w-full h-10 rounded-lg px-3 text-sm outline-none transition-all border ${FIELD_HL}`}
                 value={projectId}
                 onChange={e => setProjectId(e.target.value)}
               >
@@ -1527,7 +1529,7 @@ function EditBillModal({ bill, projects, onClose }) {
             <div className="flex items-center justify-between mb-3">
               <p className="text-xs font-medium text-slate-900 font-medium uppercase tracking-widest">Invoice Amounts & GST</p>
               <select
-                className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 text-slate-900 focus:ring-2 focus:ring-blue-400 outline-none bg-white"
+                className={`text-xs h-9 rounded-lg px-2 text-slate-900 outline-none transition-all border ${FIELD_HL}`}
                 value={form.tax_mode} onChange={e => set('tax_mode', e.target.value)}
               >
                 <option value="intrastate">Intrastate (CGST + SGST)</option>
@@ -2346,8 +2348,7 @@ export default function TQSBillsPage() {
             { val: vendorFilter, set: setVendorFilter, opts: [['', 'All Vendors'], ...vendorOptions.map(v => [v, v])], cls: 'max-w-[180px]' },
           ].map((s, i) => (
             <select key={i} value={s.val} onChange={e => s.set(e.target.value)}
-              className={`rounded-lg px-3 py-1.5 text-sm text-slate-900 outline-none bg-slate-50 ${s.cls || ''}`}
-              style={{ border: `1px solid ${BORDER}` }}>
+              className={clsx('h-9 rounded-lg px-3 text-sm font-medium outline-none transition-all border', FIELD_HL, s.cls)}>
               {s.opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           ))}
