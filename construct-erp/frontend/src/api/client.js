@@ -325,10 +325,55 @@ export const financeAPI = {
 };
 
 export const pettyCashAPI = {
-  list:    (params) => api.get('/petty-cash', { params }),
-  summary: (params) => api.get('/petty-cash/summary', { params }),
-  create:  (data)   => api.post('/petty-cash', data),
-  delete:  (id)     => api.delete(`/petty-cash/${id}`),
+  // Dashboard
+  dashboard:    (params) => api.get('/petty-cash/dashboard', { params }),
+  // Masters
+  accounts:     (params) => api.get('/petty-cash/accounts', { params }),
+  createAccount:(data)   => api.post('/petty-cash/accounts', data),
+  updateAccount:(id, d)  => api.patch(`/petty-cash/accounts/${id}`, d),
+  custodians:   (params) => api.get('/petty-cash/custodians', { params }),
+  createCustodian:(data) => api.post('/petty-cash/custodians', data),
+  updateCustodian:(id,d) => api.patch(`/petty-cash/custodians/${id}`, d),
+  categories:   (params) => api.get('/petty-cash/categories', { params }),
+  createCategory:(data)  => api.post('/petty-cash/categories', data),
+  // Requests
+  requests:     (params) => api.get('/petty-cash/requests', { params }),
+  createRequest:(data)   => api.post('/petty-cash/requests', data),
+  updateRequest:(id, d)  => api.patch(`/petty-cash/requests/${id}`, d),
+  submitRequest:(id)     => api.post(`/petty-cash/requests/${id}/submit`),
+  approveRequest:(id, d) => api.post(`/petty-cash/requests/${id}/approve`, d),
+  issueRequest: (id, d)  => api.post(`/petty-cash/requests/${id}/issue`, d),
+  // Expenses
+  expenses:     (params) => api.get('/petty-cash/expenses', { params }),
+  createExpense:(data)   => api.post('/petty-cash/expenses', data),
+  updateExpense:(id, d)  => api.patch(`/petty-cash/expenses/${id}`, d),
+  submitExpense:(id)     => api.post(`/petty-cash/expenses/${id}/submit`),
+  approveExpense:(id, d) => api.post(`/petty-cash/expenses/${id}/approve`, d),
+  deleteExpense:(id)     => api.delete(`/petty-cash/expenses/${id}`),
+  // Settlements
+  settlements:  (params) => api.get('/petty-cash/settlements', { params }),
+  createSettlement:(data)=> api.post('/petty-cash/settlements', data),
+  verifySettlement:(id,d)=> api.post(`/petty-cash/settlements/${id}/verify`, d),
+  // Transfers
+  transfers:    (params) => api.get('/petty-cash/transfers', { params }),
+  createTransfer:(data)  => api.post('/petty-cash/transfers', data),
+  approveTransfer:(id)   => api.post(`/petty-cash/transfers/${id}/approve`),
+  // Adjustments
+  adjustments:  (params) => api.get('/petty-cash/adjustments', { params }),
+  createAdjustment:(data)=> api.post('/petty-cash/adjustments', data),
+  approveAdjustment:(id) => api.post(`/petty-cash/adjustments/${id}/approve`),
+  // Approvals
+  pendingApprovals:() => api.get('/petty-cash/approvals/pending'),
+  // Reports
+  cashBook:     (params) => api.get('/petty-cash/reports/cash-book', { params }),
+  expenseRegister:(params)=> api.get('/petty-cash/reports/expense-register', { params }),
+  siteWise:     (params) => api.get('/petty-cash/reports/site-wise', { params }),
+  custodianWise:(params) => api.get('/petty-cash/reports/custodian-wise', { params }),
+  categoryWise: (params) => api.get('/petty-cash/reports/category-wise', { params }),
+  pendingSettlement:() => api.get('/petty-cash/reports/pending-settlement'),
+  auditTrail:   (params) => api.get('/petty-cash/reports/audit-trail', { params }),
+  // Legacy
+  summary:      (params) => api.get('/petty-cash/summary', { params }),
 };
 
 export const paymentAPI = {
