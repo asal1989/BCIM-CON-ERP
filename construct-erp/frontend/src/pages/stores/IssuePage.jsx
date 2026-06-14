@@ -10,6 +10,7 @@ import { clsx } from 'clsx';
 import dayjs from 'dayjs';
 import { minAPI, projectAPI, mrsAPI, vendorAPI, inventoryAPI } from '../../api/client';
 import { FIELD_HL } from '../../constants/fieldStyles';
+import SearchableSelect from '../../components/shared/SearchableSelect';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import toast from 'react-hot-toast';
 import { useReactToPrint } from 'react-to-print';
@@ -348,11 +349,13 @@ function MINForm({ onClose, projects, contractors, qc }) {
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div className="col-span-2 md:col-span-1 space-y-1.5">
                 <label className="text-xs font-bold text-slate-700">Project *</label>
-                <select className={inp} value={formData.project_id}
-                  onChange={e => setFormData(p => ({ ...p, project_id: e.target.value }))}>
-                  <option value="">Select site store…</option>
-                  {projects?.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                <SearchableSelect
+                  value={formData.project_id}
+                  onChange={v => setFormData(p => ({ ...p, project_id: v }))}
+                  options={(projects || []).map(p => ({ value: p.id, label: p.name }))}
+                  placeholder="Select site store…"
+                  searchPlaceholder="Search projects…"
+                />
               </div>
               <div className="col-span-2 space-y-1.5">
                 <label className="text-xs font-bold text-slate-700">Work Activity *</label>

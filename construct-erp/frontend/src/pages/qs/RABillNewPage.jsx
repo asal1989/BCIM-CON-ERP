@@ -8,6 +8,7 @@ import {
 import { clsx } from 'clsx';
 // FIX: Added missing measurementAPI, vendorAPI, and materialReconAPI imports
 import { raBillAPI, projectAPI, boqAPI, measurementAPI, vendorAPI, variationAPI, normsAPI, materialReconAPI, priceEscalationAPI } from '../../api/client';
+import SearchableSelect from '../../components/shared/SearchableSelect';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -528,10 +529,13 @@ export default function RABillNewPage() {
             {/* Bill Info */}
             <Card icon={<Building2 size={15} />} title="Bill Information">
               <Field label="Project Site *">
-                <select className="field-input" value={formData.project_id} onChange={e => set('project_id', e.target.value)}>
-                  <option value="">— Select project —</option>
-                  {projects?.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                <SearchableSelect
+                  value={formData.project_id}
+                  onChange={v => set('project_id', v)}
+                  options={(projects || []).map(p => ({ value: p.id, label: p.name }))}
+                  placeholder="— Select project —"
+                  searchPlaceholder="Search projects…"
+                />
               </Field>
 
               {selectedProject && (

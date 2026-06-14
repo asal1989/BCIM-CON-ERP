@@ -8,6 +8,7 @@ import { planningP6API, projectAPI, planningAPI } from '../../api/client';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
 import { FIELD_HL } from '../../constants/fieldStyles';
+import SearchableSelect from '../../components/shared/SearchableSelect';
 
 const MRP_INP = `w-full h-10 rounded-lg px-3 text-sm font-medium outline-none transition-all border ${FIELD_HL}`;
 
@@ -173,11 +174,15 @@ export default function MRPPage() {
           <p className="text-sm text-slate-500 mt-0.5">MRP — plan, track orders, receipts & consumption</p>
         </div>
         <div className="flex items-center gap-2">
-          <select value={projectId} onChange={e => setProjectId(e.target.value)}
-            className={clsx('h-10 w-64 rounded-lg px-3 text-sm font-medium outline-none transition-all border', FIELD_HL)}>
-            <option value="">— Select project —</option>
-            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          <div className="w-64">
+            <SearchableSelect
+              value={projectId}
+              onChange={v => setProjectId(v)}
+              options={projects.map(p => ({ value: p.id, label: p.name }))}
+              placeholder="— Select project —"
+              searchPlaceholder="Search projects…"
+            />
+          </div>
           {projectId && (
             <button onClick={() => setShowAdd(true)}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 shadow-sm">

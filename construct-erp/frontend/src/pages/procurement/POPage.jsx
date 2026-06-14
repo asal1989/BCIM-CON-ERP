@@ -16,6 +16,7 @@ import { clsx } from 'clsx';
 import dayjs from 'dayjs';
 import { poAPI, vendorAPI, projectAPI, mrsAPI, inventoryAPI } from '../../api/client';
 import MaterialCombobox from '../../components/shared/MaterialCombobox';
+import SearchableSelect from '../../components/shared/SearchableSelect';
 import { FIELD_HL } from '../../constants/fieldStyles';
 import toast from 'react-hot-toast';
 import POPrintTemplate from './POPrintTemplate';
@@ -543,16 +544,22 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
                 )}
               </Field>
               <Field label="Vendor *">
-                <select className={INP} value={form.vendor_id} onChange={e => set('vendor_id', e.target.value)}>
-                  <option value="">Select vendor…</option>
-                  {vendorOptions.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                </select>
+                <SearchableSelect
+                  value={form.vendor_id}
+                  onChange={v => set('vendor_id', v)}
+                  options={vendorOptions.map(v => ({ value: v.id, label: v.name }))}
+                  placeholder="Select vendor…"
+                  searchPlaceholder="Search vendors…"
+                />
               </Field>
               <Field label="Project *">
-                <select className={INP} value={form.project_id} onChange={e => set('project_id', e.target.value)}>
-                  <option value="">Select project…</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                <SearchableSelect
+                  value={form.project_id}
+                  onChange={v => set('project_id', v)}
+                  options={projects.map(p => ({ value: p.id, label: p.name }))}
+                  placeholder="Select project…"
+                  searchPlaceholder="Search projects…"
+                />
               </Field>
               <Field label="PO Date *">
                 <input type="date" className={INP} value={form.po_date} onChange={e => set('po_date', e.target.value)} />

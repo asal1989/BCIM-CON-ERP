@@ -1,6 +1,7 @@
 // src/pages/stores/MRSPage.jsx
 import RecordAttachments from '../../components/shared/RecordAttachments';
 import MaterialCombobox from '../../components/shared/MaterialCombobox';
+import SearchableSelect from '../../components/shared/SearchableSelect';
 import { FIELD_HL } from '../../constants/fieldStyles';
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
@@ -1234,14 +1235,13 @@ export default function MRSPage() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   <Field label="Project *">
-                    <select
-                      className={clsx('w-full h-10 rounded-xl px-3.5 text-sm font-medium text-slate-900 outline-none transition-all border', FIELD_HL)}
+                    <SearchableSelect
                       value={formData.project_id}
-                      onChange={e => setFormData(p => ({ ...p, project_id: e.target.value }))}
-                    >
-                      <option value="">Select project…</option>
-                      {visibleProjects.map(proj => <option key={proj.id} value={proj.id}>{proj.name}</option>)}
-                    </select>
+                      onChange={v => setFormData(p => ({ ...p, project_id: v }))}
+                      options={visibleProjects.map(proj => ({ value: proj.id, label: proj.name }))}
+                      placeholder="Select project…"
+                      searchPlaceholder="Search projects…"
+                    />
                   </Field>
                   <Field label="Department">
                     <select

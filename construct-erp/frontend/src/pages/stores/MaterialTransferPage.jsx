@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { mtrAPI, projectAPI, inventoryAPI } from '../../api/client';
 import MaterialCombobox from '../../components/shared/MaterialCombobox';
+import SearchableSelect from '../../components/shared/SearchableSelect';
 import { FIELD_HL } from '../../constants/fieldStyles';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import {
@@ -200,10 +201,13 @@ function MTRForm({ mtr, projects, onClose }) {
                 <MapPin size={11} className="text-rose-400" /> From
               </p>
               <Field label="From Project">
-                <select value={form.from_project_id} onChange={e => set('from_project_id', e.target.value)} className={inp}>
-                  <option value="">— Select project —</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.project_code} — {p.name}</option>)}
-                </select>
+                <SearchableSelect
+                  value={form.from_project_id}
+                  onChange={v => set('from_project_id', v)}
+                  options={projects.map(p => ({ value: p.id, label: `${p.project_code} — ${p.name}` }))}
+                  placeholder="— Select project —"
+                  searchPlaceholder="Search projects…"
+                />
               </Field>
               <Field label="From Location / Store">
                 <input value={form.from_location} onChange={e => set('from_location', e.target.value)}
@@ -216,10 +220,13 @@ function MTRForm({ mtr, projects, onClose }) {
                 <MapPin size={11} className="text-teal-500" /> To
               </p>
               <Field label="To Project">
-                <select value={form.to_project_id} onChange={e => set('to_project_id', e.target.value)} className={inp}>
-                  <option value="">— Select project —</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.project_code} — {p.name}</option>)}
-                </select>
+                <SearchableSelect
+                  value={form.to_project_id}
+                  onChange={v => set('to_project_id', v)}
+                  options={projects.map(p => ({ value: p.id, label: `${p.project_code} — ${p.name}` }))}
+                  placeholder="— Select project —"
+                  searchPlaceholder="Search projects…"
+                />
               </Field>
               <Field label="To Location / Store">
                 <input value={form.to_location} onChange={e => set('to_location', e.target.value)}

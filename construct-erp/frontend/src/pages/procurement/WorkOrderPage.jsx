@@ -16,6 +16,7 @@ import { clsx } from 'clsx';
 import dayjs from 'dayjs';
 import { subcontractorAPI, vendorAPI, projectAPI } from '../../api/client';
 import { FIELD_HL } from '../../constants/fieldStyles';
+import SearchableSelect from '../../components/shared/SearchableSelect';
 import toast from 'react-hot-toast';
 import WOPrintTemplate from './WOPrintTemplate';
 
@@ -663,10 +664,13 @@ function CreateWOModal({ onClose, vendors, projects, onCreate, onUpdate, isPendi
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="col-span-2">
                 <Lbl req>Project</Lbl>
-                <select className={inp} value={form.project_id} onChange={e => f('project_id', e.target.value)}>
-                  <option value="">Select project…</option>
-                  {(projects||[]).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                <SearchableSelect
+                  value={form.project_id}
+                  onChange={v => f('project_id', v)}
+                  options={(projects||[]).map(p => ({ value: p.id, label: p.name }))}
+                  placeholder="Select project…"
+                  searchPlaceholder="Search projects…"
+                />
               </div>
               <div>
                 <Lbl>WO Number</Lbl>
@@ -684,10 +688,13 @@ function CreateWOModal({ onClose, vendors, projects, onCreate, onUpdate, isPendi
               </div>
               <div className="col-span-2 md:col-span-2">
                 <Lbl req>Contractor / Vendor</Lbl>
-                <select className={inp} value={form.vendor_id} onChange={e => f('vendor_id', e.target.value)}>
-                  <option value="">Select contractor…</option>
-                  {vendorOptions.map(v => <option key={v.id} value={v.id}>{v.name}{v.vendor_type ? ` · ${v.vendor_type.replace(/_/g,' ')}` : ''}</option>)}
-                </select>
+                <SearchableSelect
+                  value={form.vendor_id}
+                  onChange={v => f('vendor_id', v)}
+                  options={vendorOptions.map(v => ({ value: v.id, label: v.name, sublabel: v.vendor_type ? v.vendor_type.replace(/_/g,' ') : '' }))}
+                  placeholder="Select contractor…"
+                  searchPlaceholder="Search contractors…"
+                />
               </div>
               <div>
                 <Lbl>Work Category</Lbl>

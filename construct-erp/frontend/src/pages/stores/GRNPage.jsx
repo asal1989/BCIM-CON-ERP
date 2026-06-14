@@ -13,6 +13,7 @@ import { clsx } from 'clsx';
 import dayjs from 'dayjs';
 import { grnAPI, projectAPI, vendorAPI, poAPI, inventoryAPI } from '../../api/client';
 import MaterialCombobox from '../../components/shared/MaterialCombobox';
+import SearchableSelect from '../../components/shared/SearchableSelect';
 import { FIELD_HL } from '../../constants/fieldStyles';
 import toast from 'react-hot-toast';
 import { useReactToPrint } from 'react-to-print';
@@ -832,15 +833,17 @@ function GRNForm({ onClose, projects, qc }) {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="col-span-2 space-y-1.5">
                 <label className="text-xs font-bold text-slate-700">Project *</label>
-                <select value={form.project_id} onChange={e => {
-                  setField('project_id', e.target.value);
-                  // reset PO when project changes
-                  setForm(p => ({ ...p, project_id: e.target.value, po_id: '', po_number: '', vendor_id: '' }));
-                  setItems([emptyItem()]);
-                }} className={inp}>
-                  <option value="">Select project…</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                <SearchableSelect
+                  value={form.project_id}
+                  onChange={v => {
+                    // reset PO when project changes
+                    setForm(p => ({ ...p, project_id: v, po_id: '', po_number: '', vendor_id: '' }));
+                    setItems([emptyItem()]);
+                  }}
+                  options={projects.map(p => ({ value: p.id, label: p.name }))}
+                  placeholder="Select project…"
+                  searchPlaceholder="Search projects…"
+                />
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700">GRN Date *</label>

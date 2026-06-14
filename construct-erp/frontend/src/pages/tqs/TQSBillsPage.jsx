@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { tqsBillsAPI, projectAPI, tqsVendorsAPI, poAPI, inventoryAPI, subcontractorAPI } from '../../api/client';
 import MaterialCombobox from '../../components/shared/MaterialCombobox';
+import SearchableSelect from '../../components/shared/SearchableSelect';
 import { FIELD_HL } from '../../constants/fieldStyles';
 import { clsx } from 'clsx';
 import useAuthStore from '../../store/authStore';
@@ -582,10 +583,13 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
               {/* Project */}
               <div>
                 <Lbl req>Project</Lbl>
-                <select className={F} value={form.project_id} onChange={e => set('project_id', e.target.value)} required>
-                  <option value="">Select project...</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                <SearchableSelect
+                  value={form.project_id}
+                  onChange={v => set('project_id', v)}
+                  options={projects.map(p => ({ value: p.id, label: p.name }))}
+                  placeholder="Select project…"
+                  searchPlaceholder="Search projects…"
+                />
               </div>
 
               {/* Bill Type */}
@@ -1271,14 +1275,13 @@ function ImportBillsModal({ projects, defaultProjectId, onClose, onDone }) {
             <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-900 flex items-center justify-center text-sm font-medium flex-shrink-0">2</div>
             <div className="flex-1">
               <p className="text-sm font-medium text-slate-900 font-medium mb-1.5">Select project</p>
-              <select
-                className={`w-full h-10 rounded-lg px-3 text-sm outline-none transition-all border ${FIELD_HL}`}
+              <SearchableSelect
                 value={projectId}
-                onChange={e => setProjectId(e.target.value)}
-              >
-                <option value="">- Select project -</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+                onChange={v => setProjectId(v)}
+                options={projects.map(p => ({ value: p.id, label: p.name }))}
+                placeholder="Select project…"
+                searchPlaceholder="Search projects…"
+              />
             </div>
           </div>
 
@@ -1509,10 +1512,13 @@ function EditBillModal({ bill, projects, onClose }) {
               {projects.length > 0 && (
                 <div className="col-span-2">
                   <Lbl>Project</Lbl>
-                  <select className={F} value={form.project_id} onChange={e => set('project_id', e.target.value)}>
-                    <option value="">- Select Project -</option>
-                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={form.project_id}
+                    onChange={v => set('project_id', v)}
+                    options={projects.map(p => ({ value: p.id, label: p.name }))}
+                    placeholder="Select project…"
+                    searchPlaceholder="Search projects…"
+                  />
                 </div>
               )}
               {form.bill_type === 'wo' && (
@@ -1833,10 +1839,13 @@ function RecordAdvanceModal({ onClose, projects, vendors, defaultProjectId }) {
           {/* Project */}
           <div>
             <label className="block text-xs font-medium text-slate-900 font-medium mb-1">Project</label>
-            <select className={F} value={form.project_id} onChange={e => set('project_id', e.target.value)}>
-              <option value="">- Select project -</option>
-              {(projects || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={form.project_id}
+              onChange={v => set('project_id', v)}
+              options={(projects || []).map(p => ({ value: p.id, label: p.name }))}
+              placeholder="Select project…"
+              searchPlaceholder="Search projects…"
+            />
           </div>
 
           {/* Vendor */}
