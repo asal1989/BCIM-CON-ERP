@@ -1,5 +1,6 @@
 // Shared KPI card used by all role dashboards
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 const COLOR_MAP = {
   indigo:  { bg: 'bg-indigo-50',  icon: 'bg-indigo-100 text-indigo-600',   val: 'text-indigo-700' },
@@ -30,6 +31,43 @@ export function DashKPI({ label, value, sub, icon: Icon, color = 'indigo', loadi
         {sub && <p className="text-[11px] text-slate-900 font-medium mt-0.5">{sub}</p>}
       </div>
     </div>
+  );
+}
+
+// Flat 2026-style KPI card (white card, soft icon badge, no shadows)
+const FLAT_COLOR_MAP = {
+  indigo:  { bg: 'bg-indigo-50',  text: 'text-indigo-600'  },
+  emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600' },
+  amber:   { bg: 'bg-amber-50',   text: 'text-amber-600'   },
+  red:     { bg: 'bg-red-50',     text: 'text-red-600'     },
+  blue:    { bg: 'bg-blue-50',    text: 'text-blue-600'    },
+  purple:  { bg: 'bg-purple-50',  text: 'text-purple-600'  },
+  violet:  { bg: 'bg-violet-50',  text: 'text-violet-600'  },
+  orange:  { bg: 'bg-orange-50',  text: 'text-orange-600'  },
+  cyan:    { bg: 'bg-cyan-50',    text: 'text-cyan-600'    },
+  green:   { bg: 'bg-green-50',   text: 'text-green-600'   },
+  slate:   { bg: 'bg-slate-100',  text: 'text-slate-500'   },
+};
+
+export function FlatKPI({ label, value, sub, icon: Icon, color = 'blue', loading, to, active, onClick }) {
+  const c = FLAT_COLOR_MAP[color] || FLAT_COLOR_MAP.blue;
+  const Wrapper = to ? Link : 'div';
+  const wrapperProps = to ? { to } : (onClick ? { onClick, role: 'button' } : {});
+  return (
+    <Wrapper {...wrapperProps}
+      className={`bg-white border rounded-md p-4 text-left transition-colors block ${active ? 'border-blue-400 ring-1 ring-blue-100' : 'border-slate-200 hover:border-slate-300'} ${(to || onClick) ? 'cursor-pointer' : ''}`}>
+      <div className={`w-8 h-8 rounded-md flex items-center justify-center mb-3 ${c.bg}`}>
+        {loading
+          ? <div className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin text-slate-300" />
+          : Icon && <Icon className={`w-4 h-4 ${c.text}`} />}
+      </div>
+      {loading
+        ? <div className="h-7 w-16 bg-slate-100 rounded animate-pulse mb-1" />
+        : <div className="text-2xl font-semibold text-slate-800 leading-tight">{value ?? '—'}</div>
+      }
+      <div className="text-xs text-slate-400 mt-0.5">{label}</div>
+      {sub && <div className="text-[11px] text-slate-400 mt-1">{sub}</div>}
+    </Wrapper>
   );
 }
 
