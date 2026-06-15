@@ -8,7 +8,7 @@ import {
   AlertCircle, ArrowDownLeft, Building2, Calendar, Check, ChevronRight,
   FileText, Hammer, Package, Plus, Search, Trash2, X,
 } from 'lucide-react';
-import { creditNoteAPI, projectAPI, vendorAPI, poAPI, grnAPI } from '../../api/client';
+import { creditNoteAPI, projectAPI, vendorAPI, poAPI, grnAPI, tqsBillsAPI } from '../../api/client';
 
 // ── constants ─────────────────────────────────────────────────────────────────
 const CN_TYPES = [
@@ -34,6 +34,7 @@ const EMPTY_FORM = {
   cn_date: dayjs().format('YYYY-MM-DD'),
   vendor_id: '', vendor_name: '',
   project_id: '',
+  bill_id: '', bill_sl: '',
   po_id: '', po_number: '',
   grn_id: '', grn_number: '',
   invoice_number: '', invoice_date: '',
@@ -78,6 +79,8 @@ function CNForm({ initial, onClose, onSaved }) {
           vendor_id:      initial.vendor_id || '',
           vendor_name:    initial.vendor_name || '',
           project_id:     initial.project_id || '',
+          bill_id:        initial.bill_id || '',
+          bill_sl:        '',
           po_id:          initial.po_id || '',
           po_number:      initial.po_number || '',
           grn_id:         initial.grn_id || '',
@@ -132,6 +135,38 @@ function CNForm({ initial, onClose, onSaved }) {
     enabled: !!form.vendor_id,
     staleTime: 30000,
   });
+
+  // Bill Tracker bills for selected vendor
+  const [billSearch, setBillSearch] = useState('');
+  const { data: billList = [] } = useQuery({
+    queryKey: ['bills-for-cn', form.vendor_id, form.project_id],
+    queryFn: () => tqsBillsAPI.list({ vendor_id: form.vendor_id, project_id: form.project_id || undefined, limit: 300 })
+      .then(r => r.data?.data ?? r.data ?? []).catch(() => []),
+    enabled: !!form.vendor_id,
+    staleTime: 30000,
+  });
+  const filteredBills = useMemo(() => {
+    const q = billSearch.toLowerCase();
+    return billList.filter(b =>
+      !q ||
+      (b.inv_number || '').toLowerCase().includes(q) ||
+      (b.sl_number  || '').toLowerCase().includes(q) ||
+      (b.vendor_name|| '').toLowerCase().includes(q)
+    ).slice(0, 40);
+  }, [billList, billSearch]);
+
+  const applyBill = (bill) => {
+    set('bill_id',       bill.id);
+    set('bill_sl',       bill.sl_number || '');
+    set('invoice_number',bill.inv_number || '');
+    set('invoice_date',  bill.inv_date ? bill.inv_date.slice(0, 10) : '');
+    set('basic_amount',  bill.total_amount ? String(parseFloat(bill.total_amount).toFixed(2)) : form.basic_amount);
+    if (!form.vendor_id && bill.vendor_id) {
+      set('vendor_id',   bill.vendor_id);
+      set('vendor_name', bill.vendor_name || '');
+    }
+    setBillSearch('');
+  };
 
   // ── item helpers ────────────────────────────────────────────────────────────
   const updateItem = (idx, key, val) =>
@@ -298,6 +333,65 @@ function CNForm({ initial, onClose, onSaved }) {
               <span className="w-1.5 h-4 rounded-full bg-sky-500 inline-block" />
               Original Invoice / Reference
             </p>
+
+            {/* Bill Tracker picker */}
+            <div>
+              <Lbl>Link Bill Tracker Invoice</Lbl>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                <input
+                  className={clsx(F, 'pl-8')}
+                  placeholder={form.vendor_id ? 'Search by invoice no. or bill ref…' : 'Select a vendor first to search bills'}
+                  disabled={!form.vendor_id}
+                  value={billSearch}
+                  onChange={e => setBillSearch(e.target.value)}
+                />
+              </div>
+              {/* Dropdown results */}
+              {billSearch && filteredBills.length > 0 && (
+                <div className="mt-1 border border-slate-200 rounded-lg bg-white shadow-lg max-h-52 overflow-y-auto z-10 relative">
+                  {filteredBills.map(b => (
+                    <button key={b.id} type="button"
+                      onClick={() => applyBill(b)}
+                      className="w-full text-left px-4 py-2.5 hover:bg-indigo-50 border-b border-slate-50 last:border-0 transition-colors">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <span className="text-xs font-semibold text-slate-800">{b.inv_number || '—'}</span>
+                          <span className="ml-2 text-[10px] text-slate-400 font-mono">{b.sl_number}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-[11px] text-slate-500 flex-shrink-0">
+                          {b.inv_date && <span>{dayjs(b.inv_date).format('DD MMM YYYY')}</span>}
+                          <span className="font-semibold text-emerald-700">
+                            ₹{Number(b.total_amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                  {filteredBills.length === 0 && (
+                    <p className="px-4 py-3 text-xs text-slate-400">No bills found</p>
+                  )}
+                </div>
+              )}
+              {billSearch && filteredBills.length === 0 && billList.length > 0 && (
+                <p className="mt-1 text-[11px] text-slate-400 pl-1">No matching bills for "{billSearch}"</p>
+              )}
+              {/* Linked bill chip */}
+              {form.bill_id && (
+                <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg">
+                  <FileText className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
+                  <span className="text-xs font-medium text-indigo-700">
+                    Linked: {form.bill_sl} — {form.invoice_number}
+                    {form.invoice_date && ` · ${dayjs(form.invoice_date).format('DD MMM YYYY')}`}
+                  </span>
+                  <button type="button" onClick={() => { set('bill_id',''); set('bill_sl',''); }}
+                    className="ml-auto text-indigo-400 hover:text-indigo-700">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div>
                 <Lbl>Invoice Number</Lbl>

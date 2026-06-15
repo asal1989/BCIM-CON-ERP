@@ -64,6 +64,7 @@ const router = express.Router();
   await safe(`CREATE INDEX IF NOT EXISTS idx_cn_vendor  ON credit_notes(vendor_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_cn_project ON credit_notes(project_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_cn_status  ON credit_notes(status)`);
+  await safe(`ALTER TABLE credit_notes ADD COLUMN IF NOT EXISTS bill_id UUID`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_cni_cn     ON credit_note_items(cn_id)`);
 
   console.log('[CreditNotes] Schema OK');
@@ -159,6 +160,7 @@ router.post('/', authenticate, async (req, res) => {
       cn_date, vendor_id, vendor_name,
       project_id, po_id, po_number,
       grn_id, grn_number,
+      bill_id,
       invoice_number, invoice_date,
       cn_type = 'other', reason,
       tax_mode = 'intrastate',
@@ -183,21 +185,21 @@ router.post('/', authenticate, async (req, res) => {
         `INSERT INTO credit_notes (
           cn_number, cn_date, vendor_id, vendor_name,
           project_id, po_id, po_number,
-          grn_id, grn_number,
+          grn_id, grn_number, bill_id,
           invoice_number, invoice_date,
           cn_type, reason, tax_mode,
           basic_amount, cgst_pct, cgst_amt, sgst_pct, sgst_amt,
           igst_pct, igst_amt, gst_amount, total_amount,
           status, remarks, created_by, company_id
         ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
-          $12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,
-          'pending',$24,$25,$26
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+          $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,
+          'pending',$25,$26,$27
         ) RETURNING *`,
         [
           cn_number, cn_date, vendor_id || null, vendor_name,
           project_id || null, po_id || null, po_number || null,
-          grn_id || null, grn_number || null,
+          grn_id || null, grn_number || null, bill_id || null,
           invoice_number || null, invoice_date || null,
           cn_type, reason || null, tax_mode,
           n(basic_amount), n(cgst_pct), n(cgst_amt), n(sgst_pct), n(sgst_amt),
@@ -255,6 +257,7 @@ router.put('/:id', authenticate, async (req, res) => {
       cn_date, vendor_id, vendor_name,
       project_id, po_id, po_number,
       grn_id, grn_number,
+      bill_id,
       invoice_number, invoice_date,
       cn_type = 'other', reason,
       tax_mode = 'intrastate',
@@ -274,18 +277,18 @@ router.put('/:id', authenticate, async (req, res) => {
         `UPDATE credit_notes SET
           cn_date=$1, vendor_id=$2, vendor_name=$3,
           project_id=$4, po_id=$5, po_number=$6,
-          grn_id=$7, grn_number=$8,
-          invoice_number=$9, invoice_date=$10,
-          cn_type=$11, reason=$12, tax_mode=$13,
-          basic_amount=$14, cgst_pct=$15, cgst_amt=$16,
-          sgst_pct=$17, sgst_amt=$18, igst_pct=$19, igst_amt=$20,
-          gst_amount=$21, total_amount=$22,
-          remarks=$23, updated_at=NOW()
-         WHERE id=$24`,
+          grn_id=$7, grn_number=$8, bill_id=$9,
+          invoice_number=$10, invoice_date=$11,
+          cn_type=$12, reason=$13, tax_mode=$14,
+          basic_amount=$15, cgst_pct=$16, cgst_amt=$17,
+          sgst_pct=$18, sgst_amt=$19, igst_pct=$20, igst_amt=$21,
+          gst_amount=$22, total_amount=$23,
+          remarks=$24, updated_at=NOW()
+         WHERE id=$25`,
         [
           cn_date, vendor_id || null, vendor_name,
           project_id || null, po_id || null, po_number || null,
-          grn_id || null, grn_number || null,
+          grn_id || null, grn_number || null, bill_id || null,
           invoice_number || null, invoice_date || null,
           cn_type, reason || null, tax_mode,
           n(basic_amount), n(cgst_pct), n(cgst_amt),
