@@ -95,16 +95,24 @@ router.get('/', authenticate, async (req, res) => {
     if (search) { conditions.push(`(code ILIKE $${++p} OR name ILIKE $${p})`); params.push(`%${search}%`); }
 
     const rows = await query(
-      `SELECT * FROM chart_of_accounts WHERE ${conditions.join(' AND ')} ORDER BY code ASC`,
+      `SELECT ca.*,
+              COALESCE(ca.opening_balance, 0)
+              + CASE WHEN ca.account_type IN ('asset','expense')  THEN  1 ELSE -1 END
+                * COALESCE(
+                    (SELECT SUM(jel.debit) - SUM(jel.credit)
+                     FROM journal_entry_lines jel
+                     JOIN journal_entries je ON je.id = jel.journal_entry_id
+                     WHERE jel.account_id = ca.id
+                       AND je.company_id  = ca.company_id
+                       AND je.status = 'posted'),
+                    0)
+              AS balance
+       FROM chart_of_accounts ca
+       WHERE ${conditions.join(' AND ')} ORDER BY ca.code ASC`,
       params
     );
 
-    const data = await Promise.all(rows.rows.map(async (acc) => ({
-      ...acc,
-      balance: await getAccountBalance(acc.id, req.user.company_id),
-    })));
-
-    res.json({ data });
+    res.json({ data: rows.rows });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

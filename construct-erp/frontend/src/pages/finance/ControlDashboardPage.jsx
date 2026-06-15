@@ -47,7 +47,7 @@ export default function ControlDashboardPage() {
 
   const { data: raBills = [] } = useQuery({
     queryKey: ['finance-control-ra'],
-    queryFn: () => raBillAPI.list().then(r => r.data?.data || []).catch(() => []),
+    queryFn: () => raBillAPI.list({ limit: 500 }).then(r => r.data?.data || []).catch(() => []),
   });
 
   const { data: invoices = [] } = useQuery({

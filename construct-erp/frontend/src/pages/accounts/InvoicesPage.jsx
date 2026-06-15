@@ -24,7 +24,7 @@ export default function InvoicesPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['accounts-invoices'],
-    queryFn: () => raBillAPI.list().then(r => r.data?.data ?? []),
+    queryFn: () => raBillAPI.list({ limit: 500 }).then(r => r.data?.data ?? []),
   });
   const rows = data ?? [];
   const filtered = rows.filter(r =>

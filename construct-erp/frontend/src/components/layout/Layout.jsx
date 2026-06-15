@@ -314,7 +314,7 @@ const NAV_SECTIONS = {
     { label: 'Banking',    paths: ['/accounts/banking/accounts','/accounts/banking/reconciliation','/accounts/banking/cash-flow','/accounts/banking/cheque-tracker','/accounts/banking/petty-cash'] },
     { label: 'Sales',      paths: ['/accounts/sales/customers','/accounts/sales/invoices','/accounts/sales/proforma-invoices','/accounts/sales/receipts','/accounts/sales/credit-notes','/accounts/sales/statements'] },
     { label: 'Purchases',  paths: ['/accounts/purchases/vendors','/accounts/purchases/bills','/accounts/purchases/bills/booking','/accounts/purchases/payments-made','/accounts/purchases/payment-run','/accounts/purchases/debit-notes'] },
-    { label: 'Accountant', paths: ['/accounts/accountant/chart-of-accounts','/accounts/accountant/journal-entries','/accounts/accountant/transactions'] },
+    { label: 'Accountant', paths: ['/accounts/accountant/chart-of-accounts','/accounts/accountant/journal-entries','/accounts/accountant/bill-automation','/accounts/accountant/transactions'] },
     { label: 'Reports',    paths: ['/accounts/reports/financial','/accounts/reports/billing','/accounts/reports/management-mis','/accounts/reports/control-dashboard','/accounts/reports/budget'] },
     { label: 'Taxes',      paths: ['/accounts/taxes/summary','/accounts/taxes/gst','/accounts/taxes/tds'] },
     { label: 'Documents',  paths: ['/accounts/documents'] },

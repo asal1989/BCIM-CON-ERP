@@ -29,7 +29,7 @@ export default function CustomerStatementsPage() {
 
   const { data: bills = [], isLoading } = useQuery({
     queryKey: ['finance-customer-statements'],
-    queryFn: () => raBillAPI.list().then(r => r.data?.data || []).catch(() => []),
+    queryFn: () => raBillAPI.list({ limit: 500 }).then(r => r.data?.data || []).catch(() => []),
   });
 
   const filtered = bills.filter(b => {
