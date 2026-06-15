@@ -1,5 +1,5 @@
 // src/pages/it/ITAssetPage.jsx  — Full IT Asset Management
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { QRCodeSVG } from 'qrcode.react';
 import { useForm } from 'react-hook-form';
