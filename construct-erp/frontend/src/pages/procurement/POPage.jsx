@@ -880,7 +880,7 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
             <h3 className={Z_HEAD}>Line Items ({items.filter(it => it.material_name && it.quantity).length})</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
-                <thead><tr className="bg-slate-50 text-slate-500 uppercase tracking-wide text-[10.5px]">
+                <thead><tr className="bg-slate-50 text-slate-400 uppercase tracking-wider text-[11px] font-medium">
                   <th className="text-left px-3 py-2">#</th><th className="text-left px-3 py-2">Description</th>
                   <th className="text-right px-3 py-2">Qty</th><th className="text-right px-3 py-2">Rate</th>
                   <th className="text-right px-3 py-2">Taxable</th><th className="text-right px-3 py-2">GST</th><th className="text-right px-3 py-2">Total</th>
@@ -2149,7 +2149,7 @@ export default function POPage() {
           <div className="flex items-center gap-2 text-xs text-slate-400 font-medium mb-1">
             <ShoppingCart className="w-3.5 h-3.5" /> Procurement
           </div>
-          <h1 className="text-2xl font-semibold text-slate-800">Purchase Orders</h1>
+          <h1 className="text-xl font-semibold text-slate-800">Purchase Orders</h1>
           <p className="text-sm text-slate-400 mt-0.5">4-stage authorization workflow</p>
         </div>
         <div className="flex items-center gap-2">

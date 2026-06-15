@@ -115,7 +115,7 @@ export default function AuditPage() {
             <Shield className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-slate-800">Quality Audits</h1>
+            <h1 className="text-xl font-semibold text-slate-800">Quality Audits</h1>
             <p className="text-xs text-slate-500">Internal / External · ISO 9001 · IS Codes · Findings → Auto-NCR</p>
           </div>
         </div>

@@ -119,7 +119,7 @@ export default function PourCardPage() {
             <Layers className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-slate-800">Pour Card Management</h1>
+            <h1 className="text-xl font-semibold text-slate-800">Pour Card Management</h1>
             <p className="text-xs text-slate-500">Pre/Post-Pour Checklists · Cube Tests · Auto-NCR on failure</p>
           </div>
         </div>

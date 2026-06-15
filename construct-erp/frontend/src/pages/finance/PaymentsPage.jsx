@@ -576,7 +576,7 @@ export default function PaymentsPage() {
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
                     {['Payment #', 'Vendor / Payee', 'Project', 'Type', 'Amount', 'TDS', 'Net Paid', 'Mode', 'Date', 'Status', ''].map((h, i) => (
-                      <th key={i} className={clsx('px-4 py-3 text-[11px] font-medium text-slate-900 font-medium text-left whitespace-nowrap', ['Amount','TDS','Net Paid'].includes(h) ? 'text-right' : '')}>{h}</th>
+                      <th key={i} className={clsx('px-4 py-3 text-[11px] font-medium text-slate-400 text-left whitespace-nowrap', ['Amount','TDS','Net Paid'].includes(h) ? 'text-right' : '')}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -743,7 +743,7 @@ export default function PaymentsPage() {
                     {['Bill #', 'Project / Client', 'Date', 'Net Payable', 'Client TDS',
                       raBillFilter === 'paid' ? 'Amount Received' : 'Status',
                       raBillFilter === 'paid' ? 'Payment Ref' : 'Certified By', ''].map((h, i) => (
-                      <th key={i} className={clsx('px-4 py-3 text-[11px] font-medium text-slate-900 font-medium text-left whitespace-nowrap', ['Net Payable','Client TDS','Amount Received'].includes(h) ? 'text-right' : '')}>{h}</th>
+                      <th key={i} className={clsx('px-4 py-3 text-[11px] font-medium text-slate-400 text-left whitespace-nowrap', ['Net Payable','Client TDS','Amount Received'].includes(h) ? 'text-right' : '')}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1059,7 +1059,7 @@ export default function PaymentsPage() {
                 ))}
               </div>
               <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <div className="bg-slate-50 px-4 py-2.5 text-[11px] font-medium text-slate-900 font-medium border-b border-slate-200">Payment Breakdown</div>
+                <div className="bg-slate-50 px-4 py-2.5 text-[11px] font-semibold text-slate-500 border-b border-slate-200">Payment Breakdown</div>
                 <div className="divide-y divide-slate-100">
                   <div className="flex justify-between px-4 py-3 text-sm"><span className="text-slate-600">Net Payable</span><span className="font-mono font-medium text-slate-800">{inr(tdsSplit.netPayable)}</span></div>
                   <div className="flex justify-between px-4 py-3 text-sm"><span className="text-red-500">Less: Client TDS @ {payBill.tds_rate || 2}%</span><span className="font-mono font-medium text-red-500">− {inr(tdsSplit.clientTds)}</span></div>

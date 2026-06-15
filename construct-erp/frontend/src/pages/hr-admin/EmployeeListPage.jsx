@@ -160,7 +160,7 @@ export default function EmployeeListPage() {
             <Users className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-medium text-gray-900">Employees</h1>
+            <h1 className="text-xl font-semibold text-slate-800">Employees</h1>
             <p className="text-sm text-gray-500">
               {employees.length} {statusFilter || 'total'} employee{employees.length !== 1 ? 's' : ''}
             </p>
@@ -282,7 +282,7 @@ export default function EmployeeListPage() {
             >
               <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-gray-100">
                 <div>
-                  <label className="text-xs text-slate-900 font-medium block mb-1">Department</label>
+                  <label className="text-xs text-slate-600 font-medium block mb-1">Department</label>
                   <select
                     value={deptFilter}
                     onChange={e => setDeptFilter(e.target.value)}
@@ -293,7 +293,7 @@ export default function EmployeeListPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-slate-900 font-medium block mb-1">Employment Type</label>
+                  <label className="text-xs text-slate-600 font-medium block mb-1">Employment Type</label>
                   <div className="flex gap-2">
                     {['', 'permanent', 'probation', 'contract', 'intern'].map(t => (
                       <button key={t}

@@ -260,10 +260,10 @@ function WorkflowConfigModal({ onClose }) {
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-100 text-xs text-slate-500 uppercase tracking-wide">
-                  <th className="text-left px-5 py-3 font-semibold">Project</th>
-                  <th className="text-left px-4 py-3 font-semibold">Approval Stages</th>
-                  <th className="px-4 py-3 font-semibold text-right">Reset</th>
+                <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-medium text-slate-400 uppercase tracking-wider">
+                  <th className="text-left px-5 py-3">Project</th>
+                  <th className="text-left px-4 py-3">Approval Stages</th>
+                  <th className="px-4 py-3 text-right">Reset</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">

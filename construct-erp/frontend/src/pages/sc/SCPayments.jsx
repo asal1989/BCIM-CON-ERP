@@ -154,7 +154,7 @@ export default function SCPayments() {
     <div className="p-6 md:p-8 min-h-screen bg-slate-50">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><CreditCard className="w-6 h-6 text-teal-600" />Payment Tracking</h1>
+          <h1 className="text-xl font-semibold text-slate-800 flex items-center gap-2"><CreditCard className="w-6 h-6 text-teal-600" />Payment Tracking</h1>
           <p className="text-sm text-slate-500 mt-0.5">Approved bills pending and completed payments</p>
         </div>
         <div className="flex gap-2">

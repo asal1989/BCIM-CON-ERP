@@ -33,7 +33,7 @@ export default function SCDocuments() {
     <div className="p-6 md:p-8 min-h-screen bg-slate-50">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><FolderOpen className="w-6 h-6 text-indigo-600" />Subcontractor Documents</h1>
+          <h1 className="text-xl font-semibold text-slate-800 flex items-center gap-2"><FolderOpen className="w-6 h-6 text-indigo-600" />Subcontractor Documents</h1>
           <p className="text-sm text-slate-500 mt-0.5">Method statements, ITPs, certificates and correspondence</p>
         </div>
         <button onClick={()=>refetch()} className="p-2 border border-slate-200 bg-white rounded-xl hover:bg-slate-50"><RefreshCw className="w-4 h-4 text-slate-500" /></button>

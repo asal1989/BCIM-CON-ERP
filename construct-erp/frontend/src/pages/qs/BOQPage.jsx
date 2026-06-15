@@ -309,7 +309,7 @@ export default function BOQPage() {
                 <FileSpreadsheet className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-lg font-medium text-slate-900 uppercase tracking-tight leading-none">Bill of Quantities</h1>
+                <h1 className="text-xl font-semibold text-slate-800 uppercase tracking-tight leading-none">Bill of Quantities</h1>
                 <p className="text-[10px] text-slate-900 font-medium uppercase tracking-widest mt-0.5">
                   {selectedProject ? selectedProject.name : 'Select a project to begin'}
                 </p>
@@ -501,15 +501,15 @@ export default function BOQPage() {
                             <table className="w-full text-left">
                               <thead className="bg-slate-50 border-b border-slate-100">
                                 <tr>
-                                  <th className="px-4 py-3 text-[9px] font-medium text-slate-900 font-medium uppercase tracking-widest w-36">CSI Code</th>
-                                  <th className="px-4 py-3 text-[9px] font-medium text-slate-900 font-medium uppercase tracking-widest w-16">Item No</th>
-                                  <th className="px-4 py-3 text-[9px] font-medium text-slate-900 font-medium uppercase tracking-widest">Description</th>
-                                  <th className="px-4 py-3 text-[9px] font-medium text-slate-900 font-medium uppercase tracking-widest text-center w-16">Unit</th>
-                                  <th className="px-4 py-3 text-[9px] font-medium text-slate-900 font-medium uppercase tracking-widest text-right w-28">Contract Qty</th>
-                                  <th className="px-4 py-3 text-[9px] font-medium text-slate-900 font-medium uppercase tracking-widest text-right w-28">Rate (₹)</th>
-                                  <th className="px-4 py-3 text-[9px] font-medium text-slate-900 font-medium uppercase tracking-widest text-right w-32 bg-indigo-50/60">Amount</th>
-                                  <th className="px-4 py-3 text-[9px] font-medium text-slate-900 font-medium uppercase tracking-widest text-right w-28">Exec Qty</th>
-                                  <th className="px-4 py-3 text-[9px] font-medium text-slate-900 font-medium uppercase tracking-widest text-center w-28">Progress</th>
+                                  <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest w-36">CSI Code</th>
+                                  <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest w-16">Item No</th>
+                                  <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest">Description</th>
+                                  <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest text-center w-16">Unit</th>
+                                  <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest text-right w-28">Contract Qty</th>
+                                  <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest text-right w-28">Rate (₹)</th>
+                                  <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest text-right w-32 bg-indigo-50/60">Amount</th>
+                                  <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest text-right w-28">Exec Qty</th>
+                                  <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest text-center w-28">Progress</th>
                                   <th className="px-4 py-3 w-20"></th>
                                 </tr>
                               </thead>
@@ -769,7 +769,7 @@ const inputCls = 'w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-
 function FormField({ label, required, children }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-[9px] font-medium text-slate-900 font-medium uppercase tracking-widest">
+      <label className="text-[9px] font-medium text-slate-400 uppercase tracking-widest">
         {label}{required && <span className="text-red-500 ml-1">*</span>}
       </label>
       {children}
@@ -789,7 +789,7 @@ function KPICard({ label, value, sub, color }) {
   return (
     <div className={clsx('bg-white border rounded-2xl p-5 shadow-sm relative overflow-hidden', c.border)}>
       <div className={clsx('absolute top-0 left-0 w-1 h-full', c.bar)} />
-      <div className="text-[9px] font-medium text-slate-900 font-medium uppercase tracking-widest mb-2">{label}</div>
+      <div className="text-[9px] font-medium text-slate-400 uppercase tracking-widest mb-2">{label}</div>
       <div className={clsx('text-xl font-medium font-mono tracking-tight', c.text)}>{value}</div>
       <div className="text-[9px] text-slate-900 font-medium mt-1 uppercase">{sub}</div>
     </div>
@@ -799,7 +799,7 @@ function KPICard({ label, value, sub, color }) {
 function TotalCell({ label, value, color }) {
   return (
     <div className="text-right">
-      <div className="text-[9px] font-medium text-slate-900 font-medium uppercase tracking-widest">{label}</div>
+      <div className="text-[9px] font-medium text-slate-400 uppercase tracking-widest">{label}</div>
       <div className={clsx('text-sm font-medium font-mono', color)}>{value}</div>
     </div>
   );
