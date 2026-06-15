@@ -1,5 +1,6 @@
 // src/pages/it/ITAssetPage.jsx  — Full IT Asset Management
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { QRCodeSVG } from 'qrcode.react';
 import { useForm } from 'react-hook-form';
@@ -700,6 +701,7 @@ export default function ITAssetPage() {
       {/* QR Modal */}
       {selectedAsset && <ITAssetBarcodeModal asset={selectedAsset} onClose={() => setSelectedAsset(null)} />}
 
+      {createPortal(
       <div className="bulk-it-qr-print hidden">
         <div className="bulk-it-qr-grid">
           {selectedAssets.map(asset => {
@@ -744,7 +746,9 @@ export default function ITAssetPage() {
             );
           })}
         </div>
-      </div>
+      </div>,
+      document.body
+      )}
     </div>
   );
 }
