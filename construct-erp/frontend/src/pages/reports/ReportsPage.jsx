@@ -9,6 +9,7 @@ import {
   Printer, Download, RefreshCw, X, Filter, SlidersHorizontal,
   CheckCircle2, Circle, ChevronDown, Eye, FileSpreadsheet,
   ArrowUpRight, Wallet, DollarSign, AlertCircle, Info,
+  LayoutDashboard, Table2, MousePointerClick,
 } from 'lucide-react';
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
@@ -2005,6 +2006,11 @@ function firstValue(row, col) {
   return undefined;
 }
 
+// groups rows for breakdown/top-N charts and drill-down filtering — keep in sync
+function groupValue(row, col) {
+  return String(firstValue(row, col) ?? 'Unknown') || 'Unknown';
+}
+
 function summarizeItems(items) {
   if (!Array.isArray(items) || !items.length) return '';
   return items
@@ -2364,6 +2370,8 @@ export function ReportGenerator({ report }) {
   const [rows, setRows]        = useState(null);
   const [error, setError]      = useState('');
   const [generated, setGenerated] = useState(false);
+  const [viewMode, setViewMode] = useState('dashboard'); // 'dashboard' | 'table'
+  const [drillFilter, setDrillFilter] = useState(null);  // { col, value } | null
 
   const hasDateFilter    = report.filters?.includes('dateRange');
   const hasProjectFilter = report.filters?.includes('project');
@@ -2379,12 +2387,15 @@ export function ReportGenerator({ report }) {
     setRows(null);
     setError('');
     setGenerated(false);
+    setDrillFilter(null);
+    setViewMode('dashboard');
   }, [report.key]);
 
   const generate = useCallback(async () => {
     setLoading(true);
     setError('');
     setRows(null);
+    setDrillFilter(null);
     try {
       const params = {};
       if (hasDateFilter) {
@@ -2519,11 +2530,11 @@ export function ReportGenerator({ report }) {
   };
 
   const handleExport = () => {
-    if (!rows || !rows.length) return;
+    if (!displayRows || !displayRows.length) return;
     const headers = report.columns.map(c => c.label);
     const csvRows = [
       headers.join(','),
-      ...rows.map(r =>
+      ...displayRows.map(r =>
         report.columns.map(c => {
           const v = firstValue(r, c);
           if (v === null || v === undefined) return '';
@@ -2541,17 +2552,73 @@ export function ReportGenerator({ report }) {
   const c = C[report.color] || C.navy;
   const Icon = report.icon;
 
-  // totals for amount columns
+  // ── Drill-down: rows currently displayed in the table ───────────────────────
+  const displayRows = useMemo(() => {
+    if (!rows) return rows;
+    if (!drillFilter) return rows;
+    return rows.filter(r => groupValue(r, drillFilter.col) === drillFilter.value);
+  }, [rows, drillFilter]);
+
+  // totals for amount columns (reflect the active drill-down filter)
   const totals = useMemo(() => {
-    if (!rows) return {};
+    if (!displayRows) return {};
     const t = {};
     report.columns.forEach(col => {
       if (col.type === 'amount' || col.type === 'number') {
-        t[col.key] = rows.reduce((s, r) => s + (parseFloat(firstValue(r, col)) || 0), 0);
+        t[col.key] = displayRows.reduce((s, r) => s + (parseFloat(firstValue(r, col)) || 0), 0);
       }
     });
     return t;
+  }, [displayRows, report]);
+
+  // ── Auto breakdown chart: first low-cardinality categorical/status column ───
+  const breakdownCol = useMemo(() => {
+    if (!rows?.length) return null;
+    const candidates = report.columns.filter(c => c.type !== 'amount' && c.type !== 'number' && c.type !== 'date');
+    const status = candidates.find(c => c.type === 'status');
+    if (status) return status;
+    return candidates.find(c => {
+      const values = new Set(rows.map(r => String(firstValue(r, c) ?? '')).filter(Boolean));
+      return values.size >= 2 && values.size <= 8;
+    }) || null;
   }, [rows, report]);
+
+  const breakdownData = useMemo(() => {
+    if (!breakdownCol || !rows?.length) return [];
+    const counts = {};
+    rows.forEach(r => {
+      const v = groupValue(r, breakdownCol);
+      counts[v] = (counts[v] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+  }, [breakdownCol, rows]);
+
+  // ── Auto Top-N chart: largest amount column grouped by the first text column ─
+  const amountCol = useMemo(() => {
+    const amountCols = report.columns.filter(c => c.type === 'amount');
+    if (!amountCols.length) return null;
+    return amountCols.reduce((best, c) => (totals[c.key] || 0) > (totals[best.key] || 0) ? c : best, amountCols[0]);
+  }, [report, totals]);
+
+  const nameCol = useMemo(() => {
+    return report.columns.find(c => c.type !== 'amount' && c.type !== 'number' && c.type !== 'date' && c.key !== breakdownCol?.key)
+        || report.columns.find(c => c.type !== 'amount' && c.type !== 'number' && c.type !== 'date')
+        || report.columns[0];
+  }, [report, breakdownCol]);
+
+  const topNData = useMemo(() => {
+    if (!amountCol || !nameCol || !rows?.length) return [];
+    const m = {};
+    rows.forEach(r => {
+      const name = groupValue(r, nameCol);
+      m[name] = (m[name] || 0) + (parseFloat(firstValue(r, amountCol)) || 0);
+    });
+    return Object.entries(m).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 8);
+  }, [amountCol, nameCol, rows]);
+
+  const toggleDrill = (col, value) => {
+    setDrillFilter(prev => (prev && prev.col.key === col.key && prev.value === value) ? null : { col, value });
+  };
 
   return (
     <div className="flex flex-col h-full min-h-0 print:h-auto print:overflow-visible">
@@ -2659,6 +2726,28 @@ export function ReportGenerator({ report }) {
               {rows.length} record{rows.length !== 1 ? 's' : ''} found
             </span>
           )}
+          {generated && rows && rows.length > 0 && (
+            <div className="flex items-center gap-1 self-end rounded-lg border border-slate-200 bg-slate-50 p-1 print:hidden">
+              <button
+                onClick={() => setViewMode('dashboard')}
+                className={clsx(
+                  'flex items-center gap-1.5 px-3 h-7 rounded-md text-xs font-semibold transition-all',
+                  viewMode === 'dashboard' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600'
+                )}
+              >
+                <LayoutDashboard className="w-3.5 h-3.5" /> Dashboard
+              </button>
+              <button
+                onClick={() => setViewMode('table')}
+                className={clsx(
+                  'flex items-center gap-1.5 px-3 h-7 rounded-md text-xs font-semibold transition-all',
+                  viewMode === 'table' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600'
+                )}
+              >
+                <Table2 className="w-3.5 h-3.5" /> Table
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -2758,10 +2847,110 @@ export function ReportGenerator({ report }) {
               </div>
             </div>
 
-            {/* Chart */}
-            {report.chart && (
-              <div className="px-5 py-4 border-b border-slate-100 print:hidden">
-                <ReportChart report={report} rows={rows} />
+            {/* Dashboard view — KPI cards + drill-down charts (Power BI style) */}
+            {viewMode === 'dashboard' && (
+              <div className="px-5 py-4 border-b border-slate-100 print:hidden space-y-4">
+                {/* KPI cards */}
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Total Records</p>
+                    <p className="mt-1 text-xl font-bold text-slate-800 tabular-nums">{rows.length}</p>
+                  </div>
+                  {report.columns.filter(col => col.type === 'amount' && totals[col.key] !== undefined).slice(0, 3).map(col => (
+                    <div key={col.key} className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 truncate">{col.label}</p>
+                      <p className="mt-1 text-xl font-bold text-slate-800 tabular-nums">
+                        ₹{Number(totals[col.key]).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Charts */}
+                {(breakdownCol || topNData.length > 0 || report.chart) && (
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {breakdownCol && breakdownData.length > 0 && (
+                      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{breakdownCol.label} Breakdown</p>
+                          <span className="flex items-center gap-1 text-[10px] text-slate-400">
+                            <MousePointerClick className="w-3 h-3" /> Click to drill down
+                          </span>
+                        </div>
+                        <ResponsiveContainer width="100%" height={220}>
+                          <PieChart>
+                            <Pie
+                              data={breakdownData} dataKey="value" nameKey="name"
+                              cx="50%" cy="50%" outerRadius={80}
+                              label={({ name, value }) => `${name}: ${value}`}
+                              onClick={(d) => toggleDrill(breakdownCol, d.name)}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              {breakdownData.map((entry, i) => (
+                                <Cell
+                                  key={entry.name}
+                                  fill={CHART_COLORS[i % CHART_COLORS.length]}
+                                  opacity={!drillFilter || (drillFilter.col.key === breakdownCol.key && drillFilter.value === entry.name) ? 1 : 0.3}
+                                />
+                              ))}
+                            </Pie>
+                            <RTooltip />
+                            <Legend wrapperStyle={{ fontSize: 11 }} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+
+                    {topNData.length > 0 && amountCol && nameCol && (
+                      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 truncate">
+                            Top {nameCol.label} by {amountCol.label}
+                          </p>
+                          <span className="flex items-center gap-1 text-[10px] text-slate-400 flex-shrink-0">
+                            <MousePointerClick className="w-3 h-3" /> Click to drill down
+                          </span>
+                        </div>
+                        <ResponsiveContainer width="100%" height={220}>
+                          <BarChart data={topNData} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                            <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-20} textAnchor="end" height={50} />
+                            <YAxis tick={{ fontSize: 10 }} />
+                            <RTooltip formatter={(v) => Number(v).toLocaleString('en-IN')} />
+                            <Bar dataKey="value" radius={[4, 4, 0, 0]} cursor="pointer" onClick={(d) => toggleDrill(nameCol, d.name)}>
+                              {topNData.map((entry, i) => (
+                                <Cell
+                                  key={entry.name}
+                                  fill={CHART_COLORS[i % CHART_COLORS.length]}
+                                  opacity={!drillFilter || (drillFilter.col.key === nameCol.key && drillFilter.value === entry.name) ? 1 : 0.3}
+                                />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+
+                    {report.chart && (
+                      <div className={clsx('rounded-xl border border-slate-200 bg-white p-4 shadow-sm', (breakdownCol || topNData.length > 0) ? '' : 'lg:col-span-2')}>
+                        <ReportChart report={report} rows={rows} />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Drill-down active chip */}
+            {drillFilter && (
+              <div className="flex items-center gap-2 px-5 py-2 border-b border-slate-100 bg-indigo-50/60 print:hidden">
+                <Filter className="w-3.5 h-3.5 text-indigo-500" />
+                <span className="text-xs font-medium text-indigo-700">
+                  Filtered by {drillFilter.col.label}: <strong>{drillFilter.value}</strong> ({displayRows.length} of {rows.length} records)
+                </span>
+                <button onClick={() => setDrillFilter(null)} className="ml-auto flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800">
+                  <X className="w-3 h-3" /> Clear
+                </button>
               </div>
             )}
 
@@ -2781,7 +2970,7 @@ export function ReportGenerator({ report }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row, i) => (
+                  {displayRows.map((row, i) => (
                     <tr key={i} className={clsx('transition-colors hover:bg-indigo-50/40', i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60')}>
                       <td className="px-3.5 py-2.5 text-slate-400 font-medium text-[10px] tabular-nums border-b border-slate-100">{i + 1}</td>
                       {report.columns.map(col => (
