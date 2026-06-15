@@ -686,7 +686,7 @@ function MastersTab({ projects }) {
                   <td className="px-3 py-2"><span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">{c.construction_type || '—'}</span></td>
                   <td className="px-3 py-2 font-mono">{c.gl_account || '—'}</td>
                   <td className="px-3 py-2">{c.requires_receipt ? <CheckCircle size={12} className="text-green-600" /> : '—'}</td>
-                  <td className="px-3 py-2">{c.is_active ? <CheckCircle size={12} className="text-green-600" /> : <XCircle size={12} className="text-gray-300" />}</td>
+                  <td className="px-3 py-2">{c.is_active ? <CheckCircle size={12} className="text-green-600" /> : <XCircle size={12} className="text-gray-400" />}</td>
                 </tr>
               ))}
             </tbody>
