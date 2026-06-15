@@ -718,7 +718,10 @@ function CNDetail({ cn, onClose, onEdit }) {
             {[
               { label: 'Basic Amount',  value: inr(cn.basic_amount), color: 'text-slate-800' },
               { label: cn.tax_mode === 'intrastate' ? 'CGST + SGST' : 'IGST',
-                value: inr(cn.gst_amount),  color: 'text-slate-600' },
+                value: cn.tax_mode === 'intrastate'
+                  ? `${inr(cn.cgst_amt)} + ${inr(cn.sgst_amt)}`
+                  : inr(cn.igst_amt),
+                color: 'text-slate-600' },
               { label: 'Total GST',     value: inr(cn.gst_amount),   color: 'text-slate-600' },
               { label: 'Total Credit',  value: `₹ ${inr(cn.total_amount)}`, color: 'text-indigo-700 text-base font-bold' },
             ].map((k, i) => (

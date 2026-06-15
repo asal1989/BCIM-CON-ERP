@@ -155,7 +155,7 @@ export default function ExpenseClaimPage() {
                             className="p-1.5 inline-flex bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors">
                             <ExternalLink className="w-4 h-4"/>
                           </a>
-                        ) : <span className="text-gray-300">—</span>}
+                        ) : <span className="text-gray-400">—</span>}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-1.5">

@@ -1705,7 +1705,7 @@ export default function StoreLedgerPage() {
                           const cfg = TYPE_CONFIG[txn.transaction_type] || TYPE_CONFIG.issue;
                           const isReceipt = txn.transaction_type === 'grn' || txn.transaction_type === 'transfer_in';
                           const isIssue   = txn.transaction_type === 'issue' || txn.transaction_type === 'transfer_out';
-                          const txnQty    = parseFloat(txn.quantity);
+                          const txnQty    = parseFloat(txn.quantity || 0);
                           const rate      = parseFloat(ledgerInventory?.unit_rate || 0);
                           const txnValue  = txnQty * rate;
                           return (

@@ -501,7 +501,7 @@ export default function ComparativeStatementPage() {
               {/* ── Item rows ── */}
               {items.map((item, idx) => {
                 // Find recommended grand total = L1 vendor negotiated value for this item
-                const l1Neg = getNegRate(l1VendorId, item.id) * parseFloat(item.quantity || 0);
+                const l1Neg = getNegRate(effectiveL1VendorId, item.id) * parseFloat(item.quantity || 0);
 
                 return (
                   <tr key={item.id} style={{ fontSize: '10px' }}>
@@ -526,7 +526,7 @@ export default function ComparativeStatementPage() {
                       const negVal = negotiatedRates[vId]?.[item.id] ?? '';
                       const negRate = negVal !== '' ? parseFloat(negVal) : qRate;
                       const negTotal = negRate * parseFloat(item.quantity || 0);
-                      const isL1 = vId === l1VendorId && negTotal > 0;
+                      const isL1 = vId === effectiveL1VendorId && negTotal > 0;
 
                       return (
                         <React.Fragment key={v.id}>
@@ -617,7 +617,7 @@ export default function ComparativeStatementPage() {
                     if (row.key === 'grand')      { cellQ = qTotal > 0 ? inr0(qTotal) : '—'; cellN = negTotal > 0 ? inr0(negTotal) : '—'; }
 
                     const vId   = v.vendor_id || v.id;
-                    const isL1v = vId === l1VendorId;
+                    const isL1v = vId === effectiveL1VendorId;
                     return (
                       <React.Fragment key={v.id}>
                         <td style={{ border: '1px solid #000', padding: '3px 5px', textAlign: 'right' }}></td>
@@ -634,7 +634,7 @@ export default function ComparativeStatementPage() {
                   <td style={{ border: '1px solid #000', padding: '3px 5px', textAlign: 'right', background: row.key === 'grand' ? '#b8dbb8' : '#e8f5e9', fontWeight: 'bold' }}>
                     {row.key === 'gst' ? 'Inclusive' :
                      row.key === 'discount' ? '0%' :
-                     l1VendorId ? inr0(getVendorNegTotal(vendors.find(v => (v.vendor_id || v.id) === l1VendorId) || {})) : '—'}
+                     effectiveL1VendorId ? inr0(getVendorNegTotal(vendors.find(v => (v.vendor_id || v.id) === effectiveL1VendorId) || {})) : '—'}
                   </td>
                 </tr>
               ))}
@@ -672,7 +672,7 @@ export default function ComparativeStatementPage() {
                   );
                 })}
                 <td style={{ border: '1px solid #000', padding: '3px 5px', textAlign: 'center', background: '#b8dbb8' }}>
-                  {l1VendorId ? 'L1' : '—'}
+                  {effectiveL1VendorId ? 'L1' : '—'}
                 </td>
               </tr>
             </tbody>

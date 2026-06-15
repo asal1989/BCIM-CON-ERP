@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Gavel, ArrowLeft, CheckCircle, Circle, ChevronRight, Plus, Trash2,
@@ -21,7 +21,8 @@ export default function TenderDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [tab, setTab] = useState('overview');
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState(searchParams.get('tab') || 'overview');
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [showAwardModal, setShowAwardModal] = useState(false);
@@ -137,7 +138,7 @@ export default function TenderDetailPage() {
             {tender.status === 'bid_open'   && <button onClick={() => evalMut.mutate()}    className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-sm rounded-lg">Start Evaluation</button>}
             {tender.status === 'evaluation' && <button onClick={() => { setTab('bids'); setShowAwardModal(true); }} className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg">Award Tender</button>}
             {!isAwarded && !isCancelled     && <button onClick={() => setShowCancelModal(true)} className="px-4 py-1.5 border border-red-700 text-red-400 text-sm rounded-lg hover:bg-red-900/20">Cancel</button>}
-            {isAwarded && tender.po_id      && <Link to={`/procurement/purchase-orders/${tender.po_id}`} className="px-4 py-1.5 bg-emerald-700 text-white text-sm rounded-lg flex items-center gap-1">View PO <ChevronRight className="w-3 h-3" /></Link>}
+            {isAwarded && tender.po_id      && <Link to={`/procurement/po?highlight=${tender.po_id}`} className="px-4 py-1.5 bg-emerald-700 text-white text-sm rounded-lg flex items-center gap-1">View PO <ChevronRight className="w-3 h-3" /></Link>}
           </div>
         </div>
       )}
@@ -285,7 +286,7 @@ export default function TenderDetailPage() {
         <div className="space-y-5">
           <div className="flex items-center justify-between">
             <h3 className="text-white font-semibold">Bids Received ({(bidsData || []).length})</h3>
-            <Link to={`/tenders/${id}/bids/new`}
+            <Link to={`/procurement/tenders/${id}/bid-entry`}
               className="flex items-center gap-1 px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white text-sm rounded-lg">
               <Plus className="w-3.5 h-3.5" /> Enter Bid
             </Link>

@@ -72,7 +72,7 @@ export default function TenderBidEntryPage() {
       qc.invalidateQueries({ queryKey: ['tender', id] });
       qc.invalidateQueries({ queryKey: ['tender-bids', id] });
       toast.success('Bid submitted');
-      navigate(`/tenders/${id}?tab=bids`);
+      navigate(`/procurement/tenders/${id}?tab=bids`);
     },
     onError: (e) => toast.error(e.response?.data?.error || 'Failed to submit bid'),
   });

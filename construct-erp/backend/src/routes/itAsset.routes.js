@@ -30,6 +30,21 @@ function normalizeItAssetTag(value, assetType = 'other') {
   return `BCIM-IT-${typeCode}-${raw}`;
 }
 
+// One-time backfill: older records were created before the BCIM- prefix was
+// enforced, so their asset_tag still reads e.g. "IT-DT-004" instead of
+// "BCIM-IT-DT-004".
+(async () => {
+  try {
+    const { rows } = await query(`SELECT id, asset_tag, asset_type FROM it_assets WHERE asset_tag NOT LIKE 'BCIM-%'`);
+    for (const row of rows) {
+      const normalized = normalizeItAssetTag(row.asset_tag, row.asset_type);
+      if (normalized && normalized !== row.asset_tag) {
+        await query(`UPDATE it_assets SET asset_tag=$1 WHERE id=$2`, [normalized, row.id]).catch(() => {});
+      }
+    }
+  } catch (_) { /* table may not exist yet on first boot */ }
+})();
+
 // ── GET /it-assets ──────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
   try {

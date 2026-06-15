@@ -46,7 +46,7 @@ export default function TenderListPage() {
       toast.success(`Tender ${r.data?.data?.tender_number} created`);
       setShowNew(false);
       setForm({ title: '', tender_type: 'works', estimated_value: '', bid_close_date: '' });
-      navigate(`/tenders/${r.data?.data?.id}`);
+      navigate(`/procurement/tenders/${r.data?.data?.id}`);
     },
     onError: (e) => toast.error(e.response?.data?.error || 'Failed to create tender'),
   });
@@ -140,7 +140,7 @@ export default function TenderListPage() {
             <tbody>
               {tenders.map(t => (
                 <tr key={t.id}
-                  onClick={() => navigate(`/tenders/${t.id}`)}
+                  onClick={() => navigate(`/procurement/tenders/${t.id}`)}
                   className="border-b border-slate-700/50 hover:bg-slate-700/40 cursor-pointer transition-colors">
                   <td className="px-4 py-3 font-mono text-violet-300 text-xs">{t.tender_number}</td>
                   <td className="px-4 py-3 text-white font-medium max-w-xs truncate">{t.title}</td>

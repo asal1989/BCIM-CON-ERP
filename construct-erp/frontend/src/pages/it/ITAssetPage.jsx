@@ -527,7 +527,7 @@ export default function ITAssetPage() {
                               </span>
                             )}
                             {asset.ip_address && <span className="flex items-center gap-1"><Wifi className="h-3 w-3" />{asset.ip_address}</span>}
-                            {!asset.processor && !asset.ram_gb && !asset.ip_address && <span className="text-gray-300">—</span>}
+                            {!asset.processor && !asset.ram_gb && !asset.ip_address && <span className="text-gray-400">—</span>}
                           </div>
                         </td>
                         <td className="whitespace-nowrap px-4 py-3">
@@ -539,18 +539,18 @@ export default function ITAssetPage() {
                           <div className="flex items-center gap-1">
                             {asset.assigned_to_name ? (
                               <><User className="h-3 w-3 text-gray-400" />{asset.assigned_to_name}</>
-                            ) : <span className="text-gray-300">—</span>}
+                            ) : <span className="text-gray-400">—</span>}
                           </div>
                           {asset.location_description && <div className="text-xs text-gray-400 flex items-center gap-1 mt-0.5"><MapPin className="h-3 w-3" />{asset.location_description}</div>}
                         </td>
                         <td className="px-4 py-3 text-xs">
-                          {daysAv === null ? <span className="text-gray-300">—</span>
+                          {daysAv === null ? <span className="text-gray-400">—</span>
                           : daysAv < 0 ? <span className="text-red-600 font-semibold">Expired</span>
                           : daysAv <= 30 ? <span className="text-red-500 font-semibold">{daysAv}d ⚠️</span>
                           : <span className="text-green-600">{dayjs(asset.antivirus_expiry).format('DD MMM YY')}</span>}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-xs">
-                          {daysWarr === null ? <span className="text-gray-300">—</span>
+                          {daysWarr === null ? <span className="text-gray-400">—</span>
                           : daysWarr < 0 ? <span className="text-red-600 font-semibold">Expired</span>
                           : daysWarr <= 90 ? <span className="text-amber-600 font-semibold">{daysWarr}d ⚠️</span>
                           : <span className="text-green-600">{dayjs(asset.warranty_expiry).format('DD MMM YYYY')}</span>}

@@ -24,7 +24,7 @@ const ADJ_CFG = {
 const num = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
 // ── create/edit header form ───────────────────────────────────────────────────
-function HeaderForm({ projects, onSave, onCancel, initial }) {
+function HeaderForm({ projects, onSave, onCancel, initial, isPending }) {
   const [form, setForm] = useState({
     project_id: initial?.project_id || '',
     verification_date: initial?.verification_date ? dayjs(initial.verification_date).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
@@ -92,9 +92,10 @@ function HeaderForm({ projects, onSave, onCancel, initial }) {
             if (!form.project_id || !form.verification_date) { toast.error('Project and date required'); return; }
             onSave(form);
           }}
-          className="h-8 px-4 rounded-lg bg-[#1e3a8a] text-white text-[12px] hover:bg-[#163172]"
+          disabled={isPending}
+          className="h-8 px-4 rounded-lg bg-[#1e3a8a] text-white text-[12px] hover:bg-[#163172] disabled:opacity-60"
         >
-          {initial ? 'Update' : 'Create & Enter Counts'}
+          {isPending ? 'Saving…' : (initial ? 'Update' : 'Create & Enter Counts')}
         </button>
       </div>
     </div>
@@ -404,6 +405,7 @@ export default function StockVerificationPage() {
             projects={projects}
             onSave={(d) => createMut.mutate(d)}
             onCancel={() => setView('list')}
+            isPending={createMut.isPending}
           />
         </div>
       )}

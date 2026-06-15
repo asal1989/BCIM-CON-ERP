@@ -57,7 +57,7 @@ export default function BidOpportunityPage() {
       qc.invalidateQueries({ queryKey: ['bid-opp-stats'] });
       toast.success(`${r.data?.data?.opportunity_number} created`);
       setShowNew(false);
-      navigate(`/bid-opportunities/${r.data?.data?.id}`);
+      navigate(`/procurement/bid-opportunities/${r.data?.data?.id}`);
     },
     onError: (e) => toast.error(e.response?.data?.error || 'Failed'),
   });
@@ -155,7 +155,7 @@ export default function BidOpportunityPage() {
             <tbody>
               {opps.map(o => (
                 <tr key={o.id}
-                  onClick={() => navigate(`/bid-opportunities/${o.id}`)}
+                  onClick={() => navigate(`/procurement/bid-opportunities/${o.id}`)}
                   className="border-b border-slate-700/50 hover:bg-slate-700/40 cursor-pointer transition-colors">
                   <td className="px-4 py-3 font-mono text-emerald-300 text-xs">{o.opportunity_number}</td>
                   <td className="px-4 py-3 text-white font-medium">{o.client_name}</td>

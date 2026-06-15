@@ -104,6 +104,11 @@ const WOBulkImportPage      = lazy(() => import('./pages/procurement/WOBulkImpor
 const ProcurementReportsPage = lazy(() => import('./pages/procurement/ProcurementReportsPage'));
 const ProcurementAlertsPage  = lazy(() => import('./pages/procurement/ProcurementAlertsPage'));
 const ProcurementDashboardPage = lazy(() => import('./pages/dashboards/ProcurementDashboard'));
+const TenderListPage         = lazy(() => import('./pages/procurement/TenderListPage'));
+const TenderDetailPage       = lazy(() => import('./pages/procurement/TenderDetailPage'));
+const TenderBidEntryPage     = lazy(() => import('./pages/procurement/TenderBidEntryPage'));
+const BidOpportunityPage       = lazy(() => import('./pages/procurement/BidOpportunityPage'));
+const BidOpportunityDetailPage = lazy(() => import('./pages/procurement/BidOpportunityDetailPage'));
 const TenderRegisterPage          = lazy(() => import('./pages/tender-mgmt/TenderRegisterPage'));
 const TenderManagementPage        = lazy(() => import('./pages/tender-mgmt/TenderManagementPage'));
 const DMSPage                     = lazy(() => import('./pages/documents/DMSPage'));
@@ -558,6 +563,11 @@ export default function App() {
                 <Route path="procurement/wo-bulk-import" element={<RequireModule module="Procurement"><WOBulkImportPage /></RequireModule>} />
                 <Route path="procurement/reports" element={<RequireModule module="Procurement"><ProcurementReportsPage /></RequireModule>} />
                 <Route path="procurement/alerts" element={<RequireModule module="Procurement"><ProcurementAlertsPage /></RequireModule>} />
+                <Route path="procurement/tenders" element={<RequireModule module="Procurement"><TenderListPage /></RequireModule>} />
+                <Route path="procurement/tenders/:id" element={<RequireModule module="Procurement"><TenderDetailPage /></RequireModule>} />
+                <Route path="procurement/tenders/:id/bid-entry" element={<RequireModule module="Procurement"><TenderBidEntryPage /></RequireModule>} />
+                <Route path="procurement/bid-opportunities" element={<RequireModule module="Procurement"><BidOpportunityPage /></RequireModule>} />
+                <Route path="procurement/bid-opportunities/:id" element={<RequireModule module="Procurement"><BidOpportunityDetailPage /></RequireModule>} />
 
                 {/* Stores */}
                 <Route path="stores" element={<RequireModule module="Stores"><StoresDashboard /></RequireModule>} />

@@ -849,7 +849,7 @@ export default function SCWorkOrders() {
                         </td>
                         <td className="px-4 py-3 text-right text-xs font-bold text-slate-800">{fmt(w.contract_amount)}</td>
                         <td className="px-4 py-3 text-right text-xs font-semibold text-indigo-600">
-                          {w.total_billed > 0 ? fmt(w.total_billed) : <span className="text-slate-300">—</span>}
+                          {w.total_billed > 0 ? fmt(w.total_billed) : <span className="text-slate-400">—</span>}
                         </td>
                         <td className="px-4 py-3">
                           <span className={clsx('text-[10px] px-2 py-0.5 rounded-full font-semibold capitalize', sm.bg, sm.text)}>{sm.label}</span>
@@ -870,7 +870,7 @@ export default function SCWorkOrders() {
                                   : dayjs(w.dlp_end_date).format('DD MMM YY')}
                               </span>
                             );
-                          })() : <span className="text-slate-300 text-[10px]">—</span>}
+                          })() : <span className="text-slate-400 text-[10px]">—</span>}
                         </td>
                         <td className="px-4 py-3" onClick={e=>e.stopPropagation()}>
                           <div className="flex items-center gap-1">
