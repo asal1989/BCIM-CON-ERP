@@ -1018,7 +1018,7 @@ export const REPORTS = [
   },
 
   {
-    key:'procurement-pending-pr', dept:'procurement', title:'Pending Purchase Requisitions', icon:ClipboardList, color:'amber',
+    key:'procurement-pending-pr', dept:'procurement', category:'Purchase Requisition Reports', title:'Pending Purchase Requisitions', icon:ClipboardList, color:'amber',
     desc:'MRS items with un-ordered balance qty — drives PO creation priority',
     filters:['dateRange','project'],
     endpoint:'/reports/procurement/pending-pr',
@@ -1039,7 +1039,7 @@ export const REPORTS = [
     ],
   },
   {
-    key:'procurement-pr-approval', dept:'procurement', title:'PR Approval Status', icon:Clock, color:'amber',
+    key:'procurement-pr-approval', dept:'procurement', category:'Purchase Requisition Reports', title:'PR Approval Status', icon:Clock, color:'amber',
     desc:'Requisitions stuck in approval pipeline — identify bottlenecks by stage',
     filters:['project'],
     endpoint:'/reports/procurement/pr-approval-status',
@@ -1055,7 +1055,7 @@ export const REPORTS = [
     ],
   },
   {
-    key:'procurement-open-pos', dept:'procurement', title:'Open PO Report', icon:Target, color:'amber',
+    key:'procurement-open-pos', dept:'procurement', category:'Purchase Order Reports', title:'Open PO Report', icon:Target, color:'amber',
     desc:'POs with pending delivery — ordered vs received vs pending value',
     filters:['dateRange','project'],
     endpoint:'/reports/procurement/open-pos',
@@ -1074,7 +1074,7 @@ export const REPORTS = [
     ],
   },
   {
-    key:'procurement-pending-delivery', dept:'procurement', title:'Pending Delivery Report', icon:Truck, color:'amber',
+    key:'procurement-pending-delivery-aging', dept:'procurement', category:'Delivery Reports', title:'Pending Delivery Report (with Aging)', icon:Truck, color:'amber',
     desc:'Item-level materials still due from vendors — flags overdue lines',
     filters:['project'],
     endpoint:'/reports/procurement/pending-delivery',
@@ -1093,7 +1093,7 @@ export const REPORTS = [
     ],
   },
   {
-    key:'procurement-po-aging', dept:'procurement', title:'PO Aging Report', icon:Calendar, color:'amber',
+    key:'procurement-po-aging', dept:'procurement', category:'Purchase Order Reports', title:'PO Aging Report', icon:Calendar, color:'amber',
     desc:'Open POs bucketed by age — surface stale orders needing vendor follow-up',
     filters:['project'],
     endpoint:'/reports/procurement/po-aging',
@@ -1110,7 +1110,7 @@ export const REPORTS = [
     ],
   },
   {
-    key:'procurement-vendor-performance', dept:'procurement', title:'Vendor Performance', icon:Star, color:'amber',
+    key:'procurement-vendor-performance-grn', dept:'procurement', category:'Vendor Reports', title:'Vendor Performance (GRN Acceptance)', icon:Star, color:'amber',
     desc:'GRN acceptance rate, rejection rate and total spend per vendor',
     filters:['dateRange','project'],
     endpoint:'/reports/procurement/vendor-performance',
@@ -1128,7 +1128,7 @@ export const REPORTS = [
     ],
   },
   {
-    key:'procurement-vendor-spend', dept:'procurement', title:'Vendor-wise Spend Analysis', icon:IndianRupee, color:'amber',
+    key:'procurement-vendor-spend', dept:'procurement', category:'Vendor Reports', title:'Vendor-wise Spend Analysis', icon:IndianRupee, color:'amber',
     desc:'Total procurement spend by vendor with % share of company total',
     filters:['dateRange','project'],
     endpoint:'/reports/procurement/vendor-spend',
@@ -1143,7 +1143,7 @@ export const REPORTS = [
     ],
   },
   {
-    key:'procurement-item-analysis', dept:'procurement', title:'Item-wise Purchase Analysis', icon:FileBarChart, color:'amber',
+    key:'procurement-item-analysis', dept:'procurement', category:'Cost Analysis Reports', title:'Item-wise Purchase Analysis', icon:FileBarChart, color:'amber',
     desc:'Price trend by material — avg, min, max rates across all vendors and POs',
     filters:['dateRange','project'],
     endpoint:'/reports/procurement/item-analysis',
@@ -1162,7 +1162,7 @@ export const REPORTS = [
     ],
   },
   {
-    key:'procurement-project-wise', dept:'procurement', title:'Project-wise Procurement', icon:Building2, color:'amber',
+    key:'procurement-project-wise', dept:'procurement', category:'Purchase Order Reports', title:'Project-wise Procurement', icon:Building2, color:'amber',
     desc:'PO count, total value, open commitment and vendor count per project',
     filters:['dateRange'],
     endpoint:'/reports/procurement/project-procurement',
@@ -1179,7 +1179,7 @@ export const REPORTS = [
     ],
   },
   {
-    key:'procurement-purchase-returns', dept:'procurement', title:'Purchase Return Register', icon:ArrowUpRight, color:'amber',
+    key:'procurement-purchase-returns', dept:'procurement', category:'Delivery Reports', title:'Purchase Return Register', icon:ArrowUpRight, color:'amber',
     desc:'Credit notes raised for vendor returns, rejections and price adjustments',
     filters:['dateRange','project'],
     endpoint:'/reports/procurement/purchase-returns',
@@ -1501,7 +1501,7 @@ export const REPORTS = [
     ],
   },
   {
-    key:'procurement-rate-contracts-report', dept:'procurement', title:'Rate Contract Utilization', icon:ShieldCheck, color:'amber',
+    key:'procurement-rate-contracts-report', dept:'procurement', category:'Cost Analysis Reports', title:'Rate Contract Utilization', icon:ShieldCheck, color:'amber',
     desc:'Formal rate contracts vs actual PO rates — variance and utilization',
     filters:['dateRange'],
     endpoint:'/reports/procurement/rate-contracts',
