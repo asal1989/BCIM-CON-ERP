@@ -1138,7 +1138,7 @@ export default function MRSPage() {
                 <ClipboardCheck className="w-5 h-5 text-indigo-600" />
               </div>
               <div>
-                <h2 className="text-sm font-semibold text-slate-950">Requisition Control Desk</h2>
+                <h2 className="text-sm font-semibold text-slate-800">Requisition Control Desk</h2>
                 <p className="text-xs text-slate-500">Track requests from site entry through MD authorization and issue.</p>
               </div>
             </div>

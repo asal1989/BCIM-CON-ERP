@@ -142,7 +142,7 @@ export const QualityPrintTemplate = forwardRef(({ data, type = 'rfi' }, ref) => 
       </div>
 
       {/* Footer Audit Trail */}
-      <div className="fixed bottom-12 left-16 right-16 flex justify-between items-center text-[7px] font-medium text-slate-300 uppercase tracking-widest border-t border-slate-100 pt-4">
+      <div className="fixed bottom-12 left-16 right-16 flex justify-between items-center text-[7px] font-medium text-slate-400 uppercase tracking-widest border-t border-slate-100 pt-4">
          <div>REPORT GENERATED: {dayjs().format('YYYY-MM-DD HH:mm:ss')} • SYSTEM ID: BCIM-FORENSIC-V2</div>
          <div>Page 1 of 1 • Strictly Confidential • BCIM CONSTRUCT ERP CORE</div>
       </div>

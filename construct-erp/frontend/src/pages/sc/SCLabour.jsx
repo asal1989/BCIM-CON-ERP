@@ -288,10 +288,10 @@ function NMRDrawer({ nmrId, onClose }) {
                             </td>
                             {w.days.map(day => {
                               const st = day.status;
-                              const bg = st ? ATT_CELL_BG[st] : 'text-slate-200';
+                              const bg = st ? ATT_CELL_BG[st] : 'text-slate-400';
                               return (
                                 <td key={day.date} className="px-1 py-2 text-center">
-                                  <span className={clsx('inline-block w-7 h-6 rounded text-[10px] font-bold flex items-center justify-center', bg || 'text-slate-200')}>
+                                  <span className={clsx('inline-block w-7 h-6 rounded text-[10px] font-bold flex items-center justify-center', bg || 'text-slate-400')}>
                                     {st ? ATT_CELL[st] : '–'}
                                   </span>
                                 </td>
@@ -319,7 +319,7 @@ function NMRDrawer({ nmrId, onClose }) {
               {/* Legend */}
               <div className="flex items-center gap-3 flex-wrap">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Legend:</p>
-                {[['P','Present','bg-emerald-100 text-emerald-800'],['A','Absent','bg-red-100 text-red-700'],['H','Half Day','bg-amber-100 text-amber-700'],['–','No Record','text-slate-200']].map(([code,label,cls])=>(
+                {[['P','Present','bg-emerald-100 text-emerald-800'],['A','Absent','bg-red-100 text-red-700'],['H','Half Day','bg-amber-100 text-amber-700'],['–','No Record','text-slate-400']].map(([code,label,cls])=>(
                   <div key={code} className="flex items-center gap-1">
                     <span className={clsx('inline-flex w-6 h-5 rounded text-[10px] font-bold items-center justify-center', cls)}>{code}</span>
                     <span className="text-[11px] text-slate-500">{label}</span>
@@ -776,7 +776,7 @@ export default function SCLabour() {
                 <tbody>
                   {filteredWorkers.length===0 ? (
                     <tr><td colSpan={7} className="py-12 text-center">
-                      <Users className="w-10 h-10 text-slate-200 mx-auto mb-2"/>
+                      <Users className="w-10 h-10 text-slate-400 mx-auto mb-2"/>
                       <p className="text-slate-400">No workers registered</p>
                     </td></tr>
                   ) : filteredWorkers.map((w,i)=>(

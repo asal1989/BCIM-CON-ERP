@@ -421,7 +421,7 @@ export default function AssetReportsDashboardPage() {
                 <tbody>
                   {expiryData.map((a, i) => {
                     const exCell = (date, days) => {
-                      if (!date) return <td key={date} className="py-3 px-4 text-xs text-gray-300">—</td>;
+                      if (!date) return <td key={date} className="py-3 px-4 text-xs text-gray-400">—</td>;
                       const cls = days < 0 ? 'text-red-600 font-bold' : days <= 30 ? 'text-orange-500 font-semibold' : 'text-gray-600';
                       const label = days < 0 ? `${date} (${Math.abs(days)}d ago)` : `${date} (${days}d)`;
                       return <td className={`py-3 px-4 text-xs ${cls}`}>{label}</td>;

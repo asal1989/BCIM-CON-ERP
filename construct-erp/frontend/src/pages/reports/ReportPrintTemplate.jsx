@@ -113,7 +113,7 @@ export const ReportPrintTemplate = forwardRef(({ data, title, type = 'strategic'
       </div>
 
       {/* Global Footer */}
-      <div className="fixed bottom-12 left-16 right-16 flex justify-between items-center text-[7.5px] font-medium text-slate-300 uppercase tracking-[0.3em] border-t border-slate-100 pt-6 italic">
+      <div className="fixed bottom-12 left-16 right-16 flex justify-between items-center text-[7.5px] font-medium text-slate-400 uppercase tracking-[0.3em] border-t border-slate-100 pt-6 italic">
          <div>DOC ID: BCIM-STRAT-{dayjs().format('YYYY')}-482-X • CERTIFIED PDF V2.0</div>
          <div className="flex gap-4">
             <span>PAGE 01 / 01</span>

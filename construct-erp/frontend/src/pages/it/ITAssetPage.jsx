@@ -741,7 +741,7 @@ export default function ITAssetPage() {
                         <div className="rounded bg-white p-1 shadow">
                           <QRCodeSVG value={itAssetQrPayload(asset)} size={148} includeMargin={false} fgColor="#0f2d6b" level="M" />
                         </div>
-                        <div className="text-[6px] font-bold uppercase tracking-widest text-slate-600">Scan to identify</div>
+                        <div className="text-[8px] font-bold uppercase tracking-widest text-slate-600">Scan to identify</div>
                       </div>
                       <div className="flex min-w-0 flex-col justify-center gap-1 px-3 py-2">
                         <div className="font-mono text-[15px] font-black leading-none tracking-wide text-[#0f2d6b] break-all">{asset.asset_tag || '-'}</div>
