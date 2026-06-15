@@ -568,6 +568,7 @@ export default function App() {
                 <Route path="procurement/tenders/:id/bid-entry" element={<RequireModule module="Procurement"><TenderBidEntryPage /></RequireModule>} />
                 <Route path="procurement/bid-opportunities" element={<RequireModule module="Procurement"><BidOpportunityPage /></RequireModule>} />
                 <Route path="procurement/bid-opportunities/:id" element={<RequireModule module="Procurement"><BidOpportunityDetailPage /></RequireModule>} />
+                <Route path="procurement/budget-control" element={<RequireAnyModule modules={['Procurement', 'Finance']}><BudgetPage /></RequireAnyModule>} />
 
                 {/* Stores */}
                 <Route path="stores" element={<RequireModule module="Stores"><StoresDashboard /></RequireModule>} />
