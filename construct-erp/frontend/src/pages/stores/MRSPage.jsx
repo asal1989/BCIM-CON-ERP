@@ -1021,10 +1021,16 @@ export default function MRSPage() {
                           </button>
                         )}
                         <button
-                          onClick={() => rejectMutation.mutate({ id: selectedMRS.id, remarks: 'Rejected by approver' })}
-                          className="flex-1 h-10 rounded-lg bg-white border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 transition-colors"
+                          onClick={() => {
+                            const remarks = window.prompt('Enter reason for rejection:');
+                            if (remarks && remarks.trim()) {
+                              rejectMutation.mutate({ id: selectedMRS.id, remarks: remarks.trim() });
+                            }
+                          }}
+                          disabled={rejectMutation.isPending}
+                          className="flex-1 h-10 rounded-lg bg-white border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 transition-colors disabled:opacity-60"
                         >
-                          Reject
+                          {rejectMutation.isPending ? 'Rejecting…' : 'Reject'}
                         </button>
                       </div>
                     )}

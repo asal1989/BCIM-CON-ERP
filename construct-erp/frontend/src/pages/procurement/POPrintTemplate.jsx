@@ -66,7 +66,14 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
   const subTotal   = parseFloat(data.sub_total  || items.reduce((s, it) => s + parseFloat(it.quantity||0) * parseFloat(it.rate||0), 0));
   const totalGst   = isTaxIncl ? 0 : parseFloat(data.total_gst  || items.reduce((s, it) => s + parseFloat(it.gst_amount||0), 0));
   const tcsAmt     = parseFloat(data.tcs_amount || 0);
-  const grandTotal = parseFloat(data.grand_total || (subTotal + totalGst + tcsAmt));
+  const freightAmt   = parseFloat(data.freight_charges || 0);
+  const loadingAmt   = parseFloat(data.loading_unloading_charges || 0);
+  const insuranceAmt = parseFloat(data.insurance_charges || 0);
+  const freightGst   = freightAmt * 0.18;
+  const tdsAmt       = subTotal * (parseFloat(data.tds_percent || 0) / 100);
+  const grandTotal = parseFloat(data.grand_total || (
+    subTotal + totalGst + tcsAmt + freightAmt + loadingAmt + insuranceAmt + freightGst - tdsAmt
+  ));
 
   // GST break-up by rate — items may carry different GST % (5 / 12 / 18 / 28).
   // Track both the tax amount and the item numbers that fall under each rate.

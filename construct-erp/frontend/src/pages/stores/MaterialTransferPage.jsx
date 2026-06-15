@@ -396,13 +396,14 @@ function MTRForm({ mtr, projects, onClose }) {
 /* ═══════════════════════════════════════════════════════════════════════════
    QUANTITY DIALOG — used for approve / issue / receive steps
 ═══════════════════════════════════════════════════════════════════════════ */
-function QuantityDialog({ title, subtitle, items, qtyField, onConfirm, onClose, isPending }) {
+function QuantityDialog({ title, subtitle, items, qtyField, onConfirm, onClose, isPending, showRemarks }) {
   const [qtys, setQtys] = useState(
     Object.fromEntries(items.map(it => [it.id, it[qtyField] ?? it.requested_qty ?? 0]))
   );
+  const [remarks, setRemarks] = useState('');
   const confirm = () => {
-    const quantities = items.map(it => ({ item_id: it.id, qty: parseFloat(qtys[it.id] || 0) }));
-    onConfirm(quantities);
+    const quantities = items.map(it => ({ item_id: it.id, [qtyField]: parseFloat(qtys[it.id] || 0) }));
+    onConfirm(quantities, remarks);
   };
   return (
     <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4">
@@ -436,6 +437,14 @@ function QuantityDialog({ title, subtitle, items, qtyField, onConfirm, onClose, 
             </div>
           ))}
         </div>
+        {showRemarks && (
+          <div className="px-5 pb-4 -mt-1">
+            <label className="block text-xs font-bold text-slate-600 uppercase tracking-widest mb-1">Receipt Remarks</label>
+            <textarea rows={2} value={remarks} onChange={e => setRemarks(e.target.value)}
+              placeholder="Note any discrepancies, damage, or shortages…"
+              className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:border-teal-400 resize-none" />
+          </div>
+        )}
         <div className="flex justify-end gap-3 px-5 py-4 border-t bg-slate-50">
           <button onClick={onClose} className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600">Cancel</button>
           <button onClick={confirm} disabled={isPending}
@@ -766,7 +775,8 @@ function MTRDetail({ mtr, onClose, onEdit }) {
           title="Confirm Receipt — Enter Received Quantities"
           subtitle="Enter quantities physically received at destination"
           items={items} qtyField="received_qty"
-          onConfirm={(qtys) => receiveMut.mutate({ quantities: qtys, remarks: '' })}
+          showRemarks
+          onConfirm={(qtys, remarks) => receiveMut.mutate({ quantities: qtys, remarks })}
           onClose={() => setShowReceiveQty(false)}
           isPending={receiveMut.isPending}
         />

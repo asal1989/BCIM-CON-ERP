@@ -42,7 +42,7 @@ export default function MINPrintTemplate({ min }) {
           <div>
             <span className="text-[10px] font-medium text-slate-400 uppercase tracking-widest block mb-1">Project Site / Store Source</span>
             <p className="text-lg font-medium leading-tight uppercase">{min.project_name}</p>
-            <p className="text-xs text-slate-600 font-bold uppercase mt-1">Cost Center: {min.project_id.slice(0,8)}</p>
+            <p className="text-xs text-slate-600 font-bold uppercase mt-1">Cost Center: {String(min.project_id || '').slice(0,8)}</p>
           </div>
           <div>
              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-widest block mb-1">Site Activity / Location</span>
@@ -82,7 +82,7 @@ export default function MINPrintTemplate({ min }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 border-b-2 border-slate-800">
-            {min.items.map((it, idx) => (
+            {(min.items || []).map((it, idx) => (
               <tr key={idx} className="page-break-inside-avoid">
                 <td className="p-3 text-xs font-mono text-slate-400">{idx + 1}</td>
                 <td className="p-3 text-sm font-medium uppercase text-slate-800">{it.material_name}</td>
@@ -150,7 +150,7 @@ export default function MINPrintTemplate({ min }) {
       {/* Forensic Trace */}
       <div className="mt-20 border-t border-slate-100 pt-6 flex justify-between items-center opacity-30 group grayscale">
         <p className="text-[8px] font-medium uppercase tracking-[0.4em] text-slate-400">
-          Traceable Audit Record • BCIM-LOG-MIN-{min.id.slice(0,8)}
+          Traceable Audit Record • BCIM-LOG-MIN-{String(min.id || '').slice(0,8)}
         </p>
         <p className="text-[8px] font-medium uppercase tracking-[0.2em] text-slate-400 font-mono">
           Page 1 of 1

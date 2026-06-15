@@ -75,7 +75,7 @@ export default function StockReportPage() {
   });
 
   // For monthly view — receive vs consumption
-  const maxQty = Math.max(...reportData.map(r => Math.max(
+  const maxQty = Math.max(...filtered.map(r => Math.max(
     parseFloat(r.received_qty || 0),
     parseFloat(r.issued_qty || 0),
   )), 1);

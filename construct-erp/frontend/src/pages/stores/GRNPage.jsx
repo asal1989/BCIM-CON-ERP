@@ -725,6 +725,7 @@ function GRNForm({ onClose, projects, qc }) {
     if (!poId) {
       setForm(p => ({ ...p, po_id: '', po_number: '' }));
       setItems([emptyItem()]);
+      setItemGstOverrides({});
       return;
     }
     const po = releasedPOs.find(p => p.id === poId);
@@ -839,6 +840,7 @@ function GRNForm({ onClose, projects, qc }) {
                     // reset PO when project changes
                     setForm(p => ({ ...p, project_id: v, po_id: '', po_number: '', vendor_id: '' }));
                     setItems([emptyItem()]);
+                    setItemGstOverrides({});
                   }}
                   options={projects.map(p => ({ value: p.id, label: p.name }))}
                   placeholder="Select project…"
@@ -1250,11 +1252,10 @@ function GRNForm({ onClose, projects, qc }) {
                     const gstPct = parseFloat(billForm.gst_pct) || 18;
                     const basicTotal = items
                       .filter(it => it.material_name?.trim())
-                      .reduce((s, it, idx) => {
+                      .reduce((s, it) => {
                         const qty = it.use_thumb_rule && it.physical_qty && it.conversion_factor
                           ? parseFloat(it.physical_qty) * parseFloat(it.conversion_factor)
                           : parseFloat(it.quantity_received || 0);
-                        const itemGst = parseFloat(itemGstOverrides[String(idx)] ?? billForm.gst_pct) / 100;
                         return s + qty * parseFloat(it.rate || 0);
                       }, 0);
                     const gstTotal = items.filter(it => it.material_name?.trim()).reduce((s, it, idx) => {
@@ -1301,7 +1302,7 @@ function GRNForm({ onClose, projects, qc }) {
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50 flex-shrink-0">
           <span className="text-xs text-slate-500 font-semibold">
-            {items.filter(i => i.material_name && (i.quantity_received || (i.use_thumb_rule && i.physical_qty))).length} item(s) ready
+            {items.filter(i => i.material_name?.trim() && (i.quantity_received || (i.use_thumb_rule && i.physical_qty))).length} item(s) ready
           </span>
           <div className="flex items-center gap-2">
             <button onClick={onClose}

@@ -15,11 +15,13 @@ import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import toast from 'react-hot-toast';
 import { useReactToPrint } from 'react-to-print';
 import MINPrintTemplate from './MINPrintTemplate';
+import useAuthStore from '../../store/authStore';
 
 const inr = n => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function IssuePage() {
   const qc = useQueryClient();
+  const { user } = useAuthStore();
   const [showForm, setShowForm] = useState(false);
   const [selectedMIN, setSelectedMIN] = useState(null);
   const printRef = useRef(null);
@@ -55,6 +57,15 @@ export default function IssuePage() {
       qc.invalidateQueries({ queryKey: ['min-list'] });
     },
     onError: (e) => toast.error(e?.response?.data?.error || 'Authorization failed'),
+  });
+
+  const receiveMutation = useMutation({
+    mutationFn: (id) => minAPI.receive(id, { signature: user?.signature_url || '' }),
+    onSuccess: () => {
+      toast.success('Receipt confirmed at site!');
+      qc.invalidateQueries({ queryKey: ['min-list'] });
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to confirm receipt'),
   });
 
   const [search, setSearch] = useState('');
@@ -195,9 +206,19 @@ export default function IssuePage() {
                       {min.status === 'draft' && (
                         <button
                           onClick={() => authorizeMutation.mutate(min.id)}
-                          className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-all"
+                          disabled={authorizeMutation.isPending && authorizeMutation.variables === min.id}
+                          className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-all disabled:opacity-50"
                         >
-                          Finalize & Deduct
+                          {authorizeMutation.isPending && authorizeMutation.variables === min.id ? 'Finalizing…' : 'Finalize & Deduct'}
+                        </button>
+                      )}
+                      {min.status === 'issued' && !min.verified_receiver_by && (
+                        <button
+                          onClick={() => receiveMutation.mutate(min.id)}
+                          disabled={receiveMutation.isPending && receiveMutation.variables === min.id}
+                          className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700 transition-all disabled:opacity-50"
+                        >
+                          {receiveMutation.isPending && receiveMutation.variables === min.id ? 'Confirming…' : 'Confirm Receipt'}
                         </button>
                       )}
                       <button
@@ -308,7 +329,9 @@ function MINForm({ onClose, projects, contractors, qc }) {
     if (!formData.activity_name?.trim()) return toast.error('Work activity is required');
     if (!formData.issued_to?.trim())   return toast.error('Issued To / Receiver is required');
     if (!items.length)                 return toast.error('Add at least one material item');
-    const validItems = items.filter(it => parseFloat(it.quantity_issued) > 0);
+    const validItems = items
+      .filter(it => parseFloat(it.quantity_issued) > 0)
+      .map(it => ({ ...it, quantity_requested: it.quantity_requested || it.quantity_issued || 0 }));
     if (!validItems.length)            return toast.error('Enter quantity to issue for at least one item');
     createMutation.mutate({ ...formData, items: validItems });
   };
