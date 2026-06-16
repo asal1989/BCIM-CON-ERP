@@ -256,6 +256,52 @@ router.post('/', authenticate, async (req, res) => {
   }
 });
 
+// ── UPDATE (draft only) ────────────────────────────────────────────────────
+router.patch('/:id([0-9a-fA-F-]{36})', authenticate, async (req, res) => {
+  try {
+    const existing = await getJE(req.params.id, req.user.company_id);
+    if (!existing) return res.status(404).json({ error: 'Journal entry not found' });
+    if (existing.status !== 'draft') return res.status(400).json({ error: 'Only draft entries can be edited' });
+
+    const { entry_date, reference, narration, lines = [] } = req.body;
+    if (!Array.isArray(lines) || lines.length < 2) {
+      return res.status(400).json({ error: 'At least two journal lines are required' });
+    }
+
+    const totalDebit  = lines.reduce((s, l) => s + n(l.debit), 0);
+    const totalCredit = lines.reduce((s, l) => s + n(l.credit), 0);
+    if (Math.abs(totalDebit - totalCredit) > 0.01) {
+      return res.status(400).json({ error: `Total debits (${totalDebit.toFixed(2)}) must equal total credits (${totalCredit.toFixed(2)})` });
+    }
+    if (totalDebit === 0) {
+      return res.status(400).json({ error: 'Journal entry cannot be zero-value' });
+    }
+
+    await withTransaction(async (client) => {
+      await client.query(
+        `UPDATE journal_entries SET entry_date = $1, reference = $2, narration = $3, updated_at = NOW() WHERE id = $4`,
+        [entry_date || existing.entry_date, reference || null, narration || null, req.params.id]
+      );
+      await client.query(`DELETE FROM journal_entry_lines WHERE journal_entry_id = $1`, [req.params.id]);
+      for (let i = 0; i < lines.length; i++) {
+        const l = lines[i];
+        if (!l.account_id) continue;
+        if (!(n(l.debit) > 0) && !(n(l.credit) > 0)) continue;
+        await client.query(
+          `INSERT INTO journal_entry_lines (journal_entry_id, account_id, debit, credit, description, sort_order)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [req.params.id, l.account_id, n(l.debit), n(l.credit), l.description || null, i + 1]
+        );
+      }
+    });
+
+    const full = await getJE(req.params.id, req.user.company_id);
+    res.json({ data: full });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── POST / UNPOST ────────────────────────────────────────────────────────────
 router.patch('/:id/status', authenticate, async (req, res) => {
   try {
