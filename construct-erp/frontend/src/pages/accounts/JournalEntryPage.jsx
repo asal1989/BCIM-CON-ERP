@@ -46,7 +46,7 @@ function SourceBadge({ source }) {
   return <span className={clsx('px-2 py-0.5 rounded-full text-[10px] font-semibold', s.cls)}>{s.label}</span>;
 }
 
-function JEDetail({ je, onClose }) {
+function JEDetail({ je, onClose, onEdit }) {
   const qc = useQueryClient();
   const statusMut = useMutation({
     mutationFn: (status) => journalEntryAPI.updateStatus(je.id, status),
@@ -114,6 +114,12 @@ function JEDetail({ je, onClose }) {
             )}
           </div>
           <div className="flex gap-2">
+            {je.status === 'draft' && onEdit && (
+              <button onClick={() => onEdit(je)}
+                className="px-4 py-2 text-sm border border-slate-200 rounded-md text-slate-700 hover:bg-slate-50">
+                Edit
+              </button>
+            )}
             {je.status === 'draft' ? (
               <button onClick={() => statusMut.mutate('posted')} disabled={statusMut.isPending}
                 className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5">
@@ -132,12 +138,22 @@ function JEDetail({ je, onClose }) {
   );
 }
 
-function JEForm({ onClose, accounts }) {
+function JEForm({ onClose, accounts, entry }) {
   const qc = useQueryClient();
-  const [entry_date, setDate] = useState(dayjs().format('YYYY-MM-DD'));
-  const [reference, setReference] = useState('');
-  const [narration, setNarration] = useState('');
-  const [lines, setLines] = useState([{ ...EMPTY_LINE }, { ...EMPTY_LINE }]);
+  const isEdit = !!entry;
+  const [entry_date, setDate] = useState(entry ? dayjs(entry.entry_date).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'));
+  const [reference, setReference] = useState(entry?.reference || '');
+  const [narration, setNarration] = useState(entry?.narration || '');
+  const [lines, setLines] = useState(
+    entry?.lines?.length
+      ? entry.lines.map(l => ({
+          account_id: l.account_id,
+          debit: n(l.debit) > 0 ? String(l.debit) : '',
+          credit: n(l.credit) > 0 ? String(l.credit) : '',
+          description: l.description || '',
+        }))
+      : [{ ...EMPTY_LINE }, { ...EMPTY_LINE }]
+  );
 
   const updateLine = (idx, key, val) => setLines(prev => {
     const next = [...prev];
@@ -152,8 +168,14 @@ function JEForm({ onClose, accounts }) {
   const balanced = Math.abs(totalDebit - totalCredit) < 0.01 && totalDebit > 0;
 
   const saveMut = useMutation({
-    mutationFn: (status) => journalEntryAPI.create({ entry_date, reference, narration, status, lines }),
-    onSuccess: () => { toast.success('Journal entry saved'); qc.invalidateQueries({ queryKey: ['journal-entries'] }); onClose(); },
+    mutationFn: (status) => isEdit
+      ? journalEntryAPI.update(entry.id, { entry_date, reference, narration, lines })
+      : journalEntryAPI.create({ entry_date, reference, narration, status, lines }),
+    onSuccess: () => {
+      toast.success(isEdit ? 'Journal entry updated' : 'Journal entry saved');
+      qc.invalidateQueries({ queryKey: ['journal-entries'] });
+      onClose();
+    },
     onError: e => toast.error(e?.response?.data?.error || 'Save failed'),
   });
 
@@ -165,7 +187,7 @@ function JEForm({ onClose, accounts }) {
             <div className="w-9 h-9 rounded-md bg-blue-50 flex items-center justify-center">
               <ScrollText className="w-4 h-4 text-blue-600" />
             </div>
-            <p className="text-sm font-semibold text-slate-800">New Journal Entry</p>
+            <p className="text-sm font-semibold text-slate-800">{isEdit ? `Edit Entry · ${entry.entry_no}` : 'New Journal Entry'}</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
         </div>
@@ -244,14 +266,23 @@ function JEForm({ onClose, accounts }) {
 
         <div className="flex-shrink-0 flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
           <button onClick={onClose} className="px-4 py-2 text-sm border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50">Cancel</button>
-          <button onClick={() => saveMut.mutate('draft')} disabled={!balanced || saveMut.isPending}
-            className="px-4 py-2 text-sm border border-slate-200 rounded-md text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-            Save Draft
-          </button>
-          <button onClick={() => saveMut.mutate('posted')} disabled={!balanced || saveMut.isPending}
-            className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
-            {saveMut.isPending ? 'Saving…' : 'Save & Post'}
-          </button>
+          {isEdit ? (
+            <button onClick={() => saveMut.mutate()} disabled={!balanced || saveMut.isPending}
+              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
+              {saveMut.isPending ? 'Saving…' : 'Save Changes'}
+            </button>
+          ) : (
+            <>
+              <button onClick={() => saveMut.mutate('draft')} disabled={!balanced || saveMut.isPending}
+                className="px-4 py-2 text-sm border border-slate-200 rounded-md text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                Save Draft
+              </button>
+              <button onClick={() => saveMut.mutate('posted')} disabled={!balanced || saveMut.isPending}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
+                {saveMut.isPending ? 'Saving…' : 'Save & Post'}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -261,6 +292,7 @@ function JEForm({ onClose, accounts }) {
 // ── Manual JE tab ─────────────────────────────────────────────────────────────
 function ManualJETab({ accounts }) {
   const [showForm, setShowForm] = useState(false);
+  const [editRecord, setEditRecord] = useState(null);
   const [viewRecord, setViewRecord] = useState(null);
   const [filters, setFilters] = useState({ status: '', search: '', from: '', to: '' });
 
@@ -275,6 +307,11 @@ function ManualJETab({ accounts }) {
     const lines = [['Entry No', 'Date', 'Reference', 'Narration', 'Debit', 'Credit', 'Status']];
     rows.forEach(r => lines.push([r.entry_no, dayjs(r.entry_date).format('DD MMM YYYY'), r.reference || '', r.narration || '', r.total_debit, r.total_credit, r.status]));
     return lines;
+  };
+
+  const handleView = async (je) => {
+    const full = await journalEntryAPI.get(je.id).then(r => r.data?.data);
+    if (full) setViewRecord(full);
   };
 
   return (
@@ -323,7 +360,7 @@ function ManualJETab({ accounts }) {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {rows.map(je => (
-                <tr key={je.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setViewRecord(je)}>
+                <tr key={je.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => handleView(je)}>
                   <td className="px-4 py-2.5 font-mono text-xs font-semibold text-blue-700">{je.entry_no}</td>
                   <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">{dayjs(je.entry_date).format('DD MMM YYYY')}</td>
                   <td className="px-4 py-2.5 text-slate-600">{je.narration || '—'}</td>
@@ -341,7 +378,14 @@ function ManualJETab({ accounts }) {
       )}
 
       {showForm && <JEForm accounts={accounts} onClose={() => setShowForm(false)} />}
-      {viewRecord && <JEDetail je={viewRecord} onClose={() => setViewRecord(null)} />}
+      {editRecord && <JEForm accounts={accounts} entry={editRecord} onClose={() => setEditRecord(null)} />}
+      {viewRecord && (
+        <JEDetail
+          je={viewRecord}
+          onClose={() => setViewRecord(null)}
+          onEdit={(je) => { setViewRecord(null); setEditRecord(je); }}
+        />
+      )}
     </div>
   );
 }

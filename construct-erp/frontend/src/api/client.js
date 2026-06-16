@@ -463,6 +463,7 @@ export const journalEntryAPI = {
   list:           (params) => api.get('/journal-entries', { params }),
   get:            (id)     => api.get(`/journal-entries/${id}`),
   create:         (data)   => api.post('/journal-entries', data),
+  update:         (id, data) => api.patch(`/journal-entries/${id}`, data),
   updateStatus:   (id, status) => api.patch(`/journal-entries/${id}/status`, { status }),
   remove:         (id)     => api.delete(`/journal-entries/${id}`),
   dayBook:        (params) => api.get('/journal-entries/day-book', { params }),
