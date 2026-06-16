@@ -223,20 +223,74 @@ router.use(async (req, res, next) => {
 // ══════════════════════════════════════════════════════════════════
 // UPLOAD (single + bulk) with DMS metadata
 // ══════════════════════════════════════════════════════════════════
+const VENDOR_FOLDER_STOPWORDS = new Set(['vendor-invoice', 'invoice', 'store invoices', 'store invoice']);
+// Derive a vendor/party name from the part after the last " - " in a filename,
+// e.g. "02272-2025-2026 - SCP CONCRETE.pdf" -> "SCP CONCRETE". Ignores purely numeric tails.
+function vendorFromName(name) {
+  const stem = String(name || '').replace(/\.[a-z0-9]+$/i, '');
+  const idx = stem.lastIndexOf(' - ');
+  if (idx === -1) return '';
+  const tail = stem.slice(idx + 3).trim().replace(/[.,]+$/, '').trim();
+  return (tail && !/^\d+$/.test(tail)) ? tail : '';
+}
+
 router.post('/upload', upload.array('files', 20), async (req, res) => {
   try {
     if (!req.files || !req.files.length) return res.status(400).json({ error: 'No files provided' });
     const { project_id, folder_id, doc_type, doc_number, doc_title, discipline,
-            description, module, module_record_id, tags, expiry_date, access_level } = req.body;
+            description, module, module_record_id, tags, expiry_date, access_level,
+            vendor, parent_folder_id, auto_folder } = req.body;
     if (project_id && !userCanAccessProject(req, project_id)) {
       return res.status(403).json({ error: 'Access denied for this project.' });
     }
     const tagArr = tags ? (Array.isArray(tags) ? tags : String(tags).split(',').map(t=>t.trim()).filter(Boolean)) : [];
+    const autoFolderOn = auto_folder === true || auto_folder === 'true' || auto_folder === '1';
+    const tagVendor = tagArr.find(t => t && !VENDOR_FOLDER_STOPWORDS.has(String(t).trim().toLowerCase())) || '';
+
+    // Find-or-create a vendor folder (cached per request so a batch of files for the
+    // same vendor reuses one folder). Optionally nested under parent_folder_id.
+    const folderCache = new Map();
+    async function ensureVendorFolder(vendorName) {
+      const key = vendorName.trim().toLowerCase();
+      if (!key) return null;
+      if (folderCache.has(key)) return folderCache.get(key);
+      const found = await db().query(
+        `SELECT id FROM document_folders
+         WHERE company_id=$1 AND lower(trim(folder_name))=$2
+           AND COALESCE(project_id::text,'')=COALESCE($3::text,'')
+           AND COALESCE(parent_id::text,'')=COALESCE($4::text,'')
+         LIMIT 1`,
+        [CID(req), key, project_id || null, parent_folder_id || null]
+      );
+      let fid = found.rows[0] && found.rows[0].id;
+      if (!fid) {
+        let folderPath = `/${vendorName}`;
+        if (parent_folder_id) {
+          const p = await db().query('SELECT path FROM document_folders WHERE id=$1', [parent_folder_id]);
+          if (p.rows.length && p.rows[0].path) folderPath = `${p.rows[0].path}/${vendorName}`;
+        }
+        const ins = await db().query(
+          `INSERT INTO document_folders (company_id,parent_id,folder_name,folder_type,project_id,path,created_by)
+           VALUES ($1,$2,$3,'vendor',$4,$5,$6) RETURNING id`,
+          [CID(req), parent_folder_id || null, vendorName.trim(), project_id || null, folderPath, req.user.id]
+        );
+        fid = ins.rows[0].id;
+      }
+      folderCache.set(key, fid);
+      return fid;
+    }
 
     const created = [];
     for (const file of req.files) {
       const localUrl = `/uploads/documents/${file.filename}`;
       const ext = path.extname(file.originalname).slice(1).toLowerCase();
+      // Resolve the folder: explicit folder_id wins; otherwise auto-file by vendor.
+      let effectiveFolderId = folder_id || null;
+      if (!effectiveFolderId) {
+        let vName = (vendor || '').trim() || tagVendor;
+        if (!vName && (autoFolderOn || doc_type === 'invoice')) vName = vendorFromName(file.originalname);
+        if (vName) effectiveFolderId = await ensureVendorFolder(vName);
+      }
       const r = await db().query(`
         INSERT INTO documents
           (company_id, project_id, folder_id, module, module_record_id,
@@ -245,7 +299,7 @@ router.post('/upload', upload.array('files', 20), async (req, res) => {
            tags, expiry_date, access_level, status, uploaded_by)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'draft',$18)
         RETURNING *`,
-        [CID(req), project_id||null, folder_id||null, module||'general', module_record_id||null,
+        [CID(req), project_id||null, effectiveFolderId, module||'general', module_record_id||null,
          file.originalname, ext, file.size, localUrl,
          doc_type||'general', doc_number||null,
          doc_title || file.originalname, discipline||null, description||null,

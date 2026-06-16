@@ -549,8 +549,10 @@ export default function DMSPage() {
   const [typeFilter, setType] = useState('');
   const [statusFilter, setStatus] = useState('');
   const [projectFilter, setProjFilter] = useState('');
-  const [cat, setCat]         = useState({ kind: 'all' });   // {kind:'all'|'type'|'vendor'|'folder', value}
-  const [openSec, setOpenSec] = useState({ type: true, vendor: true, folder: true });
+  const [cat, setCat]         = useState({ kind: 'all' });   // {kind:'all'|'type'|'vendor'|'project'|'month'|'folder', value}
+  const [openSec, setOpenSec] = useState({ type: true, vendor: true, project: true, month: false, folder: true });
+  const [groupBy, setGroupBy] = useState('none');            // none|vendor|type|project|month
+  const [collapsedGroups, setCollapsedGroups] = useState({});
   const [modal, setModal]     = useState(null);
   const [detailId, setDetailId] = useState(null);
   const [reportTab, setReportTab] = useState('register');
@@ -598,18 +600,99 @@ export default function DMSPage() {
     return Object.entries(m).sort((a, b) => b[1] - a[1]);
   }, [docs]);
 
+  const projectGroups = useMemo(() => {
+    const m = {};
+    docs.forEach(d => { const p = d.project_name || 'No project'; m[p] = (m[p] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }, [docs]);
+
+  // By Month — keyed by YYYY-MM for stable sort, labelled "MMM YYYY"
+  const monthGroups = useMemo(() => {
+    const m = {};
+    docs.forEach(d => { const k = d.created_at ? dayjs(d.created_at).format('YYYY-MM') : 'unknown'; m[k] = (m[k] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [docs]);
+  const monthLabel = k => (k === 'unknown' ? 'Unknown date' : dayjs(`${k}-01`).format('MMM YYYY'));
+
   const visibleDocs = useMemo(() => {
-    if (cat.kind === 'type')   return docs.filter(d => (d.doc_type || 'general') === cat.value);
-    if (cat.kind === 'vendor') return docs.filter(d => vendorOf(d) === cat.value);
-    if (cat.kind === 'folder') return docs.filter(d => d.folder_id === cat.value);
+    if (cat.kind === 'type')    return docs.filter(d => (d.doc_type || 'general') === cat.value);
+    if (cat.kind === 'vendor')  return docs.filter(d => vendorOf(d) === cat.value);
+    if (cat.kind === 'project') return docs.filter(d => (d.project_name || 'No project') === cat.value);
+    if (cat.kind === 'month')   return docs.filter(d => (d.created_at ? dayjs(d.created_at).format('YYYY-MM') : 'unknown') === cat.value);
+    if (cat.kind === 'folder')  return docs.filter(d => d.folder_id === cat.value);
     return docs;
   }, [docs, cat]);
+
+  // ── Row grouping inside the table ──────────────────────────────────────────
+  const groupKeyOf = (d) => {
+    if (groupBy === 'vendor')  return vendorOf(d) || 'Unspecified vendor';
+    if (groupBy === 'type')    return titleCase(d.doc_type || 'general');
+    if (groupBy === 'project') return d.project_name || 'No project';
+    if (groupBy === 'month')   return d.created_at ? dayjs(d.created_at).format('YYYY-MM') : 'unknown';
+    return '';
+  };
+  const groupedDocs = useMemo(() => {
+    if (groupBy === 'none') return null;
+    const m = new Map();
+    visibleDocs.forEach(d => {
+      const k = groupKeyOf(d);
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push(d);
+    });
+    let entries = Array.from(m.entries());
+    entries.sort((a, b) => groupBy === 'month' ? b[0].localeCompare(a[0]) : b[1].length - a[1].length);
+    return entries.map(([key, rows]) => ({
+      key,
+      label: groupBy === 'month' ? monthLabel(key) : key,
+      rows,
+    }));
+  }, [visibleDocs, groupBy]);
 
   const catLabel = cat.kind === 'all' ? 'All Documents'
     : cat.kind === 'type' ? titleCase(cat.value)
     : cat.kind === 'vendor' ? cat.value
+    : cat.kind === 'project' ? cat.value
+    : cat.kind === 'month' ? monthLabel(cat.value)
     : (folders.find(f => f.id === cat.value)?.folder_name || 'Folder');
   const s = dash?.stats;
+
+  const renderRow = (d) => {
+    const cfg = STATUS_CFG[d.status] || STATUS_CFG.draft;
+    const expDays = d.expiry_date ? dayjs(d.expiry_date).diff(dayjs(), 'day') : null;
+    return (
+      <tr key={d.id} className="border-b last:border-0 hover:bg-slate-50 group cursor-pointer" onClick={()=>setDetailId(d.id)}>
+        <td className="py-2 px-3 font-mono text-xs text-indigo-600">{d.doc_number || '—'}</td>
+        <td className="py-2 px-3">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-medium text-slate-800 max-w-[180px] truncate">{d.doc_title || d.file_name}</span>
+            {d.is_signed && <FileSignature className="w-3 h-3 text-blue-500 flex-shrink-0" />}
+            {d.version_count > 0 && <span className="text-[9px] bg-slate-100 text-slate-500 px-1 rounded">v{d.revision_no+1||d.version_count}</span>}
+          </div>
+          <div className="text-[10px] text-slate-400 truncate">{d.file_name}</div>
+        </td>
+        <td className="py-2 px-3 text-xs capitalize">{titleCase(d.doc_type)}</td>
+        <td className="py-2 px-3 text-xs text-slate-500 max-w-[120px] truncate">{d.project_name || '—'}</td>
+        <td className="py-2 px-3 text-xs font-mono">{d.revision || 'A'}</td>
+        <td className="py-2 px-3 text-xs">{fmtSize(d.file_size)}</td>
+        <td className="py-2 px-3 text-xs">
+          {d.expiry_date ? <span className={clsx('font-medium', expDays<0?'text-red-600':expDays<=30?'text-orange-500':'text-slate-500')}>{d.expiry_date}</span> : '—'}
+        </td>
+        <td className="py-2 px-3"><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${cfg.color}`}>{cfg.label}</span></td>
+        <td className="py-2 px-3" onClick={e=>e.stopPropagation()}>
+          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {(d.local_url || d.onedrive_url) && (
+              <button type="button" onClick={()=>downloadDmsDocument(d)}
+                className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Download"><Download className="w-3.5 h-3.5" /></button>
+            )}
+            <button onClick={()=>setModal({type:'review', doc:d})} className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded" title="Submit for Review"><Send className="w-3.5 h-3.5" /></button>
+            <button onClick={()=>setModal({type:'version', doc:d})} className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded" title="Add Revision"><GitBranch className="w-3.5 h-3.5" /></button>
+            <button onClick={()=>setModal({type:'share', doc:d})} className="p-1 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded" title="Share"><Share2 className="w-3.5 h-3.5" /></button>
+            <button onClick={()=>{ if(window.confirm('Archive?')) archiveMut.mutate(d.id); }} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded" title="Archive"><Archive className="w-3.5 h-3.5" /></button>
+          </div>
+        </td>
+      </tr>
+    );
+  };
 
   return (
     <div className="p-6 md:p-8 max-w-[1400px] mx-auto min-h-screen bg-[#f4f6f9]">
@@ -821,6 +904,44 @@ export default function DMSPage() {
                   </div>
                 )}
 
+                {/* By Project */}
+                {projectGroups.length > 0 && (
+                  <div className="mt-1">
+                    <button onClick={()=>setOpenSec(o=>({...o, project:!o.project}))}
+                      className="flex items-center gap-1.5 w-full px-2 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-600">
+                      {openSec.project ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                      <Building2 className="w-3.5 h-3.5" /> By Project
+                      <span className="ml-auto">{projectGroups.length}</span>
+                    </button>
+                    {openSec.project && projectGroups.map(([p, n]) => (
+                      <button key={p} onClick={()=>setCat({ kind:'project', value:p })} title={p}
+                        className={clsx('flex items-center gap-2 w-full pl-7 pr-2 py-1.5 rounded-lg text-xs', cat.kind==='project'&&cat.value===p ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-50')}>
+                        <span className="truncate">{p}</span>
+                        <span className="ml-auto text-slate-400 flex-shrink-0">{n}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* By Month */}
+                {monthGroups.length > 0 && (
+                  <div className="mt-1">
+                    <button onClick={()=>setOpenSec(o=>({...o, month:!o.month}))}
+                      className="flex items-center gap-1.5 w-full px-2 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-600">
+                      {openSec.month ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                      <Clock className="w-3.5 h-3.5" /> By Month
+                      <span className="ml-auto">{monthGroups.length}</span>
+                    </button>
+                    {openSec.month && monthGroups.map(([k, n]) => (
+                      <button key={k} onClick={()=>setCat({ kind:'month', value:k })}
+                        className={clsx('flex items-center gap-2 w-full pl-7 pr-2 py-1.5 rounded-lg text-xs', cat.kind==='month'&&cat.value===k ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-600 hover:bg-slate-50')}>
+                        <span className="truncate">{monthLabel(k)}</span>
+                        <span className="ml-auto text-slate-400 flex-shrink-0">{n}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {/* Manual folders */}
                 <div className="mt-1">
                   <button onClick={()=>setOpenSec(o=>({...o, folder:!o.folder}))}
@@ -865,6 +986,14 @@ export default function DMSPage() {
               <select value={statusFilter} onChange={e=>setStatus(e.target.value)} className="bg-white border rounded-lg px-3 py-2 text-sm shadow-sm">
                 <option value="">All Status</option>{Object.entries(STATUS_CFG).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
               </select>
+              <select value={groupBy} onChange={e=>{ setGroupBy(e.target.value); setCollapsedGroups({}); }}
+                title="Group rows" className="bg-white border rounded-lg px-3 py-2 text-sm shadow-sm">
+                <option value="none">No grouping</option>
+                <option value="vendor">Group by Vendor</option>
+                <option value="type">Group by Type</option>
+                <option value="project">Group by Project</option>
+                <option value="month">Group by Month</option>
+              </select>
             </div>
 
             {/* Active category chip */}
@@ -872,7 +1001,7 @@ export default function DMSPage() {
               <div className="flex items-center gap-2 mb-3 text-xs">
                 <span className="text-slate-400">Showing:</span>
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full font-medium">
-                  {cat.kind === 'type' ? <Layers className="w-3 h-3" /> : cat.kind === 'vendor' ? <Tag className="w-3 h-3" /> : <Folder className="w-3 h-3" />}
+                  {cat.kind === 'type' ? <Layers className="w-3 h-3" /> : cat.kind === 'vendor' ? <Tag className="w-3 h-3" /> : cat.kind === 'project' ? <Building2 className="w-3 h-3" /> : cat.kind === 'month' ? <Clock className="w-3 h-3" /> : <Folder className="w-3 h-3" />}
                   {catLabel}
                   <span className="text-indigo-400">· {visibleDocs.length}</span>
                   <button onClick={()=>setCat({ kind:'all' })} className="hover:text-indigo-900"><X className="w-3 h-3" /></button>
@@ -890,44 +1019,28 @@ export default function DMSPage() {
                       ))}</tr>
                     </thead>
                     <tbody>
-                      {visibleDocs.map(d => {
-                        const cfg = STATUS_CFG[d.status] || STATUS_CFG.draft;
-                        const expDays = d.expiry_date ? dayjs(d.expiry_date).diff(dayjs(),'day') : null;
-                        return (
-                          <tr key={d.id} className="border-b last:border-0 hover:bg-slate-50 group cursor-pointer" onClick={()=>setDetailId(d.id)}>
-                            <td className="py-2 px-3 font-mono text-xs text-indigo-600">{d.doc_number || '—'}</td>
-                            <td className="py-2 px-3">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-xs font-medium text-slate-800 max-w-[180px] truncate">{d.doc_title || d.file_name}</span>
-                                {d.is_signed && <FileSignature className="w-3 h-3 text-blue-500 flex-shrink-0" />}
-                                {d.version_count > 0 && <span className="text-[9px] bg-slate-100 text-slate-500 px-1 rounded">v{d.revision_no+1||d.version_count}</span>}
-                              </div>
-                              <div className="text-[10px] text-slate-400 truncate">{d.file_name}</div>
-                            </td>
-                            <td className="py-2 px-3 text-xs capitalize">{titleCase(d.doc_type)}</td>
-                            <td className="py-2 px-3 text-xs text-slate-500 max-w-[120px] truncate">{d.project_name || '—'}</td>
-                            <td className="py-2 px-3 text-xs font-mono">{d.revision || 'A'}</td>
-                            <td className="py-2 px-3 text-xs">{fmtSize(d.file_size)}</td>
-                            <td className="py-2 px-3 text-xs">
-                              {d.expiry_date ? <span className={clsx('font-medium', expDays<0?'text-red-600':expDays<=30?'text-orange-500':'text-slate-500')}>{d.expiry_date}</span> : '—'}
-                            </td>
-                            <td className="py-2 px-3"><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${cfg.color}`}>{cfg.label}</span></td>
-                            <td className="py-2 px-3" onClick={e=>e.stopPropagation()}>
-                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                {(d.local_url || d.onedrive_url) && (
-                                  <button type="button"
-                                    onClick={()=>downloadDmsDocument(d)}
-                                    className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Download"><Download className="w-3.5 h-3.5" /></button>
-                                )}
-                                <button onClick={()=>setModal({type:'review', doc:d})} className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded" title="Submit for Review"><Send className="w-3.5 h-3.5" /></button>
-                                <button onClick={()=>setModal({type:'version', doc:d})} className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded" title="Add Revision"><GitBranch className="w-3.5 h-3.5" /></button>
-                                <button onClick={()=>setModal({type:'share', doc:d})} className="p-1 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded" title="Share"><Share2 className="w-3.5 h-3.5" /></button>
-                                <button onClick={()=>{ if(window.confirm('Archive?')) archiveMut.mutate(d.id); }} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded" title="Archive"><Archive className="w-3.5 h-3.5" /></button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
+                      {groupBy === 'none'
+                        ? visibleDocs.map(renderRow)
+                        : groupedDocs.map(g => {
+                            const collapsed = collapsedGroups[g.key];
+                            const GIcon = groupBy==='vendor' ? Tag : groupBy==='type' ? Layers : groupBy==='project' ? Building2 : Clock;
+                            return (
+                              <React.Fragment key={g.key}>
+                                <tr className="bg-slate-100/70 border-b cursor-pointer hover:bg-slate-100"
+                                  onClick={()=>setCollapsedGroups(c=>({ ...c, [g.key]: !c[g.key] }))}>
+                                  <td colSpan={9} className="py-2 px-3">
+                                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                                      {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                      <GIcon className="w-3.5 h-3.5 text-slate-400" />
+                                      <span>{g.label}</span>
+                                      <span className="text-slate-400 font-normal">· {g.rows.length} doc{g.rows.length!==1?'s':''}</span>
+                                    </div>
+                                  </td>
+                                </tr>
+                                {!collapsed && g.rows.map(renderRow)}
+                              </React.Fragment>
+                            );
+                          })}
                       {visibleDocs.length === 0 && (
                         <tr><td colSpan={9} className="text-center py-10 text-slate-400">
                           <FolderOpen className="w-8 h-8 mx-auto mb-2 opacity-30" />No documents found
