@@ -68,7 +68,7 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => cb(null, `${uuid()}${path.extname(file.originalname)}`),
 });
-const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } });
+const upload = multer({ storage, limits: { fileSize: 100 * 1024 * 1024 } }); // 100MB limit for large documents
 
 const uploadBase = path.resolve(__dirname, '../..');
 const resolveLocalDocumentPath = (localUrl) => {

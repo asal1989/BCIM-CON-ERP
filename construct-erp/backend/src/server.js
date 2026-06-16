@@ -198,9 +198,9 @@ app.use(morgan('combined', {
 // correctly read the client IP from X-Forwarded-For
 app.set('trust proxy', 1);
 
-// Body parsing
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Body parsing — increased limit for large file uploads (DMS, documents)
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
 // Static file serving (uploads) — authenticated only
 // Requires a valid JWT so private documents cannot be hot-linked
