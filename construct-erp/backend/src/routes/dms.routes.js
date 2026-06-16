@@ -237,13 +237,31 @@ function vendorFromName(name) {
 router.post('/upload', upload.array('files', 20), async (req, res) => {
   try {
     if (!req.files || !req.files.length) return res.status(400).json({ error: 'No files provided' });
+    if (!req.user || !req.user.id) return res.status(401).json({ error: 'User not authenticated' });
+
     const { project_id, folder_id, doc_type, doc_number, doc_title, discipline,
             description, module, module_record_id, tags, expiry_date, access_level,
             vendor, parent_folder_id, auto_folder } = req.body;
     if (project_id && !userCanAccessProject(req, project_id)) {
       return res.status(403).json({ error: 'Access denied for this project.' });
     }
-    const tagArr = tags ? (Array.isArray(tags) ? tags : String(tags).split(',').map(t=>t.trim()).filter(Boolean)) : [];
+    let tagArr = [];
+    if (tags) {
+      try {
+        // Handle both JSON array strings and comma-separated strings
+        if (typeof tags === 'string' && tags.startsWith('[')) {
+          tagArr = JSON.parse(tags);
+        } else if (Array.isArray(tags)) {
+          tagArr = tags;
+        } else {
+          tagArr = String(tags).split(',').map(t => t.trim()).filter(Boolean);
+        }
+      } catch (e) {
+        tagArr = String(tags).split(',').map(t => t.trim()).filter(Boolean);
+      }
+      tagArr = tagArr.map(t => String(t).trim()).filter(Boolean);
+    }
+
     const autoFolderOn = auto_folder === true || auto_folder === 'true' || auto_folder === '1';
     const tagVendor = tagArr.find(t => t && !VENDOR_FOLDER_STOPWORDS.has(String(t).trim().toLowerCase())) || '';
 
@@ -309,7 +327,10 @@ router.post('/upload', upload.array('files', 20), async (req, res) => {
       created.push(r.rows[0]);
     }
     res.status(201).json({ data: created, count: created.length });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    console.error('DMS upload error:', e);
+    res.status(500).json({ error: e.message, details: e.message });
+  }
 });
 
 // ══════════════════════════════════════════════════════════════════
