@@ -696,6 +696,119 @@ function LeaveTypeModal({ lt, onClose, onSave, isPending }) {
   );
 }
 
+// ── Leave Calendar Tab ────────────────────────────────────────────────────────
+function LeaveCalendarTab() {
+  const today = new Date();
+  const [year,  setYear]  = useState(today.getFullYear());
+  const [month, setMonth] = useState(today.getMonth());   // 0-based
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['hr-leave-requests-cal', year, month],
+    queryFn: () => hrLeaveAPI.listRequests({ status: 'approved' }).then(r => r.data),
+  });
+
+  const requests = data?.data || [];
+
+  // build a map: 'YYYY-MM-DD' -> [{name, leave_type_name}]
+  const dayMap = {};
+  requests.forEach(r => {
+    if (!r.from_date || !r.to_date) return;
+    const start = new Date(r.from_date);
+    const end   = new Date(r.to_date);
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const key = d.toISOString().slice(0, 10);
+      const [ky, km] = key.split('-').map(Number);
+      if (ky === year && km - 1 === month) {
+        (dayMap[key] = dayMap[key] || []).push({ name: r.employee_name, type: r.leave_type_name });
+      }
+    }
+  });
+
+  const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const DAY_LABELS  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  const LEAVE_COLORS = ['bg-blue-100 text-blue-700','bg-green-100 text-green-700','bg-purple-100 text-purple-700',
+    'bg-amber-100 text-amber-700','bg-rose-100 text-rose-700','bg-indigo-100 text-indigo-700'];
+  const colorFor = (name) => LEAVE_COLORS[(name?.charCodeAt(0)||0) % LEAVE_COLORS.length];
+
+  const prev = () => { if (month === 0) { setMonth(11); setYear(y => y-1); } else setMonth(m => m-1); };
+  const next = () => { if (month === 11) { setMonth(0); setYear(y => y+1); } else setMonth(m => m+1); };
+
+  const todayKey = today.toISOString().slice(0, 10);
+  const cells = Array.from({ length: firstDay + daysInMonth }, (_, i) => i < firstDay ? null : i - firstDay + 1);
+
+  return (
+    <div className="space-y-4">
+      {/* Month navigation */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center justify-between"
+        style={{ boxShadow: '0 2px 12px rgba(10,31,92,0.06)' }}>
+        <button onClick={prev} className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors text-gray-600 font-bold">‹</button>
+        <span className="font-black text-gray-900 text-lg">{MONTH_NAMES[month]} {year}</span>
+        <button onClick={next} className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors text-gray-600 font-bold">›</button>
+      </div>
+
+      {isLoading ? (
+        <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400 text-sm">Loading…</div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden" style={{ boxShadow: '0 2px 12px rgba(10,31,92,0.06)' }}>
+          {/* Day-of-week header */}
+          <div className="grid grid-cols-7 bg-gray-50 border-b border-gray-100">
+            {DAY_LABELS.map(d => (
+              <div key={d} className="py-2 text-center text-xs font-black text-gray-500 uppercase tracking-wide">{d}</div>
+            ))}
+          </div>
+          {/* Calendar grid */}
+          <div className="grid grid-cols-7 divide-x divide-y divide-gray-100">
+            {cells.map((day, i) => {
+              if (!day) return <div key={`e-${i}`} className="min-h-[90px] bg-gray-50/50" />;
+              const key = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+              const leaves = dayMap[key] || [];
+              const isToday = key === todayKey;
+              return (
+                <div key={key} className={`min-h-[90px] p-1.5 ${isToday ? 'bg-blue-50' : 'bg-white'}`}>
+                  <span className={`inline-flex w-6 h-6 items-center justify-center rounded-full text-xs font-black mb-1 ${
+                    isToday ? 'bg-blue-600 text-white' : 'text-gray-700'
+                  }`}>{day}</span>
+                  <div className="space-y-0.5">
+                    {leaves.slice(0, 3).map((l, j) => (
+                      <div key={j} className={`text-[10px] font-bold px-1 py-0.5 rounded-md truncate ${colorFor(l.name)}`}
+                        title={`${l.name} — ${l.type}`}>
+                        {l.name?.split(' ')[0]}
+                      </div>
+                    ))}
+                    {leaves.length > 3 && (
+                      <div className="text-[10px] text-gray-400 font-bold px-1">+{leaves.length - 3} more</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Legend */}
+      {Object.keys(dayMap).length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-4" style={{ boxShadow: '0 2px 12px rgba(10,31,92,0.06)' }}>
+          <p className="text-xs font-black text-gray-500 uppercase tracking-wide mb-3">Employees on Leave This Month</p>
+          <div className="flex flex-wrap gap-2">
+            {[...new Set(Object.values(dayMap).flat().map(l => l.name))].map(name => {
+              const count = Object.values(dayMap).flat().filter(l => l.name === name).length;
+              return (
+                <span key={name} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${colorFor(name)}`}>
+                  {name} <span className="opacity-60">· {count}d</span>
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function LeaveManagementPage() {
   const [activeTab, setActiveTab] = useState('Requests');
@@ -703,6 +816,7 @@ export default function LeaveManagementPage() {
     { key: 'Requests',    label: 'Requests',    icon: Calendar  },
     { key: 'Balances',    label: 'Balances',    icon: RefreshCw },
     { key: 'Leave Types', label: 'Leave Types', icon: Users     },
+    { key: 'Calendar',    label: 'Calendar',    icon: Calendar  },
   ];
 
   return (
@@ -744,6 +858,7 @@ export default function LeaveManagementPage() {
           {activeTab === 'Requests'    && <RequestsTab />}
           {activeTab === 'Balances'    && <BalancesTab />}
           {activeTab === 'Leave Types' && <LeaveTypesTab />}
+          {activeTab === 'Calendar'    && <LeaveCalendarTab />}
         </motion.div>
       </AnimatePresence>
     </div>
