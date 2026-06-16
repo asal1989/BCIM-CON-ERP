@@ -2,10 +2,11 @@ import React, { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   BadgeIndianRupee, Bell, Briefcase, CalendarCheck, CalendarOff, CheckCircle2,
-  FileText, FolderUp, Headphones, Monitor, ShieldCheck, UserRound,
+  FileText, FolderUp, Headphones, Monitor, ShieldCheck, UserRound, Printer, ExternalLink,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { essAPI, hrAdvancedAPI } from '../../api/client';
+import { useNavigate } from 'react-router-dom';
 
 const input = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-950 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100';
 const label = 'mb-1 block text-[11px] font-black uppercase tracking-wide text-slate-600';
@@ -169,6 +170,7 @@ function AttendanceLeave({ leaveTypes }) {
 
 function PayslipsDocuments({ policies, userId }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [doc, setDoc] = useState({ file: null, doc_type: 'employee_document', doc_name: '' });
   const payslips = useQuery({ queryKey: ['ess-payslips'], queryFn: () => essAPI.payslips().then(unwrap) });
   const documents = useQuery({ queryKey: ['ess-documents'], queryFn: () => essAPI.documents().then(unwrap) });
@@ -188,13 +190,25 @@ function PayslipsDocuments({ policies, userId }) {
   const acked = new Set((acks.data || []).map((a) => a.policy_id));
   return (
     <div className="grid gap-5 xl:grid-cols-2">
-      <Panel title="Payslips" subtitle="Approved and paid payslips" icon={BadgeIndianRupee}>
+      <Panel title="Payslips" subtitle="Approved and paid payslips — click Print to download" icon={BadgeIndianRupee}>
         <Table columns={[
-          { key: 'month', label: 'Month' }, { key: 'year', label: 'Year' },
+          { key: 'month', label: 'Month' },
+          { key: 'year', label: 'Year' },
           { key: 'gross_earnings', label: 'Gross', render: (r) => `Rs ${Number(r.gross_earnings || 0).toLocaleString('en-IN')}` },
           { key: 'total_deductions', label: 'Deductions', render: (r) => `Rs ${Number(r.total_deductions || 0).toLocaleString('en-IN')}` },
-          { key: 'net_pay', label: 'Net', render: (r) => `Rs ${Number(r.net_pay || 0).toLocaleString('en-IN')}` },
-          { key: 'status', label: 'Status' },
+          { key: 'net_pay', label: 'Net Pay', render: (r) => <span className="font-black text-emerald-700">Rs {Number(r.net_pay || 0).toLocaleString('en-IN')}</span> },
+          { key: 'status', label: 'Status', render: (r) => {
+            const cfg = { paid: 'bg-emerald-50 text-emerald-700', approved: 'bg-blue-50 text-blue-700', draft: 'bg-amber-50 text-amber-700' };
+            return <span className={`rounded px-2 py-0.5 text-[11px] font-black ${cfg[r.status] || 'bg-slate-100 text-slate-600'}`}>{r.status}</span>;
+          }},
+          { key: 'actions', label: 'Payslip', render: (r) => (
+            <button
+              onClick={() => navigate(`/hr-admin/payroll/${r.id}/payslip`)}
+              className="inline-flex items-center gap-1 rounded-lg bg-blue-700 px-3 py-1 text-xs font-black text-white hover:bg-blue-800 transition"
+            >
+              <Printer className="h-3 w-3" /> Print
+            </button>
+          )},
         ]} rows={payslips.data || []} />
       </Panel>
       <Panel title="Document Upload" subtitle="Upload profile and HR documents" icon={FolderUp}>
