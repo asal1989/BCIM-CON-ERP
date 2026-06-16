@@ -60,6 +60,7 @@ const qualityPourRoutes = require('./routes/quality-pour.routes');
 const qualityAuditRoutes = require('./routes/quality-audit.routes');
 const assetRoutes = require('./routes/asset.routes');
 const assetMgmtRoutes = require('./routes/asset-mgmt.routes');
+const plantRoutes = require('./routes/plant.routes');
 const inventoryAssetRoutes = require('./routes/inventoryAsset.routes');
 const itAssetRoutes = require('./routes/itAsset.routes');
 const itTicketRoutes = require('./routes/itTicket.routes');
@@ -310,6 +311,7 @@ app.use(`${API}/snags`, snagRoutes);
 // Assets
 app.use(`${API}/assets`, assetRoutes);
 app.use(`${API}/asset-mgmt`, assetMgmtRoutes);
+app.use(`${API}/plant`, plantRoutes);
 app.use(`${API}/inventory-assets`, inventoryAssetRoutes);
 
 // IT

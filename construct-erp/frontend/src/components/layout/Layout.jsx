@@ -14,7 +14,8 @@ import {
   Briefcase, UploadCloud, Upload, ChevronUp, Flag, CalendarDays, GanttChartSquare, Hammer,
   CalendarOff, FileBarChart, Star, UserCheck, Fingerprint, PackageCheck, ArrowLeftRight,
   Landmark, FileSignature, CircleSlash, ShieldCheck, Clock3, Lightbulb,
-  Gavel, Target, Send, Coins, Replace, Link2, Wrench, Layers, MapPin, TrendingDown, FolderOpen, Calculator, IndianRupee
+  Gavel, Target, Send, Coins, Replace, Link2, Wrench, Layers, MapPin, TrendingDown, FolderOpen, Calculator, IndianRupee,
+  Cog, Fuel, Gauge
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import CommandPalette from './CommandPalette';
@@ -221,6 +222,20 @@ const navGroups = [
     { to: '/it/licenses',           icon: Key,             label: 'Licenses / AMC' },
     { to: '/assets/documents',      icon: FolderSearch,    label: 'Module Documents' },
   ]},
+  { label: 'Plant & Machinery', items: [
+    { to: '/plant/dashboard',   icon: LayoutDashboard, label: 'Fleet Dashboard' },
+    { to: '/plant/equipment',   icon: Truck,           label: 'Asset Register' },
+    { to: '/plant/masters',     icon: Layers,          label: 'Masters' },
+    { to: '/plant/transfers',   icon: ArrowLeftRight,  label: 'Transfers & Disposals' },
+    { to: '/plant/hire',        icon: Briefcase,       label: 'Hire Management' },
+    { to: '/plant/deployment',  icon: Gauge,           label: 'Deployment & Utilisation' },
+    { to: '/plant/fuel',        icon: Fuel,            label: 'Fuel Management' },
+    { to: '/plant/maintenance', icon: Wrench,          label: 'Maintenance & Repairs' },
+    { to: '/plant/operators',   icon: UserCheck,       label: 'Operator Management' },
+    { to: '/plant/compliance',  icon: ShieldCheck,     label: 'Document Compliance' },
+    { to: '/plant/cost',        icon: Calculator,      label: 'Cost Allocation' },
+    { to: '/plant/reports',     icon: FileBarChart,    label: 'Reports & Analytics' },
+  ]},
   { label: 'DMS', items: [
     { to: '/dms',         icon: FolderOpen, label: 'Document Repository' },
     { to: '/dms/gfc-log', icon: Layers,     label: 'GFC Master Log' },
@@ -264,6 +279,7 @@ const GROUP_COLORS = {
   'Quality (QA/QC)':   '#3B82F6',
   'HSE & Safety':      '#EF4444',
   'Assets & IT':       '#64748B',
+  'Plant & Machinery': '#0D9488',
   'DMS':               '#0EA5E9',
   'Subcontractors':    '#F97316',
   'Administration':    '#A855F7',

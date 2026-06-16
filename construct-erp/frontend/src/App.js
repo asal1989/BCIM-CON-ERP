@@ -162,6 +162,18 @@ const P6Dashboard           = lazy(() => import('./pages/planning/P6Dashboard'))
 const WBSEditorPage         = lazy(() => import('./pages/planning/WBSEditorPage'));
 const RiskRegisterPage      = lazy(() => import('./pages/planning/RiskRegisterPage'));
 const MRPPage               = lazy(() => import('./pages/planning/MRPPage'));
+const PlantDashboard      = lazy(() => import('./pages/plant/PlantDashboard'));
+const PlantEquipment      = lazy(() => import('./pages/plant/PlantEquipment'));
+const PlantMasters        = lazy(() => import('./pages/plant/PlantMasters'));
+const PlantTransfers      = lazy(() => import('./pages/plant/PlantTransfers'));
+const PlantHire           = lazy(() => import('./pages/plant/PlantHire'));
+const PlantDeployment     = lazy(() => import('./pages/plant/PlantDeployment'));
+const PlantFuel           = lazy(() => import('./pages/plant/PlantFuel'));
+const PlantMaintenance    = lazy(() => import('./pages/plant/PlantMaintenance'));
+const PlantOperators      = lazy(() => import('./pages/plant/PlantOperators'));
+const PlantCompliance     = lazy(() => import('./pages/plant/PlantCompliance'));
+const PlantCost           = lazy(() => import('./pages/plant/PlantCost'));
+const PlantReports        = lazy(() => import('./pages/plant/PlantReports'));
 const ITAssetPage         = lazy(() => import('./pages/it/ITAssetPage'));
 const ITTicketPage        = lazy(() => import('./pages/it/ITTicketPage'));
 const LicensePage         = lazy(() => import('./pages/it/LicensePage'));
@@ -659,6 +671,19 @@ export default function App() {
                 <Route path="assets/reports"     element={<RequireModule module="Assets & IT"><AssetReportsDashboardPage /></RequireModule>} />
                 <Route path="assets/alerts"      element={<RequireModule module="Assets & IT"><AssetAlertsPage /></RequireModule>} />
                 <Route path="assets/roles"       element={<RequireModule module="Assets & IT"><AssetRolesPage /></RequireModule>} />
+                <Route path="plant"              element={<RequireModule module="Assets & IT"><PlantDashboard /></RequireModule>} />
+                <Route path="plant/dashboard"    element={<RequireModule module="Assets & IT"><PlantDashboard /></RequireModule>} />
+                <Route path="plant/equipment"    element={<RequireModule module="Assets & IT"><PlantEquipment /></RequireModule>} />
+                <Route path="plant/masters"      element={<RequireModule module="Assets & IT"><PlantMasters /></RequireModule>} />
+                <Route path="plant/transfers"    element={<RequireModule module="Assets & IT"><PlantTransfers /></RequireModule>} />
+                <Route path="plant/hire"         element={<RequireModule module="Assets & IT"><PlantHire /></RequireModule>} />
+                <Route path="plant/deployment"   element={<RequireModule module="Assets & IT"><PlantDeployment /></RequireModule>} />
+                <Route path="plant/fuel"         element={<RequireModule module="Assets & IT"><PlantFuel /></RequireModule>} />
+                <Route path="plant/maintenance"  element={<RequireModule module="Assets & IT"><PlantMaintenance /></RequireModule>} />
+                <Route path="plant/operators"    element={<RequireModule module="Assets & IT"><PlantOperators /></RequireModule>} />
+                <Route path="plant/compliance"   element={<RequireModule module="Assets & IT"><PlantCompliance /></RequireModule>} />
+                <Route path="plant/cost"         element={<RequireModule module="Assets & IT"><PlantCost /></RequireModule>} />
+                <Route path="plant/reports"      element={<RequireModule module="Assets & IT"><PlantReports /></RequireModule>} />
                 <Route path="it/assets"          element={<RequireModule module="Assets & IT"><ITAssetPage /></RequireModule>} />
                 <Route path="it/tickets" element={<RequireModule module="Assets & IT"><ITTicketPage /></RequireModule>} />
                 <Route path="it/licenses" element={<RequireModule module="Assets & IT"><LicensePage /></RequireModule>} />
