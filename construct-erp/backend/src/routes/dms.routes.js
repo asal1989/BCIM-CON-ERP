@@ -561,40 +561,20 @@ router.get('/:id([0-9a-fA-F-]{36})', async (req, res) => {
 
 router.get('/:id([0-9a-fA-F-]{36})/file', async (req, res) => {
   try {
-    await getAccessibleDocument(req, req.params.id);
-    // Support JWT via query param for iframe/embed src usage (no custom headers possible)
-    const jwt = require('jsonwebtoken');
-    let userId    = req.user?.id;
-    let companyId = req.user?.company_id;
-    if (req.query.token) {
-      try {
-        const decoded = jwt.verify(req.query.token, process.env.JWT_SECRET);
-        const uRow = await db().query('SELECT id,company_id FROM users WHERE id=$1 AND is_active=true',[decoded.id]);
-        if (uRow.rows.length) { userId = uRow.rows[0].id; companyId = uRow.rows[0].company_id; }
-      } catch { return res.status(401).json({ error: 'Invalid token' }); }
-    }
-    const r = await db().query(
-      `SELECT id, file_name, file_type, local_url, onedrive_url
-       FROM documents WHERE id=$1 AND company_id=$2`,
-      [req.params.id, companyId]
-    );
-    if (!r.rows.length) return res.status(404).json({ error: 'Document not found' });
-    const doc = r.rows[0];
+    const doc = await getAccessibleDocument(req, req.params.id);
+    const { rows } = await db().query(`SELECT onedrive_url FROM documents WHERE id=$1`, [req.params.id]);
     const localPath = resolveLocalDocumentPath(doc.local_url);
     if (!localPath || !fs.existsSync(localPath)) {
-      if (doc.onedrive_url) return res.redirect(doc.onedrive_url);
+      if (rows[0]?.onedrive_url) return res.redirect(rows[0].onedrive_url);
       return res.status(404).json({ error: 'Document file not found on server' });
     }
     // Set proper Content-Type for PDF so browser renders inline
     const ext = path.extname(doc.file_name || '').toLowerCase();
-    const mimeMap = { '.pdf':'.pdf', '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg' };
     if (ext === '.pdf') res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${String(doc.file_name || 'document').replace(/"/g, '')}"`);
     // Log access
-    if (userId) {
-      db().query(`INSERT INTO document_access_logs (document_id,user_id,action,ip_address) VALUES ($1,$2,'view',$3)`,
-        [req.params.id, userId, req.ip]).catch(()=>{});
-    }
+    db().query(`INSERT INTO document_access_logs (document_id,user_id,action,ip_address) VALUES ($1,$2,'view',$3)`,
+      [req.params.id, req.user.id, req.ip]).catch(()=>{});
     res.sendFile(localPath);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

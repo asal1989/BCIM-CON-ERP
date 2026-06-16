@@ -66,15 +66,13 @@ function DocumentPreview({ doc }) {
   const [blobUrl,     setBlobUrl]     = useState('');
   const [loadingDocx, setLoadingDocx] = useState(false);
   const [imgBlobUrl,  setImgBlobUrl]  = useState('');
+  const [pdfBlobUrl,  setPdfBlobUrl]  = useState('');
   const ext   = fileExt(doc?.file_name || doc?.local_url || '');
   const isPDF = ext === 'pdf';
   const isImg = ['png','jpg','jpeg','webp','gif'].includes(ext);
   const excel = isExcelDoc(doc);
   const word  = isWordDoc(doc);
-
-  // For PDF: use direct URL with JWT token in query param — most reliable
-  const token      = sessionStorage.getItem('accessToken');
-  const pdfUrl     = isPDF && doc?.id ? `/api/v1/dms/${doc.id}/file?token=${token}` : '';
+  const token = sessionStorage.getItem('accessToken');
 
   const preview = useQuery({
     queryKey: ['dms-preview', doc?.id],
@@ -85,6 +83,12 @@ function DocumentPreview({ doc }) {
   useEffect(() => {
     let alive = true;
     let url   = '';
+    // PDF — fetch blob with auth header (iframe can't send headers, so a direct URL 401s)
+    if (doc?.id && isPDF) {
+      dmsAPI.fileBlob(doc.id)
+        .then(res => { if (!alive) return; url = URL.createObjectURL(res.data); setPdfBlobUrl(url); })
+        .catch(e => toast.error(e?.response?.data?.error || 'Unable to load PDF'));
+    }
     // Image — fetch blob for display
     if (doc?.id && isImg) {
       dmsAPI.fileBlob(doc.id)
@@ -101,18 +105,24 @@ function DocumentPreview({ doc }) {
         .finally(() => { if (alive) setLoadingDocx(false); });
     }
     return () => { alive = false; if (url) URL.revokeObjectURL(url); };
-  }, [doc?.id, isImg, word]);
+  }, [doc?.id, isPDF, isImg, word]);
 
-  // PDF — direct URL with JWT token in query (no blob, no CORS issues)
+  // PDF — blob URL (object URL needs no auth, sidesteps iframe header limitation)
   if (isPDF) {
     return (
       <div className="space-y-3">
-        <iframe
-          key={pdfUrl}
-          title={doc.file_name}
-          src={pdfUrl}
-          className="w-full h-[620px] rounded-xl border border-slate-200 bg-white"
-        />
+        {!pdfBlobUrl ? (
+          <div className="h-[620px] flex items-center justify-center border rounded-xl text-slate-400">
+            <RefreshCw className="w-5 h-5 animate-spin mr-2" /> Loading PDF…
+          </div>
+        ) : (
+          <iframe
+            key={pdfBlobUrl}
+            title={doc.file_name}
+            src={pdfBlobUrl}
+            className="w-full h-[620px] rounded-xl border border-slate-200 bg-white"
+          />
+        )}
       </div>
     );
   }
