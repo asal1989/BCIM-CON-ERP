@@ -458,6 +458,7 @@ export default function App() {
                 <Route path="projects" element={<RequireModule module="Overview"><ProjectList /></RequireModule>} />
                 <Route path="projects/new" element={<RequireModule module="Overview"><ProjectCreate /></RequireModule>} />
                 <Route path="projects/:id" element={<RequireModule module="Overview"><ProjectDetail /></RequireModule>} />
+                <Route path="projects/:id/edit" element={<RequireModule module="Overview"><ProjectCreate /></RequireModule>} />
 
                 {/* QS & Billing */}
                 <Route path="qs" element={<RequireModule module="QS & Billing"><QSDashboardPage /></RequireModule>} />

@@ -1,13 +1,13 @@
 // src/pages/projects/ProjectDetail.jsx
 import React from 'react';
 import dayjs from 'dayjs';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectAPI, variationAPI, raBillAPI, clientAdvanceAPI } from '../../api/client';
 import {
   ArrowLeft, Building2, FileText, UploadCloud, Trash2,
   TrendingUp, Wallet, Receipt, ShieldCheck, History,
-  MapPin, Activity, Users, CalendarDays, Hash, Coins, Check, X as XIcon
+  MapPin, Activity, Users, CalendarDays, Hash, Coins, Check, X as XIcon, Pencil
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
@@ -37,6 +37,7 @@ const fullInr = v => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFract
 
 export default function ProjectDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [editingAdvance, setEditingAdvance] = React.useState(false);
   const [advanceInput, setAdvanceInput] = React.useState('');
@@ -141,9 +142,12 @@ export default function ProjectDetail() {
           <Link to={`/qs/ra-bills?project_id=${id}`} className="px-4 py-2 bg-white border border-slate-200 text-slate-900 text-xs font-medium rounded-lg hover:border-indigo-300 hover:text-indigo-600 shadow-sm transition-all">
             RA Bills
           </Link>
-          <Link to={`/hse?project_id=${id}`} className="px-4 py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 shadow-sm transition-all">
+          <Link to={`/hse?project_id=${id}`} className="px-4 py-2 bg-white border border-slate-200 text-slate-900 text-xs font-medium rounded-lg hover:border-indigo-300 hover:text-indigo-600 shadow-sm transition-all">
             Safety Desk
           </Link>
+          <button onClick={() => navigate(`/projects/${id}/edit`)} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 shadow-sm transition-all">
+            <Pencil className="w-3.5 h-3.5" /> Edit Project
+          </button>
         </div>
       </div>
 

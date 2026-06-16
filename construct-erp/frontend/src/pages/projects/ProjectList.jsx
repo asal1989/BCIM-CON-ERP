@@ -212,7 +212,7 @@ export default function ProjectList() {
                           <span className={clsx('flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold', sc.bg, sc.text, sc.border)}>
                             <span className={clsx('h-1.5 w-1.5 rounded-full', sc.dot)} />{sc.label}
                           </span>
-                          <TableActions disableEdit onDelete={() => deleteMut.mutate(proj.id)} recordName={proj.name} />
+                          <TableActions onEdit={() => navigate(`/projects/${proj.id}/edit`)} onDelete={() => deleteMut.mutate(proj.id)} recordName={proj.name} />
                         </div>
                       </div>
 
@@ -296,7 +296,7 @@ export default function ProjectList() {
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500">{proj.pm_name || '—'}</td>
                       <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                        <TableActions disableEdit onDelete={() => deleteMut.mutate(proj.id)} recordName={proj.name} />
+                        <TableActions onEdit={() => navigate(`/projects/${proj.id}/edit`)} onDelete={() => deleteMut.mutate(proj.id)} recordName={proj.name} />
                       </td>
                     </tr>
                   );
