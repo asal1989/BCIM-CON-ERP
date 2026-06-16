@@ -30,13 +30,17 @@ async function getAccessToken() {
 
 async function uploadToSharePoint(fileName, fileBuffer, folderPath = 'Vendor Invoices') {
   try {
+    console.log(`[OneDrive] Starting upload: ${fileName} to ${folderPath}`);
     const token = await getAccessToken();
+    console.log(`[OneDrive] Got token, uploading to user: ${USER_EMAIL}`);
+
     const sanitizedFileName = String(fileName).replace(/[<>:"|?*]/g, '_').trim();
     const sanitizedFolder = String(folderPath).replace(/[<>:"|?*]/g, '_').trim();
 
     // Upload file to OneDrive (using /users/{email}/drive root)
     // Path: /users/{email}/drive/root:/{folderPath}/{fileName}:/content
     const uploadUrl = `https://graph.microsoft.com/v1.0/users/${USER_EMAIL}/drive/root:/${sanitizedFolder}/${sanitizedFileName}:/content`;
+    console.log(`[OneDrive] Upload URL: ${uploadUrl}`);
 
     const uploadRes = await fetch(uploadUrl, {
       method: 'PUT',
@@ -47,20 +51,25 @@ async function uploadToSharePoint(fileName, fileBuffer, folderPath = 'Vendor Inv
       body: fileBuffer,
     });
 
+    console.log(`[OneDrive] Response status: ${uploadRes.status}`);
+
     if (!uploadRes.ok) {
       const error = await uploadRes.text();
-      throw new Error(`Upload failed: ${uploadRes.status} ${error}`);
+      console.error(`[OneDrive] Upload failed: ${uploadRes.status}`, error.slice(0, 200));
+      throw new Error(`Upload failed: ${uploadRes.status} ${error.slice(0, 100)}`);
     }
 
     const driveItem = await uploadRes.json();
+    console.log(`[OneDrive] Upload successful: ${driveItem.webUrl}`);
+
     return {
       id: driveItem.id,
       webUrl: driveItem.webUrl,
       downloadUrl: driveItem['@microsoft.graph.downloadUrl'],
     };
   } catch (e) {
-    console.error('OneDrive upload error:', e.message);
-    throw new Error(`Failed to upload to OneDrive: ${e.message}`);
+    console.error('[OneDrive] Upload error:', e.message);
+    throw e;
   }
 }
 
