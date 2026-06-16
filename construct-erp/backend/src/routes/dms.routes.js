@@ -11,6 +11,7 @@ const { loadProjectScope, userCanAccessProject } = require('../middleware/projec
 const db = () => require('../config/database').pool;
 const xlsx    = require('xlsx');
 const mammoth = require('mammoth');
+const { uploadToSharePoint, createFolderInSharePoint } = require('../services/azureService');
 
 router.use(authenticate);
 router.use(loadProjectScope);
@@ -324,23 +325,38 @@ router.post('/upload', upload.array('files', 20), async (req, res) => {
     for (const file of req.files) {
       const localUrl = `/uploads/documents/${file.filename}`;
       const ext = path.extname(file.originalname).slice(1).toLowerCase();
+
       // Resolve the folder: explicit folder_id wins; otherwise auto-file by vendor.
       let effectiveFolderId = folder_id || null;
+      let vendorName = '';
       if (!effectiveFolderId) {
-        let vName = (vendor || '').trim() || tagVendor;
-        if (!vName && (autoFolderOn || doc_type === 'invoice')) vName = vendorFromName(file.originalname);
-        if (vName) effectiveFolderId = await ensureVendorFolder(vName);
+        vendorName = (vendor || '').trim() || tagVendor;
+        if (!vendorName && (autoFolderOn || doc_type === 'invoice')) vendorName = vendorFromName(file.originalname);
+        if (vendorName) effectiveFolderId = await ensureVendorFolder(vendorName);
       }
+
+      // Upload to SharePoint/OneDrive
+      let oneDriveUrl = null;
+      try {
+        const fileBuffer = fs.readFileSync(file.path);
+        const folderPath = vendorName ? `Vendor Invoices/${vendorName}` : 'Vendor Invoices';
+        const uploadResult = await uploadToSharePoint(file.originalname, fileBuffer, folderPath);
+        oneDriveUrl = uploadResult.webUrl;
+      } catch (e) {
+        console.warn(`SharePoint upload failed for ${file.originalname}: ${e.message}`);
+        // Continue without SharePoint URL - local upload is still available
+      }
+
       const r = await db().query(`
         INSERT INTO documents
           (company_id, project_id, folder_id, module, module_record_id,
-           file_name, file_type, file_size, local_url,
+           file_name, file_type, file_size, local_url, onedrive_url,
            doc_type, doc_number, doc_title, discipline, description,
            tags, expiry_date, access_level, status, uploaded_by)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'draft',$18)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'draft',$19)
         RETURNING *`,
         [CID(req), project_id||null, effectiveFolderId, module||'general', module_record_id||null,
-         file.originalname, ext, file.size, localUrl,
+         file.originalname, ext, file.size, localUrl, oneDriveUrl,
          doc_type||'general', doc_number||null,
          doc_title || file.originalname, discipline||null, description||null,
          tagArr, expiry_date||null, access_level||'internal', req.user.id]);
@@ -700,13 +716,19 @@ router.get('/:id([0-9a-fA-F-]{36})/preview', async (req, res) => {
   try {
     await getAccessibleDocument(req, req.params.id);
     const r = await db().query(
-      `SELECT id, file_name, file_type, local_url
+      `SELECT id, file_name, file_type, local_url, onedrive_url
        FROM documents
        WHERE id=$1 AND company_id=$2`,
       [req.params.id, CID(req)]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Document not found' });
     const doc = r.rows[0];
+
+    // Prefer OneDrive/SharePoint URL if available
+    if (doc.onedrive_url) {
+      return res.redirect(doc.onedrive_url);
+    }
+
     const localPath = resolveLocalDocumentPath(doc.local_url);
     if (!localPath || !fs.existsSync(localPath)) return res.status(404).json({ error: 'Document file not found on server' });
 
