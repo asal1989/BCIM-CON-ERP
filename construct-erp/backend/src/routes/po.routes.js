@@ -305,7 +305,7 @@ router.use(loadProjectScope);
 // GET /purchase-orders
 router.get('/', async (req, res) => {
   try {
-    const { project_id, status } = req.query;
+    const { project_id, status, vendor_id } = req.query;
     const conditions = ['p.company_id = $1'];
     const params = [req.user.company_id];
     applyProjectScope(req, conditions, params, 'po', project_id);
@@ -336,6 +336,7 @@ router.get('/', async (req, res) => {
       WHERE ${conditions.join(' AND ')}`;
     let i = params.length + 1;
     if (status)     { sql += ` AND po.status = $${i++}`;     params.push(status); }
+    if (vendor_id)  { sql += ` AND po.vendor_id = $${i++}`;  params.push(vendor_id); }
     sql += ' ORDER BY po.created_at DESC';
     const result = await query(sql, params);
     res.json({ data: result.rows });

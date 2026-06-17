@@ -692,12 +692,16 @@ function GRNForm({ onClose, projects, qc }) {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Released (approved) POs for selected project
+  // Released (approved) POs — filtered by selected vendor and/or project
   const { data: releasedPOs = [], isFetching: posFetching } = useQuery({
-    queryKey: ['po-released-grn', form.project_id],
-    queryFn: () => poAPI.list({ project_id: form.project_id, status: 'approved' }, { skipProjectInject: true })
+    queryKey: ['po-released-grn', form.project_id, form.vendor_id],
+    queryFn: () => poAPI.list({
+      project_id: form.project_id || undefined,
+      vendor_id:  form.vendor_id  || undefined,
+      status: 'approved',
+    }, { skipProjectInject: true })
       .then(r => r.data?.data ?? r.data ?? []).catch(() => []),
-    enabled: !!form.project_id,
+    enabled: !!(form.project_id || form.vendor_id),
   });
 
   // Full PO detail (with items) when a PO is selected
@@ -719,6 +723,15 @@ function GRNForm({ onClose, projects, qc }) {
       _po_qty: it.quantity ?? null,
     })));
   }, [selectedPODetail?.id]);
+
+  // When a vendor is chosen and they have exactly one released PO, auto-select it
+  // so its items preload without an extra click.
+  useEffect(() => {
+    if (form.vendor_id && !form.po_id && !posFetching && releasedPOs.length === 1) {
+      handlePOSelect(releasedPOs[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.vendor_id, releasedPOs, posFetching]);
 
   // Handle PO selection from dropdown
   function handlePOSelect(poId) {
@@ -853,7 +866,16 @@ function GRNForm({ onClose, projects, qc }) {
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700">Vendor / Supplier</label>
-                <select value={form.vendor_id} onChange={e => setField('vendor_id', e.target.value)} className={inp}>
+                <select
+                  value={form.vendor_id}
+                  onChange={e => {
+                    // Selecting a vendor reloads that vendor's released POs and clears any prior PO/items
+                    setForm(p => ({ ...p, vendor_id: e.target.value, po_id: '', po_number: '' }));
+                    setItems([emptyItem()]);
+                    setItemGstOverrides({});
+                  }}
+                  className={inp}
+                >
                   <option value="">Select vendor…</option>
                   {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                 </select>
@@ -862,15 +884,17 @@ function GRNForm({ onClose, projects, qc }) {
                 <label className="text-xs font-bold text-slate-700 flex items-center gap-2">
                   Link to Released PO
                   {posFetching && <span className="text-[10px] font-normal text-slate-400 animate-pulse">loading…</span>}
-                  {!posFetching && form.project_id && releasedPOs.length === 0 && (
-                    <span className="text-[10px] font-normal text-amber-500">no released POs for this project</span>
+                  {!posFetching && (form.vendor_id || form.project_id) && releasedPOs.length === 0 && (
+                    <span className="text-[10px] font-normal text-amber-500">
+                      no released POs {form.vendor_id ? 'for this vendor' : 'for this project'}
+                    </span>
                   )}
                 </label>
                 <select
                   value={form.po_id}
                   onChange={e => handlePOSelect(e.target.value)}
                   className={inp}
-                  disabled={!form.project_id || posFetching}
+                  disabled={(!form.project_id && !form.vendor_id) || posFetching}
                 >
                   <option value="">— Select PO (optional) —</option>
                   {releasedPOs.map(po => (
