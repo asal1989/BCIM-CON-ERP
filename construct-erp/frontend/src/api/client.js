@@ -961,6 +961,8 @@ export const mrsAPI = {
   delete:            (id)            => api.delete(`/stores/mrs/${id}`),
   getWorkflowConfig: ()              => api.get('/stores/mrs/workflow-config'),
   saveWorkflow:      (projectId, stages) => api.put(`/stores/mrs/workflow-config/${projectId}`, { stages }),
+  saveNumbering:     (projectId, data) => api.put(`/stores/mrs/numbering-config/${projectId}`, data),
+  renumber:          (id, serial)    => api.patch(`/stores/mrs/${id}/renumber`, { serial }),
   resendNotify:      (id)            => api.post(`/stores/mrs/${id}/resend-notify`),
 };
 

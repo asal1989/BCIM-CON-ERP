@@ -839,7 +839,7 @@ router.post('/', async (req, res) => {
 router.get('/workflow-config', async (req, res) => {
   try {
     const r = await query(
-      `SELECT id, name, project_code, mrs_workflow
+      `SELECT id, name, project_code, mrs_workflow, mrs_prefix, mrs_seq_group, mrs_start_seq
        FROM projects WHERE company_id = $1 ORDER BY name`,
       [req.user.company_id]
     );
@@ -882,6 +882,37 @@ router.put('/workflow-config/:project_id', async (req, res) => {
   }
 });
 
+// ── PUT /stores/mrs/numbering-config/:project_id — set MR serial prefix / shared
+//    numbering pool / starting number for a project (replaces hand-run SQL) ──
+router.put('/numbering-config/:project_id', async (req, res) => {
+  try {
+    const { mrs_prefix, mrs_seq_group, mrs_start_seq } = req.body;
+    const cid = req.user.company_id;
+    const startSeq = mrs_start_seq === '' || mrs_start_seq == null ? null : parseInt(mrs_start_seq);
+    if (startSeq != null && (isNaN(startSeq) || startSeq < 0)) {
+      return res.status(400).json({ error: 'Start number must be a non-negative integer' });
+    }
+    const r = await query(
+      `UPDATE projects
+         SET mrs_prefix    = $1,
+             mrs_seq_group = $2,
+             mrs_start_seq = $3
+       WHERE id = $4 AND company_id = $5
+       RETURNING name, mrs_prefix, mrs_seq_group, mrs_start_seq`,
+      [
+        (mrs_prefix || '').trim() || null,
+        (mrs_seq_group || '').trim() || null,
+        startSeq,
+        req.params.project_id, cid,
+      ]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Project not found' });
+    res.json({ message: `Numbering updated for ${r.rows[0].name}`, data: r.rows[0] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // PATCH /stores/mrs/:id/reject — Anyone in the chain can reject
 // NOTE: must be registered BEFORE /:id/:stage to avoid the wildcard swallowing it
 router.patch('/:id/reject', async (req, res) => {
@@ -916,6 +947,43 @@ router.patch('/:id/reject', async (req, res) => {
     }
 
     res.json({ message: 'MRS rejected' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /stores/mrs/:id/renumber — fix/override an MR's serial number
+// (e.g. correct a stray "-001" to "-053"). Both serial_no_formatted and the
+// globally-unique mrs_number are updated together.
+router.patch('/:id/renumber', async (req, res) => {
+  try {
+    const serial = String(req.body.serial || '').trim();
+    if (!serial) return res.status(400).json({ error: 'serial is required' });
+
+    const mrs = await query(
+      `SELECT mr.id, p.company_id FROM material_requisitions mr
+       JOIN projects p ON mr.project_id = p.id WHERE mr.id = $1`,
+      [req.params.id]
+    );
+    if (!mrs.rows.length || mrs.rows[0].company_id !== req.user.company_id) {
+      return res.status(404).json({ error: 'MRS not found' });
+    }
+    if (!userCanAccessProject(req, mrs.rows[0].project_id)) {
+      return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
+
+    try {
+      const r = await query(
+        `UPDATE material_requisitions
+         SET serial_no_formatted = $1, mrs_number = $1, updated_at = NOW()
+         WHERE id = $2 RETURNING serial_no_formatted`,
+        [serial, req.params.id]
+      );
+      res.json({ message: `Serial updated to ${r.rows[0].serial_no_formatted}`, data: r.rows[0] });
+    } catch (e) {
+      if (e.code === '23505') return res.status(409).json({ error: `Serial "${serial}" is already in use` });
+      throw e;
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

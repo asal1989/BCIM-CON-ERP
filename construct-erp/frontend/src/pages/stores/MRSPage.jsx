@@ -177,6 +177,52 @@ const STAGE_NEXT = {
 };
 function getNextStatus(stageId) { return STAGE_NEXT[stageId]; }
 
+/* ── Per-project MR numbering editor (prefix / shared pool / next number) ── */
+function NumberingCell({ project }) {
+  const qc = useQueryClient();
+  const [prefix, setPrefix] = useState(project.mrs_prefix || '');
+  const [group, setGroup]   = useState(project.mrs_seq_group || '');
+  const [start, setStart]   = useState(project.mrs_start_seq ?? '');
+  const [saving, setSaving] = useState(false);
+  const dirty =
+    (prefix || '') !== (project.mrs_prefix || '') ||
+    (group || '')  !== (project.mrs_seq_group || '') ||
+    String(start ?? '') !== String(project.mrs_start_seq ?? '');
+  const save = async () => {
+    setSaving(true);
+    try {
+      await mrsAPI.saveNumbering(project.id, { mrs_prefix: prefix, mrs_seq_group: group, mrs_start_seq: start });
+      toast.success('Numbering saved');
+      qc.invalidateQueries({ queryKey: ['mrs-workflow-config'] });
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to save numbering');
+    } finally { setSaving(false); }
+  };
+  const previewSeq = String(Math.max(parseInt(start) || 0, 1)).padStart(3, '0');
+  const previewPrefix = prefix || `BCIM-${project.project_code || 'PRJ'}-MR`;
+  return (
+    <div className="space-y-1.5 min-w-[200px]">
+      <input value={prefix} onChange={e => setPrefix(e.target.value)} placeholder="Prefix e.g. BCIM-DQS-BLR-MR"
+        className="w-full text-[11px] border border-slate-200 rounded px-2 py-1 font-mono" />
+      <div className="flex gap-1.5">
+        <input value={group} onChange={e => setGroup(e.target.value)} placeholder="Shared pool (optional)"
+          title="Projects with the same shared-pool name share one continuous number"
+          className="flex-1 text-[11px] border border-slate-200 rounded px-2 py-1" />
+        <input type="number" min="0" value={start} onChange={e => setStart(e.target.value)} placeholder="Next #"
+          title="Next serial number to use (e.g. 53)"
+          className="w-16 text-[11px] border border-slate-200 rounded px-2 py-1" />
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[9px] text-slate-400 font-mono truncate" title={`${previewPrefix}-${previewSeq}`}>{previewPrefix}-{previewSeq}</span>
+        <button onClick={save} disabled={saving || !dirty}
+          className="text-[11px] font-semibold px-2.5 py-1 rounded bg-blue-600 text-white disabled:opacity-40 hover:bg-blue-700">
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ── WorkflowConfigModal ───────────────────────────────────────────────── */
 function WorkflowConfigModal({ onClose }) {
   const qc = useQueryClient();
@@ -220,16 +266,16 @@ function WorkflowConfigModal({ onClose }) {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex-shrink-0 flex items-center justify-between px-6 py-4"
           style={{ background: `linear-gradient(135deg, #1a3a6b 0%, #0f2347 100%)` }}>
           <div>
             <h2 className="font-bold text-white text-base flex items-center gap-2">
-              <Settings size={16} className="opacity-70" /> MRS Approval Workflow — Per Project
+              <Settings size={16} className="opacity-70" /> MRS Workflow &amp; Numbering — Per Project
             </h2>
             <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>
-              Configure which approval stages apply to each project
+              Configure approval stages and the MR serial number (prefix, shared pool, next number) per project
             </p>
           </div>
           <button onClick={onClose}
@@ -263,6 +309,7 @@ function WorkflowConfigModal({ onClose }) {
                 <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-medium text-slate-400 uppercase tracking-wider">
                   <th className="text-left px-5 py-3">Project</th>
                   <th className="text-left px-4 py-3">Approval Stages</th>
+                  <th className="text-left px-4 py-3">MR Numbering</th>
                   <th className="px-4 py-3 text-right">Reset</th>
                 </tr>
               </thead>
@@ -299,7 +346,10 @@ function WorkflowConfigModal({ onClose }) {
                           })}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 align-top">
+                        <NumberingCell project={p} />
+                      </td>
+                      <td className="px-4 py-3 text-right align-top">
                         {isCustom && (
                           <button onClick={() => resetWorkflow(p.id)} disabled={saving === p.id}
                             className="text-xs text-slate-400 hover:text-rose-600 transition border border-slate-200 rounded px-2 py-1">
@@ -771,6 +821,27 @@ export default function MRSPage() {
     cancelItemsMutation.mutate({ id: selectedMRS.id, item_ids: [it.id], reason: reason || null });
   };
 
+  // Admin / PM / Stores may correct an MR's serial number (e.g. a stray -001 → -053)
+  const canRenumber = ['admin', 'super_admin', 'managing_director', 'md', 'procurement_manager',
+    'procurement', 'project_manager', 'pm', 'stores_manager', 'store_keeper'].includes(userRoleLower);
+  const renumberMutation = useMutation({
+    mutationFn: ({ id, serial }) => mrsAPI.renumber(id, serial),
+    onSuccess: (_d, v) => {
+      toast.success('Serial number updated');
+      setSelectedMRS(s => (s ? { ...s, serial_no_formatted: v.serial, mrs_number: v.serial } : s));
+      qc.invalidateQueries({ queryKey: ['mrs'] });
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to update serial'),
+  });
+  const handleRenumber = () => {
+    const cur = selectedMRS.serial_no_formatted || selectedMRS.mrs_number || '';
+    const next = window.prompt('Edit MR serial number:', cur);
+    if (next == null) return;
+    const v = next.trim();
+    if (!v || v === cur) return;
+    renumberMutation.mutate({ id: selectedMRS.id, serial: v });
+  };
+
   if (selectedMRS) {
     const detailItems = detailedMRS?.items || selectedMRS.items || [];
     return (
@@ -788,7 +859,15 @@ export default function MRSPage() {
               <ClipboardList className="w-5 h-5 text-indigo-600" />
             </div>
             <div>
-              <p className="text-lg font-bold text-slate-950 font-mono">{selectedMRS.serial_no_formatted || selectedMRS.mrs_number}</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-lg font-bold text-slate-950 font-mono">{selectedMRS.serial_no_formatted || selectedMRS.mrs_number}</p>
+                {canRenumber && (
+                  <button onClick={handleRenumber} disabled={renumberMutation.isPending} title="Edit serial number"
+                    className="text-[10px] font-semibold text-slate-400 hover:text-blue-600 border border-slate-200 hover:border-blue-300 rounded px-1.5 py-0.5 transition">
+                    Edit #
+                  </button>
+                )}
+              </div>
               <p className="text-xs text-slate-500 font-medium">Material Requisition • {dayjs(selectedMRS.created_at).format('D MMM YYYY, HH:mm')}</p>
             </div>
           </div>
