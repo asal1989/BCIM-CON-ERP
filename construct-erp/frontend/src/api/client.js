@@ -439,6 +439,21 @@ export const grsAPI = {
   acknowledge: (id)     => api.patch(`/grs/${id}/acknowledge`),
 };
 
+export const ignAPI = {
+  list:    (params) => api.get('/ign', { params }),
+  get:     (id)     => api.get(`/ign/${id}`),
+  create:  (data)   => api.post('/ign', data),
+  approve: (id)     => api.patch(`/ign/${id}/approve`),
+};
+
+export const gatePassAPI = {
+  list:   (params) => api.get('/gate-passes', { params }),
+  get:    (id)     => api.get(`/gate-passes/${id}`),
+  create: (data)   => api.post('/gate-passes', data),
+  return: (id)     => api.patch(`/gate-passes/${id}/return`),
+  close:  (id)     => api.patch(`/gate-passes/${id}/close`),
+};
+
 export const creditNoteAPI = {
   list:         (params) => api.get('/credit-notes', { params }),
   get:          (id)     => api.get(`/credit-notes/${id}`),
