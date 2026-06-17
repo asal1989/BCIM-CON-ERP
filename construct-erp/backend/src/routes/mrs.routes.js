@@ -445,11 +445,26 @@ router.use(loadProjectScope);
   await safe(`ALTER TABLE mrs_items ADD COLUMN IF NOT EXISTS preferred_vendor_id UUID`);
   // Expand priority check from ('normal','urgent') → 4-value set matching the frontend.
   // Data must be migrated BEFORE re-adding the constraint so existing rows pass validation.
+  // Drop the constraint FIRST (unconditionally) so inserts work even if a later step fails,
+  // and normalize EVERY non-conforming value (normal/critical/NULL/legacy/typo) to 'medium'.
   await safe(`ALTER TABLE material_requisitions DROP CONSTRAINT IF EXISTS material_requisitions_priority_check`);
-  await safe(`UPDATE material_requisitions SET priority = 'medium' WHERE priority = 'normal'`);
-  await safe(`UPDATE material_requisitions SET priority = 'urgent' WHERE priority = 'critical'`);
+  await safe(`UPDATE material_requisitions SET priority = 'urgent' WHERE LOWER(priority) = 'critical'`);
+  await safe(`UPDATE material_requisitions SET priority = 'medium'
+              WHERE priority IS NULL OR priority NOT IN ('low','medium','high','urgent')`);
   await safe(`ALTER TABLE material_requisitions ALTER COLUMN priority SET DEFAULT 'medium'`);
-  await safe(`ALTER TABLE material_requisitions ADD CONSTRAINT material_requisitions_priority_check CHECK (priority IN ('low','medium','high','urgent'))`);
+  // Re-add with explicit logging so a failure is visible in deploy logs (not swallowed).
+  try {
+    await query(`ALTER TABLE material_requisitions
+      ADD CONSTRAINT material_requisitions_priority_check
+      CHECK (priority IN ('low','medium','high','urgent'))`);
+    console.log('[mrs] priority constraint updated → (low,medium,high,urgent)');
+  } catch (e) {
+    if (e.code === '42710' || /already exists/i.test(e.message)) {
+      console.log('[mrs] priority constraint already present');
+    } else {
+      console.error('[mrs] priority constraint NOT applied:', e.message);
+    }
+  }
   console.log('[mrs] schema OK');
 })();
 

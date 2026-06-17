@@ -2285,4 +2285,91 @@ router.get('/procurement/budget-vs-procurement', async (req, res) => {
   } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// STOCK LEDGER REPORT — monthly opening / receipts / issues / closing
+// GET /reports/stock-report?month=5&year=2026&project_id=<uuid>&format=csv
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/stock-report', async (req, res) => {
+  try {
+    const month  = parseInt(req.query.month  || new Date().getMonth() + 1);
+    const year   = parseInt(req.query.year   || new Date().getFullYear());
+    const projId = req.query.project_id || null;
+    const cid    = req.user.company_id;
+
+    const periodStart = `${year}-${String(month).padStart(2,'0')}-01`;
+    const periodEnd   = new Date(year, month, 1).toISOString().slice(0, 10); // 1st of next month
+
+    const params  = [cid, periodStart, periodEnd];
+    let projFilter = '';
+    if (projId) { params.push(projId); projFilter = `AND st.project_id = $${params.length}`; }
+
+    const { rows } = await query(`
+      WITH opening AS (
+        SELECT st.material_name, st.project_id, st.unit,
+          SUM(CASE WHEN st.transaction_type IN ('bill_receipt','transfer_in')  THEN st.quantity ELSE 0 END)
+        - SUM(CASE WHEN st.transaction_type IN ('issue','transfer_out')        THEN st.quantity ELSE 0 END) AS qty
+        FROM stock_transactions st
+        JOIN projects p ON p.id = st.project_id
+        WHERE p.company_id = $1 AND st.transacted_at < $2 ${projFilter}
+        GROUP BY st.material_name, st.project_id, st.unit
+      ),
+      may AS (
+        SELECT st.material_name, st.project_id, st.unit,
+          SUM(CASE WHEN st.transaction_type = 'bill_receipt' THEN st.quantity ELSE 0 END) AS receipts,
+          SUM(CASE WHEN st.transaction_type = 'transfer_in'  THEN st.quantity ELSE 0 END) AS tr_in,
+          SUM(CASE WHEN st.transaction_type = 'issue'        THEN st.quantity ELSE 0 END) AS issued,
+          SUM(CASE WHEN st.transaction_type = 'transfer_out' THEN st.quantity ELSE 0 END) AS tr_out
+        FROM stock_transactions st
+        JOIN projects p ON p.id = st.project_id
+        WHERE p.company_id = $1 AND st.transacted_at >= $2 AND st.transacted_at < $3 ${projFilter}
+        GROUP BY st.material_name, st.project_id, st.unit
+      ),
+      all_items AS (
+        SELECT material_name, project_id, unit FROM opening
+        UNION SELECT material_name, project_id, unit FROM may
+      )
+      SELECT
+        COALESCE(pr.name,'—')                     AS project,
+        a.material_name,
+        COALESCE(inv.category,'—')                AS category,
+        a.unit,
+        ROUND(COALESCE(o.qty,      0)::numeric,3) AS opening_stock,
+        ROUND(COALESCE(m.receipts, 0)::numeric,3) AS grn_receipts,
+        ROUND(COALESCE(m.tr_in,    0)::numeric,3) AS transfer_in,
+        ROUND(COALESCE(m.issued,   0)::numeric,3) AS mrs_issued,
+        ROUND(COALESCE(m.tr_out,   0)::numeric,3) AS transfer_out,
+        ROUND((COALESCE(o.qty,0)+COALESCE(m.receipts,0)+COALESCE(m.tr_in,0)
+              -COALESCE(m.issued,0)-COALESCE(m.tr_out,0))::numeric,3) AS closing_stock,
+        COALESCE(inv.unit_rate,0)                 AS unit_rate,
+        ROUND((COALESCE(o.qty,0)+COALESCE(m.receipts,0)+COALESCE(m.tr_in,0)
+              -COALESCE(m.issued,0)-COALESCE(m.tr_out,0))
+              * COALESCE(inv.unit_rate,0)::numeric, 2) AS closing_value
+      FROM all_items a
+      LEFT JOIN opening    o   ON o.material_name=a.material_name AND o.project_id=a.project_id
+      LEFT JOIN may        m   ON m.material_name=a.material_name AND m.project_id=a.project_id
+      LEFT JOIN inventory  inv ON inv.material_name=a.material_name AND inv.project_id=a.project_id
+      LEFT JOIN projects   pr  ON pr.id=a.project_id
+      WHERE COALESCE(o.qty,0)<>0 OR COALESCE(m.receipts,0)<>0
+         OR COALESCE(m.issued,0)<>0 OR COALESCE(m.tr_in,0)<>0 OR COALESCE(m.tr_out,0)<>0
+      ORDER BY pr.name, inv.category, a.material_name
+    `, params);
+
+    if (req.query.format === 'csv') {
+      const headers = ['Project','Material','Category','Unit','Opening Stock','GRN Receipts','Transfer In','MRS Issued','Transfer Out','Closing Stock','Unit Rate','Closing Value'];
+      const lines = [headers.join(',')];
+      rows.forEach(r => lines.push([
+        r.project, r.material_name, r.category, r.unit,
+        r.opening_stock, r.grn_receipts, r.transfer_in,
+        r.mrs_issued, r.transfer_out, r.closing_stock,
+        r.unit_rate, r.closing_value
+      ].map(v => `"${String(v ?? '').replace(/"/g,'""')}"`).join(',')));
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="stock_report_${month}_${year}.csv"`);
+      return res.send(lines.join('\r\n'));
+    }
+
+    res.json({ data: rows, meta: { month, year, total: rows.length } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;
