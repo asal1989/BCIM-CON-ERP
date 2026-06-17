@@ -683,7 +683,7 @@ router.post('/', async (req, res) => {
     const result = await withTransaction(async (client) => {
       // Verify project belongs to company
       const proj = await client.query(
-        `SELECT id, name, project_code, mrs_prefix FROM projects WHERE id = $1 AND company_id = $2`,
+        `SELECT id, name, project_code, mrs_prefix, mrs_sequence_start FROM projects WHERE id = $1 AND company_id = $2`,
         [project_id, req.user.company_id]
       );
       if (!proj.rows.length) throw Object.assign(new Error('Project not found'), { status: 404 });
@@ -692,8 +692,8 @@ router.post('/', async (req, res) => {
       const seqRes = await client.query(
         `SELECT COALESCE(MAX(
            CASE
-             WHEN serial_no_formatted ~ '-[0-9]+$'
-             THEN CAST(REGEXP_REPLACE(serial_no_formatted, '^.*-([0-9]+)$', '\\1') AS INTEGER)
+             WHEN serial_no_formatted ~ '[0-9]+$'
+             THEN CAST(REGEXP_REPLACE(serial_no_formatted, '^.*?([0-9]+)$', '\\1') AS INTEGER)
              ELSE 0
            END
          ), 0) AS last_seq
@@ -701,8 +701,9 @@ router.post('/', async (req, res) => {
          WHERE project_id = $1`,
         [project_id]
       );
-      const nextSeq = parseInt(seqRes.rows[0].last_seq) + 1;
-      const seq     = String(nextSeq).padStart(3, '0');
+      const seqStart = parseInt(proj.rows[0].mrs_sequence_start) || 1;
+      const nextSeq  = Math.max(parseInt(seqRes.rows[0].last_seq) + 1, seqStart);
+      const seq      = String(nextSeq).padStart(3, '0');
 
       const yr          = new Date().getFullYear();
       const mrs_number  = `MRS-${yr}-${seq}`;
@@ -712,7 +713,7 @@ router.post('/', async (req, res) => {
       const deptCode  = (department || 'GEN').substring(0, 3).toUpperCase();
       const projectCode = proj.rows[0].project_code || 'PRJ';
       const serial_no_formatted = mrsPrefix
-        ? `${mrsPrefix}-${seq}`
+        ? `${mrsPrefix}${seq}`
         : `BCIM-${projectCode}-${deptCode}-MR-${seq}`;
 
       const mrs = await client.query(

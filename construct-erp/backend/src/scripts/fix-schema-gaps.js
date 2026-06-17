@@ -47,11 +47,22 @@ async function run() {
           AND (name ILIKE '%lanco%' OR name ILIKE '%lancho%')
           AND (name ILIKE '%lh%10%' OR name ILIKE '%lh10%' OR project_code ILIKE '%LH-10%' OR project_code ILIKE '%LH10%')`,
         'Projects: mrs_prefix = MR-LANCHO-HYD-LH10 for LANCO Hills LH10'],
-      // Residential Yelahanka → BCIM-DQS-BLR-MR-xxx
+      // Residential Yelahanka → BCIM-DQS-BLR-MRxxx (no dash before number)
       [`UPDATE projects SET mrs_prefix = 'BCIM-DQS-BLR-MR'
         WHERE mrs_prefix IS NULL
-          AND (name ILIKE '%yelahanka%' OR project_code ILIKE '%DQS%BLR%' OR project_code ILIKE '%DQS-BLR%')`,
+          AND (name ILIKE '%yelahanka%' OR name ILIKE '%yelkhan%' OR project_code ILIKE '%DQS%BLR%' OR project_code ILIKE '%DQS-BLR%')`,
         'Projects: mrs_prefix = BCIM-DQS-BLR-MR for Residential Yelahanka'],
+      [`ALTER TABLE projects ADD COLUMN IF NOT EXISTS mrs_sequence_start INTEGER NOT NULL DEFAULT 1`,
+        'Projects: mrs_sequence_start (seed MRS numbering from a specific number)'],
+      [`UPDATE projects SET mrs_sequence_start = 53
+        WHERE (name ILIKE '%yelahanka%' OR name ILIKE '%yelkhan%' OR project_code ILIKE '%DQS%BLR%' OR project_code ILIKE '%DQS-BLR%')
+          AND mrs_sequence_start = 1`,
+        'Projects: mrs_sequence_start = 53 for Yelahanka (physical MRs 001–052 pre-date ERP)'],
+      [`DELETE FROM material_requisitions
+        WHERE serial_no_formatted = 'BCIM-DQS-BLR-MR-001'
+          AND status = 'pending'
+          AND project_id IN (SELECT id FROM projects WHERE name ILIKE '%yelahanka%' OR name ILIKE '%yelkhan%' OR project_code ILIKE '%DQS%BLR%')`,
+        'MRS: Remove incorrectly-numbered BCIM-DQS-BLR-MR-001 (Yelahanka, restart from 053)'],
 
       // ── Finance columns (already in route guards, belt-and-suspenders) ───
       [`ALTER TABLE payments ADD COLUMN IF NOT EXISTS cost_head VARCHAR(100)`,        'Payments: cost_head'],
