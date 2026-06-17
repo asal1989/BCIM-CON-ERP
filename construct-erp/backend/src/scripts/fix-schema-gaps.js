@@ -55,9 +55,10 @@ async function run() {
       [`ALTER TABLE projects ADD COLUMN IF NOT EXISTS mrs_start_seq INTEGER NOT NULL DEFAULT 1`,
         'Projects: mrs_start_seq (seed MRS numbering from a specific number)'],
       [`UPDATE projects SET mrs_start_seq = 53
-        WHERE (name ILIKE '%yelahanka%' OR name ILIKE '%yelkhan%' OR project_code ILIKE '%DQS%BLR%' OR project_code ILIKE '%DQS-BLR%')
+        WHERE (name ILIKE '%yelahanka%' OR name ILIKE '%yelkhan%' OR name ILIKE '%DQS Towers%'
+               OR project_code ILIKE '%DQS%BLR%' OR project_code ILIKE '%DQS-BLR%' OR project_code ILIKE '%DQSTWR%')
           AND mrs_start_seq = 1`,
-        'Projects: mrs_start_seq = 53 for Yelahanka (physical MRs 001–052 pre-date ERP)'],
+        'Projects: mrs_start_seq = 53 for DQS Towers/Yelahanka (physical MRs 001–052 pre-date ERP)'],
       [`DELETE FROM material_requisitions
         WHERE serial_no_formatted = 'BCIM-DQS-BLR-MR-001'
           AND status = 'pending'
