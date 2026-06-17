@@ -673,12 +673,13 @@ function GRNForm({ onClose, projects, qc }) {
   });
   const [items, setItems] = useState([emptyItem()]);
   const [createBill, setCreateBill] = useState(false);
-  const [billForm, setBillForm] = useState({
-    inv_date: '', tax_mode: 'intrastate', gst_pct: '18',
+  const emptyBillForm = () => ({
+    inv_number: '', inv_date: '', tax_mode: 'intrastate', gst_pct: '18',
     transport_charges: '', transport_gst_pct: '18', transport_desc: '',
     other_charges: '', other_charges_desc: '',
   });
-  const [itemGstOverrides, setItemGstOverrides] = useState({});
+  const [bills, setBills] = useState([emptyBillForm()]);
+  const [allGstOverrides, setAllGstOverrides] = useState([{}]);
 
   const { data: vendors = [] } = useQuery({
     queryKey: ['vendors'],
@@ -738,7 +739,7 @@ function GRNForm({ onClose, projects, qc }) {
     if (!poId) {
       setForm(p => ({ ...p, po_id: '', po_number: '' }));
       setItems([emptyItem()]);
-      setItemGstOverrides({});
+      setAllGstOverrides([{}]);
       return;
     }
     const po = releasedPOs.find(p => p.id === poId);
@@ -753,10 +754,13 @@ function GRNForm({ onClose, projects, qc }) {
   const createMutation = useMutation({
     mutationFn: (d) => grnAPI.create(d),
     onSuccess: (response) => {
-      const bill = response?.data?.bill;
-      const msg = bill
-        ? `GRN created · Bill ${bill.sl_number} added to tracker`
-        : 'GRN created — pending verification!';
+      const bills = response?.data?.bills;
+      const bill  = response?.data?.bill;
+      const msg = bills?.length > 1
+        ? `GRN created · ${bills.length} bills added (${bills.map(b => b.sl_number).join(', ')})`
+        : bill
+          ? `GRN created · Bill ${bill.sl_number} added to tracker`
+          : 'GRN created — pending verification!';
       toast.success(msg);
       qc.invalidateQueries({ queryKey: ['grn-list'] });
       onClose();
@@ -779,7 +783,11 @@ function GRNForm({ onClose, projects, qc }) {
     if (!form.grn_date)   return toast.error('GRN date is required');
     const validItems = items.filter(i => i.material_name?.trim() && (i.quantity_received || (i.use_thumb_rule && i.physical_qty)));
     if (!validItems.length) return toast.error('Add at least one item with quantity');
-    if (createBill && !billForm.inv_date) return toast.error('Invoice Date is required for Bill entry');
+    if (createBill) {
+      for (let i = 0; i < bills.length; i++) {
+        if (!bills[i].inv_date) return toast.error(`Invoice Date is required for Invoice ${i + 1}`);
+      }
+    }
 
     const payload = {
       ...form,
@@ -803,17 +811,18 @@ function GRNForm({ onClose, projects, qc }) {
     };
 
     if (createBill) {
-      payload.bill = {
-        inv_date:            billForm.inv_date,
-        tax_mode:            billForm.tax_mode,
-        gst_pct:             parseFloat(billForm.gst_pct) || 18,
-        item_gst_overrides:  itemGstOverrides,
-        transport_charges:   parseFloat(billForm.transport_charges) || 0,
-        transport_gst_pct:   parseFloat(billForm.transport_gst_pct) || 18,
-        transport_desc:      billForm.transport_desc,
-        other_charges:       parseFloat(billForm.other_charges) || 0,
-        other_charges_desc:  billForm.other_charges_desc,
-      };
+      payload.bills = bills.map((b, i) => ({
+        inv_number:          b.inv_number || form.invoice_number || '',
+        inv_date:            b.inv_date,
+        tax_mode:            b.tax_mode,
+        gst_pct:             parseFloat(b.gst_pct) || 18,
+        item_gst_overrides:  allGstOverrides[i] || {},
+        transport_charges:   parseFloat(b.transport_charges) || 0,
+        transport_gst_pct:   parseFloat(b.transport_gst_pct) || 18,
+        transport_desc:      b.transport_desc,
+        other_charges:       parseFloat(b.other_charges) || 0,
+        other_charges_desc:  b.other_charges_desc,
+      }));
     }
 
     createMutation.mutate(payload);
@@ -853,7 +862,7 @@ function GRNForm({ onClose, projects, qc }) {
                     // reset PO when project changes
                     setForm(p => ({ ...p, project_id: v, po_id: '', po_number: '', vendor_id: '' }));
                     setItems([emptyItem()]);
-                    setItemGstOverrides({});
+                    setAllGstOverrides([{}]);
                   }}
                   options={projects.map(p => ({ value: p.id, label: p.name }))}
                   placeholder="Select project…"
@@ -872,7 +881,7 @@ function GRNForm({ onClose, projects, qc }) {
                     // Selecting a vendor reloads that vendor's released POs and clears any prior PO/items
                     setForm(p => ({ ...p, vendor_id: e.target.value, po_id: '', po_number: '' }));
                     setItems([emptyItem()]);
-                    setItemGstOverrides({});
+                    setAllGstOverrides([{}]);
                   }}
                   className={inp}
                 >
@@ -1149,8 +1158,8 @@ function GRNForm({ onClose, projects, qc }) {
                   <input type="checkbox" checked={createBill} onChange={e => setCreateBill(e.target.checked)}
                     className="w-4 h-4 rounded border-blue-300 accent-blue-600" />
                   <span className="text-sm font-semibold text-blue-800">
-                    Also create Bill Tracker entry
-                    {form.invoice_number && <span className="font-mono ml-1">· {form.invoice_number}</span>}
+                    Also create Bill Tracker entries
+                    {bills.length > 1 && <span className="ml-1 text-blue-600">· {bills.length} invoices</span>}
                   </span>
                 </label>
                 <span className="text-xs text-blue-500 font-medium">Saves re-entry</span>
@@ -1159,162 +1168,223 @@ function GRNForm({ onClose, projects, qc }) {
               {createBill && (
                 <div className="p-5 space-y-4 bg-white">
 
-                  {/* Invoice date + tax mode + GST */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Invoice Date *</label>
-                      <input type="date" value={billForm.inv_date}
-                        onChange={e => setBillForm(p => ({ ...p, inv_date: e.target.value }))}
-                        className={inp} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Tax Type</label>
-                      <div className="flex items-center gap-4 h-9 px-1">
-                        {['intrastate', 'interstate'].map(t => (
-                          <label key={t} className="flex items-center gap-1.5 text-sm cursor-pointer capitalize">
-                            <input type="radio" name="grn_bill_tax_mode" value={t}
-                              checked={billForm.tax_mode === t}
-                              onChange={() => setBillForm(p => ({ ...p, tax_mode: t }))}
-                              className="accent-indigo-600" />
-                            {t}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">GST % (all items)</label>
-                      <select value={billForm.gst_pct}
-                        onChange={e => setBillForm(p => ({ ...p, gst_pct: e.target.value }))}
-                        className={inp}>
-                        {['0','5','12','18','28'].map(v => <option key={v} value={v}>{v}%</option>)}
-                      </select>
-                    </div>
-                  </div>
+                  {bills.map((billForm, billIdx) => {
+                    const itemGstOverrides = allGstOverrides[billIdx] || {};
+                    const setBillField = (k, v) => setBills(prev => prev.map((b, i) => i === billIdx ? { ...b, [k]: v } : b));
+                    const setGstOverride = (itemIdx, v) => setAllGstOverrides(prev => {
+                      const next = [...prev];
+                      next[billIdx] = { ...next[billIdx], [String(itemIdx)]: v };
+                      return next;
+                    });
 
-                  {/* Per-item GST override table */}
-                  {items.some(it => it.material_name?.trim()) && (
-                    <div>
-                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
-                        Per-Item GST Override <span className="font-normal normal-case text-slate-400">(optional — leave default to apply {billForm.gst_pct}% to all)</span>
-                      </p>
-                      <div className="border border-slate-200 rounded-lg overflow-hidden">
-                        <table className="w-full text-xs">
-                          <thead className="bg-slate-50">
-                            <tr>
-                              <th className="text-left px-3 py-2 font-semibold text-slate-600">Material</th>
-                              <th className="text-right px-3 py-2 font-semibold text-slate-600">Qty</th>
-                              <th className="text-right px-3 py-2 font-semibold text-slate-600">Rate</th>
-                              <th className="px-3 py-2 font-semibold text-slate-600 w-24">GST %</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {items.map((it, idx) => {
-                              if (!it.material_name?.trim()) return null;
-                              const effQty = it.use_thumb_rule && it.physical_qty && it.conversion_factor
-                                ? (parseFloat(it.physical_qty) * parseFloat(it.conversion_factor)).toFixed(3)
-                                : it.quantity_received || '—';
-                              const gstVal = itemGstOverrides[String(idx)] ?? billForm.gst_pct;
-                              return (
-                                <tr key={idx} className="border-t border-slate-100">
-                                  <td className="px-3 py-1.5 text-slate-700">{it.material_name}</td>
-                                  <td className="px-3 py-1.5 text-right font-mono text-slate-600">{effQty}</td>
-                                  <td className="px-3 py-1.5 text-right font-mono text-slate-600">₹{it.rate || '0'}</td>
-                                  <td className="px-3 py-1.5">
-                                    <select value={gstVal}
-                                      onChange={e => setItemGstOverrides(p => ({ ...p, [String(idx)]: e.target.value }))}
-                                      className={clsx('w-full h-8 rounded px-2 text-xs outline-none transition-all border', FIELD_HL)}>
-                                      {['0','5','12','18','28'].map(v => <option key={v} value={v}>{v}%</option>)}
-                                    </select>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Transport + Other charges */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 border-t border-slate-100 pt-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Transport Charges</label>
-                      <input type="number" placeholder="0.00" value={billForm.transport_charges}
-                        onChange={e => setBillForm(p => ({ ...p, transport_charges: e.target.value }))}
-                        className={inp} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Transport GST %</label>
-                      <select value={billForm.transport_gst_pct}
-                        onChange={e => setBillForm(p => ({ ...p, transport_gst_pct: e.target.value }))}
-                        className={inp}>
-                        {['0','5','12','18'].map(v => <option key={v} value={v}>{v}%</option>)}
-                      </select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Transport Description</label>
-                      <input type="text" placeholder="e.g. Freight charges" value={billForm.transport_desc}
-                        onChange={e => setBillForm(p => ({ ...p, transport_desc: e.target.value }))}
-                        className={inp} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Other Charges</label>
-                      <input type="number" placeholder="0.00" value={billForm.other_charges}
-                        onChange={e => setBillForm(p => ({ ...p, other_charges: e.target.value }))}
-                        className={inp} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Other Description</label>
-                      <input type="text" placeholder="e.g. Loading/unloading" value={billForm.other_charges_desc}
-                        onChange={e => setBillForm(p => ({ ...p, other_charges_desc: e.target.value }))}
-                        className={inp} />
-                    </div>
-                  </div>
-
-                  {/* Running total preview */}
-                  {(() => {
-                    const gstPct = parseFloat(billForm.gst_pct) || 18;
-                    const basicTotal = items
-                      .filter(it => it.material_name?.trim())
-                      .reduce((s, it) => {
-                        const qty = it.use_thumb_rule && it.physical_qty && it.conversion_factor
-                          ? parseFloat(it.physical_qty) * parseFloat(it.conversion_factor)
-                          : parseFloat(it.quantity_received || 0);
-                        return s + qty * parseFloat(it.rate || 0);
-                      }, 0);
+                    // Running total for this bill
+                    const basicTotal = items.filter(it => it.material_name?.trim()).reduce((s, it) => {
+                      const qty = it.use_thumb_rule && it.physical_qty && it.conversion_factor
+                        ? parseFloat(it.physical_qty) * parseFloat(it.conversion_factor)
+                        : parseFloat(it.quantity_received || 0);
+                      return s + qty * parseFloat(it.rate || 0);
+                    }, 0);
                     const gstTotal = items.filter(it => it.material_name?.trim()).reduce((s, it, idx) => {
                       const qty = it.use_thumb_rule && it.physical_qty && it.conversion_factor
                         ? parseFloat(it.physical_qty) * parseFloat(it.conversion_factor)
                         : parseFloat(it.quantity_received || 0);
-                      const itemGst = parseFloat(itemGstOverrides[String(idx)] ?? billForm.gst_pct);
-                      return s + qty * parseFloat(it.rate || 0) * itemGst / 100;
+                      return s + qty * parseFloat(it.rate || 0) * parseFloat(itemGstOverrides[String(idx)] ?? billForm.gst_pct) / 100;
                     }, 0);
                     const transport = parseFloat(billForm.transport_charges) || 0;
                     const transportGst = transport * (parseFloat(billForm.transport_gst_pct) || 0) / 100;
                     const other = parseFloat(billForm.other_charges) || 0;
                     const total = basicTotal + gstTotal + transport + transportGst + other;
-                    if (!basicTotal) return null;
+
                     return (
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-xs space-y-1">
-                        <div className="flex justify-between text-slate-600">
-                          <span>Basic Amount</span><span className="font-mono">₹{inr(basicTotal)}</span>
+                      <div key={billIdx} className={clsx('rounded-xl border-2 overflow-hidden', billIdx > 0 ? 'border-indigo-200' : 'border-slate-200')}>
+                        {/* Invoice header bar */}
+                        <div className={clsx('flex items-center justify-between px-4 py-2', billIdx > 0 ? 'bg-indigo-50' : 'bg-slate-50')}>
+                          <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                            Invoice {billIdx + 1} {bills.length > 1 && <span className="text-slate-400 font-normal normal-case">of {bills.length}</span>}
+                          </span>
+                          {bills.length > 1 && (
+                            <button type="button"
+                              onClick={() => {
+                                setBills(p => p.filter((_, i) => i !== billIdx));
+                                setAllGstOverrides(p => p.filter((_, i) => i !== billIdx));
+                              }}
+                              className="flex items-center gap-1 text-[11px] text-red-500 hover:text-red-700 font-medium transition-colors">
+                              <X size={12} /> Remove
+                            </button>
+                          )}
                         </div>
-                        <div className="flex justify-between text-slate-600">
-                          <span>GST</span><span className="font-mono">₹{inr(gstTotal)}</span>
-                        </div>
-                        {(transport + transportGst) > 0 && (
-                          <div className="flex justify-between text-slate-600">
-                            <span>Transport + GST</span><span className="font-mono">₹{inr(transport + transportGst)}</span>
+
+                        <div className="p-4 space-y-4">
+                          {/* Invoice number + date + tax mode + GST */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-bold text-slate-700">Invoice Number</label>
+                              <input type="text"
+                                placeholder={form.invoice_number || 'INV-001'}
+                                value={billForm.inv_number}
+                                onChange={e => setBillField('inv_number', e.target.value)}
+                                className={inp} />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-bold text-slate-700">Invoice Date *</label>
+                              <input type="date" value={billForm.inv_date}
+                                onChange={e => setBillField('inv_date', e.target.value)}
+                                className={inp} />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-bold text-slate-700">Tax Type</label>
+                              <div className="flex items-center gap-4 h-9 px-1">
+                                {['intrastate', 'interstate'].map(t => (
+                                  <label key={t} className="flex items-center gap-1.5 text-sm cursor-pointer capitalize">
+                                    <input type="radio" name={`grn_bill_tax_mode_${billIdx}`} value={t}
+                                      checked={billForm.tax_mode === t}
+                                      onChange={() => setBillField('tax_mode', t)}
+                                      className="accent-indigo-600" />
+                                    {t}
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-bold text-slate-700">GST % (all items)</label>
+                              <select value={billForm.gst_pct}
+                                onChange={e => setBillField('gst_pct', e.target.value)}
+                                className={inp}>
+                                {['0','5','12','18','28'].map(v => <option key={v} value={v}>{v}%</option>)}
+                              </select>
+                            </div>
                           </div>
-                        )}
-                        {other > 0 && (
-                          <div className="flex justify-between text-slate-600">
-                            <span>Other Charges</span><span className="font-mono">₹{inr(other)}</span>
+
+                          {/* Per-item GST override */}
+                          {items.some(it => it.material_name?.trim()) && (
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                                Per-Item GST Override <span className="font-normal normal-case text-slate-400">(optional — default {billForm.gst_pct}% applied)</span>
+                              </p>
+                              <div className="border border-slate-200 rounded-lg overflow-hidden">
+                                <table className="w-full text-xs">
+                                  <thead className="bg-slate-50">
+                                    <tr>
+                                      <th className="text-left px-3 py-2 font-semibold text-slate-600">Material</th>
+                                      <th className="text-right px-3 py-2 font-semibold text-slate-600">Qty</th>
+                                      <th className="text-right px-3 py-2 font-semibold text-slate-600">Rate</th>
+                                      <th className="px-3 py-2 font-semibold text-slate-600 w-24">GST %</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {items.map((it, idx) => {
+                                      if (!it.material_name?.trim()) return null;
+                                      const effQty = it.use_thumb_rule && it.physical_qty && it.conversion_factor
+                                        ? (parseFloat(it.physical_qty) * parseFloat(it.conversion_factor)).toFixed(3)
+                                        : it.quantity_received || '—';
+                                      return (
+                                        <tr key={idx} className="border-t border-slate-100">
+                                          <td className="px-3 py-1.5 text-slate-700">{it.material_name}</td>
+                                          <td className="px-3 py-1.5 text-right font-mono text-slate-600">{effQty}</td>
+                                          <td className="px-3 py-1.5 text-right font-mono text-slate-600">₹{it.rate || '0'}</td>
+                                          <td className="px-3 py-1.5">
+                                            <select value={itemGstOverrides[String(idx)] ?? billForm.gst_pct}
+                                              onChange={e => setGstOverride(idx, e.target.value)}
+                                              className={clsx('w-full h-8 rounded px-2 text-xs outline-none transition-all border', FIELD_HL)}>
+                                              {['0','5','12','18','28'].map(v => <option key={v} value={v}>{v}%</option>)}
+                                            </select>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Transport + Other */}
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 border-t border-slate-100 pt-4">
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-bold text-slate-700">Transport Charges</label>
+                              <input type="number" placeholder="0.00" value={billForm.transport_charges}
+                                onChange={e => setBillField('transport_charges', e.target.value)} className={inp} />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-bold text-slate-700">Transport GST %</label>
+                              <select value={billForm.transport_gst_pct}
+                                onChange={e => setBillField('transport_gst_pct', e.target.value)} className={inp}>
+                                {['0','5','12','18'].map(v => <option key={v} value={v}>{v}%</option>)}
+                              </select>
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-bold text-slate-700">Transport Description</label>
+                              <input type="text" placeholder="e.g. Freight charges" value={billForm.transport_desc}
+                                onChange={e => setBillField('transport_desc', e.target.value)} className={inp} />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-bold text-slate-700">Other Charges</label>
+                              <input type="number" placeholder="0.00" value={billForm.other_charges}
+                                onChange={e => setBillField('other_charges', e.target.value)} className={inp} />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-bold text-slate-700">Other Description</label>
+                              <input type="text" placeholder="e.g. Loading/unloading" value={billForm.other_charges_desc}
+                                onChange={e => setBillField('other_charges_desc', e.target.value)} className={inp} />
+                            </div>
                           </div>
-                        )}
-                        <div className="flex justify-between font-bold text-slate-800 border-t border-blue-200 pt-1">
-                          <span>Bill Total</span><span className="font-mono">₹{inr(total)}</span>
+
+                          {/* Running total preview */}
+                          {basicTotal > 0 && (
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-xs space-y-1">
+                              <div className="flex justify-between text-slate-600"><span>Basic Amount</span><span className="font-mono">₹{inr(basicTotal)}</span></div>
+                              <div className="flex justify-between text-slate-600"><span>GST</span><span className="font-mono">₹{inr(gstTotal)}</span></div>
+                              {(transport + transportGst) > 0 && (
+                                <div className="flex justify-between text-slate-600"><span>Transport + GST</span><span className="font-mono">₹{inr(transport + transportGst)}</span></div>
+                              )}
+                              {other > 0 && (
+                                <div className="flex justify-between text-slate-600"><span>Other Charges</span><span className="font-mono">₹{inr(other)}</span></div>
+                              )}
+                              <div className="flex justify-between font-bold text-slate-800 border-t border-blue-200 pt-1">
+                                <span>Invoice {billIdx + 1} Total</span><span className="font-mono">₹{inr(total)}</span>
+                              </div>
+                            </div>
+                          )}
                         </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Add Another Invoice button */}
+                  {bills.length < 4 && (
+                    <button type="button"
+                      onClick={() => {
+                        setBills(p => [...p, emptyBillForm()]);
+                        setAllGstOverrides(p => [...p, {}]);
+                      }}
+                      className="flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-800 border border-indigo-200 hover:border-indigo-400 rounded-lg px-4 py-2 transition-colors w-full justify-center">
+                      <Plus size={15} /> Add Another Invoice
+                    </button>
+                  )}
+
+                  {/* Grand total across all invoices when more than 1 */}
+                  {bills.length > 1 && (() => {
+                    let grandTotal = 0;
+                    bills.forEach((b, bi) => {
+                      const overrides = allGstOverrides[bi] || {};
+                      const basic = items.filter(it => it.material_name?.trim()).reduce((s, it) => {
+                        const qty = it.use_thumb_rule && it.physical_qty && it.conversion_factor
+                          ? parseFloat(it.physical_qty) * parseFloat(it.conversion_factor)
+                          : parseFloat(it.quantity_received || 0);
+                        return s + qty * parseFloat(it.rate || 0);
+                      }, 0);
+                      const gst = items.filter(it => it.material_name?.trim()).reduce((s, it, idx) => {
+                        const qty = it.use_thumb_rule && it.physical_qty && it.conversion_factor
+                          ? parseFloat(it.physical_qty) * parseFloat(it.conversion_factor)
+                          : parseFloat(it.quantity_received || 0);
+                        return s + qty * parseFloat(it.rate || 0) * parseFloat(overrides[String(idx)] ?? b.gst_pct) / 100;
+                      }, 0);
+                      grandTotal += basic + gst + (parseFloat(b.transport_charges)||0) + (parseFloat(b.transport_charges)||0)*(parseFloat(b.transport_gst_pct)||0)/100 + (parseFloat(b.other_charges)||0);
+                    });
+                    return (
+                      <div className="bg-indigo-50 border-2 border-indigo-200 rounded-lg px-4 py-2.5 flex justify-between items-center">
+                        <span className="text-xs font-bold text-indigo-700 uppercase tracking-wide">Grand Total — {bills.length} Invoices</span>
+                        <span className="text-sm font-bold text-indigo-800 font-mono">₹{inr(grandTotal)}</span>
                       </div>
                     );
                   })()}

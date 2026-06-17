@@ -170,8 +170,12 @@ router.post('/', async (req, res) => {
       site_location, gate_pass_no, wb_slip_no,
       remarks, issues_notes, inspection_notes,
       items,
-      bill: billData,
+      bills: billsData,
+      bill: legacyBillData,
     } = req.body;
+
+    // Support both new `bills` array and old single `bill` for backward compat
+    const billsArray = billsData?.length ? billsData : (legacyBillData ? [legacyBillData] : []);
 
     if (!project_id || !items?.length) {
       return res.status(400).json({ error: 'Missing required project or items.' });
@@ -180,10 +184,18 @@ router.post('/', async (req, res) => {
       return res.status(403).json({ error: 'You do not have access to this project.' });
     }
 
-    // Pre-generate bill SL number outside the transaction (same pattern as tqs-bills route)
-    let billSlNumber = null;
-    if (billData) {
-      billSlNumber = await nextBillSlNumber(req.user.company_id);
+    // Pre-generate SL numbers for each bill (sequential offsets from current DB max)
+    const billSlNumbers = [];
+    if (billsArray.length > 0) {
+      const maxRes = await query(
+        `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(sl_number, '[^0-9]', '', 'g') AS INTEGER)), 0) AS max_num
+         FROM tqs_bills WHERE sl_number ~ '[0-9]' AND company_id = $1`,
+        [req.user.company_id]
+      );
+      const baseNum = Number(maxRes.rows[0]?.max_num) || 0;
+      for (let i = 0; i < billsArray.length; i++) {
+        billSlNumbers.push(`P0-${baseNum + i + 1}`);
+      }
     }
 
     const result = await withTransaction(async (client) => {
@@ -243,11 +255,21 @@ router.post('/', async (req, res) => {
       );
       const grnRow = finalRes.rows[0];
 
-      // 5. Optionally create TQS Bill in the same transaction
-      let billRow = null;
-      if (billData && billSlNumber) {
+      // 5. Optionally create TQS Bills (one per entry in billsArray)
+      const createdBills = [];
+
+      // Vendor name lookup (shared across all bills for this GRN)
+      const vendorRes = vendor_id
+        ? await client.query('SELECT name FROM vendors WHERE id = $1', [vendor_id])
+        : { rows: [] };
+      const vendor_name = vendorRes.rows[0]?.name || '';
+
+      for (let billIdx = 0; billIdx < billsArray.length; billIdx++) {
+        const billData = billsArray[billIdx];
+        const billSlNumber = billSlNumbers[billIdx];
+
         const tax_mode = billData.tax_mode || 'intrastate';
-        const defaultGstPct = parseFloat(billData.gst_pct) || 18;
+        const defaultGstPct = parseFloat(billData.gst_pct) ?? 18;
         const itemGstOverrides = billData.item_gst_overrides || {};
         const transport_charges = parseFloat(billData.transport_charges) || 0;
         const transport_gst_pct = parseFloat(billData.transport_gst_pct) || 18;
@@ -255,26 +277,21 @@ router.post('/', async (req, res) => {
         const other_charges = parseFloat(billData.other_charges) || 0;
         const inv_date = billData.inv_date || null;
         const inv_month = inv_date ? inv_date.slice(0, 7) : null;
+        const inv_number = billData.inv_number || invoice_number || null;
 
-        // Vendor name lookup
-        const vendorRes = vendor_id
-          ? await client.query('SELECT name FROM vendors WHERE id = $1', [vendor_id])
-          : { rows: [] };
-        const vendor_name = vendorRes.rows[0]?.name || '';
-
-        // Duplicate invoice guard
-        if (invoice_number && vendor_name) {
+        // Duplicate invoice guard per bill
+        if (inv_number && vendor_name) {
           const dup = await client.query(
             `SELECT id FROM tqs_bills
              WHERE is_deleted = FALSE AND company_id = $1
                AND LOWER(BTRIM(COALESCE(vendor_name,''))) = $2
                AND LOWER(BTRIM(COALESCE(inv_number,''))) = $3
              LIMIT 1`,
-            [req.user.company_id, vendor_name.toLowerCase().trim(), invoice_number.toLowerCase().trim()]
+            [req.user.company_id, vendor_name.toLowerCase().trim(), inv_number.toLowerCase().trim()]
           );
           if (dup.rows.length) {
             throw Object.assign(
-              new Error(`Duplicate invoice: "${invoice_number}" for "${vendor_name}" already exists in Bill Tracker.`),
+              new Error(`Duplicate invoice: "${inv_number}" for "${vendor_name}" already exists in Bill Tracker.`),
               { status: 409 }
             );
           }
@@ -320,7 +337,7 @@ router.post('/', async (req, res) => {
           ) RETURNING *
         `, [
           req.user.company_id, project_id, billSlNumber, vendor_id || null, vendor_name,
-          po_id || null, grnId, po_number || null, invoice_number, inv_date, inv_month, grn_date,
+          po_id || null, grnId, po_number || null, inv_number, inv_date, inv_month, grn_date,
           'po', tax_mode,
           basic_amount, cgst_pct_hdr, cgst_amt, sgst_pct_hdr, sgst_amt,
           igst_pct_hdr, igst_amt, gst_amount,
@@ -370,15 +387,15 @@ router.post('/', async (req, res) => {
                    reference_id, reference_number, remarks, transacted_by, transacted_at)
                 VALUES ($1,$2,'bill_receipt',$3,$4,$5,$6,$7,NOW())
               `, [project_id, inventoryId, li.qty, billId, billSlNumber,
-                  `Received via Invoice ${invoice_number || ''} — ${vendor_name}`, req.user.id]);
+                  `Received via Invoice ${inv_number || ''} — ${vendor_name}`, req.user.id]);
             }
           }
         }
 
-        billRow = billRes.rows[0];
+        createdBills.push(billRes.rows[0]);
       }
 
-      return { grn: grnRow, bill: billRow };
+      return { grn: grnRow, bills: createdBills, bill: createdBills[0] || null };
     });
 
     // Rate variance check — warn if any item deviates >5% from PO item rate
@@ -405,7 +422,12 @@ router.post('/', async (req, res) => {
 
     // Fire-and-forget push notification to stores team
     notifyGrnSubmitted(req.user.company_id, result.grn);
-    res.status(201).json({ data: result.grn, bill: result.bill || null, rate_variances: rateVariances });
+    res.status(201).json({
+      data: result.grn,
+      bill: result.bill || null,
+      bills: result.bills || [],
+      rate_variances: rateVariances,
+    });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
