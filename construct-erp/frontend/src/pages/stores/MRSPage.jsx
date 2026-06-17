@@ -237,6 +237,22 @@ function WorkflowConfigModal({ onClose }) {
   const projects = cfg?.projects || (Array.isArray(cfg) ? cfg : []);
   const allStagesMeta = cfg?.allStages || ACTIVE_STAGES.map(s => ({ id: s.id, label: s.label }));
 
+  const PRESETS = [
+    { label: 'SM → PM → MD (3-stage)', stages: ['stores-approve', 'approve-pm', 'approve-md'] },
+    { label: 'Full (SM → PM → Dir → MD)', stages: ['stores-approve', 'approve-pm', 'approve-mgmt', 'approve-md'] },
+  ];
+
+  const applyPreset = async (projectId, stages) => {
+    setSaving(projectId);
+    try {
+      await mrsAPI.saveWorkflow(projectId, stages);
+      toast.success('Workflow preset applied');
+      qc.invalidateQueries({ queryKey: ['mrs-workflow-config'] });
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to apply preset');
+    } finally { setSaving(null); }
+  };
+
   const toggleStage = async (projectId, currentStages, stageId) => {
     const updated = currentStages.includes(stageId)
       ? currentStages.filter(s => s !== stageId)
@@ -325,7 +341,8 @@ function WorkflowConfigModal({ onClose }) {
                         {isCustom && <span className="text-[10px] text-orange-600 font-bold">Custom workflow</span>}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1.5">
+                        {/* Active stage toggles */}
+                        <div className="flex flex-wrap gap-1.5 mb-2">
                           {ACTIVE_STAGES.map((s, idx) => {
                             const on = enabledStages.includes(s.id);
                             return (
@@ -344,6 +361,17 @@ function WorkflowConfigModal({ onClose }) {
                               </button>
                             );
                           })}
+                        </div>
+                        {/* Preset buttons */}
+                        <div className="flex flex-wrap gap-1">
+                          {PRESETS.map(preset => (
+                            <button key={preset.label}
+                              onClick={() => applyPreset(p.id, preset.stages)}
+                              disabled={saving === p.id}
+                              className="text-[9px] px-2 py-0.5 rounded border border-indigo-200 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors font-medium">
+                              {preset.label}
+                            </button>
+                          ))}
                         </div>
                       </td>
                       <td className="px-4 py-3 align-top">

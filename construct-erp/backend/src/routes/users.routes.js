@@ -44,6 +44,33 @@ const ensureRoleSchema = async () => {
 // and module access, while companies may use role names that differ by project.
 runSchemaInit('users_role_schema', ensureRoleSchema);
 
+// ── One-time module access grants ────────────────────────────────────────────
+// Idempotent: only adds module if not already present for the specified email.
+(async () => {
+  const grants = [
+    { email: 'bkmanjunath@bcim.in', module: 'Stores' },
+  ];
+  for (const { email, module } of grants) {
+    try {
+      const r = await query(
+        `UPDATE users
+           SET accessible_modules = ARRAY(
+             SELECT DISTINCT unnest(COALESCE(accessible_modules, ARRAY[]::text[]) || ARRAY[$1])
+           )
+         WHERE LOWER(email) = $2
+           AND NOT ($1 = ANY(COALESCE(accessible_modules, ARRAY[]::text[])))
+         RETURNING id, name, email, accessible_modules`,
+        [module, email.toLowerCase()]
+      );
+      if (r.rowCount > 0) {
+        console.log(`[users] Granted "${module}" access to ${email}`);
+      }
+    } catch (e) {
+      console.error(`[users] Module grant failed for ${email}:`, e.message);
+    }
+  }
+})();
+
 const normalizeModules = (modules, fallback = []) => {
   const normalizeName = (name) => name === 'DQS Tracker' ? 'Bill Tracker' : name;
   if (modules === undefined || modules === null) return fallback;

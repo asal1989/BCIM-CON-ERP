@@ -227,7 +227,8 @@ const TQSBillsPage          = lazy(() => import('./pages/tqs/TQSBillsPage'));
 const TQSBillNewPage        = lazy(() => import('./pages/tqs/TQSBillNewPage'));
 const TQSBillDetailPage     = lazy(() => import('./pages/tqs/TQSBillDetailPage'));
 const TQSPaymentCertPrint   = lazy(() => import('./pages/tqs/TQSPaymentCertPrint'));
-const TQSMaterialTrackerPage = lazy(() => import('./pages/tqs/TQSMaterialTrackerPage'));
+const TQSMaterialTrackerPage    = lazy(() => import('./pages/tqs/TQSMaterialTrackerPage'));
+const TQSConcreteTrackerPage    = lazy(() => import('./pages/tqs/TQSConcreteTrackerPage'));
 const TQSReportsPage        = lazy(() => import('./pages/tqs/TQSReportsPage'));
 const TQSAnalyticsPage      = lazy(() => import('./pages/tqs/TQSAnalyticsPage'));
 const TQSTransmittalPage    = lazy(() => import('./pages/tqs/TQSTransmittalPage'));
@@ -765,6 +766,7 @@ export default function App() {
                 <Route path="tqs/bills/new"            element={<Navigate to="/tqs/bills" replace />} />
                 <Route path="tqs/bills/:id"            element={<RequireModule module="Bill Tracker"><TQSBillDetailPage /></RequireModule>} />
                 <Route path="tqs/material-tracker"     element={<RequireModule module="Bill Tracker"><TQSMaterialTrackerPage /></RequireModule>} />
+                <Route path="tqs/concrete-tracker"    element={<RequireModule module="Bill Tracker"><TQSConcreteTrackerPage /></RequireModule>} />
                 <Route path="tqs/reports"              element={<RequireModule module="Bill Tracker"><TQSReportsPage /></RequireModule>} />
                 <Route path="tqs/analytics"            element={<RequireModule module="Bill Tracker"><TQSAnalyticsPage /></RequireModule>} />
                 <Route path="tqs/vendors"              element={<RequireModule module="Bill Tracker"><Navigate to="/procurement/vendors" replace /></RequireModule>} />

@@ -1660,6 +1660,125 @@ router.delete('/advances/:id', async (req, res) => {
   }
 });
 
+// ── GET /tqs/bills/concrete-tracker ─────────────────────────────────────────
+// Returns pour cards + matched RMC bills + DPR daily concrete for a unified concrete view
+router.get('/concrete-tracker', async (req, res) => {
+  try {
+    const { project_id, from_date, to_date } = req.query;
+    const cid = req.user.company_id;
+
+    // 1. Pour Cards
+    const pcParams = [cid];
+    let pcWhere = 'p.company_id = $1';
+    let pcIdx = 2;
+    if (project_id) { pcWhere += ` AND pc.project_id = $${pcIdx++}`; pcParams.push(project_id); }
+    if (from_date)  { pcWhere += ` AND (pc.planned_pour_date >= $${pcIdx} OR pc.actual_pour_start >= $${pcIdx})`; pcParams.push(from_date); pcIdx++; }
+    if (to_date)    { pcWhere += ` AND (pc.planned_pour_date <= $${pcIdx} OR pc.actual_pour_start <= $${pcIdx})`; pcParams.push(to_date); pcIdx++; }
+
+    const pcRes = await query(`
+      SELECT pc.id, pc.pour_card_number, pc.pour_description, pc.pour_type,
+             pc.concrete_grade, pc.location, pc.drawing_ref,
+             pc.planned_pour_date, pc.actual_pour_start, pc.actual_pour_end,
+             pc.volume_planned, pc.volume_actual,
+             pc.status, pc.contractor_rep, pc.remarks,
+             pc.cube_sets_required, pc.cube_sets_taken,
+             p.name AS project_name,
+             u.name AS site_engineer_name,
+             n.ncr_number,
+             (SELECT COUNT(*) FROM quality_lab_tests lt WHERE lt.pour_card_id = pc.id) AS cube_test_count,
+             (SELECT COUNT(*) FROM quality_lab_tests lt WHERE lt.pour_card_id = pc.id AND lt.result_status = 'pass') AS cube_pass_count
+        FROM quality_pour_cards pc
+        JOIN projects p ON pc.project_id = p.id
+        LEFT JOIN users u ON pc.site_engineer_id = u.id
+        LEFT JOIN quality_ncrs n ON pc.ncr_id = n.id
+       WHERE ${pcWhere}
+       ORDER BY COALESCE(pc.actual_pour_start, pc.planned_pour_date) DESC NULLS LAST
+    `, pcParams);
+
+    // 2. RMC / Concrete Bills — filter by work_desc OR vendor name containing concrete keywords
+    const billParams = [cid];
+    const billConds = [
+      'b.is_deleted = FALSE',
+      `(b.company_id = $1 OR b.company_id IS NULL)`,
+      `(LOWER(COALESCE(b.work_desc,'')) ~ 'concrete|rmc|ready.?mix|cement|m\\d0'
+        OR LOWER(COALESCE(b.vendor_name,'')) ~ 'concrete|rmc|ready.?mix|cement')`,
+    ];
+    let bIdx = 2;
+    const bScope = [];
+    applyProjectScope(req, bScope, billParams, 'b', project_id);
+    bIdx = billParams.length + 1;
+    if (bScope.length) billConds.push(...bScope);
+    if (from_date) { billConds.push(`b.inv_date >= $${bIdx++}`); billParams.push(from_date); }
+    if (to_date)   { billConds.push(`b.inv_date <= $${bIdx++}`); billParams.push(to_date); }
+
+    const billRes = await query(`
+      SELECT b.id, b.sl_number, b.vendor_name, b.vendor_id,
+             b.po_number, b.po_date, b.inv_number, b.inv_date, b.inv_month,
+             b.work_desc, b.basic_amount, b.gst_amount, b.total_amount,
+             b.workflow_status, b.bill_type,
+             u.paid_amount, u.balance_to_pay, u.certified_net,
+             u.payment_status, u.payment_date, u.qs_certified_date,
+             p.name AS project_name
+        FROM tqs_bills b
+        LEFT JOIN tqs_bill_updates u ON u.bill_id = b.id
+        LEFT JOIN projects p ON p.id = b.project_id
+       WHERE ${billConds.join(' AND ')}
+       ORDER BY b.inv_date DESC NULLS LAST, b.created_at DESC
+    `, billParams);
+
+    // 3. DPR Concrete per day
+    const dprParams = [cid];
+    let dprWhere = 'd.project_id = (SELECT id FROM projects WHERE company_id = $1 LIMIT 1)';
+    if (project_id) {
+      dprWhere = 'd.project_id = $2';
+      dprParams.push(project_id);
+    }
+    let dIdx = dprParams.length + 1;
+    if (from_date) { dprWhere += ` AND d.report_date >= $${dIdx++}`; dprParams.push(from_date); }
+    if (to_date)   { dprWhere += ` AND d.report_date <= $${dIdx++}`; dprParams.push(to_date); }
+
+    let dprRows = [];
+    try {
+      const dprRes = await query(`
+        SELECT d.report_date, d.material_consumed
+          FROM daily_progress_reports d
+         WHERE ${dprWhere}
+         ORDER BY d.report_date DESC
+      `, dprParams);
+
+      dprRows = dprRes.rows.map(r => {
+        const mc = r.material_consumed || {};
+        const concrete = Array.isArray(mc.concrete_today) ? mc.concrete_today : [];
+        return {
+          report_date: r.report_date,
+          grades: concrete.filter(c => c.grade && Number(c.qty) > 0),
+          total_qty: concrete.reduce((s, c) => s + (Number(c.qty) || 0), 0),
+        };
+      }).filter(r => r.total_qty > 0);
+    } catch (_) { /* DPR table may not exist in all environments */ }
+
+    // 4. Summary aggregates
+    const pours = pcRes.rows;
+    const bills = billRes.rows;
+    const summary = {
+      total_pours:     pours.length,
+      total_volume_planned: pours.reduce((s, p) => s + (Number(p.volume_planned) || 0), 0),
+      total_volume_actual:  pours.reduce((s, p) => s + (Number(p.volume_actual)  || 0), 0),
+      pours_closed:    pours.filter(p => p.status === 'closed').length,
+      pours_active:    pours.filter(p => ['pre_pour','poured','curing','certs_pending'].includes(p.status)).length,
+      total_bills:     bills.length,
+      total_billed:    bills.reduce((s, b) => s + (Number(b.total_amount) || 0), 0),
+      total_paid:      bills.reduce((s, b) => s + (Number(b.paid_amount)  || 0), 0),
+      total_pending:   bills.reduce((s, b) => s + (Number(b.balance_to_pay) || 0), 0),
+    };
+
+    res.json({ data: { pour_cards: pours, bills: bills, dpr_daily: dprRows, summary } });
+  } catch (err) {
+    console.error('[concrete-tracker]', err.message);
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
 // ── GET /tqs/bills ─────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
   try {

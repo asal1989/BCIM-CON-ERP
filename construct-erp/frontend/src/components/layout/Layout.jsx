@@ -175,6 +175,7 @@ const navGroups = [
     { to: '/tqs/bills',                 icon: FileText,        label: 'Bills' },
     { to: '/tqs/transmittal',           icon: Send,            label: 'Transmittal' },
     { to: '/tqs/material-tracker',      icon: Package,         label: 'Material Tracker' },
+    { to: '/tqs/concrete-tracker',     icon: Layers,          label: 'Concrete Tracker' },
     { to: '/tqs/analytics',             icon: TrendingUp,      label: 'Analytics' },
     { to: '/tqs/reports',               icon: BarChart3,       label: 'Reports' },
     { to: '/tqs/liability-register',    icon: BookOpen,        label: 'Liability Register' },
@@ -358,7 +359,7 @@ const NAV_SECTIONS = {
   ],
   'Bill Tracker': [
     { label: 'Bills',      paths: ['/tqs','/tqs/bills','/tqs/transmittal'] },
-    { label: 'Trackers',   paths: ['/tqs/material-tracker','/tqs/advance-tracker','/tqs/liability-register'] },
+    { label: 'Trackers',   paths: ['/tqs/material-tracker','/tqs/concrete-tracker','/tqs/advance-tracker','/tqs/liability-register'] },
     { label: 'Reports',    paths: ['/tqs/analytics','/tqs/reports','/tqs/deduction-register','/tqs/wo-bill-register','/tqs/cash-flow','/tqs/cost-report'] },
     { label: 'QS Cert',    paths: ['/tqs/vendor-certifications'] },
     { label: 'Documents',  paths: ['/tqs/documents'] },

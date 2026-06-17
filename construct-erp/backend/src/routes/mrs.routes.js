@@ -472,6 +472,26 @@ router.use(loadProjectScope);
       console.error('[mrs] priority constraint NOT applied:', e.message);
     }
   }
+  // ── Auto-configure 3-stage workflow (Store Manager → PM → MD) for Yelahanka & DQS projects ──
+  // Only sets workflow when no stages are already configured (safe to run on every deploy).
+  try {
+    const threeStage = JSON.stringify({ stages: ['stores-approve', 'approve-pm', 'approve-md'] });
+    const r = await query(
+      `UPDATE projects
+         SET mrs_workflow = $1::jsonb
+       WHERE (LOWER(name) LIKE '%yelahanka%' OR LOWER(name) LIKE '%dqs%' OR LOWER(name) LIKE '%tqs%')
+         AND (mrs_workflow IS NULL
+              OR mrs_workflow = 'null'::jsonb
+              OR NOT (mrs_workflow ? 'stages'))`,
+      [threeStage]
+    );
+    if (r.rowCount > 0) {
+      console.log(`[mrs] 3-stage workflow (Store Mgr→PM→MD) set for ${r.rowCount} project(s) (Yelahanka/DQS)`);
+    }
+  } catch (e) {
+    console.error('[mrs] project workflow init failed:', e.message);
+  }
+
   console.log('[mrs] schema OK');
 })();
 
@@ -1126,8 +1146,13 @@ router.patch('/:id/:stage', async (req, res) => {
       }).catch(() => {});
     }
 
-    // Project Head approved → notify full team with item details
-    if (cfg.nextStatus === 'approved_mgmt') {
+    // After PM approval — notify full team with item details.
+    // In the standard 4-stage flow this fires at 'approved_mgmt' (Project Director stage);
+    // in the 3-stage flow (SM→PM→MD), PM approval sets 'approved_pm' and MD is next,
+    // so we fire the same notification then so MD knows their action is required.
+    const pmApprovedAndMDIsNext =
+      cfg.nextStatus === 'approved_pm' && !enabledIds.includes('approve-mgmt');
+    if (cfg.nextStatus === 'approved_mgmt' || pmApprovedAndMDIsNext) {
       notifyAfterProjectHeadApproval({ mrs: { ...mrs.rows[0], status: cfg.nextStatus } });
     }
 

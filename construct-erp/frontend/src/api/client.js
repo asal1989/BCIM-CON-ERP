@@ -1402,6 +1402,7 @@ export const tqsBillsAPI = {
   // ── Export & Stage advancement ──
   exportExcel:     (params) => api.get('/tqs/bills/export/excel', { params, responseType: 'blob' }),
   advanceStage:    (id)     => api.patch(`/tqs/bills/${id}/advance-stage`),
+  concreteTracker: (params) => api.get('/tqs/bills/concrete-tracker', { params }),
 };
 
 export const liabilityRegisterAPI = {
