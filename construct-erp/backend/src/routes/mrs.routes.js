@@ -424,6 +424,9 @@ router.use(loadProjectScope);
   await safe(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS mrs_workflow JSONB`);
   // Optional per-project starting sequence (e.g. continue legacy paper numbering at 053)
   await safe(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS mrs_start_seq INTEGER`);
+  // Optional shared numbering pool: projects with the same mrs_seq_group share one
+  // continuous MR serial counter (e.g. Yelahanka + DQS Towers number together).
+  await safe(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS mrs_seq_group TEXT`);
   // mrs_number now mirrors the project-scoped serial which can be longer than 30 chars
   await safe(`ALTER TABLE material_requisitions ALTER COLUMN mrs_number TYPE VARCHAR(60)`);
   // MD item-level authorization: which items to proceed, at what quantity
@@ -717,12 +720,26 @@ router.post('/', async (req, res) => {
         result = await withTransaction(async (client) => {
           // Verify project belongs to company
           const proj = await client.query(
-            `SELECT id, name, project_code, mrs_prefix, mrs_start_seq FROM projects WHERE id = $1 AND company_id = $2`,
+            `SELECT id, name, project_code, mrs_prefix, mrs_start_seq, mrs_seq_group FROM projects WHERE id = $1 AND company_id = $2`,
             [project_id, req.user.company_id]
           );
           if (!proj.rows.length) throw Object.assign(new Error('Project not found'), { status: 404 });
 
-          // Per-project sequence: find the highest trailing number used so far for this project
+          // A project may share one continuous MR numbering pool with others via
+          // mrs_seq_group. Resolve the set of project_ids that share this sequence.
+          const seqGroup = proj.rows[0].mrs_seq_group;
+          let groupProjects;
+          if (seqGroup) {
+            groupProjects = (await client.query(
+              `SELECT id, mrs_start_seq FROM projects WHERE company_id = $1 AND mrs_seq_group = $2`,
+              [req.user.company_id, seqGroup]
+            )).rows;
+          } else {
+            groupProjects = [{ id: proj.rows[0].id, mrs_start_seq: proj.rows[0].mrs_start_seq }];
+          }
+          const groupIds = groupProjects.map(r => r.id);
+
+          // Highest trailing number used so far across the whole numbering pool
           const seqRes = await client.query(
             `SELECT COALESCE(MAX(
                CASE
@@ -732,12 +749,12 @@ router.post('/', async (req, res) => {
                END
              ), 0) AS last_seq
              FROM material_requisitions
-             WHERE project_id = $1`,
-            [project_id]
+             WHERE project_id = ANY($1::uuid[])`,
+            [groupIds]
           );
-          // Continue from a configured starting number (legacy paper numbering) if it is
-          // higher than what's already in the table; +attempt bumps forward on a unique clash.
-          const startSeq = parseInt(proj.rows[0].mrs_start_seq) || 0;
+          // Continue from the highest configured starting number in the pool (legacy paper
+          // numbering); +attempt bumps forward on a unique clash.
+          const startSeq = Math.max(0, ...groupProjects.map(r => parseInt(r.mrs_start_seq) || 0));
           const nextSeq  = Math.max(parseInt(seqRes.rows[0].last_seq) + 1, startSeq) + attempt;
           const seq      = String(nextSeq).padStart(3, '0');
 
