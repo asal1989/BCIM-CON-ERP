@@ -56,6 +56,8 @@ const router = express.Router();
   await safe(`CREATE INDEX IF NOT EXISTS idx_ign_company  ON ign(company_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_ign_project  ON ign(project_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_ign_items    ON ign_items(ign_id)`);
+  // Guarantee per-company uniqueness of the generated IGN number
+  await safe(`CREATE UNIQUE INDEX IF NOT EXISTS uq_ign_number ON ign(company_id, ign_number)`);
 
   console.log('[IGN] Schema migration OK');
 })();
@@ -63,13 +65,16 @@ const router = express.Router();
 router.use(authenticate);
 router.use(loadProjectScope);
 
-async function nextIgnNumber(companyId) {
+// Race-safe IGN number — MAX of existing seq for company+year, run inside a txn.
+async function nextIgnNumber(client, companyId) {
   const yr = new Date().getFullYear();
-  const res = await query(
-    `SELECT COUNT(*) FROM ign WHERE company_id = $1 AND EXTRACT(YEAR FROM created_at) = $2`,
-    [companyId, yr]
+  const res = await client.query(
+    `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(ign_number, '^IGN/[0-9]+/', '') AS INTEGER)), 0) AS last_seq
+     FROM ign
+     WHERE company_id = $1 AND ign_number LIKE $2`,
+    [companyId, `IGN/${yr}/%`]
   );
-  const seq = String(parseInt(res.rows[0].count) + 1).padStart(4, '0');
+  const seq = String(parseInt(res.rows[0].last_seq) + 1).padStart(4, '0');
   return `IGN/${yr}/${seq}`;
 }
 
@@ -144,9 +149,8 @@ router.post('/', authorize(...STORES_WRITE), async (req, res) => {
     }
     if (!items.length) return res.status(400).json({ error: 'Add at least one item' });
 
-    const ign_number = await nextIgnNumber(req.user.company_id);
-
     const result = await withTransaction(async (client) => {
+      const ign_number = await nextIgnNumber(client, req.user.company_id);
       const hdr = await client.query(
         `INSERT INTO ign
            (company_id, project_id, ign_number, supplier_name,

@@ -50,6 +50,8 @@ const router = express.Router();
   await safe(`CREATE INDEX IF NOT EXISTS idx_gp_company ON gate_passes(company_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_gp_project ON gate_passes(project_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_gp_items   ON gate_pass_items(gp_id)`);
+  // Guarantee per-company uniqueness of the generated gate-pass number
+  await safe(`CREATE UNIQUE INDEX IF NOT EXISTS uq_gp_number ON gate_passes(company_id, gp_number)`);
 
   console.log('[GatePass] Schema migration OK');
 })();
@@ -57,13 +59,16 @@ const router = express.Router();
 router.use(authenticate);
 router.use(loadProjectScope);
 
-async function nextGpNumber(companyId) {
+// Race-safe gate-pass number — MAX of existing seq for company+year, in a txn.
+async function nextGpNumber(client, companyId) {
   const yr = new Date().getFullYear();
-  const res = await query(
-    `SELECT COUNT(*) FROM gate_passes WHERE company_id = $1 AND EXTRACT(YEAR FROM created_at) = $2`,
-    [companyId, yr]
+  const res = await client.query(
+    `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(gp_number, '^GP/[0-9]+/', '') AS INTEGER)), 0) AS last_seq
+     FROM gate_passes
+     WHERE company_id = $1 AND gp_number LIKE $2`,
+    [companyId, `GP/${yr}/%`]
   );
-  const seq = String(parseInt(res.rows[0].count) + 1).padStart(4, '0');
+  const seq = String(parseInt(res.rows[0].last_seq) + 1).padStart(4, '0');
   return `GP/${yr}/${seq}`;
 }
 
@@ -133,9 +138,8 @@ router.post('/', authorize(...STORES_WRITE), async (req, res) => {
     }
     if (!items.length) return res.status(400).json({ error: 'Add at least one item' });
 
-    const gp_number = await nextGpNumber(req.user.company_id);
-
     const result = await withTransaction(async (client) => {
+      const gp_number = await nextGpNumber(client, req.user.company_id);
       const hdr = await client.query(
         `INSERT INTO gate_passes
            (company_id, project_id, gp_number, pass_type,
@@ -205,13 +209,21 @@ router.patch('/:id/return', async (req, res) => {
 router.patch('/:id/close', async (req, res) => {
   try {
     const check = await query(
-      `SELECT gp.project_id, p.company_id FROM gate_passes gp
+      `SELECT gp.project_id, p.company_id, gp.pass_type, gp.status FROM gate_passes gp
        JOIN projects p ON p.id = gp.project_id
        WHERE gp.id = $1 AND gp.status != 'closed'`,
       [req.params.id]
     );
     if (!check.rows.length || check.rows[0].company_id !== req.user.company_id) {
       return res.status(404).json({ error: 'Gate Pass not found or already closed' });
+    }
+    if (!userCanAccessProject(req, check.rows[0].project_id)) {
+      return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
+    // A returnable pass must be marked returned before it can be closed,
+    // otherwise the return-tracking is lost.
+    if (check.rows[0].pass_type === 'returnable' && check.rows[0].status === 'open') {
+      return res.status(400).json({ error: 'Mark the returnable gate pass as returned before closing it' });
     }
     await query(
       `UPDATE gate_passes SET status = 'closed' WHERE id = $1`,

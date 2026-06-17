@@ -375,6 +375,10 @@ function RequireModule({ module, children }) {
   const { user } = useAuthStore();
   if (!user) return <Navigate to="/login" replace />;
   if (['admin', 'super_admin'].includes(user.role)) return children;
+  // Stores-floor roles always have the Stores module — their home route lives
+  // under /stores, so gating it on accessible_modules could cause a redirect loop.
+  const STORES_ROLES = ['security_guard', 'store_keeper', 'stores_manager', 'stores_officer'];
+  if (module === 'Stores' && STORES_ROLES.includes(String(user.role || '').toLowerCase())) return children;
   const mods = user.accessible_modules;
   if (!mods || mods.length === 0) return children; // unconfigured account → full access
   const legacyAliases = [

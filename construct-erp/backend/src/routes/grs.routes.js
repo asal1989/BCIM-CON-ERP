@@ -47,6 +47,8 @@ const router = express.Router();
   await safe(`CREATE INDEX IF NOT EXISTS idx_grs_company ON grs(company_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_grs_project ON grs(project_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_grs_items_grs ON grs_items(grs_id)`);
+  // Guarantee per-company uniqueness of the generated GRS number
+  await safe(`CREATE UNIQUE INDEX IF NOT EXISTS uq_grs_number ON grs(company_id, grs_number)`);
 
   console.log('[GRS] Schema migration OK');
 })();
@@ -54,14 +56,18 @@ const router = express.Router();
 router.use(authenticate);
 router.use(loadProjectScope);
 
-// ── Helper: next GRS number ───────────────────────────────────────────────────
-async function nextGrsNumber(companyId) {
+// ── Helper: next GRS number (race-safe: MAX of existing seq, run inside a txn) ──
+// Derives the next sequence from the highest trailing number already issued for
+// the company+year, so deleting a row never causes a number to be reused.
+async function nextGrsNumber(client, companyId) {
   const yr = new Date().getFullYear();
-  const res = await query(
-    `SELECT COUNT(*) FROM grs WHERE company_id = $1 AND EXTRACT(YEAR FROM created_at) = $2`,
-    [companyId, yr]
+  const res = await client.query(
+    `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(grs_number, '^GRS/[0-9]+/', '') AS INTEGER)), 0) AS last_seq
+     FROM grs
+     WHERE company_id = $1 AND grs_number LIKE $2`,
+    [companyId, `GRS/${yr}/%`]
   );
-  const seq = String(parseInt(res.rows[0].count) + 1).padStart(4, '0');
+  const seq = String(parseInt(res.rows[0].last_seq) + 1).padStart(4, '0');
   return `GRS/${yr}/${seq}`;
 }
 
@@ -131,9 +137,8 @@ router.post('/', authorize(...STORES_WRITE), async (req, res) => {
     }
     if (!items.length) return res.status(400).json({ error: 'Add at least one item' });
 
-    const grs_number = await nextGrsNumber(req.user.company_id);
-
     const result = await withTransaction(async (client) => {
+      const grs_number = await nextGrsNumber(client, req.user.company_id);
       const hdr = await client.query(
         `INSERT INTO grs
            (company_id, project_id, grs_number, vehicle_no, date_time,

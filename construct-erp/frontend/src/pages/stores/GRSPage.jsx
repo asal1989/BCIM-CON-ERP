@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  ShieldCheck, Plus, X, Search, Download, Printer,
+  ShieldCheck, Plus, X, Search, Download,
   Clock, CheckCircle2, AlertTriangle, Package,
   ChevronRight, FileText, Truck, RefreshCw, ClipboardList,
 } from 'lucide-react';
@@ -13,8 +13,6 @@ import { FIELD_HL } from '../../constants/fieldStyles';
 import toast from 'react-hot-toast';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import { CONSTRUCTION_UNITS as UNITS } from '../../constants/units';
-
-const inr = n => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
 const STATUS_CONFIG = {
   pending:      { label: 'Pending',      color: 'bg-amber-50 text-amber-700 border-amber-200',    dot: 'bg-amber-500',   icon: Clock },

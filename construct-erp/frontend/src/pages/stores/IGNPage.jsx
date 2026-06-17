@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
-import { ignAPI, projectAPI, grsAPI, poAPI } from '../../api/client';
+import { ignAPI, projectAPI, grsAPI } from '../../api/client';
 import { FIELD_HL } from '../../constants/fieldStyles';
 import toast from 'react-hot-toast';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
@@ -401,7 +401,7 @@ function IGNForm({ onClose, projects, qc }) {
   });
 
   const [form, setForm] = useState({
-    project_id: '', supplier_name: '', po_id: '', po_number: '',
+    project_id: '', supplier_name: '', po_number: '',
     vehicle_no: '', dc_number: '', bill_number: '',
     date_time: dayjs().format('YYYY-MM-DDTHH:mm'),
     grs_id: '', grs_number: '',

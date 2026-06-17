@@ -143,7 +143,7 @@ function GatePassDetailPanel({ gp, onClose, onReturn, onClose2, returnLoading, c
               {returnLoading ? 'Processing…' : 'Mark as Returned'}
             </button>
           )}
-          {gp.status !== 'closed' && (
+          {gp.status !== 'closed' && (gp.pass_type === 'non_returnable' || gp.status === 'returned') && (
             <button onClick={onClose2} disabled={closeLoading}
               className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-800 disabled:opacity-60 text-white font-medium py-2.5 rounded-xl text-sm transition">
               <CheckCircle2 size={16} />
