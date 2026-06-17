@@ -12,8 +12,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { clsx } from 'clsx';
 
-const SAFE_DAYS = 42;
-
 export default function HSEDashboard() {
   const navigate = useNavigate();
   const { data: incidents = [] } = useQuery({ queryKey:['incidents'], queryFn:()=>incidentAPI.list().then(r=>r.data?.data ?? r.data ?? []).catch(()=>[]) });
@@ -21,6 +19,17 @@ export default function HSEDashboard() {
 
   const inc = Array.isArray(incidents) ? incidents : [];
   const ptw = Array.isArray(permits)   ? permits   : [];
+
+  // LTI = incidents with lost_time_days > 0 (real Lost Time Injuries)
+  const ltiIncidents = inc.filter(i => Number(i.lost_time_days || 0) > 0)
+    .sort((a, b) => new Date(b.incident_date) - new Date(a.incident_date));
+  const lastLti = ltiIncidents[0];
+  const safeDays = lastLti ? dayjs().diff(dayjs(lastLti.incident_date), 'day') : null;
+
+  const firstAidCount = inc.filter(i => i.incident_type === 'minor_injury').length;
+  const openCapaCount = inc.filter(i => i.status === 'open').length;
+  const closedCount = inc.filter(i => i.status !== 'open').length;
+  const complianceRate = inc.length > 0 ? Math.round((closedCount / inc.length) * 100) : 100;
 
   return (
     <div className="p-6 space-y-6 bg-slate-50 min-h-screen">
@@ -52,7 +61,7 @@ export default function HSEDashboard() {
            
            <div className="relative shrink-0">
               <div className="w-48 h-48 rounded-[3.5rem] border-[12px] border-emerald-50 flex flex-col items-center justify-center bg-white shadow-2xl shadow-emerald-500/10 group hover:scale-105 transition-transform">
-                 <span className="text-6xl font-medium text-emerald-600 italic tracking-tighter leading-none">{SAFE_DAYS}</span>
+                 <span className="text-6xl font-medium text-emerald-600 italic tracking-tighter leading-none">{safeDays ?? '—'}</span>
                  <span className="text-[10px] font-medium text-slate-900 font-medium uppercase tracking-[0.2em] mt-3 italic">Safe Days</span>
               </div>
               <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-emerald-600 text-white px-5 py-2 rounded-2xl text-[10px] font-medium uppercase tracking-widest whitespace-nowrap shadow-xl shadow-emerald-600/30 italic">Target: 365 Days 🛡</div>
@@ -64,34 +73,42 @@ export default function HSEDashboard() {
                  <span className="text-[10px] font-medium text-emerald-600 uppercase tracking-[0.3em]">HSE Safety Benchmark</span>
               </div>
               <h2 className="text-3xl font-medium text-slate-900 tracking-tighter italic leading-none">LTI-Free Operational Cycle</h2>
-              <p className="text-xs text-slate-900 font-medium leading-relaxed font-medium italic pr-12">Your site has maintained zero Lost Time Injuries (LTI) for the last {SAFE_DAYS} consecutive business days. Continue protocol enforcement to exceed benchmark KPIs.</p>
+              <p className="text-xs text-slate-900 font-medium leading-relaxed font-medium italic pr-12">
+                {safeDays != null
+                  ? `Your site has maintained zero Lost Time Injuries (LTI) for the last ${safeDays} consecutive days. Continue protocol enforcement to exceed benchmark KPIs.`
+                  : 'No Lost Time Injury (LTI) has been recorded yet. The counter will start from the date of the first LTI incident.'}
+              </p>
               
               <div className="flex items-center gap-10 pt-6 border-t border-slate-100">
                  <div>
                     <div className="text-[10px] font-medium text-slate-900 font-medium uppercase tracking-widest mb-1.5 flex items-center gap-2"><MapPin size={12} /> Last LTI Incident</div>
-                    <div className="text-xs font-medium text-slate-900 italic tracking-tight bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 w-fit">28 Feb • KH-98 Site Segment</div>
+                    <div className="text-xs font-medium text-slate-900 italic tracking-tight bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 w-fit">
+                      {lastLti ? `${dayjs(lastLti.incident_date).format('DD MMM YYYY')} • ${lastLti.location || lastLti.project_name || 'Unknown Site'}` : 'No LTI recorded'}
+                    </div>
                  </div>
                  <div className="h-12 w-px bg-slate-100" />
                  <div>
-                    <div className="text-[10px] font-medium text-slate-900 font-medium uppercase tracking-widest mb-1.5 flex items-center gap-2"><Activity size={12} /> Cumulative Man-Hours</div>
-                    <div className="text-xs font-medium text-emerald-600 italic bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-100 w-fit">10,480 Safe Hours</div>
+                    <div className="text-[10px] font-medium text-slate-900 font-medium uppercase tracking-widest mb-1.5 flex items-center gap-2"><Activity size={12} /> Total Incidents Logged</div>
+                    <div className="text-xs font-medium text-emerald-600 italic bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-100 w-fit">{inc.length} Records</div>
                  </div>
               </div>
            </div>
         </div>
 
-        {/* Compliance Rating */}
+        {/* Incident Closure Rate — % of logged incidents that have been closed */}
         <div className="bg-white border border-slate-200 rounded-[3rem] p-10 flex flex-col items-center justify-center text-center space-y-8 shadow-sm">
-           <div className="text-[10px] font-medium text-slate-900 font-medium uppercase tracking-[0.3em] italic">HSE Compliance Rating</div>
+           <div className="text-[10px] font-medium text-slate-900 font-medium uppercase tracking-[0.3em] italic">Incident Closure Rate</div>
            <div className="relative">
-              <div className="text-7xl font-medium text-slate-900 italic tracking-tighter leading-none">94<span className="text-2xl text-slate-200 ml-1">%</span></div>
+              <div className="text-7xl font-medium text-slate-900 italic tracking-tighter leading-none">{complianceRate}<span className="text-2xl text-slate-200 ml-1">%</span></div>
               <div className="absolute -top-4 -right-6">
                  <CheckCircle2 size={32} className="text-emerald-500 drop-shadow-lg" />
               </div>
            </div>
-           <p className="text-[11px] text-emerald-600 font-medium uppercase tracking-[0.2em] italic bg-emerald-50 px-6 py-2 rounded-full border border-emerald-100">Outstanding Performance</p>
+           <p className="text-[11px] text-emerald-600 font-medium uppercase tracking-[0.2em] italic bg-emerald-50 px-6 py-2 rounded-full border border-emerald-100">
+             {closedCount} of {inc.length || 0} cases finalized
+           </p>
            <div className="w-full bg-slate-50 h-3 rounded-full overflow-hidden border border-slate-100 shadow-inner">
-              <div className="bg-emerald-500 h-full w-[94%] shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all duration-1000" />
+              <div className="bg-emerald-500 h-full transition-all duration-1000" style={{ width: `${complianceRate}%` }} />
            </div>
         </div>
       </div>
@@ -122,9 +139,16 @@ export default function HSEDashboard() {
                     </div>
                     <div className="text-right flex flex-col items-end">
                        <div className="text-[9px] font-medium text-slate-900 font-medium uppercase tracking-widest mb-1.5 leading-none italic">Expires In</div>
-                       <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-600 border border-amber-100 rounded-xl text-[10px] font-medium italic shadow-sm leading-none">
-                          <Clock size={12} /> 4 hrs
-                       </div>
+                       {(() => {
+                         const hrsLeft = dayjs(p.valid_to).diff(dayjs(), 'hour');
+                         const expired = hrsLeft < 0;
+                         return (
+                           <div className={clsx("flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-medium italic shadow-sm leading-none border",
+                             expired ? "bg-red-50 text-red-600 border-red-100" : "bg-amber-50 text-amber-600 border-amber-100")}>
+                              <Clock size={12} /> {expired ? 'Expired' : `${hrsLeft} hrs`}
+                           </div>
+                         );
+                       })()}
                     </div>
                  </div>
                ))}
@@ -155,11 +179,11 @@ export default function HSEDashboard() {
                </div>
                <div className="space-y-3 bg-slate-50/50 p-6 rounded-[2rem] border border-slate-100 text-center shadow-inner">
                   <div className="text-[9px] font-medium text-slate-900 font-medium uppercase tracking-widest italic">First Aid (FA)</div>
-                  <div className="text-2xl font-medium text-blue-500 italic leading-none">28</div>
+                  <div className="text-2xl font-medium text-blue-500 italic leading-none">{firstAidCount}</div>
                </div>
                <div className="space-y-3 bg-slate-50/50 p-6 rounded-[2rem] border border-slate-100 text-center shadow-inner">
                   <div className="text-[9px] font-medium text-slate-900 font-medium uppercase tracking-widest italic">Active CAPAs</div>
-                  <div className="text-2xl font-medium text-red-600 italic leading-none">05</div>
+                  <div className="text-2xl font-medium text-red-600 italic leading-none">{String(openCapaCount).padStart(2, '0')}</div>
                </div>
             </div>
 

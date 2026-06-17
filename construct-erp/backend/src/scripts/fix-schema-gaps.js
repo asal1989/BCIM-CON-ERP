@@ -52,12 +52,12 @@ async function run() {
         WHERE mrs_prefix IS NULL
           AND (name ILIKE '%yelahanka%' OR name ILIKE '%yelkhan%' OR project_code ILIKE '%DQS%BLR%' OR project_code ILIKE '%DQS-BLR%')`,
         'Projects: mrs_prefix = BCIM-DQS-BLR-MR for Residential Yelahanka'],
-      [`ALTER TABLE projects ADD COLUMN IF NOT EXISTS mrs_sequence_start INTEGER NOT NULL DEFAULT 1`,
-        'Projects: mrs_sequence_start (seed MRS numbering from a specific number)'],
-      [`UPDATE projects SET mrs_sequence_start = 53
+      [`ALTER TABLE projects ADD COLUMN IF NOT EXISTS mrs_start_seq INTEGER NOT NULL DEFAULT 1`,
+        'Projects: mrs_start_seq (seed MRS numbering from a specific number)'],
+      [`UPDATE projects SET mrs_start_seq = 53
         WHERE (name ILIKE '%yelahanka%' OR name ILIKE '%yelkhan%' OR project_code ILIKE '%DQS%BLR%' OR project_code ILIKE '%DQS-BLR%')
-          AND mrs_sequence_start = 1`,
-        'Projects: mrs_sequence_start = 53 for Yelahanka (physical MRs 001–052 pre-date ERP)'],
+          AND mrs_start_seq = 1`,
+        'Projects: mrs_start_seq = 53 for Yelahanka (physical MRs 001–052 pre-date ERP)'],
       [`DELETE FROM material_requisitions
         WHERE serial_no_formatted = 'BCIM-DQS-BLR-MR-001'
           AND status = 'pending'
@@ -176,7 +176,7 @@ async function run() {
         mrs_number VARCHAR(30) UNIQUE NOT NULL,
         site_incharge VARCHAR(100),
         required_by DATE NOT NULL,
-        priority VARCHAR(10) DEFAULT 'normal' CHECK (priority IN ('normal','urgent')),
+        priority VARCHAR(10) DEFAULT 'medium' CHECK (priority IN ('low','medium','high','urgent')),
         status VARCHAR(20) DEFAULT 'pending',
         raised_by UUID REFERENCES users(id),
         approved_by UUID REFERENCES users(id),

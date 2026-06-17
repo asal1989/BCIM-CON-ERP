@@ -81,7 +81,7 @@ export default function PPEPage() {
           <StatCard label="Total Items Issued" value={ppeLogs?.length || 0} color="text-amber-500" />
           <StatCard label="Safety Helmets" value={ppeLogs?.filter(p => p.item_type === 'helmet').length || 0} color="text-blue-400" />
           <StatCard label="Jacket / High-Vis" value={ppeLogs?.filter(p => p.item_type === 'waistcoat').length || 0} color="text-emerald-500" />
-          <StatCard label="Expiring Soon" value={ppeLogs?.filter(p => p.days_remaining <= 30).length || 0} color="text-red-500" />
+          <StatCard label="Expiring Soon" value={ppeLogs?.filter(p => dayjs(p.expiry_date).diff(dayjs(), 'day') <= 30).length || 0} color="text-red-500" />
       </div>
 
       {/* Issuance Ledger */}
@@ -120,8 +120,8 @@ export default function PPEPage() {
                             <Shield className="w-5 h-5" />
                          </div>
                          <div>
-                            <div className="text-slate-900 font-medium text-xs uppercase tracking-tight italic">{p.item_name}</div>
-                            <div className="text-[9px] font-medium text-slate-900 font-medium uppercase tracking-widest mt-1 italic">{p.item_type} • <span className="text-slate-300 font-mono">S/N: {p.serial_number || 'NA'}</span></div>
+                            <div className="text-slate-900 font-medium text-xs uppercase tracking-tight italic">{p.item_code}</div>
+                            <div className="text-[9px] font-medium text-slate-900 font-medium uppercase tracking-widest mt-1 italic">{p.item_type} • <span className="text-slate-300 font-mono">Condition: {p.condition || 'good'}</span></div>
                          </div>
                       </div>
                     </td>
@@ -130,12 +130,12 @@ export default function PPEPage() {
                           <User size={12} className="text-slate-400" />
                           <span className="text-slate-900 font-medium text-xs uppercase tracking-tight italic">{p.worker_name}</span>
                        </div>
-                       <div className="text-[9px] text-slate-900 font-medium uppercase tracking-widest mt-1 ml-5 italic leading-none">{p.worker_type || 'General Site Staff'}</div>
+                       <div className="text-[9px] text-slate-900 font-medium uppercase tracking-widest mt-1 ml-5 italic leading-none">{p.skill_type || 'General Site Staff'}</div>
                     </td>
                     <td className="p-6">
                       <div className="flex items-center gap-2 text-slate-900 font-medium font-mono text-xs font-medium bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100 w-fit">
                          <Calendar size={12} className="text-slate-400" />
-                         <span>{dayjs(p.issue_date).format('DD MMM YYYY')}</span>
+                         <span>{dayjs(p.issued_date).format('DD MMM YYYY')}</span>
                       </div>
                     </td>
                     <td className="p-6">
@@ -193,7 +193,7 @@ export default function PPEPage() {
                      <label className="text-[10px] font-medium text-slate-900 font-medium uppercase tracking-widest ml-1 leading-none italic mt-4">Recipient Worker</label>
                      <select {...register('worker_id', { required: true })} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-900 uppercase italic outline-none focus:border-amber-500 transition-all">
                         <option value="">Select Target Worker...</option>
-                        {workers?.map(w => <option key={w.id} value={w.id}>{w.name} ({w.worker_type})</option>)}
+                        {workers?.map(w => <option key={w.id} value={w.id}>{w.worker_name || w.name} ({w.skill_type})</option>)}
                      </select>
                   </div>
                   <div className="space-y-2">
@@ -209,14 +209,14 @@ export default function PPEPage() {
                </div>
 
                <div className="space-y-2">
-                  <label className="text-[10px] font-medium text-slate-900 font-medium uppercase tracking-widest ml-1 leading-none italic">Item Specification / Serial Branding</label>
-                  <input {...register('item_name', { required: true })} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-xs italic font-medium text-slate-900 outline-none focus:border-amber-500 shadow-inner transition-all uppercase" placeholder="e.g. KARAM PN-21 INDUSTRIAL HARDHAT" />
+                  <label className="text-[10px] font-medium text-slate-900 font-medium uppercase tracking-widest ml-1 leading-none italic">Item Code / Specification</label>
+                  <input {...register('item_code', { required: true })} className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-xs italic font-medium text-slate-900 outline-none focus:border-amber-500 shadow-inner transition-all uppercase" placeholder="e.g. KARAM PN-21 INDUSTRIAL HARDHAT" />
                </div>
 
                <div className="grid grid-cols-2 gap-8">
                   <div className="space-y-2">
                      <label className="text-[10px] font-medium text-slate-900 font-medium uppercase tracking-widest ml-1 leading-none">Issuance Date</label>
-                     <input type="date" {...register('issue_date', { required: true })} defaultValue={dayjs().format('YYYY-MM-DD')} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-900 font-mono uppercase outline-none focus:border-amber-500 transition-all" />
+                     <input type="date" {...register('issued_date', { required: true })} defaultValue={dayjs().format('YYYY-MM-DD')} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-900 font-mono uppercase outline-none focus:border-amber-500 transition-all" />
                   </div>
                   <div className="space-y-2">
                      <label className="text-[10px] font-medium text-slate-900 font-medium uppercase tracking-widest ml-1 leading-none">Renewal Protocol Date</label>
