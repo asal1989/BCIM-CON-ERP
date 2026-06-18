@@ -2,7 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  ShieldCheck, Plus, X, Search, Download,
+  ShieldCheck, Plus, X, Search, Download, Printer,
   Clock, CheckCircle2, AlertTriangle, Package,
   ChevronRight, FileText, Truck, RefreshCw, ClipboardList,
   XCircle,
