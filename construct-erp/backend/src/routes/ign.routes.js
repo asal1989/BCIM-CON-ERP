@@ -268,4 +268,20 @@ router.patch('/:id/cancel', async (req, res) => {
   }
 });
 
+// ── DELETE /ign/:id — super-admin only (IGN carries no stock effect) ──────────
+router.delete('/:id', authorize('super_admin'), async (req, res) => {
+  try {
+    const chk = await query(`SELECT id FROM ign WHERE id = $1 AND company_id = $2`,
+      [req.params.id, req.user.company_id]);
+    if (!chk.rows.length) return res.status(404).json({ error: 'IGN not found' });
+    // ign_items has ON DELETE CASCADE; the grs_id/po_id FKs are outbound references
+    // (this note points at them) so removing the note leaves those records intact.
+    await query(`DELETE FROM ign WHERE id = $1 AND company_id = $2`,
+      [req.params.id, req.user.company_id]);
+    res.json({ message: 'IGN deleted' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -245,4 +245,50 @@ router.patch('/:id/receive', async (req, res) => {
   }
 });
 
+// ── DELETE /stores/min/:id — super-admin only ────────────────────────────────
+// If the slip was authorized (stock already issued), the issued quantities are
+// added back to inventory and the 'issue' ledger entries are removed before the
+// slip itself is deleted. A draft slip never touched stock, so it is just removed.
+router.delete('/:id', authorize('super_admin'), async (req, res) => {
+  try {
+    const out = await withTransaction(async (client) => {
+      const minR = await client.query(
+        `SELECT mi.*, p.company_id
+         FROM material_issue_notes mi
+         JOIN projects p ON p.id = mi.project_id
+         WHERE mi.id = $1 FOR UPDATE`,
+        [req.params.id]
+      );
+      if (!minR.rows.length || minR.rows[0].company_id !== req.user.company_id) {
+        throw Object.assign(new Error('Issue slip not found'), { status: 404 });
+      }
+      const min = minR.rows[0];
+      const wasIssued = ['issued', 'received'].includes(min.status);
+
+      if (wasIssued) {
+        const items = await client.query(`SELECT * FROM min_items WHERE min_id = $1`, [min.id]);
+        for (const it of items.rows) {
+          if (!it.inventory_id || !(parseFloat(it.quantity_issued) > 0)) continue;
+          // Returning issued stock can never make a balance negative.
+          await client.query(
+            `UPDATE inventory SET closing_stock = closing_stock + $1 WHERE id = $2`,
+            [it.quantity_issued, it.inventory_id]
+          );
+        }
+        await client.query(
+          `DELETE FROM stock_transactions WHERE reference_id = $1 AND transaction_type = 'issue'`,
+          [min.id]
+        );
+      }
+
+      // min_items cascades on delete of the parent.
+      await client.query(`DELETE FROM material_issue_notes WHERE id = $1`, [min.id]);
+      return { stock_reversed: wasIssued };
+    });
+    res.json({ message: 'Issue slip deleted', ...out });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowUpRight, Search, Plus, Clock, CheckCircle2,
   Printer, Box, ShieldCheck, MapPin, HardHat,
-  FileText, Send, X, Package
+  FileText, Send, X, Package, Trash2
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
@@ -138,6 +138,7 @@ function MINDetailPanel({ min, onClose, onAuthorize, authLoading, onReceive, rec
 export default function IssuePage() {
   const qc = useQueryClient();
   const { user } = useAuthStore();
+  const isSuperAdmin = String(user?.role || '').toLowerCase() === 'super_admin';
   const [showForm, setShowForm] = useState(false);
   const [selectedMIN, setSelectedMIN] = useState(null);
   const [detailMIN, setDetailMIN] = useState(null);
@@ -184,6 +185,22 @@ export default function IssuePage() {
     },
     onError: (e) => toast.error(e?.response?.data?.error || 'Failed to confirm receipt'),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => minAPI.remove(id),
+    onSuccess: () => {
+      toast.success('Issue slip deleted');
+      qc.invalidateQueries({ queryKey: ['min-list'] });
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Delete failed'),
+  });
+
+  const handleDelete = (min) => {
+    const warn = ['issued', 'received'].includes(min.status)
+      ? `Delete ${min.min_number}? The issued quantities will be ADDED BACK to inventory and this slip removed. This cannot be undone.`
+      : `Delete ${min.min_number}? This permanently removes the issue slip. This cannot be undone.`;
+    if (window.confirm(warn)) deleteMutation.mutate(min.id);
+  };
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -327,6 +344,16 @@ export default function IssuePage() {
                       >
                         <Printer className="w-4 h-4" />
                       </button>
+                      {isSuperAdmin && (
+                        <button
+                          onClick={() => handleDelete(min)}
+                          disabled={deleteMutation.isPending && deleteMutation.variables === min.id}
+                          title="Delete issue slip"
+                          className="p-2 rounded-lg border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-all disabled:opacity-50"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

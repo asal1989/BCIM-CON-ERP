@@ -1,6 +1,6 @@
 // src/routes/grn.routes.js
 const express = require('express');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
 const { loadProjectScope, userCanAccessProject, appendProjectScope } = require('../middleware/projectScope');
 const { query, withTransaction } = require('../config/database');
 const { notifyGrnSubmitted, notifyGrnVerifiedStores, notifyGrnApproved } = require('../services/notif.helper');
@@ -562,6 +562,109 @@ router.patch('/:id/approve-qc', async (req, res) => {
       return { status: 'approved' };
     });
     res.json({ data: result });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+// ── DELETE /grn/:id — super-admin only, with guarded stock/bill reversal ──────
+// A GRN posts inventory two ways: (1) auto-created bills at GRN creation
+// ('bill_receipt' txns keyed by bill id) and (2) QC approval (inventory_batches
+// keyed by grn_id, a 'grn' stock txn, and PO → 'received'). Deleting reverses
+// exactly what was posted, in one transaction. It is BLOCKED (nothing changes)
+// when the GRN is too far downstream to safely unwind: a QS certification or
+// vendor invoice references it, a linked bill has progressed past 'pending' or
+// been paid, or a reversal would drive a stock balance negative (goods issued).
+router.delete('/:id', authorize('super_admin'), async (req, res) => {
+  try {
+    const out = await withTransaction(async (client) => {
+      const gR = await client.query(
+        `SELECT g.*, p.company_id
+         FROM grn g JOIN projects p ON p.id = g.project_id
+         WHERE g.id = $1 FOR UPDATE`,
+        [req.params.id]
+      );
+      if (!gR.rows.length || gR.rows[0].company_id !== req.user.company_id) {
+        throw Object.assign(new Error('GRN not found'), { status: 404 });
+      }
+      const grn = gR.rows[0];
+      const site = grn.site_location || 'main';
+
+      // Hard FK blockers (these tables reference grn(id) without cascade and
+      // represent downstream certification / accounting that must not be orphaned).
+      const qsRef = await client.query(`SELECT 1 FROM qs_certifications WHERE grn_id = $1 LIMIT 1`, [grn.id]);
+      if (qsRef.rows.length) {
+        throw Object.assign(new Error('Cannot delete: a QS certification is linked to this GRN. Reverse the certification first.'), { status: 409 });
+      }
+      const invRef = await client.query(`SELECT 1 FROM invoices WHERE grn_id = $1 LIMIT 1`, [grn.id]);
+      if (invRef.rows.length) {
+        throw Object.assign(new Error('Cannot delete: a vendor invoice is linked to this GRN. Remove that invoice first.'), { status: 409 });
+      }
+
+      const subtractStock = async (material_name, qty) => {
+        const q = parseFloat(qty) || 0;
+        if (q <= 0 || !material_name) return;
+        const inv = await client.query(
+          `SELECT id, closing_stock FROM inventory
+           WHERE project_id = $1 AND material_name = $2 AND site_location = $3 FOR UPDATE`,
+          [grn.project_id, String(material_name).trim(), site]
+        );
+        if (!inv.rows.length) return; // nothing posted under this key / already removed
+        if (parseFloat(inv.rows[0].closing_stock) < q) {
+          throw Object.assign(
+            new Error(`Cannot delete: "${material_name}" stock has already been issued/consumed (reversal would go negative). Reverse the issues first.`),
+            { status: 409 }
+          );
+        }
+        await client.query(
+          `UPDATE inventory SET closing_stock = closing_stock - $1, last_updated = NOW() WHERE id = $2`,
+          [q, inv.rows[0].id]
+        );
+      };
+
+      // 1. Linked auto-created bills — block if any progressed/paid, else reverse.
+      const bills = await client.query(
+        `SELECT b.id, b.sl_number, b.workflow_status, COALESCE(u.paid_amount, 0) AS paid_amount
+         FROM tqs_bills b LEFT JOIN tqs_bill_updates u ON u.bill_id = b.id
+         WHERE b.grn_id = $1 AND b.is_deleted = FALSE`,
+        [grn.id]
+      );
+      for (const b of bills.rows) {
+        if (String(b.workflow_status || 'pending') !== 'pending' || parseFloat(b.paid_amount) > 0) {
+          throw Object.assign(
+            new Error(`Cannot delete: linked Bill ${b.sl_number} has been processed/paid. Remove it from the bill workflow first.`),
+            { status: 409 }
+          );
+        }
+      }
+      for (const b of bills.rows) {
+        const li = await client.query(`SELECT item_name, quantity FROM tqs_bill_line_items WHERE bill_id = $1`, [b.id]);
+        for (const l of li.rows) await subtractStock(l.item_name, l.quantity);
+        await client.query(`DELETE FROM stock_transactions WHERE reference_id = $1 AND transaction_type = 'bill_receipt'`, [b.id]);
+        await client.query(`DELETE FROM tqs_bill_files WHERE bill_id = $1`, [b.id]);
+        await client.query(`DELETE FROM tqs_bill_line_items WHERE bill_id = $1`, [b.id]);
+        await client.query(`DELETE FROM tqs_bill_updates WHERE bill_id = $1`, [b.id]);
+        await client.query(`DELETE FROM tqs_bills WHERE id = $1`, [b.id]);
+      }
+
+      // 2. QC-approval posting — reverse only if it actually posted to inventory.
+      if (grn.quality_status === 'approved') {
+        const items = await client.query(`SELECT material_name, quantity_received FROM grn_items WHERE grn_id = $1`, [grn.id]);
+        for (const it of items.rows) await subtractStock(it.material_name, it.quantity_received);
+        await client.query(`DELETE FROM stock_transactions WHERE reference_number = $1 AND transaction_type = 'grn'`, [grn.grn_number]);
+        if (grn.po_id) {
+          await client.query(`UPDATE purchase_orders SET status = 'approved' WHERE id = $1 AND status = 'received'`, [grn.po_id]);
+        }
+      }
+
+      // Always clear forensic batches (FK without cascade; no-op when none exist).
+      await client.query(`DELETE FROM inventory_batches WHERE grn_id = $1`, [grn.id]);
+
+      // 3. Delete the GRN (grn_items cascade).
+      await client.query(`DELETE FROM grn WHERE id = $1`, [grn.id]);
+      return { bills_removed: bills.rows.length, stock_reversed: grn.quality_status === 'approved' || bills.rows.length > 0 };
+    });
+    res.json({ message: 'GRN deleted', ...out });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }

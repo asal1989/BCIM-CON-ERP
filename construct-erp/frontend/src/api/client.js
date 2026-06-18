@@ -430,6 +430,7 @@ export const grnAPI = {
   get:     (id)       => api.get(`/grn/${id}`),
   create:  (data)     => api.post('/grn', data),
   approve: (id, stage) => api.patch(`/grn/${id}/${stage}`),
+  remove:  (id)       => api.delete(`/grn/${id}`),
 };
 
 export const grsAPI = {
@@ -438,6 +439,7 @@ export const grsAPI = {
   create:      (data)   => api.post('/grs', data),
   acknowledge: (id)     => api.patch(`/grs/${id}/acknowledge`),
   cancel:      (id)     => api.patch(`/grs/${id}/cancel`),
+  remove:      (id)     => api.delete(`/grs/${id}`),
 };
 
 export const ignAPI = {
@@ -447,6 +449,7 @@ export const ignAPI = {
   inspect: (id)     => api.patch(`/ign/${id}/inspect`),
   approve: (id)     => api.patch(`/ign/${id}/approve`),
   cancel:  (id)     => api.patch(`/ign/${id}/cancel`),
+  remove:  (id)     => api.delete(`/ign/${id}`),
 };
 
 export const gatePassAPI = {
@@ -998,6 +1001,7 @@ export const minAPI = {
   create:    (data)   => api.post('/stores/min', data),
   authorize: (id)     => api.patch(`/stores/min/${id}/authorize`),
   receive:   (id, data) => api.patch(`/stores/min/${id}/receive`, data),
+  remove:    (id)     => api.delete(`/stores/min/${id}`),
 };
 
 export const engineerLogAPI = {

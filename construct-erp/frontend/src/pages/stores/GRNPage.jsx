@@ -7,11 +7,12 @@ import {
   Truck, CheckCircle2, Clock, AlertTriangle, Package,
   ChevronRight, FileText, Calendar, Hash, TrendingUp,
   ShieldCheck, CheckCheck, RefreshCw, ClipboardList,
-  Eye, Building2
+  Eye, Building2, Trash2
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
 import { grnAPI, projectAPI, vendorAPI, poAPI, inventoryAPI, ignAPI } from '../../api/client';
+import useAuthStore from '../../store/authStore';
 import MaterialCombobox from '../../components/shared/MaterialCombobox';
 import SearchableSelect from '../../components/shared/SearchableSelect';
 import { FIELD_HL } from '../../constants/fieldStyles';
@@ -82,7 +83,7 @@ function WorkflowStepper({ status }) {
 }
 
 /* ── Detail / Approval Panel ──────────────────────────────────── */
-function GRNDetailPanel({ grn, onClose, onVerify, onApprove, verifyLoading, approveLoading, printRef }) {
+function GRNDetailPanel({ grn, onClose, onVerify, onApprove, verifyLoading, approveLoading, printRef, isSuperAdmin, onDelete, deleteLoading }) {
   if (!grn) return null;
   const status = grn.quality_status || grn.status || 'pending';
   const items  = grn.items || [];
@@ -321,6 +322,15 @@ function GRNDetailPanel({ grn, onClose, onVerify, onApprove, verifyLoading, appr
               Close
             </button>
           </div>
+          {isSuperAdmin && (
+            <button
+              onClick={onDelete}
+              disabled={deleteLoading}
+              className="w-full flex items-center justify-center gap-2 text-red-600 font-medium py-2.5 rounded-xl text-sm border border-red-200 hover:bg-red-50 disabled:opacity-50 transition"
+            >
+              <Trash2 size={15} /> {deleteLoading ? 'Deleting…' : 'Delete GRN (reverses stock)'}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -330,6 +340,8 @@ function GRNDetailPanel({ grn, onClose, onVerify, onApprove, verifyLoading, appr
 /* ── Main Page ────────────────────────────────────────────────── */
 export default function GRNPage() {
   const qc = useQueryClient();
+  const { user } = useAuthStore();
+  const isSuperAdmin = String(user?.role || '').toLowerCase() === 'super_admin';
   const [showForm, setShowForm]         = useState(false);
   const [selectedId, setSelectedId]     = useState(null);
   const [search, setSearch]             = useState('');
@@ -384,6 +396,24 @@ export default function GRNPage() {
     },
     onError: (e) => toast.error(e?.response?.data?.error || 'Approval failed'),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => grnAPI.remove(id),
+    onSuccess: () => {
+      toast.success('GRN deleted');
+      qc.invalidateQueries({ queryKey: ['grn-list'] });
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+      setSelectedId(null);
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Delete failed'),
+  });
+
+  const handleDelete = (grn, e) => {
+    e?.stopPropagation?.();
+    if (window.confirm(`Delete ${grn.grn_number}? This reverses the stock it added and removes any unprocessed auto-bills. It is blocked if the goods were already issued/consumed or the GRN is billed/QS-certified. This cannot be undone.`)) {
+      deleteMutation.mutate(grn.id);
+    }
+  };
 
   // Counts
   const counts = {
@@ -603,7 +633,15 @@ export default function GRNPage() {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={status} /></td>
                     <td className="px-4 py-3 text-right">
-                      <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 transition-colors" />
+                      <div className="flex items-center justify-end gap-1">
+                        {isSuperAdmin && (
+                          <button onClick={(e) => handleDelete(grn, e)} title="Delete GRN"
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-300 hover:text-red-600 hover:bg-red-50 transition-colors">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 transition-colors" />
+                      </div>
                     </td>
                   </tr>
                 );
@@ -636,6 +674,9 @@ export default function GRNPage() {
           onApprove={() => approveMutation.mutate(selectedId)}
           verifyLoading={verifyMutation.isPending}
           approveLoading={approveMutation.isPending}
+          isSuperAdmin={isSuperAdmin}
+          onDelete={() => handleDelete(detailedGRN)}
+          deleteLoading={deleteMutation.isPending}
         />
       )}
 

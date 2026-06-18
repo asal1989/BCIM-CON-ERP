@@ -5,12 +5,13 @@ import {
   ShieldCheck, Plus, X, Search, Download, Printer,
   Clock, CheckCircle2, AlertTriangle, Package,
   ChevronRight, FileText, Truck, RefreshCw, ClipboardList,
-  XCircle,
+  XCircle, Trash2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
 import { useReactToPrint } from 'react-to-print';
 import { grsAPI, projectAPI, poAPI } from '../../api/client';
+import useAuthStore from '../../store/authStore';
 import { FIELD_HL } from '../../constants/fieldStyles';
 import toast from 'react-hot-toast';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
@@ -35,7 +36,7 @@ function StatusBadge({ status }) {
 }
 
 /* ── Detail Panel ─────────────────────────────────────────────────────────── */
-function GRSDetailPanel({ grs, onClose, onAcknowledge, ackLoading, onCancel, cancelLoading, onCreateIGN }) {
+function GRSDetailPanel({ grs, onClose, onAcknowledge, ackLoading, onCancel, cancelLoading, onCreateIGN, isSuperAdmin, onDelete, deleteLoading }) {
   if (!grs) return null;
   const items = grs.items || [];
 
@@ -184,6 +185,18 @@ function GRSDetailPanel({ grs, onClose, onAcknowledge, ackLoading, onCancel, can
               {cancelLoading ? 'Cancelling…' : 'Cancel GRS'}
             </button>
           )}
+          <div className="flex items-center gap-2">
+            {isSuperAdmin && (
+              <button onClick={onDelete} disabled={deleteLoading}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 text-red-600 font-medium text-sm border border-red-200 rounded-xl hover:bg-red-50 disabled:opacity-50 transition">
+                <Trash2 size={15} /> {deleteLoading ? 'Deleting…' : 'Delete'}
+              </button>
+            )}
+            <button onClick={onClose}
+              className="flex-1 py-2.5 text-slate-600 font-medium text-sm border border-slate-200 rounded-xl hover:bg-slate-50 transition">
+              Close
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -193,6 +206,8 @@ function GRSDetailPanel({ grs, onClose, onAcknowledge, ackLoading, onCancel, can
 /* ── Main Page ────────────────────────────────────────────────────────────── */
 export default function GRSPage() {
   const qc = useQueryClient();
+  const { user } = useAuthStore();
+  const isSuperAdmin = String(user?.role || '').toLowerCase() === 'super_admin';
   const [showForm, setShowForm]       = useState(false);
   const [selectedId, setSelectedId]   = useState(null);
   const [search, setSearch]           = useState('');
@@ -234,6 +249,24 @@ export default function GRSPage() {
     },
     onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => grsAPI.remove(id),
+    onSuccess: () => {
+      toast.success('GRS deleted');
+      qc.invalidateQueries({ queryKey: ['grs-list'] });
+      setSelectedId(null);
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Delete failed'),
+  });
+
+  const handleDelete = (grs, e) => {
+    e?.stopPropagation?.();
+    if (window.confirm(`Delete ${grs.grs_number}? This permanently removes the GRS and its items. This cannot be undone.`)) {
+      deleteMutation.mutate(grs.id);
+    }
+  };
+
 
   const counts = {
     pending:      grsList.filter(g => g.status === 'pending').length,
@@ -412,7 +445,15 @@ export default function GRSPage() {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={grs.status} /></td>
                     <td className="px-4 py-3 text-right">
-                      <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 transition-colors" />
+                      <div className="flex items-center justify-end gap-1">
+                        {isSuperAdmin && (
+                          <button onClick={(e) => handleDelete(grs, e)} title="Delete GRS"
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-300 hover:text-red-600 hover:bg-red-50 transition-colors">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 transition-colors" />
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -446,6 +487,9 @@ export default function GRSPage() {
               setSelectedId(null);
               window.location.href = `/stores/ign?from_grs=${selectedId}`;
             }}
+            isSuperAdmin={isSuperAdmin}
+            onDelete={() => handleDelete(detailedGRS)}
+            deleteLoading={deleteMutation.isPending}
           />
         )}
 

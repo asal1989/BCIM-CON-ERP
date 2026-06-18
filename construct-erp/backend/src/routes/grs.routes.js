@@ -227,4 +227,19 @@ router.patch('/:id/cancel', async (req, res) => {
   }
 });
 
+// ── DELETE /grs/:id — super-admin only (GRS carries no stock effect) ──────────
+router.delete('/:id', authorize('super_admin'), async (req, res) => {
+  try {
+    const chk = await query(`SELECT id FROM grs WHERE id = $1 AND company_id = $2`,
+      [req.params.id, req.user.company_id]);
+    if (!chk.rows.length) return res.status(404).json({ error: 'GRS not found' });
+    // grs_items has ON DELETE CASCADE, so the header delete removes its lines too.
+    await query(`DELETE FROM grs WHERE id = $1 AND company_id = $2`,
+      [req.params.id, req.user.company_id]);
+    res.json({ message: 'GRS deleted' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
