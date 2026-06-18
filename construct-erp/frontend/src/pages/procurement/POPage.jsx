@@ -1102,11 +1102,21 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
     tbody tr { page-break-inside: avoid; }
     .po-items-table thead { display: table-header-group; }
     .po-items-table tbody tr { page-break-inside: avoid; page-break-after: auto; }
-    /* tfoot repeats signature at the bottom of every printed page */
-    .po-layout-footer { display: table-footer-group; }
-    /* Keep totals block together; let T&C flow naturally across pages */
+    .po-layout-footer { display: none; }
+    /* Keep totals and T&C blocks together on one page */
     .po-totals-block { page-break-inside: avoid; break-inside: avoid; }
-    @page { size: A4 portrait; margin: 8mm 8mm 20mm 8mm; }
+    .po-terms-block  { page-break-inside: avoid; break-inside: avoid; }
+    /* Signature: position:fixed with negative bottom pushes it into the @page margin,
+       so it sits below the content area (no overlap) and repeats on every printed page */
+    .po-page-footer {
+      position: fixed;
+      bottom: -28mm;
+      left: 0; right: 0;
+      padding: 0 12mm;
+      background: white;
+      border-top: 2px solid #000;
+    }
+    @page { size: A4 portrait; margin: 8mm 8mm 40mm 8mm; }
     @media print { body { margin: 0; } }
   </style>
 </head>

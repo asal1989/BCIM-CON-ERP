@@ -116,7 +116,7 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
   // ── Signature / approval grid — rendered in a tfoot so it repeats at the
   //    bottom of EVERY printed page (table-footer-group behaviour) ───────────
   const approvalGrid = (
-    <div className="po-approval-block" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', border: '1px solid #000', fontSize: '8px', height: '80px' }}>
+    <div className="po-approval-block" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', border: '1px solid #000', fontSize: '8px', height: '24mm' }}>
       {/* Col 1: Prepared By */}
       <div style={{ borderRight: '1px solid #000', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px', textAlign: 'center' }}>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
@@ -170,6 +170,7 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
         style={{ width: '210mm', padding: '12mm', boxSizing: 'border-box', fontSize: '10px', lineHeight: '1.4', fontFamily: "'Book Antiqua','Palatino Linotype',Palatino,serif" }}>
 
         <table className="po-layout" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <tfoot className="po-layout-footer" />
           <tbody className="po-layout-body">
             <tr><td style={{ padding: 0 }}>
 
@@ -396,6 +397,11 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
             </td></tr>
           </tbody>
         </table>
+
+        {/* Fixed footer — placed in the @page bottom margin on every printed page */}
+        <div className="po-page-footer">
+          {approvalGrid}
+        </div>
 
       </div>
     </div>
