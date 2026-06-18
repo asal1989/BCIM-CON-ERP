@@ -73,14 +73,14 @@ const router = express.Router();
 // ── helpers ──────────────────────────────────────────────────────────────────
 const n = (v) => parseFloat(v) || 0;
 
-async function nextCNNumber(companyId) {
+async function nextCNNumber(client, companyId) {
   const yr = new Date().getFullYear();
-  const r = await query(
-    `SELECT COUNT(*) FROM credit_notes WHERE company_id = $1 AND EXTRACT(YEAR FROM created_at) = $2`,
-    [companyId, yr]
+  const r = await client.query(
+    `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(cn_number, '^CN/[0-9]+/', '') AS INTEGER)), 0) AS last_seq
+     FROM credit_notes WHERE company_id = $1 AND cn_number LIKE $2`,
+    [companyId, `CN/${yr}/%`]
   );
-  const seq = String(parseInt(r.rows[0].count) + 1).padStart(4, '0');
-  return `CN/${yr}/${seq}`;
+  return `CN/${yr}/${String(parseInt(r.rows[0].last_seq) + 1).padStart(4, '0')}`;
 }
 
 async function getCN(id, companyId) {
@@ -175,12 +175,11 @@ router.post('/', authenticate, async (req, res) => {
     if (!cn_date)     return res.status(400).json({ error: 'cn_date is required' });
     if (!vendor_name) return res.status(400).json({ error: 'vendor_name is required' });
 
-    const cn_number = await nextCNNumber(req.user.company_id);
-
     const gst_amount  = n(cgst_amt) + n(sgst_amt) + n(igst_amt);
     const total_amount = n(basic_amount) + gst_amount;
 
     const result = await withTransaction(async (client) => {
+      const cn_number = await nextCNNumber(client, req.user.company_id);
       const r = await client.query(
         `INSERT INTO credit_notes (
           cn_number, cn_date, vendor_id, vendor_name,

@@ -82,6 +82,24 @@ async function run() {
       [`ALTER TABLE ra_bills ADD COLUMN IF NOT EXISTS client_tds_amount NUMERIC(15,2) DEFAULT 0`, 'RA Bills: client_tds_amount'],
       [`ALTER TABLE ra_bills ADD COLUMN IF NOT EXISTS amount_received NUMERIC(15,2) DEFAULT 0`,   'RA Bills: amount_received'],
       [`ALTER TABLE ra_bills ADD COLUMN IF NOT EXISTS company_id UUID`,               'RA Bills: company_id'],
+
+      // ── Document-number uniqueness guards (prevents duplicate serials under ──
+      //    concurrent inserts; pairs with MAX-based number generation in routes) ─
+      [`CREATE UNIQUE INDEX IF NOT EXISTS uq_grn_number              ON grn(grn_number)`,                                       'Unique: GRN number'],
+      [`CREATE UNIQUE INDEX IF NOT EXISTS uq_je_entry_no            ON journal_entries(company_id, entry_no)`,                  'Unique: Journal entry_no'],
+      [`CREATE UNIQUE INDEX IF NOT EXISTS uq_cn_number              ON credit_notes(company_id, cn_number)`,                    'Unique: Credit note number'],
+      [`CREATE UNIQUE INDEX IF NOT EXISTS uq_dn_number              ON debit_notes(company_id, dn_number)`,                     'Unique: Debit note number'],
+      [`CREATE UNIQUE INDEX IF NOT EXISTS uq_car_proforma_no        ON client_advance_requests(company_id, proforma_no)`,       'Unique: Client advance proforma_no'],
+      [`CREATE UNIQUE INDEX IF NOT EXISTS uq_vo_number              ON variation_orders(vo_number)`,                            'Unique: Variation order number'],
+      [`CREATE UNIQUE INDEX IF NOT EXISTS uq_sc_code                ON sc_subcontractors(company_id, sc_code)`,                 'Unique: SC code'],
+      [`CREATE UNIQUE INDEX IF NOT EXISTS uq_sc_wo_number           ON sc_work_orders(company_id, wo_number)`,                  'Unique: SC work-order number'],
+      [`CREATE UNIQUE INDEX IF NOT EXISTS uq_sc_bill_number         ON sc_bills(company_id, bill_number)`,                      'Unique: SC bill number'],
+      [`CREATE UNIQUE INDEX IF NOT EXISTS uq_sc_mb_number           ON sc_mb_entries(company_id, mb_number)`,                   'Unique: SC MB number'],
+      [`CREATE UNIQUE INDEX IF NOT EXISTS uq_sc_adv_number          ON sc_advances(company_id, adv_number)`,                    'Unique: SC advance number'],
+      [`CREATE UNIQUE INDEX IF NOT EXISTS uq_sc_rr_number           ON sc_retention_releases(company_id, rr_number)`,           'Unique: SC retention-release number'],
+      [`CREATE UNIQUE INDEX IF NOT EXISTS uq_sc_fb_number           ON sc_final_bills(company_id, fb_number)`,                  'Unique: SC final-bill number'],
+      [`CREATE UNIQUE INDEX IF NOT EXISTS uq_sc_nmr_number          ON sc_nmr(company_id, nmr_number)`,                         'Unique: SC NMR number'],
+      [`CREATE UNIQUE INDEX IF NOT EXISTS uq_amd_no                 ON po_amendments(company_id, amendment_no)`,                'Unique: PO amendment_no'],
     ];
 
     for (const [sql, label] of fixes) {

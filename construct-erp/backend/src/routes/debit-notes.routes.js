@@ -64,14 +64,14 @@ const router = express.Router();
 
 const n = (v) => parseFloat(v) || 0;
 
-async function nextDNNumber(companyId) {
+async function nextDNNumber(client, companyId) {
   const yr = new Date().getFullYear();
-  const r = await query(
-    `SELECT COUNT(*) FROM debit_notes WHERE company_id = $1 AND EXTRACT(YEAR FROM created_at) = $2`,
-    [companyId, yr]
+  const r = await client.query(
+    `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(dn_number, '^DN/[0-9]+/', '') AS INTEGER)), 0) AS last_seq
+     FROM debit_notes WHERE company_id = $1 AND dn_number LIKE $2`,
+    [companyId, `DN/${yr}/%`]
   );
-  const seq = String(parseInt(r.rows[0].count) + 1).padStart(4, '0');
-  return `DN/${yr}/${seq}`;
+  return `DN/${yr}/${String(parseInt(r.rows[0].last_seq) + 1).padStart(4, '0')}`;
 }
 
 async function getDN(id, companyId) {
@@ -149,11 +149,11 @@ router.post('/', authenticate, async (req, res) => {
     if (!dn_date)     return res.status(400).json({ error: 'dn_date is required' });
     if (!vendor_name) return res.status(400).json({ error: 'vendor_name is required' });
 
-    const dn_number = await nextDNNumber(req.user.company_id);
     const gst_amount   = n(cgst_amt) + n(sgst_amt) + n(igst_amt);
     const total_amount = n(basic_amount) + gst_amount;
 
     const result = await withTransaction(async (client) => {
+      const dn_number = await nextDNNumber(client, req.user.company_id);
       const r = await client.query(
         `INSERT INTO debit_notes (
           dn_number, dn_date, vendor_id, vendor_name, project_id,

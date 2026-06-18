@@ -5,7 +5,9 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
 const { postAutoJournal } = require('../services/journalAutoPost');
+const { loadProjectScope, appendProjectScope } = require('../middleware/projectScope');
 router.use(authenticate);
+router.use(loadProjectScope);
 
 // Ensure invoice_items table exists (idempotent)
 const ensureInvoiceItemsTable = async () => {
@@ -53,6 +55,7 @@ router.get('/', async (req, res) => {
     if (project_id) { sql += ` AND i.project_id = $${idx++}`; params.push(project_id); }
     if (vendor_id)  { sql += ` AND i.vendor_id = $${idx++}`;  params.push(vendor_id); }
     if (status)     { sql += ` AND i.status = $${idx++}`;     params.push(status); }
+    ({ sql, params } = appendProjectScope(req, sql, params, 'i'));
     sql += ` ORDER BY i.invoice_date DESC`;
     const r = await query(sql, params);
     res.json({ data: r.rows });

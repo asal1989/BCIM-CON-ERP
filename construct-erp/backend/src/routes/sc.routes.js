@@ -12,22 +12,28 @@ const CID  = req => req.user.company_id;
 const ADMIN = ['super_admin','admin'];
 const PLANNER = ['super_admin','admin','project_manager','site_engineer','qs_engineer','procurement_manager'];
 
-// ── Auto-number helpers ────────────────────────────────────────────
-async function nextScCode(cid) {
-  const r = await query(`SELECT COUNT(*) FROM sc_subcontractors WHERE company_id=$1`, [cid]);
-  return `SC-${String(parseInt(r.rows[0].count)+1).padStart(3,'0')}`;
+// ── Auto-number helpers — MAX-based, company-scoped, must be called inside withTransaction ──
+async function nextScCode(client, cid) {
+  const r = await client.query(
+    `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(sc_code, '^SC-', '') AS INTEGER)), 0) AS last_seq
+     FROM sc_subcontractors WHERE company_id=$1 AND sc_code ~ '^SC-[0-9]+'`, [cid]);
+  return `SC-${String(parseInt(r.rows[0].last_seq)+1).padStart(3,'0')}`;
 }
-async function nextWONumber(cid, projId) {
-  const proj = await query(`SELECT name FROM projects WHERE id=$1`, [projId]);
+async function nextWONumber(client, cid, projId) {
+  const proj = await client.query(`SELECT name FROM projects WHERE id=$1`, [projId]);
   const code = (proj.rows[0]?.name||'XX').replace(/[^A-Za-z0-9]/g,'').substring(0,6).toUpperCase();
-  const r = await query(`SELECT COUNT(*) FROM sc_work_orders WHERE company_id=$1`, [cid]);
-  return `WO-${code}-${String(parseInt(r.rows[0].count)+1).padStart(3,'0')}`;
+  const r = await client.query(
+    `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(wo_number, '^WO-[A-Z0-9]+-', '') AS INTEGER)), 0) AS last_seq
+     FROM sc_work_orders WHERE company_id=$1 AND wo_number ~ '^WO-[A-Z0-9]+-[0-9]+'`, [cid]);
+  return `WO-${code}-${String(parseInt(r.rows[0].last_seq)+1).padStart(3,'0')}`;
 }
-async function nextBillNumber(cid, projId) {
-  const proj = await query(`SELECT name FROM projects WHERE id=$1`, [projId]);
+async function nextBillNumber(client, cid, projId) {
+  const proj = await client.query(`SELECT name FROM projects WHERE id=$1`, [projId]);
   const code = (proj.rows[0]?.name||'XX').replace(/[^A-Za-z0-9]/g,'').substring(0,6).toUpperCase();
-  const r = await query(`SELECT COUNT(*) FROM sc_bills WHERE company_id=$1`, [cid]);
-  return `BILL-${code}-${String(parseInt(r.rows[0].count)+1).padStart(3,'0')}`;
+  const r = await client.query(
+    `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(bill_number, '^BILL-[A-Z0-9]+-', '') AS INTEGER)), 0) AS last_seq
+     FROM sc_bills WHERE company_id=$1 AND bill_number ~ '^BILL-[A-Z0-9]+-[0-9]+'`, [cid]);
+  return `BILL-${code}-${String(parseInt(r.rows[0].last_seq)+1).padStart(3,'0')}`;
 }
 
 function normalizeContractorType(vendorType) {
@@ -329,10 +335,13 @@ router.post('/subcontractors', authorize(...PLANNER), async (req, res) => {
   try {
     const { name, contact_person, mobile, email, gst_number, pan_number, address, city, state, pincode, trade_type, contractor_type, bank_name, account_number, ifsc_code, bank_branch, notes } = req.body;
     if (!name) return res.status(400).json({ error: 'Name required' });
-    const sc_code = await nextScCode(CID(req));
-    const r = await query(`INSERT INTO sc_subcontractors (company_id,sc_code,name,contact_person,mobile,email,gst_number,pan_number,address,city,state,pincode,trade_type,contractor_type,bank_name,account_number,ifsc_code,bank_branch,notes,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
-      [CID(req),sc_code,name,contact_person||null,mobile||null,email||null,gst_number||null,pan_number||null,address||null,city||null,state||null,pincode||null,trade_type||null,contractor_type||'sub_contractor',bank_name||null,account_number||null,ifsc_code||null,bank_branch||null,notes||null,req.user.id]);
-    res.status(201).json({ data: r.rows[0] });
+    const result = await withTransaction(async (client) => {
+      const sc_code = await nextScCode(client, CID(req));
+      const r = await client.query(`INSERT INTO sc_subcontractors (company_id,sc_code,name,contact_person,mobile,email,gst_number,pan_number,address,city,state,pincode,trade_type,contractor_type,bank_name,account_number,ifsc_code,bank_branch,notes,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
+        [CID(req),sc_code,name,contact_person||null,mobile||null,email||null,gst_number||null,pan_number||null,address||null,city||null,state||null,pincode||null,trade_type||null,contractor_type||'sub_contractor',bank_name||null,account_number||null,ifsc_code||null,bank_branch||null,notes||null,req.user.id]);
+      return r.rows[0];
+    });
+    res.status(201).json({ data: result });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
@@ -476,20 +485,21 @@ router.post('/work-orders', authorize(...PLANNER), async (req, res) => {
     // Validate subcontractor is active
     const sc = await query(`SELECT status FROM sc_subcontractors WHERE id=$1 AND company_id=$2`, [sc_id, CID(req)]);
     if (!sc.rows.length || sc.rows[0].status !== 'active') return res.status(400).json({ error: 'Subcontractor is not active' });
-    const wo_number = await nextWONumber(CID(req), project_id);
-    const r = await query(`INSERT INTO sc_work_orders (company_id,project_id,sc_id,wo_number,subject,description,scope_of_work,terms_conditions,start_date,end_date,contract_amount,gst_pct,tds_pct,retention_pct,advance_amount,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
-      [CID(req),project_id,sc_id,wo_number,subject,description||null,scope_of_work||null,terms_conditions||null,start_date||null,end_date||null,contract_amount||0,gst_pct||18,tds_pct||2,retention_pct||5,advance_amount||0,req.user.id]);
-    // Insert BOQ items
-    if (Array.isArray(items) && items.length) {
-      for (let k=0; k<items.length; k++) {
-        const it = items[k];
-        await query(`INSERT INTO sc_wo_items (wo_id,item_code,description,unit,qty,rate,sequence_no) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-          [r.rows[0].id, it.item_code||null, it.description, it.unit||null, it.qty||0, it.rate||0, k+1]);
+    const result = await withTransaction(async (client) => {
+      const wo_number = await nextWONumber(client, CID(req), project_id);
+      const r = await client.query(`INSERT INTO sc_work_orders (company_id,project_id,sc_id,wo_number,subject,description,scope_of_work,terms_conditions,start_date,end_date,contract_amount,gst_pct,tds_pct,retention_pct,advance_amount,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+        [CID(req),project_id,sc_id,wo_number,subject,description||null,scope_of_work||null,terms_conditions||null,start_date||null,end_date||null,contract_amount||0,gst_pct||18,tds_pct||2,retention_pct||5,advance_amount||0,req.user.id]);
+      if (Array.isArray(items) && items.length) {
+        for (let k=0; k<items.length; k++) {
+          const it = items[k];
+          await client.query(`INSERT INTO sc_wo_items (wo_id,item_code,description,unit,qty,rate,sequence_no) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [r.rows[0].id, it.item_code||null, it.description, it.unit||null, it.qty||0, it.rate||0, k+1]);
+        }
       }
-    }
-    // Notify approvers about new work order
-    notifyScWoSubmitted(CID(req), r.rows[0]);
-    res.status(201).json({ data: r.rows[0] });
+      return r.rows[0];
+    });
+    notifyScWoSubmitted(CID(req), result);
+    res.status(201).json({ data: result });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
@@ -764,80 +774,83 @@ router.post('/bills', authorize(...PLANNER), async (req, res) => {
     // Net = Gross + GST + Retention Released − Credit Note − TDS − Retention − Advances − Materials − Penalty − Labour Cess − Other
     const net = grossAmt + gst + retRelease - creditNote - tds - ret - adv - mat - pen - labourCess - oth;
 
-    const bill_number = await nextBillNumber(CID(req), woRow.project_id);
+    const billResult = await withTransaction(async (client) => {
+      const bill_number = await nextBillNumber(client, CID(req), woRow.project_id);
 
-    // ── Insert bill ───────────────────────────────────────────────────────────
-    const r = await query(
-      `INSERT INTO sc_bills
-         (company_id,project_id,wo_id,sc_id,bill_number,bill_date,bill_type,
-          period_from,period_to,description,
-          gross_amount,gst_pct,gst_amount,
-          is_igst,cgst_amount,sgst_amount,igst_amount,
-          tds_pct,tds_amount,retention_pct,retention_amount,
-          advance_recovery,material_recovery,penalty_amount,other_deductions,
-          labour_cess_amount,retention_release_amount,credit_note_amount,
-          net_payable,attachments,created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-               $11,$12,$13,$14,$15,$16,$17,
-               $18,$19,$20,$21,
-               $22,$23,$24,$25,
-               $26,$27,$28,
-               $29,$30,$31)
-       RETURNING *`,
-      [CID(req), woRow.project_id, wo_id, woRow.sc_id, bill_number,
-       bill_date || new Date().toISOString().slice(0,10), bill_type || 'ra',
-       period_from||null, period_to||null, description||null,
-       grossAmt, effectiveGstPct, gst,
-       isIgst, cgst, sgst, igst,
-       tds_pct||woRow.tds_pct||2, tds,
-       retention_pct||woRow.retention_pct||5, ret,
-       adv, mat, pen, oth,
-       labourCess, retRelease, creditNote,
-       net, JSON.stringify(attachments||[]), req.user.id]);
+      // ── Insert bill ─────────────────────────────────────────────────────────
+      const r = await client.query(
+        `INSERT INTO sc_bills
+           (company_id,project_id,wo_id,sc_id,bill_number,bill_date,bill_type,
+            period_from,period_to,description,
+            gross_amount,gst_pct,gst_amount,
+            is_igst,cgst_amount,sgst_amount,igst_amount,
+            tds_pct,tds_amount,retention_pct,retention_amount,
+            advance_recovery,material_recovery,penalty_amount,other_deductions,
+            labour_cess_amount,retention_release_amount,credit_note_amount,
+            net_payable,attachments,created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+                 $11,$12,$13,$14,$15,$16,$17,
+                 $18,$19,$20,$21,
+                 $22,$23,$24,$25,
+                 $26,$27,$28,
+                 $29,$30,$31)
+         RETURNING *`,
+        [CID(req), woRow.project_id, wo_id, woRow.sc_id, bill_number,
+         bill_date || new Date().toISOString().slice(0,10), bill_type || 'ra',
+         period_from||null, period_to||null, description||null,
+         grossAmt, effectiveGstPct, gst,
+         isIgst, cgst, sgst, igst,
+         tds_pct||woRow.tds_pct||2, tds,
+         retention_pct||woRow.retention_pct||5, ret,
+         adv, mat, pen, oth,
+         labourCess, retRelease, creditNote,
+         net, JSON.stringify(attachments||[]), req.user.id]);
 
-    const billId = r.rows[0].id;
+      const billId = r.rows[0].id;
 
-    // ── Insert bill items + update per-item billed_qty ────────────────────────
-    if (Array.isArray(items) && items.length) {
-      for (let k = 0; k < items.length; k++) {
-        const it = items[k];
-        const currQty = parseFloat(it.curr_qty || 0);
-        if (currQty <= 0) continue;
-        await query(
-          `INSERT INTO sc_bill_items (bill_id,wo_item_id,description,unit,wo_qty,prev_qty,curr_qty,balance_qty,rate,sequence_no)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-          [billId, it.wo_item_id||null, it.description, it.unit||null,
-           it.wo_qty||0, it.prev_qty||0, currQty,
-           Math.max(0, parseFloat(it.balance_qty||0) - currQty), it.rate||0, k+1]);
+      // ── Insert bill items + update per-item billed_qty ──────────────────────
+      if (Array.isArray(items) && items.length) {
+        for (let k = 0; k < items.length; k++) {
+          const it = items[k];
+          const currQty = parseFloat(it.curr_qty || 0);
+          if (currQty <= 0) continue;
+          await client.query(
+            `INSERT INTO sc_bill_items (bill_id,wo_item_id,description,unit,wo_qty,prev_qty,curr_qty,balance_qty,rate,sequence_no)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+            [billId, it.wo_item_id||null, it.description, it.unit||null,
+             it.wo_qty||0, it.prev_qty||0, currQty,
+             Math.max(0, parseFloat(it.balance_qty||0) - currQty), it.rate||0, k+1]);
 
-        // Update live billed_qty on the WO item
-        if (it.wo_item_id) {
-          await query(
-            `UPDATE sc_wo_items
-             SET billed_qty = COALESCE(billed_qty,0) + $1,
-                 balance_qty = GREATEST(0, COALESCE(qty,0) - COALESCE(billed_qty,0) - $1)
-             WHERE id=$2`,
-            [currQty, it.wo_item_id]);
+          if (it.wo_item_id) {
+            await client.query(
+              `UPDATE sc_wo_items
+               SET billed_qty = COALESCE(billed_qty,0) + $1,
+                   balance_qty = GREATEST(0, COALESCE(qty,0) - COALESCE(billed_qty,0) - $1)
+               WHERE id=$2`,
+              [currQty, it.wo_item_id]);
+          }
         }
       }
-    }
 
-    // ── Update WO financial totals ─────────────────────────────────────────────
-    await query(
-      `UPDATE sc_work_orders
-       SET total_billed = total_billed + $1,
-           retention_held = retention_held + $2,
-           updated_at = NOW()
-       WHERE id = $3`,
-      [grossAmt, ret, wo_id]);
+      // ── Update WO financial totals ───────────────────────────────────────────
+      await client.query(
+        `UPDATE sc_work_orders
+         SET total_billed = total_billed + $1,
+             retention_held = retention_held + $2,
+             updated_at = NOW()
+         WHERE id = $3`,
+        [grossAmt, ret, wo_id]);
 
-    // ── Audit log ─────────────────────────────────────────────────────────────
-    await query(
-      `INSERT INTO sc_bill_approvals (bill_id,stage,action,actor_id,actor_name,comments)
-       VALUES ($1,'draft','submitted',$2,$3,'Bill created')`,
-      [billId, req.user.id, req.user.name]);
+      // ── Audit log ───────────────────────────────────────────────────────────
+      await client.query(
+        `INSERT INTO sc_bill_approvals (bill_id,stage,action,actor_id,actor_name,comments)
+         VALUES ($1,'draft','submitted',$2,$3,'Bill created')`,
+        [billId, req.user.id, req.user.name]);
 
-    res.status(201).json({ data: r.rows[0] });
+      return r.rows[0];
+    });
+
+    res.status(201).json({ data: billResult });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
@@ -932,19 +945,21 @@ router.patch('/bills/:id/approve', authorize('super_admin','admin','project_mana
     // ── Auto-generate IPC on final approval ──────────────────────────────────
     if (isFinal) {
       try {
-        const ipcNum = await nextIPCNumber(CID(req), b.project_id);
-        await query(
-          `INSERT INTO sc_ipcs
-             (company_id,project_id,wo_id,sc_id,bill_id,ipc_number,ipc_date,
-              gross_amount,net_payable,gst_amount,tds_amount,retention_amount,
-              approved_by,approved_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
-           ON CONFLICT (bill_id) DO NOTHING`,
-          [CID(req), b.project_id, b.wo_id, b.sc_id, b.id, ipcNum,
-           new Date().toISOString().slice(0,10),
-           b.gross_amount, b.net_payable, b.gst_amount||0,
-           b.tds_amount||0, b.retention_amount||0,
-           req.user.id]);
+        await withTransaction(async (client) => {
+          const ipcNum = await nextIPCNumber(client, CID(req), b.project_id);
+          await client.query(
+            `INSERT INTO sc_ipcs
+               (company_id,project_id,wo_id,sc_id,bill_id,ipc_number,ipc_date,
+                gross_amount,net_payable,gst_amount,tds_amount,retention_amount,
+                approved_by,approved_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
+             ON CONFLICT (bill_id) DO NOTHING`,
+            [CID(req), b.project_id, b.wo_id, b.sc_id, b.id, ipcNum,
+             new Date().toISOString().slice(0,10),
+             b.gross_amount, b.net_payable, b.gst_amount||0,
+             b.tds_amount||0, b.retention_amount||0,
+             req.user.id]);
+        });
       } catch(ipcErr) {
         // IPC failure is non-fatal — log but don't block the approval response
         console.error('IPC generation failed:', ipcErr.message);
@@ -1184,17 +1199,21 @@ router.post('/settings', authorize(...ADMIN), async (req, res) => {
 // ════════════════════════════════════════════════════════════════════
 // 10. MEASUREMENT BOOK (MB)
 // ════════════════════════════════════════════════════════════════════
-async function nextMBNumber(cid, projId) {
-  const proj = await query(`SELECT name FROM projects WHERE id=$1`, [projId]);
+async function nextMBNumber(client, cid, projId) {
+  const proj = await client.query(`SELECT name FROM projects WHERE id=$1`, [projId]);
   const code = (proj.rows[0]?.name||'XX').replace(/[^A-Za-z0-9]/g,'').substring(0,6).toUpperCase();
-  const r = await query(`SELECT COUNT(*) FROM sc_mb_entries WHERE company_id=$1`, [cid]);
-  return `MB-${code}-${String(parseInt(r.rows[0].count)+1).padStart(3,'0')}`;
+  const r = await client.query(
+    `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(mb_number, '^MB-[A-Z0-9]+-', '') AS INTEGER)), 0) AS last_seq
+     FROM sc_mb_entries WHERE company_id=$1 AND mb_number ~ '^MB-[A-Z0-9]+-[0-9]+'`, [cid]);
+  return `MB-${code}-${String(parseInt(r.rows[0].last_seq)+1).padStart(3,'0')}`;
 }
-async function nextIPCNumber(cid, projId) {
-  const proj = await query(`SELECT name FROM projects WHERE id=$1`, [projId]);
+async function nextIPCNumber(client, cid, projId) {
+  const proj = await client.query(`SELECT name FROM projects WHERE id=$1`, [projId]);
   const code = (proj.rows[0]?.name||'XX').replace(/[^A-Za-z0-9]/g,'').substring(0,6).toUpperCase();
-  const r = await query(`SELECT COUNT(*) FROM sc_ipcs WHERE company_id=$1`, [cid]);
-  return `IPC-${code}-${String(parseInt(r.rows[0].count)+1).padStart(3,'0')}`;
+  const r = await client.query(
+    `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(ipc_number, '^IPC-[A-Z0-9]+-', '') AS INTEGER)), 0) AS last_seq
+     FROM sc_ipcs WHERE company_id=$1 AND ipc_number ~ '^IPC-[A-Z0-9]+-[0-9]+'`, [cid]);
+  return `IPC-${code}-${String(parseInt(r.rows[0].last_seq)+1).padStart(3,'0')}`;
 }
 // Helper to load approval stages from settings (with fallback)
 async function getApprovalStages(cid) {
@@ -1249,16 +1268,19 @@ router.post('/mb', authorize(...PLANNER), async (req, res) => {
         }
       }
     }
-    const mb_number = await nextMBNumber(CID(req), wo.rows[0].project_id);
-    const r = await query(`INSERT INTO sc_mb_entries
-      (company_id,project_id,wo_id,wo_item_id,sc_id,mb_number,mb_date,tower_block,floor_number,
-       location_detail,drawing_ref,description,unit,executed_qty,previous_qty,remarks,site_photos,created_by)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
-      [CID(req),wo.rows[0].project_id,wo_id,wo_item_id||null,wo.rows[0].sc_id,mb_number,
-       mb_date||new Date().toISOString().slice(0,10),tower_block||null,floor_number||null,
-       location_detail||null,drawing_ref||null,description,unit||null,executed_qty,prev_qty,
-       remarks||null,JSON.stringify(site_photos||[]),req.user.id]);
-    res.status(201).json({ data: r.rows[0] });
+    const mbResult = await withTransaction(async (client) => {
+      const mb_number = await nextMBNumber(client, CID(req), wo.rows[0].project_id);
+      const r = await client.query(`INSERT INTO sc_mb_entries
+        (company_id,project_id,wo_id,wo_item_id,sc_id,mb_number,mb_date,tower_block,floor_number,
+         location_detail,drawing_ref,description,unit,executed_qty,previous_qty,remarks,site_photos,created_by)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+        [CID(req),wo.rows[0].project_id,wo_id,wo_item_id||null,wo.rows[0].sc_id,mb_number,
+         mb_date||new Date().toISOString().slice(0,10),tower_block||null,floor_number||null,
+         location_detail||null,drawing_ref||null,description,unit||null,executed_qty,prev_qty,
+         remarks||null,JSON.stringify(site_photos||[]),req.user.id]);
+      return r.rows[0];
+    });
+    res.status(201).json({ data: mbResult });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
@@ -1339,11 +1361,13 @@ router.patch('/mb/:id/qaqc-clear', authorize('super_admin','admin','qs_engineer'
 // ════════════════════════════════════════════════════════════════════
 // 11. ADVANCES
 // ════════════════════════════════════════════════════════════════════
-async function nextAdvNumber(cid, projId) {
-  const proj = await query(`SELECT name FROM projects WHERE id=$1`, [projId]);
+async function nextAdvNumber(client, cid, projId) {
+  const proj = await client.query(`SELECT name FROM projects WHERE id=$1`, [projId]);
   const code = (proj.rows[0]?.name||'XX').replace(/[^A-Za-z0-9]/g,'').substring(0,6).toUpperCase();
-  const r = await query(`SELECT COUNT(*) FROM sc_advances WHERE company_id=$1`, [cid]);
-  return `ADV-${code}-${String(parseInt(r.rows[0].count)+1).padStart(3,'0')}`;
+  const r = await client.query(
+    `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(adv_number, '^ADV-[A-Z0-9]+-', '') AS INTEGER)), 0) AS last_seq
+     FROM sc_advances WHERE company_id=$1 AND adv_number ~ '^ADV-[A-Z0-9]+-[0-9]+'`, [cid]);
+  return `ADV-${code}-${String(parseInt(r.rows[0].last_seq)+1).padStart(3,'0')}`;
 }
 
 router.get('/advances', async (req, res) => {
@@ -1383,15 +1407,17 @@ router.post('/advances', authorize(...ADMIN,'accounts'), async (req, res) => {
     if (!wo_id || !amount) return res.status(400).json({ error: 'wo_id and amount required' });
     const wo = await query(`SELECT * FROM sc_work_orders WHERE id=$1 AND company_id=$2`, [wo_id, CID(req)]);
     if (!wo.rows.length) return res.status(404).json({ error: 'Work order not found' });
-    const adv_num = await nextAdvNumber(CID(req), wo.rows[0].project_id);
-    const r = await query(`INSERT INTO sc_advances (company_id,project_id,wo_id,sc_id,advance_number,advance_date,amount,recovery_pct,recovery_start_bill,payment_mode,reference_no,remarks,created_by)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-      [CID(req),wo.rows[0].project_id,wo_id,wo.rows[0].sc_id,adv_num,
-       advance_date||new Date().toISOString().slice(0,10),amount,recovery_pct||10,
-       recovery_start_bill||null,payment_mode||'bank_transfer',reference_no||null,remarks||null,req.user.id]);
-    // Update WO advance_amount
-    await query(`UPDATE sc_work_orders SET advance_paid=advance_paid+$1, updated_at=NOW() WHERE id=$2`, [amount, wo_id]);
-    res.status(201).json({ data: r.rows[0] });
+    const advResult = await withTransaction(async (client) => {
+      const adv_num = await nextAdvNumber(client, CID(req), wo.rows[0].project_id);
+      const r = await client.query(`INSERT INTO sc_advances (company_id,project_id,wo_id,sc_id,advance_number,advance_date,amount,recovery_pct,recovery_start_bill,payment_mode,reference_no,remarks,created_by)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+        [CID(req),wo.rows[0].project_id,wo_id,wo.rows[0].sc_id,adv_num,
+         advance_date||new Date().toISOString().slice(0,10),amount,recovery_pct||10,
+         recovery_start_bill||null,payment_mode||'bank_transfer',reference_no||null,remarks||null,req.user.id]);
+      await client.query(`UPDATE sc_work_orders SET advance_paid=advance_paid+$1, updated_at=NOW() WHERE id=$2`, [amount, wo_id]);
+      return r.rows[0];
+    });
+    res.status(201).json({ data: advResult });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
@@ -1454,11 +1480,13 @@ router.post('/material-recoveries', authorize(...PLANNER,'accounts'), async (req
 // ════════════════════════════════════════════════════════════════════
 // 13. RETENTION RELEASES
 // ════════════════════════════════════════════════════════════════════
-async function nextRRNumber(cid, projId) {
-  const proj = await query(`SELECT name FROM projects WHERE id=$1`, [projId]);
+async function nextRRNumber(client, cid, projId) {
+  const proj = await client.query(`SELECT name FROM projects WHERE id=$1`, [projId]);
   const code = (proj.rows[0]?.name||'XX').replace(/[^A-Za-z0-9]/g,'').substring(0,6).toUpperCase();
-  const r = await query(`SELECT COUNT(*) FROM sc_retention_releases WHERE company_id=$1`, [cid]);
-  return `RR-${code}-${String(parseInt(r.rows[0].count)+1).padStart(3,'0')}`;
+  const r = await client.query(
+    `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(rr_number, '^RR-[A-Z0-9]+-', '') AS INTEGER)), 0) AS last_seq
+     FROM sc_retention_releases WHERE company_id=$1 AND rr_number ~ '^RR-[A-Z0-9]+-[0-9]+'`, [cid]);
+  return `RR-${code}-${String(parseInt(r.rows[0].last_seq)+1).padStart(3,'0')}`;
 }
 
 router.get('/retention-releases', async (req, res) => {
@@ -1520,13 +1548,16 @@ router.post('/retention-releases', authorize(...ADMIN,'accounts'), async (req, r
     if (!wo.rows.length) return res.status(404).json({ error: 'Work order not found' });
     // Get total retained
     const retained = await query(`SELECT COALESCE(SUM(retention_amount),0) AS total FROM sc_bills WHERE wo_id=$1 AND status NOT IN ('draft','rejected')`, [wo_id]);
-    const rr_num = await nextRRNumber(CID(req), wo.rows[0].project_id);
-    const r = await query(`INSERT INTO sc_retention_releases (company_id,project_id,wo_id,sc_id,release_number,release_date,total_retained,release_amount,remarks,created_by)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [CID(req),wo.rows[0].project_id,wo_id,wo.rows[0].sc_id,rr_num,
-       release_date||new Date().toISOString().slice(0,10),
-       parseFloat(retained.rows[0].total||0),release_amount,remarks||null,req.user.id]);
-    res.status(201).json({ data: r.rows[0] });
+    const rrResult = await withTransaction(async (client) => {
+      const rr_num = await nextRRNumber(client, CID(req), wo.rows[0].project_id);
+      const r = await client.query(`INSERT INTO sc_retention_releases (company_id,project_id,wo_id,sc_id,release_number,release_date,total_retained,release_amount,remarks,created_by)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+        [CID(req),wo.rows[0].project_id,wo_id,wo.rows[0].sc_id,rr_num,
+         release_date||new Date().toISOString().slice(0,10),
+         parseFloat(retained.rows[0].total||0),release_amount,remarks||null,req.user.id]);
+      return r.rows[0];
+    });
+    res.status(201).json({ data: rrResult });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
@@ -1554,11 +1585,13 @@ router.patch('/retention-releases/:id/release', authorize(...ADMIN,'accounts'), 
 // ════════════════════════════════════════════════════════════════════
 // 14. FINAL BILLS
 // ════════════════════════════════════════════════════════════════════
-async function nextFBNumber(cid, projId) {
-  const proj = await query(`SELECT name FROM projects WHERE id=$1`, [projId]);
+async function nextFBNumber(client, cid, projId) {
+  const proj = await client.query(`SELECT name FROM projects WHERE id=$1`, [projId]);
   const code = (proj.rows[0]?.name||'XX').replace(/[^A-Za-z0-9]/g,'').substring(0,6).toUpperCase();
-  const r = await query(`SELECT COUNT(*) FROM sc_final_bills WHERE company_id=$1`, [cid]);
-  return `FB-${code}-${String(parseInt(r.rows[0].count)+1).padStart(3,'0')}`;
+  const r = await client.query(
+    `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(fb_number, '^FB-[A-Z0-9]+-', '') AS INTEGER)), 0) AS last_seq
+     FROM sc_final_bills WHERE company_id=$1 AND fb_number ~ '^FB-[A-Z0-9]+-[0-9]+'`, [cid]);
+  return `FB-${code}-${String(parseInt(r.rows[0].last_seq)+1).padStart(3,'0')}`;
 }
 
 router.get('/final-bills', async (req, res) => {
@@ -1591,13 +1624,16 @@ router.post('/final-bills', authorize(...ADMIN,'qs_engineer'), async (req, res) 
     const ret_released = parseFloat(retention_released||0);
     const other_adj    = parseFloat(other_adjustments||0);
     const net_final    = parseFloat(bs.total_billed||0) - parseFloat(bs.total_paid||0) + ret_released + other_adj;
-    const fb_number = await nextFBNumber(CID(req), woRow.project_id);
-    const r = await query(`INSERT INTO sc_final_bills (company_id,project_id,wo_id,sc_id,final_bill_number,bill_date,total_wo_value,total_ra_billed,total_ra_paid,retention_released,advance_recovered,other_adjustments,net_final_amount,remarks,created_by)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
-      [CID(req),woRow.project_id,wo_id,woRow.sc_id,fb_number,
-       bill_date||new Date().toISOString().slice(0,10),woRow.contract_amount,
-       bs.total_billed,bs.total_paid,ret_released,bs.total_adv_rec,other_adj,net_final,remarks||null,req.user.id]);
-    res.status(201).json({ data: r.rows[0] });
+    const fbResult = await withTransaction(async (client) => {
+      const fb_number = await nextFBNumber(client, CID(req), woRow.project_id);
+      const r = await client.query(`INSERT INTO sc_final_bills (company_id,project_id,wo_id,sc_id,final_bill_number,bill_date,total_wo_value,total_ra_billed,total_ra_paid,retention_released,advance_recovered,other_adjustments,net_final_amount,remarks,created_by)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+        [CID(req),woRow.project_id,wo_id,woRow.sc_id,fb_number,
+         bill_date||new Date().toISOString().slice(0,10),woRow.contract_amount,
+         bs.total_billed,bs.total_paid,ret_released,bs.total_adv_rec,other_adj,net_final,remarks||null,req.user.id]);
+      return r.rows[0];
+    });
+    res.status(201).json({ data: fbResult });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
@@ -1706,11 +1742,13 @@ router.get('/reports/payment-register', async (req, res) => {
 // ════════════════════════════════════════════════════════════════════
 // NMR — NOMINAL MUSTER ROLL (Labour Contractor Billing)
 // ════════════════════════════════════════════════════════════════════
-async function nextNMRNumber(cid, projId) {
-  const proj = await query(`SELECT name FROM projects WHERE id=$1`, [projId]);
+async function nextNMRNumber(client, cid, projId) {
+  const proj = await client.query(`SELECT name FROM projects WHERE id=$1`, [projId]);
   const code = (proj.rows[0]?.name||'XX').replace(/[^A-Za-z0-9]/g,'').substring(0,6).toUpperCase();
-  const r = await query(`SELECT COUNT(*) FROM sc_nmr WHERE company_id=$1`, [cid]);
-  return `NMR-${code}-${String(parseInt(r.rows[0].count)+1).padStart(3,'0')}`;
+  const r = await client.query(
+    `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(nmr_number, '^NMR-[A-Z0-9]+-', '') AS INTEGER)), 0) AS last_seq
+     FROM sc_nmr WHERE company_id=$1 AND nmr_number ~ '^NMR-[A-Z0-9]+-[0-9]+'`, [cid]);
+  return `NMR-${code}-${String(parseInt(r.rows[0].last_seq)+1).padStart(3,'0')}`;
 }
 
 // List NMRs
@@ -1869,16 +1907,20 @@ router.post('/nmr', authorize(...PLANNER), async (req, res) => {
       else unskilledWages += dayWage;
     }
 
-    const nmr_number = await nextNMRNumber(CID(req), wo.rows[0].project_id);
-    const r = await query(`INSERT INTO sc_nmr
-      (company_id,project_id,wo_id,sc_id,nmr_number,period_from,period_to,
-       total_workers,total_mandays,total_wages,skilled_wages,unskilled_wages,remarks,created_by)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
-      [CID(req), wo.rows[0].project_id, wo_id, sc_id, nmr_number,
-       period_from, period_to, workers.rows.length,
-       totalMandays, parseFloat(totalWages.toFixed(2)),
-       parseFloat(skilledWages.toFixed(2)), parseFloat(unskilledWages.toFixed(2)),
-       remarks||null, req.user.id]);
+    const { nmr_number, nmrRow } = await withTransaction(async (client) => {
+      const nmr_number = await nextNMRNumber(client, CID(req), wo.rows[0].project_id);
+      const r = await client.query(`INSERT INTO sc_nmr
+        (company_id,project_id,wo_id,sc_id,nmr_number,period_from,period_to,
+         total_workers,total_mandays,total_wages,skilled_wages,unskilled_wages,remarks,created_by)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+        [CID(req), wo.rows[0].project_id, wo_id, sc_id, nmr_number,
+         period_from, period_to, workers.rows.length,
+         totalMandays, parseFloat(totalWages.toFixed(2)),
+         parseFloat(skilledWages.toFixed(2)), parseFloat(unskilledWages.toFixed(2)),
+         remarks||null, req.user.id]);
+      return { nmr_number, nmrRow: r };
+    });
+    const r = nmrRow;
 
     res.status(201).json({ data: r.rows[0] });
   } catch(e){ res.status(500).json({ error: e.message }); }
@@ -1936,32 +1978,31 @@ router.post('/nmr/:id/raise-bill', authorize(...PLANNER), async (req, res) => {
     const net  = gross + gst - tds - ret;
     const avgRate = n.total_mandays > 0 ? parseFloat((gross / n.total_mandays).toFixed(2)) : 0;
 
-    const bill_number = await nextBillNumber(CID(req), n.project_id);
-    const billR = await query(`INSERT INTO sc_bills
-      (company_id,project_id,wo_id,sc_id,bill_number,bill_date,bill_type,
-       period_from,period_to,description,gross_amount,
-       gst_pct,gst_amount,tds_pct,tds_amount,retention_pct,retention_amount,
-       advance_recovery,material_recovery,penalty_amount,other_deductions,net_payable,
-       attachments,created_by)
-      VALUES ($1,$2,$3,$4,$5,$6,'ra',$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,0,0,0,0,$17,'[]',$18)
-      RETURNING *`,
-      [CID(req), n.project_id, n.wo_id, n.sc_id, bill_number,
-       new Date().toISOString().slice(0,10),
-       n.period_from, n.period_to,
-       `Labour charges as per NMR ${n.nmr_number} — ${n.total_workers} workers, ${n.total_mandays} man-days`,
-       gross, gstPct, gst, tdsPct, tds, retPct, ret, net, req.user.id]);
+    const nmrBillResult = await withTransaction(async (client) => {
+      const bill_number = await nextBillNumber(client, CID(req), n.project_id);
+      const billR = await client.query(`INSERT INTO sc_bills
+        (company_id,project_id,wo_id,sc_id,bill_number,bill_date,bill_type,
+         period_from,period_to,description,gross_amount,
+         gst_pct,gst_amount,tds_pct,tds_amount,retention_pct,retention_amount,
+         advance_recovery,material_recovery,penalty_amount,other_deductions,net_payable,
+         attachments,created_by)
+        VALUES ($1,$2,$3,$4,$5,$6,'ra',$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,0,0,0,0,$17,'[]',$18)
+        RETURNING *`,
+        [CID(req), n.project_id, n.wo_id, n.sc_id, bill_number,
+         new Date().toISOString().slice(0,10),
+         n.period_from, n.period_to,
+         `Labour charges as per NMR ${n.nmr_number} — ${n.total_workers} workers, ${n.total_mandays} man-days`,
+         gross, gstPct, gst, tdsPct, tds, retPct, ret, net, req.user.id]);
 
-    const billId = billR.rows[0].id;
+      const billId = billR.rows[0].id;
+      await client.query(`INSERT INTO sc_bill_items (bill_id,description,unit,wo_qty,prev_qty,curr_qty,balance_qty,rate,sequence_no) VALUES ($1,$2,'Mandays',0,0,$3,0,$4,1)`,
+        [billId, `Labour Charges (NMR ${n.nmr_number})`, n.total_mandays, avgRate]);
+      await client.query(`UPDATE sc_nmr SET status='billed', bill_id=$1, updated_at=NOW() WHERE id=$2`, [billId, req.params.id]);
+      await client.query(`UPDATE sc_work_orders SET total_billed=total_billed+$1, retention_held=retention_held+$2, updated_at=NOW() WHERE id=$3`, [gross, ret, n.wo_id]);
+      return billR.rows[0];
+    });
 
-    // Insert summary bill item
-    await query(`INSERT INTO sc_bill_items (bill_id,description,unit,wo_qty,prev_qty,curr_qty,balance_qty,rate,sequence_no) VALUES ($1,$2,'Mandays',0,0,$3,0,$4,1)`,
-      [billId, `Labour Charges (NMR ${n.nmr_number})`, n.total_mandays, avgRate]);
-
-    // Link NMR → bill
-    await query(`UPDATE sc_nmr SET status='billed', bill_id=$1, updated_at=NOW() WHERE id=$2`, [billId, req.params.id]);
-    await query(`UPDATE sc_work_orders SET total_billed=total_billed+$1, retention_held=retention_held+$2, updated_at=NOW() WHERE id=$3`, [gross, ret, n.wo_id]);
-
-    res.status(201).json({ data: { bill: billR.rows[0], nmr_number: n.nmr_number } });
+    res.status(201).json({ data: { bill: nmrBillResult, nmr_number: n.nmr_number } });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 

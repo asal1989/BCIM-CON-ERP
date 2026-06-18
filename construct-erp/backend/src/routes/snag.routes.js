@@ -5,12 +5,19 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { notifySnagRaised, notifySnagClosed } = require('../services/notif.helper');
 
 const db = () => require('../config/database').pool;
+const { withTransaction } = require('../config/database');
 
 const EDITORS  = ['project_manager', 'site_engineer', 'admin', 'super_admin'];
 const MANAGERS = ['project_manager', 'admin', 'super_admin'];
 const ADMINS   = ['admin', 'super_admin'];
 
 router.use(authenticate);
+
+/* ── Auto-migrate ──────────────────────────────────────────────────────── */
+(async () => {
+  const safe = async (sql) => { try { await db().query(sql); } catch {} };
+  await safe(`CREATE UNIQUE INDEX IF NOT EXISTS uq_snag_items_code ON snag_items(project_id, snag_code)`);
+})();
 
 // ── GET /snags/stats — KPI counts (must be before /:id) ──────────────────
 router.get('/stats', async (req, res) => {
@@ -126,25 +133,29 @@ router.post('/', authorize(EDITORS), async (req, res) => {
     if (!title)      return res.status(400).json({ error: 'title is required' });
 
     // Auto-generate snag_code: SNF-001
-    const { rows: countRows } = await db().query(
-      `SELECT COUNT(*) FROM snag_items WHERE project_id = $1`, [project_id]
-    );
-    const seq      = parseInt(countRows[0].count, 10) + 1;
-    const snag_code = `SNF-${String(seq).padStart(3, '0')}`;
+    const rows = await withTransaction(async (client) => {
+      const { rows: seqRows } = await client.query(
+        `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(snag_code, '^SNF-', '') AS INTEGER)), 0) AS last_seq
+         FROM snag_items WHERE project_id = $1 AND snag_code LIKE 'SNF-%'`,
+        [project_id]
+      );
+      const snag_code = `SNF-${String(parseInt(seqRows[0].last_seq) + 1).padStart(3, '0')}`;
 
-    const { rows } = await db().query(`
-      INSERT INTO snag_items
-        (project_id, snag_code, title, description, zone, trade, priority,
-         photos, due_date, assigned_to_name, assigned_user_id, raised_by)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-      RETURNING *
-    `, [
-      project_id, snag_code, title, description || null,
-      zone || null, trade || 'other', priority || 'medium',
-      JSON.stringify(photos || []),
-      due_date || null, assigned_to_name || null,
-      assigned_user_id || null, req.user.id,
-    ]);
+      const { rows: ins } = await client.query(`
+        INSERT INTO snag_items
+          (project_id, snag_code, title, description, zone, trade, priority,
+           photos, due_date, assigned_to_name, assigned_user_id, raised_by)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        RETURNING *
+      `, [
+        project_id, snag_code, title, description || null,
+        zone || null, trade || 'other', priority || 'medium',
+        JSON.stringify(photos || []),
+        due_date || null, assigned_to_name || null,
+        assigned_user_id || null, req.user.id,
+      ]);
+      return ins;
+    });
 
     // Notify assigned user about snag
     notifySnagRaised(req.user.company_id, rows[0], req.user.name);

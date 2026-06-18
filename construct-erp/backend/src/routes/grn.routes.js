@@ -38,6 +38,9 @@ const router = express.Router();
   await safe(`ALTER TABLE grn ADD COLUMN IF NOT EXISTS issues_notes TEXT`);
   await safe(`ALTER TABLE grn ADD COLUMN IF NOT EXISTS inspection_notes TEXT`);
 
+  // Guarantee uniqueness of generated GRN numbers per company
+  await safe(`CREATE UNIQUE INDEX IF NOT EXISTS uq_grn_number ON grn(grn_number)`);
+
   console.log('[GRN] Schema migration OK');
 })();
 
@@ -199,11 +202,16 @@ router.post('/', async (req, res) => {
     }
 
     const result = await withTransaction(async (client) => {
-      // 1. Generate GRN Number
+      // 1. Generate GRN Number — MAX-based, company-scoped, race-safe inside transaction
       const yr = new Date().getFullYear();
-      const countRes = await client.query('SELECT COUNT(*) FROM grn');
-      const seq = String(parseInt(countRes.rows[0].count) + 1).padStart(4, '0');
-      const grn_number = `GRN/${yr}/${seq}`;
+      const seqRes = await client.query(
+        `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(grn_number, '^GRN/[0-9]+/', '') AS INTEGER)), 0) AS last_seq
+         FROM grn g
+         JOIN projects p ON p.id = g.project_id
+         WHERE p.company_id = $1 AND g.grn_number LIKE $2`,
+        [req.user.company_id, `GRN/${yr}/%`]
+      );
+      const grn_number = `GRN/${yr}/${String(parseInt(seqRes.rows[0].last_seq) + 1).padStart(4, '0')}`;
 
       // 2. Insert Header (Initial Status: pending)
       const headerRes = await client.query(

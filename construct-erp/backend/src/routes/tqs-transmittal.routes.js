@@ -52,11 +52,13 @@ runSchemaInit('tqs_transmittals', ensureTables);
 
 // ── Auto-number helper ─────────────────────────────────────────────────────
 async function nextTransmittalNumber(companyId) {
+  // MAX-based so deleting a transmittal never causes the next number to collide
   const res = await query(
-    `SELECT COUNT(*) AS cnt FROM tqs_transmittals WHERE company_id = $1`,
+    `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(transmittal_number, '^.*-', '') AS INTEGER)), 0) AS last_seq
+     FROM tqs_transmittals WHERE company_id = $1 AND transmittal_number ~ '[0-9]+$'`,
     [companyId]
   );
-  const seq = parseInt(res.rows[0].cnt, 10) + 1;
+  const seq = parseInt(res.rows[0].last_seq, 10) + 1;
   return `BCIM-HO-QS-ACC-${String(seq).padStart(3, '0')}`;
 }
 

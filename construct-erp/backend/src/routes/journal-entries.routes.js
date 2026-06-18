@@ -81,20 +81,21 @@ const router = express.Router();
   // range and sort by entry_date — without this Postgres falls back to a
   // sequential scan + sort as journal_entries grows.
   await safe(`CREATE INDEX IF NOT EXISTS idx_je_company_status_date ON journal_entries(company_id, status, entry_date, created_at)`);
+  await safe(`CREATE UNIQUE INDEX IF NOT EXISTS uq_je_entry_no ON journal_entries(company_id, entry_no)`);
 
   console.log('[JournalEntries] Schema OK');
 })();
 
 const n = (v) => parseFloat(v) || 0;
 
-async function nextEntryNo(companyId) {
+async function nextEntryNo(client, companyId) {
   const yr = new Date().getFullYear();
-  const r = await query(
-    `SELECT COUNT(*) FROM journal_entries WHERE company_id = $1 AND EXTRACT(YEAR FROM created_at) = $2`,
-    [companyId, yr]
+  const r = await client.query(
+    `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(entry_no, '^JE/[0-9]+/', '') AS INTEGER)), 0) AS last_seq
+     FROM journal_entries WHERE company_id = $1 AND entry_no LIKE $2`,
+    [companyId, `JE/${yr}/%`]
   );
-  const seq = String(parseInt(r.rows[0].count) + 1).padStart(4, '0');
-  return `JE/${yr}/${seq}`;
+  return `JE/${yr}/${String(parseInt(r.rows[0].last_seq) + 1).padStart(4, '0')}`;
 }
 
 async function getJE(id, companyId) {
@@ -226,9 +227,8 @@ router.post('/', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Journal entry cannot be zero-value' });
     }
 
-    const entry_no = await nextEntryNo(req.user.company_id);
-
     const result = await withTransaction(async (client) => {
+      const entry_no = await nextEntryNo(client, req.user.company_id);
       const r = await client.query(
         `INSERT INTO journal_entries (company_id, entry_no, entry_date, reference, narration, status, created_by)
          VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,

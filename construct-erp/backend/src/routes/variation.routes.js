@@ -1,26 +1,29 @@
-// src/routes/variation.routes.js 
+// src/routes/variation.routes.js
 const express = require('express');
 const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
+const { loadProjectScope, userCanAccessProject, appendProjectScope } = require('../middleware/projectScope');
 const { query, withTransaction } = require('../config/database');
 
 router.use(authenticate);
+router.use(loadProjectScope);
 
 // GET /api/v1/variations — List for a project
 router.get('/', async (req, res) => {
   try {
     const { project_id, status } = req.query;
-    let sql = `SELECT vo.*, p.name as project_name, u.name as requested_by_name 
+    let sql = `SELECT vo.*, p.name as project_name, u.name as requested_by_name
                FROM variation_orders vo
                JOIN projects p ON vo.project_id = p.id
                LEFT JOIN users u ON vo.requested_by = u.id
                WHERE p.company_id = $1`;
-    const params = [req.user.company_id];
+    let params = [req.user.company_id];
     let idx = 2;
 
     if (project_id) { sql += ` AND vo.project_id = $${idx++}`; params.push(project_id); }
     if (status)     { sql += ` AND vo.status = $${idx++}`;     params.push(status); }
 
+    ({ sql, params } = appendProjectScope(req, sql, params, 'vo'));
     sql += ' ORDER BY vo.created_at DESC';
     const result = await query(sql, params);
     res.json({ data: result.rows });
@@ -33,13 +36,13 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const voRes = await query(
-      `SELECT vo.*, p.name as project_name, u.name as requested_by_name 
+      `SELECT vo.*, p.name as project_name, p.company_id, u.name as requested_by_name
        FROM variation_orders vo
        JOIN projects p ON vo.project_id = p.id
        LEFT JOIN users u ON vo.requested_by = u.id
        WHERE vo.id = $1`, [req.params.id]
     );
-    if (!voRes.rows.length) return res.status(404).json({ error: 'VO not found' });
+    if (!voRes.rows.length || voRes.rows[0].company_id !== req.user.company_id) return res.status(404).json({ error: 'VO not found' });
     
     const items = await query(
       `SELECT vi.*, b.description as boq_description 
@@ -59,12 +62,22 @@ router.post('/', authorize('super_admin','admin','qs_engineer','project_manager'
   try {
     const { project_id, description, items, remarks } = req.body;
     
+    if (!project_id) return res.status(400).json({ error: 'project_id is required' });
+    if (!userCanAccessProject(req, project_id)) {
+      return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
+
     const result = await withTransaction(async (client) => {
-      // 1. Generate VO Number
+      // 1. Generate VO Number — MAX-based, company-scoped, race-safe inside transaction
       const yr = new Date().getFullYear();
-      const countRes = await client.query('SELECT COUNT(*) FROM variation_orders');
-      const seq = String(parseInt(countRes.rows[0].count) + 1).padStart(3,'0');
-      const vo_number = `VO/${yr}/${seq}`;
+      const seqRes = await client.query(
+        `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(vo_number, '^VO/[0-9]+/', '') AS INTEGER)), 0) AS last_seq
+         FROM variation_orders vo
+         JOIN projects p ON p.id = vo.project_id
+         WHERE p.company_id = $1 AND vo.vo_number LIKE $2`,
+        [req.user.company_id, `VO/${yr}/%`]
+      );
+      const vo_number = `VO/${yr}/${String(parseInt(seqRes.rows[0].last_seq) + 1).padStart(3, '0')}`;
 
       // 2. Insert Header
       const header = await client.query(
@@ -118,8 +131,9 @@ router.get('/approved-items', async (req, res) => {
       LEFT JOIN boq_items b ON vi.boq_item_id = b.id
       WHERE vo.status = 'approved'
         AND p.company_id = $1`;
-    const params = [req.user.company_id];
+    let params = [req.user.company_id];
     if (project_id) { sql += ` AND vo.project_id = $2`; params.push(project_id); }
+    ({ sql, params } = appendProjectScope(req, sql, params, 'vo'));
     sql += ` ORDER BY vo.created_at, vi.id`;
     const result = await query(sql, params);
     res.json({ data: result.rows });

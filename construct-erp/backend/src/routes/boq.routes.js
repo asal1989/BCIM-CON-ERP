@@ -5,6 +5,7 @@ const path = require('path');
 const { authenticate, authorize } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const { extractBOQItems } = require('../services/boqExtraction.service');
+const { loadProjectScope, appendProjectScope } = require('../middleware/projectScope');
 
 const upload = multer({ 
   dest: 'uploads/',
@@ -12,6 +13,7 @@ const upload = multer({
 });
 
 router.use(authenticate);
+router.use(loadProjectScope);
 
 router.get('/', async (req, res) => {
   const { project_id, chapter } = req.query;
@@ -44,10 +46,11 @@ router.get('/', async (req, res) => {
              FROM boq_items b
              JOIN projects p ON b.project_id = p.id
              WHERE p.company_id = $1 AND b.is_active = true`;
-  const params = [req.user.company_id];
+  let params = [req.user.company_id];
   let i = 2;
   if (project_id) { sql += ` AND b.project_id = $${i++}`; params.push(project_id); }
   if (chapter) { sql += ` AND b.chapter_name ILIKE $${i++}`; params.push(`%${chapter}%`); }
+  ({ sql, params } = appendProjectScope(req, sql, params, 'b'));
   sql += ' ORDER BY b.chapter_no, b.item_no';
   const result = await query(sql, params);
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');

@@ -2,8 +2,10 @@
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
+const { loadProjectScope, userCanAccessProject } = require('../middleware/projectScope');
 const router = express.Router();
 router.use(authenticate);
+router.use(loadProjectScope);
 
 // Reusable: actual spend from DQS tqs_bills (paid) grouped by cost head.
 // vendor_id is NULL on tqs_bills — join by name (ILIKE) as fallback.
@@ -50,6 +52,7 @@ router.get('/actuals', async (req, res) => {
       [project_id, req.user.company_id]
     );
     if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) return res.status(403).json({ error: 'Access denied' });
 
     const result = await query(`
       SELECT
@@ -102,6 +105,7 @@ router.get('/', async (req, res) => {
       [project_id, req.user.company_id]
     );
     if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) return res.status(403).json({ error: 'Access denied' });
 
     // Budget lines
     const budget = await query(

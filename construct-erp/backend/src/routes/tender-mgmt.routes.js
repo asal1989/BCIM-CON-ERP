@@ -215,7 +215,8 @@ router.get('/:id/clarifications', async (req, res) => {
 router.post('/:id/clarifications', authorize(...TENDER_ROLES), async (req, res) => {
   try {
     const { query_type, query_text, query_date } = req.body;
-    const cnt = (await db().query(`SELECT COUNT(*) FROM tender_clarifications WHERE tender_id=$1`, [req.params.id])).rows[0].count;
+    const cnt = (await db().query(`SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(query_number, '^.*-', '') AS INTEGER)), 0) AS last_seq
+                                   FROM tender_clarifications WHERE tender_id=$1 AND query_number ~ '[0-9]+$'`, [req.params.id])).rows[0].last_seq;
     const query_number = `Q-${String(parseInt(cnt)+1).padStart(3,'0')}`;
     const r = await db().query(`
       INSERT INTO tender_clarifications (tender_id,query_number,query_date,query_type,query_text,raised_by)

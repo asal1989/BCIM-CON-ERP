@@ -6,14 +6,17 @@ const router  = express.Router();
 const dayjs   = require('dayjs');
 const { query } = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
+const { loadProjectScope, appendProjectScope } = require('../middleware/projectScope');
 const { createNotification } = require('../controllers/notification.controller');
 
 router.use(authenticate);
+router.use(loadProjectScope);
 
-async function nextAudit(companyId) {
-  const r = await query('SELECT COUNT(*) FROM quality_audits WHERE company_id=$1', [companyId]);
-  const n = parseInt(r.rows[0].count, 10) + 1;
-  return `AUD-${dayjs().year()}-${String(n).padStart(4, '0')}`;
+// MAX-based (avoids number reuse when a record is deleted)
+async function nextAudit(companyId, db = query) {
+  const r = await db(`SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(audit_number, '^.*-', '') AS INTEGER)), 0) AS last_seq
+                      FROM quality_audits WHERE company_id=$1 AND audit_number ~ '[0-9]+$'`, [companyId]);
+  return `AUD-${dayjs().year()}-${String(parseInt(r.rows[0].last_seq, 10) + 1).padStart(4, '0')}`;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -33,7 +36,7 @@ router.get('/', async (req, res) => {
         JOIN projects p ON a.project_id = p.id
         LEFT JOIN users u ON a.created_by = u.id
        WHERE a.company_id = $1`;
-    const params = [req.user.company_id];
+    let params = [req.user.company_id];
     let idx = 2;
     if (project_id) { sql += ` AND a.project_id = $${idx++}`; params.push(project_id); }
     if (status)      { sql += ` AND a.status = $${idx++}`; params.push(status); }
@@ -42,6 +45,7 @@ router.get('/', async (req, res) => {
       sql += ` AND (a.audit_number ILIKE $${idx} OR a.scope ILIKE $${idx} OR a.auditor_name ILIKE $${idx})`;
       params.push(`%${search}%`); idx++;
     }
+    ({ sql, params } = appendProjectScope(req, sql, params, 'a'));
     sql += ' ORDER BY a.created_at DESC';
     res.json({ data: (await query(sql, params)).rows });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -175,7 +179,8 @@ router.post('/:id/findings', async (req, res) => {
     const audit = auditRes.rows[0];
 
     // finding sequence number within audit
-    const cnt = (await query('SELECT COUNT(*) FROM quality_audit_findings WHERE audit_id=$1', [req.params.id])).rows[0].count;
+    const cnt = (await query(`SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(finding_number, '^.*-', '') AS INTEGER)), 0) AS last_seq
+                              FROM quality_audit_findings WHERE audit_id=$1 AND finding_number ~ '[0-9]+$'`, [req.params.id])).rows[0].last_seq;
     const finding_number = `F-${String(parseInt(cnt) + 1).padStart(2, '0')}`;
 
     const f = await query(`
@@ -190,7 +195,8 @@ router.post('/:id/findings', async (req, res) => {
 
     // Auto-create NCR for major non-conformance
     if (finding_type === 'major_nc') {
-      const ncnt = (await query('SELECT COUNT(*) FROM quality_ncrs WHERE project_id=$1', [audit.project_id])).rows[0].count;
+      const ncnt = (await query(`SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(ncr_number, '^.*-', '') AS INTEGER)), 0) AS last_seq
+                                 FROM quality_ncrs WHERE project_id=$1 AND ncr_number ~ '[0-9]+$'`, [audit.project_id])).rows[0].last_seq;
       const ncrNum = `NCR-${dayjs().year()}-${String(parseInt(ncnt) + 1).padStart(4, '0')}`;
       // Severity: major_nc → 'major'. Could be escalated to 'critical' by the engineer later.
       const ncrSeverity = 'major';
