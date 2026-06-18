@@ -139,27 +139,6 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
           </tr>
         </thead>
 
-        {/* ── Repeating page footer: signature row + registered office ───────── */}
-        <tfoot className="po-doc-foot" style={{ display: 'table-footer-group' }}>
-          <tr>
-            <td style={{ padding: '6px 0 0', border: 'none' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px' }}>
-                <tbody>
-                  <tr>
-                    {sigCell('Checked by', data.created_by_sig)}
-                    {sigCell('Director', data.released_mgmt_sig)}
-                    {sigCell('Managing Director', data.authorized_md_sig)}
-                  </tr>
-                </tbody>
-              </table>
-              <div style={{ textAlign: 'center', marginTop: '8px', lineHeight: 1.4 }}>
-                <div style={{ fontWeight: 700, fontSize: '10px' }}>BCIM ENGINEERING PRIVATE LIMITED</div>
-                <div style={{ fontSize: '9px' }}>&ldquo;B&rdquo; Wing, DivyaSree Chambers, No. 11, O&rsquo;Shaugnessy Road, Bangalore-560 025.</div>
-              </div>
-            </td>
-          </tr>
-        </tfoot>
-
         {/* ── Flowing body ───────────────────────────────────────────────────── */}
         <tbody>
           <tr><td style={{ border: 'none', padding: 0 }}>
@@ -329,6 +308,23 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
           </td></tr>
         </tbody>
       </table>
+
+      {/* po-sig-footer: position:fixed in print CSS pins this to the bottom of every page */}
+      <div className="po-sig-footer">
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <tbody>
+            <tr>
+              {sigCell('Checked by', data.created_by_sig)}
+              {sigCell('Director', data.released_mgmt_sig)}
+              {sigCell('Managing Director', data.authorized_md_sig)}
+            </tr>
+          </tbody>
+        </table>
+        <div style={{ textAlign: 'center', marginTop: '4px', lineHeight: 1.4 }}>
+          <div style={{ fontWeight: 700, fontSize: '10px' }}>BCIM ENGINEERING PRIVATE LIMITED</div>
+          <div style={{ fontSize: '9px' }}>&ldquo;B&rdquo; Wing, DivyaSree Chambers, No. 11, O&rsquo;Shaugnessy Road, Bangalore-560 025.</div>
+        </div>
+      </div>
     </div>
   );
 });

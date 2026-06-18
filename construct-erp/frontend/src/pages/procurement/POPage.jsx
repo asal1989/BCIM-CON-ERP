@@ -1096,17 +1096,14 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
   <title></title>
   <style>
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
-    body { margin: 0; padding: 10mm; background: white; font-family: 'Times New Roman', Times, serif; color: #000; }
+    body { margin: 0; padding: 10mm 10mm 55mm 10mm; background: white; font-family: 'Times New Roman', Times, serif; color: #000; }
     table { border-collapse: collapse; }
-    /* po-doc.thead repeats the doc code; po-doc.tfoot repeats the signature
-       row + registered-office footer at the bottom of EVERY printed page. */
     .po-doc > thead { display: table-header-group; }
-    .po-doc > tfoot { display: table-footer-group; }
     .po-items-table thead { display: table-header-group; }
     .po-items-table tbody tr { page-break-inside: avoid; }
     .po-terms-block li { page-break-inside: avoid; break-inside: avoid; }
+    .po-sig-footer { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 6px 10mm 8mm; }
     @page { size: A4 portrait; margin: 0; }
-    @media print { body { margin: 0; } }
   </style>
 </head>
 <body>${html}</body>
