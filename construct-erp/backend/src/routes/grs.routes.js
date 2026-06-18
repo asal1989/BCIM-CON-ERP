@@ -227,6 +227,66 @@ router.patch('/:id/cancel', async (req, res) => {
   }
 });
 
+// ── PUT /grs/:id — edit header + items (pending only; super_admin any) ────────
+router.put('/:id', authorize(...STORES_WRITE), async (req, res) => {
+  try {
+    const { project_id, vehicle_no, date_time, security_incharge, items = [], remarks, po_id, po_number } = req.body;
+
+    const existing = await query(
+      `SELECT g.*, p.company_id FROM grs g
+       JOIN projects p ON p.id = g.project_id
+       WHERE g.id = $1`,
+      [req.params.id]
+    );
+    if (!existing.rows.length || existing.rows[0].company_id !== req.user.company_id) {
+      return res.status(404).json({ error: 'GRS not found' });
+    }
+    const grs = existing.rows[0];
+
+    // Only pending GRS can be edited — unless super_admin.
+    const isSuperAdmin = String(req.user.role || '').toLowerCase() === 'super_admin';
+    if (grs.status !== 'pending' && !isSuperAdmin) {
+      return res.status(400).json({ error: 'Only pending GRS can be edited.' });
+    }
+
+    const targetProject = project_id || grs.project_id;
+    if (!userCanAccessProject(req, targetProject)) {
+      return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
+    const validItems = items.filter(it => it.particulars?.trim());
+    if (!validItems.length) return res.status(400).json({ error: 'Add at least one item' });
+
+    const result = await withTransaction(async (client) => {
+      const hdr = await client.query(
+        `UPDATE grs SET
+           project_id = $1, vehicle_no = $2, date_time = $3,
+           security_incharge = $4, remarks = $5, po_id = $6, po_number = $7
+         WHERE id = $8 RETURNING *`,
+        [targetProject, vehicle_no || null,
+         date_time || grs.date_time, security_incharge || null,
+         remarks || null, po_id || null, po_number || null, req.params.id]
+      );
+
+      // Replace line items wholesale.
+      await client.query(`DELETE FROM grs_items WHERE grs_id = $1`, [req.params.id]);
+      for (let i = 0; i < validItems.length; i++) {
+        const it = validItems[i];
+        await client.query(
+          `INSERT INTO grs_items (grs_id, sl_no, particulars, unit, quantity, remarks)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [req.params.id, i + 1, it.particulars.trim(), it.unit || null,
+           it.quantity ? parseFloat(it.quantity) : null, it.remarks || null]
+        );
+      }
+      return hdr.rows[0];
+    });
+
+    res.json({ data: result });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
 // ── DELETE /grs/:id — super-admin only (GRS carries no stock effect) ──────────
 router.delete('/:id', authorize('super_admin'), async (req, res) => {
   try {

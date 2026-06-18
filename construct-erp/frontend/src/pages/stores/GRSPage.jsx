@@ -5,7 +5,7 @@ import {
   ShieldCheck, Plus, X, Search, Download, Printer,
   Clock, CheckCircle2, AlertTriangle, Package,
   ChevronRight, FileText, Truck, RefreshCw, ClipboardList,
-  XCircle, Trash2,
+  XCircle, Trash2, Pencil,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
@@ -36,7 +36,7 @@ function StatusBadge({ status }) {
 }
 
 /* ── Detail Panel ─────────────────────────────────────────────────────────── */
-function GRSDetailPanel({ grs, onClose, onAcknowledge, ackLoading, onCancel, cancelLoading, onCreateIGN, isSuperAdmin, onDelete, deleteLoading }) {
+function GRSDetailPanel({ grs, onClose, onAcknowledge, ackLoading, onCancel, cancelLoading, onCreateIGN, isSuperAdmin, onDelete, deleteLoading, onEdit }) {
   if (!grs) return null;
   const items = grs.items || [];
 
@@ -61,6 +61,12 @@ function GRSDetailPanel({ grs, onClose, onAcknowledge, ackLoading, onCancel, can
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={grs.status} />
+          {(grs.status === 'pending' || isSuperAdmin) && onEdit && (
+            <button onClick={onEdit} title="Edit GRS"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white text-xs font-medium transition">
+              <Pencil size={14} /> Edit
+            </button>
+          )}
           <button onClick={handlePrint} title="Print GRS"
             className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white text-xs font-medium transition">
             <Printer size={14} /> Print
@@ -209,6 +215,7 @@ export default function GRSPage() {
   const { user } = useAuthStore();
   const isSuperAdmin = String(user?.role || '').toLowerCase() === 'super_admin';
   const [showForm, setShowForm]       = useState(false);
+  const [editGrs, setEditGrs]         = useState(null);
   const [selectedId, setSelectedId]   = useState(null);
   const [search, setSearch]           = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -264,6 +271,19 @@ export default function GRSPage() {
     e?.stopPropagation?.();
     if (window.confirm(`Delete ${grs.grs_number}? This permanently removes the GRS and its items. This cannot be undone.`)) {
       deleteMutation.mutate(grs.id);
+    }
+  };
+
+  // Open the edit form — fetches full GRS (with items) then shows the form.
+  const handleEdit = async (grs, e) => {
+    e?.stopPropagation?.();
+    try {
+      const full = grs.items ? grs : await grsAPI.get(grs.id).then(r => r.data?.data ?? null);
+      if (!full) return toast.error('Could not load GRS for editing');
+      setSelectedId(null);
+      setEditGrs(full);
+    } catch (_) {
+      toast.error('Could not load GRS for editing');
     }
   };
 
@@ -446,6 +466,12 @@ export default function GRSPage() {
                     <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={grs.status} /></td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {(grs.status === 'pending' || isSuperAdmin) && (
+                          <button onClick={(e) => handleEdit(grs, e)} title="Edit GRS"
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         {isSuperAdmin && (
                           <button onClick={(e) => handleDelete(grs, e)} title="Delete GRS"
                             className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-300 hover:text-red-600 hover:bg-red-50 transition-colors">
@@ -490,23 +516,38 @@ export default function GRSPage() {
             isSuperAdmin={isSuperAdmin}
             onDelete={() => handleDelete(detailedGRS)}
             deleteLoading={deleteMutation.isPending}
+            onEdit={() => handleEdit(detailedGRS)}
           />
         )}
 
-        {/* Create Form */}
-        {showForm && (
-          <GRSForm onClose={() => setShowForm(false)} projects={projects} qc={qc} />
+        {/* Create / Edit Form */}
+        {(showForm || editGrs) && (
+          <GRSForm
+            onClose={() => { setShowForm(false); setEditGrs(null); }}
+            projects={projects}
+            qc={qc}
+            editGrs={editGrs}
+          />
         )}
       </div>
     </div>
   );
 }
 
-/* ── GRS Create Form ──────────────────────────────────────────────────────── */
-function GRSForm({ onClose, projects, qc }) {
+/* ── GRS Create / Edit Form ───────────────────────────────────────────────── */
+function GRSForm({ onClose, projects, qc, editGrs = null }) {
+  const isEdit = Boolean(editGrs);
   const emptyItem = () => ({ particulars: '', unit: '', quantity: '', remarks: '' });
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(() => isEdit ? {
+    project_id: editGrs.project_id || '',
+    vehicle_no: editGrs.vehicle_no || '',
+    date_time: editGrs.date_time ? dayjs(editGrs.date_time).format('YYYY-MM-DDTHH:mm') : dayjs().format('YYYY-MM-DDTHH:mm'),
+    security_incharge: editGrs.security_incharge || '',
+    remarks: editGrs.remarks || '',
+    po_id: editGrs.po_id || '',
+    po_number: editGrs.po_number || '',
+  } : {
     project_id: '',
     vehicle_no: '',
     date_time: dayjs().format('YYYY-MM-DDTHH:mm'),
@@ -515,7 +556,16 @@ function GRSForm({ onClose, projects, qc }) {
     po_id: '',
     po_number: '',
   });
-  const [items, setItems] = useState([emptyItem()]);
+  const [items, setItems] = useState(() =>
+    isEdit && editGrs.items?.length
+      ? editGrs.items.map(it => ({
+          particulars: it.particulars || '',
+          unit:        it.unit || '',
+          quantity:    it.quantity != null ? String(it.quantity) : '',
+          remarks:     it.remarks || '',
+        }))
+      : [emptyItem()]
+  );
 
   // Fetch approved POs for the selected project
   const { data: poList = [] } = useQuery({
@@ -526,13 +576,14 @@ function GRSForm({ onClose, projects, qc }) {
   });
 
   const createMutation = useMutation({
-    mutationFn: (d) => grsAPI.create(d),
+    mutationFn: (d) => isEdit ? grsAPI.update(editGrs.id, d) : grsAPI.create(d),
     onSuccess: () => {
-      toast.success('GRS entry created');
+      toast.success(isEdit ? 'GRS updated' : 'GRS entry created');
       qc.invalidateQueries({ queryKey: ['grs-list'] });
+      if (isEdit) qc.invalidateQueries({ queryKey: ['grs', editGrs.id] });
       onClose();
     },
-    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to create GRS'),
+    onError: (e) => toast.error(e?.response?.data?.error || `Failed to ${isEdit ? 'update' : 'create'} GRS`),
   });
 
   const setField = (k, v) => setForm(p => ({ ...p, [k]: v }));
@@ -591,9 +642,9 @@ function GRSForm({ onClose, projects, qc }) {
               <X size={16} />
             </button>
             <div>
-              <div className="text-[10px] text-slate-400 font-medium uppercase tracking-widest mb-0.5">New Entry</div>
+              <div className="text-[10px] text-slate-400 font-medium uppercase tracking-widest mb-0.5">{isEdit ? `Edit ${editGrs.grs_number || ''}` : 'New Entry'}</div>
               <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-                <ShieldCheck size={16} className="text-teal-400" /> New Goods Receipt by Security
+                <ShieldCheck size={16} className="text-teal-400" /> {isEdit ? 'Edit Goods Receipt by Security' : 'New Goods Receipt by Security'}
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">Security gate entry for incoming material delivery</p>
             </div>
@@ -751,7 +802,7 @@ function GRSForm({ onClose, projects, qc }) {
               </button>
               <button onClick={submit} disabled={createMutation.isPending}
                 className="px-6 h-9 rounded-lg bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition disabled:opacity-50 shadow-sm">
-                {createMutation.isPending ? 'Saving…' : 'Create GRS →'}
+                {createMutation.isPending ? 'Saving…' : (isEdit ? 'Update GRS →' : 'Create GRS →')}
               </button>
             </div>
           </div>

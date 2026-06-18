@@ -437,6 +437,7 @@ export const grsAPI = {
   list:        (params) => api.get('/grs', { params }),
   get:         (id)     => api.get(`/grs/${id}`),
   create:      (data)   => api.post('/grs', data),
+  update:      (id, data) => api.put(`/grs/${id}`, data),
   acknowledge: (id)     => api.patch(`/grs/${id}/acknowledge`),
   cancel:      (id)     => api.patch(`/grs/${id}/cancel`),
   remove:      (id)     => api.delete(`/grs/${id}`),
