@@ -6,7 +6,7 @@ const logger = require('./logger');
 const { query } = require('../config/database');
 const { sendMail } = require('../services/mail.service');
 
-const DEFAULT_RECIPIENTS = 'it@bcim.in';
+const DEFAULT_RECIPIENTS = 'it@bcim.in,stephen@bcim.in';
 const DEFAULT_CRON = '0 20 * * *'; // 8:00 PM IST daily
 
 const parseEmails = (value, fallback = '') =>
