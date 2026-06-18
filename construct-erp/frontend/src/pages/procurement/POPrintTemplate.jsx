@@ -2,7 +2,6 @@
 import React from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import dayjs from 'dayjs';
-import { getDeliveryAddress } from '../../constants/poAddresses';
 
 // ─── Amount to words ─────────────────────────────────────────────────────────
 const ONES  = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
@@ -49,7 +48,7 @@ const formatItemNos = (nums) => {
   return out.join(', ');
 };
 
-const POPrintTemplate = React.forwardRef(({ data }, ref) => {
+const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
   if (!data) return (
     <div ref={ref} className="p-10 text-center font-bold text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
       Preparing Purchase Order…
@@ -58,7 +57,6 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
 
   const items        = data.items || [];
   const isTaxIncl    = Boolean(data.gst_inclusive);
-  const isLanco      = data.project_code === 'LH-10';
   const verifyUrl    = `${window.location.origin}/verify/po/${data.id}`;
   const termsLines   = String(data.terms_conditions || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
@@ -170,21 +168,19 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
           <div>
             <img src="/bcim-logo.png" alt="BCIM" style={{ height: '48px', objectFit: 'contain', marginBottom: '6px', display: 'block' }} />
             <div style={{ fontSize: '9px', color: '#000', lineHeight: '1.5' }}>
-              <p style={{ fontWeight: 700, fontSize: '12px', color: '#000', margin: '0 0 2px' }}>BCIM ENGINEERING PRIVATE LIMITED</p>
-              {isLanco ? (
-                <>
-                  <p style={{ margin: 0 }}>TOWER VIEW APARTMENT, NO 403, 4th FLOOR,</p>
-                  <p style={{ margin: 0 }}>PLOT NO 26 &amp; 27, SRI LAKSHMI NAGAR COLONY,</p>
-                  <p style={{ margin: 0 }}>HYDERABAD, RANGAREDDY DIST, TELANGANA – 500089</p>
-                  <p style={{ margin: 0 }}>GSTIN: 36AAHCB6485A1ZQ</p>
-                </>
-              ) : (
-                <>
-                  <p style={{ margin: 0 }}>No 579, 1st 'A' Main Road, Jayanagar 8th Block, Bangalore – 560070</p>
-                  <p style={{ margin: 0 }}>GSTIN: 29AAXCB2929P1Z1 &nbsp;|&nbsp; Tel: +91 80 26650194</p>
-                  <p style={{ margin: 0 }}>Email: procurement@bcimengineering.in</p>
-                </>
-              )}
+              <p style={{ fontWeight: 700, fontSize: '12px', color: '#000', margin: '0 0 2px' }}>
+                {company.name || 'BCIM ENGINEERING PRIVATE LIMITED'}
+              </p>
+              {[company.address, company.city,
+                company.state && company.pincode ? `${company.state} – ${company.pincode}` : (company.state || company.pincode)
+              ].filter(Boolean).map((line, i) => (
+                <p key={i} style={{ margin: 0 }}>{line}</p>
+              ))}
+              <p style={{ margin: 0 }}>
+                GSTIN: {company.gstin || '—'}
+                {company.phone ? ` | Tel: ${company.phone}` : ''}
+              </p>
+              {company.email && <p style={{ margin: 0 }}>Email: {company.email}</p>}
             </div>
           </div>
 
@@ -242,7 +238,11 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
         {/* Delivery Address + Order Intro (stacked) */}
         <div style={{ marginBottom: '10px', fontSize: '9px' }}>
           <p style={{ fontWeight: 700, textDecoration: 'underline', marginBottom: '3px' }}>DELIVERY ADDRESS:</p>
-          <p style={{ color: '#000', whiteSpace: 'pre-line', marginBottom: '6px' }}>{data.delivery_address || getDeliveryAddress({ project_code: data.project_code, name: data.project_name }) || '—'}</p>
+          <p style={{ color: '#000', whiteSpace: 'pre-line', marginBottom: '6px' }}>
+            {data.delivery_address ||
+              [data.project_location, data.project_city, data.project_state].filter(Boolean).join(', ') ||
+              '—'}
+          </p>
           <p style={{ color: '#000', fontStyle: 'italic' }}>
             {data.order_intro || 'We hereby place an order on you for supply of the following materials / services as per the terms and conditions below.'}
           </p>
