@@ -56,34 +56,36 @@ function GatePassDetailPanel({ gp, onClose, onReturn, onClose2, returnLoading, c
   const handlePrint = useReactToPrint({ contentRef: localPrintRef });
 
   return (
-    <div className="fixed inset-0 z-50 flex">
-      <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="w-full max-w-xl bg-white shadow-2xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-white flex flex-col overflow-hidden">
 
-        <div className="bg-slate-900 px-6 py-4 flex items-start justify-between flex-shrink-0">
+      <div className="bg-slate-900 px-6 py-4 flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-4">
+          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition">
+            <X size={16} />
+          </button>
           <div>
-            <div className="text-[10px] text-slate-400 font-medium uppercase tracking-widest mb-1">Gate Pass</div>
-            <h2 className="text-xl font-medium text-white font-mono">{gp.gp_number}</h2>
-            <p className="text-sm text-slate-300 font-medium mt-0.5">{gp.project_name}</p>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <TypeBadge type={gp.pass_type} />
-            <StatusBadge status={gp.status} />
-            <button onClick={handlePrint} title="Print Gate Pass"
-              className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition">
-              <Printer size={15} />
-            </button>
-            <button onClick={onClose} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition">
-              <X size={16} />
-            </button>
+            <div className="text-[10px] text-slate-400 font-medium uppercase tracking-widest mb-0.5">Gate Pass</div>
+            <h2 className="text-xl font-semibold text-white font-mono leading-tight">{gp.gp_number}</h2>
+            <p className="text-sm text-slate-300 mt-0.5">{gp.project_name}</p>
           </div>
         </div>
-        <div style={{ display: 'none' }}>
-          <GatePassPrintTemplate ref={localPrintRef} data={gp} />
+        <div className="flex items-center gap-2">
+          <TypeBadge type={gp.pass_type} />
+          <StatusBadge status={gp.status} />
+          <button onClick={handlePrint} title="Print Gate Pass"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white text-xs font-medium transition">
+            <Printer size={14} /> Print
+          </button>
         </div>
+      </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-slate-50">
-          <div className="grid grid-cols-2 gap-3">
+      <div style={{ display: 'none' }}>
+        <GatePassPrintTemplate ref={localPrintRef} data={gp} />
+      </div>
+
+      <div className="flex-1 overflow-y-auto bg-slate-50">
+        <div className="max-w-4xl mx-auto p-6 space-y-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
               ['Vehicle No.',      gp.vehicle_no       || '—'],
               ['Date & Time',      gp.date_time ? dayjs(gp.date_time).format('DD MMM YYYY, HH:mm') : '—'],
@@ -98,12 +100,11 @@ function GatePassDetailPanel({ gp, onClose, onReturn, onClose2, returnLoading, c
             ].map(([lbl, val]) => (
               <div key={lbl} className="bg-white border border-slate-200 rounded-lg px-3 py-2.5">
                 <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-0.5">{lbl}</div>
-                <div className="text-sm font-medium text-slate-900 truncate">{val}</div>
+                <div className="text-sm font-medium text-slate-900">{val}</div>
               </div>
             ))}
           </div>
 
-          {/* Overdue warning for returnable */}
           {gp.pass_type === 'returnable' && gp.status === 'open' && gp.expected_return_date &&
            dayjs(gp.expected_return_date).isBefore(dayjs(), 'day') && (
             <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center gap-3">
@@ -147,38 +148,36 @@ function GatePassDetailPanel({ gp, onClose, onReturn, onClose2, returnLoading, c
             </table>
           </div>
         </div>
+      </div>
 
-        <div className="px-6 py-4 border-t border-slate-200 bg-white flex-shrink-0 space-y-2">
+      <div className="border-t border-slate-200 bg-white flex-shrink-0 px-6 py-4">
+        <div className="max-w-4xl mx-auto flex flex-wrap gap-3">
           {gp.pass_type === 'returnable' && gp.status === 'open' && (
             <button onClick={onReturn} disabled={returnLoading}
-              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium py-3 rounded-xl text-sm transition shadow-sm">
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium px-6 py-2.5 rounded-xl text-sm transition shadow-sm">
               <RotateCcw size={16} />
               {returnLoading ? 'Processing…' : 'Mark as Returned'}
             </button>
           )}
           {gp.status !== 'closed' && gp.status !== 'cancelled' && (
             <button onClick={onClose2} disabled={closeLoading}
-              className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-800 disabled:opacity-60 text-white font-medium py-2.5 rounded-xl text-sm transition">
+              className="flex items-center gap-2 bg-slate-700 hover:bg-slate-800 disabled:opacity-60 text-white font-medium px-6 py-2.5 rounded-xl text-sm transition">
               <CheckCircle2 size={16} />
               {closeLoading ? 'Closing…' : 'Close Gate Pass'}
             </button>
           )}
           {gp.status === 'closed' && (
-            <div className="flex items-center gap-2 bg-slate-100 text-slate-700 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold">
+            <div className="flex items-center gap-2 text-slate-700 text-sm font-medium">
               <CheckCircle2 size={16} /> Gate Pass Closed
             </div>
           )}
           {gp.status === 'open' && (
             <button onClick={onCancel} disabled={cancelLoading}
-              className="w-full flex items-center justify-center gap-2 bg-red-50 hover:bg-red-100 disabled:opacity-60 text-red-700 border border-red-200 font-medium py-2 rounded-xl text-sm transition">
+              className="flex items-center gap-2 border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-60 font-medium px-5 py-2.5 rounded-xl text-sm transition">
               <XCircle size={14} />
               {cancelLoading ? 'Cancelling…' : 'Cancel Gate Pass'}
             </button>
           )}
-          <button onClick={onClose}
-            className="w-full py-2.5 text-slate-600 font-medium text-sm border border-slate-200 rounded-xl hover:bg-slate-50 transition">
-            Close Panel
-          </button>
         </div>
       </div>
     </div>

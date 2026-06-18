@@ -19,11 +19,128 @@ import useAuthStore from '../../store/authStore';
 
 const inr = n => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/* ── Issue Slip Detail Panel (full-screen) ──────────────────────────────── */
+function MINDetailPanel({ min, onClose, onAuthorize, authLoading, onReceive, receiveLoading }) {
+  const printRef = useRef(null);
+  const handlePrint = useReactToPrint({ contentRef: printRef });
+  const items = min.items || [];
+  return (
+    <div className="fixed inset-0 z-50 bg-white flex flex-col overflow-hidden">
+      <div className="bg-slate-900 px-6 py-4 flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-4">
+          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition">
+            <X size={16} />
+          </button>
+          <div>
+            <div className="text-[10px] text-slate-400 font-medium uppercase tracking-widest mb-0.5">Issue Slip</div>
+            <h2 className="text-xl font-semibold text-white font-mono leading-tight">{min.min_number}</h2>
+            <p className="text-sm text-slate-300 mt-0.5">{min.project_name}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={clsx('inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border',
+            min.status === 'draft' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+          )}>
+            {min.status === 'draft' ? 'Pending' : 'Issued'}
+          </span>
+          <button onClick={handlePrint}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white text-xs font-medium transition">
+            <Printer size={14} /> Print Slip
+          </button>
+        </div>
+      </div>
+      <div style={{ display: 'none' }}><div ref={printRef}><MINPrintTemplate min={min} /></div></div>
+
+      <div className="flex-1 overflow-y-auto bg-slate-50">
+        <div className="max-w-4xl mx-auto p-6 space-y-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              ['Project',      min.project_name    || '—'],
+              ['Activity',     min.activity_name   || '—'],
+              ['Issued To',    min.issued_to        || 'Site Team'],
+              ['Contractor',   min.contractor_name  || '—'],
+              ['Issue Date',   min.issue_date ? dayjs(min.issue_date).format('DD MMM YYYY, HH:mm') : '—'],
+              ['Total Value',  `₹${inr(min.total_value)}`],
+              ['Issued By',    min.issued_by_name   || '—'],
+              ['Received By',  min.received_by_name || '—'],
+            ].map(([lbl, val]) => (
+              <div key={lbl} className="bg-white border border-slate-200 rounded-lg px-3 py-2.5">
+                <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-0.5">{lbl}</div>
+                <div className="text-sm font-medium text-slate-900">{val}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                <Package size={13} /> Materials Issued
+              </span>
+              <span className="text-xs font-medium text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full">
+                {items.length} items
+              </span>
+            </div>
+            <table className="w-full text-xs">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  {['Sl.','Material','Unit','Qty Issued','Rate','Value','Remarks'].map(h => (
+                    <th key={h} className="px-3 py-2 text-left font-medium text-slate-600 uppercase tracking-wider">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {items.map((it, i) => (
+                  <tr key={i} className="hover:bg-slate-50">
+                    <td className="px-3 py-2.5 font-mono text-slate-500">{i + 1}</td>
+                    <td className="px-3 py-2.5 font-medium text-slate-900">{it.material_name || it.item_name || '—'}</td>
+                    <td className="px-3 py-2.5">
+                      {(it.unit) && <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 text-[10px] uppercase font-medium">{it.unit}</span>}
+                    </td>
+                    <td className="px-3 py-2.5 font-mono text-emerald-700 font-medium">{it.quantity ?? it.qty_issued ?? '—'}</td>
+                    <td className="px-3 py-2.5 font-mono text-slate-600">₹{inr(it.rate)}</td>
+                    <td className="px-3 py-2.5 font-mono font-medium text-slate-800">₹{inr(it.value || it.total_value)}</td>
+                    <td className="px-3 py-2.5 text-slate-500">{it.remarks || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-slate-200 bg-white flex-shrink-0 px-6 py-4">
+        <div className="max-w-4xl mx-auto flex flex-wrap gap-3">
+          {min.status === 'draft' && (
+            <button onClick={onAuthorize} disabled={authLoading}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-medium px-6 py-2.5 rounded-xl text-sm transition shadow-sm">
+              <Send size={15} />
+              {authLoading ? 'Processing…' : 'Finalize & Deduct Stock'}
+            </button>
+          )}
+          {min.status === 'issued' && !min.verified_receiver_by && (
+            <button onClick={onReceive} disabled={receiveLoading}
+              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-medium px-6 py-2.5 rounded-xl text-sm transition shadow-sm">
+              <CheckCircle2 size={15} />
+              {receiveLoading ? 'Confirming…' : 'Confirm Receipt at Site'}
+            </button>
+          )}
+          {min.status === 'issued' && min.verified_receiver_by && (
+            <div className="flex items-center gap-2 text-emerald-700 text-sm font-medium">
+              <CheckCircle2 size={16} className="text-emerald-600" /> Receipt Confirmed
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function IssuePage() {
   const qc = useQueryClient();
   const { user } = useAuthStore();
   const [showForm, setShowForm] = useState(false);
   const [selectedMIN, setSelectedMIN] = useState(null);
+  const [detailMIN, setDetailMIN] = useState(null);
   const printRef = useRef(null);
 
   const handlePrint = useReactToPrint({
@@ -164,7 +281,7 @@ export default function IssuePage() {
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {minList.map(min => (
-                  <tr key={min.id} className="hover:bg-slate-50 transition-colors group">
+                  <tr key={min.id} onClick={() => setDetailMIN(min)} className="hover:bg-slate-50 transition-colors group cursor-pointer">
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center">
@@ -202,28 +319,11 @@ export default function IssuePage() {
                         {dayjs(min.issue_date).format('D MMM, HH:mm')}
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 text-right space-x-2">
-                      {min.status === 'draft' && (
-                        <button
-                          onClick={() => authorizeMutation.mutate(min.id)}
-                          disabled={authorizeMutation.isPending && authorizeMutation.variables === min.id}
-                          className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-all disabled:opacity-50"
-                        >
-                          {authorizeMutation.isPending && authorizeMutation.variables === min.id ? 'Finalizing…' : 'Finalize & Deduct'}
-                        </button>
-                      )}
-                      {min.status === 'issued' && !min.verified_receiver_by && (
-                        <button
-                          onClick={() => receiveMutation.mutate(min.id)}
-                          disabled={receiveMutation.isPending && receiveMutation.variables === min.id}
-                          className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700 transition-all disabled:opacity-50"
-                        >
-                          {receiveMutation.isPending && receiveMutation.variables === min.id ? 'Confirming…' : 'Confirm Receipt'}
-                        </button>
-                      )}
+                    <td className="px-5 py-3.5 text-right">
                       <button
-                        onClick={() => setSelectedMIN(min)}
-                        className="p-2 rounded-lg border border-slate-200 text-slate-900 font-medium hover:text-slate-900 hover:border-slate-300 transition-all"
+                        onClick={e => { e.stopPropagation(); setSelectedMIN(min); }}
+                        className="p-2 rounded-lg border border-slate-200 text-slate-500 hover:border-slate-300 transition-all"
+                        title="Quick print"
                       >
                         <Printer className="w-4 h-4" />
                       </button>
@@ -267,7 +367,19 @@ export default function IssuePage() {
         />
       )}
 
-      {/* Hidden print area */}
+      {/* Full-screen detail panel */}
+      {detailMIN && (
+        <MINDetailPanel
+          min={detailMIN}
+          onClose={() => setDetailMIN(null)}
+          onAuthorize={() => { authorizeMutation.mutate(detailMIN.id); setDetailMIN(null); }}
+          authLoading={authorizeMutation.isPending}
+          onReceive={() => { receiveMutation.mutate(detailMIN.id); setDetailMIN(null); }}
+          receiveLoading={receiveMutation.isPending}
+        />
+      )}
+
+      {/* Hidden print area (quick-print from table row) */}
       <div className="hidden">
         <div ref={printRef}>
           {selectedMIN && <MINPrintTemplate min={selectedMIN} />}

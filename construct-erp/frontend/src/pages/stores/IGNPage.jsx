@@ -44,30 +44,30 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, in
   const handlePrint = useReactToPrint({ contentRef: localPrintRef });
 
   return (
-    <div className="fixed inset-0 z-50 flex">
-      <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="w-full max-w-2xl bg-white shadow-2xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-white flex flex-col overflow-hidden">
 
-        <div className="bg-slate-900 px-6 py-4 flex items-start justify-between flex-shrink-0">
+      <div className="bg-slate-900 px-6 py-4 flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-4">
+          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition">
+            <X size={16} />
+          </button>
           <div>
-            <div className="text-[10px] text-slate-400 font-medium uppercase tracking-widest mb-1">Inward Goods Note</div>
-            <h2 className="text-xl font-medium text-white font-mono">{ign.ign_number}</h2>
-            <p className="text-sm text-slate-300 font-medium mt-0.5">{ign.project_name}</p>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <StatusBadge status={ign.status} />
-            <button onClick={handlePrint}
-              className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition"
-              title="Print IGN">
-              <Printer size={15} />
-            </button>
-            <button onClick={onClose} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition">
-              <X size={16} />
-            </button>
+            <div className="text-[10px] text-slate-400 font-medium uppercase tracking-widest mb-0.5">Inward Goods Note</div>
+            <h2 className="text-xl font-semibold text-white font-mono leading-tight">{ign.ign_number}</h2>
+            <p className="text-sm text-slate-300 mt-0.5">{ign.project_name}</p>
           </div>
         </div>
+        <div className="flex items-center gap-2">
+          <StatusBadge status={ign.status} />
+          <button onClick={handlePrint} title="Print IGN"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white text-xs font-medium transition">
+            <Printer size={14} /> Print
+          </button>
+        </div>
+      </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-slate-50">
+      <div className="flex-1 overflow-y-auto bg-slate-50">
+        <div className="max-w-5xl mx-auto p-6 space-y-5">
           {/* Meta */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {[
@@ -197,45 +197,43 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, in
             <IGNPrintTemplate ref={localPrintRef} data={ign} />
           </div>
         </div>
+      </div>
 
-        <div className="px-6 py-4 border-t border-slate-200 bg-white flex-shrink-0 space-y-2">
+      <div className="border-t border-slate-200 bg-white flex-shrink-0 px-6 py-4">
+        <div className="max-w-5xl mx-auto flex flex-wrap gap-3">
           {ign.status === 'pending' && (
             <button onClick={onInspect} disabled={inspectLoading}
-              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium py-3 rounded-xl text-sm transition shadow-sm">
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium px-6 py-2.5 rounded-xl text-sm transition shadow-sm">
               <Eye size={16} />
               {inspectLoading ? 'Processing…' : 'Mark as Inspected'}
             </button>
           )}
           {(ign.status === 'pending' || ign.status === 'inspected') && (
             <button onClick={onApprove} disabled={approveLoading}
-              className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-medium py-3 rounded-xl text-sm transition shadow-sm">
+              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-medium px-6 py-2.5 rounded-xl text-sm transition shadow-sm">
               <CheckCircle2 size={16} />
               {approveLoading ? 'Processing…' : 'Approve IGN — Stores-In-Charge Sign-off'}
             </button>
           )}
           {ign.status === 'approved' && onCreateGRN && (
             <button onClick={onCreateGRN}
-              className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-xl text-sm transition">
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-6 py-2.5 rounded-xl text-sm transition">
               <FileText size={15} />
               Create GRN from this IGN →
             </button>
           )}
           {ign.status === 'approved' && (
-            <div className="flex items-center gap-2 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl px-4 py-3 text-sm font-bold">
-              <CheckCircle2 size={16} className="text-emerald-600" /> IGN Approved by Stores-In-Charge
+            <div className="flex items-center gap-2 text-emerald-700 text-sm font-medium">
+              <CheckCircle2 size={16} className="text-emerald-600" /> Approved by Stores-In-Charge
             </div>
           )}
           {ign.status === 'pending' && (
             <button onClick={onCancel} disabled={cancelLoading}
-              className="w-full flex items-center justify-center gap-2 border border-red-200 text-red-600 hover:bg-red-50 font-medium py-2.5 rounded-xl text-sm transition disabled:opacity-50">
+              className="flex items-center gap-2 border border-red-200 text-red-600 hover:bg-red-50 font-medium px-5 py-2.5 rounded-xl text-sm transition disabled:opacity-50">
               <XCircle size={15} />
               {cancelLoading ? 'Cancelling…' : 'Cancel IGN'}
             </button>
           )}
-          <button onClick={onClose}
-            className="w-full py-2.5 text-slate-600 font-medium text-sm border border-slate-200 rounded-xl hover:bg-slate-50 transition">
-            Close
-          </button>
         </div>
       </div>
     </div>
