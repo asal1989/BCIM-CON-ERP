@@ -166,12 +166,19 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
   return (
     <div ref={ref} className="po-print-wrapper">
       {/* Push content down from the top on page 2+ — div padding-top only applies once */}
-      <style>{`@media print { @page { margin-top: 15mm; } @page :first { margin-top: 0mm; } }`}</style>
+      <style>{`@media print { @page { margin-top: 15mm; margin-bottom: 30mm; } @page :first { margin-top: 0mm; } }`}</style>
       {/* po-page: no fixed minHeight — content determines height, allows multi-page */}
       <div className="po-page bg-white text-black"
         style={{ width: '210mm', padding: '12mm', boxSizing: 'border-box', fontSize: '10px', lineHeight: '1.4', fontFamily: "'Book Antiqua','Palatino Linotype',Palatino,serif" }}>
 
         <table className="po-layout" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <tfoot>
+            <tr><td style={{ padding: 0 }}>
+              <div style={{ borderTop: '2px solid #000', paddingTop: '4px' }}>
+                {approvalGrid}
+              </div>
+            </td></tr>
+          </tfoot>
           <tbody className="po-layout-body">
             <tr><td style={{ padding: 0 }}>
 
@@ -389,9 +396,6 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
             </ol>
           )}
         </div>
-          <div style={{ borderTop: '2px solid #000', paddingTop: '6px', marginTop: '10px', breakInside: 'avoid', pageBreakInside: 'avoid' }}>
-            {approvalGrid}
-          </div>
         </div>{/* /po-footer-block */}
 
             </td></tr>
