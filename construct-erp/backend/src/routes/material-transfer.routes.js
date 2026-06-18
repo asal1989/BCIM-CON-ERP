@@ -2,8 +2,10 @@
 const express  = require('express');
 const { authenticate } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
+const { loadProjectScope, appendProjectScope } = require('../middleware/projectScope');
 const router = express.Router();
 router.use(authenticate);
+router.use(loadProjectScope);
 
 /* ── Auto-migrate ─────────────────────────────────────────────────────────── */
 (async () => {
@@ -97,6 +99,15 @@ router.get('/', async (req, res) => {
     if (search) {
       where.push(`(m.mtr_number ILIKE $${p} OR m.purpose ILIKE $${p} OR m.vehicle_number ILIKE $${p})`);
       params.push(`%${search}%`); p++;
+    }
+    if (!req.isGlobalRole) {
+      const ids = req.allowedProjectIds || [];
+      if (ids.length === 0) {
+        where.push('FALSE');
+      } else {
+        where.push(`(m.from_project_id = ANY($${p}::uuid[]) OR m.to_project_id = ANY($${p}::uuid[]))`);
+        params.push(ids); p++;
+      }
     }
 
     const rows = await query(`

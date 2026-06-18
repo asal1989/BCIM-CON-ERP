@@ -49,14 +49,14 @@ const ensureTable = async () => {
 };
 runSchemaInit('client_advance_requests', ensureTable);
 
-const nextNo = async (companyId) => {
-  const { rows } = await query(
-    `SELECT COUNT(*) AS cnt FROM client_advance_requests WHERE company_id = $1`,
-    [companyId]
-  );
-  const n = Number(rows[0].cnt) + 1;
+const nextNo = async (client, companyId) => {
   const yr = new Date().getFullYear();
-  return `CAR/${yr}/${String(n).padStart(3, '0')}`;
+  const { rows } = await client.query(
+    `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(proforma_no, '^CAR/[0-9]+/', '') AS INTEGER)), 0) AS last_seq
+     FROM client_advance_requests WHERE company_id = $1 AND proforma_no LIKE $2`,
+    [companyId, `CAR/${yr}/%`]
+  );
+  return `CAR/${yr}/${String(parseInt(rows[0].last_seq) + 1).padStart(3, '0')}`;
 };
 
 // GET / — list with project name + summary
@@ -109,16 +109,18 @@ router.post('/', authorize('super_admin','admin','finance_manager','accountant',
     } = req.body;
     const adv = parseFloat(advance_amount || 0);
     const tax = parseFloat(tax_amount || 0);
-    const no = proforma_no || await nextNo(req.user.company_id);
     const st = ['submitted','approved','received','rejected'].includes(status) ? status : 'submitted';
-    const { rows } = await query(`
-      INSERT INTO client_advance_requests
-        (company_id, project_id, proforma_no, proforma_date, work_description, hsn_code,
-         advance_amount, advance_pct, tax_amount, total_amount, status, remarks, created_by)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-      [req.user.company_id, project_id || null, no, proforma_date || null, work_description || null, hsn_code || null,
-       adv, parseFloat(advance_pct || 0), tax, adv + tax, st, remarks || null, req.user.id]);
-    res.status(201).json({ data: rows[0] });
+    const { rows } = await withTransaction(async (client) => {
+      const no = proforma_no || await nextNo(client, req.user.company_id);
+      return client.query(`
+        INSERT INTO client_advance_requests
+          (company_id, project_id, proforma_no, proforma_date, work_description, hsn_code,
+           advance_amount, advance_pct, tax_amount, total_amount, status, remarks, created_by)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+        [req.user.company_id, project_id || null, no, proforma_date || null, work_description || null, hsn_code || null,
+         adv, parseFloat(advance_pct || 0), tax, adv + tax, st, remarks || null, req.user.id]);
+    });
+    res.status(201).json({ data: rows.rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

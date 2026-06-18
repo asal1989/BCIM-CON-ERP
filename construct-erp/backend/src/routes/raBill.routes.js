@@ -4,7 +4,9 @@ const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
+const { loadProjectScope, appendProjectScope } = require('../middleware/projectScope');
 router.use(authenticate);
+router.use(loadProjectScope);
 
 // Ensure new columns exist on live DB (idempotent)
 const ensureRaBillCols = async () => {
@@ -59,9 +61,10 @@ router.get('/', async (req, res) => {
       LEFT JOIN users v ON rb.verified_by = v.id
       LEFT JOIN users cert ON rb.certified_by = cert.id
       WHERE p.company_id = $1`;
-    const params = [req.user.company_id]; let i = 2;
+    let params = [req.user.company_id]; let i = 2;
     if (project_id) { sql += ` AND rb.project_id = $${i++}`; params.push(project_id); }
     if (status)     { sql += ` AND rb.status = $${i++}`;     params.push(status); }
+    ({ sql, params } = appendProjectScope(req, sql, params, 'rb'));
     sql += ' ORDER BY rb.bill_date DESC, rb.created_at DESC';
     const result = await query(sql, params);
     res.json({ data: result.rows });

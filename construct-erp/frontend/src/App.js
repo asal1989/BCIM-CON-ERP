@@ -307,6 +307,9 @@ const ADMIN_ROLES = [
   'stores_manager', 'store_keeper', 'security_guard',
 ];
 
+// Managing-director roles get the approvals view embedded in their main dashboard.
+const MD_DASHBOARD_ROLES = ['md', 'managing_director'];
+
 function getHomeRoute(user) {
   if (!user) return '/login';
   const role = String(user.role || '').toLowerCase();
@@ -315,6 +318,8 @@ function getHomeRoute(user) {
   if (role === 'store_keeper')   return '/stores';
   // Super admin & admin → full dashboard
   if (['admin', 'super_admin'].includes(role)) return '/dashboard';
+  // Managing director → main dashboard (which renders all approvals inline)
+  if (MD_DASHBOARD_ROLES.includes(role)) return '/dashboard';
   // Approver / manager roles → My Approvals page as home
   if (APPROVER_ROLES.includes(role)) return '/approvals';
   const mods = user.accessible_modules;
@@ -370,6 +375,10 @@ function RequireModule({ module, children }) {
   const { user } = useAuthStore();
   if (!user) return <Navigate to="/login" replace />;
   if (['admin', 'super_admin'].includes(user.role)) return children;
+  // Stores-floor roles always have the Stores module — their home route lives
+  // under /stores, so gating it on accessible_modules could cause a redirect loop.
+  const STORES_ROLES = ['security_guard', 'store_keeper', 'stores_manager', 'stores_officer'];
+  if (module === 'Stores' && STORES_ROLES.includes(String(user.role || '').toLowerCase())) return children;
   const mods = user.accessible_modules;
   if (!mods || mods.length === 0) return children; // unconfigured account → full access
   const legacyAliases = [

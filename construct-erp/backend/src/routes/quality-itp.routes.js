@@ -6,8 +6,10 @@ const router   = express.Router();
 const dayjs    = require('dayjs');
 const { query } = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
+const { loadProjectScope, appendProjectScope } = require('../middleware/projectScope');
 
 router.use(authenticate);
+router.use(loadProjectScope);
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 async function nextSeq(table, col, prefix, companyId) {
@@ -43,12 +45,13 @@ router.get('/', async (req, res) => {
         LEFT JOIN users u1 ON i.created_by = u1.id
         LEFT JOIN users u2 ON i.approved_by = u2.id
        WHERE i.company_id = $1`;
-    const params = [req.user.company_id];
+    let params = [req.user.company_id];
     let idx = 2;
     if (project_id) { sql += ` AND i.project_id = $${idx++}`; params.push(project_id); }
     if (discipline)  { sql += ` AND i.discipline ILIKE $${idx++}`; params.push(`%${discipline}%`); }
     if (status)      { sql += ` AND i.status = $${idx++}`; params.push(status); }
     if (search)      { sql += ` AND (i.itp_number ILIKE $${idx} OR i.title ILIKE $${idx})`; params.push(`%${search}%`); idx++; }
+    ({ sql, params } = appendProjectScope(req, sql, params, 'i'));
     sql += ' ORDER BY i.created_at DESC';
     const r = await query(sql, params);
     res.json({ data: r.rows });
@@ -246,6 +249,7 @@ router.delete('/:id/activities/:actId', async (req, res) => {
 
 const msRouter = express.Router();
 msRouter.use(authenticate);
+msRouter.use(loadProjectScope);
 
 msRouter.get('/', async (req, res) => {
   try {
@@ -261,7 +265,7 @@ msRouter.get('/', async (req, res) => {
         LEFT JOIN users u3 ON m.approved_by = u3.id
         LEFT JOIN quality_itps i ON m.itp_id = i.id
        WHERE p.company_id = $1`;
-    const params = [req.user.company_id];
+    let params = [req.user.company_id];
     let idx = 2;
     if (project_id) { sql += ` AND m.project_id = $${idx++}`; params.push(project_id); }
     if (discipline)  { sql += ` AND m.discipline ILIKE $${idx++}`; params.push(`%${discipline}%`); }
@@ -270,6 +274,7 @@ msRouter.get('/', async (req, res) => {
       sql += ` AND (m.ms_number ILIKE $${idx} OR m.title ILIKE $${idx})`;
       params.push(`%${search}%`); idx++;
     }
+    ({ sql, params } = appendProjectScope(req, sql, params, 'm'));
     sql += ' ORDER BY m.created_at DESC';
     const r = await query(sql, params);
     res.json({ data: r.rows });

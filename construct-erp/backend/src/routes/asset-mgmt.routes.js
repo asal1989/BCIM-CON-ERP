@@ -266,7 +266,8 @@ router.post('/work-orders', async (req, res) => {
   try {
     const { asset_id, wo_type, description, priority, scheduled_date,
             vendor_id, vendor_name, technician } = req.body;
-    const cnt = (await query('SELECT COUNT(*) FROM asset_work_orders WHERE company_id=$1',[COMPANY(req)])).rows[0].count;
+    const cnt = (await query(`SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(wo_number, '^.*-', '') AS INTEGER)), 0) AS last_seq
+                              FROM asset_work_orders WHERE company_id=$1 AND wo_number ~ '[0-9]+$'`,[COMPANY(req)])).rows[0].last_seq;
     const wo_number = `WO-${dayjs().format('YYYY')}-${String(parseInt(cnt)+1).padStart(4,'0')}`;
     const r = await query(`
       INSERT INTO asset_work_orders (asset_id, company_id, wo_number, wo_type, description,

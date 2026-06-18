@@ -97,7 +97,8 @@ router.post('/contracts', authorize(...SC_ROLES), async (req, res) => {
     } = req.body;
     if (!project_id || !vendor_id) return res.status(400).json({ error: 'project_id, vendor_id required' });
     // Auto-generate contract number
-    const cnt = (await db().query(`SELECT COUNT(*) FROM subcontractor_contracts WHERE project_id=$1`, [project_id])).rows[0].count;
+    const cnt = (await db().query(`SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(contract_number, '^.*-', '') AS INTEGER)), 0) AS last_seq
+                                   FROM subcontractor_contracts WHERE project_id=$1 AND contract_number ~ '[0-9]+$'`, [project_id])).rows[0].last_seq;
     const proj = (await db().query(`SELECT name FROM projects WHERE id=$1`, [project_id])).rows[0];
     const contract_number = `SC-${(proj?.name||'').substring(0,4).toUpperCase().replace(/\s/g,'')}-${String(parseInt(cnt)+1).padStart(3,'0')}`;
     const r = await db().query(`
@@ -163,7 +164,8 @@ router.post('/mb', authorize(...SC_ROLES), async (req, res) => {
     const { project_id, vendor_id, wo_id, contract_id, mb_date, period_start, period_end,
             location, description, items } = req.body;
     if (!project_id || !vendor_id) return res.status(400).json({ error: 'project_id, vendor_id required' });
-    const cnt = (await db().query(`SELECT COUNT(*) FROM subcontractor_mb WHERE project_id=$1`, [project_id])).rows[0].count;
+    const cnt = (await db().query(`SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(mb_number, '^.*-', '') AS INTEGER)), 0) AS last_seq
+                                   FROM subcontractor_mb WHERE project_id=$1 AND mb_number ~ '[0-9]+$'`, [project_id])).rows[0].last_seq;
     const mb_number = `MB-${String(parseInt(cnt)+1).padStart(4,'0')}`;
     const totalAmount = Array.isArray(items) ? items.reduce((s,it) => s + (parseFloat(it.this_qty||0) * parseFloat(it.rate||0)), 0) : 0;
     const r = await db().query(`
@@ -330,7 +332,8 @@ router.post('/claims', authorize(...SC_ROLES), async (req, res) => {
     const { project_id, vendor_id, wo_id, contract_id, claim_type, claim_date,
             description, claim_amount, justification, file_url } = req.body;
     if (!project_id || !vendor_id || !description) return res.status(400).json({ error: 'Required fields missing' });
-    const cnt = (await db().query(`SELECT COUNT(*) FROM subcontractor_claims WHERE project_id=$1`, [project_id])).rows[0].count;
+    const cnt = (await db().query(`SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(claim_number, '^.*-', '') AS INTEGER)), 0) AS last_seq
+                                   FROM subcontractor_claims WHERE project_id=$1 AND claim_number ~ '[0-9]+$'`, [project_id])).rows[0].last_seq;
     const claim_number = `CLM-${String(parseInt(cnt)+1).padStart(4,'0')}`;
     const r = await db().query(`
       INSERT INTO subcontractor_claims

@@ -3,8 +3,10 @@ const express = require('express');
 const router  = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
+const { loadProjectScope, appendProjectScope } = require('../middleware/projectScope');
 
 router.use(authenticate);
+router.use(loadProjectScope);
 
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -39,14 +41,14 @@ router.get('/summary', async (req, res) => {
     const cid = req.user.company_id;
 
     let projectFilter = '';
-    const params = [cid];
+    let params = [cid];
     if (project_id) {
       projectFilter = 'AND rb.project_id = $2';
       params.push(project_id);
     }
 
     // Total retention held from certified/paid RA bills
-    const heldRes = await query(`
+    let heldSql = `
       SELECT
         rb.project_id,
         p.name               AS project_name,
@@ -58,26 +60,29 @@ router.get('/summary', async (req, res) => {
       JOIN projects p ON p.id = rb.project_id
       WHERE rb.company_id = $1
         AND rb.status IN ('certified', 'paid')
-        ${projectFilter}
+        ${projectFilter}`;
+    ({ sql: heldSql, params } = appendProjectScope(req, heldSql, params, 'rb'));
+    heldSql += `
       GROUP BY rb.project_id, p.name, p.project_code, rb.contractor_name
-      ORDER BY p.name
-    `, params);
+      ORDER BY p.name`;
+    const heldRes = await query(heldSql, params);
 
     // Total released and pending per project
-    const params2 = [cid];
+    let params2 = [cid];
     let pf2 = '';
     if (project_id) { pf2 = 'AND project_id = $2'; params2.push(project_id); }
 
-    const relRes = await query(`
+    let relSql = `
       SELECT
         project_id,
         SUM(CASE WHEN status = 'released' THEN release_amount ELSE 0 END)::NUMERIC AS total_released,
         SUM(CASE WHEN status = 'pending'  THEN release_amount ELSE 0 END)::NUMERIC AS pending_approval,
         SUM(CASE WHEN status = 'approved' THEN release_amount ELSE 0 END)::NUMERIC AS approved_pending_payment
       FROM retention_releases
-      WHERE company_id = $1 ${pf2}
-      GROUP BY project_id
-    `, params2);
+      WHERE company_id = $1 ${pf2}`;
+    ({ sql: relSql, params: params2 } = appendProjectScope(req, relSql, params2, 'retention_releases'));
+    relSql += ` GROUP BY project_id`;
+    const relRes = await query(relSql, params2);
 
     const relMap = {};
     relRes.rows.forEach(r => { relMap[r.project_id] = r; });
@@ -138,12 +143,13 @@ router.get('/', async (req, res) => {
       LEFT JOIN users u2 ON u2.id = rr.approved_by
       WHERE rr.company_id = $1
     `;
-    const params = [cid];
+    let params = [cid];
     let idx = 2;
 
     if (project_id) { sql += ` AND rr.project_id = $${idx++}`; params.push(project_id); }
     if (status)     { sql += ` AND rr.status = $${idx++}`;     params.push(status); }
 
+    ({ sql, params } = appendProjectScope(req, sql, params, 'rr'));
     sql += ' ORDER BY rr.created_at DESC';
     const result = await query(sql, params);
     res.json({ data: result.rows });

@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { query } = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
+const { loadProjectScope, appendProjectScope } = require('../middleware/projectScope');
 const dayjs = require('dayjs');
 const { notifyNcrRaised } = require('../services/notif.helper');
 // Lazy-loaded at module level to avoid circular require at load time
@@ -16,6 +17,7 @@ function getEvaluateFn() {
 }
 
 router.use(authenticate);
+router.use(loadProjectScope);
 
 async function tableExists(tableName) {
     const r = await query('SELECT to_regclass($1) AS table_name', [tableName]);
@@ -29,8 +31,9 @@ router.get('/drawings', async (req, res) => {
                FROM quality_drawings d 
                JOIN projects p ON d.project_id = p.id 
                WHERE p.company_id = $1`;
-    const params = [req.user.company_id];
+    let params = [req.user.company_id];
     if (project_id) { sql += ` AND d.project_id = $2`; params.push(project_id); }
+    ({ sql, params } = appendProjectScope(req, sql, params, 'd'));
     sql += ' ORDER BY d.drawing_number ASC';
     const r = await query(sql, params);
     res.json({ data: r.rows });
@@ -55,8 +58,9 @@ router.get('/submittals', async (req, res) => {
                JOIN projects p ON s.project_id = p.id
                LEFT JOIN vendors v ON s.vendor_id = v.id
                WHERE p.company_id = $1`;
-    const params = [req.user.company_id];
+    let params = [req.user.company_id];
     if (project_id) { sql += ` AND s.project_id=$2`; params.push(project_id); }
+    ({ sql, params } = appendProjectScope(req, sql, params, 's'));
     sql += ' ORDER BY s.created_at DESC';
     const r = await query(sql, params);
     res.json({ data: r.rows });
@@ -69,7 +73,8 @@ router.post('/submittals', authorize('admin','super_admin','project_manager','si
             status, submitted_at, review_date, remarks } = req.body;
     if (!project_id || !title) return res.status(400).json({ error: 'project_id and title required' });
     // Auto-generate submittal number
-    const cnt = (await query('SELECT COUNT(*) FROM quality_submittals WHERE project_id=$1',[project_id])).rows[0].count;
+    const cnt = (await query(`SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(submittal_number, '^.*-', '') AS INTEGER)), 0) AS last_seq
+                              FROM quality_submittals WHERE project_id=$1 AND submittal_number ~ '[0-9]+$'`,[project_id])).rows[0].last_seq;
     const submittal_number = `SUB-${String(parseInt(cnt)+1).padStart(3,'0')}`;
     const r = await query(`
       INSERT INTO quality_submittals (project_id, submittal_number, title, description,
@@ -104,9 +109,10 @@ router.get('/transmittals', async (req, res) => {
                JOIN projects p ON t.project_id=p.id
                LEFT JOIN users u ON u.id=t.created_by
                WHERE p.company_id=$1`;
-    const params = [req.user.company_id]; let i=2;
+    let params = [req.user.company_id]; let i=2;
     if (project_id) { sql += ` AND t.project_id=$${i++}`; params.push(project_id); }
     if (status)     { sql += ` AND t.status=$${i++}`;     params.push(status); }
+    ({ sql, params } = appendProjectScope(req, sql, params, 't'));
     sql += ' ORDER BY t.transmittal_date DESC, t.created_at DESC';
     res.json({ data: (await query(sql, params)).rows });
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -117,7 +123,8 @@ router.post('/transmittals', authorize('admin','super_admin','project_manager','
     const { project_id, transmittal_date, to_party, to_contact, to_email, from_party,
             subject, purpose, delivery_method, documents, remarks } = req.body;
     if (!project_id || !to_party || !subject) return res.status(400).json({ error: 'project_id, to_party, subject required' });
-    const cnt = (await query('SELECT COUNT(*) FROM quality_transmittals WHERE project_id=$1',[project_id])).rows[0].count;
+    const cnt = (await query(`SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(transmittal_no, '^.*-', '') AS INTEGER)), 0) AS last_seq
+                              FROM quality_transmittals WHERE project_id=$1 AND transmittal_no ~ '[0-9]+$'`,[project_id])).rows[0].last_seq;
     const transmittal_no = `TRS-${String(parseInt(cnt)+1).padStart(3,'0')}`;
     const r = await query(`
       INSERT INTO quality_transmittals (project_id, transmittal_no, transmittal_date,
@@ -169,10 +176,11 @@ router.get('/rfi', async (req, res) => {
                LEFT JOIN quality_itps itp ON q.itp_id = itp.id
                LEFT JOIN quality_itp_activities act ON q.itp_activity_id = act.id
                WHERE p.company_id = $1`;
-    const params = [req.user.company_id];
+    let params = [req.user.company_id];
     let i = 2;
     if (project_id) { sql += ` AND q.project_id = $${i++}`; params.push(project_id); }
     if (status) { sql += ` AND q.status = $${i++}`; params.push(status); }
+    ({ sql, params } = appendProjectScope(req, sql, params, 'q'));
     sql += ' ORDER BY q.created_at DESC';
     res.json({ data: (await query(sql, params)).rows });
   } catch (err) {
@@ -183,7 +191,9 @@ router.get('/rfi', async (req, res) => {
 router.post('/rfi', async (req, res) => {
     const { project_id, checklist_id, drawing_id, location, activity_name, scheduled_at,
             inspection_type, itp_id, itp_activity_id, hold_point_type, stage } = req.body;
-    const count = (await query('SELECT COUNT(*) FROM quality_rfis q JOIN projects p ON q.project_id = p.id WHERE p.company_id = $1', [req.user.company_id])).rows[0].count;
+    const count = (await query(`SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(q.rfi_number, '^.*-', '') AS INTEGER)), 0) AS last_seq
+                                FROM quality_rfis q JOIN projects p ON q.project_id = p.id
+                                WHERE p.company_id = $1 AND q.rfi_number ~ '[0-9]+$'`, [req.user.company_id])).rows[0].last_seq;
     const num = `RFI-${dayjs().year()}-${String(parseInt(count) + 1).padStart(4, '0')}`;
     // WIR number mirrors RFI for work-inspection requests at hold/witness points
     const wir = (hold_point_type === 'H' || hold_point_type === 'W')
@@ -257,7 +267,9 @@ router.get('/ncr', async (req, res) => {
 
 router.post('/ncr', async (req, res) => {
     const { project_id, rfi_id, title, description, assigned_to, priority, issue_type, severity } = req.body;
-    const count = (await query('SELECT COUNT(*) FROM quality_ncrs q JOIN projects p ON q.project_id = p.id WHERE p.company_id = $1', [req.user.company_id])).rows[0].count;
+    const count = (await query(`SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(q.ncr_number, '^.*-', '') AS INTEGER)), 0) AS last_seq
+                                FROM quality_ncrs q JOIN projects p ON q.project_id = p.id
+                                WHERE p.company_id = $1 AND q.ncr_number ~ '[0-9]+$'`, [req.user.company_id])).rows[0].last_seq;
     const num = `NCR-${dayjs().year()}-${String(parseInt(count) + 1).padStart(4, '0')}`;
     
     const r = await query(
@@ -338,8 +350,9 @@ router.get('/lab-tests', async (req, res) => {
                JOIN projects p ON l.project_id = p.id 
                LEFT JOIN users u ON l.requested_by = u.id
                WHERE p.company_id = $1`;
-    const params = [req.user.company_id];
+    let params = [req.user.company_id];
     if (project_id) { sql += ` AND l.project_id = $2`; params.push(project_id); }
+    ({ sql, params } = appendProjectScope(req, sql, params, 'l'));
     sql += ' ORDER BY l.created_at DESC';
     const r = await query(sql, params);
     res.json({ data: r.rows });
@@ -360,7 +373,9 @@ router.post('/lab-tests', async (req, res) => {
         sample_location, batch_number, request_date, result_status, result_value,
         status, result, remarks, attachments
     } = req.body;
-    const count = (await query('SELECT COUNT(*) FROM quality_lab_tests l JOIN projects p ON l.project_id = p.id WHERE p.company_id = $1', [req.user.company_id])).rows[0].count;
+    const count = (await query(`SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(l.test_number, '^.*-', '') AS INTEGER)), 0) AS last_seq
+                                FROM quality_lab_tests l JOIN projects p ON l.project_id = p.id
+                                WHERE p.company_id = $1 AND l.test_number ~ '[0-9]+$'`, [req.user.company_id])).rows[0].last_seq;
     const num = `LT-${dayjs().year()}-${String(parseInt(count) + 1).padStart(4, '0')}`;
 
     const r = await query(

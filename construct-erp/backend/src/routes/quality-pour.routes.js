@@ -7,15 +7,18 @@ const router  = express.Router();
 const dayjs   = require('dayjs');
 const { query } = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
+const { loadProjectScope, appendProjectScope } = require('../middleware/projectScope');
 const { createNotification } = require('../controllers/notification.controller');
 
 router.use(authenticate);
+router.use(loadProjectScope);
 
 // ── helpers ──────────────────────────────────────────────────────────────────
-async function nextPourCard(projectId) {
-  const r = await query('SELECT COUNT(*) FROM quality_pour_cards WHERE project_id=$1', [projectId]);
-  const n = parseInt(r.rows[0].count, 10) + 1;
-  return `PC-${dayjs().year()}-${String(n).padStart(4, '0')}`;
+// MAX-based (avoids number reuse when a record is deleted)
+async function nextPourCard(projectId, db = query) {
+  const r = await db(`SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(pour_card_number, '^.*-', '') AS INTEGER)), 0) AS last_seq
+                      FROM quality_pour_cards WHERE project_id=$1 AND pour_card_number ~ '[0-9]+$'`, [projectId]);
+  return `PC-${dayjs().year()}-${String(parseInt(r.rows[0].last_seq, 10) + 1).padStart(4, '0')}`;
 }
 
 // Grade "M30" -> 30
@@ -54,7 +57,8 @@ async function evaluateCubeResultAndChain({ labTestId, companyId, userId }) {
     if (failed && !test.auto_ncr_created) {
       // create NCR
       const cnt = (await query(
-        'SELECT COUNT(*) FROM quality_ncrs WHERE project_id=$1', [test.project_id])).rows[0].count;
+        `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(ncr_number, '^.*-', '') AS INTEGER)), 0) AS last_seq
+         FROM quality_ncrs WHERE project_id=$1 AND ncr_number ~ '[0-9]+$'`, [test.project_id])).rows[0].last_seq;
       const ncrNum = `NCR-${dayjs().year()}-${String(parseInt(cnt) + 1).padStart(4, '0')}`;
       const severity = result28 < fck * 0.75 ? 'critical' : 'major';
       const ncr = await query(`
@@ -137,7 +141,7 @@ router.get('/', async (req, res) => {
         LEFT JOIN quality_drawings d ON pc.drawing_id = d.id
         LEFT JOIN quality_ncrs n ON pc.ncr_id = n.id
        WHERE p.company_id = $1`;
-    const params = [req.user.company_id];
+    let params = [req.user.company_id];
     let idx = 2;
     if (project_id) { sql += ` AND pc.project_id = $${idx++}`; params.push(project_id); }
     if (status)      { sql += ` AND pc.status = $${idx++}`; params.push(status); }
@@ -146,6 +150,7 @@ router.get('/', async (req, res) => {
       sql += ` AND (pc.pour_card_number ILIKE $${idx} OR pc.pour_description ILIKE $${idx} OR pc.location ILIKE $${idx})`;
       params.push(`%${search}%`); idx++;
     }
+    ({ sql, params } = appendProjectScope(req, sql, params, 'pc'));
     sql += ' ORDER BY pc.created_at DESC';
     res.json({ data: (await query(sql, params)).rows });
   } catch (err) { res.status(500).json({ error: err.message }); }

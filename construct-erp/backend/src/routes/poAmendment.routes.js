@@ -240,10 +240,11 @@ router.post('/', authorize(...WRITE_ROLES), async (req, res) => {
     }
 
     const countRes = await query(
-      `SELECT COUNT(*)::int AS count FROM po_amendments WHERE company_id = $1`,
+      `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(amendment_no, '^.*-', '') AS INTEGER)), 0)::int AS last_seq
+       FROM po_amendments WHERE company_id = $1 AND amendment_no ~ '[0-9]+$'`,
       [req.user.company_id]
     );
-    const seq = String(countRes.rows[0].count + 1).padStart(3, '0');
+    const seq = String(countRes.rows[0].last_seq + 1).padStart(3, '0');
     const amendment_no = `AMD-${new Date().getFullYear()}-${seq}`;
 
     const insertRes = await query(

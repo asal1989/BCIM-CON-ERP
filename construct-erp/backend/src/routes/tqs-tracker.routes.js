@@ -104,12 +104,14 @@ runSchemaInit('tqs_material_tracker', ensureTrackerSchema);
 
 // ── Auto-number ───────────────────────────────────────────────────────────────
 async function nextTrackerNo() {
+  // MAX-based so a deleted tracker row never causes the next number to collide
   const yr = new Date().getFullYear();
   const { rows } = await query(
-    `SELECT COUNT(*) AS cnt FROM tqs_material_tracker WHERE tracker_no LIKE $1`,
+    `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(tracker_no, '^.*-', '') AS INTEGER)), 0) AS last_seq
+     FROM tqs_material_tracker WHERE tracker_no LIKE $1`,
     [`MT-${yr}-%`]
   );
-  const n = parseInt(rows[0].cnt, 10) + 1;
+  const n = parseInt(rows[0].last_seq, 10) + 1;
   return `MT-${yr}-${String(n).padStart(4, '0')}`;
 }
 

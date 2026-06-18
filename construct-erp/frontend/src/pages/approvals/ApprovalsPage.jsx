@@ -404,7 +404,7 @@ function ApprovalCard({ item, onApprove, onReject, onView, onMDReview }) {
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-export default function ApprovalsPage() {
+export default function ApprovalsPage({ embedded = false }) {
   const { user }    = useAuthStore();
   const navigate    = useNavigate();
   const qc          = useQueryClient();
@@ -473,21 +473,34 @@ export default function ApprovalsPage() {
     : 0;
 
   return (
-    <div style={{ background: Theme.pageBg, minHeight:'100vh' }}>
-      <PageHeader
-        title="My Approvals"
-        subtitle={`Welcome back, ${user?.name?.split(' ')[0] || 'User'} — ${total} item${total!==1?'s':''} waiting for your action`}
-        breadcrumbs={[{ label:'Home' },{ label:'My Approvals' }]}
-        actions={
+    <div style={embedded ? undefined : { background: Theme.pageBg, minHeight:'100vh' }}>
+      {embedded ? (
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h2 className="text-base font-bold text-slate-800">Pending Approvals</h2>
+            <p className="text-xs text-slate-500">{total} item{total!==1?'s':''} waiting for your action</p>
+          </div>
           <button onClick={() => refetch()}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg transition"
-            style={{ background:'rgba(255,255,255,0.12)', border:'1px solid rgba(255,255,255,0.25)', color:'#fff' }}>
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition">
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
           </button>
-        }
-      />
+        </div>
+      ) : (
+        <PageHeader
+          title="My Approvals"
+          subtitle={`Welcome back, ${user?.name?.split(' ')[0] || 'User'} — ${total} item${total!==1?'s':''} waiting for your action`}
+          breadcrumbs={[{ label:'Home' },{ label:'My Approvals' }]}
+          actions={
+            <button onClick={() => refetch()}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg transition"
+              style={{ background:'rgba(255,255,255,0.12)', border:'1px solid rgba(255,255,255,0.25)', color:'#fff' }}>
+              <RefreshCw className="w-3.5 h-3.5" /> Refresh
+            </button>
+          }
+        />
+      )}
 
-      <div className="p-5 md:p-6 max-w-[1400px] mx-auto space-y-5">
+      <div className={embedded ? "space-y-5" : "p-5 md:p-6 max-w-[1400px] mx-auto space-y-5"}>
 
         {/* KPI summary cards */}
         {items.length > 0 && (

@@ -67,15 +67,18 @@ const canManageLogs = (req) => MANAGER_ROLES.has(String(req.user?.role || '').to
   await safe(`CREATE INDEX IF NOT EXISTS idx_edl_date     ON engineer_daily_logs(log_date)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_ela_log      ON engineer_log_activities(log_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_ela_activity ON engineer_log_activities(activity_id)`);
+  await safe(`CREATE UNIQUE INDEX IF NOT EXISTS uq_engineer_daily_logs_number ON engineer_daily_logs(company_id, log_number)`);
   console.log('[EngineerLog] schema OK');
 })();
 
 /* ── Number generator ───────────────────────────────────────────────────── */
-async function nextLogNumber(companyId) {
-  const r = await query(
-    `SELECT COUNT(*) FROM engineer_daily_logs WHERE company_id=$1`, [companyId]
+async function nextLogNumber(client, companyId) {
+  const { rows } = await client.query(
+    `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(log_number, '^EL-', '') AS INTEGER)), 0) AS last_seq
+     FROM engineer_daily_logs WHERE company_id=$1 AND log_number LIKE 'EL-%'`,
+    [companyId]
   );
-  return `EL-${String(parseInt(r.rows[0].count) + 1).padStart(4, '0')}`;
+  return `EL-${String(parseInt(rows[0].last_seq) + 1).padStart(4, '0')}`;
 }
 
 /* ── Progress sync ──────────────────────────────────────────────────────── */
@@ -283,9 +286,9 @@ router.post('/', async (req, res) => {
     const scTotal = (mb.subcontractors || []).reduce((s, x) => s + (parseInt(x.count) || 0), 0);
     const manpower_count = (parseInt(mb.company) || 0) + scTotal + (parseInt(mb.nmr) || 0);
 
-    const log_number = await nextLogNumber(cid);
-
     const result = await withTransaction(async (client) => {
+      const log_number = await nextLogNumber(client, cid);
+
       // Check if engineer already submitted for this date + project
       const existing = await client.query(
         `SELECT id FROM engineer_daily_logs WHERE project_id=$1 AND engineer_id=$2 AND log_date=$3`,
@@ -326,7 +329,7 @@ router.post('/', async (req, res) => {
       return ins.rows[0];
     });
 
-    res.status(201).json({ data: result, message: `Log ${log_number} submitted successfully` });
+    res.status(201).json({ data: result, message: `Log ${result.log_number} submitted successfully` });
   } catch (e) {
     console.error('[EngineerLog create]', e);
     res.status(e.status || 500).json({ error: e.message });

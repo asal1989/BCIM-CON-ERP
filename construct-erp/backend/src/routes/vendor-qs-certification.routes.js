@@ -144,13 +144,14 @@ const billPayableCap = (bill = {}) => {
   return round2(certified);
 };
 
-async function nextCertNumber(companyId) {
+async function nextCertNumber(companyId, db = query) {
   const yr = new Date().getFullYear();
-  const { rows } = await query(
-    `SELECT COUNT(*)::int AS cnt FROM vendor_qs_certifications WHERE company_id=$1 AND cert_number LIKE $2`,
+  const { rows } = await db(
+    `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(cert_number, '^.*-', '') AS INTEGER)), 0)::int AS last_seq
+     FROM vendor_qs_certifications WHERE company_id=$1 AND cert_number LIKE $2`,
     [companyId, `VQS-${yr}-%`]
   );
-  return `VQS-${yr}-${String((rows[0]?.cnt || 0) + 1).padStart(4, '0')}`;
+  return `VQS-${yr}-${String((rows[0]?.last_seq || 0) + 1).padStart(4, '0')}`;
 }
 
 async function buildSummaryFromBills(executor, billIds, companyId, excludeCertificationId = null) {

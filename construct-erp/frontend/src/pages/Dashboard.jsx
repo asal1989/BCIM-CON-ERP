@@ -29,6 +29,10 @@ const HRDashboard           = lazy(() => import('./dashboards/HRDashboard'));
 const HSEDashboard          = lazy(() => import('./dashboards/HSEDashboard'));
 const StoresDashboard       = lazy(() => import('./dashboards/StoresDashboard'));
 const ProcurementDashboard  = lazy(() => import('./dashboards/ProcurementDashboard'));
+const ApprovalsPage         = lazy(() => import('./approvals/ApprovalsPage'));
+
+// Managing-director roles see the unified approvals view AS their main dashboard.
+const MD_DASHBOARD_ROLES = ['md', 'managing_director'];
 
 const PIE_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444'];
 
@@ -317,7 +321,11 @@ export default function Dashboard() {
   const role = user?.role || '';
   const dept = (user?.department || '').toLowerCase();
 
-  if (!['super_admin', 'admin'].includes(role)) {
+  // Managing director sees the full executive dashboard with their pending
+  // approvals embedded as a section near the top (see isMdRole usage below).
+  const isMdRole = MD_DASHBOARD_ROLES.includes(String(role).toLowerCase());
+
+  if (!['super_admin', 'admin'].includes(role) && !isMdRole) {
     let RoleDash = null;
     if (role === 'project_manager') RoleDash = PMDashboard;
     else if (role === 'site_engineer') RoleDash = SiteEngineerDashboard;
@@ -592,6 +600,15 @@ export default function Dashboard() {
               style={{ padding: '3px 8px', border: '1px solid #e5e7eb', background: '#fff', color: '#64748b', borderRadius: 999, fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>
               Clear all
             </button>
+          </div>
+        )}
+
+        {/* Managing Director — pending approvals embedded at top of dashboard */}
+        {isMdRole && (
+          <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e8edf3', padding: '16px 18px', marginBottom: 18, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+            <Suspense fallback={<DashLoader />}>
+              <ApprovalsPage embedded />
+            </Suspense>
           </div>
         )}
 

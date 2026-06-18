@@ -510,7 +510,8 @@ router.post('/risks', authorize(...PLANNERS), async (req, res) => {
     const score = p * imp;
     const risk_level = score >= 20 ? 'critical' : score >= 12 ? 'high' : score >= 6 ? 'medium' : 'low';
     // Auto-generate risk code
-    const cnt = (await db().query(`SELECT COUNT(*) FROM risk_register WHERE project_id=$1`, [project_id])).rows[0].count;
+    const cnt = (await db().query(`SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(risk_code, '^.*-', '') AS INTEGER)), 0) AS last_seq
+                                   FROM risk_register WHERE project_id=$1 AND risk_code ~ '[0-9]+$'`, [project_id])).rows[0].last_seq;
     const risk_code = `RISK-${String(parseInt(cnt)+1).padStart(3,'0')}`;
     const r = await db().query(`
       INSERT INTO risk_register (project_id,risk_code,risk_title,description,category,probability,impact,

@@ -5,17 +5,19 @@ const express = require('express');
 const dayjs   = require('dayjs');
 const { query } = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
+const { loadProjectScope, appendProjectScope } = require('../middleware/projectScope');
 
 // ── helpers ──────────────────────────────────────────────────────────────────
-async function nextMIR(projectId) {
-  const r = await query('SELECT COUNT(*) FROM quality_mir WHERE project_id=$1', [projectId]);
-  const n = parseInt(r.rows[0].count, 10) + 1;
-  return `MIR-${dayjs().year()}-${String(n).padStart(4, '0')}`;
+// MAX-based (avoids number reuse when a record is deleted; pass a txn client when available)
+async function nextMIR(projectId, db = query) {
+  const r = await db(`SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(mir_number, '^.*-', '') AS INTEGER)), 0) AS last_seq
+                      FROM quality_mir WHERE project_id=$1 AND mir_number ~ '[0-9]+$'`, [projectId]);
+  return `MIR-${dayjs().year()}-${String(parseInt(r.rows[0].last_seq, 10) + 1).padStart(4, '0')}`;
 }
-async function nextMTC(projectId) {
-  const r = await query('SELECT COUNT(*) FROM quality_mtc WHERE project_id=$1', [projectId]);
-  const n = parseInt(r.rows[0].count, 10) + 1;
-  return `MTC-${dayjs().year()}-${String(n).padStart(4, '0')}`;
+async function nextMTC(projectId, db = query) {
+  const r = await db(`SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(mtc_number, '^.*-', '') AS INTEGER)), 0) AS last_seq
+                      FROM quality_mtc WHERE project_id=$1 AND mtc_number ~ '[0-9]+$'`, [projectId]);
+  return `MTC-${dayjs().year()}-${String(parseInt(r.rows[0].last_seq, 10) + 1).padStart(4, '0')}`;
 }
 
 // Compute auto_result from test_parameters array
@@ -39,6 +41,7 @@ function computeAutoResult(testParameters) {
 // ═══════════════════════════════════════════════════════════════
 const mirRouter = express.Router();
 mirRouter.use(authenticate);
+mirRouter.use(loadProjectScope);
 
 // GET /quality/mir
 mirRouter.get('/', async (req, res) => {
@@ -59,7 +62,7 @@ mirRouter.get('/', async (req, res) => {
         LEFT JOIN users u2 ON m.inspected_by = u2.id
         LEFT JOIN users u3 ON m.approved_by = u3.id
        WHERE p.company_id = $1`;
-    const params = [req.user.company_id];
+    let params = [req.user.company_id];
     let idx = 2;
     if (project_id) { sql += ` AND m.project_id = $${idx++}`; params.push(project_id); }
     if (status)      { sql += ` AND m.status = $${idx++}`; params.push(status); }
@@ -67,6 +70,7 @@ mirRouter.get('/', async (req, res) => {
       sql += ` AND (m.mir_number ILIKE $${idx} OR m.material_name ILIKE $${idx} OR m.vendor_name ILIKE $${idx})`;
       params.push(`%${search}%`); idx++;
     }
+    ({ sql, params } = appendProjectScope(req, sql, params, 'm'));
     sql += ' ORDER BY m.created_at DESC';
     res.json({ data: (await query(sql, params)).rows });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -261,6 +265,7 @@ mirRouter.delete('/:id', authorize('admin', 'super_admin'), async (req, res) => 
 // ═══════════════════════════════════════════════════════════════
 const mtcRouter = express.Router();
 mtcRouter.use(authenticate);
+mtcRouter.use(loadProjectScope);
 
 // GET /quality/mtc
 mtcRouter.get('/', async (req, res) => {
@@ -279,7 +284,7 @@ mtcRouter.get('/', async (req, res) => {
         LEFT JOIN users u1 ON mt.created_by = u1.id
         LEFT JOIN users u2 ON mt.reviewed_by = u2.id
        WHERE p.company_id = $1`;
-    const params = [req.user.company_id];
+    let params = [req.user.company_id];
     let idx = 2;
     if (project_id)  { sql += ` AND mt.project_id = $${idx++}`; params.push(project_id); }
     if (status)       { sql += ` AND mt.status = $${idx++}`; params.push(status); }
@@ -288,6 +293,7 @@ mtcRouter.get('/', async (req, res) => {
       sql += ` AND (mt.internal_ref ILIKE $${idx} OR mt.mtc_number ILIKE $${idx} OR mt.material_name ILIKE $${idx})`;
       params.push(`%${search}%`); idx++;
     }
+    ({ sql, params } = appendProjectScope(req, sql, params, 'mt'));
     sql += ' ORDER BY mt.created_at DESC';
     res.json({ data: (await query(sql, params)).rows });
   } catch (err) { res.status(500).json({ error: err.message }); }

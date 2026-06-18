@@ -4,10 +4,12 @@ const multer = require('multer');
 const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { extractMBItems } = require('../services/measurementExtraction.service');
+const { loadProjectScope, appendProjectScope } = require('../middleware/projectScope');
 
 const upload = multer({ dest: 'uploads/' });
 
 router.use(authenticate);
+router.use(loadProjectScope);
 
 router.get('/', async (req, res) => {
   const { project_id, boq_item_id, status } = req.query;
@@ -19,11 +21,12 @@ router.get('/', async (req, res) => {
              LEFT JOIN users u1 ON m.submitted_by = u1.id
              LEFT JOIN users u2 ON m.qs_approved_by = u2.id
              WHERE p.company_id = $1`;
-  const params = [req.user.company_id];
+  let params = [req.user.company_id];
   let i = 2;
   if (project_id) { sql += ` AND m.project_id = $${i++}`; params.push(project_id); }
   if (boq_item_id) { sql += ` AND m.boq_item_id = $${i++}`; params.push(boq_item_id); }
   if (status) { sql += ` AND m.status = $${i++}`; params.push(status); }
+  ({ sql, params } = appendProjectScope(req, sql, params, 'm'));
   sql += ' ORDER BY m.entry_date DESC, m.created_at DESC';
   const result = await query(sql, params);
   res.json({ data: result.rows });

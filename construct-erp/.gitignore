@@ -49,3 +49,9 @@ desktop.ini
 frontend/android/
 frontend/node_modules/
 .claude/
+
+# ── Bulk RA-bill engineering data (CAD/BBS/RFI dumps — never commit) ──
+WDIRY0151/
+*.dwg
+*.bak
+*.rar

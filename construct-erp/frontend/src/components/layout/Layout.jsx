@@ -1723,19 +1723,23 @@ export default function Layout() {
                      '/stores/issue', '/stores/ledger', '/stores/mtr', '/stores/stock-verification'],
   };
 
-  const filteredGroups = navGroups.filter(g => {
-    if (['admin', 'super_admin'].includes(user?.role)) return true;
-    if (!user?.accessible_modules?.length) return true;
-    const aliases = g.label === 'Bill Tracker' ? ['Bill Tracker', 'DQS Tracker'] : [g.label];
-    return aliases.some(label => user?.accessible_modules?.includes(label));
-  }).map(g => {
-    // Filter stores nav items for security guards and store keepers
-    if (g.label === 'Stores' && STORES_ROLE_NAV[user?.role]) {
-      const allowed = STORES_ROLE_NAV[user?.role];
-      return { ...g, items: g.items.filter(item => allowed.includes(item.to)) };
-    }
-    return g;
-  });
+  const filteredGroups = navGroups
+    .filter(g => {
+      if (['admin', 'super_admin'].includes(user?.role)) return true;
+      // If no modules configured at all, show everything (fallback for unconfigured accounts)
+      if (!user?.accessible_modules?.length) return true;
+      const aliases = g.label === 'Bill Tracker' ? ['Bill Tracker', 'DQS Tracker'] : [g.label];
+      return aliases.some(label => user?.accessible_modules?.includes(label));
+    })
+    .map(g => {
+      // Filter stores nav items for security guards and store keepers
+      if (g.label === 'Stores' && STORES_ROLE_NAV[user?.role]) {
+        const allowed = STORES_ROLE_NAV[user?.role];
+        return { ...g, items: g.items.filter(item => allowed.includes(item.to)) };
+      }
+      return g;
+    })
+    .filter(g => g.items.length > 0);
 
   const doLogout = useCallback(async () => {
     sessionStorage.removeItem('erp-welcomed');
