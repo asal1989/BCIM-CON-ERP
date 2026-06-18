@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
-import { grnAPI, projectAPI, vendorAPI, poAPI, inventoryAPI } from '../../api/client';
+import { grnAPI, projectAPI, vendorAPI, poAPI, inventoryAPI, ignAPI } from '../../api/client';
 import MaterialCombobox from '../../components/shared/MaterialCombobox';
 import SearchableSelect from '../../components/shared/SearchableSelect';
 import { FIELD_HL } from '../../constants/fieldStyles';
@@ -666,7 +666,7 @@ function GRNForm({ onClose, projects, qc }) {
 
   const [form, setForm] = useState({
     project_id: '', vendor_id: '', grn_date: dayjs().format('YYYY-MM-DD'),
-    po_id: '', po_number: '', vehicle_number: '', driver_name: '',
+    po_id: '', po_number: '', ign_id: '', ign_number: '', vehicle_number: '', driver_name: '',
     challan_number: '', invoice_number: '',
     site_location: '', gate_pass_no: '', wb_slip_no: '',
     issues_notes: '', remarks: '', inspection_notes: '',
@@ -733,6 +733,56 @@ function GRNForm({ onClose, projects, qc }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.vendor_id, releasedPOs, posFetching]);
+
+  // Approved IGNs for the selected project — for linking GRN to IGN
+  const { data: approvedIGNs = [] } = useQuery({
+    queryKey: ['ign-approved-grn', form.project_id],
+    queryFn: () => ignAPI.list({ project_id: form.project_id, status: 'approved' })
+      .then(r => r.data?.data ?? r.data ?? []).catch(() => []),
+    enabled: !!form.project_id,
+  });
+
+  // Pre-fill from IGN if navigated from IGN detail panel (?from_ign=:id)
+  useEffect(() => {
+    const fromIgnId = new URLSearchParams(window.location.search).get('from_ign');
+    if (!fromIgnId) return;
+    ignAPI.get(fromIgnId).then(r => {
+      const ign = r.data?.data ?? r.data;
+      if (!ign) return;
+      setForm(p => ({
+        ...p,
+        project_id:  ign.project_id  || p.project_id,
+        vendor_id:   ign.vendor_id   || p.vendor_id,
+        ign_id:      ign.id,
+        ign_number:  ign.ign_number  || '',
+        vehicle_number: ign.vehicle_no || p.vehicle_number,
+        challan_number: ign.dc_number  || p.challan_number,
+        invoice_number: ign.bill_number || p.invoice_number,
+      }));
+      // Pre-fill items from IGN inspected quantities
+      const ignItems = (ign.items || []).filter(it => it.particulars?.trim());
+      if (ignItems.length > 0) {
+        setItems(ignItems.map(it => ({
+          ...emptyItem(),
+          material_name:     it.particulars || '',
+          unit:              it.unit || 'Nos',
+          quantity_received: it.qty_accepted ? String(it.qty_accepted) : '',
+          po_item_id:        null,
+        })));
+      }
+      toast.success('GRN pre-filled from IGN');
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function handleIGNSelect(ignId) {
+    if (!ignId) {
+      setForm(p => ({ ...p, ign_id: '', ign_number: '' }));
+      return;
+    }
+    const ign = approvedIGNs.find(i => i.id === ignId);
+    setForm(p => ({ ...p, ign_id: ignId, ign_number: ign?.ign_number || '' }));
+  }
 
   // Handle PO selection from dropdown
   function handlePOSelect(poId) {
@@ -921,6 +971,34 @@ function GRNForm({ onClose, projects, qc }) {
                   </p>
                 )}
               </div>
+
+              {/* IGN Link */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">
+                  Link to Inspection Note (IGN)
+                  <span className="ml-1 font-normal text-slate-400">(optional)</span>
+                </label>
+                <select
+                  value={form.ign_id}
+                  onChange={e => handleIGNSelect(e.target.value)}
+                  disabled={!form.project_id}
+                  className={`${inp} ${!form.project_id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <option value="">— No IGN linked —</option>
+                  {approvedIGNs.map(ign => (
+                    <option key={ign.id} value={ign.id}>
+                      {ign.ign_number} — {ign.vendor_name || ign.supplier_name || 'Unknown vendor'}
+                      {ign.date_time ? ` · ${dayjs(ign.date_time).format('DD MMM')}` : ''}
+                    </option>
+                  ))}
+                </select>
+                {form.ign_id && (
+                  <p className="text-[10px] text-blue-600 font-medium flex items-center gap-1 mt-0.5">
+                    <CheckCircle2 size={10} /> IGN linked — delivery trace: GRS → IGN → GRN
+                  </p>
+                )}
+              </div>
+
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700">Challan Number</label>
                 <input type="text" value={form.challan_number} onChange={e => setField('challan_number', e.target.value)}
