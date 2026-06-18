@@ -1093,10 +1093,10 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
 <html>
 <head>
   <meta charset="UTF-8"/>
-  <title>Purchase Order — ${detailedPO.po_number || po.po_number}</title>
+  <title></title>
   <style>
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
-    body { margin: 0; padding: 0; background: white; font-family: 'Times New Roman', Times, serif; color: #000; }
+    body { margin: 0; padding: 10mm; background: white; font-family: 'Times New Roman', Times, serif; color: #000; }
     table { border-collapse: collapse; }
     /* po-doc.thead repeats the doc code; po-doc.tfoot repeats the signature
        row + registered-office footer at the bottom of EVERY printed page. */
@@ -1105,7 +1105,7 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
     .po-items-table thead { display: table-header-group; }
     .po-items-table tbody tr { page-break-inside: avoid; }
     .po-terms-block li { page-break-inside: avoid; break-inside: avoid; }
-    @page { size: A4 portrait; margin: 10mm; }
+    @page { size: A4 portrait; margin: 0; }
     @media print { body { margin: 0; } }
   </style>
 </head>
