@@ -1106,17 +1106,20 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
     /* Keep totals block together; allow T&C to flow naturally across pages */
     .po-totals-block { page-break-inside: avoid; break-inside: avoid; }
     .po-terms-block li, .po-terms-block p { page-break-inside: avoid; break-inside: avoid; }
-    /* Signature: position:fixed with negative bottom pushes it into the @page margin,
-       so it sits below the content area (no overlap) and repeats on every printed page */
+    /* Signature pinned to the bottom of every page.
+       bottom:0 = base of the @page content area; @page margin-bottom:36mm reserves
+       that zone so rows break to the next page before entering the signature band. */
     .po-page-footer {
       position: fixed;
-      bottom: -28mm;
+      bottom: 0;
       left: 0; right: 0;
       padding: 0 12mm;
       background: white;
       border-top: 2px solid #000;
     }
-    @page { size: A4 portrait; margin: 8mm 8mm 40mm 8mm; }
+    /* Push last-page content up so it doesn't hide behind the signature */
+    .po-page { padding-bottom: 28mm !important; }
+    @page { size: A4 portrait; margin: 8mm 8mm 36mm 8mm; }
     @media print { body { margin: 0; } }
   </style>
 </head>
