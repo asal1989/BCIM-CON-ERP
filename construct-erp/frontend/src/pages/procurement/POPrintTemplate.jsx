@@ -130,10 +130,12 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
     <div ref={ref} className="po-print-wrapper" style={{ fontFamily: "'Times New Roman', Times, serif", color: '#000' }}>
       <table className="po-doc" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
 
-        {/* ── Repeating page header: doc code ────────────────────────────────── */}
+        {/* ── Repeating page header: doc code ────────────────────────────────────
+            Top space lives HERE (not in body padding) so it repeats identically
+            on every page — body padding-top only applies to page 1. */}
         <thead className="po-doc-head" style={{ display: 'table-header-group' }}>
           <tr>
-            <td style={{ padding: '0 0 4px', border: 'none' }}>
+            <td style={{ padding: '14mm 0 4px', border: 'none' }}>
               <div style={{ textAlign: 'right', fontWeight: 700, fontSize: '11px' }}>{DOC_CODE}</div>
             </td>
           </tr>
