@@ -93,6 +93,7 @@ const GRNPage             = lazy(() => import('./pages/stores/GRNPage'));
 const GRSPage             = lazy(() => import('./pages/stores/GRSPage'));
 const IGNPage             = lazy(() => import('./pages/stores/IGNPage'));
 const GatePassPage        = lazy(() => import('./pages/stores/GatePassPage'));
+const MaterialTrackerPage = lazy(() => import('./pages/stores/MaterialTrackerPage'));
 const InventoryPage       = lazy(() => import('./pages/procurement/InventoryPage'));
 const QuotationPage       = lazy(() => import('./pages/procurement/QuotationPage'));
 const RFQPage             = lazy(() => import('./pages/procurement/RFQPage'));
@@ -621,6 +622,7 @@ export default function App() {
                 <Route path="stores/ign" element={<RequireModule module="Stores"><IGNPage /></RequireModule>} />
                 <Route path="stores/grn" element={<RequireModule module="Stores"><GRNPage /></RequireModule>} />
                 <Route path="stores/gate-pass" element={<RequireModule module="Stores"><GatePassPage /></RequireModule>} />
+                <Route path="stores/material-tracker" element={<RequireModule module="Stores"><MaterialTrackerPage /></RequireModule>} />
 
                 {/* Tender Management */}
                 <Route path="tender-management" element={<RequireModule module="Tender Management"><TenderManagementPage /></RequireModule>} />

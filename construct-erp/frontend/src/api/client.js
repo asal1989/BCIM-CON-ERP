@@ -453,6 +453,19 @@ export const ignAPI = {
   remove:  (id)     => api.delete(`/ign/${id}`),
 };
 
+export const materialTrackerAPI = {
+  list:        (params)           => api.get('/material-tracker', { params }),
+  register:    (data)             => api.post('/material-tracker', data),
+  get:         (id)               => api.get(`/material-tracker/${id}`),
+  update:      (id, data)         => api.put(`/material-tracker/${id}`, data),
+  remove:      (id)               => api.delete(`/material-tracker/${id}`),
+  addLoad:     (id, data)         => api.post(`/material-tracker/${id}/loads`, data),
+  updateLoad:  (id, loadId, data) => api.put(`/material-tracker/${id}/loads/${loadId}`, data),
+  deleteLoad:  (id, loadId)       => api.delete(`/material-tracker/${id}/loads/${loadId}`),
+  abstract:    (params)           => api.get('/material-tracker/report/abstract', { params }),
+  loadwise:    (params)           => api.get('/material-tracker/report/loadwise', { params }),
+};
+
 export const gatePassAPI = {
   list:   (params) => api.get('/gate-passes', { params }),
   get:    (id)     => api.get(`/gate-passes/${id}`),

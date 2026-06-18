@@ -15,7 +15,7 @@ import {
   CalendarOff, FileBarChart, Star, UserCheck, Fingerprint, PackageCheck, ArrowLeftRight,
   Landmark, FileSignature, CircleSlash, ShieldCheck, Clock3, Lightbulb,
   Gavel, Target, Send, Coins, Replace, Link2, Wrench, Layers, MapPin, TrendingDown, FolderOpen, Calculator, IndianRupee, UserRound,
-  Cog, Fuel, Gauge
+  Cog, Fuel, Gauge, BarChart2
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import CommandPalette from './CommandPalette';
@@ -93,6 +93,7 @@ const navGroups = [
     { to: '/stores/ign',               icon: ClipboardCheck,  label: 'IGN (Inward Goods)' },
     { to: '/stores/grn',               icon: PackageCheck,    label: 'GRN Receiving' },
     { to: '/stores/gate-pass',         icon: LogOut,          label: 'Gate Pass' },
+    { to: '/stores/material-tracker', icon: BarChart2,        label: 'Material Tracker' },
     { to: '/stores/ledger',            icon: BookOpen,        label: 'Store Ledger' },
     { to: '/stores/issue',             icon: ArrowUpRight,    label: 'Issue Slip' },
     { to: '/stores/mtr',               icon: Truck,           label: 'Material Transfer' },
@@ -336,6 +337,7 @@ const NAV_SECTIONS = {
     { label: 'IGN',             paths: ['/stores/ign'] },
     { label: 'Receiving',       paths: ['/stores/grn'] },
     { label: 'Gate Pass',       paths: ['/stores/gate-pass'] },
+    { label: 'Matl Tracker',    paths: ['/stores/material-tracker'] },
     { label: 'Stock Control',   paths: ['/stores/ledger','/stores/issue'] },
     { label: 'Transfer',        paths: ['/stores/mtr'] },
     { label: 'Credit Notes',    paths: ['/stores/credit-notes'] },
@@ -1720,7 +1722,8 @@ export default function Layout() {
   const STORES_ROLE_NAV = {
     security_guard: ['/stores/grs'],
     store_keeper:   ['/stores', '/stores/grs', '/stores/ign', '/stores/grn', '/stores/gate-pass',
-                     '/stores/issue', '/stores/ledger', '/stores/mtr', '/stores/stock-verification'],
+                     '/stores/issue', '/stores/ledger', '/stores/mtr', '/stores/stock-verification',
+                     '/stores/material-tracker'],
   };
 
   const filteredGroups = navGroups
