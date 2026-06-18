@@ -1103,9 +1103,9 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
     .po-items-table thead { display: table-header-group; }
     .po-items-table tbody tr { page-break-inside: avoid; page-break-after: auto; }
     .po-layout-footer { display: none; }
-    /* Keep totals and T&C blocks together on one page */
+    /* Keep totals block together; allow T&C to flow naturally across pages */
     .po-totals-block { page-break-inside: avoid; break-inside: avoid; }
-    .po-terms-block  { page-break-inside: avoid; break-inside: avoid; }
+    .po-terms-block li, .po-terms-block p { page-break-inside: avoid; break-inside: avoid; }
     /* Signature: position:fixed with negative bottom pushes it into the @page margin,
        so it sits below the content area (no overlap) and repeats on every printed page */
     .po-page-footer {
