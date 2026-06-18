@@ -170,7 +170,9 @@ async function ensurePoMailSchema() {
 
 async function getPoDetailsForMail(req) {
   const po = await query(
-    `SELECT po.*, v.name as vendor_name, v.address AS vendor_address, v.gstin AS vendor_gstin,
+    `SELECT po.*, v.name as vendor_name, v.address AS vendor_address,
+            v.city AS vendor_city, v.state AS vendor_state, v.pincode AS vendor_pincode,
+            v.gstin AS vendor_gstin,
             v.email AS vendor_email, v.contact_person AS vendor_contact_person, v.phone AS vendor_phone,
             p.name as project_name, p.project_code, p.company_id,
             c.name AS company_name, c.email AS company_email, c.phone AS company_phone, c.address AS company_address,
@@ -268,7 +270,9 @@ function buildPOMail({ po, subject, body }) {
 router.get('/public/verify/:id', async (req, res) => {
   try {
     const po = await query(
-      `SELECT po.*, v.name as vendor_name, v.address AS vendor_address, v.gstin AS vendor_gstin,
+      `SELECT po.*, v.name as vendor_name, v.address AS vendor_address,
+              v.city AS vendor_city, v.state AS vendor_state, v.pincode AS vendor_pincode,
+              v.gstin AS vendor_gstin,
               v.email AS vendor_email, v.contact_person AS vendor_contact_person, v.phone AS vendor_phone,
               p.name as project_name, p.project_code,
               u.name AS created_by_name, u.signature_url AS created_by_sig,
@@ -747,7 +751,9 @@ router.get('/:id', async (req, res) => {
   try {
     await getAccessiblePo(req, req.params.id);
     const po = await query(
-      `SELECT po.*, v.name as vendor_name, v.address AS vendor_address, v.gstin AS vendor_gstin,
+      `SELECT po.*, v.name as vendor_name, v.address AS vendor_address,
+              v.city AS vendor_city, v.state AS vendor_state, v.pincode AS vendor_pincode,
+              v.gstin AS vendor_gstin,
               v.email AS vendor_email, v.contact_person AS vendor_contact_person, v.phone AS vendor_phone,
               p.name as project_name, p.project_code, p.company_id,
               u.name AS created_by_name, u.signature_url AS created_by_sig,

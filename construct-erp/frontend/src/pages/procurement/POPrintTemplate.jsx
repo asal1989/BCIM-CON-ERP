@@ -2,7 +2,6 @@
 import React from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import dayjs from 'dayjs';
-import { getDeliveryAddress } from '../../constants/poAddresses';
 
 // ─── Amount to words ─────────────────────────────────────────────────────────
 const ONES  = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
@@ -49,7 +48,7 @@ const formatItemNos = (nums) => {
   return out.join(', ');
 };
 
-const POPrintTemplate = React.forwardRef(({ data }, ref) => {
+const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
   if (!data) return (
     <div ref={ref} className="p-10 text-center font-bold text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
       Preparing Purchase Order…
@@ -58,8 +57,32 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
 
   const items        = data.items || [];
   const isTaxIncl    = Boolean(data.gst_inclusive);
-  const isLanco      = data.project_code === 'LH-10';
   const verifyUrl    = `${window.location.origin}/verify/po/${data.id}`;
+
+  // Company header — use live data from company-settings, fall back to known-good BCIM values
+  const BCIM = {
+    name: 'BCIM ENGINEERING PRIVATE LIMITED',
+    address: '#11, B Wing, Divyasree Chambers, O\'Shaughnessy Road',
+    city: 'Bangalore', state: 'Karnataka', pincode: '560025',
+    gstin: '29AAHCB6485A1ZL',
+  };
+  const BAD_PHONES = ['9999999999', '1234567890', '0000000000'];
+  const coName    = (company.name && !company.name.toLowerCase().includes('pvt ltd') && company.name !== 'BCIM Engineering Pvt Ltd') ? company.name : BCIM.name;
+  const coAddr    = (company.address && !company.address.toLowerCase().includes('bcim office') && !company.address.toLowerCase().includes('jayanagar')) ? company.address : BCIM.address;
+  const coCity    = company.city    || BCIM.city;
+  const coState   = company.state   || BCIM.state;
+  const coPincode = company.pincode || BCIM.pincode;
+  const coGstin   = (company.gstin  && !['29AABCB1234C1Z5','29AAXCB2929P1Z1'].includes(company.gstin)) ? company.gstin : BCIM.gstin;
+  const coPhone   = (!company.phone || BAD_PHONES.includes(company.phone)) ? '' : company.phone;
+  const coEmail   = company.email || '';
+  const coStatePin = (coState && coPincode) ? `${coState} – ${coPincode}` : (coState || coPincode);
+
+  // Vendor full address — combine street, city, state–pincode
+  const vendorCityStatePin = [
+    data.vendor_city,
+    [data.vendor_state, data.vendor_pincode].filter(Boolean).join(' – '),
+  ].filter(Boolean).join(', ');
+  const vendorFullAddr = [data.vendor_address, vendorCityStatePin].filter(Boolean).join(', ');
   const termsLines   = String(data.terms_conditions || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
   // ── Totals ──────────────────────────────────────────────────────────────────
@@ -139,15 +162,14 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
       <div className="po-page bg-white text-black"
         style={{ width: '210mm', padding: '12mm', boxSizing: 'border-box', fontSize: '10px', lineHeight: '1.4', fontFamily: "'Book Antiqua','Palatino Linotype',Palatino,serif" }}>
 
-        {/* Fixed page footer: print CSS pins this to the BOTTOM of every printed page */}
-        <div className="po-page-footer">
-          {approvalGrid}
-        </div>
-
-        {/* Layout table: repeated tfoot spacer reserves room for the fixed footer on each page */}
+        {/* Layout table: tfoot repeats the signature at the bottom of every printed page */}
         <table className="po-layout" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <tfoot className="po-layout-footer">
-            <tr><td><div className="po-footer-space" style={{ height: '100px' }} /></td></tr>
+            <tr>
+              <td style={{ padding: '6px 0 0', borderTop: '2px solid #000' }}>
+                {approvalGrid}
+              </td>
+            </tr>
           </tfoot>
           <tbody className="po-layout-body">
             <tr><td style={{ padding: 0 }}>
@@ -163,21 +185,12 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
           <div>
             <img src="/bcim-logo.png" alt="BCIM" style={{ height: '48px', objectFit: 'contain', marginBottom: '6px', display: 'block' }} />
             <div style={{ fontSize: '9px', color: '#000', lineHeight: '1.5' }}>
-              <p style={{ fontWeight: 700, fontSize: '12px', color: '#000', margin: '0 0 2px' }}>BCIM ENGINEERING PRIVATE LIMITED</p>
-              {isLanco ? (
-                <>
-                  <p style={{ margin: 0 }}>TOWER VIEW APARTMENT, NO 403, 4th FLOOR,</p>
-                  <p style={{ margin: 0 }}>PLOT NO 26 &amp; 27, SRI LAKSHMI NAGAR COLONY,</p>
-                  <p style={{ margin: 0 }}>HYDERABAD, RANGAREDDY DIST, TELANGANA – 500089</p>
-                  <p style={{ margin: 0 }}>GSTIN: 36AAHCB6485A1ZQ</p>
-                </>
-              ) : (
-                <>
-                  <p style={{ margin: 0 }}>No 579, 1st 'A' Main Road, Jayanagar 8th Block, Bangalore – 560070</p>
-                  <p style={{ margin: 0 }}>GSTIN: 29AAXCB2929P1Z1 &nbsp;|&nbsp; Tel: +91 80 26650194</p>
-                  <p style={{ margin: 0 }}>Email: procurement@bcimengineering.in</p>
-                </>
-              )}
+              <p style={{ fontWeight: 700, fontSize: '12px', color: '#000', margin: '0 0 2px' }}>{coName}</p>
+              <p style={{ margin: 0 }}>{coAddr}</p>
+              <p style={{ margin: 0 }}>{coCity}</p>
+              <p style={{ margin: 0 }}>{coStatePin}</p>
+              <p style={{ margin: 0 }}>GSTIN: {coGstin}{coPhone ? ` | Tel: ${coPhone}` : ''}</p>
+              {coEmail && <p style={{ margin: 0 }}>Email: {coEmail}</p>}
             </div>
           </div>
 
@@ -203,7 +216,7 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
             </p>
             <p style={{ fontWeight: 700, fontSize: '11px', margin: '0 0 3px', color: '#000' }}>{data.vendor_name || '—'}</p>
             {data.vendor_contact_person && <p style={{ margin: '0 0 3px', color: '#000', fontWeight: 600 }}>Kind Attn: {data.vendor_contact_person}</p>}
-            {data.vendor_address && <p style={{ color: '#000', whiteSpace: 'pre-line', margin: '0 0 3px' }}>{data.vendor_address}</p>}
+            <p style={{ color: '#000', whiteSpace: 'pre-line', margin: '0 0 3px' }}>{vendorFullAddr || '—'}</p>
             {data.vendor_phone && <p style={{ margin: '2px 0 0', color: '#000', fontWeight: 600 }}>Mobile: {data.vendor_phone}</p>}
             {data.vendor_email && <p style={{ margin: '2px 0 0', color: '#000', fontWeight: 600 }}>Email: {data.vendor_email}</p>}
             <p style={{ margin: '4px 0 0', fontWeight: 700, color: '#000' }}>
@@ -235,7 +248,11 @@ const POPrintTemplate = React.forwardRef(({ data }, ref) => {
         {/* Delivery Address + Order Intro (stacked) */}
         <div style={{ marginBottom: '10px', fontSize: '9px' }}>
           <p style={{ fontWeight: 700, textDecoration: 'underline', marginBottom: '3px' }}>DELIVERY ADDRESS:</p>
-          <p style={{ color: '#000', whiteSpace: 'pre-line', marginBottom: '6px' }}>{data.delivery_address || getDeliveryAddress({ project_code: data.project_code, name: data.project_name }) || '—'}</p>
+          <p style={{ color: '#000', whiteSpace: 'pre-line', marginBottom: '6px' }}>
+            {data.delivery_address ||
+              [data.project_location, data.project_city, data.project_state].filter(Boolean).join(', ') ||
+              '—'}
+          </p>
           <p style={{ color: '#000', fontStyle: 'italic' }}>
             {data.order_intro || 'We hereby place an order on you for supply of the following materials / services as per the terms and conditions below.'}
           </p>
