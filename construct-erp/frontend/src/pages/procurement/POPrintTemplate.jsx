@@ -171,13 +171,17 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
               <p style={{ fontWeight: 700, fontSize: '12px', color: '#000', margin: '0 0 2px' }}>
                 {company.name || 'BCIM ENGINEERING PRIVATE LIMITED'}
               </p>
-              {[company.address, company.city,
-                company.state && company.pincode ? `${company.state} – ${company.pincode}` : (company.state || company.pincode)
+              {[
+                company.address || '#11, B Wing, Divyasree Chambers, O\'Shaughnessy Road',
+                company.city    || 'Bangalore',
+                (company.state && company.pincode)
+                  ? `${company.state} – ${company.pincode}`
+                  : (company.state || company.pincode || 'Karnataka – 560025'),
               ].filter(Boolean).map((line, i) => (
                 <p key={i} style={{ margin: 0 }}>{line}</p>
               ))}
               <p style={{ margin: 0 }}>
-                GSTIN: {company.gstin || '—'}
+                GSTIN: {company.gstin || '29AAHCB6485A1ZL'}
                 {company.phone ? ` | Tel: ${company.phone}` : ''}
               </p>
               {company.email && <p style={{ margin: 0 }}>Email: {company.email}</p>}
