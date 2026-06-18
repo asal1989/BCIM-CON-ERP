@@ -38,6 +38,10 @@ const router = express.Router();
   await safe(`ALTER TABLE grn ADD COLUMN IF NOT EXISTS issues_notes TEXT`);
   await safe(`ALTER TABLE grn ADD COLUMN IF NOT EXISTS inspection_notes TEXT`);
 
+  // 7. IGN link — tie GRN back to the Inward Goods Note that preceded it
+  await safe(`ALTER TABLE grn ADD COLUMN IF NOT EXISTS ign_id UUID REFERENCES ign(id)`);
+  await safe(`ALTER TABLE grn ADD COLUMN IF NOT EXISTS ign_number VARCHAR(50)`);
+
   console.log('[GRN] Schema migration OK');
 })();
 
@@ -169,6 +173,7 @@ router.post('/', async (req, res) => {
       vehicle_number, driver_name, challan_number, invoice_number,
       site_location, gate_pass_no, wb_slip_no,
       remarks, issues_notes, inspection_notes,
+      ign_id, ign_number,
       items,
       bills: billsData,
       bill: legacyBillData,
@@ -211,11 +216,13 @@ router.post('/', async (req, res) => {
           project_id, po_id, vendor_id, grn_number, grn_date,
           vehicle_number, driver_name, challan_number, invoice_number,
           site_location, gate_pass_no, wb_slip_no, remarks, issues_notes, inspection_notes,
+          ign_id, ign_number,
           quality_status, received_by
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'pending',$16) RETURNING *`,
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'pending',$18) RETURNING *`,
         [project_id, po_id, vendor_id, grn_number, grn_date, vehicle_number, driver_name,
          challan_number, invoice_number, site_location, gate_pass_no, wb_slip_no,
-         remarks, issues_notes || null, inspection_notes || null, req.user.id]
+         remarks, issues_notes || null, inspection_notes || null,
+         ign_id || null, ign_number || null, req.user.id]
       );
       const grnId = headerRes.rows[0].id;
 

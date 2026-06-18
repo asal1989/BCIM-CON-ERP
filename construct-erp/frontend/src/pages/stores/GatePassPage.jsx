@@ -1,23 +1,27 @@
 // src/pages/stores/GatePassPage.jsx — Gate Pass (Returnable / Non-Returnable)
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   LogOut, Plus, X, Search, Download, RefreshCw,
   Clock, CheckCircle2, RotateCcw, Package,
   ChevronRight, FileText, Truck, ClipboardList, AlertTriangle,
+  Printer, XCircle,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
+import { useReactToPrint } from 'react-to-print';
 import { gatePassAPI, projectAPI } from '../../api/client';
+import GatePassPrintTemplate from './GatePassPrintTemplate';
 import { FIELD_HL } from '../../constants/fieldStyles';
 import toast from 'react-hot-toast';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import { CONSTRUCTION_UNITS as UNITS } from '../../constants/units';
 
 const STATUS_CONFIG = {
-  open:     { label: 'Open',     color: 'bg-amber-50 text-amber-700 border-amber-200',    icon: Clock },
-  returned: { label: 'Returned', color: 'bg-blue-50 text-blue-700 border-blue-200',       icon: RotateCcw },
-  closed:   { label: 'Closed',   color: 'bg-slate-100 text-slate-600 border-slate-200',   icon: CheckCircle2 },
+  open:      { label: 'Open',      color: 'bg-amber-50 text-amber-700 border-amber-200',  icon: Clock },
+  returned:  { label: 'Returned',  color: 'bg-blue-50 text-blue-700 border-blue-200',     icon: RotateCcw },
+  closed:    { label: 'Closed',    color: 'bg-slate-100 text-slate-600 border-slate-200', icon: CheckCircle2 },
+  cancelled: { label: 'Cancelled', color: 'bg-red-50 text-red-700 border-red-200',        icon: XCircle },
 };
 
 const TYPE_CONFIG = {
@@ -45,9 +49,11 @@ function TypeBadge({ type }) {
 }
 
 /* ── Detail Panel ─────────────────────────────────────────────────────────── */
-function GatePassDetailPanel({ gp, onClose, onReturn, onClose2, returnLoading, closeLoading }) {
+function GatePassDetailPanel({ gp, onClose, onReturn, onClose2, returnLoading, closeLoading, onCancel, cancelLoading }) {
   if (!gp) return null;
   const items = gp.items || [];
+  const localPrintRef = useRef(null);
+  const handlePrint = useReactToPrint({ contentRef: localPrintRef });
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -63,10 +69,17 @@ function GatePassDetailPanel({ gp, onClose, onReturn, onClose2, returnLoading, c
           <div className="flex items-center gap-2 flex-shrink-0">
             <TypeBadge type={gp.pass_type} />
             <StatusBadge status={gp.status} />
+            <button onClick={handlePrint} title="Print Gate Pass"
+              className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition">
+              <Printer size={15} />
+            </button>
             <button onClick={onClose} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition">
               <X size={16} />
             </button>
           </div>
+        </div>
+        <div style={{ display: 'none' }}>
+          <GatePassPrintTemplate ref={localPrintRef} data={gp} />
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-slate-50">
@@ -143,7 +156,7 @@ function GatePassDetailPanel({ gp, onClose, onReturn, onClose2, returnLoading, c
               {returnLoading ? 'Processing…' : 'Mark as Returned'}
             </button>
           )}
-          {gp.status !== 'closed' && (
+          {gp.status !== 'closed' && gp.status !== 'cancelled' && (
             <button onClick={onClose2} disabled={closeLoading}
               className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-800 disabled:opacity-60 text-white font-medium py-2.5 rounded-xl text-sm transition">
               <CheckCircle2 size={16} />
@@ -154,6 +167,13 @@ function GatePassDetailPanel({ gp, onClose, onReturn, onClose2, returnLoading, c
             <div className="flex items-center gap-2 bg-slate-100 text-slate-700 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold">
               <CheckCircle2 size={16} /> Gate Pass Closed
             </div>
+          )}
+          {gp.status === 'open' && (
+            <button onClick={onCancel} disabled={cancelLoading}
+              className="w-full flex items-center justify-center gap-2 bg-red-50 hover:bg-red-100 disabled:opacity-60 text-red-700 border border-red-200 font-medium py-2 rounded-xl text-sm transition">
+              <XCircle size={14} />
+              {cancelLoading ? 'Cancelling…' : 'Cancel Gate Pass'}
+            </button>
           )}
           <button onClick={onClose}
             className="w-full py-2.5 text-slate-600 font-medium text-sm border border-slate-200 rounded-xl hover:bg-slate-50 transition">
@@ -211,10 +231,21 @@ export default function GatePassPage() {
     onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
   });
 
+  const cancelMutation = useMutation({
+    mutationFn: (id) => gatePassAPI.cancel(id),
+    onSuccess: () => {
+      toast.success('Gate Pass cancelled');
+      qc.invalidateQueries({ queryKey: ['gp-list'] });
+      qc.invalidateQueries({ queryKey: ['gp', selectedId] });
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
+  });
+
   const counts = {
     open:       gpList.filter(g => g.status === 'open').length,
     returned:   gpList.filter(g => g.status === 'returned').length,
     closed:     gpList.filter(g => g.status === 'closed').length,
+    cancelled:  gpList.filter(g => g.status === 'cancelled').length,
     overdue:    gpList.filter(g =>
       g.pass_type === 'returnable' && g.status === 'open' &&
       g.expected_return_date && dayjs(g.expected_return_date).isBefore(dayjs(), 'day')
@@ -248,10 +279,11 @@ export default function GatePassPage() {
   };
 
   const STATUS_FILTERS = [
-    { key: 'all',      label: 'All',      count: gpList.length },
-    { key: 'open',     label: 'Open',     count: counts.open,     color: 'bg-amber-500' },
-    { key: 'returned', label: 'Returned', count: counts.returned, color: 'bg-blue-500' },
-    { key: 'closed',   label: 'Closed',   count: counts.closed,   color: 'bg-slate-400' },
+    { key: 'all',       label: 'All',       count: gpList.length },
+    { key: 'open',      label: 'Open',      count: counts.open,      color: 'bg-amber-500' },
+    { key: 'returned',  label: 'Returned',  count: counts.returned,  color: 'bg-blue-500' },
+    { key: 'closed',    label: 'Closed',    count: counts.closed,    color: 'bg-slate-400' },
+    { key: 'cancelled', label: 'Cancelled', count: counts.cancelled, color: 'bg-red-400' },
   ];
 
   return (
@@ -412,6 +444,8 @@ export default function GatePassPage() {
             onClose2={() => closeMutation.mutate(selectedId)}
             returnLoading={returnMutation.isPending}
             closeLoading={closeMutation.isPending}
+            onCancel={() => cancelMutation.mutate(selectedId)}
+            cancelLoading={cancelMutation.isPending}
           />
         )}
 

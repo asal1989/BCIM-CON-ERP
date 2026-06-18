@@ -1,24 +1,28 @@
 // src/pages/stores/GRSPage.jsx — Goods Receipt by Security
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ShieldCheck, Plus, X, Search, Download, Printer,
   Clock, CheckCircle2, AlertTriangle, Package,
   ChevronRight, FileText, Truck, RefreshCw, ClipboardList,
+  XCircle,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
+import { useReactToPrint } from 'react-to-print';
 import { grsAPI, projectAPI } from '../../api/client';
 import { FIELD_HL } from '../../constants/fieldStyles';
 import toast from 'react-hot-toast';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import { CONSTRUCTION_UNITS as UNITS } from '../../constants/units';
+import GRSPrintTemplate from './GRSPrintTemplate';
 
 const inr = n => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
 const STATUS_CONFIG = {
   pending:      { label: 'Pending',      color: 'bg-amber-50 text-amber-700 border-amber-200',    dot: 'bg-amber-500',   icon: Clock },
   acknowledged: { label: 'Acknowledged', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', icon: CheckCircle2 },
+  cancelled:    { label: 'Cancelled',    color: 'bg-red-50 text-red-600 border-red-200',           dot: 'bg-red-400',     icon: XCircle },
 };
 
 function StatusBadge({ status }) {
@@ -33,9 +37,12 @@ function StatusBadge({ status }) {
 }
 
 /* ── Detail Panel ─────────────────────────────────────────────────────────── */
-function GRSDetailPanel({ grs, onClose, onAcknowledge, ackLoading }) {
+function GRSDetailPanel({ grs, onClose, onAcknowledge, ackLoading, onCancel, cancelLoading, onCreateIGN }) {
   if (!grs) return null;
   const items = grs.items || [];
+
+  const localPrintRef = useRef(null);
+  const handlePrint = useReactToPrint({ contentRef: localPrintRef });
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -51,6 +58,11 @@ function GRSDetailPanel({ grs, onClose, onAcknowledge, ackLoading }) {
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <StatusBadge status={grs.status} />
+            <button onClick={handlePrint}
+              className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition"
+              title="Print GRS">
+              <Printer size={15} />
+            </button>
             <button onClick={onClose}
               className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition">
               <X size={16} />
@@ -123,6 +135,11 @@ function GRSDetailPanel({ grs, onClose, onAcknowledge, ackLoading }) {
               </div>
             </div>
           )}
+
+          {/* Hidden print template */}
+          <div style={{ display: 'none' }}>
+            <GRSPrintTemplate ref={localPrintRef} data={grs} />
+          </div>
         </div>
 
         {/* Footer */}
@@ -139,6 +156,20 @@ function GRSDetailPanel({ grs, onClose, onAcknowledge, ackLoading }) {
               <CheckCircle2 size={16} className="text-emerald-600" />
               Acknowledged by Engineer / Stores Officer
             </div>
+          )}
+          {grs.status === 'acknowledged' && onCreateIGN && (
+            <button onClick={onCreateIGN}
+              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-xl text-sm transition">
+              <FileText size={15} />
+              Create IGN from this GRS →
+            </button>
+          )}
+          {grs.status === 'pending' && (
+            <button onClick={onCancel} disabled={cancelLoading}
+              className="w-full flex items-center justify-center gap-2 border border-red-200 text-red-600 hover:bg-red-50 font-medium py-2.5 rounded-xl text-sm transition disabled:opacity-50">
+              <XCircle size={15} />
+              {cancelLoading ? 'Cancelling…' : 'Cancel GRS'}
+            </button>
           )}
           <button onClick={onClose}
             className="w-full py-2.5 text-slate-600 font-medium text-sm border border-slate-200 rounded-xl hover:bg-slate-50 transition">
@@ -185,9 +216,20 @@ export default function GRSPage() {
     onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
   });
 
+  const cancelMutation = useMutation({
+    mutationFn: (id) => grsAPI.cancel(id),
+    onSuccess: () => {
+      toast.success('GRS cancelled');
+      qc.invalidateQueries({ queryKey: ['grs-list'] });
+      qc.invalidateQueries({ queryKey: ['grs', selectedId] });
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
+  });
+
   const counts = {
     pending:      grsList.filter(g => g.status === 'pending').length,
     acknowledged: grsList.filter(g => g.status === 'acknowledged').length,
+    cancelled:    grsList.filter(g => g.status === 'cancelled').length,
   };
 
   const filtered = grsList.filter(g => {
@@ -227,6 +269,7 @@ export default function GRSPage() {
     { key: 'all',         label: 'All',          count: grsList.length },
     { key: 'pending',     label: 'Pending',      count: counts.pending,      color: 'bg-amber-500' },
     { key: 'acknowledged',label: 'Acknowledged', count: counts.acknowledged, color: 'bg-emerald-500' },
+    { key: 'cancelled',   label: 'Cancelled',    count: counts.cancelled,    color: 'bg-red-400' },
   ];
 
   return (
@@ -388,6 +431,12 @@ export default function GRSPage() {
             onClose={() => setSelectedId(null)}
             onAcknowledge={() => ackMutation.mutate(selectedId)}
             ackLoading={ackMutation.isPending}
+            onCancel={() => cancelMutation.mutate(selectedId)}
+            cancelLoading={cancelMutation.isPending}
+            onCreateIGN={() => {
+              setSelectedId(null);
+              window.location.href = `/stores/ign?from_grs=${selectedId}`;
+            }}
           />
         )}
 

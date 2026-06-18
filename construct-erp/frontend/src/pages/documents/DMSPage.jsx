@@ -83,15 +83,13 @@ function DocumentPreview({ doc }) {
   const [blobUrl,     setBlobUrl]     = useState('');
   const [loadingDocx, setLoadingDocx] = useState(false);
   const [imgBlobUrl,  setImgBlobUrl]  = useState('');
+  const [pdfBlobUrl,  setPdfBlobUrl]  = useState('');
   const ext   = fileExt(doc?.file_name || doc?.local_url || '');
   const isPDF = ext === 'pdf';
   const isImg = ['png','jpg','jpeg','webp','gif'].includes(ext);
   const excel = isExcelDoc(doc);
   const word  = isWordDoc(doc);
-
-  // For PDF: fetch with Authorization header and create blob URL
-  const token      = sessionStorage.getItem('accessToken');
-  const [pdfBlobUrl, setPdfBlobUrl] = useState('');
+  const token = sessionStorage.getItem('accessToken');
 
   const preview = useQuery({
     queryKey: ['dms-preview', doc?.id],
@@ -102,12 +100,11 @@ function DocumentPreview({ doc }) {
   useEffect(() => {
     let alive = true;
     let url   = '';
-    // PDF — fetch with auth header, create blob URL
+    // PDF — fetch blob with auth header (iframe can't send headers, so a direct URL 401s)
     if (doc?.id && isPDF) {
-      fetch(`/api/v1/dms/${doc.id}/preview`, { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.ok ? r.blob() : Promise.reject(new Error(`HTTP ${r.status}`)))
-        .then(blob => { if (!alive) return; url = URL.createObjectURL(blob); setPdfBlobUrl(url); })
-        .catch(e => toast.error('Unable to load PDF: ' + (e?.message || 'Unknown error')));
+      dmsAPI.fileBlob(doc.id)
+        .then(res => { if (!alive) return; url = URL.createObjectURL(res.data); setPdfBlobUrl(url); })
+        .catch(e => toast.error(e?.response?.data?.error || 'Unable to load PDF'));
     }
     // Image — fetch blob for display
     if (doc?.id && isImg) {
@@ -125,9 +122,9 @@ function DocumentPreview({ doc }) {
         .finally(() => { if (alive) setLoadingDocx(false); });
     }
     return () => { alive = false; if (url) URL.revokeObjectURL(url); };
-  }, [doc?.id, isPDF, isImg, word, token]);
+  }, [doc?.id, isPDF, isImg, word]);
 
-  // PDF — blob URL from authenticated endpoint
+  // PDF — blob URL (object URL needs no auth, sidesteps iframe header limitation)
   if (isPDF) {
     return (
       <div className="space-y-3">

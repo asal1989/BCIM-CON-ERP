@@ -508,7 +508,7 @@ function DetailView({ id, onBack, onRefresh }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const handlePrint = useReactToPrint({ content: () => printRef.current });
+  const handlePrint = useReactToPrint({ contentRef: printRef });
 
   const handlePDF = () => {
     if (!t) return;

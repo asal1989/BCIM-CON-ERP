@@ -28,7 +28,7 @@ const router = express.Router();
       expected_return_date DATE,
       returned_at     TIMESTAMPTZ,
       status          VARCHAR(30) NOT NULL DEFAULT 'open'
-                        CHECK (status IN ('open','returned','closed')),
+                        CHECK (status IN ('open','returned','closed','cancelled')),
       remarks         TEXT,
       created_by      UUID REFERENCES users(id),
       created_at      TIMESTAMPTZ DEFAULT NOW()
@@ -50,6 +50,12 @@ const router = express.Router();
   await safe(`CREATE INDEX IF NOT EXISTS idx_gp_company ON gate_passes(company_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_gp_project ON gate_passes(project_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_gp_items   ON gate_pass_items(gp_id)`);
+  await safe(`CREATE INDEX IF NOT EXISTS idx_gp_status    ON gate_passes(status)`);
+  await safe(`CREATE INDEX IF NOT EXISTS idx_gp_pass_type ON gate_passes(pass_type)`);
+  await safe(`CREATE INDEX IF NOT EXISTS idx_gp_date      ON gate_passes(date_time)`);
+
+  await safe(`ALTER TABLE gate_passes DROP CONSTRAINT IF EXISTS gate_passes_status_check`);
+  await safe(`ALTER TABLE gate_passes ADD CONSTRAINT gate_passes_status_check CHECK (status IN ('open','returned','closed','cancelled'))`);
 
   console.log('[GatePass] Schema migration OK');
 })();
@@ -60,17 +66,17 @@ router.use(loadProjectScope);
 async function nextGpNumber(companyId) {
   const yr = new Date().getFullYear();
   const res = await query(
-    `SELECT COUNT(*) FROM gate_passes WHERE company_id = $1 AND EXTRACT(YEAR FROM created_at) = $2`,
+    `SELECT COALESCE(MAX(CAST(SPLIT_PART(gp_number,'/',3) AS INTEGER)),0)+1 AS next
+     FROM gate_passes WHERE company_id=$1 AND EXTRACT(YEAR FROM created_at)=$2`,
     [companyId, yr]
   );
-  const seq = String(parseInt(res.rows[0].count) + 1).padStart(4, '0');
-  return `GP/${yr}/${seq}`;
+  return `GP/${yr}/${String(res.rows[0].next).padStart(4,'0')}`;
 }
 
 // ── GET /gate-passes ──────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
   try {
-    const { project_id, status, pass_type } = req.query;
+    const { project_id, status, pass_type, from_date, to_date } = req.query;
     let sql = `
       SELECT gp.*,
              p.name  AS project_name,
@@ -85,6 +91,8 @@ router.get('/', async (req, res) => {
     if (project_id) { sql += ` AND gp.project_id = $${i++}`; params.push(project_id); }
     if (status)     { sql += ` AND gp.status = $${i++}`;     params.push(status); }
     if (pass_type)  { sql += ` AND gp.pass_type = $${i++}`;  params.push(pass_type); }
+    if (from_date) { sql += ` AND gp.date_time >= $${i++}`; params.push(from_date); }
+    if (to_date)   { sql += ` AND gp.date_time <= $${i++}`; params.push(to_date); }
     ({ sql, params } = appendProjectScope(req, sql, params, 'gp'));
     sql += ' ORDER BY gp.date_time DESC';
     const result = await query(sql, params);
@@ -218,6 +226,28 @@ router.patch('/:id/close', async (req, res) => {
       [req.params.id]
     );
     res.json({ message: 'Gate Pass closed' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PATCH /gate-passes/:id/cancel ────────────────────────────────────────
+router.patch('/:id/cancel', async (req, res) => {
+  try {
+    const check = await query(
+      `SELECT gp.project_id, p.company_id FROM gate_passes gp
+       JOIN projects p ON p.id = gp.project_id
+       WHERE gp.id = $1 AND gp.status = 'open'`,
+      [req.params.id]
+    );
+    if (!check.rows.length || check.rows[0].company_id !== req.user.company_id) {
+      return res.status(404).json({ error: 'Gate Pass not found or cannot be cancelled' });
+    }
+    if (!userCanAccessProject(req, check.rows[0].project_id)) {
+      return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
+    await query(`UPDATE gate_passes SET status = 'cancelled' WHERE id = $1`, [req.params.id]);
+    res.json({ message: 'Gate Pass cancelled' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

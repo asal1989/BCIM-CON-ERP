@@ -23,7 +23,7 @@ const router = express.Router();
       date_time        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       security_incharge VARCHAR(120),
       status           VARCHAR(30) NOT NULL DEFAULT 'pending'
-                         CHECK (status IN ('pending','acknowledged')),
+                         CHECK (status IN ('pending','acknowledged','cancelled')),
       acknowledged_by  UUID REFERENCES users(id),
       acknowledged_at  TIMESTAMPTZ,
       remarks          TEXT,
@@ -47,6 +47,11 @@ const router = express.Router();
   await safe(`CREATE INDEX IF NOT EXISTS idx_grs_company ON grs(company_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_grs_project ON grs(project_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_grs_items_grs ON grs_items(grs_id)`);
+  await safe(`CREATE INDEX IF NOT EXISTS idx_grs_status ON grs(status)`);
+  await safe(`CREATE INDEX IF NOT EXISTS idx_grs_date   ON grs(date_time)`);
+
+  await safe(`ALTER TABLE grs DROP CONSTRAINT IF EXISTS grs_status_check`);
+  await safe(`ALTER TABLE grs ADD CONSTRAINT grs_status_check CHECK (status IN ('pending','acknowledged','cancelled'))`);
 
   console.log('[GRS] Schema migration OK');
 })();
@@ -58,17 +63,17 @@ router.use(loadProjectScope);
 async function nextGrsNumber(companyId) {
   const yr = new Date().getFullYear();
   const res = await query(
-    `SELECT COUNT(*) FROM grs WHERE company_id = $1 AND EXTRACT(YEAR FROM created_at) = $2`,
+    `SELECT COALESCE(MAX(CAST(SPLIT_PART(grs_number,'/',3) AS INTEGER)),0)+1 AS next
+     FROM grs WHERE company_id=$1 AND EXTRACT(YEAR FROM created_at)=$2`,
     [companyId, yr]
   );
-  const seq = String(parseInt(res.rows[0].count) + 1).padStart(4, '0');
-  return `GRS/${yr}/${seq}`;
+  return `GRS/${yr}/${String(res.rows[0].next).padStart(4,'0')}`;
 }
 
 // ── GET /grs ──────────────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
   try {
-    const { project_id, status } = req.query;
+    const { project_id, status, from_date, to_date } = req.query;
     let sql = `
       SELECT g.*,
              p.name  AS project_name,
@@ -84,6 +89,8 @@ router.get('/', async (req, res) => {
     let i = 2;
     if (project_id) { sql += ` AND g.project_id = $${i++}`; params.push(project_id); }
     if (status)     { sql += ` AND g.status = $${i++}`;     params.push(status); }
+    if (from_date) { sql += ` AND g.date_time >= $${i++}`; params.push(from_date); }
+    if (to_date)   { sql += ` AND g.date_time <= $${i++}`; params.push(to_date); }
     ({ sql, params } = appendProjectScope(req, sql, params, 'g'));
     sql += ' ORDER BY g.date_time DESC';
     const result = await query(sql, params);
@@ -187,6 +194,28 @@ router.patch('/:id/acknowledge', async (req, res) => {
       [req.user.id, req.params.id]
     );
     res.json({ message: 'GRS acknowledged' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PATCH /grs/:id/cancel ──────────────────────────────────────────────────
+router.patch('/:id/cancel', async (req, res) => {
+  try {
+    const check = await query(
+      `SELECT g.project_id, p.company_id FROM grs g
+       JOIN projects p ON p.id = g.project_id
+       WHERE g.id = $1 AND g.status = 'pending'`,
+      [req.params.id]
+    );
+    if (!check.rows.length || check.rows[0].company_id !== req.user.company_id) {
+      return res.status(404).json({ error: 'GRS not found or cannot be cancelled' });
+    }
+    if (!userCanAccessProject(req, check.rows[0].project_id)) {
+      return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
+    await query(`UPDATE grs SET status = 'cancelled' WHERE id = $1`, [req.params.id]);
+    res.json({ message: 'GRS cancelled' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

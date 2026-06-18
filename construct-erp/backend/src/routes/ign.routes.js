@@ -29,7 +29,7 @@ const router = express.Router();
       inspected_by    VARCHAR(120),
       stores_incharge VARCHAR(120),
       status          VARCHAR(30) NOT NULL DEFAULT 'pending'
-                        CHECK (status IN ('pending','inspected','approved')),
+                        CHECK (status IN ('pending','inspected','approved','cancelled')),
       approved_by     UUID REFERENCES users(id),
       approved_at     TIMESTAMPTZ,
       remarks         TEXT,
@@ -56,6 +56,12 @@ const router = express.Router();
   await safe(`CREATE INDEX IF NOT EXISTS idx_ign_company  ON ign(company_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_ign_project  ON ign(project_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_ign_items    ON ign_items(ign_id)`);
+  await safe(`CREATE INDEX IF NOT EXISTS idx_ign_status ON ign(status)`);
+  await safe(`CREATE INDEX IF NOT EXISTS idx_ign_date   ON ign(date_time)`);
+  await safe(`CREATE INDEX IF NOT EXISTS idx_ign_grs    ON ign(grs_id)`);
+
+  await safe(`ALTER TABLE ign DROP CONSTRAINT IF EXISTS ign_status_check`);
+  await safe(`ALTER TABLE ign ADD CONSTRAINT ign_status_check CHECK (status IN ('pending','inspected','approved','cancelled'))`);
 
   console.log('[IGN] Schema migration OK');
 })();
@@ -66,17 +72,17 @@ router.use(loadProjectScope);
 async function nextIgnNumber(companyId) {
   const yr = new Date().getFullYear();
   const res = await query(
-    `SELECT COUNT(*) FROM ign WHERE company_id = $1 AND EXTRACT(YEAR FROM created_at) = $2`,
+    `SELECT COALESCE(MAX(CAST(SPLIT_PART(ign_number,'/',3) AS INTEGER)),0)+1 AS next
+     FROM ign WHERE company_id=$1 AND EXTRACT(YEAR FROM created_at)=$2`,
     [companyId, yr]
   );
-  const seq = String(parseInt(res.rows[0].count) + 1).padStart(4, '0');
-  return `IGN/${yr}/${seq}`;
+  return `IGN/${yr}/${String(res.rows[0].next).padStart(4,'0')}`;
 }
 
 // ── GET /ign ──────────────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
   try {
-    const { project_id, status } = req.query;
+    const { project_id, status, from_date, to_date } = req.query;
     let sql = `
       SELECT n.*,
              p.name  AS project_name,
@@ -92,6 +98,8 @@ router.get('/', async (req, res) => {
     let i = 2;
     if (project_id) { sql += ` AND n.project_id = $${i++}`; params.push(project_id); }
     if (status)     { sql += ` AND n.status = $${i++}`;     params.push(status); }
+    if (from_date) { sql += ` AND n.date_time >= $${i++}`; params.push(from_date); }
+    if (to_date)   { sql += ` AND n.date_time <= $${i++}`; params.push(to_date); }
     ({ sql, params } = appendProjectScope(req, sql, params, 'n'));
     sql += ' ORDER BY n.date_time DESC';
     const result = await query(sql, params);
@@ -196,7 +204,7 @@ router.patch('/:id/approve', async (req, res) => {
     const check = await query(
       `SELECT n.project_id, p.company_id FROM ign n
        JOIN projects p ON p.id = n.project_id
-       WHERE n.id = $1 AND n.status = 'pending'`,
+       WHERE n.id = $1 AND n.status IN ('pending','inspected')`,
       [req.params.id]
     );
     if (!check.rows.length || check.rows[0].company_id !== req.user.company_id) {
@@ -211,6 +219,50 @@ router.patch('/:id/approve', async (req, res) => {
       [req.user.id, req.params.id]
     );
     res.json({ message: 'IGN approved' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PATCH /ign/:id/inspect ────────────────────────────────────────────────
+router.patch('/:id/inspect', async (req, res) => {
+  try {
+    const check = await query(
+      `SELECT n.project_id, p.company_id FROM ign n
+       JOIN projects p ON p.id = n.project_id
+       WHERE n.id = $1 AND n.status = 'pending'`,
+      [req.params.id]
+    );
+    if (!check.rows.length || check.rows[0].company_id !== req.user.company_id) {
+      return res.status(404).json({ error: 'IGN not found or not in pending state' });
+    }
+    if (!userCanAccessProject(req, check.rows[0].project_id)) {
+      return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
+    await query(`UPDATE ign SET status = 'inspected' WHERE id = $1`, [req.params.id]);
+    res.json({ message: 'IGN marked as inspected' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PATCH /ign/:id/cancel ─────────────────────────────────────────────────
+router.patch('/:id/cancel', async (req, res) => {
+  try {
+    const check = await query(
+      `SELECT n.project_id, p.company_id FROM ign n
+       JOIN projects p ON p.id = n.project_id
+       WHERE n.id = $1 AND n.status = 'pending'`,
+      [req.params.id]
+    );
+    if (!check.rows.length || check.rows[0].company_id !== req.user.company_id) {
+      return res.status(404).json({ error: 'IGN not found or cannot be cancelled' });
+    }
+    if (!userCanAccessProject(req, check.rows[0].project_id)) {
+      return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
+    await query(`UPDATE ign SET status = 'cancelled' WHERE id = $1`, [req.params.id]);
+    res.json({ message: 'IGN cancelled' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

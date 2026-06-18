@@ -24,7 +24,7 @@ export default function Project360Page() {
   const printRef = useRef();
 
   const handlePrint = useReactToPrint({
-    content: () => printRef.current,
+    contentRef: printRef,
     onAfterPrint: () => setPrintData(null),
   });
 

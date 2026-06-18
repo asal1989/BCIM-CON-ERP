@@ -1782,4 +1782,30 @@ export const stockVerifAPI = {
   saveItems: (id, items) => api.put(`/stock-verifications/${id}/items`, { items }),
 };
 
+export const grsAPI = {
+  list:        (params) => api.get('/grs', { params }),
+  get:         (id)     => api.get(`/grs/${id}`),
+  create:      (data)   => api.post('/grs', data),
+  acknowledge: (id)     => api.patch(`/grs/${id}/acknowledge`),
+  cancel:      (id)     => api.patch(`/grs/${id}/cancel`),
+};
+
+export const ignAPI = {
+  list:    (params) => api.get('/ign', { params }),
+  get:     (id)     => api.get(`/ign/${id}`),
+  create:  (data)   => api.post('/ign', data),
+  inspect: (id)     => api.patch(`/ign/${id}/inspect`),
+  approve: (id)     => api.patch(`/ign/${id}/approve`),
+  cancel:  (id)     => api.patch(`/ign/${id}/cancel`),
+};
+
+export const gatePassAPI = {
+  list:   (params) => api.get('/gate-passes', { params }),
+  get:    (id)     => api.get(`/gate-passes/${id}`),
+  create: (data)   => api.post('/gate-passes', data),
+  return: (id)     => api.patch(`/gate-passes/${id}/return`),
+  close:  (id)     => api.patch(`/gate-passes/${id}/close`),
+  cancel: (id)     => api.patch(`/gate-passes/${id}/cancel`),
+};
+
 export default api;

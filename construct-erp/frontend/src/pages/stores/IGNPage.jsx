@@ -1,24 +1,28 @@
 // src/pages/stores/IGNPage.jsx — Inward Goods Note
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  ClipboardCheck, Plus, X, Search, Download, RefreshCw,
+  ClipboardCheck, Plus, X, Search, Download, RefreshCw, Printer,
   Clock, CheckCircle2, Package, ChevronRight, FileText,
-  Truck, ClipboardList, AlertTriangle,
+  Truck, ClipboardList, AlertTriangle, XCircle, Eye,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
+import { useReactToPrint } from 'react-to-print';
 import { ignAPI, projectAPI, grsAPI, poAPI } from '../../api/client';
 import { FIELD_HL } from '../../constants/fieldStyles';
 import toast from 'react-hot-toast';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import { CONSTRUCTION_UNITS as UNITS } from '../../constants/units';
+import IGNPrintTemplate from './IGNPrintTemplate';
 
 const fmt = n => n != null ? Number(n).toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : '—';
 
 const STATUS_CONFIG = {
-  pending:  { label: 'Pending',  color: 'bg-amber-50 text-amber-700 border-amber-200',    icon: Clock },
-  approved: { label: 'Approved', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: CheckCircle2 },
+  pending:   { label: 'Pending',   color: 'bg-amber-50 text-amber-700 border-amber-200',    icon: Clock },
+  inspected: { label: 'Inspected', color: 'bg-blue-50 text-blue-700 border-blue-200',       icon: Eye },
+  approved:  { label: 'Approved',  color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: CheckCircle2 },
+  cancelled: { label: 'Cancelled', color: 'bg-red-50 text-red-600 border-red-200',          icon: XCircle },
 };
 
 function StatusBadge({ status }) {
@@ -32,10 +36,12 @@ function StatusBadge({ status }) {
 }
 
 /* ── Detail Panel ─────────────────────────────────────────────────────────── */
-function IGNDetailPanel({ ign, onClose, onApprove, approveLoading }) {
+function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, inspectLoading, onCancel, cancelLoading, onCreateGRN }) {
   if (!ign) return null;
   const items = ign.items || [];
   const totalRejected = items.reduce((s, it) => s + parseFloat(it.qty_rejected || 0), 0);
+  const localPrintRef = useRef(null);
+  const handlePrint = useReactToPrint({ contentRef: localPrintRef });
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -50,6 +56,11 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading }) {
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <StatusBadge status={ign.status} />
+            <button onClick={handlePrint}
+              className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition"
+              title="Print IGN">
+              <Printer size={15} />
+            </button>
             <button onClick={onClose} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition">
               <X size={16} />
             </button>
@@ -76,6 +87,46 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading }) {
               </div>
             ))}
           </div>
+
+          {/* 3-step workflow progress */}
+          {ign.status !== 'cancelled' && (
+            <div className="bg-white border border-slate-200 rounded-xl p-4">
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Workflow Progress</div>
+              <div className="flex items-center gap-2">
+                {[
+                  { key: 'pending',   label: 'Created' },
+                  { key: 'inspected', label: 'Inspected' },
+                  { key: 'approved',  label: 'Approved' },
+                ].map((step, idx, arr) => {
+                  const statusOrder = ['pending','inspected','approved'];
+                  const currentIdx = statusOrder.indexOf(ign.status);
+                  const stepIdx = statusOrder.indexOf(step.key);
+                  const done = currentIdx > stepIdx || (ign.status === step.key);
+                  const active = ign.status === step.key;
+                  return (
+                    <React.Fragment key={step.key}>
+                      <div className="flex flex-col items-center gap-1 flex-1">
+                        <div className={clsx(
+                          'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2',
+                          done && !active ? 'bg-emerald-500 border-emerald-500 text-white' :
+                          active ? 'bg-white border-indigo-500 text-indigo-600' :
+                          'bg-white border-slate-200 text-slate-400'
+                        )}>
+                          {done && !active ? <CheckCircle2 size={14} /> : idx + 1}
+                        </div>
+                        <span className={clsx('text-[9px] font-medium uppercase tracking-wide',
+                          done ? 'text-emerald-600' : active ? 'text-indigo-600' : 'text-slate-400'
+                        )}>{step.label}</span>
+                      </div>
+                      {idx < arr.length - 1 && (
+                        <div className={clsx('flex-1 h-0.5 mb-4', currentIdx > stepIdx ? 'bg-emerald-400' : 'bg-slate-200')} />
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Rejection warning */}
           {totalRejected > 0 && (
@@ -140,20 +191,46 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading }) {
               </p>
             </div>
           )}
+
+          {/* Hidden print template */}
+          <div style={{ display: 'none' }}>
+            <IGNPrintTemplate ref={localPrintRef} data={ign} />
+          </div>
         </div>
 
         <div className="px-6 py-4 border-t border-slate-200 bg-white flex-shrink-0 space-y-2">
           {ign.status === 'pending' && (
+            <button onClick={onInspect} disabled={inspectLoading}
+              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium py-3 rounded-xl text-sm transition shadow-sm">
+              <Eye size={16} />
+              {inspectLoading ? 'Processing…' : 'Mark as Inspected'}
+            </button>
+          )}
+          {(ign.status === 'pending' || ign.status === 'inspected') && (
             <button onClick={onApprove} disabled={approveLoading}
               className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-medium py-3 rounded-xl text-sm transition shadow-sm">
               <CheckCircle2 size={16} />
               {approveLoading ? 'Processing…' : 'Approve IGN — Stores-In-Charge Sign-off'}
             </button>
           )}
+          {ign.status === 'approved' && onCreateGRN && (
+            <button onClick={onCreateGRN}
+              className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-xl text-sm transition">
+              <FileText size={15} />
+              Create GRN from this IGN →
+            </button>
+          )}
           {ign.status === 'approved' && (
             <div className="flex items-center gap-2 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl px-4 py-3 text-sm font-bold">
               <CheckCircle2 size={16} className="text-emerald-600" /> IGN Approved by Stores-In-Charge
             </div>
+          )}
+          {ign.status === 'pending' && (
+            <button onClick={onCancel} disabled={cancelLoading}
+              className="w-full flex items-center justify-center gap-2 border border-red-200 text-red-600 hover:bg-red-50 font-medium py-2.5 rounded-xl text-sm transition disabled:opacity-50">
+              <XCircle size={15} />
+              {cancelLoading ? 'Cancelling…' : 'Cancel IGN'}
+            </button>
           )}
           <button onClick={onClose}
             className="w-full py-2.5 text-slate-600 font-medium text-sm border border-slate-200 rounded-xl hover:bg-slate-50 transition">
@@ -168,7 +245,7 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading }) {
 /* ── Main Page ────────────────────────────────────────────────────────────── */
 export default function IGNPage() {
   const qc = useQueryClient();
-  const [showForm, setShowForm]           = useState(false);
+  const [showForm, setShowForm]           = useState(() => !!new URLSearchParams(window.location.search).get('from_grs'));
   const [selectedId, setSelectedId]       = useState(null);
   const [search, setSearch]               = useState('');
   const [statusFilter, setStatusFilter]   = useState('all');
@@ -200,9 +277,30 @@ export default function IGNPage() {
     onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
   });
 
+  const inspectMutation = useMutation({
+    mutationFn: (id) => ignAPI.inspect(id),
+    onSuccess: () => {
+      toast.success('IGN marked as inspected');
+      qc.invalidateQueries({ queryKey: ['ign-list'] });
+      qc.invalidateQueries({ queryKey: ['ign', selectedId] });
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: (id) => ignAPI.cancel(id),
+    onSuccess: () => {
+      toast.success('IGN cancelled');
+      qc.invalidateQueries({ queryKey: ['ign-list'] });
+      qc.invalidateQueries({ queryKey: ['ign', selectedId] });
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
+  });
+
   const counts = {
-    pending:  ignList.filter(g => g.status === 'pending').length,
-    approved: ignList.filter(g => g.status === 'approved').length,
+    pending:   ignList.filter(g => g.status === 'pending').length,
+    inspected: ignList.filter(g => g.status === 'inspected').length,
+    approved:  ignList.filter(g => g.status === 'approved').length,
   };
 
   const filtered = ignList.filter(g => {
@@ -233,9 +331,10 @@ export default function IGNPage() {
   };
 
   const STATUS_FILTERS = [
-    { key: 'all',      label: 'All',      count: ignList.length },
-    { key: 'pending',  label: 'Pending',  count: counts.pending,  color: 'bg-amber-500' },
-    { key: 'approved', label: 'Approved', count: counts.approved, color: 'bg-emerald-500' },
+    { key: 'all',       label: 'All',       count: ignList.length },
+    { key: 'pending',   label: 'Pending',   count: counts.pending,   color: 'bg-amber-500' },
+    { key: 'inspected', label: 'Inspected', count: counts.inspected, color: 'bg-blue-500' },
+    { key: 'approved',  label: 'Approved',  count: counts.approved,  color: 'bg-emerald-500' },
   ];
 
   return (
@@ -263,10 +362,11 @@ export default function IGNPage() {
       />
 
       <div className="p-6 md:p-8 max-w-full mx-auto">
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
-          <ThemeKpiCard icon={FileText}     label="Total IGNs"  value={ignList.length}    color="slate" />
-          <ThemeKpiCard icon={Clock}        label="Pending"     value={counts.pending}    color="amber" />
-          <ThemeKpiCard icon={CheckCircle2} label="Approved"    value={counts.approved}   color="emerald" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          <ThemeKpiCard icon={FileText}     label="Total IGNs"  value={ignList.length}     color="slate" />
+          <ThemeKpiCard icon={Clock}        label="Pending"     value={counts.pending}     color="amber" />
+          <ThemeKpiCard icon={Eye}          label="Inspected"   value={counts.inspected}   color="blue" />
+          <ThemeKpiCard icon={CheckCircle2} label="Approved"    value={counts.approved}    color="emerald" />
         </div>
 
         {counts.pending > 0 && (
@@ -382,11 +482,24 @@ export default function IGNPage() {
             onClose={() => setSelectedId(null)}
             onApprove={() => approveMutation.mutate(selectedId)}
             approveLoading={approveMutation.isPending}
+            onInspect={() => inspectMutation.mutate(selectedId)}
+            inspectLoading={inspectMutation.isPending}
+            onCancel={() => cancelMutation.mutate(selectedId)}
+            cancelLoading={cancelMutation.isPending}
+            onCreateGRN={() => {
+              setSelectedId(null);
+              window.location.href = `/stores/grn?from_ign=${selectedId}`;
+            }}
           />
         )}
 
         {showForm && (
-          <IGNForm onClose={() => setShowForm(false)} projects={projects} qc={qc} />
+          <IGNForm
+            onClose={() => { setShowForm(false); window.history.replaceState({}, '', window.location.pathname); }}
+            projects={projects}
+            qc={qc}
+            fromGrsId={new URLSearchParams(window.location.search).get('from_grs')}
+          />
         )}
       </div>
     </div>
@@ -394,7 +507,7 @@ export default function IGNPage() {
 }
 
 /* ── IGN Create Form ──────────────────────────────────────────────────────── */
-function IGNForm({ onClose, projects, qc }) {
+function IGNForm({ onClose, projects, qc, fromGrsId }) {
   const emptyItem = () => ({
     invoice_no: '', material_name: '', unit: '',
     qty_as_per_dc: '', qty_inspected: '', qty_rejected: '', remarks: '',
@@ -415,6 +528,18 @@ function IGNForm({ onClose, projects, qc }) {
     queryFn: () => grsAPI.list(form.project_id ? { project_id: form.project_id } : {}).then(r => r.data?.data ?? []).catch(() => []),
     enabled: !!form.project_id,
   });
+
+  // Pre-fill from GRS when opened via quick-link
+  useEffect(() => {
+    if (!fromGrsId || !grsList.length) return;
+    const grs = grsList.find(g => g.id === fromGrsId);
+    if (grs) {
+      setField('grs_id', grs.id);
+      setField('grs_number', grs.grs_number || '');
+      if (grs.vehicle_no) setField('vehicle_no', grs.vehicle_no);
+      if (grs.supplier_name) setField('supplier_name', grs.supplier_name);
+    }
+  }, [fromGrsId, grsList]);
 
   const createMutation = useMutation({
     mutationFn: (d) => ignAPI.create(d),
