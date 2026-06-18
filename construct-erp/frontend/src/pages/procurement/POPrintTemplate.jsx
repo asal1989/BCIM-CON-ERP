@@ -60,6 +60,17 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
   const verifyUrl    = `${window.location.origin}/verify/po/${data.id}`;
   const termsLines   = String(data.terms_conditions || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
+  // Company header — DB values take precedence only when they exist AND differ from defaults
+  const coName    = company.name    || 'BCIM ENGINEERING PRIVATE LIMITED';
+  const coAddr    = company.address || '#11, B Wing, Divyasree Chambers, O\'Shaughnessy Road';
+  const coCity    = company.city    || 'Bangalore';
+  const coState   = company.state   || 'Karnataka';
+  const coPincode = company.pincode || '560025';
+  const coGstin   = company.gstin   || '29AAHCB6485A1ZL';
+  const coPhone   = company.phone   || '';
+  const coEmail   = company.email   || '';
+  const coStatePin = (coState && coPincode) ? `${coState} – ${coPincode}` : (coState || coPincode);
+
   // ── Totals ──────────────────────────────────────────────────────────────────
   const subTotal   = parseFloat(data.sub_total  || items.reduce((s, it) => s + parseFloat(it.quantity||0) * parseFloat(it.rate||0), 0));
   const totalGst   = isTaxIncl ? 0 : parseFloat(data.total_gst  || items.reduce((s, it) => s + parseFloat(it.gst_amount||0), 0));
@@ -168,23 +179,14 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
           <div>
             <img src="/bcim-logo.png" alt="BCIM" style={{ height: '48px', objectFit: 'contain', marginBottom: '6px', display: 'block' }} />
             <div style={{ fontSize: '9px', color: '#000', lineHeight: '1.5' }}>
-              <p style={{ fontWeight: 700, fontSize: '12px', color: '#000', margin: '0 0 2px' }}>
-                {company.name || 'BCIM ENGINEERING PRIVATE LIMITED'}
-              </p>
-              {[
-                company.address || '#11, B Wing, Divyasree Chambers, O\'Shaughnessy Road',
-                company.city    || 'Bangalore',
-                (company.state && company.pincode)
-                  ? `${company.state} – ${company.pincode}`
-                  : (company.state || company.pincode || 'Karnataka – 560025'),
-              ].filter(Boolean).map((line, i) => (
-                <p key={i} style={{ margin: 0 }}>{line}</p>
-              ))}
+              <p style={{ fontWeight: 700, fontSize: '12px', color: '#000', margin: '0 0 2px' }}>{coName}</p>
+              <p style={{ margin: 0 }}>{coAddr}</p>
+              <p style={{ margin: 0 }}>{coCity}</p>
+              <p style={{ margin: 0 }}>{coStatePin}</p>
               <p style={{ margin: 0 }}>
-                GSTIN: {company.gstin || '29AAHCB6485A1ZL'}
-                {company.phone ? ` | Tel: ${company.phone}` : ''}
+                GSTIN: {coGstin}{coPhone ? ` | Tel: ${coPhone}` : ''}
               </p>
-              {company.email && <p style={{ margin: 0 }}>Email: {company.email}</p>}
+              {coEmail && <p style={{ margin: 0 }}>Email: {coEmail}</p>}
             </div>
           </div>
 
