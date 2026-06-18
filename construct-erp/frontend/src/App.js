@@ -89,6 +89,9 @@ const RateContractPage    = lazy(() => import('./pages/procurement/RateContractP
 const VendorPaymentsPage  = lazy(() => import('./pages/procurement/VendorPaymentsPage'));
 const POPage              = lazy(() => import('./pages/procurement/POPage'));
 const GRNPage             = lazy(() => import('./pages/stores/GRNPage'));
+const GRSPage             = lazy(() => import('./pages/stores/GRSPage'));
+const IGNPage             = lazy(() => import('./pages/stores/IGNPage'));
+const GatePassPage        = lazy(() => import('./pages/stores/GatePassPage'));
 const InventoryPage       = lazy(() => import('./pages/procurement/InventoryPage'));
 const QuotationPage       = lazy(() => import('./pages/procurement/QuotationPage'));
 const RFQPage             = lazy(() => import('./pages/procurement/RFQPage'));
@@ -292,6 +295,9 @@ function getHomeRoute(user) {
   const role = String(user.role || '').toLowerCase();
   // Super admin & admin → full dashboard
   if (['admin', 'super_admin'].includes(role)) return '/dashboard';
+  // Stores roles → stores landing
+  if (role === 'security_guard') return '/stores/grs';
+  if (role === 'store_keeper')   return '/stores';
   // Approver roles → My Approvals page as home
   if (APPROVER_ROLES.includes(role)) return '/approvals';
   const mods = user.accessible_modules;
@@ -574,6 +580,9 @@ export default function App() {
                 <Route path="stores/work-orders" element={<RequireModule module="Stores"><WorkOrderPage /></RequireModule>} />
                 <Route path="stores/wo-register" element={<RequireModule module="Stores"><WORegisterPage /></RequireModule>} />
                 <Route path="stores/grn" element={<RequireModule module="Stores"><GRNPage /></RequireModule>} />
+                <Route path="stores/grs" element={<RequireModule module="Stores"><GRSPage /></RequireModule>} />
+                <Route path="stores/ign" element={<RequireModule module="Stores"><IGNPage /></RequireModule>} />
+                <Route path="stores/gate-pass" element={<RequireModule module="Stores"><GatePassPage /></RequireModule>} />
 
                 {/* Tender Management */}
                 <Route path="tender-management" element={<RequireModule module="Tender Management"><TenderManagementPage /></RequireModule>} />

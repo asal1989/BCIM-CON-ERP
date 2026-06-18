@@ -85,9 +85,12 @@ const navGroups = [
     { to: '/stores/po-register',       icon: ClipboardList,   label: 'PO Register' },
     { to: '/stores/work-orders',       icon: Hammer,          label: 'Work Orders' },
     { to: '/stores/wo-register',       icon: ClipboardList,   label: 'WO Register' },
+    { to: '/stores/grs',               icon: ShieldCheck,     label: 'GRS (Security Gate)' },
+    { to: '/stores/ign',               icon: ClipboardCheck,  label: 'IGN (Inward Goods)' },
     { to: '/stores/grn',               icon: PackageCheck,    label: 'GRN Receiving' },
+    { to: '/stores/gate-pass',         icon: LogOut,          label: 'Gate Pass' },
     { to: '/stores/ledger',            icon: BookOpen,        label: 'Store Ledger' },
-    { to: '/stores/issue',             icon: ArrowUpRight,    label: 'Issue Notes (MIN)' },
+    { to: '/stores/issue',             icon: ArrowUpRight,    label: 'Issue Slip' },
     { to: '/stores/mtr',               icon: Truck,           label: 'Material Transfer' },
     { to: '/stores/credit-notes',      icon: TrendingDown,    label: 'Credit Notes' },
     { to: '/stores/documents',         icon: FolderSearch,    label: 'Documents' },
@@ -1695,12 +1698,25 @@ export default function Layout() {
     return segs.length >= 2 && location.pathname.startsWith(p + '/');
   };
 
+  // Stores nav items visible per role
+  const STORES_ROLE_NAV = {
+    security_guard: ['/stores/grs'],
+    store_keeper:   ['/stores', '/stores/grs', '/stores/ign', '/stores/grn', '/stores/gate-pass',
+                     '/stores/issue', '/stores/ledger', '/stores/mtr', '/stores/stock-verification'],
+  };
+
   const filteredGroups = navGroups.filter(g => {
     if (['admin', 'super_admin'].includes(user?.role)) return true;
     // If no modules configured at all, show everything (fallback for unconfigured accounts)
     if (!user?.accessible_modules?.length) return true;
     const aliases = g.label === 'Bill Tracker' ? ['Bill Tracker', 'DQS Tracker'] : [g.label];
     return aliases.some(label => user?.accessible_modules?.includes(label));
+  }).map(g => {
+    if (g.label === 'Stores' && STORES_ROLE_NAV[user?.role]) {
+      const allowed = STORES_ROLE_NAV[user?.role];
+      return { ...g, items: g.items.filter(item => allowed.includes(item.to)) };
+    }
+    return g;
   });
 
   const doLogout = useCallback(async () => {
