@@ -1096,7 +1096,7 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
   <title></title>
   <style>
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
-    body { margin: 0; padding: 10mm 10mm 55mm 10mm; background: white; font-family: 'Times New Roman', Times, serif; color: #000; }
+    body { margin: 0; padding: 16mm 10mm 55mm 10mm; background: white; font-family: 'Times New Roman', Times, serif; color: #000; }
     table { border-collapse: collapse; }
     .po-doc > thead { display: table-header-group; }
     .po-items-table thead { display: table-header-group; }
