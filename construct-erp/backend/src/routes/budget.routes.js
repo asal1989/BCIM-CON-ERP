@@ -7,6 +7,42 @@ const router = express.Router();
 router.use(authenticate);
 router.use(loadProjectScope);
 
+// One-time migration: normalize legacy cost_head names in budget_items to new DIPPL naming
+;(async () => {
+  try {
+    await query(`
+      UPDATE budget_items SET cost_head = 'Labour — Skilled'
+        WHERE cost_head ILIKE 'labour%skilled%' AND cost_head NOT LIKE '%—%';
+      UPDATE budget_items SET cost_head = 'Labour — Unskilled'
+        WHERE cost_head ILIKE 'labour%unskilled%' AND cost_head NOT LIKE '%—%';
+      UPDATE budget_items SET cost_head = 'Labour — Supervisory'
+        WHERE cost_head ILIKE 'labour%supervis%' AND cost_head NOT LIKE '%—%';
+      UPDATE budget_items SET cost_head = 'Material — Reinforcement'
+        WHERE (cost_head ILIKE 'material%steel%' OR cost_head ILIKE 'material%reinforc%') AND cost_head NOT LIKE '%—%';
+      UPDATE budget_items SET cost_head = 'Material — Concrete & Aggregates'
+        WHERE (cost_head ILIKE 'material%concrete%' OR cost_head ILIKE 'material%aggregate%') AND cost_head NOT LIKE '%—%';
+      UPDATE budget_items SET cost_head = 'Material — Formworks'
+        WHERE (cost_head ILIKE 'material%formwork%' OR cost_head ILIKE 'material%shuttering%') AND cost_head NOT LIKE '%—%';
+      UPDATE budget_items SET cost_head = 'Material — Other Materials'
+        WHERE cost_head ILIKE 'material%other%' AND cost_head NOT LIKE '%—%';
+      UPDATE budget_items SET cost_head = 'P & M — Equipment (General)'
+        WHERE (cost_head ILIKE 'plant%machinery%' OR cost_head ILIKE 'p%m%hired%') AND cost_head NOT LIKE '%—%';
+      UPDATE budget_items SET cost_head = 'Subcontracting — Civil'
+        WHERE cost_head ILIKE 'subcontract%civil%' AND cost_head NOT LIKE '%—%';
+      UPDATE budget_items SET cost_head = 'Subcontracting — MEP'
+        WHERE cost_head ILIKE 'subcontract%mep%' AND cost_head NOT LIKE '%—%';
+      UPDATE budget_items SET cost_head = 'Overhead — Site Overhead'
+        WHERE (cost_head ILIKE 'site overhead' OR cost_head ILIKE 'overhead%site%') AND cost_head NOT LIKE '%—%';
+      UPDATE budget_items SET cost_head = 'Overhead — Head Office'
+        WHERE cost_head ILIKE 'overhead%office%' AND cost_head NOT LIKE '%—%';
+      UPDATE budget_items SET cost_head = 'Electrical — Cables & Wiring'
+        WHERE cost_head ILIKE 'electrical' AND cost_head NOT LIKE '%—%';
+      UPDATE budget_items SET cost_head = 'Safety — PPE & Protective Gear'
+        WHERE cost_head ILIKE 'safety' AND cost_head NOT LIKE '%—%';
+    `);
+  } catch (_) {}
+})();
+
 // Reusable: actual spend from DQS tqs_bills (paid) grouped by cost head.
 // vendor_id is NULL on tqs_bills — join by name (ILIKE) as fallback.
 // WO bills → Subcontracting — Civil by default; PO bills → vendor_type mapping.
