@@ -1,16 +1,17 @@
 // src/pages/stores/StockReportPage.jsx
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   BarChart2, TrendingUp, TrendingDown, Download,
   AlertTriangle, Package, Search, Filter,
-  Calendar, ChevronDown, RefreshCw, FileText
+  Calendar, ChevronDown, RefreshCw, FileText, Wrench
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
 import { inventoryAPI, projectAPI } from '../../api/client';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import toast from 'react-hot-toast';
+import useAuthStore from '../../store/authStore';
 
 const CATEGORIES = [
   'All Categories',
@@ -45,10 +46,22 @@ export default function StockReportPage() {
   const [categoryFilter, setCategoryFilter] = useState('All Categories');
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('monthly'); // 'monthly' | 'valuation' | 'slow'
+  const { user } = useAuthStore();
+  const isAdmin = ['super_admin', 'admin'].includes(user?.role);
+  const queryClient = useQueryClient();
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: () => projectAPI.list().then(r => r.data?.data ?? r.data ?? []).catch(() => []),
+  });
+
+  const repairMutation = useMutation({
+    mutationFn: () => inventoryAPI.repairDoubleStock(projectFilter || undefined),
+    onSuccess: (res) => {
+      toast.success(res.data?.message || 'Stock balances recalculated');
+      queryClient.invalidateQueries({ queryKey: ['stock-report'] });
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'Repair failed'),
   });
 
   const { data: reportData = [], isLoading, refetch } = useQuery({
@@ -109,6 +122,23 @@ export default function StockReportPage() {
         breadcrumbs={[{ label: 'Stores' }, { label: 'Stock Report' }]}
         actions={
           <>
+            {isAdmin && (
+              <button
+                onClick={() => {
+                  if (window.confirm(
+                    projectFilter
+                      ? 'Recalculate stock balances for the selected project from transaction history? This corrects double-posted stock.'
+                      : 'Recalculate stock balances for ALL projects from transaction history? This corrects double-posted stock.'
+                  )) repairMutation.mutate();
+                }}
+                disabled={repairMutation.isPending}
+                title="Fix phantom stock caused by double-posting"
+                className="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg"
+                style={{ background: 'rgba(239,68,68,0.20)', border: '1px solid rgba(239,68,68,0.40)', color: '#fca5a5' }}>
+                <Wrench className="w-3.5 h-3.5" />
+                {repairMutation.isPending ? 'Repairing…' : 'Repair Stock'}
+              </button>
+            )}
             <button onClick={() => refetch()}
               className="w-9 h-9 flex items-center justify-center rounded-lg"
               style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.20)', color: '#fff' }}>

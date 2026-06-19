@@ -500,34 +500,62 @@ router.patch('/:id/approve-qc', async (req, res) => {
       const items = await client.query(`SELECT * FROM grn_items WHERE grn_id = $1`, [grn.id]);
 
       // 3. Process Inventory Updates
+      // Guard: if bills already posted stock via 'bill_receipt', skip incrementing
+      // closing_stock to avoid double-counting the same physical delivery.
+      const billPostedCheck = await client.query(
+        `SELECT COUNT(*) AS cnt FROM stock_transactions st
+         JOIN tqs_bills b ON b.id = st.reference_id
+         WHERE b.grn_id = $1 AND b.is_deleted = FALSE AND st.transaction_type = 'bill_receipt'`,
+        [grn.id]
+      );
+      const billsAlreadyPostedStock = parseInt(billPostedCheck.rows[0].cnt) > 0;
+
       for (const it of items.rows) {
         // Find/Create Inventory Item — also store latest unit_rate
         const itemRate = it.rate ? parseFloat(it.rate) : 0;
-        const inv = await client.query(
-          `INSERT INTO inventory (project_id, material_name, unit, site_location, opening_stock, closing_stock, unit_rate)
-           VALUES ($1, $2, $3, $4, 0, $5, $6)
-           ON CONFLICT (project_id, material_name, site_location)
-           DO UPDATE SET
-             closing_stock = inventory.closing_stock + $5,
-             unit_rate     = CASE WHEN $6 > 0 THEN $6 ELSE inventory.unit_rate END,
-             last_updated  = NOW()
-           RETURNING id`,
-          [grn.project_id, it.material_name, it.unit, grn.site_location || 'main', parseFloat(it.quantity_received), itemRate]
-        );
-        const inventoryId = inv.rows[0].id;
-        
-        // Spawn Forensic Batch/Lot
-        await client.query(
-          `INSERT INTO inventory_batches (inventory_id, batch_number, expiry_date, opening_quantity, current_quantity, grn_id)
-           VALUES ($1, $2, $3, $4, $4, $5)`,
-          [inventoryId, it.batch_number || `BAT-${grn.grn_number}-${it.id.slice(-4)}`, it.expiry_date || null, parseFloat(it.quantity_received), grn.id]
-        );
-        
-        await client.query(
-          `INSERT INTO stock_transactions (project_id, inventory_id, transaction_type, quantity, reference_number, remarks, transacted_by)
-           VALUES ($1, $2, 'grn', $3, $4, $5, $6)`,
-          [grn.project_id, inventoryId, it.quantity_received, grn.grn_number, 'Industrial QC Approved', req.user.id]
-        );
+        let inventoryId;
+
+        if (!billsAlreadyPostedStock) {
+          // No bills posted stock — QC approval is the stock-in event
+          const inv = await client.query(
+            `INSERT INTO inventory (project_id, material_name, unit, site_location, opening_stock, closing_stock, unit_rate)
+             VALUES ($1, $2, $3, $4, 0, $5, $6)
+             ON CONFLICT (project_id, material_name, site_location)
+             DO UPDATE SET
+               closing_stock = inventory.closing_stock + $5,
+               unit_rate     = CASE WHEN $6 > 0 THEN $6 ELSE inventory.unit_rate END,
+               last_updated  = NOW()
+             RETURNING id`,
+            [grn.project_id, it.material_name, it.unit, grn.site_location || 'main', parseFloat(it.quantity_received), itemRate]
+          );
+          inventoryId = inv.rows[0].id;
+          await client.query(
+            `INSERT INTO stock_transactions (project_id, inventory_id, transaction_type, quantity, reference_number, remarks, transacted_by)
+             VALUES ($1, $2, 'grn', $3, $4, $5, $6)`,
+            [grn.project_id, inventoryId, it.quantity_received, grn.grn_number, 'QC Approved', req.user.id]
+          );
+        } else {
+          // Bills already incremented closing_stock; just update unit_rate + get id for batches
+          const inv = await client.query(
+            `INSERT INTO inventory (project_id, material_name, unit, site_location, opening_stock, closing_stock, unit_rate)
+             VALUES ($1, $2, $3, $4, 0, 0, $5)
+             ON CONFLICT (project_id, material_name, site_location)
+             DO UPDATE SET
+               unit_rate = CASE WHEN $5 > 0 THEN $5 ELSE inventory.unit_rate END,
+               last_updated = NOW()
+             RETURNING id`,
+            [grn.project_id, it.material_name, it.unit, grn.site_location || 'main', itemRate]
+          );
+          inventoryId = inv.rows[0].id;
+        }
+        // Spawn Forensic Batch/Lot (always, regardless of whether bills posted stock)
+        if (inventoryId) {
+          await client.query(
+            `INSERT INTO inventory_batches (inventory_id, batch_number, expiry_date, opening_quantity, current_quantity, grn_id)
+             VALUES ($1, $2, $3, $4, $4, $5)`,
+            [inventoryId, it.batch_number || `BAT-${grn.grn_number}-${it.id.slice(-4)}`, it.expiry_date || null, parseFloat(it.quantity_received), grn.id]
+          );
+        }
       }
       // Auto-close PO when all items are fully received
       if (grn.po_id) {
@@ -647,10 +675,18 @@ router.delete('/:id', authorize('super_admin'), async (req, res) => {
         await client.query(`DELETE FROM tqs_bills WHERE id = $1`, [b.id]);
       }
 
-      // 2. QC-approval posting — reverse only if it actually posted to inventory.
+      // 2. QC-approval posting — only reverse if QC actually posted to inventory
+      // (i.e. 'grn' transactions exist). When bills posted stock first, QC skips
+      // the inventory increment so there is nothing to reverse here.
       if (grn.quality_status === 'approved') {
-        const items = await client.query(`SELECT material_name, quantity_received FROM grn_items WHERE grn_id = $1`, [grn.id]);
-        for (const it of items.rows) await subtractStock(it.material_name, it.quantity_received);
+        const qcTxns = await client.query(
+          `SELECT COUNT(*) AS cnt FROM stock_transactions WHERE reference_number=$1 AND transaction_type='grn'`,
+          [grn.grn_number]
+        );
+        if (parseInt(qcTxns.rows[0].cnt) > 0) {
+          const items = await client.query(`SELECT material_name, quantity_received FROM grn_items WHERE grn_id = $1`, [grn.id]);
+          for (const it of items.rows) await subtractStock(it.material_name, it.quantity_received);
+        }
         await client.query(`DELETE FROM stock_transactions WHERE reference_number = $1 AND transaction_type = 'grn'`, [grn.grn_number]);
         if (grn.po_id) {
           await client.query(`UPDATE purchase_orders SET status = 'approved' WHERE id = $1 AND status = 'received'`, [grn.po_id]);
