@@ -193,6 +193,7 @@ const IssuePage                 = lazy(() => import('./pages/stores/IssuePage'))
 const StoreLedgerPage           = lazy(() => import('./pages/stores/StoreLedgerPage'));
 const MaterialTransferPage      = lazy(() => import('./pages/stores/MaterialTransferPage'));
 const CreditNotePage            = lazy(() => import('./pages/stores/CreditNotePage'));
+const StoresPettyCashPage       = lazy(() => import('./pages/stores/StoresPettyCashPage'));
 const StockVerificationPage     = lazy(() => import('./pages/stores/StockVerificationPage'));
 const StoresDashboard           = lazy(() => import('./pages/dashboards/StoresDashboard'));
 // StockReportPage merged into StoreLedgerPage as "Monthly Movement" tab
@@ -757,6 +758,7 @@ export default function App() {
                 <Route path="stores/ledger" element={<RequireModule module="Stores"><StoreLedgerPage /></RequireModule>} />
                 <Route path="stores/mtr"           element={<RequireModule module="Stores"><MaterialTransferPage /></RequireModule>} />
                 <Route path="stores/credit-notes" element={<RequireModule module="Stores"><CreditNotePage /></RequireModule>} />
+                <Route path="stores/petty-cash" element={<RequireModule module="Stores"><StoresPettyCashPage /></RequireModule>} />
                 <Route path="stores/stock-verification" element={<RequireModule module="Stores"><StockVerificationPage /></RequireModule>} />
 
                 {/* Quality (QA/QC) */}

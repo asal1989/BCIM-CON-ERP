@@ -612,6 +612,21 @@ function MastersTab({ projects }) {
   const { data: accounts }   = useQuery({ queryKey: ['pc-accounts'],   queryFn: () => pettyCashAPI.accounts().then(r => r.data) });
   const { data: custodians } = useQuery({ queryKey: ['pc-custodians'], queryFn: () => pettyCashAPI.custodians().then(r => r.data) });
   const { data: categories } = useQuery({ queryKey: ['pc-categories'], queryFn: () => pettyCashAPI.categories().then(r => r.data) });
+  const { data: usersResp }  = useQuery({ queryKey: ['pc-users'],      queryFn: () => pettyCashAPI.users().then(r => r.data) });
+  const users = usersResp?.data || [];
+
+  const applyUserLink = userId => {
+    if (!userId) { setForm(f => ({ ...f, user_id: '' })); return; }
+    const u = users.find(x => x.id === userId);
+    if (!u) return;
+    setForm(f => ({
+      ...f, user_id: userId,
+      custodian_name: u.name || f.custodian_name,
+      employee_code:  u.employee_code || f.employee_code,
+      designation:    u.designation || u.department || f.designation,
+      contact_number: u.phone || f.contact_number,
+    }));
+  };
 
   const inv = key => qc.invalidateQueries({ queryKey: [key] });
 
@@ -685,7 +700,12 @@ function MastersTab({ projects }) {
             <tbody className="divide-y divide-gray-50">
               {(custodians||[]).map(c => (
                 <tr key={c.id} className="hover:bg-gray-50">
-                  <td className="px-3 py-2 font-medium">{c.custodian_name}</td>
+                  <td className="px-3 py-2 font-medium">
+                    {c.custodian_name}
+                    {c.user_id
+                      ? <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 font-semibold">Linked</span>
+                      : <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-400 font-semibold">Manual</span>}
+                  </td>
                   <td className="px-3 py-2 font-mono text-gray-500">{c.employee_code || '—'}</td>
                   <td className="px-3 py-2">{c.designation || '—'}</td>
                   <td className="px-3 py-2">{c.project_name || '—'}</td>
@@ -807,6 +827,13 @@ function MastersTab({ projects }) {
       {showForm && section === 'custodians' && (
         <Modal title="New Custodian" onClose={() => setShowForm(false)} wide>
           <div className="grid grid-cols-2 gap-3">
+            <Field label="Link to Employee / User">
+              <select className={inputCls} value={form.user_id||''} onChange={e => applyUserLink(e.target.value)}>
+                <option value="">— Manual entry (no login) —</option>
+                {users.map(u => <option key={u.id} value={u.id}>{u.name}{u.designation ? ` — ${u.designation}` : ''}</option>)}
+              </select>
+            </Field>
+            <div />
             <Field label="Name *"><input className={inputCls} value={form.custodian_name||''} onChange={e => setForm(f => ({...f, custodian_name: e.target.value}))} /></Field>
             <Field label="Employee Code"><input className={inputCls} value={form.employee_code||''} onChange={e => setForm(f => ({...f, employee_code: e.target.value}))} /></Field>
             <Field label="Designation"><input className={inputCls} value={form.designation||''} onChange={e => setForm(f => ({...f, designation: e.target.value}))} /></Field>
@@ -831,6 +858,13 @@ function MastersTab({ projects }) {
       {editing && section === 'custodians' && (
         <Modal title={`Edit — ${editing.custodian_name}`} onClose={() => setEditing(null)} wide>
           <div className="grid grid-cols-2 gap-3">
+            <Field label="Link to Employee / User">
+              <select className={inputCls} value={form.user_id||''} onChange={e => applyUserLink(e.target.value)}>
+                <option value="">— Manual entry (no login) —</option>
+                {users.map(u => <option key={u.id} value={u.id}>{u.name}{u.designation ? ` — ${u.designation}` : ''}</option>)}
+              </select>
+            </Field>
+            <div />
             <Field label="Name *"><input className={inputCls} value={form.custodian_name||''} onChange={e => setForm(f => ({...f, custodian_name: e.target.value}))} /></Field>
             <Field label="Designation"><input className={inputCls} value={form.designation||''} onChange={e => setForm(f => ({...f, designation: e.target.value}))} /></Field>
             <Field label="Site Location"><input className={inputCls} value={form.site_location||''} onChange={e => setForm(f => ({...f, site_location: e.target.value}))} /></Field>

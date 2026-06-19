@@ -334,6 +334,7 @@ export const pettyCashAPI = {
   custodians:   (params) => api.get('/petty-cash/custodians', { params }),
   createCustodian:(data) => api.post('/petty-cash/custodians', data),
   updateCustodian:(id,d) => api.patch(`/petty-cash/custodians/${id}`, d),
+  users:        ()       => api.get('/users'),
   topupAccount: (id, d)  => api.post(`/petty-cash/accounts/${id}/topup`, d),
   categories:   (params) => api.get('/petty-cash/categories', { params }),
   createCategory:(data)  => api.post('/petty-cash/categories', data),
@@ -588,6 +589,22 @@ export const creditNoteAPI = {
   update:       (id, d)  => api.put(`/credit-notes/${id}`, d),
   updateStatus: (id, status) => api.patch(`/credit-notes/${id}/status`, { status }),
   remove:       (id)     => api.delete(`/credit-notes/${id}`),
+};
+
+export const storesPettyCashAPI = {
+  // Local Purchase entries (header + line items)
+  listEntries:   (params)   => api.get('/stores-petty-cash/entries', { params }),
+  getEntry:      (id)       => api.get(`/stores-petty-cash/entries/${id}`),
+  createEntry:   (data)     => api.post('/stores-petty-cash/entries', data),
+  updateEntry:   (id, d)    => api.put(`/stores-petty-cash/entries/${id}`, d),
+  deleteEntry:   (id)       => api.delete(`/stores-petty-cash/entries/${id}`),
+  // Other Petty Cash (advances)
+  listAdvances:  (params)   => api.get('/stores-petty-cash/advances', { params }),
+  createAdvance: (data)     => api.post('/stores-petty-cash/advances', data),
+  updateAdvance: (id, d)    => api.put(`/stores-petty-cash/advances/${id}`, d),
+  deleteAdvance: (id)       => api.delete(`/stores-petty-cash/advances/${id}`),
+  // Summary
+  summary:       (params)   => api.get('/stores-petty-cash/summary', { params }),
 };
 
 export const debitNoteAPI = {

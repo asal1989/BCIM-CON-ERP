@@ -99,6 +99,7 @@ const navGroups = [
     { to: '/stores/mtr',               icon: Truck,           label: 'Material Transfer' },
     { to: '/stores/stock-verification', icon: ClipboardCheck, label: 'Stock Verification' },
     { to: '/stores/credit-notes',      icon: TrendingDown,    label: 'Credit Notes' },
+    { to: '/stores/petty-cash',        icon: Wallet,          label: 'Petty Cash Tracker' },
     { to: '/stores/documents',         icon: FolderSearch,    label: 'Documents' },
   ]},
   { label: 'QS & Billing', items: [
@@ -348,6 +349,7 @@ const NAV_SECTIONS = {
     { label: 'Stock Control',   paths: ['/stores/ledger','/stores/issue'] },
     { label: 'Transfer',        paths: ['/stores/mtr'] },
     { label: 'Credit Notes',    paths: ['/stores/credit-notes'] },
+    { label: 'Petty Cash Tracker', paths: ['/stores/petty-cash'] },
     { label: 'Stock Verify',    paths: ['/stores/stock-verification'] },
     { label: 'Documents',       paths: ['/stores/documents'] },
   ],

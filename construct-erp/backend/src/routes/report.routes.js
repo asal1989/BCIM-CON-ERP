@@ -744,6 +744,10 @@ router.get('/procurement/open-pos', async (req, res) => {
 });
 
 // ── P9: Pending Delivery ──────────────────────────────────────────────────────
+// "Delivered" is determined by GRN receipt OR a Bill Tracker invoice against the
+// PO item (whichever shows the larger quantity) — relying on GRN alone falsely
+// flags items as pending when the storekeeper has already billed/received the
+// material but a formal GRN entry was never raised or wasn't linked to the item.
 router.get('/procurement/pending-delivery', async (req, res) => {
   try {
     const { project_id } = req.query;
@@ -751,12 +755,35 @@ router.get('/procurement/pending-delivery', async (req, res) => {
     const pConds = ['p.company_id = $1'];
     applyProjectScope(req, pConds, params, 'p', project_id);
     const { rows } = await query(`
-      WITH recv AS (
-        SELECT gi.po_item_id, SUM(gi.quantity_received) AS qty
+      WITH grn_agg AS (
+        SELECT
+          gi.po_item_id,
+          LOWER(TRIM(COALESCE(gi.material_name, ''))) AS mat_name,
+          COALESCE(gi.unit, '')                        AS unit,
+          SUM(gi.quantity_received)                    AS qty
         FROM grn_items gi
         JOIN grn g ON g.id = gi.grn_id
-        WHERE g.quality_status NOT IN ('rejected') AND gi.po_item_id IS NOT NULL
-        GROUP BY gi.po_item_id
+        WHERE g.quality_status NOT IN ('rejected')
+        GROUP BY gi.po_item_id, LOWER(TRIM(COALESCE(gi.material_name, ''))), COALESCE(gi.unit, '')
+      ),
+      inv_direct AS (
+        SELECT li.po_item_id, SUM(li.quantity) AS qty
+        FROM tqs_bill_line_items li
+        JOIN tqs_bills b ON b.id = li.bill_id
+        WHERE li.po_item_id IS NOT NULL AND b.is_deleted = FALSE
+        GROUP BY li.po_item_id
+      ),
+      inv_legacy AS (
+        SELECT
+          COALESCE(b.po_id, po2.id)                AS po_id,
+          LOWER(TRIM(COALESCE(li.item_name, '')))  AS item_name,
+          COALESCE(li.unit, '')                    AS unit,
+          SUM(li.quantity)                         AS qty
+        FROM tqs_bill_line_items li
+        JOIN tqs_bills b ON b.id = li.bill_id
+        LEFT JOIN purchase_orders po2 ON po2.po_number = b.po_number
+        WHERE li.po_item_id IS NULL AND b.is_deleted = FALSE AND COALESCE(b.bill_type, 'po') <> 'wo'
+        GROUP BY COALESCE(b.po_id, po2.id), LOWER(TRIM(COALESCE(li.item_name, ''))), COALESCE(li.unit, '')
       )
       SELECT
         po.po_number,
@@ -764,8 +791,11 @@ router.get('/procurement/pending-delivery', async (req, res) => {
         poi.material_name,
         poi.unit,
         ROUND(poi.quantity::numeric, 3)                                            AS ordered_qty,
-        ROUND(COALESCE(r.qty, 0)::numeric, 3)                                      AS received_qty,
-        ROUND((poi.quantity - COALESCE(r.qty,0))::numeric, 3)                      AS pending_qty,
+        ROUND(COALESCE(g.qty, 0)::numeric, 3)                                      AS received_qty,
+        ROUND((COALESCE(id_.qty, 0) + COALESCE(il.qty, 0))::numeric, 3)            AS invoiced_qty,
+        ROUND(GREATEST(0, poi.quantity - GREATEST(
+          COALESCE(g.qty, 0), COALESCE(id_.qty, 0) + COALESCE(il.qty, 0)
+        ))::numeric, 3)                                                           AS pending_qty,
         poi.req_date,
         CASE WHEN poi.req_date IS NOT NULL AND poi.req_date < CURRENT_DATE
           THEN (CURRENT_DATE - poi.req_date)::int ELSE 0 END                       AS days_overdue,
@@ -774,10 +804,23 @@ router.get('/procurement/pending-delivery', async (req, res) => {
       JOIN purchase_orders po ON po.id = poi.po_id
       JOIN projects p ON p.id = po.project_id
       LEFT JOIN vendors v ON v.id = po.vendor_id
-      LEFT JOIN recv r ON r.po_item_id = poi.id
+      LEFT JOIN grn_agg g ON (
+        g.po_item_id = poi.id
+        OR (g.po_item_id IS NULL
+            AND g.mat_name = LOWER(TRIM(COALESCE(poi.material_name, '')))
+            AND g.unit     = COALESCE(poi.unit, ''))
+      )
+      LEFT JOIN inv_direct id_ ON id_.po_item_id = poi.id
+      LEFT JOIN inv_legacy il ON (
+        il.po_id = poi.po_id
+        AND il.item_name = LOWER(TRIM(COALESCE(poi.material_name, '')))
+        AND il.unit       = COALESCE(poi.unit, '')
+      )
       WHERE ${pConds.join(' AND ')}
         AND po.status NOT IN ('fully_received','cancelled','rejected')
-        AND poi.quantity > COALESCE(r.qty, 0)
+        AND poi.quantity > GREATEST(
+          COALESCE(g.qty, 0), COALESCE(id_.qty, 0) + COALESCE(il.qty, 0)
+        )
       ORDER BY days_overdue DESC, po.po_date ASC
     `, params);
     res.json({ data: rows });

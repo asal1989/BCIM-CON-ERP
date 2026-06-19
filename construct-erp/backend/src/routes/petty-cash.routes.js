@@ -426,13 +426,27 @@ router.get('/custodians', async (req, res) => {
 
 router.post('/custodians', async (req, res) => {
   try {
-    const { custodian_name, employee_code, designation, project_id, site_location, spending_limit, contact_number } = req.body;
+    let { custodian_name, employee_code, designation, project_id, site_location, spending_limit, contact_number, user_id } = req.body;
+
+    // If linked to a real user account, pull authoritative identity fields from there
+    if (user_id) {
+      const { rows: [u] } = await query(
+        `SELECT name, employee_code, designation, department, phone FROM users WHERE id=$1 AND company_id=$2`,
+        [user_id, req.user.company_id]
+      );
+      if (!u) return res.status(400).json({ error: 'Linked user not found' });
+      custodian_name  = custodian_name  || u.name;
+      employee_code   = employee_code   || u.employee_code;
+      designation      = designation     || u.designation || u.department;
+      contact_number  = contact_number  || u.phone;
+    }
+
     if (!custodian_name) return res.status(400).json({ error: 'custodian_name required' });
     const { rows: [row] } = await query(
-      `INSERT INTO pc_custodians (company_id,custodian_name,employee_code,designation,project_id,site_location,spending_limit,contact_number,created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      `INSERT INTO pc_custodians (company_id,custodian_name,employee_code,designation,project_id,site_location,spending_limit,contact_number,user_id,created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
       [req.user.company_id, custodian_name, employee_code||null, designation||null, project_id||null,
-       site_location||null, Number(spending_limit)||5000, contact_number||null, req.user.id]
+       site_location||null, Number(spending_limit)||5000, contact_number||null, user_id||null, req.user.id]
     );
     res.status(201).json(row);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -440,14 +454,17 @@ router.post('/custodians', async (req, res) => {
 
 router.patch('/custodians/:id', async (req, res) => {
   try {
-    const { custodian_name, designation, site_location, spending_limit, status } = req.body;
+    const { custodian_name, designation, site_location, spending_limit, status, user_id, employee_code, contact_number } = req.body;
     const { rows: [row] } = await query(
       `UPDATE pc_custodians SET
          custodian_name=COALESCE($1,custodian_name), designation=COALESCE($2,designation),
          site_location=COALESCE($3,site_location), spending_limit=COALESCE($4,spending_limit),
-         status=COALESCE($5,status), updated_at=NOW()
-       WHERE id=$6 AND company_id=$7 RETURNING *`,
-      [custodian_name, designation, site_location, spending_limit, status, req.params.id, req.user.company_id]
+         status=COALESCE($5,status), user_id=COALESCE($6,user_id),
+         employee_code=COALESCE($7,employee_code), contact_number=COALESCE($8,contact_number),
+         updated_at=NOW()
+       WHERE id=$9 AND company_id=$10 RETURNING *`,
+      [custodian_name, designation, site_location, spending_limit, status, user_id, employee_code, contact_number,
+       req.params.id, req.user.company_id]
     );
     if (!row) return res.status(404).json({ error: 'Not found' });
     res.json(row);

@@ -510,7 +510,24 @@ router.get('/items-report', async (req, res) => {
                 AND COALESCE(gi.unit, '') = COALESCE(i.unit, '')
               )
             )
-        ), 0) AS received_quantity
+        ), 0) AS received_quantity,
+        -- Bill Tracker invoices also prove delivery, even when no GRN was raised
+        COALESCE((
+          SELECT SUM(li.quantity)
+          FROM tqs_bill_line_items li
+          JOIN tqs_bills b ON b.id = li.bill_id
+          WHERE b.is_deleted = FALSE
+            AND (
+              li.po_item_id = i.id
+              OR (
+                li.po_item_id IS NULL
+                AND COALESCE(b.bill_type, 'po') <> 'wo'
+                AND COALESCE(b.po_id, (SELECT po2.id FROM purchase_orders po2 WHERE po2.po_number = b.po_number)) = i.po_id
+                AND LOWER(TRIM(COALESCE(li.item_name, ''))) = LOWER(TRIM(COALESCE(i.material_name, '')))
+                AND COALESCE(li.unit, '') = COALESCE(i.unit, '')
+              )
+            )
+        ), 0) AS invoiced_quantity
       FROM po_items i
       JOIN purchase_orders po ON po.id = i.po_id
       JOIN vendors v ON v.id = po.vendor_id
@@ -522,11 +539,14 @@ router.get('/items-report', async (req, res) => {
     const data = rows.map(r => {
       const qty = parseFloat(r.quantity) || 0;
       const received = parseFloat(r.received_quantity) || 0;
-      const remaining = Math.max(0, qty - received);
+      const invoiced = parseFloat(r.invoiced_quantity) || 0;
+      const delivered = Math.max(received, invoiced);
+      const remaining = Math.max(0, qty - delivered);
       return {
         ...r,
+        delivered_quantity: delivered,
         remaining_quantity: remaining,
-        delivery_status: remaining <= 0 ? 'Completed' : (received > 0 ? 'Partial' : 'Pending'),
+        delivery_status: remaining <= 0 ? 'Completed' : (delivered > 0 ? 'Partial' : 'Pending'),
       };
     });
     res.json({ data });
