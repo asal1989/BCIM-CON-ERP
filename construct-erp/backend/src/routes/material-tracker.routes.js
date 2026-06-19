@@ -74,6 +74,12 @@ const WRITE_ROLES = ['store_keeper','stores_manager','stores_officer','admin','s
   await safe(`CREATE INDEX IF NOT EXISTS idx_mtl_entry     ON material_tracker_loads(entry_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_mtsd_load     ON material_tracker_steel_dia(load_id)`);
 
+  // Widen short text columns — GRN challan/vehicle/grn numbers can exceed 50 chars
+  await safe(`ALTER TABLE material_tracker_loads ALTER COLUMN invoice_no  TYPE VARCHAR(150)`);
+  await safe(`ALTER TABLE material_tracker_loads ALTER COLUMN ign_no      TYPE VARCHAR(150)`);
+  await safe(`ALTER TABLE material_tracker_loads ALTER COLUMN grs_no      TYPE VARCHAR(150)`);
+  await safe(`ALTER TABLE material_tracker_loads ALTER COLUMN vehicle_no  TYPE VARCHAR(150)`);
+
   // Auto-import dedup columns
   await safe(`ALTER TABLE material_tracker_loads ADD COLUMN IF NOT EXISTS source_grn_id  UUID`);
   await safe(`ALTER TABLE material_tracker_loads ADD COLUMN IF NOT EXISTS source_bill_id UUID`);
@@ -543,6 +549,7 @@ router.post('/auto-import/run', authorize(...WRITE_ROLES), async (req, res) => {
     const kws = MATERIAL_KEYWORDS[material_type] || MATERIAL_KEYWORDS.cement;
     const kwPats = kws.map(k => `%${k}%`);
     const todayStr = new Date().toISOString().slice(0, 10);
+    const trunc = (v, n = 150) => (v == null ? null : String(v).slice(0, n));
 
     let params = [companyId, ...kwPats];
     let projFilter = '';
@@ -661,10 +668,10 @@ router.post('/auto-import/run', authorize(...WRITE_ROLES), async (req, res) => {
       const grandTot = billRow?.total_amount != null ? parseFloat(billRow.total_amount) : (basic + gstAmt);
       grnRows.push([
         entryId, grn.grn_date || todayStr,
-        grn.invoice_number || null,
-        grn.grn_number || grn.wb_slip_no || null,
-        grn.challan_number || null,
-        grn.vehicle_number || null,
+        trunc(grn.invoice_number),
+        trunc(grn.grn_number || grn.wb_slip_no),
+        trunc(grn.challan_number),
+        trunc(grn.vehicle_number),
         qty || null, rate || null,
         gstRate, gstAmt || null, grandTot || null,
         req.user.id, grn.grn_id,
@@ -709,8 +716,8 @@ router.post('/auto-import/run', authorize(...WRITE_ROLES), async (req, res) => {
       billRows.push([
         entryId,
         bill.inv_date || (bill.bill_created_at ? new Date(bill.bill_created_at).toISOString().slice(0,10) : todayStr),
-        bill.inv_number || null,
-        bill.vehicle_number || null,
+        trunc(bill.inv_number),
+        trunc(bill.vehicle_number),
         qty || null, rate || null,
         gstRate, gstAmt || null, grandTot || null,
         req.user.id, bill.id,
