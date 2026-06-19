@@ -632,24 +632,46 @@ router.get('/procurement/pending-pr', async (req, res) => {
         JOIN purchase_orders po ON po.id = poi.po_id
         WHERE po.status NOT IN ('rejected','cancelled') AND poi.mrs_item_id IS NOT NULL
         GROUP BY poi.mrs_item_id
+      ),
+      grn_recv AS (
+        SELECT poi.mrs_item_id, SUM(gi.quantity_received) AS qty
+        FROM grn_items gi
+        JOIN grn g ON g.id = gi.grn_id
+        JOIN po_items poi ON poi.id = gi.po_item_id
+        WHERE g.quality_status NOT IN ('rejected') AND poi.mrs_item_id IS NOT NULL
+        GROUP BY poi.mrs_item_id
+      ),
+      bill_inv AS (
+        SELECT poi.mrs_item_id, SUM(li.quantity) AS qty
+        FROM tqs_bill_line_items li
+        JOIN tqs_bills b ON b.id = li.bill_id
+        JOIN po_items poi ON poi.id = li.po_item_id
+        WHERE b.is_deleted = FALSE AND poi.mrs_item_id IS NOT NULL
+        GROUP BY poi.mrs_item_id
       )
       SELECT
-        mr.serial_no_formatted                                                          AS mrs_number,
-        p.name                                                                          AS project_name,
-        u.name                                                                          AS raised_by,
+        mr.serial_no_formatted                                                              AS mrs_number,
+        p.name                                                                              AS project_name,
+        u.name                                                                              AS raised_by,
         mi.material_name,
         mi.unit,
-        ROUND(COALESCE(mi.md_approved_qty, mi.quantity)::numeric, 3)                   AS requested_qty,
-        ROUND(COALESCE(ord.qty, 0)::numeric, 3)                                         AS ordered_qty,
-        ROUND((COALESCE(mi.md_approved_qty, mi.quantity) - COALESCE(ord.qty,0))::numeric,3) AS balance_qty,
+        ROUND(COALESCE(mi.md_approved_qty, mi.quantity)::numeric, 3)                       AS requested_qty,
+        ROUND(COALESCE(ord.qty, 0)::numeric, 3)                                             AS ordered_qty,
+        ROUND(COALESCE(grn.qty, 0)::numeric, 3)                                             AS received_qty,
+        ROUND(COALESCE(inv.qty, 0)::numeric, 3)                                             AS invoiced_qty,
+        ROUND(GREATEST(COALESCE(grn.qty,0), COALESCE(inv.qty,0))::numeric, 3)              AS delivered_qty,
+        ROUND((COALESCE(mi.md_approved_qty, mi.quantity) - COALESCE(ord.qty,0))::numeric,3) AS po_balance_qty,
+        ROUND(GREATEST(0, COALESCE(ord.qty,0) - GREATEST(COALESCE(grn.qty,0), COALESCE(inv.qty,0)))::numeric,3) AS delivery_balance_qty,
         mr.required_by,
-        (CURRENT_DATE - mr.created_at::date)::int                                       AS days_pending,
-        COALESCE(mr.priority,'normal')                                                  AS priority
+        (CURRENT_DATE - mr.created_at::date)::int                                           AS days_pending,
+        COALESCE(mr.priority,'normal')                                                      AS priority
       FROM mrs_items mi
       JOIN material_requisitions mr ON mr.id = mi.mrs_id
       JOIN projects p ON p.id = mr.project_id
       LEFT JOIN users u ON u.id = mr.raised_by
       LEFT JOIN po_ord ord ON ord.mrs_item_id = mi.id
+      LEFT JOIN grn_recv grn ON grn.mrs_item_id = mi.id
+      LEFT JOIN bill_inv inv ON inv.mrs_item_id = mi.id
       WHERE ${pConds.join(' AND ')}
         AND mr.status NOT IN ('rejected','cancelled')
         AND COALESCE(mi.md_included, TRUE) = TRUE
@@ -710,26 +732,58 @@ router.get('/procurement/open-pos', async (req, res) => {
         WHERE g.quality_status NOT IN ('rejected') AND gi.po_item_id IS NOT NULL
         GROUP BY gi.po_item_id
       ),
+      inv_direct AS (
+        SELECT li.po_item_id, SUM(li.quantity) AS qty
+        FROM tqs_bill_line_items li
+        JOIN tqs_bills b ON b.id = li.bill_id
+        WHERE li.po_item_id IS NOT NULL AND b.is_deleted = FALSE
+        GROUP BY li.po_item_id
+      ),
+      inv_legacy AS (
+        SELECT COALESCE(b.po_id, po2.id) AS po_id,
+               LOWER(TRIM(COALESCE(li.item_name,''))) AS item_name,
+               COALESCE(li.unit,'') AS unit,
+               SUM(li.quantity) AS qty
+        FROM tqs_bill_line_items li
+        JOIN tqs_bills b ON b.id = li.bill_id
+        LEFT JOIN purchase_orders po2 ON po2.po_number = b.po_number
+        WHERE li.po_item_id IS NULL AND b.is_deleted = FALSE
+          AND COALESCE(b.bill_type,'po') <> 'wo'
+        GROUP BY COALESCE(b.po_id, po2.id),
+                 LOWER(TRIM(COALESCE(li.item_name,''))), COALESCE(li.unit,'')
+      ),
       po_agg AS (
         SELECT
           poi.po_id,
-          SUM(poi.quantity)                                                    AS ordered_qty,
-          SUM(COALESCE(r.qty, 0))                                               AS received_qty,
-          SUM((poi.quantity - COALESCE(r.qty,0)) * COALESCE(poi.rate, 0))      AS pending_value
+          SUM(poi.quantity)                                                         AS ordered_qty,
+          SUM(COALESCE(r.qty, 0))                                                   AS received_qty,
+          SUM(COALESCE(id_.qty, 0) + COALESCE(il.qty, 0))                          AS invoiced_qty,
+          SUM(GREATEST(COALESCE(r.qty,0), COALESCE(id_.qty,0)+COALESCE(il.qty,0))) AS delivered_qty,
+          SUM(
+            GREATEST(0, poi.quantity -
+              GREATEST(COALESCE(r.qty,0), COALESCE(id_.qty,0)+COALESCE(il.qty,0))
+            ) * COALESCE(poi.rate, 0)
+          )                                                                         AS pending_value
         FROM po_items poi
-        LEFT JOIN recv r ON r.po_item_id = poi.id
+        LEFT JOIN recv    r   ON r.po_item_id = poi.id
+        LEFT JOIN inv_direct id_ ON id_.po_item_id = poi.id
+        LEFT JOIN inv_legacy il  ON il.po_id = poi.po_id
+          AND il.item_name = LOWER(TRIM(COALESCE(poi.material_name,'')))
+          AND il.unit = COALESCE(poi.unit,'')
         GROUP BY poi.po_id
       )
       SELECT
         po.po_number,
-        v.name                                                                   AS vendor_name,
-        p.name                                                                   AS project_name,
+        v.name                                                                        AS vendor_name,
+        p.name                                                                        AS project_name,
         po.po_date,
         po.status,
-        ROUND(COALESCE(pa.ordered_qty, 0)::numeric, 3)                          AS ordered_qty,
-        ROUND(COALESCE(pa.received_qty, 0)::numeric, 3)                         AS received_qty,
-        ROUND((COALESCE(pa.ordered_qty,0) - COALESCE(pa.received_qty,0))::numeric, 3) AS pending_qty,
-        ROUND(COALESCE(pa.pending_value, po.grand_total)::numeric, 2)           AS pending_value
+        ROUND(COALESCE(pa.ordered_qty, 0)::numeric, 3)                               AS ordered_qty,
+        ROUND(COALESCE(pa.received_qty, 0)::numeric, 3)                              AS received_qty,
+        ROUND(COALESCE(pa.invoiced_qty, 0)::numeric, 3)                              AS invoiced_qty,
+        ROUND(COALESCE(pa.delivered_qty, 0)::numeric, 3)                             AS delivered_qty,
+        ROUND(GREATEST(0, COALESCE(pa.ordered_qty,0) - COALESCE(pa.delivered_qty,0))::numeric, 3) AS balance_qty,
+        ROUND(COALESCE(pa.pending_value, po.grand_total)::numeric, 2)                AS pending_value
       FROM purchase_orders po
       JOIN projects p ON p.id = po.project_id
       LEFT JOIN vendors v ON v.id = po.vendor_id
