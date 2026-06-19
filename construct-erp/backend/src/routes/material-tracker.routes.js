@@ -658,14 +658,16 @@ router.post('/auto-import/run', authorize(...WRITE_ROLES), async (req, res) => {
       const kwCond3 = kwCondition(kws, 'li', 'item_name', 2);
       const bills = await query(`
         SELECT
-          b.id, b.inv_number, b.inv_date, b.vehicle_number,
+          b.id, b.inv_number, b.inv_date,
           b.gst_amount, b.total_amount,
           (COALESCE(b.cgst_pct,0)*2 + COALESCE(b.igst_pct,0)) AS gst_rate,
           COALESCE(SUM(li.quantity),0)  AS qty,
           MAX(li.rate)                  AS rate,
-          MAX(li.unit)                  AS unit
+          MAX(li.unit)                  AS unit,
+          MAX(bu.vehicle_number)        AS vehicle_number
         FROM tqs_bills b
         LEFT JOIN tqs_bill_line_items li ON li.bill_id = b.id
+        LEFT JOIN tqs_bill_updates bu ON bu.bill_id = b.id
         WHERE b.po_id = $1
           AND b.grn_id IS NULL
           AND b.is_deleted = FALSE
