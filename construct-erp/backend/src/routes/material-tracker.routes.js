@@ -466,10 +466,11 @@ router.get('/auto-import/preview', async (req, res) => {
       SELECT DISTINCT po.id, po.po_number, po.serial_no_formatted, po.po_date,
         po.project_id, v.name AS vendor_name
       FROM purchase_orders po
+      JOIN projects pr ON pr.id = po.project_id
       JOIN po_items pi ON pi.po_id = po.id
       JOIN vendors v ON v.id = po.vendor_id
-      WHERE po.company_id = $1
-        AND COALESCE(po.status,'') NOT IN ('cancelled','draft')
+      WHERE pr.company_id = $1
+        AND COALESCE(po.status,'') NOT IN ('cancelled','draft','rejected')
         ${projFilter}
         AND (${kwCond})
       ORDER BY po.po_date
@@ -495,7 +496,7 @@ router.get('/auto-import/preview', async (req, res) => {
         SELECT DISTINCT g.id
         FROM grn g
         JOIN grn_items gi ON gi.grn_id = g.id
-        WHERE g.po_id = ANY($1)
+        WHERE g.po_id = ANY($1::uuid[])
           AND (${kwCond2})
       `, [poIds, ...kwPats]);
       grnsNew = grns.rows.filter(r => !importedGrnSet.has(r.id)).length;
@@ -510,7 +511,7 @@ router.get('/auto-import/preview', async (req, res) => {
         SELECT DISTINCT b.id
         FROM tqs_bills b
         LEFT JOIN tqs_bill_line_items li ON li.bill_id = b.id
-        WHERE b.po_id = ANY($1)
+        WHERE b.po_id = ANY($1::uuid[])
           AND b.grn_id IS NULL
           AND b.is_deleted = FALSE
           AND (li.item_name IS NULL OR (${kwCondition(kws, 'li', 'item_name', 2)}))
@@ -558,10 +559,11 @@ router.post('/auto-import/run', authorize(...WRITE_ROLES), async (req, res) => {
         MAX(pi.material_name) AS grade,
         MAX(pi.rate)          AS unit_price
       FROM purchase_orders po
+      JOIN projects pr ON pr.id = po.project_id
       JOIN po_items pi ON pi.po_id = po.id
       JOIN vendors v ON v.id = po.vendor_id
-      WHERE po.company_id = $1
-        AND COALESCE(po.status,'') NOT IN ('cancelled','draft')
+      WHERE pr.company_id = $1
+        AND COALESCE(po.status,'') NOT IN ('cancelled','draft','rejected')
         ${projFilter}
         AND (${kwCond})
       GROUP BY po.id, v.name
