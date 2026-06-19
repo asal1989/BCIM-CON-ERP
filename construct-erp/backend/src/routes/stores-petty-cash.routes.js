@@ -203,6 +203,18 @@ router.post('/entries', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'At least one material line is required' });
     }
 
+    const invTrimmed = invoice_no?.trim();
+    if (invTrimmed && invTrimmed !== '–' && !req.body.force) {
+      const dup = await query(
+        `SELECT id, sl_no, supplier, entry_date FROM stores_petty_cash_entries
+         WHERE company_id=$1 AND invoice_no=$2`,
+        [req.user.company_id, invTrimmed]
+      );
+      if (dup.rows.length > 0) {
+        return res.status(409).json({ errorCode: 'DUPLICATE_INVOICE', existing: dup.rows[0] });
+      }
+    }
+
     const result = await withTransaction(async (client) => {
       const sl_no = await nextSlNo(client, req.user.company_id, project_id);
       const r = await client.query(
@@ -237,6 +249,18 @@ router.put('/entries/:id', authenticate, async (req, res) => {
     if (!existing) return res.status(404).json({ error: 'Entry not found' });
 
     const { project_id, entry_date, supplier, invoice_no, amount = 0, remarks, items = [], status, bill_file_url, bill_file_name } = req.body;
+
+    const invTrimmedPut = invoice_no?.trim();
+    if (invTrimmedPut && invTrimmedPut !== '–' && !req.body.force) {
+      const dup = await query(
+        `SELECT id, sl_no, supplier, entry_date FROM stores_petty_cash_entries
+         WHERE company_id=$1 AND invoice_no=$2 AND id != $3`,
+        [req.user.company_id, invTrimmedPut, req.params.id]
+      );
+      if (dup.rows.length > 0) {
+        return res.status(409).json({ errorCode: 'DUPLICATE_INVOICE', existing: dup.rows[0] });
+      }
+    }
 
     await withTransaction(async (client) => {
       await client.query(

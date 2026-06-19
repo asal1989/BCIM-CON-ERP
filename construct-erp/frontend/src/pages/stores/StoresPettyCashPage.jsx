@@ -159,7 +159,7 @@ function printStatement({ entries, advances, receipts, projectName }) {
 const EMPTY_ITEM  = { material_name: '', unit: "NO'S", quantity: '' };
 const EMPTY_ENTRY = { project_id: '', entry_date: dayjs().format('YYYY-MM-DD'), supplier: '', invoice_no: '', amount: '', remarks: '', bill_file_url: '', bill_file_name: '' };
 
-function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, onClose }) {
+function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, existingInvoices, onClose }) {
   const qc = useQueryClient();
   const isEdit = !!initial?.id;
 
@@ -176,6 +176,15 @@ function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, onC
       : [{ ...EMPTY_ITEM }]
   );
   const [uploading, setUploading] = useState(false);
+
+  const dupWarn = useMemo(() => {
+    const inv = form.invoice_no?.trim();
+    if (!inv || inv === '–') return null;
+    const ex = existingInvoices?.[inv];
+    if (!ex) return null;
+    if (isEdit && ex.id === initial?.id) return null;
+    return ex;
+  }, [form.invoice_no, existingInvoices, isEdit, initial?.id]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const updateItem  = (idx, key, val) => setItems(prev => { const n = [...prev]; n[idx] = { ...n[idx], [key]: val }; return n; });
@@ -217,7 +226,15 @@ function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, onC
       qc.invalidateQueries({ queryKey: ['spc-summary'] });
       onClose();
     },
-    onError: e => toast.error(e?.response?.data?.error || 'Save failed'),
+    onError: (err, variables) => {
+      if (err?.response?.status === 409 && err?.response?.data?.errorCode === 'DUPLICATE_INVOICE') {
+        const ex = err.response.data.existing;
+        const msg = `Invoice "${variables.invoice_no || ''}" already recorded in entry #${ex.sl_no} (${ex.supplier}, ${dayjs(ex.entry_date).format('DD MMM YY')}).\n\nSave anyway?`;
+        if (window.confirm(msg)) saveMut.mutate({ ...variables, force: true });
+      } else {
+        toast.error(err?.response?.data?.error || 'Save failed');
+      }
+    },
   });
 
   const handleSubmit = (e) => {
@@ -254,7 +271,16 @@ function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, onC
               </select>
             </div>
             <div><Lbl req>Supplier</Lbl><input className={F} placeholder="e.g. Ponam Hardware" value={form.supplier} onChange={e => set('supplier', e.target.value)} required /></div>
-            <div><Lbl>Invoice No.</Lbl><input className={F} placeholder="49045" value={form.invoice_no} onChange={e => set('invoice_no', e.target.value)} /></div>
+            <div>
+              <Lbl>Invoice No.</Lbl>
+              <input className={F} placeholder="49045" value={form.invoice_no} onChange={e => set('invoice_no', e.target.value)} />
+              {dupWarn && (
+                <div className="flex items-center gap-2 mt-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200">
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                  Already in entry #{dupWarn.sl_no} — {dupWarn.supplier} · {dayjs(dupWarn.entry_date).format('DD MMM YY')}
+                </div>
+              )}
+            </div>
             <div className="col-span-2">
               <Lbl req>Amount (₹)</Lbl>
               <input type="number" step="0.01" className={F} placeholder="0.00" value={form.amount} onChange={e => set('amount', e.target.value)} required />
@@ -637,6 +663,18 @@ export default function StoresPettyCashPage() {
     });
     return result;
   }, [approvedEntries]);
+
+  // Invoice number → first entry record (for real-time duplicate warning in form)
+  const existingInvoices = useMemo(() => {
+    const map = {};
+    entries.forEach(e => {
+      if (e.invoice_no && e.invoice_no !== '–') {
+        const inv = e.invoice_no.trim();
+        if (!map[inv]) map[inv] = { id: e.id, sl_no: e.sl_no, supplier: e.supplier, entry_date: e.entry_date, amount: e.amount };
+      }
+    });
+    return map;
+  }, [entries]);
 
   // Top suppliers
   const topSuppliers = useMemo(() => {
@@ -1279,6 +1317,7 @@ export default function StoresPettyCashPage() {
           defaultProjectId={projectId}
           budgets={budgets}
           catSpend={catSpend}
+          existingInvoices={existingInvoices}
           onClose={() => { setShowEntryForm(false); setEditEntry(null); }}
         />
       )}
