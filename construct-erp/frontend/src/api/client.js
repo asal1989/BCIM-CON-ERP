@@ -673,6 +673,7 @@ export const inventoryAPI = {
     fd.append('overwrite', overwrite ? 'true' : 'false');
     return api.post('/inventory/import', fd, { headers: { 'Content-Type': undefined } });
   },
+  repairDoubleStock: (project_id) => api.post('/inventory/repair-double-stock', null, { params: project_id ? { project_id } : {} }),
 };
 
 export const workerAPI = {
