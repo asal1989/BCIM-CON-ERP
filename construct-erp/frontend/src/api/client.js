@@ -593,18 +593,27 @@ export const creditNoteAPI = {
 
 export const storesPettyCashAPI = {
   // Local Purchase entries (header + line items)
-  listEntries:   (params)   => api.get('/stores-petty-cash/entries', { params }),
-  getEntry:      (id)       => api.get(`/stores-petty-cash/entries/${id}`),
-  createEntry:   (data)     => api.post('/stores-petty-cash/entries', data),
-  updateEntry:   (id, d)    => api.put(`/stores-petty-cash/entries/${id}`, d),
-  deleteEntry:   (id)       => api.delete(`/stores-petty-cash/entries/${id}`),
+  listEntries:   (params)      => api.get('/stores-petty-cash/entries', { params }),
+  getEntry:      (id)          => api.get(`/stores-petty-cash/entries/${id}`),
+  createEntry:   (data)        => api.post('/stores-petty-cash/entries', data),
+  updateEntry:   (id, d)       => api.put(`/stores-petty-cash/entries/${id}`, d),
+  patchStatus:   (id, status)  => api.patch(`/stores-petty-cash/entries/${id}/status`, { status }),
+  deleteEntry:   (id)          => api.delete(`/stores-petty-cash/entries/${id}`),
   // Other Petty Cash (advances)
-  listAdvances:  (params)   => api.get('/stores-petty-cash/advances', { params }),
-  createAdvance: (data)     => api.post('/stores-petty-cash/advances', data),
-  updateAdvance: (id, d)    => api.put(`/stores-petty-cash/advances/${id}`, d),
-  deleteAdvance: (id)       => api.delete(`/stores-petty-cash/advances/${id}`),
+  listAdvances:  (params)      => api.get('/stores-petty-cash/advances', { params }),
+  createAdvance: (data)        => api.post('/stores-petty-cash/advances', data),
+  updateAdvance: (id, d)       => api.put(`/stores-petty-cash/advances/${id}`, d),
+  deleteAdvance: (id)          => api.delete(`/stores-petty-cash/advances/${id}`),
+  // HO Receipts
+  listReceipts:  (params)      => api.get('/stores-petty-cash/receipts', { params }),
+  createReceipt: (data)        => api.post('/stores-petty-cash/receipts', data),
+  updateReceipt: (id, d)       => api.put(`/stores-petty-cash/receipts/${id}`, d),
+  deleteReceipt: (id)          => api.delete(`/stores-petty-cash/receipts/${id}`),
+  // Budgets
+  getBudgets:    (params)      => api.get('/stores-petty-cash/budgets', { params }),
+  updateBudgets: (data)        => api.put('/stores-petty-cash/budgets', data),
   // Summary
-  summary:       (params)   => api.get('/stores-petty-cash/summary', { params }),
+  summary:       (params)      => api.get('/stores-petty-cash/summary', { params }),
 };
 
 export const debitNoteAPI = {
