@@ -12,7 +12,7 @@ const HR_ALL   = [...HR_ROLES, 'hr', 'manager'];
   await safe(`CREATE TABLE IF NOT EXISTS hr_employee_assets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL,
-    employee_id UUID NOT NULL REFERENCES hr_employees(id),
+    employee_id UUID NOT NULL REFERENCES users(id),
     asset_name VARCHAR(200) NOT NULL,
     asset_code VARCHAR(100),
     category VARCHAR(50) DEFAULT 'other'
@@ -41,8 +41,8 @@ router.get('/', authorize(...HR_ALL), async (req, res) => {
   if (status)      { conds.push(`a.status=$${i++}`); params.push(status); }
   if (category)    { conds.push(`a.category=$${i++}`); params.push(category); }
   const { rows } = await query(
-    `SELECT a.*, e.full_name, e.employee_id as emp_code, e.department, e.designation
-     FROM hr_employee_assets a JOIN hr_employees e ON e.id=a.employee_id
+    `SELECT a.*, e.name AS full_name, e.employee_code AS emp_code, e.department, e.designation
+     FROM hr_employee_assets a JOIN users e ON e.id=a.employee_id
      WHERE ${conds.join(' AND ')} ORDER BY a.assigned_on DESC`,
     params
   );

@@ -291,7 +291,7 @@ router.get('/encashment', async (req, res) => {
     if (user_id) { conds.push(`e.user_id=$${i++}`); params.push(user_id); }
     if (status)  { conds.push(`e.status=$${i++}`); params.push(status); }
     const { rows } = await query(
-      `SELECT e.*, u.full_name, lt.name as leave_type_name
+      `SELECT e.*, u.name AS full_name, lt.name as leave_type_name
        FROM hr_leave_encashment e JOIN users u ON u.id=e.user_id
        LEFT JOIN hr_leave_types lt ON lt.id=e.leave_type_id
        WHERE ${conds.join(' AND ')} ORDER BY e.created_at DESC`,
@@ -379,7 +379,7 @@ router.post('/carry-forward/run', async (req, res) => {
 router.get('/carry-forward/history', async (req, res) => {
   try {
     const { rows } = await query(
-      `SELECT l.*, u.full_name as run_by_name FROM hr_leave_carryforward_log l
+      `SELECT l.*, u.name as run_by_name FROM hr_leave_carryforward_log l
        LEFT JOIN users u ON u.id=l.run_by WHERE l.company_id=$1 ORDER BY l.processed_at DESC`,
       [req.user.company_id]
     );

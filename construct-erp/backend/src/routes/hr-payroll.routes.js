@@ -525,7 +525,7 @@ router.get('/reports/form16', async (req, res) => {
     const params = [req.user.company_id, fy_start, fy_end]; let i=4;
     if (user_id) { conds.push(`p.user_id=$${i++}`); params.push(user_id); }
     const { rows } = await query(
-      `SELECT p.user_id, u.full_name, e.employee_id as emp_code, e.pan_number,
+      `SELECT p.user_id, u.name AS full_name, u.employee_code AS emp_code, ep.pan_number,
               SUM(p.basic_pay) as total_basic,
               SUM(p.hra) as total_hra,
               SUM(p.gross_pay) as total_gross,
@@ -536,10 +536,10 @@ router.get('/reports/form16', async (req, res) => {
               COUNT(*) as months_paid
        FROM hr_payroll_runs p
        JOIN users u ON u.id=p.user_id
-       LEFT JOIN hr_employees e ON e.user_id=p.user_id
+       LEFT JOIN employee_profiles ep ON ep.user_id=p.user_id
        WHERE ${conds.join(' AND ')}
-       GROUP BY p.user_id, u.full_name, e.employee_id, e.pan_number
-       ORDER BY u.full_name`,
+       GROUP BY p.user_id, u.name, u.employee_code, ep.pan_number
+       ORDER BY u.name`,
       params
     );
     res.json({ data: rows, financial_year: `${parseInt(year)-1}-${year}` });
@@ -551,9 +551,9 @@ router.get('/reports/attrition', async (req, res) => {
   try {
     const { rows } = await query(
       `SELECT to_char(series, 'YYYY-MM') as month,
-        (SELECT COUNT(*) FROM hr_employees WHERE company_id=$1
+        (SELECT COUNT(*) FROM employee_profiles WHERE company_id=$1
           AND to_char(date_of_joining,'YYYY-MM')=to_char(series,'YYYY-MM')) as joined,
-        (SELECT COUNT(*) FROM hr_employees WHERE company_id=$1
+        (SELECT COUNT(*) FROM employee_profiles WHERE company_id=$1
           AND to_char(date_of_leaving,'YYYY-MM')=to_char(series,'YYYY-MM')) as left_count
        FROM generate_series(
          date_trunc('month', NOW()) - INTERVAL '11 months',
