@@ -80,6 +80,12 @@ const WRITE_ROLES = ['store_keeper','stores_manager','stores_officer','admin','s
   await safe(`ALTER TABLE material_tracker_loads ALTER COLUMN grs_no      TYPE VARCHAR(150)`);
   await safe(`ALTER TABLE material_tracker_loads ALTER COLUMN vehicle_no  TYPE VARCHAR(150)`);
 
+  // Widen entry columns — auto-import sets grade from the full material name (TEXT)
+  await safe(`ALTER TABLE material_tracker_entries ALTER COLUMN po_number TYPE VARCHAR(150)`);
+  await safe(`ALTER TABLE material_tracker_entries ALTER COLUMN grade     TYPE VARCHAR(300)`);
+  await safe(`ALTER TABLE material_tracker_entries ALTER COLUMN unit      TYPE VARCHAR(60)`);
+  await safe(`ALTER TABLE material_tracker_entries ALTER COLUMN mr_number TYPE VARCHAR(150)`);
+
   // Auto-import dedup columns
   await safe(`ALTER TABLE material_tracker_loads ADD COLUMN IF NOT EXISTS source_grn_id  UUID`);
   await safe(`ALTER TABLE material_tracker_loads ADD COLUMN IF NOT EXISTS source_bill_id UUID`);
@@ -603,9 +609,9 @@ router.post('/auto-import/run', authorize(...WRITE_ROLES), async (req, res) => {
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
         RETURNING id
       `, [companyId, po.project_id, material_type,
-          po.id, po.po_number || po.serial_no_formatted,
-          po.vendor_name, po.grade || null,
-          po.ordered_qty || null, po.unit || null, req.user.id]);
+          po.id, trunc(po.po_number || po.serial_no_formatted, 150),
+          trunc(po.vendor_name, 200), trunc(po.grade, 300),
+          po.ordered_qty || null, trunc(po.unit, 60), req.user.id]);
       entryByPo.set(po.id, ins.rows[0].id);
       entries_created++;
     }
