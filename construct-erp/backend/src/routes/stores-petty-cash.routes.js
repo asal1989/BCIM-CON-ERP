@@ -26,7 +26,9 @@ const router = express.Router();
     )
   `);
 
-  await safe(`ALTER TABLE stores_petty_cash_entries ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Pending'`);
+  await safe(`ALTER TABLE stores_petty_cash_entries ADD COLUMN IF NOT EXISTS status       TEXT DEFAULT 'Pending'`);
+  await safe(`ALTER TABLE stores_petty_cash_entries ADD COLUMN IF NOT EXISTS bill_file_url  TEXT`);
+  await safe(`ALTER TABLE stores_petty_cash_entries ADD COLUMN IF NOT EXISTS bill_file_name TEXT`);
 
   await safe(`
     CREATE TABLE IF NOT EXISTS stores_petty_cash_items (
@@ -194,7 +196,7 @@ router.get('/entries/:id', authenticate, async (req, res) => {
 
 router.post('/entries', authenticate, async (req, res) => {
   try {
-    const { project_id, entry_date, supplier, invoice_no, amount = 0, remarks, items = [], status = 'Pending' } = req.body;
+    const { project_id, entry_date, supplier, invoice_no, amount = 0, remarks, items = [], status = 'Pending', bill_file_url, bill_file_name } = req.body;
     if (!entry_date) return res.status(400).json({ error: 'entry_date is required' });
     if (!supplier?.trim()) return res.status(400).json({ error: 'supplier is required' });
     if (!items.filter(i => i.material_name?.trim()).length) {
@@ -205,10 +207,11 @@ router.post('/entries', authenticate, async (req, res) => {
       const sl_no = await nextSlNo(client, req.user.company_id, project_id);
       const r = await client.query(
         `INSERT INTO stores_petty_cash_entries
-          (company_id, project_id, sl_no, entry_date, supplier, invoice_no, amount, remarks, status, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+          (company_id, project_id, sl_no, entry_date, supplier, invoice_no, amount, remarks, status, bill_file_url, bill_file_name, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
         [req.user.company_id, project_id || null, sl_no, entry_date, supplier.trim(),
-         invoice_no || null, n(amount), remarks || null, status, req.user.id]
+         invoice_no || null, n(amount), remarks || null, status,
+         bill_file_url || null, bill_file_name || null, req.user.id]
       );
       const entryId = r.rows[0].id;
       for (let i = 0; i < items.length; i++) {
@@ -233,16 +236,21 @@ router.put('/entries/:id', authenticate, async (req, res) => {
     const existing = await getEntry(req.params.id, req.user.company_id);
     if (!existing) return res.status(404).json({ error: 'Entry not found' });
 
-    const { project_id, entry_date, supplier, invoice_no, amount = 0, remarks, items = [], status } = req.body;
+    const { project_id, entry_date, supplier, invoice_no, amount = 0, remarks, items = [], status, bill_file_url, bill_file_name } = req.body;
 
     await withTransaction(async (client) => {
       await client.query(
         `UPDATE stores_petty_cash_entries SET
            project_id=$1, entry_date=$2, supplier=$3, invoice_no=$4, amount=$5, remarks=$6,
-           status=COALESCE($7,status), updated_at=NOW()
-         WHERE id=$8`,
+           status=COALESCE($7,status),
+           bill_file_url=COALESCE($8,bill_file_url),
+           bill_file_name=COALESCE($9,bill_file_name),
+           updated_at=NOW()
+         WHERE id=$10`,
         [project_id || null, entry_date, supplier?.trim(), invoice_no || null, n(amount),
-         remarks || null, status || null, req.params.id]
+         remarks || null, status || null,
+         bill_file_url || null, bill_file_name || null,
+         req.params.id]
       );
       await client.query(`DELETE FROM stores_petty_cash_items WHERE entry_id = $1`, [req.params.id]);
       for (let i = 0; i < items.length; i++) {
