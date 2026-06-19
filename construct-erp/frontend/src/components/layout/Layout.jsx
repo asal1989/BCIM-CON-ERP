@@ -55,8 +55,8 @@ const navGroups = [
     { to: '/procurement/vendors',          icon: Users,         label: 'Vendors' },
     { to: '/procurement/live-rate-checker',icon: Search,        label: 'Live Rate Checker' },
     { to: '/procurement/rate-contracts',   icon: Landmark,      label: 'Rate Contracts' },
-    { to: '/procurement/rfqs',             icon: Send,          label: 'RFQ' },
-    { to: '/procurement/quotations',       icon: FileText,      label: 'Quotations' },
+    { to: '/procurement/rfqs',             icon: Send,          label: 'RFQ',             superAdminOnly: true },
+    { to: '/procurement/quotations',       icon: FileText,      label: 'Quotations',      superAdminOnly: true },
     { to: '/procurement/comparative-statements', icon: ScrollText, label: 'Comparative Statements' },
     { to: '/procurement/po',               icon: ShoppingCart,  label: 'Purchase Orders' },
     { to: '/procurement/po-amendments',    icon: FileSignature, label: 'PO Amendments' },
@@ -73,8 +73,8 @@ const navGroups = [
     { to: '/procurement/documents',        icon: FolderSearch,  label: 'Documents' },
     { to: '/procurement/reports',          icon: FileBarChart,  label: 'Reports' },
     { to: '/procurement/alerts',           icon: AlertTriangle, label: 'Alerts' },
-    { to: '/procurement/tenders',          icon: Gavel,         label: 'Tenders (BD)' },
-    { to: '/procurement/bid-opportunities',icon: Target,        label: 'Bid Opportunities' },
+    { to: '/procurement/tenders',          icon: Gavel,         label: 'Tenders (BD)',        superAdminOnly: true },
+    { to: '/procurement/bid-opportunities',icon: Target,        label: 'Bid Opportunities',   superAdminOnly: true },
   ]},
   { label: 'Tender Management', items: [
     { to: '/tender-management',           icon: Gavel,         label: 'Tender Register' },
@@ -1756,6 +1756,10 @@ export default function Layout() {
       if (g.label === 'Stores' && STORES_ROLE_NAV[user?.role]) {
         const allowed = STORES_ROLE_NAV[user?.role];
         return { ...g, items: g.items.filter(item => allowed.includes(item.to)) };
+      }
+      // Hide superAdminOnly items from everyone except super_admin
+      if (user?.role !== 'super_admin') {
+        return { ...g, items: g.items.filter(item => !item.superAdminOnly) };
       }
       return g;
     })
