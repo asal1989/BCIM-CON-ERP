@@ -23,7 +23,7 @@ const upload = multer({ storage, limits: { fileSize: 5*1024*1024 } });
   await safe(`CREATE TABLE IF NOT EXISTS hr_travel_requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL,
-    employee_id UUID NOT NULL REFERENCES hr_employees(id),
+    employee_id UUID NOT NULL REFERENCES users(id),
     purpose TEXT NOT NULL,
     from_date DATE NOT NULL,
     to_date DATE NOT NULL,
@@ -60,10 +60,10 @@ router.get('/', authorize(...HR_ALL), async (req, res) => {
   if (status)      { conds.push(`t.status=$${i++}`); params.push(status); }
   if (month)       { conds.push(`to_char(t.from_date,'YYYY-MM')=$${i++}`); params.push(month); }
   const { rows } = await query(
-    `SELECT t.*, e.full_name, e.employee_id as emp_code, e.department,
-            u.full_name as approved_by_name
+    `SELECT t.*, e.name AS full_name, e.employee_code AS emp_code, e.department,
+            u.name as approved_by_name
      FROM hr_travel_requests t
-     JOIN hr_employees e ON e.id=t.employee_id
+     JOIN users e ON e.id=t.employee_id
      LEFT JOIN users u ON u.id=t.approved_by
      WHERE ${conds.join(' AND ')} ORDER BY t.from_date DESC`,
     params

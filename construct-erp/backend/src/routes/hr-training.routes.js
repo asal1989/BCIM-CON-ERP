@@ -33,7 +33,7 @@ const HR_ALL   = [...HR_ROLES, 'hr', 'manager', 'department_head'];
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     program_id UUID NOT NULL REFERENCES hr_training_programs(id) ON DELETE CASCADE,
     company_id UUID NOT NULL,
-    employee_id UUID NOT NULL REFERENCES hr_employees(id),
+    employee_id UUID NOT NULL REFERENCES users(id),
     nominated_by UUID REFERENCES users(id),
     attended BOOLEAN DEFAULT FALSE,
     score NUMERIC(5,2),
@@ -71,9 +71,9 @@ router.get('/:id', authorize(...HR_ALL), async (req, res) => {
   );
   if (!rows[0]) return res.status(404).json({ error: 'Not found' });
   const { rows: participants } = await query(
-    `SELECT p.*, e.full_name, e.employee_id as emp_code, e.department, e.designation
-     FROM hr_training_participants p JOIN hr_employees e ON e.id=p.employee_id
-     WHERE p.program_id=$1 ORDER BY e.full_name`,
+    `SELECT p.*, e.name AS full_name, e.employee_code AS emp_code, e.department, e.designation
+     FROM hr_training_participants p JOIN users e ON e.id=p.employee_id
+     WHERE p.program_id=$1 ORDER BY e.name`,
     [req.params.id]
   );
   res.json({ data: { ...rows[0], participants } });

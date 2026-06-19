@@ -27,7 +27,7 @@ const HR_ALL   = [...HR_ROLES, 'hr', 'manager', 'department_head'];
   await safe(`CREATE TABLE IF NOT EXISTS hr_employee_shifts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL,
-    employee_id UUID NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+    employee_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     shift_id UUID NOT NULL REFERENCES hr_shifts(id),
     effective_from DATE NOT NULL,
     effective_to DATE,
@@ -37,7 +37,7 @@ const HR_ALL   = [...HR_ROLES, 'hr', 'manager', 'department_head'];
   await safe(`CREATE TABLE IF NOT EXISTS hr_overtime (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL,
-    employee_id UUID NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+    employee_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     ot_date DATE NOT NULL,
     ot_hours NUMERIC(5,2) NOT NULL DEFAULT 0,
     ot_rate_multiplier NUMERIC(4,2) DEFAULT 1.5,
@@ -52,7 +52,7 @@ const HR_ALL   = [...HR_ROLES, 'hr', 'manager', 'department_head'];
   await safe(`CREATE TABLE IF NOT EXISTS hr_comp_off (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL,
-    employee_id UUID NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+    employee_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     worked_on DATE NOT NULL,
     expiry_date DATE,
     reason TEXT,
@@ -106,10 +106,10 @@ router.get('/employee-shifts', authorize(...HR_ALL), async (req, res) => {
   const { employee_id } = req.query;
   const { rows } = await query(
     `SELECT es.*, s.name as shift_name, s.start_time, s.end_time,
-            e.full_name as employee_name, e.employee_id as emp_code
+            e.name as employee_name, e.employee_code as emp_code
      FROM hr_employee_shifts es
      JOIN hr_shifts s ON s.id=es.shift_id
-     JOIN hr_employees e ON e.id=es.employee_id
+     JOIN users e ON e.id=es.employee_id
      WHERE es.company_id=$1 ${employee_id ? 'AND es.employee_id=$2' : ''}
      ORDER BY es.effective_from DESC`,
     employee_id ? [req.user.company_id, employee_id] : [req.user.company_id]
@@ -140,8 +140,8 @@ router.get('/overtime', authorize(...HR_ALL), async (req, res) => {
   if (month)       { conds.push(`to_char(o.ot_date,'YYYY-MM')=$${i++}`); params.push(month); }
   if (status)      { conds.push(`o.status=$${i++}`); params.push(status); }
   const { rows } = await query(
-    `SELECT o.*, e.full_name, e.employee_id as emp_code
-     FROM hr_overtime o JOIN hr_employees e ON e.id=o.employee_id
+    `SELECT o.*, e.name AS full_name, e.employee_code AS emp_code
+     FROM hr_overtime o JOIN users e ON e.id=o.employee_id
      WHERE ${conds.join(' AND ')} ORDER BY o.ot_date DESC`,
     params
   );
@@ -180,8 +180,8 @@ router.patch('/overtime/:id/reject', authorize(...HR_ROLES), async (req, res) =>
 router.get('/comp-off', authorize(...HR_ALL), async (req, res) => {
   const { employee_id } = req.query;
   const { rows } = await query(
-    `SELECT c.*, e.full_name, e.employee_id as emp_code
-     FROM hr_comp_off c JOIN hr_employees e ON e.id=c.employee_id
+    `SELECT c.*, e.name AS full_name, e.employee_code AS emp_code
+     FROM hr_comp_off c JOIN users e ON e.id=c.employee_id
      WHERE c.company_id=$1 ${employee_id ? 'AND c.employee_id=$2' : ''}
      ORDER BY c.worked_on DESC`,
     employee_id ? [req.user.company_id, employee_id] : [req.user.company_id]

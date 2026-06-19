@@ -92,7 +92,7 @@ const DEFAULT_TEMPLATES = [
   await safe(`CREATE TABLE IF NOT EXISTS hr_employee_letters (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL,
-    employee_id UUID NOT NULL REFERENCES hr_employees(id),
+    employee_id UUID NOT NULL REFERENCES users(id),
     template_id UUID REFERENCES hr_letter_templates(id),
     letter_type VARCHAR(30) NOT NULL,
     reference_no VARCHAR(50),
@@ -160,9 +160,9 @@ router.get('/generated', authorize(...HR_ALL), async (req, res) => {
   if (employee_id)  { conds.push(`l.employee_id=$${i++}`); params.push(employee_id); }
   if (letter_type)  { conds.push(`l.letter_type=$${i++}`); params.push(letter_type); }
   const { rows } = await query(
-    `SELECT l.*, e.full_name, e.employee_id as emp_code, u.full_name as issued_by_name
+    `SELECT l.*, e.name AS full_name, e.employee_code AS emp_code, u.name as issued_by_name
      FROM hr_employee_letters l
-     JOIN hr_employees e ON e.id=l.employee_id
+     JOIN users e ON e.id=l.employee_id
      LEFT JOIN users u ON u.id=l.issued_by
      WHERE ${conds.join(' AND ')} ORDER BY l.generated_on DESC`,
     params
@@ -187,9 +187,12 @@ router.post('/generate', authorize(...HR_ROLES), async (req, res) => {
   if (!tmpl) return res.status(404).json({ error: 'Template not found' });
   // Load employee
   const { rows: [emp] } = await query(
-    `SELECT e.*, c.name as company_name FROM hr_employees e
-     LEFT JOIN companies c ON c.id=e.company_id
-     WHERE e.id=$1 AND e.company_id=$2`,
+    `SELECT u.id, u.name AS full_name, u.employee_code AS employee_id, u.designation, u.department,
+            u.email, u.phone, ep.date_of_joining, ep.pan_number, c.name as company_name
+     FROM users u
+     LEFT JOIN employee_profiles ep ON ep.user_id=u.id
+     LEFT JOIN companies c ON c.id=u.company_id
+     WHERE u.id=$1 AND u.company_id=$2`,
     [employee_id, req.user.company_id]
   );
   if (!emp) return res.status(404).json({ error: 'Employee not found' });
@@ -209,8 +212,8 @@ router.post('/generate', authorize(...HR_ROLES), async (req, res) => {
 
 router.get('/generated/:id', authorize(...HR_ALL), async (req, res) => {
   const { rows } = await query(
-    `SELECT l.*, e.full_name, e.employee_id as emp_code FROM hr_employee_letters l
-     JOIN hr_employees e ON e.id=l.employee_id WHERE l.id=$1 AND l.company_id=$2`,
+    `SELECT l.*, e.name AS full_name, e.employee_code AS emp_code FROM hr_employee_letters l
+     JOIN users e ON e.id=l.employee_id WHERE l.id=$1 AND l.company_id=$2`,
     [req.params.id, req.user.company_id]
   );
   if (!rows[0]) return res.status(404).json({ error: 'Not found' });

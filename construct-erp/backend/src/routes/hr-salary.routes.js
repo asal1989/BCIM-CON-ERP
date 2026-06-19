@@ -275,10 +275,9 @@ router.delete('/pt-slabs/:id', async (req, res) => {
 router.get('/revisions', async (req, res) => {
   const { user_id } = req.query;
   const { rows } = await query(
-    `SELECT r.*, u.full_name, e.employee_id as emp_code, e.department, e.designation
+    `SELECT r.*, u.name AS full_name, u.employee_code AS emp_code, u.department, u.designation
      FROM hr_salary_revisions r
      JOIN users u ON u.id=r.user_id
-     LEFT JOIN hr_employees e ON e.user_id=r.user_id
      WHERE r.company_id=$1 ${user_id ? 'AND r.user_id=$2' : ''}
      ORDER BY r.effective_from DESC`,
     user_id ? [req.user.company_id, user_id] : [req.user.company_id]
