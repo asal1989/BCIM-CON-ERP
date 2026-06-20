@@ -1,8 +1,21 @@
 // gfc.routes.js — GFC (Good For Construction) Drawing Master Log
 const express = require('express');
 const router  = express.Router();
+const path    = require('path');
+const fs      = require('fs');
+const multer  = require('multer');
+const { v4: uuid } = require('uuid');
 const { query } = require('../config/database');
 const { authenticate } = require('../middleware/auth');
+
+// ── Multer setup (same uploads folder as DMS) ────────────────────────────────
+const GFC_UPLOAD_DIR = path.join(__dirname, '../../uploads/gfc-drawings');
+fs.mkdirSync(GFC_UPLOAD_DIR, { recursive: true });
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, GFC_UPLOAD_DIR),
+  filename:    (req, file, cb) => cb(null, `${uuid()}${path.extname(file.originalname)}`),
+});
+const upload = multer({ storage, limits: { fileSize: 200 * 1024 * 1024 } }); // 200 MB
 
 router.use(authenticate);
 
@@ -49,6 +62,13 @@ async function ensureSchema() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  // Add file columns if they don't exist yet (idempotent)
+  await query(`ALTER TABLE gfc_drawings          ADD COLUMN IF NOT EXISTS file_name VARCHAR(255)`);
+  await query(`ALTER TABLE gfc_drawings          ADD COLUMN IF NOT EXISTS file_url  TEXT`);
+  await query(`ALTER TABLE gfc_drawings          ADD COLUMN IF NOT EXISTS file_size BIGINT`);
+  await query(`ALTER TABLE gfc_drawing_revisions ADD COLUMN IF NOT EXISTS file_name VARCHAR(255)`);
+  await query(`ALTER TABLE gfc_drawing_revisions ADD COLUMN IF NOT EXISTS file_url  TEXT`);
+  await query(`ALTER TABLE gfc_drawing_revisions ADD COLUMN IF NOT EXISTS file_size BIGINT`);
   schemaReady = true;
 }
 router.use(async (req, res, next) => {
@@ -261,6 +281,71 @@ router.get('/drawings/superseded', async (req, res) => {
     sql += ` ORDER BY d.updated_at DESC`;
     const r = await query(sql, params);
     res.json({ data: r.rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /gfc/drawings/:id/upload — attach a file to a drawing ───────────────
+router.post('/drawings/:id/upload', upload.single('file'), async (req, res) => {
+  try {
+    const own = await query('SELECT id, file_url FROM gfc_drawings WHERE id = $1 AND company_id = $2', [req.params.id, req.user.company_id]);
+    if (!own.rows.length) return res.status(404).json({ error: 'Drawing not found' });
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    // Delete old file from disk if it exists
+    if (own.rows[0].file_url) {
+      const old = path.join(GFC_UPLOAD_DIR, path.basename(own.rows[0].file_url));
+      fs.unlink(old, () => {});
+    }
+
+    const fileUrl = `/uploads/gfc-drawings/${req.file.filename}`;
+    const r = await query(
+      `UPDATE gfc_drawings SET file_name=$3, file_url=$4, file_size=$5, updated_at=NOW()
+       WHERE id=$1 AND company_id=$2 RETURNING *`,
+      [req.params.id, req.user.company_id, req.file.originalname, fileUrl, req.file.size]
+    );
+    res.json({ data: r.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /gfc/drawings/:id/revisions/:revId/upload — attach file to a revision
+router.post('/drawings/:id/revisions/:revId/upload', upload.single('file'), async (req, res) => {
+  try {
+    const own = await query('SELECT rv.id, rv.file_url FROM gfc_drawing_revisions rv JOIN gfc_drawings d ON d.id = rv.drawing_id WHERE rv.id=$1 AND d.company_id=$2', [req.params.revId, req.user.company_id]);
+    if (!own.rows.length) return res.status(404).json({ error: 'Revision not found' });
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    if (own.rows[0].file_url) {
+      const old = path.join(GFC_UPLOAD_DIR, path.basename(own.rows[0].file_url));
+      fs.unlink(old, () => {});
+    }
+
+    const fileUrl = `/uploads/gfc-drawings/${req.file.filename}`;
+    const r = await query(
+      `UPDATE gfc_drawing_revisions SET file_name=$3, file_url=$4, file_size=$5 WHERE id=$1 AND drawing_id=$2 RETURNING *`,
+      [req.params.revId, req.params.id, req.file.originalname, fileUrl, req.file.size]
+    );
+    res.json({ data: r.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /gfc/drawings/:id/file — download the attached drawing file ───────────
+router.get('/drawings/:id/file', async (req, res) => {
+  try {
+    const own = await query('SELECT file_url, file_name FROM gfc_drawings WHERE id=$1 AND company_id=$2', [req.params.id, req.user.company_id]);
+    if (!own.rows.length) return res.status(404).json({ error: 'Drawing not found' });
+    const { file_url, file_name } = own.rows[0];
+    if (!file_url) return res.status(404).json({ error: 'No file attached to this drawing' });
+
+    const filePath = path.join(GFC_UPLOAD_DIR, path.basename(file_url));
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found on server' });
+    res.setHeader('Content-Disposition', `inline; filename="${(file_name || 'drawing').replace(/"/g, '')}"`);
+    res.sendFile(filePath);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

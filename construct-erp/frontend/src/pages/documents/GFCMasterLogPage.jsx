@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tansta
 import {
   Layers, Plus, X, Search, RefreshCw, History, Pencil, Trash2,
   FileUp, CheckCircle2, PauseCircle, CircleSlash, FileStack, Download,
+  Paperclip, Eye,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
@@ -329,6 +330,8 @@ export default function GFCMasterLogPage() {
   const [disciplineFilter, setDiscipline] = useState('');
   const [statusFilter, setStatus]       = useState('');
   const [modal, setModal]               = useState(null); // {type:'add'|'edit'|'revision'|'history', drawing}
+  const [uploadTarget, setUploadTarget] = useState(null); // drawing id being uploaded to
+  const fileInputRef                    = React.useRef();
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -390,6 +393,31 @@ export default function GFCMasterLogPage() {
     onSuccess: () => { toast.success('Drawing deleted'); invalidate(); },
     onError: e => toast.error(e?.response?.data?.error || 'Delete failed'),
   });
+  const uploadMut = useMutation({
+    mutationFn: ({ id, file }) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      return gfcAPI.uploadFile(id, fd);
+    },
+    onSuccess: () => { toast.success('File attached'); setUploadTarget(null); invalidate(); },
+    onError: e => toast.error(e?.response?.data?.error || 'Upload failed'),
+  });
+
+  const openFile = async (id, fileName) => {
+    try {
+      const res = await gfcAPI.downloadFile(id);
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noreferrer';
+      a.download = fileName || 'drawing';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch {
+      toast.error('Could not open file');
+    }
+  };
 
   const kpis = [
     { label: 'Total Drawings', value: stats?.total ?? '—',      icon: FileStack,    cls: 'border-indigo-500',  iconBg: 'bg-indigo-50 text-indigo-600' },
@@ -479,6 +507,19 @@ export default function GFCMasterLogPage() {
         <span className="text-xs text-slate-400 shrink-0">{drawings.length} drawings</span>
       </div>
 
+      {/* Hidden file input for drawing attachment */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,.dwg,.dxf,.jpg,.jpeg,.png,.tif,.tiff"
+        className="hidden"
+        onChange={e => {
+          const file = e.target.files?.[0];
+          if (file && uploadTarget) uploadMut.mutate({ id: uploadTarget, file });
+          e.target.value = '';
+        }}
+      />
+
       {/* Master log table */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
@@ -507,6 +548,14 @@ export default function GFCMasterLogPage() {
                   <td className="px-4 py-3 max-w-[220px]">
                     <p className="text-xs font-medium text-slate-800 truncate" title={d.title}>{d.title}</p>
                     {d.remarks && <p className="text-[10px] text-slate-400 truncate" title={d.remarks}>{d.remarks}</p>}
+                    {d.file_name && (
+                      <button onClick={() => openFile(d.id, d.file_name)}
+                        className="inline-flex items-center gap-1 mt-1 text-[10px] text-indigo-600 hover:underline truncate max-w-full text-left"
+                        title={d.file_name}>
+                        <Paperclip className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{d.file_name}</span>
+                      </button>
+                    )}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     {d.discipline ? <span className="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{d.discipline}</span> : <span className="text-slate-300">—</span>}
@@ -532,6 +581,25 @@ export default function GFCMasterLogPage() {
                   <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={d.status} /></td>
                   <td className="px-4 py-3 whitespace-nowrap text-right">
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => { setUploadTarget(d.id); fileInputRef.current?.click(); }}
+                        title={d.file_name ? `Replace file (${d.file_name})` : 'Attach drawing file'}
+                        disabled={uploadMut.isPending && uploadTarget === d.id}
+                        className={clsx(
+                          'p-1.5 rounded-lg border transition-colors',
+                          d.file_url
+                            ? 'border-indigo-300 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white'
+                            : 'border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-300',
+                        )}>
+                        <Paperclip className="w-3.5 h-3.5" />
+                      </button>
+                      {d.file_url && (
+                        <button onClick={() => openFile(d.id, d.file_name)}
+                          title="View / download file"
+                          className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-emerald-600 hover:border-emerald-300 transition-colors">
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       <button onClick={() => setModal({ type: 'revision', drawing: d })} title="Issue new revision"
                         className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-600 hover:text-white transition-colors">
                         <FileUp className="w-3.5 h-3.5" />

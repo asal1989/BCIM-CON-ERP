@@ -1308,15 +1308,18 @@ export const dmsAPI = {
 
 // ─── GFC Master Log ──────────────────────────────────────────────────────────
 export const gfcAPI = {
-  list:         (p)       => api.get('/gfc/drawings', { params: p }),
-  stats:        (p)       => api.get('/gfc/stats', { params: p }),
-  create:       (d)       => api.post('/gfc/drawings', d),
-  update:       (id, d)   => api.patch(`/gfc/drawings/${id}`, d),
-  remove:       (id)      => api.delete(`/gfc/drawings/${id}`),
-  addRevision:  (id, d)   => api.post(`/gfc/drawings/${id}/revisions`, d),
-  revisions:    (id)      => api.get(`/gfc/drawings/${id}/revisions`),
-  allRevisions: (p)       => api.get('/gfc/drawings/revisions/all', { params: p }),
-  superseded:   (p)       => api.get('/gfc/drawings/superseded', { params: p }),
+  list:           (p)           => api.get('/gfc/drawings', { params: p }),
+  stats:          (p)           => api.get('/gfc/stats', { params: p }),
+  create:         (d)           => api.post('/gfc/drawings', d),
+  update:         (id, d)       => api.patch(`/gfc/drawings/${id}`, d),
+  remove:         (id)          => api.delete(`/gfc/drawings/${id}`),
+  addRevision:    (id, d)       => api.post(`/gfc/drawings/${id}/revisions`, d),
+  revisions:      (id)          => api.get(`/gfc/drawings/${id}/revisions`),
+  allRevisions:   (p)           => api.get('/gfc/drawings/revisions/all', { params: p }),
+  superseded:     (p)           => api.get('/gfc/drawings/superseded', { params: p }),
+  uploadFile:     (id, fd)      => api.post(`/gfc/drawings/${id}/upload`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  uploadRevFile:  (id, rid, fd) => api.post(`/gfc/drawings/${id}/revisions/${rid}/upload`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  downloadFile:   (id)          => api.get(`/gfc/drawings/${id}/file`, { responseType: 'blob' }),
 };
 
 // ─── Subcontractor Management ─────────────────────────────────────────────────
