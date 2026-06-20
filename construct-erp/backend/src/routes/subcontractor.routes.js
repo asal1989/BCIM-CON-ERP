@@ -12,6 +12,9 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 
 router.use(authenticate);
 
+// Editing/deleting a work order is restricted to procurement & super admin users
+const PROCUREMENT_ROLES = ['super_admin', 'procurement_manager', 'procurement'];
+
 // Dashboard
 router.get('/dashboard', ctrl.getDashboard);
 
@@ -38,8 +41,8 @@ router.delete('/:vendorId/documents/:docId', authorize('super_admin', 'admin', '
 router.get('/work-orders', ctrl.getWorkOrders);
 router.post('/work-orders', authorize('super_admin', 'admin', 'project_manager', 'procurement_manager'), ctrl.createWorkOrder);
 router.get('/work-orders/:id', ctrl.getWorkOrder);
-router.patch('/work-orders/:id', authorize('super_admin', 'admin', 'project_manager', 'procurement_manager'), ctrl.updateWorkOrder);
-router.delete('/work-orders/:id', authorize('super_admin', 'admin', 'project_manager', 'procurement_manager'), async (req, res) => {
+router.patch('/work-orders/:id', authorize(...PROCUREMENT_ROLES), ctrl.updateWorkOrder);
+router.delete('/work-orders/:id', authorize(...PROCUREMENT_ROLES), async (req, res) => {
   try {
     const result = await query(
       `DELETE FROM work_orders WHERE id = $1 AND project_id IN (SELECT id FROM projects WHERE company_id = $2) RETURNING id`,

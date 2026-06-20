@@ -67,6 +67,13 @@ function canApproveWOStage(stageId, user) {
   return allowed.roles.some(r => role.includes(r)) || allowed.depts.some(d => dept.includes(d));
 }
 
+// Editing/deleting a work order is restricted to procurement & super admin users
+function canManageProcurement(user) {
+  if (!user) return false;
+  const role = (user.role || '').toLowerCase();
+  return role === 'super_admin' || role.includes('procurement');
+}
+
 function StatusBadge({ status }) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
   return (
@@ -974,7 +981,7 @@ function WODetailPanel({ wo, onClose, onEdit, onDelete, onApprove, onMDApprove, 
                 </div>
               ))}
             </div>
-            {['draft','pending'].includes(liveStatus) && onEdit && (
+            {['draft','pending'].includes(liveStatus) && onEdit && canManageProcurement(user) && (
               <button onClick={() => onEdit({ ...wo, ...(detail || {}) })}
                 className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-amber-300 bg-amber-50 text-amber-700 text-xs font-medium hover:bg-amber-100 transition-all">
                 <Edit2 className="w-3.5 h-3.5" /> Edit WO
@@ -984,11 +991,13 @@ function WODetailPanel({ wo, onClose, onEdit, onDelete, onApprove, onMDApprove, 
               className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-slate-200 text-xs font-medium text-slate-900 hover:border-slate-300 transition-all">
               <Printer className="w-3.5 h-3.5" /> Print
             </button>
-            <button
-              onClick={() => { if (window.confirm(`Delete Work Order ${wo.wo_number}? This cannot be undone.`)) { onDelete(wo.id); } }}
-              className="flex items-center gap-1.5 px-3 h-8 rounded-lg bg-white border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50 transition-all">
-              <X className="w-3.5 h-3.5" /> Delete
-            </button>
+            {canManageProcurement(user) && (
+              <button
+                onClick={() => { if (window.confirm(`Delete Work Order ${wo.wo_number}? This cannot be undone.`)) { onDelete(wo.id); } }}
+                className="flex items-center gap-1.5 px-3 h-8 rounded-lg bg-white border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50 transition-all">
+                <X className="w-3.5 h-3.5" /> Delete
+              </button>
+            )}
           </div>
         </div>
 

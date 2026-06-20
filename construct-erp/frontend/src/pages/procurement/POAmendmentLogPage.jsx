@@ -7,7 +7,7 @@ import {
   Search,
   Filter,
   RefreshCw,
-  BadgeDollarSign,
+  BadgeIndianRupee,
   CalendarDays,
   CheckCircle2,
   XCircle,
@@ -67,7 +67,8 @@ function POAmendEditor({ poId, pos, onClose, onSubmitted }) {
       po_item_id: it.id,
       material_name: it.material_name,
       unit: it.unit,
-      gst_rate: it.gst_rate,
+      original_gst_rate: num(it.gst_rate),
+      gst_rate: num(it.gst_rate),
       original_qty: num(it.quantity),
       revised_qty: num(it.quantity),
       original_rate: num(it.rate),
@@ -79,12 +80,18 @@ function POAmendEditor({ poId, pos, onClose, onSubmitted }) {
   const updateItem = (idx, field, value) => setItems(prev => prev.map((it, i) => (i === idx ? { ...it, [field]: value } : it)));
   const removeItem = idx => setItems(prev => prev.filter((_, i) => i !== idx));
   const addBlankItem = () => setItems(prev => [...prev, {
-    po_item_id: null, material_name: '', unit: 'Nos', gst_rate: 0,
+    po_item_id: null, material_name: '', unit: 'Nos', original_gst_rate: 0, gst_rate: 0,
     original_qty: 0, revised_qty: 0, original_rate: 0, revised_rate: 0, received_qty: 0,
   }]);
 
-  const originalTotal = useMemo(() => items.reduce((s, it) => s + num(it.original_qty) * num(it.original_rate), 0), [items]);
-  const revisedTotal  = useMemo(() => items.reduce((s, it) => s + num(it.revised_qty)  * num(it.revised_rate),  0), [items]);
+  const originalTotal = useMemo(() => items.reduce((s, it) => {
+    const basic = num(it.original_qty) * num(it.original_rate);
+    return s + basic + basic * (num(it.original_gst_rate) / 100);
+  }, 0), [items]);
+  const revisedTotal  = useMemo(() => items.reduce((s, it) => {
+    const basic = num(it.revised_qty) * num(it.revised_rate);
+    return s + basic + basic * (num(it.gst_rate) / 100);
+  }, 0), [items]);
   const difference = revisedTotal - originalTotal;
   const requiresReApproval = Math.abs(difference) > APPROVAL_THRESHOLD;
   const underReceivedWarnings = items.filter(it => num(it.revised_qty) < num(it.received_qty) && num(it.received_qty) > 0);
@@ -195,14 +202,18 @@ function POAmendEditor({ poId, pos, onClose, onSubmitted }) {
                         <th className="text-right px-2 py-2.5 font-medium">Rev Qty</th>
                         <th className="text-right px-2 py-2.5 font-medium">Orig Rate</th>
                         <th className="text-right px-2 py-2.5 font-medium">Rev Rate</th>
+                        <th className="text-right px-2 py-2.5 font-medium">Orig GST%</th>
+                        <th className="text-right px-2 py-2.5 font-medium">Rev GST%</th>
                         <th className="text-right px-2 py-2.5 font-medium">Diff ₹</th>
                         <th className="px-2 py-2.5"></th>
                       </tr>
                     </thead>
                     <tbody>
                       {items.map((it, idx) => {
-                        const origAmt = num(it.original_qty) * num(it.original_rate);
-                        const revAmt = num(it.revised_qty) * num(it.revised_rate);
+                        const origBasic = num(it.original_qty) * num(it.original_rate);
+                        const revBasic = num(it.revised_qty) * num(it.revised_rate);
+                        const origAmt = origBasic + origBasic * (num(it.original_gst_rate) / 100);
+                        const revAmt = revBasic + revBasic * (num(it.gst_rate) / 100);
                         const diff = revAmt - origAmt;
                         const underReceived = num(it.revised_qty) < num(it.received_qty) && num(it.received_qty) > 0;
                         return (
@@ -243,6 +254,14 @@ function POAmendEditor({ poId, pos, onClose, onSubmitted }) {
                                 onChange={e => updateItem(idx, 'revised_rate', e.target.value)}
                                 className="w-20 text-right border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-300" />
                             </td>
+                            <td className="px-2 py-2 text-right text-slate-400">{it.original_gst_rate}</td>
+                            <td className="px-2 py-2">
+                              <input
+                                type="number"
+                                value={it.gst_rate}
+                                onChange={e => updateItem(idx, 'gst_rate', e.target.value)}
+                                className="w-16 text-right border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-300" />
+                            </td>
                             <td className={clsx('px-2 py-2 text-right font-medium whitespace-nowrap',
                               diff > 0 ? 'text-orange-600' : diff < 0 ? 'text-sky-600' : 'text-slate-400')}>
                               {diff !== 0 ? `${diff > 0 ? '+' : ''}${inrFull(diff)}` : '—'}
@@ -254,7 +273,7 @@ function POAmendEditor({ poId, pos, onClose, onSubmitted }) {
                         );
                       })}
                       {items.length === 0 && (
-                        <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400 text-sm">No line items yet. Add one below.</td></tr>
+                        <tr><td colSpan={10} className="px-4 py-8 text-center text-slate-400 text-sm">No line items yet. Add one below.</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -351,6 +370,13 @@ function StatCard({ label, value, sub, icon: Icon, tone = 'indigo' }) {
   );
 }
 
+// Editing/deleting an amendment is restricted to procurement & super admin users
+function canManageProcurement(user) {
+  if (!user) return false;
+  const role = (user.role || '').toLowerCase();
+  return role === 'super_admin' || role.includes('procurement');
+}
+
 export default function POAmendmentLogPage() {
   const qc = useQueryClient();
   const user = useAuthStore(state => state.user);
@@ -360,6 +386,7 @@ export default function POAmendmentLogPage() {
   const [showModal, setShowModal] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
   const [showDetail, setShowDetail] = useState(null);
+  const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({
     po_id: '',
     amendment_type: 'Qty Change',
@@ -413,6 +440,17 @@ export default function POAmendmentLogPage() {
       qc.invalidateQueries({ queryKey: ['procurement-po-amendments'] });
     },
     onError: err => toast.error(err?.response?.data?.error || 'Unable to log amendment'),
+  });
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }) => poAmendmentAPI.update(id, data),
+    onSuccess: () => {
+      toast.success('Amendment updated');
+      setShowModal(false);
+      setEditingId(null);
+      qc.invalidateQueries({ queryKey: ['procurement-po-amendments'] });
+    },
+    onError: err => toast.error(err?.response?.data?.error || 'Unable to update amendment'),
   });
 
   const approveMut = useMutation({
@@ -494,6 +532,7 @@ export default function POAmendmentLogPage() {
   };
 
   const openNew = () => {
+    setEditingId(null);
     setForm({
       po_id: '',
       amendment_type: 'Qty Change',
@@ -506,12 +545,30 @@ export default function POAmendmentLogPage() {
     setShowModal(true);
   };
 
+  const openEdit = (a) => {
+    setEditingId(a.id);
+    setForm({
+      po_id: a.po_id || '',
+      amendment_type: a.amendment_type || 'Qty Change',
+      description: a.description || '',
+      value_impact: a.value_impact ?? '',
+      impact_type: a.impact_type || 'increase',
+      raised_by: a.raised_by || user?.name || '',
+      amendment_date: a.amendment_date ? dayjs(a.amendment_date).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
+    });
+    setShowModal(true);
+  };
+
   const handleSave = () => {
     if (!form.po_id || !form.amendment_type || !form.description || !form.raised_by || !form.amendment_date) {
       toast.error('Fill all required fields');
       return;
     }
-    createMut.mutate(form);
+    if (editingId) {
+      updateMut.mutate({ id: editingId, data: form });
+    } else {
+      createMut.mutate(form);
+    }
   };
 
   const selectedPo = form.po_id ? poLookup.get(form.po_id) : null;
@@ -559,7 +616,7 @@ export default function POAmendmentLogPage() {
         <StatCard label="Amendments" value={stats.total} sub="Live records only" icon={ClipboardList} tone="indigo" />
         <StatCard label="Pending" value={stats.pending} sub="Awaiting action" icon={CalendarDays} tone="amber" />
         <StatCard label="Approved" value={stats.approved} sub="Completed approvals" icon={CheckCircle2} tone="emerald" />
-        <StatCard label="Net Impact" value={money(stats.impact)} sub="Increase minus decrease" icon={BadgeDollarSign} tone="rose" />
+        <StatCard label="Net Impact" value={money(stats.impact)} sub="Increase minus decrease" icon={BadgeIndianRupee} tone="rose" />
       </div>
 
       <div className="bg-white border border-slate-200 rounded-2xl p-3 md:p-4 shadow-sm mb-5">
@@ -692,14 +749,23 @@ export default function POAmendmentLogPage() {
                           className="text-xs border border-rose-200 text-rose-600 rounded px-2 py-1 hover:bg-rose-50 disabled:opacity-50">
                           Reject
                         </button>
+                        {canManageProcurement(user) && (
+                          <button
+                            onClick={() => openEdit(a)}
+                            className="text-xs border border-amber-200 text-amber-700 rounded px-2 py-1 hover:bg-amber-50">
+                            Edit
+                          </button>
+                        )}
                       </>
                     )}
-                    <button
-                      onClick={() => window.confirm(`Delete amendment ${a.amendment_no}? This cannot be undone.`) && deleteMut.mutate(a.id)}
-                      disabled={deleteMut.isPending}
-                      className="text-xs border border-slate-200 text-slate-500 rounded px-2 py-1 hover:bg-red-50 hover:border-red-200 hover:text-red-600 disabled:opacity-50">
-                      Delete
-                    </button>
+                    {canManageProcurement(user) && (
+                      <button
+                        onClick={() => window.confirm(`Delete amendment ${a.amendment_no}? This cannot be undone.`) && deleteMut.mutate(a.id)}
+                        disabled={deleteMut.isPending}
+                        className="text-xs border border-slate-200 text-slate-500 rounded px-2 py-1 hover:bg-red-50 hover:border-red-200 hover:text-red-600 disabled:opacity-50">
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -713,10 +779,10 @@ export default function POAmendmentLogPage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-6">
             <div className="flex items-center justify-between p-5 border-b border-slate-100">
               <div>
-                <h2 className="text-base font-medium text-slate-900">Log Amendment</h2>
+                <h2 className="text-base font-medium text-slate-900">{editingId ? 'Edit Amendment' : 'Log Amendment'}</h2>
                 <p className="text-xs text-slate-900 font-medium mt-0.5">Linked to live purchase orders</p>
               </div>
-              <button onClick={() => setShowModal(false)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-900 font-medium hover:text-slate-900 transition-all">×</button>
+              <button onClick={() => { setShowModal(false); setEditingId(null); }} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-900 font-medium hover:text-slate-900 transition-all">×</button>
             </div>
 
             <div className="p-5 space-y-5">
@@ -817,7 +883,7 @@ export default function POAmendmentLogPage() {
             <div className="flex gap-3 px-5 pb-5">
               <button
                 type="button"
-                onClick={() => setShowModal(false)}
+                onClick={() => { setShowModal(false); setEditingId(null); }}
                 className="flex-1 py-2.5 bg-slate-100 text-slate-900 text-sm font-medium rounded-lg hover:bg-slate-200 transition-all"
               >
                 Cancel
@@ -825,10 +891,10 @@ export default function POAmendmentLogPage() {
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={createMut.isPending}
+                disabled={createMut.isPending || updateMut.isPending}
                 className="flex-1 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 shadow-sm transition-all disabled:opacity-60"
               >
-                {createMut.isPending ? 'Saving…' : 'Submit Amendment'}
+                {(createMut.isPending || updateMut.isPending) ? 'Saving…' : editingId ? 'Save Changes' : 'Submit Amendment'}
               </button>
             </div>
           </div>

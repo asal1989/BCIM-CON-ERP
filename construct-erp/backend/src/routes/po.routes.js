@@ -1,7 +1,7 @@
 // src/routes/po.routes.js
 const express = require('express');
 const multer = require('multer');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
 const { loadProjectScope, userCanAccessProject } = require('../middleware/projectScope');
 const { query, withTransaction } = require('../config/database');
 const { extractPO } = require('../services/poExtraction.service');
@@ -115,6 +115,9 @@ function applyProjectScope(req, sqlParts, params, alias = 'po', requestedProject
   params.push(allowed);
   sqlParts.push(`${alias}.project_id = ANY($${params.length}::uuid[])`);
 }
+
+// Edit/delete of purchase orders is restricted to procurement & super admin users
+const PROCUREMENT_ROLES = ['super_admin', 'procurement_manager', 'procurement'];
 
 async function getAccessiblePo(req, poId) {
   const { rows } = await query(
@@ -974,7 +977,7 @@ router.post('/:id/amend', async (req, res) => {
 });
 
 // PATCH /purchase-orders/:id — edit core PO fields (po_number, delivery_address, etc.)
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', authorize(...PROCUREMENT_ROLES), async (req, res) => {
   try {
     const po = await getAccessiblePo(req, req.params.id);
 
@@ -1051,6 +1054,25 @@ router.patch('/:id', async (req, res) => {
 
     res.json({ data: result });
   } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// DELETE /purchase-orders/:id — procurement & super admin only; pending POs only
+router.delete('/:id', authorize(...PROCUREMENT_ROLES), async (req, res) => {
+  try {
+    const po = await getAccessiblePo(req, req.params.id);
+    if (po.status !== 'pending') {
+      return res.status(400).json({ error: `Cannot delete a PO at status "${po.status}". Only pending POs can be deleted.` });
+    }
+    const result = await query(
+      `DELETE FROM purchase_orders WHERE id = $1 RETURNING id`,
+      [req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Purchase Order not found' });
+    res.json({ message: 'Purchase Order deleted' });
+  } catch (err) {
+    if (err.code === '23503') return res.status(409).json({ error: 'Cannot delete — this PO has linked bills, GRNs, or amendments' });
     res.status(err.statusCode || 500).json({ error: err.message });
   }
 });

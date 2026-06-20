@@ -99,6 +99,8 @@ const ensureSchema = async () => {
 runSchemaInit('po_amendments', ensureSchema);
 
 const WRITE_ROLES = ['super_admin', 'admin', 'procurement_manager', 'procurement', 'manager'];
+// Editing/deleting an amendment record is restricted to procurement & super admin users
+const PROCUREMENT_ROLES = ['super_admin', 'procurement_manager', 'procurement'];
 
 // Debounce: run at most once per 30 s per company to avoid heavy INSERT…SELECT on every request.
 const _syncDebounce = new Map();
@@ -274,6 +276,40 @@ router.post('/', authorize(...WRITE_ROLES), async (req, res) => {
   }
 });
 
+// PATCH /po-amendments/:id — edit amendment fields; procurement & super admin only, pending amendments only
+router.patch('/:id', authorize(...PROCUREMENT_ROLES), async (req, res) => {
+  try {
+    const amendment = await getAccessibleAmendment(req, req.params.id);
+    if (amendment.status !== 'pending') {
+      return res.status(400).json({ error: `Cannot edit an amendment at status "${amendment.status}". Only pending amendments can be edited.` });
+    }
+
+    const { amendment_type, description, value_impact, impact_type, raised_by, amendment_date } = req.body;
+    const sets = [];
+    const params = [req.params.id, req.user.company_id];
+    let i = 3;
+
+    if (amendment_type  !== undefined) { sets.push(`amendment_type = $${i++}`); params.push(amendment_type); }
+    if (description     !== undefined) { sets.push(`description = $${i++}`);    params.push(description); }
+    if (value_impact    !== undefined) { sets.push(`value_impact = $${i++}`);    params.push(Number(value_impact) || 0); }
+    if (impact_type     !== undefined) { sets.push(`impact_type = $${i++}`);     params.push(impact_type); }
+    if (raised_by       !== undefined) { sets.push(`raised_by = $${i++}`);       params.push(raised_by); }
+    if (amendment_date  !== undefined) { sets.push(`amendment_date = $${i++}`);  params.push(amendment_date || null); }
+
+    if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
+    sets.push('updated_at = NOW()');
+
+    const r = await query(
+      `UPDATE po_amendments SET ${sets.join(', ')} WHERE id = $1 AND company_id = $2 RETURNING *`,
+      params
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Amendment not found' });
+    res.json({ data: r.rows[0] });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
 router.patch('/:id/approve', authorize(...WRITE_ROLES), async (req, res) => {
   try {
     await getAccessibleAmendment(req, req.params.id);
@@ -312,7 +348,7 @@ router.patch('/:id/reject', authorize(...WRITE_ROLES), async (req, res) => {
   }
 });
 
-router.delete('/:id', authorize(...WRITE_ROLES), async (req, res) => {
+router.delete('/:id', authorize(...PROCUREMENT_ROLES), async (req, res) => {
   try {
     await getAccessibleAmendment(req, req.params.id);
     const r = await query(

@@ -260,31 +260,42 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
                   );
                 })}
 
-                {/* TOTALS — aligned under Rate/Amount columns */}
+                {/* TOTALS — Sub Total / GST / Grand Total stacked in a single column */}
                 <tr style={{ pageBreakInside: 'avoid' }}>
                   <td style={{ ...TD, border: 'none' }} colSpan={4} rowSpan={2 + gstRates.length + (isTaxIncl ? 1 : 0)} />
-                  <td style={{ ...TD, fontWeight: 700, textAlign: 'right' }} colSpan={1}>Sub Total</td>
-                  <td style={{ ...TD, fontWeight: 700, textAlign: 'right' }}>{inr0(subTotal)}</td>
+                  <td style={{ ...TD, fontWeight: 700 }} colSpan={2}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Sub Total</span><span>{inr0(subTotal)}</span>
+                    </div>
+                  </td>
                   <td style={{ ...TD, border: 'none' }} />
                 </tr>
                 {isTaxIncl ? (
                   <tr style={{ pageBreakInside: 'avoid' }}>
-                    <td style={{ ...TD, textAlign: 'right' }}>GST</td>
-                    <td style={{ ...TD, textAlign: 'right' }}>Inclusive</td>
+                    <td style={TD} colSpan={2}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>GST</span><span>Inclusive</span>
+                      </div>
+                    </td>
                     <td style={{ ...TD, border: 'none' }} />
                   </tr>
                 ) : gstRates.map(r => (
                   <tr key={r} style={{ pageBreakInside: 'avoid' }}>
-                    <td style={{ ...TD, textAlign: 'right', fontSize: '10px' }}>
-                      GST @ {r}%{gstRates.length > 1 ? ` on item no. ${formatItemNos(gstByRate[r].nums)}` : ''}
+                    <td style={{ ...TD, fontSize: '10px' }} colSpan={2}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>GST @ {r}%{gstRates.length > 1 ? ` on item no. ${formatItemNos(gstByRate[r].nums)}` : ''}</span>
+                        <span style={{ fontSize: '11px' }}>{inr0(gstByRate[r].amount)}</span>
+                      </div>
                     </td>
-                    <td style={{ ...TD, textAlign: 'right' }}>{inr0(gstByRate[r].amount)}</td>
                     <td style={{ ...TD, border: 'none' }} />
                   </tr>
                 ))}
                 <tr style={{ pageBreakInside: 'avoid' }}>
-                  <td style={{ ...TD, fontWeight: 700, textAlign: 'right' }}>Grand Total</td>
-                  <td style={{ ...TD, fontWeight: 700, textAlign: 'right' }}>{inr0(grandTotal)}</td>
+                  <td style={{ ...TD, fontWeight: 700 }} colSpan={2}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Grand Total</span><span>{inr0(grandTotal)}</span>
+                    </div>
+                  </td>
                   <td style={{ ...TD, border: 'none' }} />
                 </tr>
               </tbody>
