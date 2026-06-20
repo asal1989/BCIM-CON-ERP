@@ -646,7 +646,7 @@ router.post('/', async (req, res) => {
 // PATCH /inventory/:id — update minimum/reorder levels
 router.patch('/:id', async (req, res) => {
   try {
-    const { minimum_level, reorder_level, maximum_level, unit_rate, category, major_head, dc_idc, remarks, unit } = req.body;
+    const { minimum_level, reorder_level, maximum_level, unit_rate, category, major_head, dc_idc, remarks, unit, opening_stock, closing_stock } = req.body;
     const check = await query(
       `SELECT i.id, i.project_id FROM inventory i JOIN projects p ON i.project_id = p.id WHERE i.id = $1 AND p.company_id = $2`,
       [req.params.id, req.user.company_id]
@@ -667,9 +667,11 @@ router.patch('/:id', async (req, res) => {
          dc_idc        = COALESCE($7, dc_idc),
          remarks       = COALESCE($8, remarks),
          unit          = COALESCE($9, unit),
+         opening_stock = COALESCE($10, opening_stock),
+         closing_stock = COALESCE($11, closing_stock),
          last_updated  = NOW()
-       WHERE id = $10`,
-      [minimum_level, reorder_level, maximum_level, unit_rate, category, major_head, dc_idc, remarks, unit, req.params.id]
+       WHERE id = $12`,
+      [minimum_level, reorder_level, maximum_level, unit_rate, category, major_head, dc_idc, remarks, unit, opening_stock, closing_stock, req.params.id]
     );
     res.json({ message: 'Inventory updated' });
   } catch (err) {

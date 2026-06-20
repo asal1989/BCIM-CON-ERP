@@ -1267,9 +1267,23 @@ export default function StoreLedgerPage() {
                             </select>
                           </td>
 
-                          <td className="px-3 py-3 text-right font-mono text-[13px] text-slate-900 font-medium">{qty(opening)}</td>
+                          {/* Opening Stock — inline editable */}
+                          <td className="px-3 py-3 text-right font-mono text-[13px] text-slate-900 font-medium">
+                            <EditableCell
+                              value={opening > 0 ? opening : ''}
+                              placeholder="0"
+                              numeric
+                              onSave={v => updateMutation.mutate({ id: s.id, data: { opening_stock: parseFloat(v) || 0 } })}
+                            />
+                          </td>
+                          {/* Closing Stock — inline editable */}
                           <td className="px-3 py-3 text-right font-mono text-[13px] font-medium text-slate-900">
-                            <div>{qty(closing)}</div>
+                            <EditableCell
+                              value={closing > 0 ? closing : ''}
+                              placeholder="0"
+                              numeric
+                              onSave={v => updateMutation.mutate({ id: s.id, data: { closing_stock: parseFloat(v) || 0 } })}
+                            />
                             <span className={clsx('text-[10px] font-medium px-1.5 py-0.5 rounded-full border mt-0.5 inline-block', badge.cls)}>
                               {badge.label}
                             </span>
