@@ -3,11 +3,13 @@ title BCIM Engineering — ConstructERP
 color 0A
 cls
 echo.
-echo  ================================================
-echo   BCIM Engineering — ConstructERP Launcher
-echo  ================================================
+echo  ====================================================
+echo    BCIM Engineering — ConstructERP
+echo    Backend  ^>  http://localhost:5000
+echo    Frontend ^>  http://localhost:3000
+echo  ====================================================
 echo.
-node "%~dp0start-all.js"
+node "%~dp0scripts\start-all.js"
 echo.
-echo  All servers have stopped.
+echo  Servers stopped.
 pause
