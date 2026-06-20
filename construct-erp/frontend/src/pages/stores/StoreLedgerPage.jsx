@@ -25,6 +25,9 @@ const DEFAULT_CATEGORIES = ['Masonry Works'];
 const inr = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const qty = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
 const fmt2 = (n) => Number(n || 0).toFixed(2);
+// Round stock quantities to 3 decimal places to match the qty() display precision.
+// Prevents floating-point residuals (e.g. 0.0004 bags) from showing "0" qty but a non-zero value.
+const rq3 = (n) => Math.round(parseFloat(n || 0) * 1000) / 1000;
 
 /* ── Mini bar (for Monthly Movement) ────────────────────────── */
 function MiniBar({ value, max, color = 'bg-indigo-400' }) {
@@ -539,12 +542,12 @@ export default function StoreLedgerPage() {
   });
 
   // Summary totals for footer
-  const totalOpeningValue  = filteredSummary.reduce((sum, s) => sum + (parseFloat(s.opening_stock || 0) * parseFloat(s.unit_rate || 0)), 0);
+  const totalOpeningValue  = filteredSummary.reduce((sum, s) => sum + (rq3(s.opening_stock) * parseFloat(s.unit_rate || 0)), 0);
   const totalIssuedValue   = filteredSummary.reduce((sum, s) => {
-    const issued = Math.max(0, parseFloat(s.opening_stock || 0) - parseFloat(s.closing_stock || 0));
+    const issued = Math.max(0, rq3(s.opening_stock) - rq3(s.closing_stock));
     return sum + issued * parseFloat(s.unit_rate || 0);
   }, 0);
-  const totalClosingValue  = filteredSummary.reduce((sum, s) => sum + (parseFloat(s.closing_stock || 0) * parseFloat(s.unit_rate || 0)), 0);
+  const totalClosingValue  = filteredSummary.reduce((sum, s) => sum + (rq3(s.closing_stock) * parseFloat(s.unit_rate || 0)), 0);
   const totalGST           = totalClosingValue * GST_RATE;
   const totalGrandTotal    = totalClosingValue + totalGST;
 
@@ -593,8 +596,8 @@ export default function StoreLedgerPage() {
     const headers = ['SL NO','Major Head','Category','Material Description','Unit','DC/IDC','Opening Stock','Closing Stock','Rate (₹)','Total Issued Stock Value','Opening Stock Value','Closing Stock Value','GST @18%','Grand Total'];
     const rows = filteredSummary.map((s, idx) => {
       const rate       = parseFloat(s.unit_rate  || 0);
-      const opening    = parseFloat(s.opening_stock || 0);
-      const closing    = parseFloat(s.closing_stock || 0);
+      const opening    = rq3(s.opening_stock);
+      const closing    = rq3(s.closing_stock);
       const issued     = Math.max(0, opening - closing);
       const issuedVal  = (issued   * rate).toFixed(2);
       const openingVal = (opening  * rate).toFixed(2);
@@ -686,8 +689,8 @@ export default function StoreLedgerPage() {
       columns: ['SL No', 'Major Head', 'Category', 'Material Description', 'Unit', 'DC/IDC', 'Opening Stock', 'Closing Stock', 'Rate', 'Issued Value', 'Opening Value', 'Closing Value', 'GST 18%', 'Grand Total'],
       rows: filteredSummary.map((s, idx) => {
         const rate = parseFloat(s.unit_rate || 0);
-        const opening = parseFloat(s.opening_stock || 0);
-        const closing = parseFloat(s.closing_stock || 0);
+        const opening = rq3(s.opening_stock);
+        const closing = rq3(s.closing_stock);
         const issued = Math.max(0, opening - closing);
         const issuedVal = issued * rate;
         const openingVal = opening * rate;
@@ -1142,7 +1145,7 @@ export default function StoreLedgerPage() {
                       return Object.entries(groups).map(([head, cats]) => {
                         const headTotal = Object.values(cats).flat().reduce((sum, s) => {
                           const r = parseFloat(s.unit_rate || 0);
-                          return sum + parseFloat(s.closing_stock || 0) * r;
+                          return sum + rq3(s.closing_stock) * r;
                         }, 0);
                         return (
                           <React.Fragment key={head}>
@@ -1164,15 +1167,15 @@ export default function StoreLedgerPage() {
                                 {items.map((s) => {
                                   globalIdx++;
                                   const rate       = parseFloat(s.unit_rate || 0);
-                                  const opening    = parseFloat(s.opening_stock || 0);
-                                  const closing    = parseFloat(s.closing_stock || 0);
+                                  const opening    = rq3(s.opening_stock);
+                                  const closing    = rq3(s.closing_stock);
                                   const issued     = Math.max(0, opening - closing);
                                   const issuedVal  = issued   * rate;
                                   const openingVal = opening  * rate;
                                   const closingVal = closing  * rate;
                                   const gst        = closingVal * GST_RATE;
                                   const grandTotal = closingVal + gst;
-                                  const badge      = stockStatus(s.closing_stock, s.min_stock, s.reorder_level);
+                                  const badge      = stockStatus(closing, s.min_stock, s.reorder_level);
                                   return (
                                     <tr key={s.id} className="hover:bg-slate-50 transition-colors">
                                       <td className="px-3 py-3 text-center text-[13px] text-slate-900 font-medium font-mono">{globalIdx}</td>
@@ -1207,15 +1210,15 @@ export default function StoreLedgerPage() {
                       });
                     })() : pagedSummary.map((s, idx) => {
                       const rate        = parseFloat(s.unit_rate || 0);
-                      const opening     = parseFloat(s.opening_stock || 0);
-                      const closing     = parseFloat(s.closing_stock || 0);
+                      const opening     = rq3(s.opening_stock);
+                      const closing     = rq3(s.closing_stock);
                       const issued      = Math.max(0, opening - closing);
                       const issuedVal   = issued   * rate;
                       const openingVal  = opening  * rate;
                       const closingVal  = closing  * rate;
                       const gst         = closingVal * GST_RATE;
                       const grandTotal  = closingVal + gst;
-                      const badge       = stockStatus(s.closing_stock, s.min_stock, s.reorder_level);
+                      const badge       = stockStatus(closing, s.min_stock, s.reorder_level);
 
                       return (
                         <tr key={s.id} className="hover:bg-slate-50 transition-colors">
