@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, FileSpreadsheet, Ruler, Receipt,
-  DollarSign, CreditCard, Wallet, TrendingUp, Users, Clock,
+  IndianRupee, CreditCard, Wallet, TrendingUp, Users, Clock,
   Banknote, FileText, ShoppingCart, Truck, Package, PieChart,
   HardHat, AlertTriangle, Shield, Cpu, Ticket, Key,
   Home, BarChart3, LogOut, Menu, Bell, ChevronDown,
@@ -14,7 +14,7 @@ import {
   Briefcase, UploadCloud, Upload, ChevronUp, Flag, CalendarDays, GanttChartSquare, Hammer,
   CalendarOff, FileBarChart, Star, UserCheck, Fingerprint, PackageCheck, ArrowLeftRight,
   Landmark, FileSignature, CircleSlash, ShieldCheck, Clock3, Lightbulb,
-  Gavel, Target, Send, Coins, Replace, Link2, Wrench, Layers, MapPin, TrendingDown, FolderOpen, Calculator, IndianRupee, UserRound,
+  Gavel, Target, Send, Coins, Replace, Link2, Wrench, Layers, MapPin, TrendingDown, FolderOpen, Calculator, UserRound,
   Cog, Fuel, Gauge, BarChart2
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
@@ -150,7 +150,7 @@ const navGroups = [
     { to: '/accounts/reports/control-dashboard',icon: Activity,        label: 'Control Dashboard' },
     { to: '/accounts/reports/budget',           icon: PieChart,        label: 'Budget vs Actual' },
     { to: '/accounts/taxes/summary',            icon: Landmark,        label: 'Tax Summary' },
-    { to: '/accounts/taxes/gst',                icon: DollarSign,      label: 'GST' },
+    { to: '/accounts/taxes/gst',                icon: IndianRupee,      label: 'GST' },
     { to: '/accounts/taxes/tds',                icon: ShieldCheck,     label: 'TDS' },
     { to: '/accounts/documents',                icon: FolderSearch,    label: 'Documents' },
     { to: '/accounts/settings',                 icon: Settings,        label: 'Settings' },
@@ -272,6 +272,7 @@ const navGroups = [
     { to: '/sc/labour',           icon: HardHat,         label: 'Labour / Worker Attendance' },
     { to: '/sc/progress',         icon: Ruler,           label: 'Work Progress Entry' },
     { to: '/sc/bill-preparation', icon: Receipt,         label: 'Bill Preparation' },
+    { to: '/sc/hire-usage-tracker', icon: Truck,         label: 'Hire Usage Tracker' },
     { to: '/sc/bill-approval',    icon: ShieldCheck,     label: 'Bill Approval' },
     { to: '/sc/payments',         icon: CreditCard,      label: 'Payment Tracking' },
     { to: '/sc/deductions',       icon: Calculator,      label: 'Retention / Deductions' },
