@@ -981,7 +981,7 @@ function WODetailPanel({ wo, onClose, onEdit, onDelete, onApprove, onMDApprove, 
                 </div>
               ))}
             </div>
-            {['draft','pending'].includes(liveStatus) && onEdit && canManageProcurement(user) && (
+            {onEdit && canManageProcurement(user) && (
               <button onClick={() => onEdit({ ...wo, ...(detail || {}) })}
                 className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-amber-300 bg-amber-50 text-amber-700 text-xs font-medium hover:bg-amber-100 transition-all">
                 <Edit2 className="w-3.5 h-3.5" /> Edit WO

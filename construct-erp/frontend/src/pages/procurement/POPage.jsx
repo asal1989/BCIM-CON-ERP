@@ -1173,13 +1173,13 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onDelete, onA
                 </div>
               ))}
             </div>
-            {liveStatus === 'pending' && onEdit && canManageProcurement(user) && (
+            {onEdit && canManageProcurement(user) && (
               <button onClick={() => onEdit(detailedPO ?? po)}
                 className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-amber-300 bg-amber-50 text-amber-700 text-xs font-medium hover:bg-amber-100 transition-all">
                 <Edit2 className="w-3.5 h-3.5" /> Edit PO
               </button>
             )}
-            {liveStatus === 'pending' && onDelete && canManageProcurement(user) && (
+            {onDelete && canManageProcurement(user) && (
               <button
                 onClick={() => { if (window.confirm(`Delete PO ${po.po_ref_no || po.po_number || po.serial_no_formatted}? This cannot be undone.`)) onDelete(po.id); }}
                 className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-red-200 bg-white text-red-600 text-xs font-medium hover:bg-red-50 transition-all">

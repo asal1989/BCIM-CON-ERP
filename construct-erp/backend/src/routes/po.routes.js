@@ -980,11 +980,8 @@ router.post('/:id/amend', async (req, res) => {
 router.patch('/:id', authorize(...PROCUREMENT_ROLES), async (req, res) => {
   try {
     const po = await getAccessiblePo(req, req.params.id);
-
-    // Full edit only allowed while still pending (not yet procurement-approved)
-    if (po.status !== 'pending') {
-      return res.status(400).json({ error: `Cannot edit a PO at status "${po.status}". Only pending POs can be edited.` });
-    }
+    // Route is already restricted to procurement/super_admin (PROCUREMENT_ROLES above) —
+    // those roles may edit a PO at any status, not just 'pending'.
 
     const {
       vendor_id, po_date, delivery_date, payment_terms, tcs_amount,
@@ -1058,13 +1055,11 @@ router.patch('/:id', authorize(...PROCUREMENT_ROLES), async (req, res) => {
   }
 });
 
-// DELETE /purchase-orders/:id — procurement & super admin only; pending POs only
+// DELETE /purchase-orders/:id — procurement & super admin only, at any status.
+// The FK constraint on linked bills/GRNs/amendments still blocks deletion of a PO already in use downstream.
 router.delete('/:id', authorize(...PROCUREMENT_ROLES), async (req, res) => {
   try {
-    const po = await getAccessiblePo(req, req.params.id);
-    if (po.status !== 'pending') {
-      return res.status(400).json({ error: `Cannot delete a PO at status "${po.status}". Only pending POs can be deleted.` });
-    }
+    await getAccessiblePo(req, req.params.id);
     const result = await query(
       `DELETE FROM purchase_orders WHERE id = $1 RETURNING id`,
       [req.params.id]
