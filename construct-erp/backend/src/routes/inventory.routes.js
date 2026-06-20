@@ -785,19 +785,19 @@ router.post('/repair-double-stock', async (req, res) => {
     }
     const { project_id } = req.query;
 
-    // Recalculate each inventory row's closing_stock as:
-    //   SUM of inbound transactions (grn + bill_receipt + transfer_in + opening)
-    //   minus SUM of outbound transactions (issue + transfer_out)
-    const filter = project_id
-      ? `AND i.project_id = '${project_id}'`   // safe – UUID validated by DB
-      : '';
+    const params = [req.user.company_id];
+    let filter = '';
+    if (project_id && project_id !== 'undefined' && project_id !== 'null') {
+      params.push(project_id);
+      filter = `AND i.project_id = $${params.length}`;
+    }
 
     const result = await query(`
       WITH corrected AS (
         SELECT
           i.id,
           i.opening_stock,
-          COALESCE(SUM(CASE WHEN st.transaction_type IN ('grn','bill_receipt','transfer_in') THEN st.quantity ELSE 0 END), 0) AS total_in,
+          COALESCE(SUM(CASE WHEN st.transaction_type IN ('grn','bill_receipt','transfer_in','ign') THEN st.quantity ELSE 0 END), 0) AS total_in,
           COALESCE(SUM(CASE WHEN st.transaction_type IN ('issue','transfer_out') THEN st.quantity ELSE 0 END), 0) AS total_out
         FROM inventory i
         JOIN projects p ON p.id = i.project_id
@@ -811,7 +811,7 @@ router.post('/repair-double-stock', async (req, res) => {
       FROM corrected c
       WHERE inventory.id = c.id
       RETURNING inventory.id, inventory.material_name, inventory.closing_stock
-    `, [req.user.company_id]);
+    `, params);
 
     res.json({
       message: `Recalculated closing_stock for ${result.rows.length} inventory item(s).`,
