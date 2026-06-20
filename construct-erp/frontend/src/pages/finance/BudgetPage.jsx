@@ -263,7 +263,7 @@ export default function BudgetPage() {
               </button>
             )}
             {activeTab === 'budget' && (
-              <DataToolbar data={allItems} fileName="Budget_Analysis_Export" />
+              <DataToolbar data={allItems} fileName="Budget_Analysis_Export" hideAdd />
             )}
           </div>
         </div>
