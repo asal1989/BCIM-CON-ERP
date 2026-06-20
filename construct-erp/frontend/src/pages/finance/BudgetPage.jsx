@@ -1,12 +1,13 @@
 // src/pages/finance/BudgetPage.jsx
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { TrendingUp, AlertTriangle, X, ChevronDown, PieChart, Zap, Warehouse, Package, RefreshCw, ChevronRight, Search } from 'lucide-react';
+import { TrendingUp, AlertTriangle, X, ChevronDown, PieChart, Zap, Warehouse, Package, RefreshCw, ChevronRight, Search, Wrench } from 'lucide-react';
 import { clsx } from 'clsx';
 import api, { projectAPI, inventoryAPI, budgetAPI } from '../../api/client';
 import toast from 'react-hot-toast';
 import DataToolbar from '../../components/common/DataToolbar';
 import TableActions from '../../components/common/TableActions';
+import useAuthStore from '../../store/authStore';
 
 const inr  = (v) => `₹${parseFloat(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const inrL = inr;
@@ -55,6 +56,17 @@ export default function BudgetPage() {
   const [drillSearch, setDrillSearch] = useState('');
   const [drillType, setDrillType]     = useState('all');
   const qc = useQueryClient();
+  const { user } = useAuthStore();
+  const isAdmin = ['super_admin', 'admin'].includes(user?.role);
+
+  const repairStockMutation = useMutation({
+    mutationFn: () => inventoryAPI.repairDoubleStock(projectId || undefined),
+    onSuccess: (res) => {
+      toast.success(res.data?.message || 'Stock balances recalculated');
+      qc.invalidateQueries({ queryKey: ['stock-valuation'] });
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'Repair failed'),
+  });
 
   const { data: projects } = useQuery({
     queryKey: ['projects'],
@@ -626,6 +638,23 @@ export default function BudgetPage() {
             >
               <RefreshCw className={clsx('w-4 h-4', valLoading && 'animate-spin')} />
             </button>
+            {isAdmin && (
+              <button
+                onClick={() => {
+                  if (window.confirm(
+                    projectId
+                      ? 'Recalculate stock balances for the selected project from transaction history? This fixes phantom stock caused by double-posting.'
+                      : 'Recalculate stock balances for ALL projects from transaction history? This fixes phantom stock caused by double-posting.'
+                  )) repairStockMutation.mutate();
+                }}
+                disabled={repairStockMutation.isPending}
+                title="Fix phantom stock caused by double-posting (bill_receipt + QC both counted)"
+                className="flex items-center gap-2 px-4 py-2.5 bg-red-50 border border-red-200 rounded-2xl text-xs font-medium text-red-700 hover:bg-red-100 transition-all shadow-sm"
+              >
+                <Wrench className="w-3.5 h-3.5" />
+                {repairStockMutation.isPending ? 'Repairing…' : 'Repair Stock'}
+              </button>
+            )}
             <div className="text-[10px] font-medium text-slate-900 font-medium uppercase tracking-widest italic flex items-center gap-1">
               <Zap size={10} className="text-emerald-500" /> Live from Store Ledger
             </div>
