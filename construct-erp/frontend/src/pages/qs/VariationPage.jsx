@@ -4,13 +4,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeftRight, Plus, X, CheckCircle2, XCircle, Search,
   RefreshCw, ChevronDown, FileText, Clock, AlertCircle,
-  User, Calendar, Trash2, Eye,
+  User, Calendar, Trash2, Eye, FileSpreadsheet,
 } from 'lucide-react';
 import { variationAPI, projectAPI, boqAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
+import VariationStatementTab from './VariationStatementTab';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -49,6 +50,7 @@ export default function VariationPage() {
   const { user } = useAuthStore();
   const canApprove = ['super_admin', 'admin', 'project_manager'].includes(user?.role);
 
+  const [outerTab,  setOuterTab]  = useState('orders');   // 'orders' | 'statements'
   const [projectId, setProjectId] = useState('');
   const [activeTab, setActiveTab] = useState('all');
   const [search,    setSearch]    = useState('');
@@ -100,7 +102,7 @@ export default function VariationPage() {
               <ArrowLeftRight className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-[15px] font-medium text-[#1a1c21] leading-none">Variation Orders</h1>
+              <h1 className="text-[15px] font-medium text-[#1a1c21] leading-none">Variations</h1>
               <p className="text-[10px] text-[#8e94a3] font-medium uppercase tracking-wider mt-0.5">
                 Extra items &amp; scope changes
               </p>
@@ -108,38 +110,71 @@ export default function VariationPage() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Project filter */}
-            <div className="relative">
-              <select
-                className="h-9 pl-3 pr-8 rounded-xl border border-[#d8dce1] bg-white text-[12px] text-[#1a1c21] outline-none focus:border-indigo-400 appearance-none cursor-pointer"
-                value={projectId}
-                onChange={e => setProjectId(e.target.value)}
-              >
-                <option value="">All Projects</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-              <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#8e94a3] pointer-events-none" />
-            </div>
+            {outerTab === 'orders' && (
+              <>
+                {/* Project filter */}
+                <div className="relative">
+                  <select
+                    className="h-9 pl-3 pr-8 rounded-xl border border-[#d8dce1] bg-white text-[12px] text-[#1a1c21] outline-none focus:border-indigo-400 appearance-none cursor-pointer"
+                    value={projectId}
+                    onChange={e => setProjectId(e.target.value)}
+                  >
+                    <option value="">All Projects</option>
+                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#8e94a3] pointer-events-none" />
+                </div>
 
-            <button
-              onClick={() => refetch()}
-              className="h-9 w-9 flex items-center justify-center rounded-xl border border-[#e2e6ec] bg-white text-[#6a6f7d] hover:bg-[#f4f6f9] transition-colors"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
+                <button
+                  onClick={() => refetch()}
+                  className="h-9 w-9 flex items-center justify-center rounded-xl border border-[#e2e6ec] bg-white text-[#6a6f7d] hover:bg-[#f4f6f9] transition-colors"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
 
-            <button
-              onClick={() => setShowForm(true)}
-              className="h-9 flex items-center gap-1.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium transition-colors shadow"
-            >
-              <Plus className="w-4 h-4" />
-              New Variation
-            </button>
+                <button
+                  onClick={() => setShowForm(true)}
+                  className="h-9 flex items-center gap-1.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium transition-colors shadow"
+                >
+                  <Plus className="w-4 h-4" />
+                  New Variation
+                </button>
+              </>
+            )}
           </div>
+        </div>
+
+        {/* Outer tab bar */}
+        <div className="px-6 flex gap-0 border-t border-[#e2e6ec]">
+          {[
+            { key: 'orders',     label: 'Variation Orders',     Icon: ArrowLeftRight   },
+            { key: 'statements', label: 'Variation Statements', Icon: FileSpreadsheet  },
+          ].map(t => (
+            <button
+              key={t.key}
+              onClick={() => setOuterTab(t.key)}
+              className={clsx(
+                'flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors',
+                outerTab === t.key
+                  ? 'border-indigo-600 text-indigo-600'
+                  : 'border-transparent text-[#6a6f7d] hover:text-[#1a1c21] hover:border-[#d8dce1]',
+              )}
+            >
+              <t.Icon className="w-3.5 h-3.5" />
+              {t.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="px-6 py-5 space-y-5">
+      {/* ── Variation Statements tab ── */}
+      {outerTab === 'statements' && (
+        <div className="px-6 py-5">
+          <VariationStatementTab />
+        </div>
+      )}
+
+      {outerTab === 'orders' && <div className="px-6 py-5 space-y-5">
 
         {/* ── Stats ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -302,6 +337,7 @@ export default function VariationPage() {
           canApprove={canApprove}
         />
       )}
+      </div>}
     </div>
   );
 }

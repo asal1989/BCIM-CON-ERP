@@ -89,7 +89,8 @@ const usersRoutes  = require('./routes/users.routes');
 const licenseRoutes = require('./routes/license.routes');
 const materialReconRoutes = require('./routes/materialRecon.routes');
 const analyticsRoutes     = require('./routes/analytics.routes');
-const variationRoutes     = require('./routes/variation.routes');
+const variationRoutes          = require('./routes/variation.routes');
+const variationStatementRoutes = require('./routes/variation-statement.routes');
 const normsRoutes         = require('./routes/norms.routes');
 const documentsRoutes     = require('./routes/documents.routes');
 const tqsBillsRoutes         = require('./routes/tqs-bills.routes');
@@ -276,6 +277,7 @@ app.use(`${API}/price-escalations`, priceEscalationRoutes);
 app.use(`${API}/vendor-qs-certifications`, vendorQsCertificationRoutes);
 app.use(`${API}/material-recon`, materialReconRoutes);
 app.use(`${API}/variations`, variationRoutes);
+app.use(`${API}/variation-statements`, variationStatementRoutes);
 app.use(`${API}/norms`, normsRoutes);
 
 // Finance
