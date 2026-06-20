@@ -12,7 +12,7 @@ const HR_ALL   = [...HR_ROLES, 'hr', 'manager'];
   await safe(`CREATE TABLE IF NOT EXISTS hr_fnf_settlements (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL,
-    employee_id UUID NOT NULL REFERENCES hr_employees(id),
+    employee_id UUID NOT NULL REFERENCES users(id),
     last_working_day DATE NOT NULL,
     exit_reason VARCHAR(50) DEFAULT 'resignation'
       CHECK (exit_reason IN ('resignation','termination','retirement','absconding','end_of_contract','death')),
@@ -65,10 +65,11 @@ router.get('/', authorize(...HR_ALL), async (req, res) => {
   if (status)      { conds.push(`f.status=$${i++}`); params.push(status); }
   if (employee_id) { conds.push(`f.employee_id=$${i++}`); params.push(employee_id); }
   const { rows } = await query(
-    `SELECT f.*, e.full_name, e.employee_id as emp_code, e.designation, e.department,
-            e.date_of_joining, u.full_name as approved_by_name
+    `SELECT f.*, e.name AS full_name, e.employee_code AS emp_code, e.designation, e.department,
+            ep.date_of_joining, u.name as approved_by_name
      FROM hr_fnf_settlements f
-     JOIN hr_employees e ON e.id=f.employee_id
+     JOIN users e ON e.id=f.employee_id
+     LEFT JOIN employee_profiles ep ON ep.user_id=e.id
      LEFT JOIN users u ON u.id=f.approved_by
      WHERE ${conds.join(' AND ')} ORDER BY f.created_at DESC`,
     params
@@ -78,10 +79,12 @@ router.get('/', authorize(...HR_ALL), async (req, res) => {
 
 router.get('/:id', authorize(...HR_ALL), async (req, res) => {
   const { rows } = await query(
-    `SELECT f.*, e.full_name, e.employee_id as emp_code, e.designation, e.department,
-            e.date_of_joining, e.basic_salary, e.pf_applicable, e.esi_applicable
+    `SELECT f.*, e.name AS full_name, e.employee_code AS emp_code, e.designation, e.department,
+            ep.date_of_joining, es.gross_monthly AS basic_salary, es.pf_applicable, es.esi_applicable
      FROM hr_fnf_settlements f
-     JOIN hr_employees e ON e.id=f.employee_id
+     JOIN users e ON e.id=f.employee_id
+     LEFT JOIN employee_profiles ep ON ep.user_id=e.id
+     LEFT JOIN hr_employee_salaries es ON es.user_id=e.id AND es.effective_to IS NULL
      WHERE f.id=$1 AND f.company_id=$2`,
     [req.params.id, req.user.company_id]
   );
@@ -189,7 +192,9 @@ router.patch('/:id/pay', authorize(...HR_ROLES), async (req, res) => {
 router.get('/calculate-gratuity', authorize(...HR_ALL), async (req, res) => {
   const { employee_id, last_working_day } = req.query;
   const { rows } = await query(
-    `SELECT date_of_joining, basic_salary FROM hr_employees WHERE id=$1 AND company_id=$2`,
+    `SELECT ep.date_of_joining,
+            (SELECT gross_monthly FROM hr_employee_salaries WHERE user_id=ep.user_id AND effective_to IS NULL ORDER BY effective_from DESC LIMIT 1) AS basic_salary
+     FROM employee_profiles ep WHERE ep.user_id=$1 AND ep.company_id=$2`,
     [employee_id, req.user.company_id]
   );
   if (!rows[0]) return res.status(404).json({ error: 'Employee not found' });

@@ -1,30 +1,34 @@
-// src/pages/stores/IGNPage.jsx — Inward Goods Note
+// src/pages/stores/IGNPage.jsx — Inward Goods Note (merged with GRN features)
+import RecordAttachments from '../../components/shared/RecordAttachments';
 import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ClipboardCheck, Plus, X, Search, Download, RefreshCw, Printer,
   Clock, CheckCircle2, Package, ChevronRight, FileText,
   Truck, ClipboardList, AlertTriangle, XCircle, Eye,
+  Building2, Trash2, DollarSign, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
 import { useReactToPrint } from 'react-to-print';
-import { ignAPI, projectAPI, grsAPI, poAPI } from '../../api/client';
+import { ignAPI, projectAPI, grsAPI, poAPI, vendorAPI, inventoryAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
-import { Trash2 } from 'lucide-react';
 import { FIELD_HL } from '../../constants/fieldStyles';
 import toast from 'react-hot-toast';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import { CONSTRUCTION_UNITS as UNITS } from '../../constants/units';
 import IGNPrintTemplate from './IGNPrintTemplate';
+import MaterialCombobox from '../../components/shared/MaterialCombobox';
+import SearchableSelect from '../../components/shared/SearchableSelect';
 
-const fmt = n => n != null ? Number(n).toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : '—';
+const fmt    = n => n != null ? Number(n).toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : '—';
+const inr    = n => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const STATUS_CONFIG = {
-  pending:   { label: 'Pending',   color: 'bg-amber-50 text-amber-700 border-amber-200',    icon: Clock },
-  inspected: { label: 'Inspected', color: 'bg-blue-50 text-blue-700 border-blue-200',       icon: Eye },
+  pending:   { label: 'Pending',   color: 'bg-amber-50 text-amber-700 border-amber-200',       icon: Clock },
+  inspected: { label: 'Inspected', color: 'bg-blue-50 text-blue-700 border-blue-200',          icon: Eye },
   approved:  { label: 'Approved',  color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: CheckCircle2 },
-  cancelled: { label: 'Cancelled', color: 'bg-red-50 text-red-600 border-red-200',          icon: XCircle },
+  cancelled: { label: 'Cancelled', color: 'bg-red-50 text-red-600 border-red-200',             icon: XCircle },
 };
 
 function StatusBadge({ status }) {
@@ -38,10 +42,11 @@ function StatusBadge({ status }) {
 }
 
 /* ── Detail Panel ─────────────────────────────────────────────────────────── */
-function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, inspectLoading, onCancel, cancelLoading, onCreateGRN, isSuperAdmin, onDelete, deleteLoading }) {
+function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, inspectLoading, onCancel, cancelLoading, isSuperAdmin, onDelete, deleteLoading }) {
   if (!ign) return null;
   const items = ign.items || [];
   const totalRejected = items.reduce((s, it) => s + parseFloat(it.qty_rejected || 0), 0);
+  const totalValue    = items.reduce((s, it) => s + parseFloat(it.qty_inspected || it.qty_as_per_dc || 0) * parseFloat(it.rate || 0), 0);
   const localPrintRef = useRef(null);
   const handlePrint = useReactToPrint({ contentRef: localPrintRef });
 
@@ -73,15 +78,20 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, in
           {/* Meta */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {[
-              ['Supplier',       ign.supplier_name  || '—'],
-              ['Vehicle No.',    ign.vehicle_no     || '—'],
-              ['DC No.',         ign.dc_number      || '—'],
-              ['Bill No.',       ign.bill_number    || '—'],
-              ['PO No.',         ign.po_number      || '—'],
-              ['GRS No.',        ign.grs_number     || '—'],
-              ['Date & Time',    ign.date_time ? dayjs(ign.date_time).format('DD MMM YYYY, HH:mm') : '—'],
-              ['Inspected By',   ign.inspected_by   || '—'],
-              ['Stores In-charge', ign.stores_incharge || '—'],
+              ['Supplier / Vendor', ign.vendor_name || ign.supplier_name || '—'],
+              ['Vehicle No.',       ign.vehicle_no     || '—'],
+              ['DC No.',            ign.dc_number      || '—'],
+              ['Bill No.',          ign.bill_number    || '—'],
+              ['PO No.',            ign.po_number      || '—'],
+              ['GRS No.',           ign.grs_number     || '—'],
+              ['Date & Time',       ign.date_time ? dayjs(ign.date_time).format('DD MMM YYYY, HH:mm') : '—'],
+              ['Driver',            ign.driver_name    || '—'],
+              ['Gate Pass No.',     ign.gate_pass_no   || '—'],
+              ['WB Slip No.',       ign.wb_slip_no     || '—'],
+              ['Site Location',     ign.site_location  || 'main'],
+              ['Inspected By',      ign.inspected_by   || '—'],
+              ['Stores In-charge',  ign.stores_incharge || '—'],
+              ['Serial No.',        ign.serial_no_formatted || '—'],
             ].map(([lbl, val]) => (
               <div key={lbl} className="bg-white border border-slate-200 rounded-lg px-3 py-2.5">
                 <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-0.5">{lbl}</div>
@@ -89,6 +99,21 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, in
               </div>
             ))}
           </div>
+
+          {/* Notes bracket */}
+          {(ign.issues_notes || ign.remarks || ign.inspection_notes) && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
+              {ign.issues_notes && (
+                <div><span className="text-xs font-bold text-amber-800">Issues: </span><span className="text-xs text-amber-700">{ign.issues_notes}</span></div>
+              )}
+              {ign.remarks && (
+                <div><span className="text-xs font-bold text-slate-700">General: </span><span className="text-xs text-slate-600">{ign.remarks}</span></div>
+              )}
+              {ign.inspection_notes && (
+                <div><span className="text-xs font-bold text-blue-800">Inspection Notes: </span><span className="text-xs text-blue-700">{ign.inspection_notes}</span></div>
+              )}
+            </div>
+          )}
 
           {/* 3-step workflow progress */}
           {ign.status !== 'cancelled' && (
@@ -98,7 +123,7 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, in
                 {[
                   { key: 'pending',   label: 'Created' },
                   { key: 'inspected', label: 'Inspected' },
-                  { key: 'approved',  label: 'Approved' },
+                  { key: 'approved',  label: 'Stock Posted' },
                 ].map((step, idx, arr) => {
                   const statusOrder = ['pending','inspected','approved'];
                   const currentIdx = statusOrder.indexOf(ign.status);
@@ -146,15 +171,22 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, in
               <span className="text-xs font-medium text-slate-700 uppercase tracking-wider flex items-center gap-2">
                 <Package size={13} /> Materials Inspected
               </span>
-              <span className="text-xs font-medium text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full">
-                {items.length} items
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-medium text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full">
+                  {items.length} items
+                </span>
+                {totalValue > 0 && (
+                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
+                    Total: ₹{inr(totalValue)}
+                  </span>
+                )}
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead className="bg-slate-50 border-b border-slate-100">
                   <tr>
-                    {['Inv. No.','Material','Unit','As per DC/Bill','After Inspection','Rejected','Remarks'].map(h => (
+                    {['Inv. No.','Material','Unit','Rate','As per DC/Bill','After Inspection','Rejected','Value','Remarks'].map(h => (
                       <th key={h} className="px-3 py-2 text-left font-medium text-slate-600 uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -162,6 +194,8 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, in
                 <tbody className="divide-y divide-slate-50">
                   {items.map((it, i) => {
                     const hasRejection = parseFloat(it.qty_rejected || 0) > 0;
+                    const qty = parseFloat(it.qty_inspected || it.qty_as_per_dc || 0);
+                    const rate = parseFloat(it.rate || 0);
                     return (
                       <tr key={i} className={clsx('hover:bg-slate-50', hasRejection && 'bg-red-50/40')}>
                         <td className="px-3 py-2.5 font-mono text-slate-500 text-[11px]">{it.invoice_no || '—'}</td>
@@ -169,6 +203,7 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, in
                         <td className="px-3 py-2.5">
                           {it.unit && <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 text-[10px] uppercase font-medium">{it.unit}</span>}
                         </td>
+                        <td className="px-3 py-2.5 font-mono text-slate-600">{rate > 0 ? inr(rate) : '—'}</td>
                         <td className="px-3 py-2.5 font-mono text-slate-600">{fmt(it.qty_as_per_dc)}</td>
                         <td className="px-3 py-2.5 font-mono text-emerald-700 font-medium">{fmt(it.qty_inspected)}</td>
                         <td className="px-3 py-2.5 font-mono font-medium">
@@ -176,7 +211,10 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, in
                             {fmt(it.qty_rejected)}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 text-slate-500">{it.remarks || '—'}</td>
+                        <td className="px-3 py-2.5 font-mono text-slate-700">
+                          {rate > 0 && qty > 0 ? `₹${inr(qty * rate)}` : '—'}
+                        </td>
+                        <td className="px-3 py-2.5 text-slate-500">{it.quality_remarks || it.remarks || '—'}</td>
                       </tr>
                     );
                   })}
@@ -185,14 +223,40 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, in
             </div>
           </div>
 
+          {/* Linked bills */}
+          {ign.bills?.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+              <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs font-medium text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                <FileText size={13} /> Linked Bills ({ign.bills.length})
+              </div>
+              <div className="divide-y divide-slate-100">
+                {ign.bills.map(b => (
+                  <div key={b.id} className="px-4 py-3 flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-mono font-medium text-indigo-700">{b.sl_number}</div>
+                      <div className="text-xs text-slate-500 mt-0.5">{b.inv_number ? `Inv: ${b.inv_number}` : 'No inv number'}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-semibold text-slate-800">₹{inr(b.total_amount)}</div>
+                      <div className="text-xs text-slate-500 capitalize">{b.workflow_status}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {ign.status === 'approved' && (
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
               <p className="text-xs font-medium text-emerald-800">
-                Approved by <strong>{ign.approved_by_name}</strong>
+                Approved by <strong>{ign.approved_by_name}</strong> — Stock posted to inventory
                 {ign.approved_at && <span className="text-emerald-600 ml-2">· {dayjs(ign.approved_at).format('DD MMM YYYY, HH:mm')}</span>}
               </p>
             </div>
           )}
+
+          {/* File attachments */}
+          <RecordAttachments recordType="ign" recordId={ign.id} />
 
           {/* Hidden print template */}
           <div style={{ display: 'none' }}>
@@ -214,19 +278,12 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, in
             <button onClick={onApprove} disabled={approveLoading}
               className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-medium px-6 py-2.5 rounded-xl text-sm transition shadow-sm">
               <CheckCircle2 size={16} />
-              {approveLoading ? 'Processing…' : 'Approve IGN — Stores-In-Charge Sign-off'}
-            </button>
-          )}
-          {ign.status === 'approved' && onCreateGRN && (
-            <button onClick={onCreateGRN}
-              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-6 py-2.5 rounded-xl text-sm transition">
-              <FileText size={15} />
-              Create GRN from this IGN →
+              {approveLoading ? 'Processing…' : 'Approve & Post to Inventory'}
             </button>
           )}
           {ign.status === 'approved' && (
             <div className="flex items-center gap-2 text-emerald-700 text-sm font-medium">
-              <CheckCircle2 size={16} className="text-emerald-600" /> Approved by Stores-In-Charge
+              <CheckCircle2 size={16} className="text-emerald-600" /> Approved — Stock Posted
             </div>
           )}
           {ign.status === 'pending' && (
@@ -284,7 +341,7 @@ export default function IGNPage() {
   const approveMutation = useMutation({
     mutationFn: (id) => ignAPI.approve(id),
     onSuccess: () => {
-      toast.success('IGN approved');
+      toast.success('IGN approved — inventory updated');
       qc.invalidateQueries({ queryKey: ['ign-list'] });
       qc.invalidateQueries({ queryKey: ['ign', selectedId] });
     },
@@ -323,7 +380,7 @@ export default function IGNPage() {
 
   const handleDelete = (ign, e) => {
     e?.stopPropagation?.();
-    if (window.confirm(`Delete ${ign.ign_number}? This permanently removes the IGN and its items. This cannot be undone.`)) {
+    if (window.confirm(`Delete ${ign.ign_number}? This permanently removes the IGN, reverses any stock, and cannot be undone.`)) {
       deleteMutation.mutate(ign.id);
     }
   };
@@ -341,6 +398,7 @@ export default function IGNPage() {
       if (!g.ign_number?.toLowerCase().includes(q) &&
           !g.project_name?.toLowerCase().includes(q) &&
           !g.supplier_name?.toLowerCase().includes(q) &&
+          !g.vendor_name?.toLowerCase().includes(q) &&
           !g.vehicle_no?.toLowerCase().includes(q) &&
           !g.dc_number?.toLowerCase().includes(q)) return false;
     }
@@ -348,10 +406,10 @@ export default function IGNPage() {
   });
 
   const exportCSV = () => {
-    const headers = ['IGN No.','Date','Project','Supplier','Vehicle No.','DC No.','GRS No.','Items','Status'];
+    const headers = ['IGN No.','Date','Project','Supplier/Vendor','Vehicle No.','DC No.','GRS No.','Items','Status'];
     const rows = filtered.map(g => [
       g.ign_number, g.date_time ? dayjs(g.date_time).format('DD/MM/YYYY HH:mm') : '',
-      g.project_name, g.supplier_name || '', g.vehicle_no || '',
+      g.project_name, g.vendor_name || g.supplier_name || '', g.vehicle_no || '',
       g.dc_number || '', g.grs_number || '', g.item_count || 0, g.status,
     ]);
     const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
@@ -372,7 +430,7 @@ export default function IGNPage() {
     <div style={{ background: Theme.pageBg, minHeight: '100vh' }}>
       <PageHeader
         title="Inward Goods Note"
-        subtitle="Stores inspection — DC qty vs inspected vs rejected, linked to GRS"
+        subtitle="Inspection receipt with inventory posting on approval"
         breadcrumbs={[{ label: 'Stores' }, { label: 'IGN' }]}
         actions={
           <>
@@ -404,7 +462,7 @@ export default function IGNPage() {
           <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-3">
             <Clock size={16} className="text-amber-600 flex-shrink-0" />
             <span className="text-sm font-medium text-amber-800">
-              {counts.pending} IGN{counts.pending > 1 ? 's' : ''} pending Stores-In-Charge approval
+              {counts.pending} IGN{counts.pending > 1 ? 's' : ''} pending approval
             </span>
             <button onClick={() => setStatusFilter('pending')} className="ml-auto text-xs font-medium text-amber-700 underline">Review now →</button>
           </div>
@@ -445,7 +503,7 @@ export default function IGNPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
-                  {['IGN No.','Date & Time','Project','Supplier','Vehicle No.','DC No.','GRS No.','Items','Status',''].map(h => (
+                  {['IGN No.','Date & Time','Project','Supplier/Vendor','Vehicle No.','DC No.','GRS No.','Items','Status',''].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -472,7 +530,7 @@ export default function IGNPage() {
                       {ign.date_time ? dayjs(ign.date_time).format('DD MMM YYYY HH:mm') : '—'}
                     </td>
                     <td className="px-4 py-3 text-xs font-medium text-slate-900 max-w-[130px] truncate">{ign.project_name}</td>
-                    <td className="px-4 py-3 text-xs text-slate-600 max-w-[120px] truncate">{ign.supplier_name || '—'}</td>
+                    <td className="px-4 py-3 text-xs text-slate-600 max-w-[120px] truncate">{ign.vendor_name || ign.supplier_name || '—'}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
                         <Truck className="w-3 h-3 text-slate-400 shrink-0" />
@@ -525,10 +583,6 @@ export default function IGNPage() {
             inspectLoading={inspectMutation.isPending}
             onCancel={() => cancelMutation.mutate(selectedId)}
             cancelLoading={cancelMutation.isPending}
-            onCreateGRN={() => {
-              setSelectedId(null);
-              window.location.href = `/stores/grn?from_ign=${selectedId}`;
-            }}
             isSuperAdmin={isSuperAdmin}
             onDelete={() => handleDelete(detailedIGN)}
             deleteLoading={deleteMutation.isPending}
@@ -553,16 +607,75 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
   const emptyItem = () => ({
     invoice_no: '', material_name: '', unit: '',
     qty_as_per_dc: '', qty_inspected: '', qty_rejected: '', remarks: '',
+    rate: '', batch_number: '', expiry_date: '', quality_remarks: '',
+    use_thumb_rule: false, physical_qty: '', physical_unit: 'Nos', conversion_factor: '',
+    po_item_id: null,
   });
 
   const [form, setForm] = useState({
-    project_id: '', supplier_name: '', po_id: '', po_number: '',
+    project_id: '', vendor_id: '', supplier_name: '',
+    po_id: '', po_number: '',
     vehicle_no: '', dc_number: '', bill_number: '',
     date_time: dayjs().format('YYYY-MM-DDTHH:mm'),
     grs_id: '', grs_number: '',
-    inspected_by: '', stores_incharge: '', remarks: '',
+    inspected_by: '', stores_incharge: '',
+    driver_name: '', gate_pass_no: '', wb_slip_no: '', site_location: 'main',
+    remarks: '', issues_notes: '', inspection_notes: '',
   });
   const [items, setItems] = useState([emptyItem()]);
+  const [createBill, setCreateBill] = useState(false);
+  const emptyBillForm = () => ({
+    inv_number: '', inv_date: '', tax_mode: 'intrastate', gst_pct: '18',
+    transport_charges: '', transport_gst_pct: '18', transport_desc: '',
+    other_charges: '', other_charges_desc: '',
+  });
+  const [bills, setBills] = useState([emptyBillForm()]);
+  const [allGstOverrides, setAllGstOverrides] = useState([{}]);
+
+  // Vendors
+  const { data: vendors = [] } = useQuery({
+    queryKey: ['vendors'],
+    queryFn: () => vendorAPI.list().then(r => r.data?.data ?? r.data ?? []).catch(() => []),
+  });
+
+  // Inventory lookup for material combobox
+  const { data: inventoryItems = [] } = useQuery({
+    queryKey: ['inventory-lookup'],
+    queryFn: () => inventoryAPI.itemsLookup().then(r => r.data?.data ?? []),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Released POs
+  const { data: releasedPOs = [] } = useQuery({
+    queryKey: ['po-released-ign', form.project_id, form.vendor_id],
+    queryFn: () => poAPI.list({
+      project_id: form.project_id || undefined,
+      vendor_id:  form.vendor_id  || undefined,
+      status: 'approved',
+    }, { skipProjectInject: true })
+      .then(r => r.data?.data ?? r.data ?? []).catch(() => []),
+    enabled: !!(form.project_id || form.vendor_id),
+  });
+
+  // Full PO detail with items
+  const { data: selectedPODetail } = useQuery({
+    queryKey: ['po-detail-ign', form.po_id],
+    queryFn: () => poAPI.get(form.po_id).then(r => r.data?.data ?? r.data),
+    enabled: !!form.po_id,
+  });
+
+  // Pre-populate items when PO detail loads
+  useEffect(() => {
+    if (!selectedPODetail?.items?.length) return;
+    setItems(selectedPODetail.items.map(it => ({
+      ...emptyItem(),
+      material_name: it.material_name || '',
+      unit: it.unit || 'Nos',
+      rate: it.rate ? String(it.rate) : '',
+      po_item_id: it.id || null,
+    })));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPODetail?.id]);
 
   // Load GRS entries for linking
   const { data: grsList = [] } = useQuery({
@@ -571,7 +684,7 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
     enabled: !!form.project_id,
   });
 
-  // Pre-fill from GRS when opened via quick-link — call API directly, no grsList dependency
+  // Pre-fill from GRS when opened via quick-link
   useEffect(() => {
     if (!fromGrsId) return;
     (async () => {
@@ -588,23 +701,32 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
         const grsItems = (detail.items || []).filter(it => it.particulars?.trim());
         if (grsItems.length > 0) {
           setItems(grsItems.map(it => ({
-            invoice_no: '',
+            ...emptyItem(),
             material_name: it.particulars || '',
             unit: it.unit || '',
             qty_as_per_dc: it.quantity ? String(it.quantity) : '',
-            qty_inspected: '',
-            qty_rejected: '',
-            remarks: it.remarks || '',
           })));
         }
       } catch (_) {}
     })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromGrsId]);
 
   const createMutation = useMutation({
     mutationFn: (d) => ignAPI.create(d),
-    onSuccess: () => {
-      toast.success('IGN created');
+    onSuccess: (response) => {
+      const bls = response?.data?.bills;
+      const bl  = response?.data?.bill;
+      const variances = response?.data?.rate_variances || [];
+      const msg = bls?.length > 1
+        ? `IGN created · ${bls.length} bills added (${bls.map(b => b.sl_number).join(', ')})`
+        : bl
+          ? `IGN created · Bill ${bl.sl_number} added to tracker`
+          : 'IGN created — pending approval';
+      toast.success(msg);
+      if (variances.length > 0) {
+        toast(`Rate variance detected on ${variances.length} item(s) vs PO rate`, { icon: '⚠️' });
+      }
       qc.invalidateQueries({ queryKey: ['ign-list'] });
       onClose();
     },
@@ -616,7 +738,6 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
   const addRow    = () => setItems(p => [...p, emptyItem()]);
   const removeRow = (idx) => { if (items.length > 1) setItems(p => p.filter((_, i) => i !== idx)); };
 
-  // When GRS is selected, fetch full detail to load PO number, supplier, and items
   const handleGrsSelect = async (grsId) => {
     setField('grs_id', grsId);
     if (!grsId) { setField('grs_number', ''); return; }
@@ -632,51 +753,123 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
       const grsItems = (detail.items || []).filter(it => it.particulars?.trim());
       if (grsItems.length > 0) {
         setItems(grsItems.map(it => ({
-          invoice_no: '',
+          ...emptyItem(),
           material_name: it.particulars || '',
           unit: it.unit || '',
           qty_as_per_dc: it.quantity ? String(it.quantity) : '',
-          qty_inspected: '',
-          qty_rejected: '',
-          remarks: it.remarks || '',
         })));
         toast.success(`${grsItems.length} item(s) loaded from GRS`);
       }
     } catch (_) {}
   };
 
+  function handlePOSelect(poId) {
+    if (!poId) {
+      setForm(p => ({ ...p, po_id: '', po_number: '' }));
+      setItems([emptyItem()]);
+      return;
+    }
+    const po = releasedPOs.find(p => p.id === poId);
+    setForm(prev => ({
+      ...prev,
+      po_id: poId,
+      po_number: po?.po_number || '',
+      vendor_id: po?.vendor_id || prev.vendor_id,
+    }));
+  }
+
+  const setBillField = (billIdx, k, v) => setBills(bs => bs.map((b, i) => i === billIdx ? { ...b, [k]: v } : b));
+  const addBill = () => { setBills(bs => [...bs, emptyBillForm()]); setAllGstOverrides(gs => [...gs, {}]); };
+  const removeBill = (idx) => { if (bills.length > 1) { setBills(bs => bs.filter((_,i) => i !== idx)); setAllGstOverrides(gs => gs.filter((_,i) => i !== idx)); } };
+
+  // Live bill calculation
+  const calcBillAmounts = (billIdx) => {
+    const b = bills[billIdx] || {};
+    const overrides = allGstOverrides[billIdx] || {};
+    const defaultGst = parseFloat(b.gst_pct) || 18;
+    const mode = b.tax_mode || 'intrastate';
+    let basic = 0, cgst = 0, sgst = 0, igst = 0;
+    items.filter(it => it.material_name?.trim()).forEach((it, i) => {
+      const qty  = parseFloat(it.qty_inspected || it.qty_as_per_dc || 0);
+      const rate = parseFloat(it.rate || 0);
+      const li_basic = qty * rate;
+      const gstPct = parseFloat(overrides[String(i)] ?? defaultGst);
+      basic += li_basic;
+      if (mode === 'interstate') igst  += li_basic * gstPct / 100;
+      else { cgst += li_basic * gstPct / 200; sgst += li_basic * gstPct / 200; }
+    });
+    const tc = parseFloat(b.transport_charges) || 0;
+    const tgst = tc * (parseFloat(b.transport_gst_pct) || 18) / 100;
+    const oc = parseFloat(b.other_charges) || 0;
+    const gst = cgst + sgst + igst;
+    return { basic, cgst, sgst, igst, gst, tc, tgst, oc, total: basic + gst + tc + tgst + oc };
+  };
+
   const submit = () => {
     if (!form.project_id) return toast.error('Select a project');
     const validItems = items.filter(it => it.material_name?.trim());
     if (!validItems.length) return toast.error('Add at least one item');
-    createMutation.mutate({ ...form, items: validItems });
+    if (createBill) {
+      for (let i = 0; i < bills.length; i++) {
+        if (!bills[i].inv_date) return toast.error(`Invoice Date is required for Invoice ${i + 1}`);
+      }
+    }
+    const payload = {
+      ...form,
+      vendor_id: form.vendor_id || null,
+      po_id: form.po_id || null,
+      items: validItems.map(it => ({
+        invoice_no:    it.invoice_no    || null,
+        material_name: it.material_name,
+        unit:          it.unit          || null,
+        qty_as_per_dc: it.qty_as_per_dc  ? parseFloat(it.qty_as_per_dc)  : null,
+        qty_inspected: it.qty_inspected  ? parseFloat(it.qty_inspected)  : null,
+        qty_rejected:  it.qty_rejected   ? parseFloat(it.qty_rejected)   : null,
+        remarks:       it.remarks       || null,
+        rate:          it.rate          ? parseFloat(it.rate) : 0,
+        batch_number:  it.batch_number  || null,
+        expiry_date:   it.expiry_date   || null,
+        quality_remarks: it.quality_remarks || null,
+        po_item_id:    it.po_item_id    || null,
+        physical_qty:  it.use_thumb_rule && it.physical_qty ? parseFloat(it.physical_qty) : null,
+        physical_unit: it.use_thumb_rule ? it.physical_unit : null,
+        conversion_factor: it.use_thumb_rule && it.conversion_factor ? parseFloat(it.conversion_factor) : 1,
+      })),
+      ...(createBill ? {
+        bills: bills.map((b, i) => ({
+          ...b,
+          item_gst_overrides: allGstOverrides[i] || {},
+        }))
+      } : {}),
+    };
+    createMutation.mutate(payload);
   };
 
   const inp = `w-full h-10 rounded-lg px-3 text-sm font-medium outline-none transition-all border ${FIELD_HL}`;
+  const validItemCount = items.filter(i => i.material_name?.trim()).length;
 
   return (
     <div className="fixed inset-0 z-[60] bg-white flex flex-col overflow-hidden">
-
-        <div className="bg-slate-900 px-6 py-4 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-4">
-            <button onClick={onClose} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition">
-              <X size={16} />
-            </button>
-            <div>
-              <div className="text-[10px] text-slate-400 font-medium uppercase tracking-widest mb-0.5">New Entry</div>
-              <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-                <ClipboardCheck size={16} className="text-blue-400" /> New Inward Goods Note
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">Stores inspection — record DC qty, inspected qty, and rejections</p>
-            </div>
+      <div className="bg-slate-900 px-6 py-4 flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-4">
+          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition">
+            <X size={16} />
+          </button>
+          <div>
+            <div className="text-[10px] text-slate-400 font-medium uppercase tracking-widest mb-0.5">New Entry</div>
+            <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+              <ClipboardCheck size={16} className="text-blue-400" /> New Inward Goods Note
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">Inspection receipt — DC qty, inspected qty, rejections, optional bill creation</p>
           </div>
         </div>
+      </div>
 
-        <div className="flex-1 overflow-y-auto bg-slate-50">
+      <div className="flex-1 overflow-y-auto bg-slate-50">
         <div className="max-w-5xl mx-auto p-6 space-y-5">
 
           {/* Header details */}
-          <div className="border border-slate-200 rounded-xl p-5">
+          <div className="bg-white border border-slate-200 rounded-xl p-5">
             <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Header Details</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="col-span-2 space-y-1.5">
@@ -687,8 +880,24 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
                 </select>
               </div>
               <div className="col-span-2 space-y-1.5">
-                <label className="text-xs font-bold text-slate-700">Supplier Name</label>
+                <label className="text-xs font-bold text-slate-700">Vendor</label>
+                <SearchableSelect
+                  options={vendors.map(v => ({ value: v.id, label: v.name }))}
+                  value={form.vendor_id}
+                  onChange={val => setField('vendor_id', val)}
+                  placeholder="Select or search vendor…"
+                />
+              </div>
+              <div className="col-span-2 space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Supplier Name (manual)</label>
                 <input type="text" value={form.supplier_name} onChange={e => setField('supplier_name', e.target.value)} placeholder="Supplier / vendor name" className={inp} />
+              </div>
+              <div className="col-span-2 space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Link to PO</label>
+                <select value={form.po_id} onChange={e => handlePOSelect(e.target.value)} className={inp} disabled={!form.project_id && !form.vendor_id}>
+                  <option value="">— Select Released PO (optional) —</option>
+                  {releasedPOs.map(po => <option key={po.id} value={po.id}>{po.po_number} · {po.vendor_name || ''}</option>)}
+                </select>
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700">Link to GRS</label>
@@ -706,7 +915,7 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
                 <input type="text" value={form.dc_number} onChange={e => setField('dc_number', e.target.value)} placeholder="Delivery challan no." className={inp} />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700">Bill No.</label>
+                <label className="text-xs font-bold text-slate-700">Bill / Invoice No.</label>
                 <input type="text" value={form.bill_number} onChange={e => setField('bill_number', e.target.value)} placeholder="Bill / invoice no." className={inp} />
               </div>
               <div className="space-y-1.5">
@@ -718,6 +927,22 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
                 <input type="datetime-local" value={form.date_time} onChange={e => setField('date_time', e.target.value)} className={inp} />
               </div>
               <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Driver Name</label>
+                <input type="text" value={form.driver_name} onChange={e => setField('driver_name', e.target.value)} placeholder="Driver name" className={inp} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Gate Pass No.</label>
+                <input type="text" value={form.gate_pass_no} onChange={e => setField('gate_pass_no', e.target.value)} placeholder="Gate pass no." className={inp} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">WB Slip No.</label>
+                <input type="text" value={form.wb_slip_no} onChange={e => setField('wb_slip_no', e.target.value)} placeholder="Weighbridge slip no." className={inp} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Site Location</label>
+                <input type="text" value={form.site_location} onChange={e => setField('site_location', e.target.value)} placeholder="main" className={inp} />
+              </div>
+              <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700">Inspected By</label>
                 <input type="text" value={form.inspected_by} onChange={e => setField('inspected_by', e.target.value)} placeholder="Inspector name" className={inp} />
               </div>
@@ -726,14 +951,36 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
                 <input type="text" value={form.stores_incharge} onChange={e => setField('stores_incharge', e.target.value)} placeholder="Stores officer name" className={inp} />
               </div>
             </div>
+
+            {/* Notes bracket */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Issues / Problems</label>
+                <textarea value={form.issues_notes} onChange={e => setField('issues_notes', e.target.value)}
+                  placeholder="Document any issues with this delivery…" rows={2}
+                  className={`w-full rounded-lg px-3 py-2 text-sm outline-none transition-all border ${FIELD_HL} resize-none`} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">General Remarks</label>
+                <textarea value={form.remarks} onChange={e => setField('remarks', e.target.value)}
+                  placeholder="General notes…" rows={2}
+                  className={`w-full rounded-lg px-3 py-2 text-sm outline-none transition-all border ${FIELD_HL} resize-none`} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Inspection Notes</label>
+                <textarea value={form.inspection_notes} onChange={e => setField('inspection_notes', e.target.value)}
+                  placeholder="Quality inspection observations…" rows={2}
+                  className={`w-full rounded-lg px-3 py-2 text-sm outline-none transition-all border ${FIELD_HL} resize-none`} />
+              </div>
+            </div>
           </div>
 
           {/* Items */}
-          <div className="border border-slate-200 rounded-xl p-5">
+          <div className="bg-white border border-slate-200 rounded-xl p-5">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Materials</h3>
-                <p className="text-[10px] text-slate-400 mt-0.5">Enter DC quantity, after-inspection quantity, and any rejections</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">DC qty · inspected qty · rejections · rate</p>
               </div>
               <button onClick={addRow}
                 className="flex items-center gap-1.5 px-3 h-7 rounded-lg text-xs font-semibold text-indigo-600 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 transition">
@@ -744,56 +991,65 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 w-8">Sl.</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 w-28">Invoice No.</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Material *</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 w-24">Unit</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 w-28">As per DC/Bill</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 w-28">After Inspection</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 w-24">Rejected</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Remarks</th>
-                    <th className="px-3 py-2 w-8" />
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-slate-600 w-8">Sl.</th>
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-slate-600 w-24">Inv. No.</th>
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-slate-600">Material *</th>
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-slate-600 w-20">Unit</th>
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-slate-600 w-24">Rate (₹)</th>
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-slate-600 w-24">As per DC</th>
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-slate-600 w-24">Inspected</th>
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-slate-600 w-20">Rejected</th>
+                    <th className="px-2 py-2 text-left text-xs font-semibold text-slate-600">Remarks</th>
+                    <th className="px-2 py-2 w-8" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {items.map((it, idx) => (
                     <tr key={idx} className={parseFloat(it.qty_rejected || 0) > 0 ? 'bg-red-50/30' : ''}>
-                      <td className="px-3 py-2 text-xs text-slate-400 font-mono">{idx + 1}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-2 py-2 text-xs text-slate-400 font-mono">{idx + 1}</td>
+                      <td className="px-2 py-2">
                         <input value={it.invoice_no} onChange={e => updateItem(idx, 'invoice_no', e.target.value)}
                           placeholder="INV-001"
                           className={`w-full h-8 rounded-lg px-2 text-xs font-mono outline-none transition-all border ${FIELD_HL}`} />
                       </td>
-                      <td className="px-3 py-2">
-                        <input value={it.material_name} onChange={e => updateItem(idx, 'material_name', e.target.value)}
+                      <td className="px-2 py-2 min-w-[160px]">
+                        <MaterialCombobox
+                          value={it.material_name}
+                          onChange={v => updateItem(idx, 'material_name', v)}
+                          options={inventoryItems.map(i => ({ label: i.material_name, value: i.material_name }))}
                           placeholder="Material description"
-                          className={`w-full h-8 rounded-lg px-3 text-xs outline-none transition-all border ${FIELD_HL}`} />
+                        />
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-2 py-2">
                         <select value={it.unit} onChange={e => updateItem(idx, 'unit', e.target.value)}
                           className={`w-full h-8 rounded-lg px-2 text-xs outline-none transition-all border ${FIELD_HL}`}>
                           <option value="">—</option>
                           {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                         </select>
                       </td>
+                      <td className="px-2 py-2">
+                        <input type="number" value={it.rate} onChange={e => updateItem(idx, 'rate', e.target.value)}
+                          placeholder="0.00" step="0.01"
+                          className={`w-full h-8 rounded-lg px-2 text-xs text-right font-mono outline-none transition-all border ${FIELD_HL}`} />
+                      </td>
                       {['qty_as_per_dc','qty_inspected','qty_rejected'].map(k => (
-                        <td key={k} className="px-3 py-2">
+                        <td key={k} className="px-2 py-2">
                           <input type="number" value={it[k]} onChange={e => updateItem(idx, k, e.target.value)}
                             placeholder="0"
                             className={clsx(
-                              `w-full h-8 rounded-lg px-3 text-xs text-right font-mono outline-none transition-all border`,
+                              `w-full h-8 rounded-lg px-2 text-xs text-right font-mono outline-none transition-all border`,
                               k === 'qty_rejected' && parseFloat(it.qty_rejected || 0) > 0
                                 ? 'bg-red-50 border-red-300 text-red-700 focus:border-red-400'
                                 : FIELD_HL
                             )} />
                         </td>
                       ))}
-                      <td className="px-3 py-2">
+                      <td className="px-2 py-2">
                         <input value={it.remarks} onChange={e => updateItem(idx, 'remarks', e.target.value)}
                           placeholder="Notes…"
-                          className={`w-full h-8 rounded-lg px-3 text-xs outline-none transition-all border ${FIELD_HL}`} />
+                          className={`w-full h-8 rounded-lg px-2 text-xs outline-none transition-all border ${FIELD_HL}`} />
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-2 py-2">
                         <button onClick={() => removeRow(idx)} disabled={items.length === 1}
                           className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 disabled:opacity-30 transition">
                           <X size={12} />
@@ -805,24 +1061,151 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
               </table>
             </div>
           </div>
-        </div>
 
-        </div>
+          {/* Optional Bill Creation */}
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <button
+              onClick={() => setCreateBill(b => !b)}
+              className="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-slate-50 transition">
+              <div className="flex items-center gap-3">
+                <div className={clsx('w-5 h-5 rounded border-2 flex items-center justify-center transition',
+                  createBill ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'
+                )}>
+                  {createBill && <CheckCircle2 size={12} className="text-white" strokeWidth={3} />}
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-slate-800">Create Invoice Bill</div>
+                  <div className="text-xs text-slate-500">Optional — adds to TQS Bill Tracker with linked IGN</div>
+                </div>
+              </div>
+              {createBill ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+            </button>
 
-        <div className="border-t bg-white flex-shrink-0 px-6 py-4">
-          <div className="max-w-5xl mx-auto flex items-center justify-between">
-            <span className="text-xs text-slate-500 font-semibold">
-              {items.filter(i => i.material_name?.trim()).length} item(s) ready
-            </span>
-            <div className="flex items-center gap-2">
-              <button onClick={onClose} className="px-5 h-9 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 transition">Cancel</button>
-              <button onClick={submit} disabled={createMutation.isPending}
-                className="px-6 h-9 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-50 shadow-sm">
-                {createMutation.isPending ? 'Saving…' : 'Create IGN →'}
-              </button>
-            </div>
+            {createBill && (
+              <div className="px-5 pb-5 border-t border-slate-100 space-y-4 pt-4">
+                {bills.map((b, billIdx) => {
+                  const calc = calcBillAmounts(billIdx);
+                  const overrides = allGstOverrides[billIdx] || {};
+                  return (
+                    <div key={billIdx} className="border border-slate-200 rounded-xl p-4 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Invoice {billIdx + 1}</h4>
+                        {bills.length > 1 && (
+                          <button onClick={() => removeBill(billIdx)} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-slate-600">Invoice No.</label>
+                          <input value={b.inv_number} onChange={e => setBillField(billIdx, 'inv_number', e.target.value)}
+                            placeholder="INV-2024-001"
+                            className={`w-full h-9 rounded-lg px-3 text-sm outline-none border ${FIELD_HL}`} />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-slate-600">Invoice Date *</label>
+                          <input type="date" value={b.inv_date} onChange={e => setBillField(billIdx, 'inv_date', e.target.value)}
+                            className={`w-full h-9 rounded-lg px-3 text-sm outline-none border ${FIELD_HL}`} />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-slate-600">Tax Mode</label>
+                          <select value={b.tax_mode} onChange={e => setBillField(billIdx, 'tax_mode', e.target.value)}
+                            className={`w-full h-9 rounded-lg px-3 text-sm outline-none border ${FIELD_HL}`}>
+                            <option value="intrastate">Intrastate (CGST + SGST)</option>
+                            <option value="interstate">Interstate (IGST)</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-slate-600">Default GST %</label>
+                          <select value={b.gst_pct} onChange={e => setBillField(billIdx, 'gst_pct', e.target.value)}
+                            className={`w-full h-9 rounded-lg px-3 text-sm outline-none border ${FIELD_HL}`}>
+                            {['0','5','12','18','28'].map(r => <option key={r} value={r}>{r}%</option>)}
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-slate-600">Transport Charges</label>
+                          <input type="number" value={b.transport_charges} onChange={e => setBillField(billIdx, 'transport_charges', e.target.value)}
+                            placeholder="0" className={`w-full h-9 rounded-lg px-3 text-sm outline-none border ${FIELD_HL}`} />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-slate-600">Transport GST %</label>
+                          <input type="number" value={b.transport_gst_pct} onChange={e => setBillField(billIdx, 'transport_gst_pct', e.target.value)}
+                            placeholder="18" className={`w-full h-9 rounded-lg px-3 text-sm outline-none border ${FIELD_HL}`} />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-slate-600">Other Charges</label>
+                          <input type="number" value={b.other_charges} onChange={e => setBillField(billIdx, 'other_charges', e.target.value)}
+                            placeholder="0" className={`w-full h-9 rounded-lg px-3 text-sm outline-none border ${FIELD_HL}`} />
+                        </div>
+                      </div>
+
+                      {/* Per-item GST overrides */}
+                      {items.filter(it => it.material_name?.trim()).length > 0 && (
+                        <div>
+                          <div className="text-xs font-semibold text-slate-600 mb-2">Per-Item GST Overrides (optional)</div>
+                          <div className="space-y-1">
+                            {items.filter(it => it.material_name?.trim()).map((it, i) => (
+                              <div key={i} className="flex items-center gap-3">
+                                <span className="text-xs text-slate-600 flex-1 truncate">{it.material_name}</span>
+                                <select value={overrides[String(i)] ?? b.gst_pct}
+                                  onChange={e => {
+                                    const updated = { ...overrides };
+                                    if (e.target.value === b.gst_pct) delete updated[String(i)];
+                                    else updated[String(i)] = e.target.value;
+                                    setAllGstOverrides(gs => gs.map((g, gi) => gi === billIdx ? updated : g));
+                                  }}
+                                  className="h-7 text-xs rounded border border-slate-200 px-2 outline-none">
+                                  {['0','5','12','18','28'].map(r => <option key={r} value={r}>{r}%</option>)}
+                                </select>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Bill Summary */}
+                      <div className="bg-slate-50 rounded-lg p-3 text-xs space-y-1">
+                        <div className="flex justify-between"><span className="text-slate-600">Basic Amount</span><span className="font-mono font-medium">₹{inr(calc.basic)}</span></div>
+                        {b.tax_mode === 'intrastate' ? (
+                          <>
+                            <div className="flex justify-between"><span className="text-slate-600">CGST</span><span className="font-mono">₹{inr(calc.cgst)}</span></div>
+                            <div className="flex justify-between"><span className="text-slate-600">SGST</span><span className="font-mono">₹{inr(calc.sgst)}</span></div>
+                          </>
+                        ) : (
+                          <div className="flex justify-between"><span className="text-slate-600">IGST</span><span className="font-mono">₹{inr(calc.igst)}</span></div>
+                        )}
+                        {calc.tc > 0 && <div className="flex justify-between"><span className="text-slate-600">Transport + GST</span><span className="font-mono">₹{inr(calc.tc + calc.tgst)}</span></div>}
+                        {calc.oc > 0 && <div className="flex justify-between"><span className="text-slate-600">Other Charges</span><span className="font-mono">₹{inr(calc.oc)}</span></div>}
+                        <div className="flex justify-between border-t border-slate-200 pt-1 font-bold text-slate-800">
+                          <span>Total</span><span className="font-mono">₹{inr(calc.total)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <button onClick={addBill}
+                  className="flex items-center gap-2 text-xs text-indigo-600 font-medium border border-dashed border-indigo-200 rounded-lg px-4 py-2 hover:bg-indigo-50 transition">
+                  <Plus size={12} /> Add Another Invoice
+                </button>
+              </div>
+            )}
           </div>
         </div>
+      </div>
+
+      <div className="border-t bg-white flex-shrink-0 px-6 py-4">
+        <div className="max-w-5xl mx-auto flex items-center justify-between">
+          <span className="text-xs text-slate-500 font-semibold">
+            {validItemCount} item(s) ready{createBill ? ` · ${bills.length} invoice(s)` : ''}
+          </span>
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="px-5 h-9 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 transition">Cancel</button>
+            <button onClick={submit} disabled={createMutation.isPending}
+              className="px-6 h-9 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-50 shadow-sm">
+              {createMutation.isPending ? 'Saving…' : 'Create IGN →'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

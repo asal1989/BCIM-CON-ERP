@@ -6,7 +6,7 @@ import {
   Truck, ClipboardList, AlertTriangle, PackageCheck, Clock, Plus,
   ArrowUpRight, Boxes, FileText, ChevronRight,
 } from 'lucide-react';
-import { grnAPI, mrsAPI, minAPI, inventoryAPI } from '../../api/client';
+import { ignAPI, mrsAPI, minAPI, inventoryAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -148,8 +148,8 @@ export default function StoresDashboard() {
   const { user } = useAuthStore();
 
   const { data: grns = [], isLoading: loadG } = useQuery({
-    queryKey: ['stores-dash-grns'],
-    queryFn: () => grnAPI.list().then(r => { const d = r.data; return Array.isArray(d) ? d : (d?.data ?? []); }),
+    queryKey: ['stores-dash-igns'],
+    queryFn: () => ignAPI.list().then(r => { const d = r.data; return Array.isArray(d) ? d : (d?.data ?? []); }),
     staleTime: 60000,
   });
   const { data: mrs = [], isLoading: loadM } = useQuery({
@@ -172,11 +172,11 @@ export default function StoresDashboard() {
   const hour = now.hour();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
-  // GRN
-  const grnThisMonth = grns.filter(g => dayjs(g.grn_date || g.created_at).isSame(now, 'month'));
-  const pendingGRNs  = grns.filter(g => (g.quality_status || g.status) === 'pending');
-  const verifiedGRNs = grns.filter(g => (g.quality_status || g.status) === 'verified_stores');
-  const awaitingGRNs = [...pendingGRNs, ...verifiedGRNs];
+  // IGN (replaces GRN)
+  const grnThisMonth = grns.filter(g => dayjs(g.date_time || g.created_at).isSame(now, 'month'));
+  const pendingGRNs  = grns.filter(g => g.status === 'pending');
+  const inspectedGRNs = grns.filter(g => g.status === 'inspected');
+  const awaitingGRNs = [...pendingGRNs, ...inspectedGRNs];
 
   // MRS
   const MRS_CLOSED      = ['issued', 'rejected', 'draft'];
@@ -220,10 +220,10 @@ export default function StoresDashboard() {
                 style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)' }}>
                 <Plus className="w-3.5 h-3.5" /> New MRS
               </Link>
-              <Link to="/stores/grn"
+              <Link to="/stores/ign"
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all"
                 style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)' }}>
-                <Plus className="w-3.5 h-3.5" /> New GRN
+                <Plus className="w-3.5 h-3.5" /> New IGN
               </Link>
               <Link to="/stores/issue"
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all"
@@ -239,7 +239,7 @@ export default function StoresDashboard() {
               { icon: ClipboardList, label: 'Open MRS',          value: openMRS.length,          bg: 'rgba(255,255,255,0.1)',   border: 'rgba(255,255,255,0.2)' },
               { icon: Clock,         label: 'In Approval',        value: inApproval.length,        bg: 'rgba(245,158,11,0.25)',  border: 'rgba(245,158,11,0.4)' },
               { icon: PackageCheck,  label: 'Issued',             value: issuedMRS.length,         bg: 'rgba(16,185,129,0.2)',   border: 'rgba(16,185,129,0.35)' },
-              { icon: Truck,         label: 'GRNs Awaiting QC',   value: awaitingGRNs.length,      bg: 'rgba(255,255,255,0.1)',  border: 'rgba(255,255,255,0.2)' },
+              { icon: Truck,         label: 'IGNs Pending Approval', value: awaitingGRNs.length,    bg: 'rgba(255,255,255,0.1)',  border: 'rgba(255,255,255,0.2)' },
               { icon: ArrowUpRight,  label: 'Issues This Month',  value: thisMonthIssues.length,   bg: 'rgba(255,255,255,0.1)',  border: 'rgba(255,255,255,0.2)' },
               { icon: AlertTriangle, label: 'Low Stock Alerts',   value: lowStock.length,          bg: lowStock.length > 0 ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.1)', border: lowStock.length > 0 ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.2)' },
             ].map(({ icon: Icon, label, value, bg, border }) => (
@@ -346,19 +346,19 @@ export default function StoresDashboard() {
           </div>
         </div>
 
-        {/* ── Row 2: GRN + Issues + Inventory ───────────────────────── */}
+        {/* ── Row 2: IGN + Issues + Inventory ───────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
 
-          {/* GRN card */}
+          {/* IGN card */}
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-teal-50 flex items-center justify-center">
                   <Truck className="w-3.5 h-3.5 text-teal-600" />
                 </div>
-                <h3 className="text-sm font-bold text-slate-800">GRN Status</h3>
+                <h3 className="text-sm font-bold text-slate-800">IGN Status</h3>
               </div>
-              <Link to="/stores/grn" className="text-[11px] text-indigo-600 font-semibold flex items-center gap-0.5">
+              <Link to="/stores/ign" className="text-[11px] text-indigo-600 font-semibold flex items-center gap-0.5">
                 View <ChevronRight className="w-3 h-3" />
               </Link>
             </div>
@@ -367,19 +367,19 @@ export default function StoresDashboard() {
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <div className="bg-slate-50 rounded-xl p-3 text-center">
                   <p className="text-2xl font-bold text-slate-800">{grns.length}</p>
-                  <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Total GRNs</p>
+                  <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Total IGNs</p>
                 </div>
                 <div className="bg-amber-50 rounded-xl p-3 text-center">
                   <p className="text-2xl font-bold text-amber-700">{awaitingGRNs.length}</p>
-                  <p className="text-[10px] text-amber-600 font-semibold mt-0.5">Awaiting QC</p>
+                  <p className="text-[10px] text-amber-600 font-semibold mt-0.5">Awaiting Approval</p>
                 </div>
               </div>
               {/* Stage breakdown */}
               <div className="space-y-2">
                 {[
-                  { label: 'Pending QC',      value: pendingGRNs.length,  color: '#f59e0b' },
-                  { label: 'Stores Verified', value: verifiedGRNs.length, color: '#0ea5e9' },
-                  { label: 'Approved',        value: grns.filter(g => (g.quality_status || g.status) === 'approved').length, color: '#10b981' },
+                  { label: 'Pending',    value: pendingGRNs.length,    color: '#f59e0b' },
+                  { label: 'Inspected',  value: inspectedGRNs.length,  color: '#0ea5e9' },
+                  { label: 'Approved',   value: grns.filter(g => g.status === 'approved').length, color: '#10b981' },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
@@ -389,7 +389,7 @@ export default function StoresDashboard() {
                 ))}
               </div>
               {awaitingGRNs.length > 0 && (
-                <Link to="/stores/grn"
+                <Link to="/stores/ign"
                   className="mt-4 flex items-center justify-center gap-1.5 w-full py-2 rounded-xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors">
                   <Clock className="w-3.5 h-3.5" /> Review {awaitingGRNs.length} Pending
                 </Link>
@@ -536,7 +536,7 @@ export default function StoresDashboard() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { to: '/stores/mrs',    icon: ClipboardList, label: 'Material Requisitions', sub: `${openMRS.length} open`,          color: '#4f46e5' },
-            { to: '/stores/grn',    icon: Truck,         label: 'Goods Receipt Notes',   sub: `${grns.length} total`,            color: '#0891b2' },
+            { to: '/stores/ign',    icon: Truck,         label: 'Inward Goods Notes',    sub: `${grns.length} total`,            color: '#0891b2' },
             { to: '/stores/issue',  icon: ArrowUpRight,  label: 'Material Issues',        sub: `${issues.length} total`,          color: '#059669' },
             { to: '/stores/ledger', icon: Boxes,         label: 'Store Ledger',           sub: `${inventory.length} materials`,   color: '#7c3aed' },
           ].map(({ to, icon: Icon, label, sub, color }) => (

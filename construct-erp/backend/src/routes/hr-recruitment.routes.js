@@ -164,7 +164,7 @@ router.get('/applicants/:id', authorize(...HR_ALL), async (req, res) => {
   );
   if (!rows[0]) return res.status(404).json({ error: 'Not found' });
   const { rows: interviews } = await query(
-    `SELECT i.*, u.full_name as interviewer_name FROM hr_interviews i
+    `SELECT i.*, u.name as interviewer_name FROM hr_interviews i
      LEFT JOIN users u ON u.id=i.interviewer_id WHERE i.applicant_id=$1 ORDER BY i.scheduled_on`,
     [req.params.id]
   );

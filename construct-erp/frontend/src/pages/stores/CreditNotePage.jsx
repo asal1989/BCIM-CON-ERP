@@ -8,7 +8,7 @@ import {
   AlertCircle, ArrowDownLeft, Building2, Calendar, Check, ChevronRight,
   FileText, Hammer, Package, Plus, Search, Trash2, X,
 } from 'lucide-react';
-import { creditNoteAPI, projectAPI, vendorAPI, poAPI, grnAPI, tqsBillsAPI } from '../../api/client';
+import { creditNoteAPI, projectAPI, vendorAPI, poAPI, ignAPI, tqsBillsAPI } from '../../api/client';
 
 // ── constants ─────────────────────────────────────────────────────────────────
 const CN_TYPES = [
@@ -127,12 +127,12 @@ function CNForm({ initial, onClose, onSaved }) {
     enabled: !!form.vendor_id,
     staleTime: 30000,
   });
-  // GRN list for selected vendor+project
+  // IGN list for selected project (replaces GRN lookup)
   const { data: grnList = [] } = useQuery({
-    queryKey: ['grn-for-cn', form.vendor_id, form.project_id],
-    queryFn: () => grnAPI.list({ vendor_id: form.vendor_id, project_id: form.project_id || undefined, limit: 200 })
+    queryKey: ['ign-for-cn', form.vendor_id, form.project_id],
+    queryFn: () => ignAPI.list({ vendor_id: form.vendor_id, project_id: form.project_id || undefined })
       .then(r => r.data?.data ?? r.data ?? []).catch(() => []),
-    enabled: !!form.vendor_id,
+    enabled: !!form.vendor_id || !!form.project_id,
     staleTime: 30000,
   });
 
@@ -414,15 +414,15 @@ function CNForm({ initial, onClose, onSaved }) {
                 </select>
               </div>
               <div>
-                <Lbl>Linked GRN</Lbl>
+                <Lbl>Linked IGN</Lbl>
                 <select className={FS} value={form.grn_id}
                   onChange={e => {
                     const g = grnList.find(x => x.id === e.target.value);
                     set('grn_id', e.target.value);
-                    set('grn_number', g?.grn_number || g?.serial_no_formatted || '');
+                    set('grn_number', g?.ign_number || g?.serial_no_formatted || '');
                   }}>
                   <option value="">— None —</option>
-                  {grnList.map(g => <option key={g.id} value={g.id}>{g.grn_number || g.serial_no_formatted}</option>)}
+                  {grnList.map(g => <option key={g.id} value={g.id}>{g.ign_number || g.serial_no_formatted}</option>)}
                 </select>
               </div>
             </div>

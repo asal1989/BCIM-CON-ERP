@@ -313,7 +313,7 @@ router.get('/monthly-report', async (req, res) => {
         SELECT inventory_id,
                SUM(quantity) AS received_qty
         FROM stock_transactions
-        WHERE transaction_type IN ('grn','transfer_in')
+        WHERE transaction_type IN ('grn','bill_receipt','transfer_in')
           AND transacted_at >= $2 AND transacted_at < $3
         GROUP BY inventory_id
       ) rx ON rx.inventory_id = i.id
@@ -770,6 +770,55 @@ router.post('/import', xlsUpload.single('file'), async (req, res) => {
 
     res.json({ message: 'Import complete', inserted, updated, skipped, skippedItems, errors, total: items.length });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /inventory/repair-double-stock?project_id=
+// Recalculates closing_stock for each inventory item from scratch using
+// stock_transactions — corrects phantom stock caused by historical double-posting
+// (GRN bill_receipt + QC grn both incrementing the same row).
+router.post('/repair-double-stock', async (req, res) => {
+  try {
+    if (!['super_admin', 'admin'].includes(req.user?.role)) {
+      return res.status(403).json({ error: 'Admin only' });
+    }
+    const { project_id } = req.query;
+
+    const params = [req.user.company_id];
+    let filter = '';
+    if (project_id && project_id !== 'undefined' && project_id !== 'null') {
+      params.push(project_id);
+      filter = `AND i.project_id = $${params.length}`;
+    }
+
+    const result = await query(`
+      WITH corrected AS (
+        SELECT
+          i.id,
+          i.opening_stock,
+          COALESCE(SUM(CASE WHEN st.transaction_type IN ('grn','bill_receipt','transfer_in','ign') THEN st.quantity ELSE 0 END), 0) AS total_in,
+          COALESCE(SUM(CASE WHEN st.transaction_type IN ('issue','transfer_out') THEN st.quantity ELSE 0 END), 0) AS total_out
+        FROM inventory i
+        JOIN projects p ON p.id = i.project_id
+        LEFT JOIN stock_transactions st ON st.inventory_id = i.id
+        WHERE p.company_id = $1 ${filter}
+        GROUP BY i.id, i.opening_stock
+      )
+      UPDATE inventory
+      SET closing_stock = GREATEST(0, c.opening_stock + c.total_in - c.total_out),
+          last_updated  = NOW()
+      FROM corrected c
+      WHERE inventory.id = c.id
+      RETURNING inventory.id, inventory.material_name, inventory.closing_stock
+    `, params);
+
+    res.json({
+      message: `Recalculated closing_stock for ${result.rows.length} inventory item(s).`,
+      updated: result.rows.length,
+    });
+  } catch (err) {
+    console.error('[inventory] repair-double-stock error:', err);
     res.status(500).json({ error: err.message });
   }
 });

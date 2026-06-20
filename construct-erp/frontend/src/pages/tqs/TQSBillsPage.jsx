@@ -784,15 +784,15 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                 <input type="date" className={F} value={form.po_date} onChange={e => set('po_date', e.target.value)} />
               </div>
 
-              {/* GRN link (optional, shown only when PO linked and GRNs exist) */}
+              {/* IGN link (optional, shown only when PO linked and IGN/GRNs exist) */}
               {form.bill_type === 'po' && form.po_id && availableGRNs.length > 0 && (
                 <div className="col-span-2 md:col-span-3">
-                  <Lbl>Link to GRN <span className="text-[10px] text-slate-400 font-normal">(optional - ties invoice to material receipt)</span></Lbl>
+                  <Lbl>Link to IGN <span className="text-[10px] text-slate-400 font-normal">(optional - ties invoice to material receipt)</span></Lbl>
                   <select className={F} value={form.grn_id} onChange={e => set('grn_id', e.target.value)}>
-                    <option value="">- No GRN link -</option>
+                    <option value="">- No IGN/GRN link -</option>
                     {availableGRNs.map(g => (
                       <option key={g.id} value={g.id}>
-                        {g.serial_no_formatted || g.grn_number} - {g.grn_date?.slice(0,10)} - Qty {Number(g.total_quantity||0).toLocaleString()}
+                        {g.serial_no_formatted || g.grn_number || g.ign_number} - {(g.grn_date || g.date_time)?.slice(0,10)} - Qty {Number(g.total_quantity||0).toLocaleString()}
                       </option>
                     ))}
                   </select>

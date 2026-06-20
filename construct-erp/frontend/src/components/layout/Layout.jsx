@@ -91,7 +91,6 @@ const navGroups = [
     { to: '/stores/wo-register',       icon: ClipboardList,   label: 'WO Register' },
     { to: '/stores/grs',               icon: ShieldCheck,     label: 'GRS (Security Gate)' },
     { to: '/stores/ign',               icon: ClipboardCheck,  label: 'IGN (Inward Goods)' },
-    { to: '/stores/grn',               icon: PackageCheck,    label: 'GRN Receiving' },
     { to: '/stores/gate-pass',         icon: LogOut,          label: 'Gate Pass' },
     { to: '/stores/material-tracker', icon: BarChart2,        label: 'Material Tracker' },
     { to: '/stores/ledger',            icon: BookOpen,        label: 'Store Ledger' },
@@ -347,7 +346,6 @@ const NAV_SECTIONS = {
     { label: 'Work Orders',     paths: ['/stores/work-orders','/stores/wo-register'] },
     { label: 'GRS Gate',        paths: ['/stores/grs'] },
     { label: 'IGN',             paths: ['/stores/ign'] },
-    { label: 'Receiving',       paths: ['/stores/grn'] },
     { label: 'Gate Pass',       paths: ['/stores/gate-pass'] },
     { label: 'Matl Tracker',    paths: ['/stores/material-tracker'] },
     { label: 'Stock Control',   paths: ['/stores/ledger','/stores/issue'] },
@@ -1737,7 +1735,7 @@ export default function Layout() {
   // Stores nav items visible per role
   const STORES_ROLE_NAV = {
     security_guard: ['/stores/grs'],
-    store_keeper:   ['/stores', '/stores/grs', '/stores/ign', '/stores/grn', '/stores/gate-pass',
+    store_keeper:   ['/stores', '/stores/grs', '/stores/ign', '/stores/gate-pass',
                      '/stores/issue', '/stores/ledger', '/stores/mtr', '/stores/stock-verification',
                      '/stores/material-tracker'],
   };

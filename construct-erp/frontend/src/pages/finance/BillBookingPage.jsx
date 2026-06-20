@@ -7,7 +7,7 @@ import {
   Plus, X, Box, Tag, DollarSign, Percent
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { invoiceAPI, projectAPI, vendorAPI, poAPI, grnAPI } from '../../api/client';
+import { invoiceAPI, projectAPI, vendorAPI, poAPI, ignAPI } from '../../api/client';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -36,13 +36,13 @@ export default function BillBookingPage() {
 
   const { data: grns = [] } = useQuery({
     queryKey: ['grn-list', formData.po_id],
-    queryFn: () => grnAPI.list({ po_id: formData.po_id }).then(r => r.data?.data ?? r.data ?? []).catch(() => []),
+    queryFn: () => ignAPI.list({ po_id: formData.po_id }).then(r => r.data?.data ?? r.data ?? []).catch(() => []),
     enabled: !!formData.po_id
   });
 
   const { data: grnDetail } = useQuery({
     queryKey: ['grn-detail', formData.grn_id],
-    queryFn: () => grnAPI.get(formData.grn_id).then(r => r.data?.data ?? r.data ?? null).catch(() => null),
+    queryFn: () => ignAPI.get(formData.grn_id).then(r => r.data?.data ?? r.data ?? null).catch(() => null),
     enabled: !!formData.grn_id
   });
 

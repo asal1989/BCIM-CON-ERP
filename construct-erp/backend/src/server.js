@@ -36,7 +36,7 @@ const poAmendmentRoutes = require('./routes/poAmendment.routes');
 const liveRatesRoutes = require('./routes/live-rates.routes');
 const rateContractRoutes = require('./routes/rate-contract.routes');
 const stockVerifRoutes = require('./routes/stock-verification.routes');
-const grnRoutes = require('./routes/grn.routes');
+// grnRoutes removed — GRN features merged into IGN (grn.routes.js kept for historical data, not mounted)
 const grsRoutes = require('./routes/grs.routes');
 const ignRoutes = require('./routes/ign.routes');
 const materialTrackerRoutes = require('./routes/material-tracker.routes');
@@ -291,7 +291,7 @@ app.use(`${API}/procurement/po-amendments`, poAmendmentRoutes);
 app.use(`${API}/procurement/live-rates`, liveRatesRoutes);
 app.use(`${API}/procurement/rate-contracts`, rateContractRoutes);
 app.use(`${API}/stock-verifications`, stockVerifRoutes);
-app.use(`${API}/grn`, grnRoutes);
+// GRN route removed — /api/v1/grn no longer served; features merged into IGN
 app.use(`${API}/grs`, grsRoutes);
 app.use(`${API}/ign`, ignRoutes);
 app.use(`${API}/material-tracker`, materialTrackerRoutes);

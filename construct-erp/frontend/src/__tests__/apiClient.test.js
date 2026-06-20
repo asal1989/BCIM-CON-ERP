@@ -77,7 +77,7 @@ describe('API module exports', () => {
 
   const expectedModules = [
     'authAPI', 'projectAPI', 'boqAPI', 'raBillAPI', 'invoiceAPI',
-    'paymentAPI', 'vendorAPI', 'poAPI', 'grnAPI', 'inventoryAPI',
+    'paymentAPI', 'vendorAPI', 'poAPI', 'ignAPI', 'inventoryAPI',
     'workerAPI', 'incidentAPI', 'qualityAPI', 'assetAPI',
   ];
 

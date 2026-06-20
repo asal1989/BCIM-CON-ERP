@@ -89,7 +89,7 @@ const VendorPerformancePage = lazy(() => import('./pages/procurement/VendorPerfo
 const RateContractPage    = lazy(() => import('./pages/procurement/RateContractPage'));
 const VendorPaymentsPage  = lazy(() => import('./pages/procurement/VendorPaymentsPage'));
 const POPage              = lazy(() => import('./pages/procurement/POPage'));
-const GRNPage             = lazy(() => import('./pages/stores/GRNPage'));
+// GRNPage removed — features merged into IGNPage
 const GRSPage             = lazy(() => import('./pages/stores/GRSPage'));
 const IGNPage             = lazy(() => import('./pages/stores/IGNPage'));
 const GatePassPage        = lazy(() => import('./pages/stores/GatePassPage'));
@@ -197,7 +197,6 @@ const StoresPettyCashPage       = lazy(() => import('./pages/stores/StoresPettyC
 const StockVerificationPage     = lazy(() => import('./pages/stores/StockVerificationPage'));
 const StoresDashboard           = lazy(() => import('./pages/dashboards/StoresDashboard'));
 // StockReportPage merged into StoreLedgerPage as "Monthly Movement" tab
-// GRNVerificationPage and GRNPrintPage merged into GRNPage
 const VendorInvoicePage   = lazy(() => import('./pages/finance/VendorInvoicePage'));
 const BillBookingPage     = lazy(() => import('./pages/finance/BillBookingPage'));
 const ReportsPage         = lazy(() => import('./pages/reports/ReportsPage'));
@@ -206,7 +205,7 @@ const BillsTrackerPage    = lazy(() => import('./pages/bills/BillsTrackerPage'))
 const UsersPage           = lazy(() => import('./pages/users/UsersPage'));
 const MRSVerificationPage = lazy(() => import('./pages/stores/MRSVerificationPage'));
 const POVerificationPage = lazy(() => import('./pages/procurement/POVerificationPage'));
-const GRNVerificationPage = lazy(() => import('./pages/stores/GRNVerificationPage'));
+// GRNVerificationPage removed — GRN features merged into IGN
 const MINVerificationPage = lazy(() => import('./pages/stores/MINVerificationPage'));
 const SubcontractorPortalPage = lazy(() => import('./pages/subcontractor/PortalPage'));
 // New SC Module — 12 separate pages
@@ -489,7 +488,7 @@ export default function App() {
               {/* Public Verification Links */}
               <Route path="/verify/mrs/:id" element={<MRSVerificationPage />} />
               <Route path="/verify/po/:id" element={<POVerificationPage />} />
-              <Route path="/verify/grn/:id" element={<GRNVerificationPage />} />
+              {/* GRN verification route removed — GRN features merged into IGN */}
               <Route path="/verify/min/:id" element={<MINVerificationPage />} />
               <Route path="/vendor-rfq/:token" element={<VendorRFQPortalPage />} />
 
@@ -632,7 +631,7 @@ export default function App() {
                 <Route path="stores/wo-register" element={<RequireModule module="Stores"><WORegisterPage /></RequireModule>} />
                 <Route path="stores/grs" element={<RequireModule module="Stores"><GRSPage /></RequireModule>} />
                 <Route path="stores/ign" element={<RequireModule module="Stores"><IGNPage /></RequireModule>} />
-                <Route path="stores/grn" element={<RequireModule module="Stores"><GRNPage /></RequireModule>} />
+                {/* GRN route removed — features merged into IGN */}
                 <Route path="stores/gate-pass" element={<RequireModule module="Stores"><GatePassPage /></RequireModule>} />
                 <Route path="stores/material-tracker" element={<RequireModule module="Stores"><MaterialTrackerPage /></RequireModule>} />
 

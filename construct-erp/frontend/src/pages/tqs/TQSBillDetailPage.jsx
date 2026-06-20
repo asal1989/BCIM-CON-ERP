@@ -1365,7 +1365,7 @@ export default function TQSBillDetailPage() {
         </div>
 
         {/* ── Cross-module links ──────────────────────────────── */}
-        {(bill.po_id || bill.grn_id) && (
+        {(bill.po_id || bill.grn_id || bill.ign_id) && (
           <div className="bg-blue-50 border border-blue-100 rounded-xl px-5 py-3 flex flex-wrap items-center gap-3">
             <span className="text-[10px] font-medium text-blue-500 uppercase tracking-widest">Linked to Procurement</span>
             {bill.po_id && (
@@ -1375,10 +1375,17 @@ export default function TQSBillDetailPage() {
                 {bill.linked_po_total && <span className="text-blue-400 font-normal ml-1">₹{Number(bill.linked_po_total).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
               </a>
             )}
-            {bill.grn_id && (
-              <a href="/procurement/grn" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-200 rounded-lg text-xs font-medium text-emerald-700 hover:bg-emerald-50 transition-all">
+            {bill.ign_id && (
+              <a href="/stores/ign" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-200 rounded-lg text-xs font-medium text-emerald-700 hover:bg-emerald-50 transition-all">
                 <FileText className="w-3.5 h-3.5" />
-                GRN: {bill.linked_grn_number}
+                IGN No.: {bill.linked_grn_number || bill.ign_id}
+                {bill.linked_grn_date && <span className="text-emerald-400 font-normal ml-1">{fmt(bill.linked_grn_date)}</span>}
+              </a>
+            )}
+            {bill.grn_id && !bill.ign_id && (
+              <a href="/stores/ign" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-200 rounded-lg text-xs font-medium text-emerald-700 hover:bg-emerald-50 transition-all">
+                <FileText className="w-3.5 h-3.5" />
+                Receipt: {bill.linked_grn_number}
                 {bill.linked_grn_date && <span className="text-emerald-400 font-normal ml-1">{fmt(bill.linked_grn_date)}</span>}
               </a>
             )}

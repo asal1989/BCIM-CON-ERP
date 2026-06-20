@@ -428,13 +428,7 @@ export const poAmendmentAPI = {
   delete: (id)     => api.delete(`/procurement/po-amendments/${id}`),
 };
 
-export const grnAPI = {
-  list:    (params)   => api.get('/grn', { params }),
-  get:     (id)       => api.get(`/grn/${id}`),
-  create:  (data)     => api.post('/grn', data),
-  approve: (id, stage) => api.patch(`/grn/${id}/${stage}`),
-  remove:  (id)       => api.delete(`/grn/${id}`),
-};
+// grnAPI removed — GRN features merged into IGN. Use ignAPI instead.
 
 export const grsAPI = {
   list:        (params) => api.get('/grs', { params }),
@@ -701,6 +695,7 @@ export const inventoryAPI = {
     fd.append('overwrite', overwrite ? 'true' : 'false');
     return api.post('/inventory/import', fd, { headers: { 'Content-Type': undefined } });
   },
+  repairDoubleStock: (project_id) => api.post('/inventory/repair-double-stock', null, { params: project_id ? { project_id } : {} }),
 };
 
 export const workerAPI = {
