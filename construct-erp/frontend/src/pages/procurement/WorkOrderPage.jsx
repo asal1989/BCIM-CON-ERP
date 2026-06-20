@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
-import { subcontractorAPI, vendorAPI, projectAPI } from '../../api/client';
+import { subcontractorAPI, vendorAPI, projectAPI, companySettingsAPI } from '../../api/client';
 import { FIELD_HL } from '../../constants/fieldStyles';
 import SearchableSelect from '../../components/shared/SearchableSelect';
 import VendorSelect from '../../components/shared/VendorSelect';
@@ -893,7 +893,7 @@ function CreateWOModal({ onClose, vendors, projects, onCreate, onUpdate, isPendi
 }
 
 /* ── WO Detail Panel — Full-Screen Modal ────────────────────────────────── */
-function WODetailPanel({ wo, onClose, onEdit, onDelete, onApprove, onMDApprove, onReject, isApproving, isMDApproving, isRejecting, user }) {
+function WODetailPanel({ wo, onClose, onEdit, onDelete, onApprove, onMDApprove, onReject, isApproving, isMDApproving, isRejecting, user, company }) {
   const { data: detail, isLoading: detailLoading } = useQuery({
     queryKey: ['work-order-detail', wo?.id],
     queryFn: () => subcontractorAPI.getWorkOrder(wo.id).then(r => r.data),
@@ -923,18 +923,16 @@ function WODetailPanel({ wo, onClose, onEdit, onDelete, onApprove, onMDApprove, 
   <title>Work Order — ${displayWO.wo_number}</title>
   <style>
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
-    body { margin: 0; padding: 0; background: white; font-family: Arial, sans-serif; }
+    body { margin: 0; padding: 0 10mm; background: white; font-family: 'Times New Roman', Times, serif; color: #000; }
     table { border-collapse: collapse; }
-    thead { display: table-header-group; }
-    tbody tr { page-break-inside: avoid; }
+    .wo-doc > thead { display: table-header-group; }
+    /* tfoot spacer reserves 44mm on every page; fixed footer draws into it */
+    .wo-doc > tfoot { display: table-footer-group; }
     .wo-items-table thead { display: table-header-group; }
-    .wo-items-table tbody tr { page-break-inside: avoid; page-break-after: auto; }
-    /* Signature strip fixed to bottom of every printed page */
-    .wo-page-footer { position: fixed; bottom: -10mm; left: 0; right: 0; background: white; }
-    /* Keep totals block together; let T&C flow naturally across pages */
-    .wo-totals-block { page-break-inside: avoid; break-inside: avoid; }
-    @page { size: A4 portrait; margin: 8mm 8mm 26mm 8mm; }
-    @media print { body { margin: 0; } }
+    .wo-items-table tbody tr { page-break-inside: avoid; }
+    .wo-terms-block li { page-break-inside: avoid; break-inside: avoid; }
+    .wo-sig-footer { position: fixed; bottom: 0; left: 0; right: 0; height: 44mm; background: white; padding: 4px 10mm 6mm; }
+    @page { size: A4 portrait; margin: 0; }
   </style>
 </head>
 <body>${html}</body>
@@ -1254,7 +1252,7 @@ function WODetailPanel({ wo, onClose, onEdit, onDelete, onApprove, onMDApprove, 
 
     {/* Hidden print zone — content captured via ref, printed in new window */}
     <div ref={printZoneRef} style={{ display: 'none' }} aria-hidden="true">
-      <WOPrintTemplate data={displayWO} />
+      <WOPrintTemplate data={displayWO} company={company} />
     </div>
     </>
   );
@@ -1263,6 +1261,11 @@ function WODetailPanel({ wo, onClose, onEdit, onDelete, onApprove, onMDApprove, 
 /* ── Main Page ─────────────────────────────────────────────────────────── */
 export default function WorkOrderPage() {
   const user = useAuthStore(s => s.user);
+  const { data: companyData } = useQuery({
+    queryKey: ['company-settings'],
+    queryFn: () => companySettingsAPI.get().then(r => r.data?.data ?? r.data),
+    staleTime: Infinity,
+  });
   const [showCreate,     setShowCreate]     = useState(false);
   const [showPdfImport,  setShowPdfImport]  = useState(false);
   const [showExcelImport,setShowExcelImport]= useState(false);
@@ -1650,6 +1653,7 @@ export default function WorkOrderPage() {
           isMDApproving={mdApproveMutation.isPending}
           isRejecting={rejectMutation.isPending}
           user={user}
+          company={companyData}
         />
       )}
 

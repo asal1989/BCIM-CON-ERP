@@ -1,6 +1,9 @@
 // src/pages/procurement/WOPrintTemplate.jsx
+// Layout mirrors POPrintTemplate.jsx exactly (same fonts, borders, totals
+// block, signature footer) so PO and WO documents look like one consistent
+// document family. WO-specific content (deduction %, approval status) is
+// kept but restyled into the same bordered/Times-New-Roman look.
 import React from 'react';
-import { QRCodeSVG } from 'qrcode.react';
 import dayjs from 'dayjs';
 
 // ─── Amount to words ─────────────────────────────────────────────────────────
@@ -30,7 +33,9 @@ function amountInWords(amount) {
   return result + ' Only';
 }
 
-const f2 = v => parseFloat(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const f2   = v => parseFloat(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const inr0 = v => Math.round(parseFloat(v || 0)).toLocaleString('en-IN', { maximumFractionDigits: 0 });
 
 // Collapse a list of item numbers into compact ranges, e.g.
 // [1,2,5,6,...,20,23,25,26] -> "1-2, 5-20, 23, 25-26"
@@ -47,326 +52,307 @@ const formatItemNos = (nums) => {
   return out.join(', ');
 };
 
-const LANCO_SITE_ADDRESS = `LANCO HILLS - LH10
-LANCO Hills Residential Apartments, Tower - LH10,
-Survey nos 201, Manikonda, Rajendranagar Mandal,
-HYDERABAD - 500089
-Contact Person BCIM: Mr. Vijayan - 82700 94285`;
-
-const WOPrintTemplate = React.forwardRef(({ data }, ref) => {
+const WOPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
   if (!data) return (
     <div ref={ref} className="p-10 text-center font-bold text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
       Preparing Work Order…
     </div>
   );
 
-  const items         = data.items || [];
-  const isLanco       = data.project_code === 'LH-10';
-  const verifyUrl     = `${window.location.origin}/verify/wo/${data.id}`;
-  const termsLines    = String(data.terms_conditions || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const items   = data.items || [];
+  const isAmend = /-A\d+$/.test(data.wo_number || '');
 
-  const workValue     = items.reduce((s, it) => s + parseFloat(it.amount || (parseFloat(it.quantity||0) * parseFloat(it.rate||0))), 0)
-                        || parseFloat(data.total_value || data.contract_amount || 0);
-  const gstPct        = parseFloat(data.gst_pct ?? 18);
+  // ── Company header (left block) — live company settings, BCIM fallback ──────
+  const BCIM = {
+    name: 'BCIM ENGINEERING PRIVATE LIMITED',
+    address: '#11, B Wing, Divyasree Chambers, O\'Shaughnessy Road',
+    city: 'Bangalore', state: 'Karnataka', pincode: '560025',
+    gstin: '29AAHCB6485A1ZL',
+  };
+  const coName  = (company.name && !company.name.toLowerCase().includes('pvt ltd') && company.name !== 'BCIM Engineering Pvt Ltd') ? company.name : BCIM.name;
+  const coAddr  = (company.address && !company.address.toLowerCase().includes('bcim office') && !company.address.toLowerCase().includes('jayanagar')) ? company.address : BCIM.address;
+  const coCity  = company.city    || BCIM.city;
+  const coState = company.state   || BCIM.state;
+  const coPin   = company.pincode || BCIM.pincode;
+  const coGstin = (company.gstin  && !['29AABCB1234C1Z5','29AAXCB2929P1Z1'].includes(company.gstin)) ? company.gstin : BCIM.gstin;
+  const coStatePin = [coState, coPin].filter(Boolean).join(' – ');
 
-  // GST break-up by rate — items may carry different GST % (5 / 12 / 18 / 28).
-  // Track both the tax amount and the item numbers that fall under each rate.
-  const gstByRate = {}; // rate -> { amount, nums: [] }
+  const vendorFullAddr = data.vendor_address || '—';
+  const siteAddress = data.delivery_address || data.project_name || '—';
+
+  // Split terms; strip any leading "1 ", "1. ", "1) " etc. because the <ol> below
+  // adds its own numbering (otherwise we get "1. 1 All work…").
+  const termsLines = String(data.terms_conditions || '')
+    .split(/\r?\n/)
+    .map(l => l.trim().replace(/^\d+[.)]?\s+/, ''))
+    .filter(Boolean);
+
+  // ── Totals ──────────────────────────────────────────────────────────────────
+  const subTotal = items.reduce((s, it) => s + parseFloat(it.quantity || 0) * parseFloat(it.rate || 0), 0)
+    || parseFloat(data.total_value || data.contract_amount || 0);
+  const gstPct = parseFloat(data.gst_pct ?? 18);
+
+  // GST break-up by rate, tracking which item numbers fall under each rate.
+  const gstByRate = {};
   items.forEach((it, idx) => {
     const qty = parseFloat(it.quantity || 0);
     const rate = parseFloat(it.rate || 0);
-    const r   = parseFloat(it.gst_rate ?? gstPct ?? 0);
+    const r = parseFloat(it.gst_rate ?? gstPct ?? 0);
     if (!gstByRate[r]) gstByRate[r] = { amount: 0, nums: [] };
     gstByRate[r].amount += qty * rate * r / 100;
     gstByRate[r].nums.push(idx + 1);
   });
   const gstRates = Object.keys(gstByRate).map(Number).filter(r => r > 0).sort((a, b) => a - b);
+  const totalGst = Object.values(gstByRate).reduce((s, g) => s + g.amount, 0) || (subTotal * (gstPct / 100));
+  const grandTotal = subTotal + totalGst;
 
-  const gstAmt        = Object.values(gstByRate).reduce((s, g) => s + g.amount, 0) || (workValue * (gstPct / 100));
-  const grandTotal    = workValue + gstAmt;
+  const TD = { border: '1px solid #000', padding: '3px 5px', verticalAlign: 'top' };
+  const TH = { border: '1px solid #000', padding: '4px 5px', fontWeight: 700, background: '#f0f0f0', textAlign: 'center' };
 
-  // ── Signature / approval grid ─────────────────────────────────────────────
-  const approvalGrid = (
-    <div className="wo-approval-block" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', border: '1px solid #000', fontSize: '8px', height: '80px' }}>
-      {/* Prepared By */}
-      <div style={{ borderRight: '1px solid #000', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px', textAlign: 'center' }}>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
-          <span style={{ color: '#6b7280', fontStyle: 'italic', fontSize: '7px' }}>Digitally Signed</span>
-        </div>
-        <div style={{ borderTop: '1px solid #000', width: '100%', paddingTop: '3px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-          Prepared By
-        </div>
-        <p style={{ margin: 0, fontSize: '7px' }}>{data.manager_name || 'Procurement'}</p>
+  // ── Signature row + registered-office footer — repeats on EVERY page ────────
+  // No signature images exist for WOs yet, so the cell shows the approval
+  // status text where a PO would show a signature image.
+  const sigCell = (label, statusText) => (
+    <td style={{ width: '33.33%', textAlign: 'center', verticalAlign: 'bottom', padding: '2px 6px' }}>
+      <div style={{ height: '34px', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+        <span style={{ fontStyle: 'italic', fontSize: '10px', color: '#444' }}>{statusText}</span>
       </div>
-
-      {/* Director / Procurement */}
-      <div style={{ borderRight: '1px solid #000', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px', textAlign: 'center' }}>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
-          <span style={{ color: '#6b7280', fontStyle: 'italic', fontSize: '7px' }}>
-            {['submitted','approved'].includes(data.status) ? 'Approved' : 'Pending'}
-          </span>
-        </div>
-        <div style={{ borderTop: '1px solid #000', width: '100%', paddingTop: '3px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-          Director
-        </div>
-        <p style={{ margin: 0, fontSize: '7px', fontWeight: 600 }}>
-          {['submitted','approved'].includes(data.status) ? 'Approved' : 'Pending'}
-        </p>
-      </div>
-
-      {/* Managing Director */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px', textAlign: 'center' }}>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
-          <span style={{ color: '#6b7280', fontStyle: 'italic', fontSize: '7px' }}>
-            {data.status === 'approved' ? 'Authorized' : 'Pending'}
-          </span>
-        </div>
-        <div style={{ borderTop: '1px solid #000', width: '100%', paddingTop: '3px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          Managing Director
-        </div>
-        <p style={{ margin: 0, fontSize: '7px', fontWeight: 600 }}>BCIM Engineering</p>
-      </div>
-    </div>
+      <div style={{ fontWeight: 700, fontSize: '10px', borderTop: '1px solid #000', paddingTop: '2px', marginTop: '2px' }}>{label}</div>
+    </td>
   );
+  const directorApproved = ['submitted', 'approved'].includes(data.status);
+  const mdApproved = data.status === 'approved';
 
   return (
-    <div ref={ref} className="wo-print-wrapper">
-      <div className="wo-page bg-white text-black"
-        style={{ width: '210mm', padding: '12mm', boxSizing: 'border-box', fontSize: '10px', lineHeight: '1.4', fontFamily: "'Book Antiqua','Palatino Linotype',Palatino,serif" }}>
+    <div ref={ref} className="wo-print-wrapper" style={{ fontFamily: "'Times New Roman', Times, serif", color: '#000' }}>
+      <table className="wo-doc" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
 
-        {/* Fixed page footer: print CSS pins this to the BOTTOM of every printed page */}
-        <div className="wo-page-footer">
-          {approvalGrid}
-        </div>
+        {/* ── Repeating page header: top spacing only (no doc code for WOs) ──── */}
+        <thead className="wo-doc-head" style={{ display: 'table-header-group' }}>
+          <tr><td style={{ padding: '14mm 0 4px', border: 'none' }} /></tr>
+        </thead>
 
-        {/* Layout table: repeated tfoot spacer reserves room for the fixed footer on each page */}
-        <table className="wo-layout" style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <tfoot className="wo-layout-footer">
-            <tr><td><div className="wo-footer-space" style={{ height: '100px' }} /></td></tr>
-          </tfoot>
-          <tbody className="wo-layout-body">
-            <tr><td style={{ padding: 0 }}>
+        {/* ── Footer SPACER: reserves the signature band on EVERY page so flowing
+            content never hides behind the position:fixed .wo-sig-footer below.
+            Height here must match .wo-sig-footer's height in the print CSS. */}
+        <tfoot className="wo-doc-foot-spacer" style={{ display: 'table-footer-group' }}>
+          <tr><td style={{ border: 'none', padding: 0, height: '44mm' }} /></tr>
+        </tfoot>
 
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* HEADER                                                              */}
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        <div style={{ borderBottom: '2.5px solid #000', paddingBottom: '8px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          {/* Left: Logo + Company */}
-          <div>
-            <img src="/bcim-logo.png" alt="BCIM" style={{ height: '48px', objectFit: 'contain', marginBottom: '6px', display: 'block' }} />
-            <div style={{ fontSize: '9px', color: '#000', lineHeight: '1.5' }}>
-              <p style={{ fontWeight: 700, fontSize: '12px', color: '#000', margin: '0 0 2px' }}>BCIM ENGINEERING PRIVATE LIMITED</p>
-              {isLanco ? (
-                <>
-                  <p style={{ margin: 0 }}>TOWER VIEW APARTMENT, NO 403, 4th FLOOR,</p>
-                  <p style={{ margin: 0 }}>PLOT NO 26 &amp; 27, SRI LAKSHMI NAGAR COLONY,</p>
-                  <p style={{ margin: 0 }}>HYDERABAD, RANGAREDDY DIST, TELANGANA – 500089</p>
-                  <p style={{ margin: 0 }}>GSTIN: 36AAHCB6485A1ZQ</p>
-                </>
-              ) : (
-                <>
-                  <p style={{ margin: 0 }}>No 579, 1st 'A' Main Road, Jayanagar 8th Block, Bangalore – 560070</p>
-                  <p style={{ margin: 0 }}>GSTIN: 29AAXCB2929P1Z1 &nbsp;|&nbsp; Tel: +91 80 26650194</p>
-                  <p style={{ margin: 0 }}>Email: procurement@bcimengineering.in</p>
-                </>
-              )}
+        {/* ── Flowing body ───────────────────────────────────────────────────── */}
+        <tbody>
+          <tr><td style={{ border: 'none', padding: 0 }}>
+
+            {/* TITLE + LOGO */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+              <img src="/bcim-logo.png" alt="BCIM" style={{ height: '40px', objectFit: 'contain' }} />
+              <h1 style={{ fontSize: '17px', fontWeight: 700, letterSpacing: '0.5px', margin: 0, flex: 1, textAlign: 'center' }}>
+                {isAmend ? 'AMENDMENT WORK ORDER' : 'WORK ORDER'}
+              </h1>
+              <div style={{ width: '40px' }} />
             </div>
-          </div>
 
-          {/* Right: WO Title + QR */}
-          <div style={{ textAlign: 'right' }}>
-            <h1 style={{ fontSize: '20px', fontWeight: 900, letterSpacing: '1px', color: '#000', margin: '0 0 4px' }}>WORK ORDER</h1>
-            <div style={{ background: '#1e293b', color: '#fff', padding: '3px 10px', display: 'inline-block', fontWeight: 700, fontSize: '11px', borderRadius: '4px', marginBottom: '6px' }}>
-              {data.wo_number || '—'}
-            </div>
-            <div style={{ marginTop: '4px' }}>
-              <QRCodeSVG value={verifyUrl} size={52} />
-            </div>
-          </div>
-        </div>
-
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* INFO GRID: Contractor + WO Details                                 */}
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-          {/* Contractor */}
-          <div style={{ border: '1px solid #cbd5e1', borderRadius: '6px', padding: '8px' }}>
-            <p style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', color: '#000', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', paddingBottom: '3px', marginBottom: '5px' }}>
-              Contractor / Vendor
-            </p>
-            <p style={{ fontWeight: 700, fontSize: '11px', margin: '0 0 3px', color: '#000' }}>{data.vendor_name || '—'}</p>
-            {data.vendor_contact_person && <p style={{ margin: '0 0 3px', color: '#000', fontWeight: 600 }}>Kind Attn: {data.vendor_contact_person}</p>}
-            {data.vendor_address && <p style={{ color: '#000', whiteSpace: 'pre-line', margin: '0 0 3px' }}>{data.vendor_address}</p>}
-            {data.vendor_phone && <p style={{ margin: '2px 0 0', color: '#000', fontWeight: 600 }}>Mobile: {data.vendor_phone}</p>}
-            {data.vendor_email && <p style={{ margin: '2px 0 0', color: '#000', fontWeight: 600 }}>Email: {data.vendor_email}</p>}
-            <p style={{ margin: '4px 0 0', fontWeight: 700, color: '#000' }}>
-              GSTIN: <span style={{ fontFamily: 'inherit' }}>{data.vendor_gstin || '—'}</span>
-            </p>
-            {data.vendor_pan && <p style={{ margin: '2px 0 0', fontWeight: 700, color: '#000' }}>PAN: <span style={{ fontFamily: 'inherit' }}>{data.vendor_pan}</span></p>}
-          </div>
-
-          {/* WO Summary */}
-          <div style={{ fontSize: '10px' }}>
-            {[
-              ['WO Number',      data.wo_number || '—'],
-              ['WO Date',        data.wo_date ? dayjs(data.wo_date).format('DD MMM YYYY') : (data.created_at ? dayjs(data.created_at).format('DD MMM YYYY') : '—')],
-              ['Start Date',     data.start_date ? dayjs(data.start_date).format('DD MMM YYYY') : '—'],
-              ['Completion Date',data.end_date   ? dayjs(data.end_date).format('DD MMM YYYY')   : '—'],
-              ['Project',        data.project_name || '—'],
-              ['Work Category',  data.work_category || '—'],
-              ['Tower / Block',  data.tower_block || '—'],
-              ['Cost Head',      data.cost_head || '—'],
-            ].map(([label, value]) => (
-              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px dotted #cbd5e1', padding: '3px 0', gap: '8px' }}>
-                <span style={{ fontWeight: 700, color: '#000', textTransform: 'uppercase', fontSize: '8px', letterSpacing: '0.04em', flexShrink: 0 }}>{label}</span>
-                <span style={{ fontWeight: 600, color: '#0f172a', textAlign: 'right' }}>{value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Site Address + Scope intro */}
-        <div style={{ marginBottom: '10px', fontSize: '9px' }}>
-          <p style={{ fontWeight: 700, textDecoration: 'underline', marginBottom: '3px' }}>SITE / WORK LOCATION:</p>
-          <p style={{ color: '#000', whiteSpace: 'pre-line', marginBottom: '6px' }}>
-            {data.delivery_address || (isLanco ? LANCO_SITE_ADDRESS : data.project_name) || '—'}
-          </p>
-          {(data.scope_of_work || data.work_description || data.subject) && (
-            <p style={{ color: '#000', fontStyle: 'italic' }}>
-              <strong>Scope:</strong> {data.scope_of_work || data.work_description || data.subject}
-            </p>
-          )}
-        </div>
-
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* ITEMS TABLE                                                         */}
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        <table className="wo-items-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '10px', fontSize: '9px' }}>
-          <thead>
-            <tr style={{ background: '#1e293b', color: '#fff' }}>
-              <th style={{ border: '1px solid #000', padding: '5px 4px', width: '22px', textAlign: 'center' }}>SL</th>
-              <th style={{ border: '1px solid #000', padding: '5px 4px', textAlign: 'left' }}>Description of Work / Item</th>
-              <th style={{ border: '1px solid #000', padding: '5px 4px', width: '44px', textAlign: 'center' }}>Unit</th>
-              <th style={{ border: '1px solid #000', padding: '5px 4px', width: '50px', textAlign: 'center' }}>Qty</th>
-              <th style={{ border: '1px solid #000', padding: '5px 4px', width: '80px', textAlign: 'right' }}>Rate (Rs)</th>
-              <th style={{ border: '1px solid #000', padding: '5px 4px', width: '40px', textAlign: 'center' }}>GST%</th>
-              <th style={{ border: '1px solid #000', padding: '5px 4px', width: '90px', textAlign: 'right' }}>Amount (Rs)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.length > 0 ? items.map((it, i) => {
-              const qty    = parseFloat(it.quantity || 0);
-              const rate   = parseFloat(it.rate || 0);
-              const amount = parseFloat(it.amount || (qty * rate));
-              const rowBg  = i % 2 === 0 ? '#fff' : '#f8fafc';
-              return (
-                <tr key={it.id || i} style={{ background: rowBg, borderBottom: '1px solid #e2e8f0' }}>
-                  <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', fontWeight: 600, color: '#000' }}>{i + 1}</td>
-                  <td style={{ border: '1px solid #000', padding: '4px' }}>
-                    <p style={{ fontWeight: 700, margin: '0 0 1px', color: '#000' }}>{it.description || `Item ${i + 1}`}</p>
-                    {it.remarks && <p style={{ color: '#374151', fontSize: '8px', margin: 0, fontStyle: 'italic' }}>{it.remarks}</p>}
+            {/* COMPANY + WO META */}
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '6px' }}>
+              <tbody>
+                <tr>
+                  <td style={{ width: '58%', verticalAlign: 'top', padding: 0 }}>
+                    <div style={{ fontWeight: 700 }}>{coName}</div>
+                    <div style={{ whiteSpace: 'pre-line', lineHeight: 1.4 }}>{coAddr}</div>
+                    <div>{coCity}</div>
+                    <div>{coStatePin}</div>
+                    <div style={{ fontWeight: 700, marginTop: '2px' }}>GSTIN : {coGstin}</div>
                   </td>
-                  <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', textTransform: 'uppercase', color: '#000' }}>{it.unit || '—'}</td>
-                  <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', fontWeight: 700, color: '#000' }}>{qty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}</td>
-                  <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'right', fontFamily: 'inherit', color: '#000' }}>{f2(rate)}</td>
-                  <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', color: '#000' }}>{parseFloat(it.gst_rate ?? gstPct ?? 0)}%</td>
-                  <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'right', fontWeight: 700, fontFamily: 'inherit', color: '#000' }}>{f2(amount)}</td>
+                  <td style={{ verticalAlign: 'top', padding: 0 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <tbody>
+                        {[
+                          ['Project:',          data.project_name || '—', true],
+                          ['WO No:',            data.wo_number || '—'],
+                          ['Date:',             data.wo_date ? dayjs(data.wo_date).format('DD.MM.YYYY') : (data.created_at ? dayjs(data.created_at).format('DD.MM.YYYY') : '—')],
+                          ['Start Date:',       data.start_date ? dayjs(data.start_date).format('DD.MM.YYYY') : '—'],
+                          ['Completion Date:',  data.end_date ? dayjs(data.end_date).format('DD.MM.YYYY') : '—'],
+                        ].map(([label, value, bold]) => (
+                          <tr key={label}>
+                            <td style={{ fontWeight: 700, padding: '1px 8px 1px 0', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{label}</td>
+                            <td style={{ padding: '1px 0', fontWeight: bold ? 700 : 400 }}>{value}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </td>
                 </tr>
-              );
-            }) : (
-              [...Array(6)].map((_, i) => (
-                <tr key={i} style={{ height: '24px' }}>
-                  {[...Array(7)].map((__, j) => (
-                    <td key={j} style={{ border: '1px solid #94a3b8', padding: '4px' }}>&nbsp;</td>
+              </tbody>
+            </table>
+
+            {/* TO + SITE / WORK ADDRESS */}
+            <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', marginBottom: '6px' }}>
+              <tbody>
+                <tr>
+                  <td style={{ width: '50%', borderRight: '1px solid #000', padding: '5px 6px', verticalAlign: 'top' }}>
+                    <div>To,</div>
+                    <div style={{ fontWeight: 700 }}>M/s. {data.vendor_name || '—'}</div>
+                    <div style={{ whiteSpace: 'pre-line', lineHeight: 1.4 }}>{vendorFullAddr}</div>
+                    {data.vendor_email && <div>Email: {data.vendor_email}</div>}
+                    {(data.vendor_contact_person || data.vendor_phone) && (
+                      <div>Contact person: {[data.vendor_contact_person, data.vendor_phone].filter(Boolean).join(' - ')}</div>
+                    )}
+                    <div style={{ fontWeight: 700 }}>GST: {data.vendor_gstin || '—'}</div>
+                    {data.vendor_pan && <div style={{ fontWeight: 700 }}>PAN: {data.vendor_pan}</div>}
+                  </td>
+                  <td style={{ padding: '5px 6px', verticalAlign: 'top' }}>
+                    <div style={{ fontWeight: 700, textDecoration: 'underline' }}>SITE / WORK ADDRESS:-</div>
+                    <div style={{ fontWeight: 700 }}>{data.project_name || ''}</div>
+                    <div style={{ whiteSpace: 'pre-line', lineHeight: 1.4 }}>{siteAddress}</div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            {/* INTRO / SCOPE LINE */}
+            <div style={{ marginBottom: '6px' }}>
+              {data.scope_of_work || data.work_description || data.subject
+                || 'This Work Order is issued for execution of the work detailed below at the site address mentioned above, subject to the terms and conditions stated herein.'}
+            </div>
+
+            {/* ITEMS TABLE */}
+            <table className="wo-items-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead style={{ display: 'table-header-group' }}>
+                <tr>
+                  <th style={{ ...TH, width: '34px' }}>Sl No</th>
+                  <th style={{ ...TH, textAlign: 'left' }}>Description of Work / Item</th>
+                  <th style={{ ...TH, width: '46px' }}>Unit</th>
+                  <th style={{ ...TH, width: '60px' }}>Quantity</th>
+                  <th style={{ ...TH, width: '74px' }}>Rate</th>
+                  <th style={{ ...TH, width: '84px' }}>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((it, i) => {
+                  const qty   = parseFloat(it.quantity || 0);
+                  const rate  = parseFloat(it.rate || 0);
+                  const basic = parseFloat(it.amount || (qty * rate));
+                  return (
+                    <tr key={it.id || i} style={{ pageBreakInside: 'avoid' }}>
+                      <td style={{ ...TD, textAlign: 'center' }}>{i + 1}</td>
+                      <td style={TD}>
+                        <div style={{ whiteSpace: 'pre-line', fontWeight: 600 }}>{it.description || `Item ${i + 1}`}</div>
+                        {it.remarks && <div style={{ fontStyle: 'italic' }}>{it.remarks}</div>}
+                      </td>
+                      <td style={{ ...TD, textAlign: 'center' }}>{it.unit || '—'}</td>
+                      <td style={{ ...TD, textAlign: 'center' }}>{qty.toLocaleString('en-IN')}</td>
+                      <td style={{ ...TD, textAlign: 'right' }}>{f2(rate)}</td>
+                      <td style={{ ...TD, textAlign: 'right' }}>{inr0(basic)}</td>
+                    </tr>
+                  );
+                })}
+
+                {/* TOTALS — Sub Total / GST / Grand Total as a clean summary block, no inner grid lines */}
+                <tr style={{ pageBreakInside: 'avoid' }}>
+                  <td style={{ ...TD, border: 'none' }} colSpan={3} rowSpan={2 + gstRates.length} />
+                  <td style={{ ...TD, borderTop: '1px solid #000', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', fontWeight: 700, padding: '4px 5px' }} colSpan={2}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Sub Total</span><span>{inr0(subTotal)}</span>
+                    </div>
+                  </td>
+                  <td style={{ ...TD, border: 'none' }} />
+                </tr>
+                {gstRates.map(r => (
+                  <tr key={r} style={{ pageBreakInside: 'avoid' }}>
+                    <td style={{ border: 'none', padding: '2px 5px', fontSize: '11px' }} colSpan={2}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>GST @ {r}%</span><span>{inr0(gstByRate[r].amount)}</span>
+                      </div>
+                      {gstRates.length > 1 && (
+                        <div style={{ fontSize: '9px', color: '#555', marginTop: '1px' }}>
+                          on item no. {formatItemNos(gstByRate[r].nums)}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ border: 'none' }} />
+                  </tr>
+                ))}
+                <tr style={{ pageBreakInside: 'avoid' }}>
+                  <td style={{ ...TD, borderLeft: 'none', borderRight: 'none', borderBottom: 'none', borderTop: '1.5px solid #000', background: '#f0f0f0', fontWeight: 700, fontSize: '13px', padding: '5px' }} colSpan={2}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Grand Total</span><span>{inr0(grandTotal)}</span>
+                    </div>
+                  </td>
+                  <td style={{ ...TD, border: 'none' }} />
+                </tr>
+              </tbody>
+            </table>
+
+            {/* RUPEES IN WORDS */}
+            <div style={{ borderTop: '1.5px solid #000', paddingTop: '4px', marginTop: '6px', fontWeight: 700, textDecoration: 'underline' }}>
+              {amountInWords(grandTotal).replace(/^Rupees/, 'Rupees:')}
+            </div>
+
+            {/* NARRATION */}
+            {data.notes && (
+              <div style={{ marginTop: '8px' }}>
+                <span style={{ fontWeight: 700, textDecoration: 'underline' }}>Narration:</span> {data.notes}
+              </div>
+            )}
+
+            {/* DEDUCTION TERMS — same bordered-table look as the rest of the doc */}
+            <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', marginTop: '10px' }}>
+              <tbody>
+                <tr>
+                  {[
+                    ['GST',              data.gst_pct ?? 18],
+                    ['TDS',              data.tds_pct],
+                    ['Retention',        data.retention_pct],
+                    ['Advance Recovery', data.advance_recovery_pct],
+                  ].map(([label, pct], idx) => (
+                    <td key={label} style={{ ...TD, borderTop: 'none', borderLeft: idx === 0 ? 'none' : '1px solid #000', borderBottom: 'none', textAlign: 'center', width: '25%' }}>
+                      <div style={{ fontWeight: 700, fontSize: '10px' }}>{label}</div>
+                      <div style={{ fontWeight: 700, fontSize: '12px' }}>
+                        {pct !== null && pct !== undefined && pct !== '' ? `${parseFloat(pct)}%` : '—'}
+                      </div>
+                    </td>
                   ))}
                 </tr>
-              ))
-            )}
+              </tbody>
+            </table>
+
+            {/* TERMS & CONDITIONS */}
+            <div className="wo-terms-block" style={{ marginTop: '12px' }}>
+              <div style={{ fontWeight: 700, textDecoration: 'underline', marginBottom: '4px' }}>Terms &amp; Conditions:</div>
+              <ol style={{ paddingLeft: '18px', margin: 0, lineHeight: 1.5 }}>
+                {termsLines.length > 0 ? termsLines.map((line, idx) => (
+                  <li key={idx} style={{ pageBreakInside: 'avoid' }}>{line}</li>
+                )) : (
+                  <>
+                    <li>All work shall be carried out as per approved drawings and specifications.</li>
+                    <li>Measurements of completed work shall be jointly recorded before billing.</li>
+                    <li>Payment shall be released against certified RA bills, subject to deductions specified above.</li>
+                    <li>Retention shall be released only after successful DLP completion.</li>
+                    <li>All bills must reference this Work Order number.</li>
+                  </>
+                )}
+              </ol>
+            </div>
+
+          </td></tr>
+        </tbody>
+      </table>
+
+      {/* wo-sig-footer: position:fixed in print CSS pins this to the bottom of every page */}
+      <div className="wo-sig-footer">
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <tbody>
+            <tr>
+              {sigCell('Prepared By', data.manager_name || 'Procurement')}
+              {sigCell('Director', directorApproved ? 'Approved' : 'Pending')}
+              {sigCell('Managing Director', mdApproved ? 'Authorized' : 'Pending')}
+            </tr>
           </tbody>
         </table>
-
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* FOOTER: TOTALS + DEDUCTIONS + TERMS                                */}
-        {/* ═══════════════════════════════════════════════════════════════════ */}
-        <div className="wo-footer-block">
-
-        {/* Totals */}
-        <div className="wo-totals-block" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px', gap: '16px', pageBreakInside: 'avoid', breakInside: 'avoid' }}>
-          <div style={{ flex: 1, border: '1px solid #cbd5e1', borderRadius: '6px', padding: '8px', background: '#f8fafc' }}>
-            <p style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', color: '#000', letterSpacing: '0.05em', marginBottom: '4px' }}>Amount in Words</p>
-            <p style={{ fontWeight: 700, fontStyle: 'italic', color: '#0f172a', fontSize: '10px', lineHeight: '1.5' }}>
-              {amountInWords(grandTotal)}
-            </p>
-          </div>
-          <div style={{ minWidth: '300px', fontSize: '10px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #e2e8f0' }}>
-              <span style={{ fontWeight: 700, color: '#000', textTransform: 'uppercase', fontSize: '9px' }}>Work Value</span>
-              <span style={{ fontWeight: 700, fontFamily: 'inherit', color: '#000' }}>₹ {f2(workValue)}</span>
-            </div>
-            {gstRates.map(r => (
-              <div key={r} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #e2e8f0', gap: '10px' }}>
-                <span style={{ fontWeight: 700, color: '#000', fontSize: '8.5px', lineHeight: '1.35' }}>
-                  GST @ {r}% {gstRates.length > 1 ? `on item no. ${formatItemNos(gstByRate[r].nums)}` : ''}
-                </span>
-                <span style={{ fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap', color: '#000' }}>₹ {f2(gstByRate[r].amount)}</span>
-              </div>
-            ))}
-            {gstRates.length !== 1 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #e2e8f0' }}>
-                <span style={{ fontWeight: 700, color: '#000', textTransform: 'uppercase', fontSize: '9px' }}>Total GST</span>
-                <span style={{ fontWeight: 700, fontFamily: 'inherit', color: '#000' }}>₹ {f2(gstAmt)}</span>
-              </div>
-            )}
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 8px', background: '#1e293b', color: '#fff', borderRadius: '4px', marginTop: '4px' }}>
-              <span style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '10px' }}>Grand Total</span>
-              <span style={{ fontWeight: 800, fontFamily: 'inherit', fontSize: '12px' }}>₹ {f2(grandTotal)}</span>
-            </div>
-          </div>
+        <div style={{ textAlign: 'center', marginTop: '4px', lineHeight: 1.4 }}>
+          <div style={{ fontWeight: 700, fontSize: '10px' }}>BCIM ENGINEERING PRIVATE LIMITED</div>
+          <div style={{ fontSize: '9px' }}>&ldquo;B&rdquo; Wing, DivyaSree Chambers, No. 11, O&rsquo;Shaugnessy Road, Bangalore-560 025.</div>
         </div>
-
-        {/* Deduction terms strip */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '10px' }}>
-          {[
-            ['GST',              data.gst_pct ?? 18],
-            ['TDS',              data.tds_pct],
-            ['Retention',        data.retention_pct],
-            ['Advance Recovery', data.advance_recovery_pct],
-          ].map(([label, pct]) => (
-            <div key={label} style={{ border: '1px solid #cbd5e1', borderRadius: '6px', padding: '6px', textAlign: 'center' }}>
-              <p style={{ fontWeight: 700, textTransform: 'uppercase', color: '#000', fontSize: '8px', letterSpacing: '0.04em', margin: '0 0 2px' }}>{label}</p>
-              <p style={{ fontWeight: 800, color: '#0f172a', fontSize: '12px', margin: 0 }}>
-                {pct !== null && pct !== undefined && pct !== '' ? `${parseFloat(pct)}%` : '—'}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        {/* Terms & Conditions */}
-        <div className="wo-terms-block" style={{ border: '1px solid #cbd5e1', borderRadius: '6px', padding: '8px', marginBottom: '10px', fontSize: '8.5px' }}>
-          <p style={{ fontWeight: 700, textTransform: 'uppercase', color: '#0f172a', letterSpacing: '0.05em', marginBottom: '5px', borderBottom: '1px solid #e2e8f0', paddingBottom: '3px' }}>
-            Terms &amp; Conditions
-          </p>
-          {termsLines.length > 0 ? (
-            <div style={{ color: '#000', lineHeight: '1.6' }}>
-              {termsLines.map((line, idx) => <p key={idx} style={{ margin: '1px 0' }}>{line}</p>)}
-            </div>
-          ) : (
-            <ol style={{ paddingLeft: '14px', color: '#000', lineHeight: '1.6', margin: 0 }}>
-              <li>All work shall be carried out as per approved drawings and specifications.</li>
-              <li>Measurements of completed work shall be jointly recorded before billing.</li>
-              <li>Payment shall be released against certified RA bills, subject to deductions specified above.</li>
-              <li>Retention shall be released only after successful DLP completion.</li>
-              <li>All bills must reference this Work Order number.</li>
-            </ol>
-          )}
-        </div>
-
-        </div>{/* /wo-footer-block */}
-
-            </td></tr>
-          </tbody>
-        </table>
-
       </div>
     </div>
   );
