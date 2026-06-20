@@ -711,7 +711,7 @@ export default function StoreLedgerPage() {
           inr(grand),
         ];
       }),
-      totals: ['Totals', '', '', '', '', '', '', '', inr(totalIssuedValue), inr(totalOpeningValue), inr(totalClosingValue), inr(totalGST), inr(totalGrandTotal)],
+      totals: ['Totals', '', '', '', '', '', '', '', '', inr(totalIssuedValue), inr(totalOpeningValue), inr(totalClosingValue), inr(totalGST), inr(totalGrandTotal)],
     };
   };
 
@@ -1340,12 +1340,13 @@ export default function StoreLedgerPage() {
                   {filteredSummary.length > 0 && (
                     <tfoot>
                       <tr className="bg-slate-800 text-white font-medium text-xs">
-                        <td colSpan={7} className="px-3 py-3 text-right uppercase tracking-wide">TOTALS</td>
+                        <td colSpan={9} className="px-3 py-3 text-right uppercase tracking-wide">TOTALS</td>
                         <td className="px-3 py-3 text-right font-mono bg-rose-900">₹{inr(totalIssuedValue)}</td>
                         <td className="px-3 py-3 text-right font-mono bg-slate-700">₹{inr(totalOpeningValue)}</td>
                         <td className="px-3 py-3 text-right font-mono bg-indigo-900">₹{inr(totalClosingValue)}</td>
                         <td className="px-3 py-3 text-right font-mono bg-amber-900">₹{inr(totalGST)}</td>
                         <td className="px-3 py-3 text-right font-mono bg-emerald-900">₹{inr(totalGrandTotal)}</td>
+                        <td className="bg-slate-800" />
                         <td className="bg-slate-800" />
                       </tr>
                     </tfoot>
