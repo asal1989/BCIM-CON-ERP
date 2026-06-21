@@ -431,11 +431,12 @@ router.get('/executive', async (req, res) => {
     const planningProjects = projects.filter((project) => project.status === 'planning');
 
     const totalContractValue = projects.reduce((sum, project) => sum + toNumber(project.contract_value), 0);
-    const pendingRABills = raBills.filter((bill) => ['draft', 'submitted'].includes(String(bill.status || '').toLowerCase()));
-    const pendingRAValue = pendingRABills.reduce((sum, bill) => sum + toNumber(bill.bill_value || bill.net_payable || bill.gross_amount), 0);
-    const totalCertified = raBills.reduce((sum, bill) => sum + toNumber(bill.bill_value || bill.net_payable || bill.gross_amount), 0);
-    const totalCollections = collections.reduce((sum, payment) => sum + toNumber(payment.net_amount || payment.amount), 0);
-    const receivables = Math.max(totalCertified - totalCollections, 0);
+    const pendingRABills    = raBills.filter((bill) => ['draft', 'submitted'].includes(String(bill.status || '').toLowerCase()));
+    const pendingRAValue    = pendingRABills.reduce((sum, bill) => sum + toNumber(bill.net_payable || bill.gross_amount), 0);
+    const certifiedRABills  = raBills.filter((bill) => ['certified', 'authorized', 'verified', 'paid'].includes(String(bill.status || '').toLowerCase()));
+    const totalCertified    = certifiedRABills.reduce((sum, bill) => sum + toNumber(bill.net_payable || bill.gross_amount), 0);
+    const totalCollections  = collections.reduce((sum, payment) => sum + toNumber(payment.net_amount || payment.amount), 0);
+    const receivables       = Math.max(totalCertified - totalCollections, 0);
 
     const openIncidents = incidents.filter((incident) => isOpenStatus(incident.status, ['closed', 'resolved'])).length;
     const now = Date.now();
