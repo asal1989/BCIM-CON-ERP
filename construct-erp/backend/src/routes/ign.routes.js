@@ -82,6 +82,9 @@ const STORES_WRITE = ['store_keeper','stores_manager','stores_officer','admin','
   // tqs_bills: add ign_id FK
   await safe(`ALTER TABLE tqs_bills ADD COLUMN IF NOT EXISTS ign_id UUID REFERENCES ign(id)`);
 
+  // inventory_batches: add ign_id so IGN approval doesn't misuse grn_id FK
+  await safe(`ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS ign_id UUID REFERENCES ign(id)`);
+
   // Indexes
   await safe(`CREATE INDEX IF NOT EXISTS idx_ign_company  ON ign(company_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_ign_project  ON ign(project_id)`);
@@ -580,7 +583,7 @@ router.patch('/:id/approve', async (req, res) => {
         // Always create inventory batch (forensic tracking)
         if (inventoryId) {
           await client.query(
-            `INSERT INTO inventory_batches (inventory_id, batch_number, expiry_date, opening_quantity, current_quantity, grn_id)
+            `INSERT INTO inventory_batches (inventory_id, batch_number, expiry_date, opening_quantity, current_quantity, ign_id)
              VALUES ($1, $2, $3, $4, $4, $5)`,
             [inventoryId,
              it.batch_number || `BAT-${ign.ign_number}-${it.id.slice(-4)}`,
@@ -746,7 +749,7 @@ router.delete('/:id', authorize('super_admin'), async (req, res) => {
       }
 
       // Always clear forensic batches
-      await client.query(`DELETE FROM inventory_batches WHERE grn_id = $1`, [ign.id]);
+      await client.query(`DELETE FROM inventory_batches WHERE ign_id = $1`, [ign.id]);
 
       // Delete IGN (ign_items cascade)
       await client.query(`DELETE FROM ign WHERE id = $1`, [ign.id]);

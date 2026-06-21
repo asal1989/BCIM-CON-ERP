@@ -166,6 +166,67 @@ router.patch('/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── PATCH /:id/pull-vos — populate items from approved VOs ───────────────────
+router.patch('/:id/pull-vos', async (req, res) => {
+  try {
+    const own = await query(
+      'SELECT id, project_id FROM variation_statements WHERE id=$1 AND company_id=$2',
+      [req.params.id, req.user.company_id]
+    );
+    if (!own.rows.length) return res.status(404).json({ error: 'Not found' });
+    const { project_id } = own.rows[0];
+
+    // Fetch all approved VO items for this project
+    const voItems = await query(
+      `SELECT vi.id, vi.boq_item_id, vi.new_item_description, vi.unit, vi.quantity, vi.rate,
+              vo.vo_number,
+              b.description AS boq_description, b.quantity AS boq_qty, b.sr_no AS boq_sr_no, b.unit AS boq_unit
+       FROM variation_items vi
+       JOIN variation_orders vo ON vi.vo_id = vo.id
+       LEFT JOIN boq_items b ON vi.boq_item_id = b.id
+       WHERE vo.project_id = $1 AND vo.status = 'approved'
+       ORDER BY vo.created_at, vi.id`,
+      [project_id]
+    );
+
+    // Split: items linked to a BOQ item → Existing Items; new descriptions → NT Items
+    const existing = voItems.rows.filter(r => r.boq_item_id);
+    const nt       = voItems.rows.filter(r => !r.boq_item_id);
+
+    await query('DELETE FROM variation_statement_items WHERE statement_id=$1', [req.params.id]);
+    for (let i = 0; i < existing.length; i++) {
+      const r = existing[i];
+      await query(
+        `INSERT INTO variation_statement_items
+           (statement_id, sl_no, item_code, description, unit, rate, wo_qty, amendment_qty, sort_order)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [req.params.id, String(i + 1), r.boq_sr_no || '',
+         r.boq_description || r.new_item_description || '',
+         r.unit || r.boq_unit || '', parseFloat(r.rate) || 0,
+         parseFloat(r.boq_qty) || 0, parseFloat(r.quantity) || 0, i]
+      );
+    }
+
+    await query('DELETE FROM variation_statement_nt_items WHERE statement_id=$1', [req.params.id]);
+    for (let i = 0; i < nt.length; i++) {
+      const r = nt[i];
+      await query(
+        `INSERT INTO variation_statement_nt_items
+           (statement_id, sl_no, description, unit, rate, qty, sort_order)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [req.params.id, `NT-${String(i + 1).padStart(2, '0')}`,
+         r.new_item_description || '', r.unit || '',
+         parseFloat(r.rate) || 0, parseFloat(r.quantity) || 0, i]
+      );
+    }
+
+    const updated = await query('SELECT * FROM variation_statements WHERE id=$1', [req.params.id]);
+    const itRows  = await query('SELECT * FROM variation_statement_items    WHERE statement_id=$1 ORDER BY sort_order', [req.params.id]);
+    const ntRows  = await query('SELECT * FROM variation_statement_nt_items WHERE statement_id=$1 ORDER BY sort_order', [req.params.id]);
+    res.json({ data: { ...updated.rows[0], items: itRows.rows, nt_items: ntRows.rows } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── PATCH /:id/submit — mark submitted ───────────────────────────────────────
 router.patch('/:id/submit', async (req, res) => {
   try {

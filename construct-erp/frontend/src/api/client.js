@@ -819,20 +819,23 @@ export const materialReconAPI = {
 };
 
 export const variationAPI = {
-  list:          (params) => api.get('/variations', { params }),
-  get:           (id)     => api.get(`/variations/${id}`),
-  create:        (data)   => api.post('/variations', data),
-  approve:       (id)     => api.patch(`/variations/${id}/approve`),
-  approvedItems: (params) => api.get('/variations/approved-items', { params }),
+  list:           (params) => api.get('/variations', { params }),
+  get:            (id)     => api.get(`/variations/${id}`),
+  create:         (data)   => api.post('/variations', data),
+  approve:        (id, d)  => api.patch(`/variations/${id}/approve`, d || {}),
+  approvedItems:  (params) => api.get('/variations/approved-items', { params }),
+  amendments:     (params) => api.get('/variations/amendments', { params }),
+  amendmentItems: (id)     => api.get(`/variations/amendments/${id}/items`),
 };
 
 export const variationStatementAPI = {
-  list:   (params)   => api.get('/variation-statements', { params }),
-  get:    (id)       => api.get(`/variation-statements/${id}`),
-  create: (data)     => api.post('/variation-statements', data),
-  update: (id, data) => api.patch(`/variation-statements/${id}`, data),
-  submit: (id)       => api.patch(`/variation-statements/${id}/submit`),
-  remove: (id)       => api.delete(`/variation-statements/${id}`),
+  list:    (params)   => api.get('/variation-statements', { params }),
+  get:     (id)       => api.get(`/variation-statements/${id}`),
+  create:  (data)     => api.post('/variation-statements', data),
+  update:  (id, data) => api.patch(`/variation-statements/${id}`, data),
+  pullVOs: (id)       => api.patch(`/variation-statements/${id}/pull-vos`),
+  submit:  (id)       => api.patch(`/variation-statements/${id}/submit`),
+  remove:  (id)       => api.delete(`/variation-statements/${id}`),
 };
 
 export const normsAPI = {

@@ -171,7 +171,8 @@ router.post('/', authorize('super_admin','admin','qs_engineer','project_manager'
 
       for (const it of (items || [])) {
         const itemCheck = await client.query(
-          `SELECT b.quantity AS boq_qty
+          `SELECT COALESCE(b.current_quantity, b.quantity) AS boq_qty,
+                  b.amendment_ref
              FROM boq_items b
              JOIN projects p ON b.project_id = p.id
             WHERE b.id = $1 AND b.project_id = $2 AND p.company_id = $3
@@ -234,7 +235,12 @@ router.get('/:id', async (req, res) => {
 
     const itemRes = await query(
       `SELECT rbi.*, b.chapter_no, b.chapter_name, b.item_no, b.sr_no,
-              b.description, b.unit, b.quantity as boq_qty
+              b.description, b.unit,
+              b.quantity    AS boq_qty,
+              b.rate        AS boq_rate,
+              COALESCE(b.current_quantity, b.quantity) AS revised_boq_qty,
+              COALESCE(b.current_rate, b.rate)         AS revised_boq_rate,
+              b.amendment_ref
        FROM ra_bill_items rbi
        JOIN boq_items b ON rbi.boq_item_id = b.id
        WHERE rbi.ra_bill_id = $1

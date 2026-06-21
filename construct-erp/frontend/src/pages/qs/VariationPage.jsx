@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeftRight, Plus, X, CheckCircle2, XCircle, Search,
   RefreshCw, ChevronDown, FileText, Clock, AlertCircle,
-  User, Calendar, Trash2, Eye, FileSpreadsheet,
+  User, Calendar, Trash2, Eye, FileSpreadsheet, GitMerge,
 } from 'lucide-react';
 import { variationAPI, projectAPI, boqAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
@@ -50,7 +50,7 @@ export default function VariationPage() {
   const { user } = useAuthStore();
   const canApprove = ['super_admin', 'admin', 'project_manager'].includes(user?.role);
 
-  const [outerTab,  setOuterTab]  = useState('orders');   // 'orders' | 'statements'
+  const [outerTab,  setOuterTab]  = useState('orders');   // 'orders' | 'statements' | 'amendments'
   const [projectId, setProjectId] = useState('');
   const [activeTab, setActiveTab] = useState('all');
   const [search,    setSearch]    = useState('');
@@ -66,6 +66,14 @@ export default function VariationPage() {
   const { data: vos = [], isLoading, refetch } = useQuery({
     queryKey: ['variations', projectId],
     queryFn:  () => variationAPI.list({ project_id: projectId || undefined }).then(r => r.data?.data || []),
+  });
+
+  const { data: amendments = [] } = useQuery({
+    queryKey: ['vo-amendments', projectId],
+    queryFn:  () => projectId
+      ? variationAPI.amendments({ project_id: projectId }).then(r => r.data?.data || [])
+      : Promise.resolve([]),
+    enabled: !!projectId && outerTab === 'amendments',
   });
 
   // ── Stats ────────────────────────────────────────────────────────────────────
@@ -149,6 +157,7 @@ export default function VariationPage() {
           {[
             { key: 'orders',     label: 'Variation Orders',     Icon: ArrowLeftRight   },
             { key: 'statements', label: 'Variation Statements', Icon: FileSpreadsheet  },
+            { key: 'amendments', label: 'BOQ Amendments',       Icon: GitMerge         },
           ].map(t => (
             <button
               key={t.key}
@@ -171,6 +180,30 @@ export default function VariationPage() {
       {outerTab === 'statements' && (
         <div className="px-6 py-5">
           <VariationStatementTab />
+        </div>
+      )}
+
+      {/* ── BOQ Amendments tab ── */}
+      {outerTab === 'amendments' && (
+        <div className="px-6 py-5 space-y-4">
+          {!projectId ? (
+            <div className="py-16 flex flex-col items-center gap-2 text-[#8e94a3]">
+              <GitMerge className="w-10 h-10 text-slate-300" />
+              <p className="text-sm font-medium">Select a project to view BOQ amendments</p>
+            </div>
+          ) : amendments.length === 0 ? (
+            <div className="py-16 flex flex-col items-center gap-2 text-[#8e94a3]">
+              <GitMerge className="w-10 h-10 text-slate-300" />
+              <p className="text-sm font-medium">No amendments yet</p>
+              <p className="text-xs">Approve a Variation Order to create the first amendment (A1)</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {amendments.map(am => (
+                <AmendmentCard key={am.id} amendment={am} />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -584,10 +617,12 @@ function VODetailPanel({ id, onClose, canApprove }) {
 
   const approveMutation = useMutation({
     mutationFn: () => variationAPI.approve(id),
-    onSuccess: () => {
+    onSuccess: (r) => {
+      const ref = r.data?.data?.amendment_ref;
       qc.invalidateQueries({ queryKey: ['variations'] });
       qc.invalidateQueries({ queryKey: ['variation-detail', id] });
-      toast.success('Variation Order approved');
+      qc.invalidateQueries({ queryKey: ['vo-amendments'] });
+      toast.success(ref ? `VO approved — BOQ Amendment ${ref} created` : 'Variation Order approved');
       onClose();
     },
   });
@@ -705,11 +740,98 @@ function VODetailPanel({ id, onClose, canApprove }) {
               className="px-6 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-sm font-medium transition-colors shadow flex items-center gap-1.5"
             >
               <CheckCircle2 className="w-4 h-4" />
-              {approveMutation.isPending ? 'Approving…' : 'Approve VO'}
+              {approveMutation.isPending ? 'Approving…' : 'Approve VO & Create Amendment'}
             </button>
           </div>
         )}
+        {vo?.status === 'approved' && vo?.amendment_ref && (
+          <div className="px-6 py-3 border-t border-[#e2e6ec] bg-emerald-50 flex items-center gap-2">
+            <GitMerge className="w-4 h-4 text-emerald-600" />
+            <span className="text-xs font-medium text-emerald-700">
+              BOQ revised under Amendment <strong>{vo.amendment_ref}</strong> — revised rates &amp; quantities active for next RA Bill
+            </span>
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+// ── AMENDMENT CARD ────────────────────────────────────────────────────────────
+function AmendmentCard({ amendment: am }) {
+  const [open, setOpen] = useState(false);
+  const { data: items = [] } = useQuery({
+    queryKey: ['amendment-items', am.id],
+    queryFn:  () => variationAPI.amendmentItems(am.id).then(r => r.data?.data || []),
+    enabled:  open,
+  });
+
+  return (
+    <div className="bg-white border border-[#e2e6ec] rounded-2xl shadow-sm overflow-hidden">
+      <button
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-[#f8f9fb] transition-colors"
+        onClick={() => setOpen(o => !o)}
+      >
+        <div className="flex items-center gap-3">
+          <span className="w-9 h-9 rounded-xl bg-indigo-600 text-white text-sm font-bold flex items-center justify-center">
+            {am.amendment_ref}
+          </span>
+          <div className="text-left">
+            <p className="text-[13px] font-medium text-[#1a1c21]">
+              Amendment {am.amendment_ref}
+              {am.vo_number && <span className="ml-2 text-[11px] text-[#8e94a3] font-normal font-mono">via {am.vo_number}</span>}
+            </p>
+            <p className="text-[11px] text-[#6a6f7d]">
+              {am.vo_description || 'Scope change'} · {am.item_count} item{am.item_count !== '1' ? 's' : ''} · Approved {dayjs(am.approved_at).format('DD MMM YYYY')} by {am.approved_by_name || '—'}
+            </p>
+          </div>
+        </div>
+        <ChevronDown className={`w-4 h-4 text-[#8e94a3] transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="border-t border-[#e2e6ec] overflow-x-auto">
+          {items.length === 0 ? (
+            <p className="py-6 text-center text-xs text-[#8e94a3]">Loading…</p>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="bg-[#f8f9fb]">
+                <tr>
+                  {['Item', 'Unit', 'Original Rate', 'Revised Rate', 'Original Qty', 'Revised Qty', 'Reason'].map((h, i) => (
+                    <th key={h} className={`px-4 py-2.5 text-[10px] font-semibold text-[#6a6f7d] uppercase tracking-wider ${i >= 2 ? 'text-right' : 'text-left'}`}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#f1f3f6]">
+                {items.map(it => (
+                  <tr key={it.id} className="hover:bg-[#f8f9fb]">
+                    <td className="px-4 py-2.5">
+                      <p className="font-medium text-[#1a1c21]">{it.description}</p>
+                      <p className="text-[10px] text-[#8e94a3]">{it.chapter_name} · {it.item_no}</p>
+                    </td>
+                    <td className="px-4 py-2.5 text-[#6a6f7d]">{it.unit}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-[#6a6f7d]">₹{Number(it.original_rate||0).toLocaleString('en-IN')}</td>
+                    <td className={`px-4 py-2.5 text-right font-mono font-semibold ${Number(it.revised_rate) !== Number(it.original_rate) ? 'text-indigo-600' : 'text-[#1a1c21]'}`}>
+                      ₹{Number(it.revised_rate||0).toLocaleString('en-IN')}
+                      {Number(it.revised_rate) !== Number(it.original_rate) && (
+                        <span className="ml-1 text-[9px] text-indigo-400">↑revised</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono text-[#6a6f7d]">{Number(it.original_quantity||0).toLocaleString('en-IN')}</td>
+                    <td className={`px-4 py-2.5 text-right font-mono font-semibold ${Number(it.revised_quantity) !== Number(it.original_quantity) ? 'text-emerald-600' : 'text-[#1a1c21]'}`}>
+                      {Number(it.revised_quantity||0).toLocaleString('en-IN')}
+                      {Number(it.revised_quantity) !== Number(it.original_quantity) && (
+                        <span className="ml-1 text-[9px] text-emerald-500">↑revised</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-[#8e94a3] italic">{it.reason || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
     </div>
   );
 }

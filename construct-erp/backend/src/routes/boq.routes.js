@@ -7,10 +7,42 @@ const { query, withTransaction } = require('../config/database');
 const { extractBOQItems } = require('../services/boqExtraction.service');
 const { loadProjectScope, appendProjectScope } = require('../middleware/projectScope');
 
-const upload = multer({ 
+const upload = multer({
   dest: 'uploads/',
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB
 });
+
+// ── Auto-migrate: BOQ amendment columns ───────────────────────────────────────
+(async () => {
+  const safe = async (sql) => { try { await query(sql); } catch (_) {} };
+  await safe(`ALTER TABLE boq_items ADD COLUMN IF NOT EXISTS current_rate     NUMERIC(14,2)`);
+  await safe(`ALTER TABLE boq_items ADD COLUMN IF NOT EXISTS current_quantity NUMERIC(14,3)`);
+  await safe(`ALTER TABLE boq_items ADD COLUMN IF NOT EXISTS amendment_ref    VARCHAR(20)`);
+  await safe(`CREATE TABLE IF NOT EXISTS boq_amendments (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id       UUID REFERENCES projects(id) ON DELETE CASCADE,
+    company_id       UUID REFERENCES companies(id) ON DELETE CASCADE,
+    vo_id            UUID REFERENCES variation_orders(id),
+    amendment_number INTEGER NOT NULL,
+    amendment_ref    VARCHAR(20) NOT NULL,
+    approved_by      UUID REFERENCES users(id),
+    approved_at      TIMESTAMPTZ DEFAULT NOW(),
+    remarks          TEXT,
+    created_at       TIMESTAMPTZ DEFAULT NOW()
+  )`);
+  await safe(`CREATE TABLE IF NOT EXISTS boq_amendment_items (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    amendment_id     UUID REFERENCES boq_amendments(id) ON DELETE CASCADE,
+    boq_item_id      UUID REFERENCES boq_items(id),
+    original_rate     NUMERIC(14,2),
+    original_quantity NUMERIC(14,3),
+    revised_rate      NUMERIC(14,2),
+    revised_quantity  NUMERIC(14,3),
+    reason           TEXT
+  )`);
+  await safe(`CREATE INDEX IF NOT EXISTS idx_boq_amend_project ON boq_amendments(project_id)`);
+  await safe(`CREATE INDEX IF NOT EXISTS idx_boq_amend_items   ON boq_amendment_items(amendment_id)`);
+})();
 
 router.use(authenticate);
 router.use(loadProjectScope);
