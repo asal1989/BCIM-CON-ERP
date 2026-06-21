@@ -128,8 +128,12 @@ export default function QSDashboardPage() {
   const kpi = useMemo(() => {
     const contractValue      = boqItems.reduce((s, i) => s + Number(i.quantity || 0) * Number(i.rate || 0), 0);
     const totalBilled        = raBills.reduce((s, b) => s + Number(b.gross_amount || b.total_amount || 0), 0);
+    // Net payable (post-GST, post-deductions) is what's actually due from the client —
+    // comparing amount_received against gross_amount instead double-subtracts GST/
+    // deductions and inflates "outstanding" by amounts that were never collectible.
+    const totalNetPayable    = raBills.reduce((s, b) => s + Number(b.net_payable ?? b.gross_amount ?? b.total_amount ?? 0), 0);
     const totalReceived      = raBills.reduce((s, b) => s + Number(b.amount_received || 0), 0);
-    const outstanding        = totalBilled - totalReceived;
+    const outstanding        = totalNetPayable - totalReceived;
     const retentionHeld      = retentions.filter(r => r.status !== 'released').reduce((s, r) => s + Number(r.retention_amount || 0), 0);
     const variationsApproved = variations.filter(v => v.status === 'approved').reduce((s, v) => s + Number(v.total_amount || 0), 0);
 
@@ -152,11 +156,11 @@ export default function QSDashboardPage() {
     }
 
     return {
-      contractValue, totalBilled, totalReceived, outstanding,
+      contractValue, totalBilled, totalNetPayable, totalReceived, outstanding,
       retentionHeld, variationsApproved,
       statusBuckets, byProject,
       billingProgress: pct(totalBilled, contractValue),
-      collectionRate:  pct(totalReceived, totalBilled),
+      collectionRate:  pct(totalReceived, totalNetPayable),
     };
   }, [raBills, boqItems, retentions, variations]);
 
