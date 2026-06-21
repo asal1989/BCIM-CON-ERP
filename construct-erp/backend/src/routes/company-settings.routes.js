@@ -1,5 +1,8 @@
 // src/routes/company-settings.routes.js — Company Profile, FY, Currency, Payment Terms, Tax Rates
 const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const { authenticate } = require('../middleware/auth');
 const { query } = require('../config/database');
 const router = express.Router();
@@ -8,27 +11,40 @@ const router = express.Router();
 (async () => {
   try {
     await query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{}'::jsonb`);
-    // Force-correct BCIM company profile on every startup
-    await query(`
-      UPDATE companies SET
-        name    = 'BCIM ENGINEERING PRIVATE LIMITED',
-        address = '#11, B Wing, Divyasree Chambers, O''Shaughnessy Road',
-        city    = 'Bangalore',
-        state   = 'Karnataka',
-        pincode = '560025',
-        gstin   = '29AAHCB6485A1ZL',
-        phone   = CASE WHEN phone = '9999999999' OR phone = '1234567890' THEN NULL ELSE phone END
-      WHERE name ILIKE '%BCIM%'
-         OR gstin IN ('29AAXCB2929P1Z1', '36AAHCB6485A1ZQ', '29AAHCB6485A1ZL', '29AABCB1234C1Z5')
-         OR address ILIKE '%Jayanagar%'
-         OR address ILIKE '%Shaughnessy%'
-         OR address ILIKE '%BCIM Office%'
-    `);
-    // Remove internal email mistakenly saved on vendor records
-    await query(`UPDATE vendors SET email = NULL WHERE email = 'dheenabcim@gmail.com'`);
     console.log('[CompanySettings] Schema OK');
   } catch (_) {}
 })();
+
+// ── Logo upload ──────────────────────────────────────────────────────────────
+const uploadDir = path.join(__dirname, '../../uploads/company');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => cb(null, `${req.user.company_id}-${Date.now()}${path.extname(file.originalname)}`),
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!/^image\/(png|jpe?g|svg\+xml|webp)$/.test(file.mimetype)) return cb(new Error('Logo must be an image (PNG, JPG, SVG or WebP)'));
+    cb(null, true);
+  },
+});
+
+router.post('/logo', authenticate, upload.single('logo'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const logoUrl = `/uploads/company/${req.file.filename}`;
+    const r = await query(
+      `UPDATE companies SET logo_url = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+      [logoUrl, req.user.company_id]
+    );
+    res.json({ data: r.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 const DEFAULT_SETTINGS = {
   fy_start_month: 4,            // April

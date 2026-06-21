@@ -675,6 +675,7 @@ export const companySettingsAPI = {
   get:            ()     => api.get('/company-settings'),
   updateProfile:  (data) => api.put('/company-settings/profile', data),
   updateSettings: (data) => api.put('/company-settings/settings', data),
+  uploadLogo:     (file) => { const fd = new FormData(); fd.append('logo', file); return api.post('/company-settings/logo', fd, { headers: { 'Content-Type': undefined } }); },
 };
 
 export const inventoryAPI = {

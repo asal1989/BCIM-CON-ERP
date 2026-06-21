@@ -1,10 +1,11 @@
 // src/pages/accounts/AccountSettingsPage.jsx — Company Profile, FY, Currency, Payment Terms, Tax Rates
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
-import { Settings, Building2, CalendarRange, Plus, Trash2 } from 'lucide-react';
+import { Settings, Building2, CalendarRange, Plus, Trash2, Upload, ImageOff } from 'lucide-react';
 import { companySettingsAPI } from '../../api/client';
+import useAuthStore from '../../store/authStore';
 
 const F = 'w-full border border-slate-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white';
 const L = 'block text-xs font-medium text-slate-600 mb-1';
@@ -26,6 +27,9 @@ const TABS = [
 export default function AccountSettingsPage() {
   const [tab, setTab] = useState('profile');
   const qc = useQueryClient();
+  const accessToken = useAuthStore(s => s.accessToken);
+  const fileInputRef = useRef(null);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['company-settings'],
@@ -46,11 +50,40 @@ export default function AccountSettingsPage() {
     }
   }, [data]);
 
+  // logo_url points at an authenticated static route (/uploads/...), so it can't be
+  // used directly as an <img src> — fetch it with the auth header and render as a blob URL.
+  useEffect(() => {
+    let objectUrl = null;
+    if (data?.logo_url && accessToken) {
+      fetch(data.logo_url, { headers: { Authorization: `Bearer ${accessToken}` } })
+        .then(r => (r.ok ? r.blob() : Promise.reject()))
+        .then(blob => { objectUrl = URL.createObjectURL(blob); setLogoPreviewUrl(objectUrl); })
+        .catch(() => setLogoPreviewUrl(null));
+    } else {
+      setLogoPreviewUrl(null);
+    }
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [data?.logo_url, accessToken]);
+
   const profileMut = useMutation({
     mutationFn: () => companySettingsAPI.updateProfile(profile).then(r => r.data),
     onSuccess: () => { toast.success('Company profile updated'); qc.invalidateQueries({ queryKey: ['company-settings'] }); },
     onError: e => toast.error(e?.response?.data?.error || 'Update failed'),
   });
+
+  const logoMut = useMutation({
+    mutationFn: (file) => companySettingsAPI.uploadLogo(file).then(r => r.data),
+    onSuccess: () => { toast.success('Logo updated'); qc.invalidateQueries({ queryKey: ['company-settings'] }); },
+    onError: e => toast.error(e?.response?.data?.error || 'Upload failed'),
+  });
+
+  const handleLogoPick = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { toast.error('Logo must be under 2MB'); return; }
+    logoMut.mutate(file);
+    e.target.value = '';
+  };
 
   const settingsMut = useMutation({
     mutationFn: (payload) => companySettingsAPI.updateSettings(payload).then(r => r.data),
@@ -105,6 +138,24 @@ export default function AccountSettingsPage() {
           </div>
         ) : tab === 'profile' ? (
           <div className="bg-white border border-slate-200 rounded-md p-5 space-y-4">
+            <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
+              <div className="w-16 h-16 rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+                {logoPreviewUrl ? (
+                  <img src={logoPreviewUrl} alt="Company logo" className="max-w-full max-h-full object-contain" />
+                ) : (
+                  <ImageOff className="w-5 h-5 text-slate-300" />
+                )}
+              </div>
+              <div>
+                <label className={L}>Company Logo</label>
+                <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" className="hidden" onChange={handleLogoPick} />
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={logoMut.isPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-slate-200 rounded-md hover:bg-slate-50 disabled:opacity-50">
+                  <Upload className="w-3.5 h-3.5" /> {logoMut.isPending ? 'Uploading…' : 'Upload Logo'}
+                </button>
+                <p className="text-[11px] text-slate-400 mt-1">PNG, JPG, SVG or WebP — up to 2MB</p>
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
                 <label className={L}>Company Name</label>

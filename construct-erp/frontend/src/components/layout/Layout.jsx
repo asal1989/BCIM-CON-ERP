@@ -294,6 +294,7 @@ const navGroups = [
   ]},
   { label: 'Administration', items: [
     { to: '/users', icon: Users, label: 'Team Members' },
+    { to: '/accounts/settings', icon: Building2, label: 'Company Profile' },
   ]},
   { label: 'Automation Ideas', items: [
     { to: '/automation-ideas', icon: Lightbulb, label: 'Ideas Dashboard' },
