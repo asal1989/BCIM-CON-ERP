@@ -1597,4 +1597,121 @@ router.post('/bulk-import', async (req, res) => {
   }
 });
 
+// POST /import-mr-tracker  — parse DQS Material Tracker Excel, link MR→PO
+// Reads "MATERIAL TRACKER-POS" sheet; col D = MR No, col N = PO No
+router.post(
+  '/import-mr-tracker',
+  authenticate,
+  authorize('super_admin', 'admin', 'procurement_manager', 'procurement'),
+  upload.single('file'),
+  async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    try {
+      const XLSX = require('xlsx');
+      const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+
+      // Find the main tracker sheet (prefer "MATERIAL TRACKER-POS", not TOWER variant)
+      const sheetName =
+        wb.SheetNames.find(n => /MATERIAL TRACKER-POS$/i.test(n.trim())) ||
+        wb.SheetNames.find(n => /MATERIAL TRACKER/i.test(n));
+      if (!sheetName) return res.status(400).json({ error: 'Sheet "MATERIAL TRACKER-POS" not found in workbook' });
+
+      const ws = wb.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+
+      // Build MR → [PO] map; MR in col D (idx 3), PO in col N (idx 13)
+      const mrToPOs = {};   // mrNo → Set<poNo>
+      const poToMR  = {};   // poNo → mrNo  (last-write wins if duplicated)
+      let currentMR = null;
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const mrCell = row[3];
+        const poCell = row[13];
+        if (mrCell && String(mrCell).trim()) currentMR = String(mrCell).trim();
+        if (!currentMR || !poCell || !String(poCell).trim()) continue;
+        const poNo = String(poCell).trim();
+        if (!mrToPOs[currentMR]) mrToPOs[currentMR] = new Set();
+        mrToPOs[currentMR].add(poNo);
+        poToMR[poNo] = currentMR;
+      }
+
+      const allMRs = Object.keys(mrToPOs);
+      const allPOs = Object.keys(poToMR);
+
+      // Look up MR UUIDs
+      const { rows: mrRows } = await query(
+        `SELECT id, serial_no_formatted FROM material_requisitions
+         WHERE company_id = $1 AND serial_no_formatted = ANY($2::text[])`,
+        [req.user.company_id, allMRs]
+      );
+      const mrMap = {};
+      for (const r of mrRows) mrMap[r.serial_no_formatted] = r.id;
+
+      // Look up PO UUIDs — try exact po_number match first, then strip amendment suffix (e.g. -A3)
+      const { rows: poRows } = await query(
+        `SELECT id, po_number FROM purchase_orders
+         WHERE company_id = $1 AND po_number = ANY($2::text[])`,
+        [req.user.company_id, allPOs]
+      );
+      const poMap = {};
+      for (const r of poRows) poMap[r.po_number] = r.id;
+
+      // For unmatched POs try base number (strip trailing -A/B/C... amendment suffix)
+      const unmatchedPOs = allPOs.filter(p => !poMap[p]);
+      if (unmatchedPOs.length) {
+        const bases = [...new Set(unmatchedPOs.map(p => p.replace(/-[A-Z]\d*$/i, '')))];
+        const { rows: baseRows } = await query(
+          `SELECT id, po_number FROM purchase_orders
+           WHERE company_id = $1 AND po_number = ANY($2::text[])`,
+          [req.user.company_id, bases]
+        );
+        for (const r of baseRows) {
+          // Map all original PO variants that resolve to this base
+          for (const orig of unmatchedPOs) {
+            if (orig.replace(/-[A-Z]\d*$/i, '') === r.po_number) poMap[orig] = r.id;
+          }
+        }
+      }
+
+      // Update purchase_orders — set mrs_id (and append to mrs_ids array)
+      let updated = 0;
+      const skipped = [];
+      const unmatchedMR = [];
+      const unmatchedPOList = [];
+
+      for (const [poNo, mrNo] of Object.entries(poToMR)) {
+        const poId   = poMap[poNo];
+        const mrsId  = mrMap[mrNo];
+        if (!poId)  { unmatchedPOList.push(poNo); continue; }
+        if (!mrsId) { unmatchedMR.push(mrNo);     continue; }
+
+        await query(
+          `UPDATE purchase_orders
+           SET mrs_id  = COALESCE(mrs_id, $1),
+               mrs_ids = array_append(COALESCE(mrs_ids, ARRAY[]::uuid[]), $1::uuid)
+           WHERE id = $2
+             AND ($1::uuid != ALL(COALESCE(mrs_ids, ARRAY[]::uuid[])) OR mrs_id IS NULL)`,
+          [mrsId, poId]
+        );
+        updated++;
+      }
+
+      res.json({
+        sheet_used: sheetName,
+        total_mr_numbers: allMRs.length,
+        total_po_numbers: allPOs.length,
+        mr_matched_in_db: allMRs.length - [...new Set(unmatchedMR)].length,
+        po_matched_in_db: allPOs.length - [...new Set(unmatchedPOList)].length,
+        po_links_updated: updated,
+        unmatched_mr_numbers: [...new Set(unmatchedMR)],
+        unmatched_po_numbers: [...new Set(unmatchedPOList)],
+      });
+    } catch (err) {
+      console.error('[MR Tracker Import]:', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
 module.exports = router;

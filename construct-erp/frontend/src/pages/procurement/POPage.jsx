@@ -1991,6 +1991,107 @@ function POImportModal({ onClose, vendors, projects, onImported }) {
   );
 }
 
+/* ─── MR Tracker Link Modal ─── */
+function MRTrackerModal({ onClose, onDone }) {
+  const [file, setFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const handleImport = async () => {
+    if (!file) return toast.error('Please select an Excel file');
+    setLoading(true);
+    try {
+      const res = await poAPI.importMrTracker(file);
+      setResult(res.data);
+      onDone();
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Import failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-base font-semibold text-slate-800">Link MR Tracker</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Upload DQS Material Tracker Excel to link MR numbers to POs</p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100">
+            <X className="w-4 h-4 text-slate-500" />
+          </button>
+        </div>
+
+        {!result ? (
+          <>
+            <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center mb-4">
+              <FileSpreadsheet className="w-8 h-8 text-amber-400 mx-auto mb-2" />
+              <p className="text-sm text-slate-600 mb-3">
+                Select the <span className="font-medium">DQS_MATERIAL_TRACKER</span> Excel file<br/>
+                <span className="text-xs text-slate-400">(Sheet: MATERIAL TRACKER-POS, Col D = MR No, Col N = PO No)</span>
+              </p>
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={e => setFile(e.target.files?.[0] || null)}
+                className="text-sm text-slate-600 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-medium file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100"
+              />
+              {file && <p className="text-xs text-slate-400 mt-2">{file.name}</p>}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 border border-slate-300 rounded-md hover:bg-slate-50">
+                Cancel
+              </button>
+              <button
+                onClick={handleImport}
+                disabled={!file || loading}
+                className="flex items-center gap-2 px-4 py-2 text-sm bg-amber-600 text-white rounded-md hover:bg-amber-700 disabled:opacity-50"
+              >
+                {loading ? <><div className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" /> Processing…</> : <><Upload className="w-3 h-3" /> Link MRs to POs</>}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="space-y-3">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <p className="text-sm font-semibold text-green-800 mb-2">Import Complete</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-green-700">
+                  <span>Sheet used:</span><span className="font-medium">{result.sheet_used}</span>
+                  <span>MR numbers in Excel:</span><span className="font-medium">{result.total_mr_numbers}</span>
+                  <span>PO numbers in Excel:</span><span className="font-medium">{result.total_po_numbers}</span>
+                  <span>MRs matched in DB:</span><span className="font-medium">{result.mr_matched_in_db}</span>
+                  <span>POs matched in DB:</span><span className="font-medium">{result.po_matched_in_db}</span>
+                  <span className="font-semibold">PO links updated:</span><span className="font-bold text-green-900">{result.po_links_updated}</span>
+                </div>
+              </div>
+              {result.unmatched_mr_numbers?.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-amber-800 mb-1">MR numbers not found in DB ({result.unmatched_mr_numbers.length})</p>
+                  <p className="text-xs text-amber-700 font-mono break-all">{result.unmatched_mr_numbers.join(', ')}</p>
+                </div>
+              )}
+              {result.unmatched_po_numbers?.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-red-800 mb-1">PO numbers not found in DB ({result.unmatched_po_numbers.length})</p>
+                  <p className="text-xs text-red-700 font-mono break-all">{result.unmatched_po_numbers.slice(0, 20).join(', ')}{result.unmatched_po_numbers.length > 20 ? ` … +${result.unmatched_po_numbers.length - 20} more` : ''}</p>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end mt-4">
+              <button onClick={onClose} className="px-4 py-2 text-sm bg-slate-800 text-white rounded-md hover:bg-slate-700">
+                Done
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main Page ─── */
 export default function POPage() {
   const { user, selectedProjectId } = useAuthStore();
@@ -1998,6 +2099,7 @@ export default function POPage() {
   const location = useLocation();
   const [showForm, setShowForm]       = useState(false);
   const [showImport, setShowImport]   = useState(false);
+  const [showMrTracker, setShowMrTracker] = useState(false);
   const [prefillData, setPrefillData] = useState(null);
   const [editingPO, setEditingPO]     = useState(null);
   const [selectedPO, setSelectedPO]   = useState(null);
@@ -2199,6 +2301,10 @@ export default function POPage() {
           <button onClick={exportCSV}
             className="flex items-center gap-2 px-4 h-9 bg-white border border-slate-300 text-slate-600 text-sm font-medium rounded-md hover:bg-slate-50 transition-colors">
             <Download className="w-4 h-4" /> Export CSV
+          </button>
+          <button onClick={() => setShowMrTracker(true)}
+            className="flex items-center gap-2 px-4 h-9 bg-white border border-amber-200 text-amber-700 text-sm font-medium rounded-md hover:bg-amber-50 transition-colors">
+            <FileSpreadsheet className="w-4 h-4" /> Link MR Tracker
           </button>
           <button onClick={() => setShowImport(true)}
             className="flex items-center gap-2 px-4 h-9 bg-white border border-blue-200 text-blue-600 text-sm font-medium rounded-md hover:bg-blue-50 transition-colors">
@@ -2466,6 +2572,13 @@ export default function POPage() {
           vendors={vendorsData}
           projects={projectsData}
           onImported={() => qc.invalidateQueries({ queryKey: ['purchase-orders'] })}
+        />
+      )}
+
+      {showMrTracker && (
+        <MRTrackerModal
+          onClose={() => setShowMrTracker(false)}
+          onDone={() => qc.invalidateQueries({ queryKey: ['purchase-orders'] })}
         />
       )}
     </div>

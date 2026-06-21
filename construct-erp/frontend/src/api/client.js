@@ -421,6 +421,11 @@ export const poAPI = {
   bills:         (id)     => api.get(`/purchase-orders/${id}/bills`),
   amendmentContext: (id)      => api.get(`/purchase-orders/${id}/amendment-context`),
   submitAmendment:  (id, data) => api.post(`/purchase-orders/${id}/amend`, data),
+  importMrTracker: (file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post('/purchase-orders/import-mr-tracker', fd, { headers: { 'Content-Type': undefined } });
+  },
 };
 
 export const poAmendmentAPI = {
