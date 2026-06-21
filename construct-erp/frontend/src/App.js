@@ -205,6 +205,7 @@ const Project360Page      = lazy(() => import('./pages/reports/Project360Page'))
 const BillsTrackerPage    = lazy(() => import('./pages/bills/BillsTrackerPage'));
 const UsersPage           = lazy(() => import('./pages/users/UsersPage'));
 const AuditLogPage        = lazy(() => import('./pages/admin/AuditLogPage'));
+const RolePermissionsPage = lazy(() => import('./pages/admin/RolePermissionsPage'));
 const MRSVerificationPage = lazy(() => import('./pages/stores/MRSVerificationPage'));
 const POVerificationPage = lazy(() => import('./pages/procurement/POVerificationPage'));
 // GRNVerificationPage removed — GRN features merged into IGN
@@ -842,6 +843,7 @@ export default function App() {
                 {/* Administration */}
                 <Route path="users" element={<RequireModule module="Administration"><UsersPage /></RequireModule>} />
                 <Route path="audit-log" element={<RequireModule module="Administration"><AuditLogPage /></RequireModule>} />
+                <Route path="role-permissions" element={<RequireModule module="Administration"><RolePermissionsPage /></RequireModule>} />
                 <Route path="automation-ideas" element={<RequireModule module="Automation Ideas"><AutomationIdeasPage /></RequireModule>} />
                 <Route path="approval-engine" element={<RequireModule module="Approval Engine"><ApprovalEnginePage /></RequireModule>} />
 

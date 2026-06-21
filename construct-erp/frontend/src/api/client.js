@@ -683,6 +683,13 @@ export const auditLogAPI = {
   tables: ()        => api.get('/audit-log/tables'),
 };
 
+export const rolePermissionsAPI = {
+  list:    ()              => api.get('/role-permissions'),
+  modules: ()              => api.get('/role-permissions/modules'),
+  save:    (role, modules) => api.put(`/role-permissions/${role}`, { modules }),
+  apply:   (role)          => api.post(`/role-permissions/${role}/apply`),
+};
+
 export const inventoryAPI = {
   list:          (params) => api.get('/inventory', { params }),
   create:        (data)   => api.post('/inventory', data),
