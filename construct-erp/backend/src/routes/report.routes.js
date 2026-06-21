@@ -2471,4 +2471,68 @@ router.get('/stock-report', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /reports/pl-debug?name=yelkhana — live P&L diagnostic for a project
+router.get('/pl-debug', async (req, res) => {
+  try {
+    const name = req.query.name || '';
+    const proj = await query(
+      `SELECT id, name, contract_value, status FROM projects
+       WHERE company_id = $1 AND name ILIKE $2 LIMIT 1`,
+      [req.user.company_id, `%${name}%`]
+    );
+    if (!proj.rows.length) return res.status(404).json({ error: `No project matching "${name}"` });
+    const p = proj.rows[0];
+    const pid = p.id;
+
+    const [raBills, raBillItems, tqsBills, payments, budgetItems, invoices, boqItems] = await Promise.all([
+      // RA Bills summary
+      query(`SELECT status, COUNT(*) as count, COALESCE(SUM(gross_amount),0) as gross, COALESCE(SUM(net_payable),0) as net
+             FROM ra_bills WHERE project_id=$1 GROUP BY status ORDER BY status`, [pid]),
+      // RA Bill line items count
+      query(`SELECT COUNT(*) as count FROM ra_bill_items rbi JOIN ra_bills rb ON rb.id=rbi.ra_bill_id WHERE rb.project_id=$1`, [pid]),
+      // TQS/Vendor bills
+      query(`SELECT tb.workflow_status, COUNT(*) as count, COALESCE(SUM(u.certified_net),0) as certified, COALESCE(SUM(u.paid_amount),0) as paid
+             FROM tqs_bills tb LEFT JOIN tqs_bill_updates u ON u.bill_id=tb.id
+             WHERE tb.project_id=$1 GROUP BY tb.workflow_status`, [pid]),
+      // Direct payments
+      query(`SELECT source, COUNT(*) as count, COALESCE(SUM(net_amount),0) as total
+             FROM payments WHERE project_id=$1 GROUP BY source`, [pid]),
+      // Budget items
+      query(`SELECT COUNT(*) as count, COALESCE(SUM(budgeted_amount),0) as budgeted, COALESCE(SUM(actual_amount),0) as actual
+             FROM budget_items WHERE project_id=$1`, [pid]),
+      // Invoices (client billing)
+      query(`SELECT payment_status, COUNT(*) as count, COALESCE(SUM(total_amount),0) as total
+             FROM invoices WHERE project_id=$1 GROUP BY payment_status`, [pid]),
+      // BOQ
+      query(`SELECT COUNT(*) as count, COALESCE(SUM(quantity*rate),0) as total_value FROM boq_items WHERE project_id=$1 AND is_active=true`, [pid]),
+    ]);
+
+    // Compute P&L the same way as /reports/project-pl
+    const netBilled   = raBills.rows.filter(r => ['certified','paid'].includes(r.status)).reduce((s,r)=>s+Number(r.net),0);
+    const vendorCert  = tqsBills.rows.filter(r => ['qs','accounts','paid'].includes(r.workflow_status)).reduce((s,r)=>s+Number(r.certified),0);
+    const otherCost   = payments.rows.filter(r => r.source !== 'tqs').reduce((s,r)=>s+Number(r.total),0);
+    const grossMargin = netBilled - vendorCert - otherCost;
+    const marginPct   = netBilled > 0 ? ((grossMargin/netBilled)*100).toFixed(1) : '0.0';
+
+    const missing = [];
+    if (!raBills.rows.some(r => ['certified','paid'].includes(r.status))) missing.push('No RA Bills certified — revenue = ₹0');
+    if (!tqsBills.rows.length) missing.push('No vendor/TQS bills entered — cost understated');
+    if (!budgetItems.rows[0]?.actual || Number(budgetItems.rows[0].actual) === 0) missing.push('Budget items have no actual_amount — profitability report will show ₹0 cost');
+    if (!invoices.rows.some(r => r.payment_status === 'paid')) missing.push('No client invoices marked paid — profitability report revenue = ₹0');
+
+    res.json({
+      project:      { id: p.id, name: p.name, status: p.status, contract_value: Number(p.contract_value||0) },
+      pl_summary:   { net_billed: netBilled, vendor_cost: vendorCert, other_cost: otherCost, gross_margin: grossMargin, margin_pct: `${marginPct}%` },
+      ra_bills:     raBills.rows.map(r=>({ status:r.status, count:Number(r.count), gross:Number(r.gross), net:Number(r.net) })),
+      ra_bill_items:Number(raBillItems.rows[0]?.count||0),
+      tqs_bills:    tqsBills.rows.map(r=>({ status:r.workflow_status, count:Number(r.count), certified:Number(r.certified), paid:Number(r.paid) })),
+      payments:     payments.rows.map(r=>({ source:r.source, count:Number(r.count), total:Number(r.total) })),
+      budget:       { count:Number(budgetItems.rows[0]?.count||0), budgeted:Number(budgetItems.rows[0]?.budgeted||0), actual:Number(budgetItems.rows[0]?.actual||0) },
+      invoices:     invoices.rows.map(r=>({ status:r.payment_status, count:Number(r.count), total:Number(r.total) })),
+      boq:          { items:Number(boqItems.rows[0]?.count||0), total_value:Number(boqItems.rows[0]?.total_value||0) },
+      data_gaps:    missing,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;
