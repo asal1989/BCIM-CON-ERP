@@ -1639,7 +1639,7 @@ router.post(
       const allMRs = Object.keys(mrToPOs);
       const allPOs = Object.keys(poToMR);
 
-      // Look up MR UUIDs
+      // Look up MR UUIDs (material_requisitions has company_id directly)
       const { rows: mrRows } = await query(
         `SELECT id, serial_no_formatted FROM material_requisitions
          WHERE company_id = $1 AND serial_no_formatted = ANY($2::text[])`,
@@ -1648,10 +1648,11 @@ router.post(
       const mrMap = {};
       for (const r of mrRows) mrMap[r.serial_no_formatted] = r.id;
 
-      // Look up PO UUIDs — try exact po_number match first, then strip amendment suffix (e.g. -A3)
+      // Look up PO UUIDs — purchase_orders has no company_id; join through projects
       const { rows: poRows } = await query(
-        `SELECT id, po_number FROM purchase_orders
-         WHERE company_id = $1 AND po_number = ANY($2::text[])`,
+        `SELECT po.id, po.po_number FROM purchase_orders po
+         JOIN projects p ON p.id = po.project_id
+         WHERE p.company_id = $1 AND po.po_number = ANY($2::text[])`,
         [req.user.company_id, allPOs]
       );
       const poMap = {};
@@ -1662,12 +1663,12 @@ router.post(
       if (unmatchedPOs.length) {
         const bases = [...new Set(unmatchedPOs.map(p => p.replace(/-[A-Z]\d*$/i, '')))];
         const { rows: baseRows } = await query(
-          `SELECT id, po_number FROM purchase_orders
-           WHERE company_id = $1 AND po_number = ANY($2::text[])`,
+          `SELECT po.id, po.po_number FROM purchase_orders po
+           JOIN projects p ON p.id = po.project_id
+           WHERE p.company_id = $1 AND po.po_number = ANY($2::text[])`,
           [req.user.company_id, bases]
         );
         for (const r of baseRows) {
-          // Map all original PO variants that resolve to this base
           for (const orig of unmatchedPOs) {
             if (orig.replace(/-[A-Z]\d*$/i, '') === r.po_number) poMap[orig] = r.id;
           }
@@ -1676,7 +1677,6 @@ router.post(
 
       // Update purchase_orders — set mrs_id (and append to mrs_ids array)
       let updated = 0;
-      const skipped = [];
       const unmatchedMR = [];
       const unmatchedPOList = [];
 
