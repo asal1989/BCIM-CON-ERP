@@ -15,7 +15,7 @@ import {
   CalendarOff, FileBarChart, Star, UserCheck, Fingerprint, PackageCheck, ArrowLeftRight,
   Landmark, FileSignature, CircleSlash, ShieldCheck, Clock3, Lightbulb,
   Gavel, Target, Send, Coins, Replace, Link2, Wrench, Layers, MapPin, TrendingDown, FolderOpen, Calculator, UserRound,
-  Cog, Fuel, Gauge, BarChart2
+  Cog, Fuel, Gauge, BarChart2, History
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import CommandPalette from './CommandPalette';
@@ -295,6 +295,7 @@ const navGroups = [
   { label: 'Administration', items: [
     { to: '/users', icon: Users, label: 'Team Members' },
     { to: '/accounts/settings', icon: Building2, label: 'Company Profile' },
+    { to: '/audit-log', icon: History, label: 'Audit Log' },
   ]},
   { label: 'Automation Ideas', items: [
     { to: '/automation-ideas', icon: Lightbulb, label: 'Ideas Dashboard' },

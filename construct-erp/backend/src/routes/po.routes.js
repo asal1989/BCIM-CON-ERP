@@ -2,6 +2,7 @@
 const express = require('express');
 const multer = require('multer');
 const { authenticate, authorize } = require('../middleware/auth');
+const { logAudit } = require('../utils/auditLog');
 const { loadProjectScope, userCanAccessProject } = require('../middleware/projectScope');
 const { query, withTransaction } = require('../config/database');
 const { extractPO } = require('../services/poExtraction.service');
@@ -1059,12 +1060,13 @@ router.patch('/:id', authorize(...PROCUREMENT_ROLES), async (req, res) => {
 // The FK constraint on linked bills/GRNs/amendments still blocks deletion of a PO already in use downstream.
 router.delete('/:id', authorize(...PROCUREMENT_ROLES), async (req, res) => {
   try {
-    await getAccessiblePo(req, req.params.id);
+    const po = await getAccessiblePo(req, req.params.id);
     const result = await query(
       `DELETE FROM purchase_orders WHERE id = $1 RETURNING id`,
       [req.params.id]
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Purchase Order not found' });
+    await logAudit(req, { action: 'delete', tableName: 'purchase_orders', recordId: req.params.id, oldValues: po });
     res.json({ message: 'Purchase Order deleted' });
   } catch (err) {
     if (err.code === '23503') return res.status(409).json({ error: 'Cannot delete — this PO has linked bills, GRNs, or amendments' });

@@ -5,6 +5,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
 const { loadProjectScope, appendProjectScope } = require('../middleware/projectScope');
+const { logAudit } = require('../utils/auditLog');
 router.use(authenticate);
 router.use(loadProjectScope);
 
@@ -267,6 +268,7 @@ router.patch('/:id/verify', authorize('super_admin','admin','qs_engineer','proje
       `UPDATE ra_bills SET status='verified', verified_by=$1, updated_at=NOW() WHERE id=$2 RETURNING *`,
       [req.user.id, req.params.id]
     );
+    await logAudit(req, { action: 'verify', tableName: 'ra_bills', recordId: req.params.id, newValues: { bill_number: result.rows[0].bill_number, status: 'verified' } });
     res.json({ data: result.rows[0] });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -285,6 +287,7 @@ router.patch('/:id/approve', authorize('super_admin','admin','project_manager'),
       [req.user.id, req.params.id, req.user.company_id]
     );
     if (!result.rows.length) return res.status(400).json({ error: 'Bill not found or not in verified status' });
+    await logAudit(req, { action: 'approve', tableName: 'ra_bills', recordId: req.params.id, newValues: { bill_number: result.rows[0].bill_number, status: 'certified', net_payable: result.rows[0].net_payable } });
     res.json({ data: result.rows[0] });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -304,6 +307,7 @@ router.patch('/:id/reject', authorize('super_admin','admin','qs_engineer','proje
       [remarks || null, req.params.id, req.user.company_id]
     );
     if (!result.rows.length) return res.status(400).json({ error: 'Bill not found or not rejectable' });
+    await logAudit(req, { action: 'reject', tableName: 'ra_bills', recordId: req.params.id, newValues: { bill_number: result.rows[0].bill_number, status: 'rejected', remarks: result.rows[0].remarks } });
     res.json({ data: result.rows[0] });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -335,6 +339,10 @@ router.patch('/:id/pay', authorize('super_admin','admin','accountant'), async (r
        parseFloat(client_tds_amount || 0), parseFloat(amount_received || 0),
        req.params.id]
     );
+    await logAudit(req, {
+      action: 'pay', tableName: 'ra_bills', recordId: req.params.id,
+      newValues: { bill_number: result.rows[0].bill_number, amount_received, payment_date, payment_mode, payment_ref },
+    });
     res.json({ data: result.rows[0] });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -347,10 +355,11 @@ router.delete('/:id', authorize('super_admin','admin','qs_engineer'), async (req
     const result = await query(
       `DELETE FROM ra_bills rb USING projects p
        WHERE rb.project_id=p.id AND rb.id=$1 AND p.company_id=$2 AND rb.status IN ('draft','rejected')
-       RETURNING rb.id`,
+       RETURNING rb.id, rb.bill_number, rb.gross_amount, rb.status`,
       [req.params.id, req.user.company_id]
     );
     if (!result.rows.length) return res.status(400).json({ error: 'Bill not found or cannot be deleted' });
+    await logAudit(req, { action: 'delete', tableName: 'ra_bills', recordId: req.params.id, oldValues: result.rows[0] });
     res.json({ message: 'Bill deleted' });
   } catch (err) {
     res.status(500).json({ error: err.message });
