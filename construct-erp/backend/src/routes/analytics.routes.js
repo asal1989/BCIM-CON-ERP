@@ -413,9 +413,9 @@ router.get('/executive', async (req, res) => {
       // All-time bill KPIs — no date filter so certified total is never clipped by date range
       safeQuery(
         `SELECT
-           COALESCE(SUM(net_payable) FILTER (WHERE status IN ('certified','authorized','verified','paid')), 0) AS total_certified,
-           COALESCE(SUM(net_payable) FILTER (WHERE status IN ('draft','submitted')), 0)                       AS pending_value,
-           COUNT(*)              FILTER (WHERE status IN ('draft','submitted'))                                AS pending_count,
+           COALESCE(SUM(net_payable) FILTER (WHERE rb.status IN ('certified','authorized','verified','paid')), 0) AS total_certified,
+           COALESCE(SUM(net_payable) FILTER (WHERE rb.status IN ('draft','submitted')), 0)                       AS pending_value,
+           COUNT(*)              FILTER (WHERE rb.status IN ('draft','submitted'))                                AS pending_count,
            COALESCE(SUM(net_payable), 0)                                                                      AS total_all
          FROM ra_bills rb
          JOIN projects p ON rb.project_id = p.id
