@@ -174,7 +174,7 @@ export default function VariationPage() {
         </div>
       )}
 
-      {outerTab === 'orders' && <div className="px-6 py-5 space-y-5">
+      {outerTab === 'orders' && (<div className="px-6 py-5 space-y-5">
 
         {/* ── Stats ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -320,7 +320,7 @@ export default function VariationPage() {
           )}
         </div>
 
-      </div>
+      </div>)}
 
       {/* ── Modals ── */}
       {showForm && (
@@ -337,7 +337,6 @@ export default function VariationPage() {
           canApprove={canApprove}
         />
       )}
-      </div>}
     </div>
   );
 }
