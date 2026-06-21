@@ -7,6 +7,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const { extractWO } = require('../services/woExtraction.service');
 const { getNextDqsNumber } = require('../services/documentNumber.service');
+const { logAudit } = require('../utils/auditLog');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -44,11 +45,13 @@ router.get('/work-orders/:id', ctrl.getWorkOrder);
 router.patch('/work-orders/:id', authorize(...PROCUREMENT_ROLES), ctrl.updateWorkOrder);
 router.delete('/work-orders/:id', authorize(...PROCUREMENT_ROLES), async (req, res) => {
   try {
+    const before = await query(`SELECT wo_number, subject, status, total_value FROM work_orders WHERE id = $1`, [req.params.id]);
     const result = await query(
       `DELETE FROM work_orders WHERE id = $1 AND project_id IN (SELECT id FROM projects WHERE company_id = $2) RETURNING id`,
       [req.params.id, req.user.company_id]
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Work Order not found' });
+    await logAudit(req, { action: 'delete', tableName: 'work_orders', recordId: req.params.id, oldValues: before.rows[0] });
     res.json({ message: 'Work Order deleted' });
   } catch (err) {
     if (err.code === '23503') return res.status(409).json({ error: 'Cannot delete — this Work Order has linked bills or measurements' });

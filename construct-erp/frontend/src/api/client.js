@@ -678,6 +678,11 @@ export const companySettingsAPI = {
   uploadLogo:     (file) => { const fd = new FormData(); fd.append('logo', file); return api.post('/company-settings/logo', fd, { headers: { 'Content-Type': undefined } }); },
 };
 
+export const auditLogAPI = {
+  list:   (params) => api.get('/audit-log', { params }),
+  tables: ()        => api.get('/audit-log/tables'),
+};
+
 export const inventoryAPI = {
   list:          (params) => api.get('/inventory', { params }),
   create:        (data)   => api.post('/inventory', data),

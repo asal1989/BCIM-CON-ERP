@@ -7,6 +7,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { runSchemaInit } = require('../utils/schemaInit');
 const { sendWelcomeLoginMail } = require('../services/mail.service');
 const { createPasswordResetToken, getResetBaseUrl } = require('../controllers/auth.controller');
+const { logAudit } = require('../utils/auditLog');
 
 // Fire-and-forget welcome email with a 24-hour password reset link
 const sendWelcomeMail = (req, { id, name, email, role }) => {
@@ -168,6 +169,7 @@ router.post('/', admin, async (req, res) => {
 
     await syncUserProjects(result.rows[0].id, req.user.company_id, project_ids, role);
 
+    await logAudit(req, { action: 'create', tableName: 'users', recordId: result.rows[0].id, newValues: result.rows[0] });
     sendWelcomeMail(req, result.rows[0]);
     res.status(201).json({ message: 'User created successfully', data: result.rows[0] });
   } catch (err) {
@@ -184,12 +186,13 @@ router.put('/:id', admin, async (req, res) => {
 
     // Ensure user belongs to this company
     const check = await query(
-      'SELECT id FROM users WHERE id = $1 AND company_id = $2',
+      'SELECT id, name, email, phone, role, designation, department, is_active, accessible_modules, vendor_id FROM users WHERE id = $1 AND company_id = $2',
       [req.params.id, req.user.company_id]
     );
     if (!check.rows[0]) return res.status(404).json({ error: 'User not found.' });
+    const before = check.rows[0];
 
-    await query(
+    const updated = await query(
       `UPDATE users SET
          name        = COALESCE($1, name),
          email       = COALESCE($2, email),
@@ -201,7 +204,8 @@ router.put('/:id', admin, async (req, res) => {
          accessible_modules = COALESCE($8::text[], accessible_modules),
          vendor_id   = $9,
          updated_at  = NOW()
-       WHERE id = $10 AND company_id = $11`,
+       WHERE id = $10 AND company_id = $11
+       RETURNING id, name, email, phone, role, designation, department, is_active, accessible_modules, vendor_id`,
       [name, email, phone, role, designation, department,
        is_active !== undefined ? is_active : null,
        accessible_modules !== undefined ? normalizeModules(accessible_modules) : null,
@@ -213,6 +217,7 @@ router.put('/:id', admin, async (req, res) => {
       await syncUserProjects(req.params.id, req.user.company_id, project_ids, role);
     }
 
+    await logAudit(req, { action: 'update', tableName: 'users', recordId: req.params.id, oldValues: before, newValues: updated.rows[0] });
     res.json({ message: 'User updated successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -227,7 +232,7 @@ router.patch('/:id/reset-password', admin, async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 8 characters.' });
 
     const check = await query(
-      'SELECT id FROM users WHERE id = $1 AND company_id = $2',
+      'SELECT id, name, email FROM users WHERE id = $1 AND company_id = $2',
       [req.params.id, req.user.company_id]
     );
     if (!check.rows[0]) return res.status(404).json({ error: 'User not found.' });
@@ -240,6 +245,7 @@ router.patch('/:id/reset-password', admin, async (req, res) => {
     // Invalidate sessions
     await query('DELETE FROM refresh_tokens WHERE user_id = $1', [req.params.id]);
 
+    await logAudit(req, { action: 'reset_password', tableName: 'users', recordId: req.params.id, newValues: { name: check.rows[0].name, email: check.rows[0].email } });
     res.json({ message: 'Password reset successfully.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -253,7 +259,7 @@ router.delete('/:id', admin, async (req, res) => {
       return res.status(400).json({ error: 'You cannot deactivate your own account.' });
 
     const check = await query(
-      'SELECT id FROM users WHERE id = $1 AND company_id = $2',
+      'SELECT id, name, email, role FROM users WHERE id = $1 AND company_id = $2',
       [req.params.id, req.user.company_id]
     );
     if (!check.rows[0]) return res.status(404).json({ error: 'User not found.' });
@@ -264,6 +270,7 @@ router.delete('/:id', admin, async (req, res) => {
     );
     await query('DELETE FROM refresh_tokens WHERE user_id = $1', [req.params.id]);
 
+    await logAudit(req, { action: 'deactivate', tableName: 'users', recordId: req.params.id, oldValues: check.rows[0] });
     res.json({ message: 'User deactivated.' });
   } catch (err) {
     res.status(500).json({ error: err.message });

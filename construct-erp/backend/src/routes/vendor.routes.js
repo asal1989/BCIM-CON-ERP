@@ -2,6 +2,7 @@
 const express = require('express');
 const multer = require('multer');
 const { authenticate, authorize } = require('../middleware/auth');
+const { logAudit } = require('../utils/auditLog');
 const { query, withTransaction } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
 const vendorRouter = express.Router();
@@ -502,7 +503,9 @@ vendorRouter.put('/:id', authorize('super_admin', 'admin', 'procurement_manager'
 // DELETE /:id — Deactivate vendor
 vendorRouter.delete('/:id', authorize('super_admin', 'admin', 'procurement_manager'), async (req, res) => {
   try {
+    const before = await query('SELECT name, vendor_type, is_active FROM vendors WHERE id = $1', [req.params.id]);
     await query('UPDATE vendors SET is_active = false WHERE id = $1', [req.params.id]);
+    await logAudit(req, { action: 'deactivate', tableName: 'vendors', recordId: req.params.id, oldValues: before.rows[0] });
     res.json({ message: 'Vendor deactivated successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });

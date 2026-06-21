@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { authenticate } = require('../middleware/auth');
 const { query } = require('../config/database');
+const { logAudit } = require('../utils/auditLog');
 const router = express.Router();
 
 // ── Auto-migrate ─────────────────────────────────────────────────────────────
@@ -40,6 +41,7 @@ router.post('/logo', authenticate, upload.single('logo'), async (req, res) => {
       `UPDATE companies SET logo_url = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
       [logoUrl, req.user.company_id]
     );
+    await logAudit(req, { action: 'update', tableName: 'companies', recordId: req.user.company_id, newValues: { logo_url: logoUrl } });
     res.json({ data: r.rows[0] });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -74,6 +76,10 @@ router.get('/', authenticate, async (req, res) => {
 // ── UPDATE company profile fields ───────────────────────────────────────────
 router.put('/profile', authenticate, async (req, res) => {
   try {
+    const before = await query(
+      `SELECT name, gstin, pan, cin, address, city, state, pincode, phone, email FROM companies WHERE id = $1`,
+      [req.user.company_id]
+    );
     const { name, gstin, pan, cin, address, city, state, pincode, phone, email } = req.body;
     const r = await query(
       `UPDATE companies SET
@@ -84,6 +90,11 @@ router.put('/profile', authenticate, async (req, res) => {
       [name, gstin || null, pan || null, cin || null, address || null, city || null,
        state || null, pincode || null, phone || null, email || null, req.user.company_id]
     );
+    await logAudit(req, {
+      action: 'update', tableName: 'companies', recordId: req.user.company_id,
+      oldValues: before.rows[0],
+      newValues: { name, gstin, pan, cin, address, city, state, pincode, phone, email },
+    });
     res.json({ data: r.rows[0] });
   } catch (err) {
     res.status(500).json({ error: err.message });
