@@ -204,10 +204,15 @@ router.post('/', async (req, res) => {
     }
 
     const result = await withTransaction(async (client) => {
-      // 1. Generate GRN Number
+      // 1. Generate GRN Number (MAX per company+year to avoid cross-company duplicates)
       const yr = new Date().getFullYear();
-      const countRes = await client.query('SELECT COUNT(*) FROM grn');
-      const seq = String(parseInt(countRes.rows[0].count) + 1).padStart(4, '0');
+      const countRes = await client.query(
+        `SELECT COALESCE(MAX(CAST(SPLIT_PART(g.grn_number,'/',3) AS INTEGER)), 0) + 1 AS next
+         FROM grn g JOIN projects p ON p.id = g.project_id
+         WHERE p.company_id = $1 AND EXTRACT(YEAR FROM g.created_at) = $2`,
+        [req.user.company_id, yr]
+      );
+      const seq = String(countRes.rows[0].next).padStart(4, '0');
       const grn_number = `GRN/${yr}/${seq}`;
 
       // 2. Insert Header (Initial Status: pending)
@@ -376,7 +381,7 @@ router.post('/', async (req, res) => {
           if (li.item_name && li.qty > 0) {
             const invRes = await client.query(`
               INSERT INTO inventory (project_id, material_name, unit, unit_rate, closing_stock, site_location, last_updated)
-              VALUES ($1,$2,$3,$4,$5,'main',NOW())
+              VALUES ($1,$2,$3,$4,$5,$6,NOW())
               ON CONFLICT (project_id, material_name, site_location)
               DO UPDATE SET
                 closing_stock = inventory.closing_stock + $5,
@@ -384,7 +389,7 @@ router.post('/', async (req, res) => {
                 unit = COALESCE($3, inventory.unit),
                 last_updated = NOW()
               RETURNING id
-            `, [project_id, String(li.item_name).trim(), li.unit || 'Nos', li.rate, li.qty]);
+            `, [project_id, String(li.item_name).trim(), li.unit || 'Nos', li.rate, li.qty, site_location || 'main']);
 
             const inventoryId = invRes.rows[0]?.id;
             if (inventoryId) {
