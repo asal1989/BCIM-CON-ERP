@@ -299,6 +299,7 @@ router.get('/executive', async (req, res) => {
       rfisRes,
       ncrsRes,
       documentsRes,
+      allTimeBillsRes,
     ] = await Promise.all([
       safeQuery(
         `SELECT p.id, p.name, p.project_code, p.type, p.status
@@ -409,11 +410,23 @@ router.get('/executive', async (req, res) => {
          LIMIT 20`,
         docParams
       ),
+      // All-time bill KPIs — no date filter so certified total is never clipped by date range
+      safeQuery(
+        `SELECT
+           COALESCE(SUM(net_payable) FILTER (WHERE status IN ('certified','authorized','verified','paid')), 0) AS total_certified,
+           COALESCE(SUM(net_payable) FILTER (WHERE status IN ('draft','submitted')), 0)                       AS pending_value,
+           COUNT(*)              FILTER (WHERE status IN ('draft','submitted'))                                AS pending_count,
+           COALESCE(SUM(net_payable), 0)                                                                      AS total_all
+         FROM ra_bills rb
+         JOIN projects p ON rb.project_id = p.id
+         WHERE ${projectScopedClause('rb')}`,
+        scope.params
+      ),
     ]);
 
     const projectOptions = projectOptionsRes.rows;
     const projects = scopedProjectsRes.rows;
-    const raBills = raBillsRes.rows;
+    const raBills = raBillsRes.rows;          // date-filtered — used for recent activity only
     const payments = paymentsRes.rows;
     const collections = payments.filter(isClientCollection);
     const purchaseOrders = purchaseOrdersRes.rows;
@@ -425,6 +438,12 @@ router.get('/executive', async (req, res) => {
     const ncrs = ncrsRes.rows;
     const documents = documentsRes.rows;
 
+    // All-time billing KPIs (not date-filtered)
+    const billKpis      = allTimeBillsRes.rows[0] || {};
+    const totalCertified  = toNumber(billKpis.total_certified);
+    const pendingRAValue  = toNumber(billKpis.pending_value);
+    const pendingRACount  = parseInt(billKpis.pending_count || 0, 10);
+
     const activeProjects = projects.filter((project) => project.status === 'active');
     const delayedProjects = projects.filter((project) => project.status === 'delayed');
     const completedProjects = projects.filter((project) => project.status === 'completed');
@@ -432,9 +451,6 @@ router.get('/executive', async (req, res) => {
 
     const totalContractValue = projects.reduce((sum, project) => sum + toNumber(project.contract_value), 0);
     const pendingRABills    = raBills.filter((bill) => ['draft', 'submitted'].includes(String(bill.status || '').toLowerCase()));
-    const pendingRAValue    = pendingRABills.reduce((sum, bill) => sum + toNumber(bill.net_payable || bill.gross_amount), 0);
-    const certifiedRABills  = raBills.filter((bill) => ['certified', 'authorized', 'verified', 'paid'].includes(String(bill.status || '').toLowerCase()));
-    const totalCertified    = certifiedRABills.reduce((sum, bill) => sum + toNumber(bill.net_payable || bill.gross_amount), 0);
     const totalCollections  = collections.reduce((sum, payment) => sum + toNumber(payment.net_amount || payment.amount), 0);
     const receivables       = Math.max(totalCertified - totalCollections, 0);
 
@@ -508,7 +524,7 @@ router.get('/executive', async (req, res) => {
           completed_projects: completedProjects.length,
           planning_projects: planningProjects.length,
           total_certified: totalCertified,
-          pending_ra_bills: pendingRABills.length,
+          pending_ra_bills: pendingRACount,
           pending_ra_value: pendingRAValue,
           total_collections: totalCollections,
           receivables,
@@ -548,7 +564,7 @@ router.get('/executive', async (req, res) => {
             total_pos: purchaseOrders.length,
             low_stock_materials: lowStock.length,
             top_low_stock_material: lowStock[0]?.material_name || null,
-            pending_vendor_bills: pendingRABills.length,
+            pending_vendor_bills: pendingRACount,
             pending_vendor_bill_value: pendingRAValue,
             open_documents: documents.length,
             recent_documents: recentDocuments.length,
