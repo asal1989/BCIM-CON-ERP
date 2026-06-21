@@ -987,6 +987,23 @@ export const plantAPI = {
   maintenanceDue:    ()      => api.get('/plant/maintenance-due'),
 };
 
+// Hire & Rental — vendor invoice → QS certification → approval → payment,
+// layered on the Plant & Machinery hire/allocation/log tables.
+export const hireRentalAPI = {
+  orders:        (p)        => api.get('/hire-rental/orders', { params: p }),
+  listInvoices:  (p)        => api.get('/hire-rental/invoices', { params: p }),
+  getInvoice:    (id)       => api.get(`/hire-rental/invoices/${id}`),
+  createInvoice: (d)        => api.post('/hire-rental/invoices', d),
+  updateInvoice: (id, d)    => api.put(`/hire-rental/invoices/${id}`, d),
+  certify:       (id, d)    => api.patch(`/hire-rental/invoices/${id}/certify`, d),
+  approve:       (id)       => api.patch(`/hire-rental/invoices/${id}/approve`),
+  reject:        (id, d)    => api.patch(`/hire-rental/invoices/${id}/reject`, d),
+  pay:           (id, d)    => api.patch(`/hire-rental/invoices/${id}/pay`, d),
+  deleteInvoice: (id)       => api.delete(`/hire-rental/invoices/${id}`),
+  dashboard:     ()         => api.get('/hire-rental/dashboard'),
+  reportOrders:  (p)        => api.get('/hire-rental/reports/orders', { params: p }),
+};
+
 export const itAssetAPI = {
   list:            (params)    => api.get('/it-assets', { params }),
   get:             (id)        => api.get(`/it-assets/${id}`),

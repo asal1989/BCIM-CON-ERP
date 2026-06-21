@@ -261,6 +261,18 @@ const navGroups = [
     { to: '/plant/cost',        icon: Calculator,      label: 'Cost Allocation' },
     { to: '/plant/reports',     icon: FileBarChart,    label: 'Reports & Analytics' },
   ]},
+  { label: 'Hire & Rental', items: [
+    { to: '/hire-rental',            icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/plant/hire',             icon: Briefcase,       label: 'Hire Work Orders' },
+    { to: '/plant/deployment',       icon: Gauge,           label: 'Equipment Allocation' },
+    { to: '/plant/equipment-log',    icon: ClipboardList,   label: 'Daily Usage / Log Sheet' },
+    { to: '/hire-rental/invoices',   icon: FileText,        label: 'Vendor Invoice Entry' },
+    { to: '/hire-rental/certify',    icon: ShieldCheck,     label: 'QS Certification' },
+    { to: '/hire-rental/approvals',  icon: BadgeCheck,      label: 'Approvals' },
+    { to: '/hire-rental/payments',   icon: CreditCard,      label: 'Payment Status' },
+    { to: '/hire-rental/reports',    icon: BarChart3,       label: 'Reports' },
+    { to: '/plant/masters',          icon: Settings,        label: 'Settings' },
+  ]},
   { label: 'DMS', items: [
     { to: '/dms',         icon: FolderOpen, label: 'Document Repository' },
     { to: '/dms/gfc-log', icon: Layers,     label: 'GFC Master Log' },

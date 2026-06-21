@@ -185,6 +185,7 @@ const PlantOperators      = lazy(() => import('./pages/plant/PlantOperators'));
 const PlantCompliance     = lazy(() => import('./pages/plant/PlantCompliance'));
 const PlantCost           = lazy(() => import('./pages/plant/PlantCost'));
 const PlantReports        = lazy(() => import('./pages/plant/PlantReports'));
+const HireRentalPage      = lazy(() => import('./pages/plant/HireRentalPage'));
 const ITAssetPage         = lazy(() => import('./pages/it/ITAssetPage'));
 const ITTicketPage        = lazy(() => import('./pages/it/ITTicketPage'));
 const LicensePage         = lazy(() => import('./pages/it/LicensePage'));
@@ -753,6 +754,12 @@ export default function App() {
                 <Route path="plant/compliance"   element={<RequireModule module="Assets & IT"><PlantCompliance /></RequireModule>} />
                 <Route path="plant/cost"         element={<RequireModule module="Assets & IT"><PlantCost /></RequireModule>} />
                 <Route path="plant/reports"      element={<RequireModule module="Assets & IT"><PlantReports /></RequireModule>} />
+                <Route path="hire-rental"           element={<RequireModule module="Assets & IT"><HireRentalPage defaultTab="dashboard" /></RequireModule>} />
+                <Route path="hire-rental/invoices"  element={<RequireModule module="Assets & IT"><HireRentalPage defaultTab="invoices" /></RequireModule>} />
+                <Route path="hire-rental/certify"   element={<RequireModule module="Assets & IT"><HireRentalPage defaultTab="certify" /></RequireModule>} />
+                <Route path="hire-rental/approvals" element={<RequireModule module="Assets & IT"><HireRentalPage defaultTab="approvals" /></RequireModule>} />
+                <Route path="hire-rental/payments"  element={<RequireModule module="Assets & IT"><HireRentalPage defaultTab="payments" /></RequireModule>} />
+                <Route path="hire-rental/reports"   element={<RequireModule module="Assets & IT"><HireRentalPage defaultTab="reports" /></RequireModule>} />
                 <Route path="it/assets"          element={<RequireModule module="Assets & IT"><ITAssetPage /></RequireModule>} />
                 <Route path="it/tickets" element={<RequireModule module="Assets & IT"><ITTicketPage /></RequireModule>} />
                 <Route path="it/licenses" element={<RequireModule module="Assets & IT"><LicensePage /></RequireModule>} />
