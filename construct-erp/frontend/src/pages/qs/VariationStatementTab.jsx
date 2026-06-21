@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Plus, X, ChevronLeft, FileText, Send, Trash2, CheckCircle2,
-  Clock, AlertCircle, Download, Edit2,
+  Clock, AlertCircle, Download, Edit2, RefreshCw,
 } from 'lucide-react';
 import { variationStatementAPI, projectAPI } from '../../api/client';
 import toast from 'react-hot-toast';
@@ -194,6 +194,18 @@ export default function VariationStatementTab({ projectId: parentProjectId }) {
     onError: e => toast.error(e?.response?.data?.error || 'Delete failed'),
   });
 
+  const pullVOsMut = useMutation({
+    mutationFn: id => variationStatementAPI.pullVOs(id),
+    onSuccess: r => {
+      const d = r.data?.data;
+      setItems((d.items || []).map(i => ({ ...i, _key: Math.random() })));
+      setNtItems((d.nt_items || []).map(n => ({ ...n, _key: Math.random() })));
+      qc.invalidateQueries({ queryKey: ['vstmt-detail', stmtId] });
+      toast.success('Items pulled from approved VOs');
+    },
+    onError: e => toast.error(e?.response?.data?.error || 'Pull failed'),
+  });
+
   // ── Navigation ───────────────────────────────────────────────────────────────
   const openDetail = (id) => { setStmtId(id); setView('detail'); };
   const backToList = () => { setView('list'); setStmtId(null); setHdr(BLANK_HDR); setItems([]); setNtItems([]); };
@@ -354,6 +366,14 @@ export default function VariationStatementTab({ projectId: parentProjectId }) {
           </button>
           {!isSubmitted && (
             <>
+              <button
+                onClick={() => { if (window.confirm('This will replace all current items with data from approved VOs for this project. Continue?')) pullVOsMut.mutate(stmtId); }}
+                disabled={pullVOsMut.isPending}
+                title="Replace items with data from all approved Variation Orders for this project"
+                className="h-9 flex items-center gap-1.5 px-4 rounded-xl bg-slate-600 hover:bg-slate-700 text-white text-xs font-medium shadow disabled:opacity-50">
+                <RefreshCw className={`w-4 h-4 ${pullVOsMut.isPending ? 'animate-spin' : ''}`} />
+                {pullVOsMut.isPending ? 'Pulling…' : 'Pull from Approved VOs'}
+              </button>
               <button onClick={handleSave} disabled={saveMut.isPending}
                 className="h-9 flex items-center gap-1.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium shadow disabled:opacity-50">
                 <FileText className="w-4 h-4" /> {saveMut.isPending ? 'Saving…' : 'Save Draft'}

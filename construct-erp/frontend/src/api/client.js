@@ -826,12 +826,13 @@ export const variationAPI = {
 };
 
 export const variationStatementAPI = {
-  list:   (params)   => api.get('/variation-statements', { params }),
-  get:    (id)       => api.get(`/variation-statements/${id}`),
-  create: (data)     => api.post('/variation-statements', data),
-  update: (id, data) => api.patch(`/variation-statements/${id}`, data),
-  submit: (id)       => api.patch(`/variation-statements/${id}/submit`),
-  remove: (id)       => api.delete(`/variation-statements/${id}`),
+  list:    (params)   => api.get('/variation-statements', { params }),
+  get:     (id)       => api.get(`/variation-statements/${id}`),
+  create:  (data)     => api.post('/variation-statements', data),
+  update:  (id, data) => api.patch(`/variation-statements/${id}`, data),
+  pullVOs: (id)       => api.patch(`/variation-statements/${id}/pull-vos`),
+  submit:  (id)       => api.patch(`/variation-statements/${id}/submit`),
+  remove:  (id)       => api.delete(`/variation-statements/${id}`),
 };
 
 export const normsAPI = {
