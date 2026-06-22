@@ -333,7 +333,7 @@ function getHomeRoute(user) {
   // Managing director → main dashboard (which renders all approvals inline)
   if (MD_DASHBOARD_ROLES.includes(role)) return '/dashboard';
   // Users whose approvals are embedded on the dashboard → go to dashboard, not /approvals
-  const DASHBOARD_APPROVALS_EMAILS = ['stephen@bcim.in'];
+  const DASHBOARD_APPROVALS_EMAILS = ['stephen@bcim.in', 'it@bcim.in'];
   if (DASHBOARD_APPROVALS_EMAILS.includes((user.email || '').toLowerCase())) return '/dashboard';
   // Approver / manager roles → My Approvals page as home
   if (APPROVER_ROLES.includes(role)) return '/approvals';

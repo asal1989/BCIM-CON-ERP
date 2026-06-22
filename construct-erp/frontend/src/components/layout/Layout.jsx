@@ -1757,7 +1757,7 @@ export default function Layout() {
   };
 
   // Users whose approvals are embedded on the dashboard — hide the separate nav link
-  const DASHBOARD_APPROVALS_EMAILS = ['stephen@bcim.in'];
+  const DASHBOARD_APPROVALS_EMAILS = ['stephen@bcim.in', 'it@bcim.in'];
   const hasDashboardApprovals = DASHBOARD_APPROVALS_EMAILS.includes(user?.email?.toLowerCase());
 
   const filteredGroups = navGroups

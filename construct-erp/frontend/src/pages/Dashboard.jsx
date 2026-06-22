@@ -323,7 +323,7 @@ export default function Dashboard() {
 
   // Managing director (and users with dashboard-embedded approvals) see the full
   // executive dashboard with their pending approvals embedded near the top.
-  const DASHBOARD_APPROVALS_EMAILS = ['stephen@bcim.in'];
+  const DASHBOARD_APPROVALS_EMAILS = ['stephen@bcim.in', 'it@bcim.in'];
   const isMdRole = MD_DASHBOARD_ROLES.includes(String(role).toLowerCase())
     || DASHBOARD_APPROVALS_EMAILS.includes(user?.email?.toLowerCase());
 
