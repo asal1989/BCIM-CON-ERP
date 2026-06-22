@@ -15,7 +15,7 @@ import {
   CalendarOff, FileBarChart, Star, UserCheck, Fingerprint, PackageCheck, ArrowLeftRight,
   Landmark, FileSignature, CircleSlash, ShieldCheck, Clock3, Lightbulb,
   Gavel, Target, Send, Coins, Replace, Link2, Wrench, Layers, MapPin, TrendingDown, FolderOpen, Calculator, UserRound,
-  Cog, Fuel, Gauge, BarChart2, History
+  Cog, Fuel, Gauge, BarChart2, History, FilePlus
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import CommandPalette from './CommandPalette';
@@ -272,6 +272,8 @@ const navGroups = [
     { to: '/hire-rental/payments',   icon: CreditCard,      label: 'Payment Status' },
     { to: '/hire-rental/reports',    icon: BarChart3,       label: 'Reports' },
     { to: '/plant/masters',          icon: Settings,        label: 'Settings' },
+    { to: '/hire-rental/crane-log',          icon: ClipboardList, label: 'Crane Log Sheet' },
+    { to: '/hire-rental/rental-invoice/new', icon: FilePlus,      label: 'New Rental Invoice' },
   ]},
   { label: 'DMS', items: [
     { to: '/dms',         icon: FolderOpen, label: 'Document Repository' },

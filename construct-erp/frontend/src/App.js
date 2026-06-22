@@ -186,6 +186,8 @@ const PlantCompliance     = lazy(() => import('./pages/plant/PlantCompliance'));
 const PlantCost           = lazy(() => import('./pages/plant/PlantCost'));
 const PlantReports        = lazy(() => import('./pages/plant/PlantReports'));
 const HireRentalPage      = lazy(() => import('./pages/plant/HireRentalPage'));
+const CraneLogSheet       = lazy(() => import('./pages/hire-rental/CraneLogSheet'));
+const RentalInvoiceEntry  = lazy(() => import('./pages/hire-rental/RentalInvoiceEntry'));
 const ITAssetPage         = lazy(() => import('./pages/it/ITAssetPage'));
 const ITTicketPage        = lazy(() => import('./pages/it/ITTicketPage'));
 const LicensePage         = lazy(() => import('./pages/it/LicensePage'));
@@ -765,6 +767,8 @@ export default function App() {
                 <Route path="hire-rental/approvals" element={<RequireModule module="Assets & IT"><HireRentalPage defaultTab="approvals" /></RequireModule>} />
                 <Route path="hire-rental/payments"  element={<RequireModule module="Assets & IT"><HireRentalPage defaultTab="payments" /></RequireModule>} />
                 <Route path="hire-rental/reports"   element={<RequireModule module="Assets & IT"><HireRentalPage defaultTab="reports" /></RequireModule>} />
+                <Route path="hire-rental/crane-log"           element={<RequireModule module="Assets & IT"><CraneLogSheet /></RequireModule>} />
+                <Route path="hire-rental/rental-invoice/new"  element={<RequireModule module="Assets & IT"><RentalInvoiceEntry /></RequireModule>} />
                 <Route path="it/assets"          element={<RequireModule module="Assets & IT"><ITAssetPage /></RequireModule>} />
                 <Route path="it/tickets" element={<RequireModule module="Assets & IT"><ITTicketPage /></RequireModule>} />
                 <Route path="it/licenses" element={<RequireModule module="Assets & IT"><LicensePage /></RequireModule>} />

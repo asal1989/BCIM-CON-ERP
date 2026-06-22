@@ -1020,6 +1020,14 @@ export const hireRentalAPI = {
   reportOrders:  (p)        => api.get('/hire-rental/reports/orders', { params: p }),
 };
 
+export const rentalInvoiceAPI = {
+  nextSeq:       (prefix) => api.get('/hire-rental/rental/next-seq', { params: { prefix } }),
+  logCheck:      (p)      => api.get('/hire-rental/rental/log-check', { params: p }),
+  saveLog:       (d)      => api.post('/hire-rental/rental/log-sheets', d),
+  getLog:        (id)     => api.get(`/hire-rental/rental/log-sheets/${id}`),
+  createInvoice: (d)      => api.post('/hire-rental/rental/invoices-v2', d),
+};
+
 export const itAssetAPI = {
   list:            (params)    => api.get('/it-assets', { params }),
   get:             (id)        => api.get(`/it-assets/${id}`),
