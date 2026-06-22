@@ -372,8 +372,7 @@ function ApprovalCard({ item, onApprove, onReject, onView, onMDReview }) {
             </button>
             {/* MD-stage items: navigate to the detail so MD can review then authorize */}
             {(item.entity_type === 'mrs' && item.status === 'approved_mgmt') ||
-             (item.entity_type === 'po' && ['pending','verified_audit','released_mgmt'].includes(item.status)) ||
-             (item.entity_type === 'work_order' && ['submitted','active'].includes(item.status)) ? (
+             (item.entity_type === 'po' && ['pending','verified_audit','released_mgmt'].includes(item.status)) ? (
               <button onClick={() => onView(item)}
                 className="flex items-center gap-1 px-2.5 py-1.5 bg-green-700 text-white rounded-lg text-xs font-bold hover:bg-green-800 transition-colors">
                 <Landmark style={{width:13,height:13}} /> Review &amp; Authorize
@@ -388,7 +387,8 @@ function ApprovalCard({ item, onApprove, onReject, onView, onMDReview }) {
                 )}
                 <button onClick={() => onApprove(item)}
                   className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors">
-                  <CheckCircle2 style={{width:13,height:13}} /> Approve
+                  <CheckCircle2 style={{width:13,height:13}} />
+                  {item.entity_type === 'work_order' && ['submitted','active'].includes(item.status) ? 'Authorize' : 'Approve'}
                 </button>
               </>
             )}
