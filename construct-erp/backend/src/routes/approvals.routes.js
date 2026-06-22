@@ -94,10 +94,14 @@ function scBillStageForRole(role) {
 // GET /api/v1/approvals/pending
 // Returns all items across all modules that need this user's action
 // ════════════════════════════════════════════════════════════════════════════
+// Emails that get full admin-level approvals feed regardless of DB role
+const FULL_APPROVALS_EMAILS = ['stephen@bcim.in', 'it@bcim.in'];
+
 router.get('/pending', async (req, res) => {
   try {
     const cid  = CID(req);
-    const role = ROLE(req);
+    const email = (req.user.email || '').toLowerCase();
+    const role = FULL_APPROVALS_EMAILS.includes(email) ? 'admin' : ROLE(req);
     const items = [];
 
     // ── 1. SC Bills ──────────────────────────────────────────────────────────
