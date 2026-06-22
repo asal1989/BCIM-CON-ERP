@@ -702,9 +702,10 @@ if (require.main === module) {
     logger.warn('All sessions cleared on startup because CLEAR_SESSIONS_ON_STARTUP=true');
   }
 
-  // Run pending schema migrations silently on startup
-  runAutoMigrations().catch(err => logger.warn('Migration error:', err.message));
-
+  // Run pending schema migrations before accepting requests
+  runAutoMigrations()
+    .catch(err => logger.warn('Migration error:', err.message))
+    .finally(() => {
   server.listen(PORT, () => {
     logger.info(`🚀 ConstructERP API running on port ${PORT}`);
     logger.info(`📍 Environment: ${process.env.NODE_ENV}`);
@@ -727,6 +728,7 @@ if (require.main === module) {
     const { initDailyActivityDigest } = require('./utils/daily-activity-digest.service');
     initDailyActivityDigest();
   });
+  }); // end .finally()
 }
 
 module.exports = app;
