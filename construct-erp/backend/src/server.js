@@ -686,7 +686,9 @@ async function runAutoMigrations() {
       ) AS v(code, name, account_type, sub_type)
       ON CONFLICT (company_id, code) DO NOTHING
     `);
-    logger.info('✅ Auto-migrations complete (003–039)');
+    // 040 Menu-level permissions per user
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS accessible_menus JSONB`);
+    logger.info('✅ Auto-migrations complete (003–040)');
   } catch (err) {
     logger.warn('⚠️  Auto-migration warning:', err.message);
   } finally {
