@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { tqsBillsAPI, projectAPI, tqsVendorsAPI, poAPI, inventoryAPI, subcontractorAPI, boqAPI } from '../../api/client';
 import { BOQ_COST_HEADS } from '../../constants/boqCostHeads';
+import { guessCostHead, guessBoqItem } from '../../utils/boqCostHeadGuess';
 import MaterialCombobox from '../../components/shared/MaterialCombobox';
 import SearchableSelect from '../../components/shared/SearchableSelect';
 import { FIELD_HL } from '../../constants/fieldStyles';
@@ -363,9 +364,21 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
           const remaining = it.remaining_qty != null
             ? Number(it.remaining_qty)
             : Math.max(Number(it.quantity || 0) - Number(it.billed_qty || 0), 0);
+          const itemName = it.description || it.item_name || '';
+          // Auto-link to BOQ item if the WO item was mapped (sc_wo_items.boq_item_id); user can override
+          let boqItemId = it.boq_item_id || '';
+          let costHead = '';
+          const guessedHead = guessCostHead(itemName);
+          if (guessedHead) {
+            costHead = guessedHead;
+            if (!boqItemId) {
+              const guessedBoq = guessBoqItem(guessedHead, boqItems);
+              if (guessedBoq) boqItemId = guessedBoq.id;
+            }
+          }
           return {
             category: '',
-            item_name: it.description || it.item_name || '',
+            item_name: itemName,
             unit: it.unit || '',
             quantity: String(remaining),
             rate: it.rate || '',
@@ -373,9 +386,8 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
               : it.gst_pct != null ? String(it.gst_pct) : '18',
             po_item_id: '',
             wo_item_id: it.id || '',
-            // Auto-link to BOQ item if the WO item was mapped (sc_wo_items.boq_item_id); user can override
-            boq_item_id: it.boq_item_id || '',
-            cost_head: '',
+            boq_item_id: boqItemId,
+            cost_head: costHead,
             remaining_qty: remaining,
             discount_amount: it.discount_amount != null ? String(Math.abs(Number(it.discount_amount) || 0)) : '',
           };
@@ -435,15 +447,29 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
   // When item_name is typed/selected: auto-fill category & unit from store ledger
   const handleItemName = (i, value) => {
     const match = itemLookupMap[value.toLowerCase()];
+    const category = match?.category ?? '';
     setItems(p => p.map((it, idx) => {
       if (idx !== i) return it;
-      return {
+      const next = {
         ...it,
         item_name: value,
         // Category is ONLY set from store ledger - locked once matched, cleared if item changes to no-match
-        category: match?.category ?? '',
+        category,
         unit:     match?.unit     ? match.unit : it.unit,
       };
+      // Suggest a cost head / BOQ item from the item name + category — only when
+      // the user hasn't already picked one (never overrides a manual/WO-linked choice)
+      if (!next.cost_head) {
+        const guessedHead = guessCostHead(`${value} ${category}`);
+        if (guessedHead) {
+          next.cost_head = guessedHead;
+          if (!next.boq_item_id) {
+            const guessedBoq = guessBoqItem(guessedHead, boqItems);
+            if (guessedBoq) next.boq_item_id = guessedBoq.id;
+          }
+        }
+      }
+      return next;
     }));
   };
 
