@@ -100,24 +100,55 @@ async function recomputeTotals(client, invoiceId) {
     [gross, certified, gstAmt, total, invoiceId]);
 }
 
-// ── Hire Work Orders (read reuse of pm_hire_in_orders for dropdowns/lists) ────
+// ── Hire Work Orders — pm_hire_in_orders UNION hire-type sc_work_orders ──────
+// sc_work_orders whose subject contains "hiring", "hire", "rental", or "lease"
+// are treated as hire/rental work orders and included in this list.
 router.get('/orders', async (req, res) => {
   try {
     const { status, project_id } = req.query;
-    let sql = `
-      SELECT h.id, h.order_no, h.equipment_desc, h.vendor_id, h.vendor_name, h.hire_rate, h.rate_type,
-             h.start_date, h.end_date, h.status, h.project_id,
-             e.code AS equipment_code, e.name AS equipment_name, p.name AS project_name,
-             COALESCE((SELECT SUM(total_amount) FROM hire_vendor_invoices i
-                        WHERE i.hire_order_id=h.id AND i.status IN ('approved','paid')),0) AS billed_value
-      FROM pm_hire_in_orders h
-      LEFT JOIN pm_equipment e ON e.id=h.equipment_id
-      LEFT JOIN projects p ON p.id=h.project_id
-      WHERE h.company_id=$1 AND h.is_deleted=false`;
-    const params = [CID(req)]; let i = 2;
-    if (status)     { sql += ` AND h.status=$${i++}`; params.push(status); }
-    if (project_id) { sql += ` AND h.project_id=$${i++}`; params.push(project_id); }
-    sql += ' ORDER BY h.created_at DESC';
+    const cid = CID(req);
+    const params = [cid];
+    let i = 2;
+    let extra = '';
+    if (status)     { extra += ` AND status=$${i++}`;     params.push(status); }
+    if (project_id) { extra += ` AND project_id=$${i++}`; params.push(project_id); }
+
+    const sql = `
+      WITH combined AS (
+        SELECT h.id, h.order_no, h.equipment_desc, h.vendor_id, h.vendor_name,
+               h.hire_rate, h.rate_type, h.start_date, h.end_date, h.status,
+               h.project_id, 'hire_order' AS source,
+               e.code AS equipment_code, e.name AS equipment_name,
+               p.name AS project_name,
+               COALESCE((SELECT SUM(total_amount) FROM hire_vendor_invoices inv
+                          WHERE inv.hire_order_id=h.id
+                            AND inv.status IN ('approved','paid')),0) AS billed_value
+        FROM pm_hire_in_orders h
+        LEFT JOIN pm_equipment e ON e.id=h.equipment_id
+        LEFT JOIN projects p ON p.id=h.project_id
+        WHERE h.company_id=$1 AND h.is_deleted=false
+
+        UNION ALL
+
+        SELECT wo.id, wo.wo_number AS order_no, wo.subject AS equipment_desc,
+               wo.sc_id AS vendor_id, s.name AS vendor_name,
+               wo.contract_amount AS hire_rate, 'SC-WO' AS rate_type,
+               wo.start_date, wo.end_date, wo.status, wo.project_id, 'sc_wo' AS source,
+               NULL AS equipment_code, wo.subject AS equipment_name,
+               p.name AS project_name,
+               COALESCE(wo.total_billed, 0) AS billed_value
+        FROM sc_work_orders wo
+        LEFT JOIN sc_subcontractors s ON s.id = wo.sc_id
+        LEFT JOIN projects p ON p.id = wo.project_id
+        WHERE wo.company_id=$1
+          AND wo.status NOT IN ('cancelled', 'closed')
+          AND (LOWER(wo.subject) LIKE '%hiring%'
+               OR LOWER(wo.subject) LIKE '%hire%'
+               OR LOWER(wo.subject) LIKE '%rental%'
+               OR LOWER(wo.subject) LIKE '%lease%')
+      )
+      SELECT * FROM combined WHERE 1=1${extra} ORDER BY order_no
+    `;
     res.json({ data: (await query(sql, params)).rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
