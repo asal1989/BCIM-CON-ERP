@@ -7,7 +7,7 @@ const { query } = require('../config/database');
 const GLOBAL_ROLES = ['super_admin', 'admin', 'managing_director', 'director', 'ceo', 'cfo', 'md'];
 
 function isGlobalRole(role) {
-  return GLOBAL_ROLES.includes(role);
+  return GLOBAL_ROLES.includes(String(role || '').toLowerCase());
 }
 
 /**

@@ -297,12 +297,16 @@ router.get('/public/verify/:id', async (req, res) => {
       [req.params.id]
     );
     if (!po.rows.length) return res.status(404).json({ error: 'Purchase Order not found' });
-    
+
     const items = await query(
-      `SELECT * FROM po_items WHERE po_id = $1 ORDER BY sort_order`,
+      `SELECT material_name, quantity, unit, rate, gst_rate, gst_amount, total_amount, sort_order
+       FROM po_items WHERE po_id = $1 ORDER BY sort_order`,
       [req.params.id]
     );
-    res.json({ data: { ...po.rows[0], items: items.rows } });
+
+    // Strip sensitive vendor financials from the public response
+    const { vendor_bank_name, vendor_account_number, vendor_ifsc, ...safeData } = po.rows[0];
+    res.json({ data: { ...safeData, items: items.rows } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
