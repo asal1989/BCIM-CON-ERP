@@ -48,7 +48,11 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const inr = v =>
   `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-function makeEmptyRow(date) {
+// Extract equipment name from WO item description: "Hiring of Hydra Crane (12T) - Min 3hr" → "Hydra Crane (12T)"
+const getEquipKey = (desc) =>
+  (desc || '').replace(/^hiring of\s+/i, '').replace(/\s*[-–]\s*.+$/, '').trim();
+
+function makeEmptyRow(date, equipment = '') {
   const d = dayjs(date);
   const isSunday = d.day() === 0;
   return {
@@ -56,6 +60,7 @@ function makeEmptyRow(date) {
     date,
     day: DAYS[d.day()],
     status: isSunday ? 'Holiday' : 'Working',
+    equipment,
     shift: '1',
     startTime: '',
     endTime: '',
@@ -252,6 +257,25 @@ export default function CraneLogSheet({ category: categoryProp, vendorList: vend
     staleTime: 5 * 60 * 1000,
   });
   const woItems = woDetail?.items || [];
+
+  // Group WO items by equipment type (e.g. "Hydra Crane (12 Ton)", "F15-Farana Crane")
+  const equipmentGroups = useMemo(() => {
+    const map = new Map();
+    for (const item of woItems) {
+      const key = getEquipKey(item.description) || 'Equipment';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(item);
+    }
+    return map;
+  }, [woItems]);
+  const equipmentNames = useMemo(() => Array.from(equipmentGroups.keys()), [equipmentGroups]);
+
+  // When WO items load, set default equipment on rows that have none
+  useEffect(() => {
+    if (equipmentNames.length > 0) {
+      setRows(prev => prev.map(r => r.equipment ? r : { ...r, equipment: equipmentNames[0] }));
+    }
+  }, [equipmentNames.join(',')]); // eslint-disable-line
 
   // Auto-populate rate from first WO item when WO detail loads
   useEffect(() => {
@@ -471,7 +495,7 @@ export default function CraneLogSheet({ category: categoryProp, vendorList: vend
             <table className="w-full text-xs border-collapse" style={{ minWidth: 1400 }}>
               <thead>
                 <tr className="bg-slate-800 text-white">
-                  {['Date', 'Day', 'Status', 'Shift', 'Start', 'End', 'Gross Hrs', 'Idle Hrs', 'Idle Reason', 'Bdown Hrs', 'Bdown Reason', 'Net Hrs', 'Work Description', 'Floor / Location', 'SE Initial', ''].map(h => (
+                  {['Date', 'Day', 'Status', ...(equipmentNames.length > 1 ? ['Equipment'] : []), 'Shift', 'Start', 'End', 'Gross Hrs', 'Idle Hrs', 'Idle Reason', 'Bdown Hrs', 'Bdown Reason', 'Net Hrs', 'Work Description', 'Floor / Location', 'SE Initial', ''].map(h => (
                     <th key={h} className="px-2 py-2 text-left font-medium whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -488,6 +512,13 @@ export default function CraneLogSheet({ category: categoryProp, vendorList: vend
                           {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </td>
+                      {equipmentNames.length > 1 && (
+                        <td className="px-2 py-1">
+                          <select className="border border-indigo-300 rounded px-1 py-0.5 text-xs w-40 bg-indigo-50" value={row.equipment || equipmentNames[0]} onChange={e => updateRow(row.id, 'equipment', e.target.value)} disabled={submitted}>
+                            {equipmentNames.map(n => <option key={n} value={n}>{n}</option>)}
+                          </select>
+                        </td>
+                      )}
                       <td className="px-2 py-1">
                         <input className="border border-slate-300 rounded px-1 py-0.5 text-xs w-10 text-center" value={row.shift} onChange={e => updateRow(row.id, 'shift', e.target.value)} disabled={submitted} />
                       </td>
@@ -583,70 +614,78 @@ export default function CraneLogSheet({ category: categoryProp, vendorList: vend
       {/* ── SECTION 3.5: WO LINE ITEMS & BILL CALCULATION ── */}
       {woItems.length > 0 && (
         <SectionBox title="Section 3.5 — Work Order Line Items & Bill Calculation">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
-              <thead>
-                <tr className="bg-slate-100 text-xs text-slate-600 uppercase">
-                  <th className="px-3 py-2 text-left">#</th>
-                  <th className="px-3 py-2 text-left">Description</th>
-                  <th className="px-3 py-2 text-center">Unit</th>
-                  <th className="px-3 py-2 text-right">Contract Qty</th>
-                  <th className="px-3 py-2 text-right">Rate (₹)</th>
-                  <th className="px-3 py-2 text-right">Certified Hrs (Log)</th>
-                  <th className="px-3 py-2 text-right">Gross Amt (₹)</th>
-                  <th className="px-3 py-2 text-right">Idle Ded (₹)</th>
-                  <th className="px-3 py-2 text-right">Bdown Ded (₹)</th>
-                  <th className="px-3 py-2 text-right font-bold text-amber-700">Net Certifiable (₹)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {woItems.map((item, idx) => {
-                  const rate      = Number(item.rate) || 0;
-                  const certQty   = summary.totalNet;
-                  const grossAmt  = +(certQty * rate).toFixed(2);
-                  let idleRate = 0;
-                  if (ded.idleRule === 'Full') idleRate = rate;
-                  else if (ded.idleRule === '50%') idleRate = rate * 0.5;
-                  else if (ded.idleRule === 'Custom%') idleRate = rate * ((Number(ded.customIdlePct) || 0) / 100);
-                  const idleDed   = +(summary.totalIdle * idleRate).toFixed(2);
-                  const bdownDed  = +(summary.totalBdown * (ded.breakdownRule === 'Full' ? rate : 0)).toFixed(2);
-                  const netCert   = +(grossAmt - idleDed - bdownDed).toFixed(2);
-                  return (
-                    <tr key={item.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                      <td className="px-3 py-2 text-slate-500">{idx + 1}</td>
-                      <td className="px-3 py-2 font-medium text-slate-800">{item.description || '—'}</td>
-                      <td className="px-3 py-2 text-center text-slate-600">{item.unit || header.billingUnit}</td>
-                      <td className="px-3 py-2 text-right text-slate-600">{item.qty ?? '—'}</td>
-                      <td className="px-3 py-2 text-right text-slate-700">{inr(rate)}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-blue-700">{certQty}</td>
-                      <td className="px-3 py-2 text-right text-slate-700">{inr(grossAmt)}</td>
-                      <td className="px-3 py-2 text-right text-red-600">({inr(idleDed)})</td>
-                      <td className="px-3 py-2 text-right text-red-600">({inr(bdownDed)})</td>
-                      <td className="px-3 py-2 text-right font-bold text-amber-700">{inr(netCert)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot>
-                <tr className="bg-amber-50 border-t-2 border-amber-300">
-                  <td colSpan={9} className="px-3 py-2 text-right font-bold text-slate-800">Total Net Certifiable Amount</td>
-                  <td className="px-3 py-2 text-right font-bold text-xl text-amber-700">
-                    {inr(woItems.reduce((sum, item, idx) => {
-                      const rate = Number(item.rate) || 0;
-                      let idleRate = 0;
-                      if (ded.idleRule === 'Full') idleRate = rate;
-                      else if (ded.idleRule === '50%') idleRate = rate * 0.5;
-                      else if (ded.idleRule === 'Custom%') idleRate = rate * ((Number(ded.customIdlePct) || 0) / 100);
-                      const gross = summary.totalNet * rate;
-                      const idle  = summary.totalIdle * idleRate;
-                      const bdown = summary.totalBdown * (ded.breakdownRule === 'Full' ? rate : 0);
-                      return sum + gross - idle - bdown;
-                    }, 0))}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+          {Array.from(equipmentGroups.entries()).map(([equipName, items], gi) => {
+            // Hours for this equipment group from the daily log
+            const eqRows   = rows.filter(r => (r.equipment || equipmentNames[0]) === equipName);
+            const eqNet    = +eqRows.reduce((s, r) => s + (Number(r.netHrs)       || 0), 0).toFixed(2);
+            const eqIdle   = +eqRows.reduce((s, r) => s + (Number(r.idleHrs)      || 0), 0).toFixed(2);
+            const eqBdown  = +eqRows.reduce((s, r) => s + (Number(r.breakdownHrs) || 0), 0).toFixed(2);
+
+            let grandNet = 0;
+            return (
+              <div key={equipName} className={gi > 0 ? 'mt-6' : ''}>
+                {equipmentNames.length > 1 && (
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-sm font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-1">{equipName}</span>
+                    <span className="text-xs text-slate-500">Net hrs from log: <strong className="text-blue-700">{eqNet}</strong> | Idle: <strong className="text-red-500">{eqIdle}</strong> | Bdown: <strong className="text-red-500">{eqBdown}</strong></span>
+                  </div>
+                )}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+                    <thead>
+                      <tr className="bg-slate-100 text-xs text-slate-600 uppercase">
+                        <th className="px-3 py-2 text-left">#</th>
+                        <th className="px-3 py-2 text-left">Description</th>
+                        <th className="px-3 py-2 text-center">Unit</th>
+                        <th className="px-3 py-2 text-right">Contract Qty</th>
+                        <th className="px-3 py-2 text-right">Rate (₹)</th>
+                        <th className="px-3 py-2 text-right">Certified Qty (Log)</th>
+                        <th className="px-3 py-2 text-right">Gross Amt (₹)</th>
+                        <th className="px-3 py-2 text-right">Idle Ded (₹)</th>
+                        <th className="px-3 py-2 text-right">Bdown Ded (₹)</th>
+                        <th className="px-3 py-2 text-right font-bold text-amber-700">Net Certifiable (₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((item, idx) => {
+                        const rate     = Number(item.rate) || 0;
+                        const certQty  = eqNet;
+                        const grossAmt = +(certQty * rate).toFixed(2);
+                        let idleRate   = 0;
+                        if (ded.idleRule === 'Full')    idleRate = rate;
+                        else if (ded.idleRule === '50%') idleRate = rate * 0.5;
+                        else if (ded.idleRule === 'Custom%') idleRate = rate * ((Number(ded.customIdlePct) || 0) / 100);
+                        const idleDed  = +(eqIdle  * idleRate).toFixed(2);
+                        const bdownDed = +(eqBdown * (ded.breakdownRule === 'Full' ? rate : 0)).toFixed(2);
+                        const netCert  = +(grossAmt - idleDed - bdownDed).toFixed(2);
+                        grandNet += netCert;
+                        return (
+                          <tr key={item.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                            <td className="px-3 py-2 text-slate-500">{idx + 1}</td>
+                            <td className="px-3 py-2 font-medium text-slate-800">{item.description || '—'}</td>
+                            <td className="px-3 py-2 text-center text-slate-600">{item.unit || header.billingUnit}</td>
+                            <td className="px-3 py-2 text-right text-slate-600">{item.qty ?? '—'}</td>
+                            <td className="px-3 py-2 text-right text-slate-700">{inr(rate)}</td>
+                            <td className="px-3 py-2 text-right font-semibold text-blue-700">{certQty}</td>
+                            <td className="px-3 py-2 text-right text-slate-700">{inr(grossAmt)}</td>
+                            <td className="px-3 py-2 text-right text-red-600">({inr(idleDed)})</td>
+                            <td className="px-3 py-2 text-right text-red-600">({inr(bdownDed)})</td>
+                            <td className="px-3 py-2 text-right font-bold text-amber-700">{inr(netCert)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-amber-50 border-t-2 border-amber-300">
+                        <td colSpan={9} className="px-3 py-2 text-right font-bold text-slate-800">{equipName} — Net Certifiable</td>
+                        <td className="px-3 py-2 text-right font-bold text-lg text-amber-700">{inr(grandNet)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
         </SectionBox>
       )}
 
