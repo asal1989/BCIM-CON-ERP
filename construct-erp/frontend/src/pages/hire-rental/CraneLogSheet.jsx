@@ -407,7 +407,14 @@ export default function CraneLogSheet({ category: categoryProp, vendorList: vend
             }}>
               <option value="">— Select WO —</option>
               {woList
-                .filter(w => !header.vendorId || String(w.vendor_id) === String(header.vendorId))
+                .filter(w => {
+                  if (!header.vendorId) return true;
+                  // Match by vendor_id UUID first (populated on newer orders)
+                  if (w.vendor_id && String(w.vendor_id) === String(header.vendorId)) return true;
+                  // Fall back: match by vendor name (older orders stored name only)
+                  const selName = (vendorList.find(v => String(v.id || v.value) === String(header.vendorId))?.name || '').toLowerCase();
+                  return selName && (w.vendor_name || '').toLowerCase().includes(selName);
+                })
                 .map(w => (
                   <option key={w.id || w.wo_number} value={w.id || w.wo_number}>{w.wo_number}</option>
                 ))}
