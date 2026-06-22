@@ -23,13 +23,15 @@ router.use(loadProjectScope);
 async function nextMINNumber(client, companyId) {
   const yr = new Date().getFullYear();
   const r = await client.query(
-    `SELECT min_number FROM material_issue_notes 
-     WHERE min_number LIKE $1 ORDER BY created_at DESC LIMIT 1`,
-    [`MIN-${yr}-%`]
+    `SELECT COALESCE(
+       MAX(CAST(REGEXP_REPLACE(mi.min_number, '^MIN-[0-9]+-([0-9]+)$', '\\1') AS INTEGER)), 0
+     ) + 1 AS next
+     FROM material_issue_notes mi
+     JOIN projects p ON p.id = mi.project_id
+     WHERE mi.min_number LIKE $1 AND p.company_id = $2`,
+    [`MIN-${yr}-%`, companyId]
   );
-  const last = r.rows[0]?.min_number;
-  const seq = last ? parseInt(last.split('-')[2]) + 1 : 1;
-  return `MIN-${yr}-${String(seq).padStart(4, '0')}`;
+  return `MIN-${yr}-${String(r.rows[0].next).padStart(4, '0')}`;
 }
 
 // GET /stores/min

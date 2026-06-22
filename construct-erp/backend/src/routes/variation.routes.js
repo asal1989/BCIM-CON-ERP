@@ -90,12 +90,14 @@ router.post('/', authorize('super_admin','admin','qs_engineer','project_manager'
       // 3. Insert Items
       let total = 0;
       for (const it of items) {
+        const qty  = parseFloat(it.quantity) || 0;
+        const rate = parseFloat(it.rate)     || 0;
         await client.query(
           `INSERT INTO variation_items (vo_id, boq_item_id, new_item_description, unit, quantity, rate, reason)
            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [voId, it.boq_item_id || null, it.new_item_description || null, it.unit, it.quantity, it.rate, it.reason]
+          [voId, it.boq_item_id || null, it.new_item_description || null, it.unit, qty, rate, it.reason]
         );
-        total += (parseFloat(it.quantity) * parseFloat(it.rate));
+        total += qty * rate;
       }
 
       // 4. Update Header with total

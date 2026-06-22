@@ -2,7 +2,7 @@
 const express = require('express');
 const router  = express.Router();
 const { query } = require('../config/database');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
 
 router.use(authenticate);
 
@@ -241,7 +241,7 @@ router.patch('/:id/submit', async (req, res) => {
 });
 
 // ── DELETE /:id ───────────────────────────────────────────────────────────────
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authorize('super_admin', 'admin', 'project_manager', 'qs_engineer'), async (req, res) => {
   try {
     const r = await query(
       'DELETE FROM variation_statements WHERE id=$1 AND company_id=$2 RETURNING id',

@@ -95,7 +95,7 @@ router.get('/previous-stats', async (req, res) => {
          AND rbi.boq_item_id = $2 AND rb.status IN ('certified','paid')`,
       [project_id, boq_item_id, req.user.company_id]
     );
-    res.json({ data: result.rows[0] });
+    res.json({ data: result.rows[0] || { total_prev_qty: 0, total_prev_amount: 0 } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
