@@ -19,6 +19,12 @@ dayjs.extend(relativeTime);
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 const fmt = (n) => n > 0 ? `₹${Number(n).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—';
+
+// Items that specifically require MD-level authorization
+const isMDStageItem = (item) =>
+  (item.entity_type === 'mrs'        && item.status === 'approved_mgmt') ||
+  (item.entity_type === 'po'         && ['verified_audit', 'released_mgmt'].includes(item.status)) ||
+  (item.entity_type === 'work_order' && ['submitted', 'active'].includes(item.status));
 const daysAgo = (d) => {
   const diff = Math.floor((Date.now() - new Date(d)) / 86400000);
   return diff === 0 ? 'Today' : diff === 1 ? '1 day ago' : `${diff} days ago`;
@@ -287,7 +293,7 @@ function MDAuthModal({ mrsId, mrsRef, onClose, onAuthorized }) {
 }
 
 // ─── Single Approval Card ─────────────────────────────────────────────────────
-function ApprovalCard({ item, onApprove, onReject, onView, onMDReview }) {
+function ApprovalCard({ item, onApprove, onReject, onView, onMDReview, mdMode }) {
   const meta   = TYPE_META[item.doc_type] || TYPE_META['SC Bill'];
   const Icon   = meta.icon;
   const daysOld = Math.floor((Date.now() - new Date(item.created_at)) / 86400000);
@@ -370,32 +376,42 @@ function ApprovalCard({ item, onApprove, onReject, onView, onMDReview }) {
               title="View details">
               <Eye style={{width:16,height:16}} />
             </button>
-            {/* MD-stage items: navigate to the detail so MD can review then authorize */}
-            {(item.entity_type === 'mrs' && item.status === 'approved_mgmt') ||
-             (item.entity_type === 'po' && ['pending','verified_audit','released_mgmt'].includes(item.status)) ? (
+            {mdMode ? (
+              /* MD dashboard: single "Review & Authorise" button → navigate to the document */
               <button onClick={() => onView(item)}
                 className="flex items-center gap-1 px-2.5 py-1.5 bg-green-700 text-white rounded-lg text-xs font-bold hover:bg-green-800 transition-colors">
-                <Landmark style={{width:13,height:13}} /> Review &amp; Authorize
+                <Landmark style={{width:13,height:13}} /> Review &amp; Authorise
               </button>
             ) : (
               <>
-                {item.entity_type === 'sc_mb' && item.status === 'submitted' && (
-                  <button onClick={() => onApprove(item)}
-                    className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold hover:bg-amber-600 transition-colors">
-                    <CheckCircle2 style={{width:13,height:13}} /> Check
+                {/* MD-stage items on the full approvals page: navigate to detail */}
+                {((item.entity_type === 'mrs' && item.status === 'approved_mgmt') ||
+                  (item.entity_type === 'po' && ['pending','verified_audit','released_mgmt'].includes(item.status))) ? (
+                  <button onClick={() => onView(item)}
+                    className="flex items-center gap-1 px-2.5 py-1.5 bg-green-700 text-white rounded-lg text-xs font-bold hover:bg-green-800 transition-colors">
+                    <Landmark style={{width:13,height:13}} /> Review &amp; Authorise
                   </button>
+                ) : (
+                  <>
+                    {item.entity_type === 'sc_mb' && item.status === 'submitted' && (
+                      <button onClick={() => onApprove(item)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold hover:bg-amber-600 transition-colors">
+                        <CheckCircle2 style={{width:13,height:13}} /> Check
+                      </button>
+                    )}
+                    <button onClick={() => onApprove(item)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors">
+                      <CheckCircle2 style={{width:13,height:13}} />
+                      {item.entity_type === 'work_order' && ['submitted','active'].includes(item.status) ? 'Authorise' : 'Approve'}
+                    </button>
+                  </>
                 )}
-                <button onClick={() => onApprove(item)}
-                  className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors">
-                  <CheckCircle2 style={{width:13,height:13}} />
-                  {item.entity_type === 'work_order' && ['submitted','active'].includes(item.status) ? 'Authorize' : 'Approve'}
+                <button onClick={() => onReject(item)}
+                  className="flex items-center gap-1 px-2.5 py-1.5 bg-red-500 text-white rounded-lg text-xs font-bold hover:bg-red-600 transition-colors">
+                  <XCircle style={{width:13,height:13}} /> Reject
                 </button>
               </>
             )}
-            <button onClick={() => onReject(item)}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-red-500 text-white rounded-lg text-xs font-bold hover:bg-red-600 transition-colors">
-              <XCircle style={{width:13,height:13}} /> Reject
-            </button>
           </div>
         </div>
       </div>
@@ -404,7 +420,7 @@ function ApprovalCard({ item, onApprove, onReject, onView, onMDReview }) {
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-export default function ApprovalsPage({ embedded = false }) {
+export default function ApprovalsPage({ embedded = false, mdMode = false }) {
   const { user }    = useAuthStore();
   const navigate    = useNavigate();
   const qc          = useQueryClient();
@@ -420,9 +436,12 @@ export default function ApprovalsPage({ embedded = false }) {
     refetchInterval: 60000, // auto-refresh every 60s
   });
 
-  const items   = raw?.data    || [];
-  const summary = raw?.summary || {};
-  const total   = raw?.total   || 0;
+  const allItems = raw?.data    || [];
+  const summary  = raw?.summary || {};
+  const total    = raw?.total   || 0;
+
+  // In mdMode, only show items that specifically require MD-level authorisation
+  const items = mdMode ? allItems.filter(isMDStageItem) : allItems;
 
   // Filter tabs — built from actual data
   const tabs = useMemo(() => {
@@ -477,8 +496,12 @@ export default function ApprovalsPage({ embedded = false }) {
       {embedded ? (
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h2 className="text-base font-bold text-slate-800">Pending Approvals</h2>
-            <p className="text-xs text-slate-500">{total} item{total!==1?'s':''} waiting for your action</p>
+            <h2 className="text-base font-bold text-slate-800">
+              {mdMode ? 'Awaiting Your Review & Authorisation' : 'Pending Approvals'}
+            </h2>
+            <p className="text-xs text-slate-500">
+              {mdMode ? items.length : total} item{(mdMode ? items.length : total) !== 1 ? 's' : ''} waiting for your action
+            </p>
           </div>
           <button onClick={() => refetch()}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition">
@@ -608,7 +631,8 @@ export default function ApprovalsPage({ embedded = false }) {
                       onApprove={handleApprove}
                       onReject={handleReject}
                       onView={handleView}
-                      onMDReview={handleMDReview} />
+                      onMDReview={handleMDReview}
+                      mdMode={mdMode} />
                   ))}
                 </div>
               </div>
@@ -632,7 +656,8 @@ export default function ApprovalsPage({ embedded = false }) {
                       onApprove={handleApprove}
                       onReject={handleReject}
                       onView={handleView}
-                      onMDReview={handleMDReview} />
+                      onMDReview={handleMDReview}
+                      mdMode={mdMode} />
                   ))}
                 </div>
               </div>

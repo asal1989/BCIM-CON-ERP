@@ -1797,6 +1797,20 @@ export default function Layout() {
     })
     .filter(g => g.items.length > 0);
 
+  // MD users get a custom nav order: Procurement → Stores → QS&Billing → Planning → Bill Tracker → rest
+  const MD_NAV_ORDER = ['Overview', 'Procurement', 'Stores', 'QS & Billing', 'Planning', 'Bill Tracker'];
+  const isMDNavUser = (() => {
+    const r = String(user?.role || '').toLowerCase();
+    return ['md', 'managing_director'].includes(r)
+      || ['stephen@bcim.in', 'it@bcim.in'].includes(String(user?.email || '').toLowerCase());
+  })();
+  const orderedGroups = isMDNavUser
+    ? [
+        ...MD_NAV_ORDER.map(lbl => filteredGroups.find(g => g.label === lbl)).filter(Boolean),
+        ...filteredGroups.filter(g => !MD_NAV_ORDER.includes(g.label)),
+      ]
+    : filteredGroups;
+
   const doLogout = useCallback(async () => {
     sessionStorage.removeItem('erp-welcomed');
     sessionStorage.removeItem('erp-recents');
@@ -2044,7 +2058,7 @@ export default function Layout() {
       <div style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
         {/* Desktop sidebar — hidden on mobile via CSS */}
         <DesktopSidebar
-          navGroups={filteredGroups}
+          navGroups={orderedGroups}
           matchesPath={matchesPath}
           collapsed={sidebarCollapsed}
           onToggle={() => setSidebarCollapsed(c => !c)}
@@ -2064,7 +2078,7 @@ export default function Layout() {
       <MobileSidebar
         open={mobileOpen}
         onClose={() => setMobileOpen(false)}
-        navGroups={filteredGroups}
+        navGroups={orderedGroups}
         user={user}
         matchesPath={matchesPath}
         recentPages={recentPages}
@@ -2073,7 +2087,7 @@ export default function Layout() {
       <CommandPalette
         isOpen={paletteOpen}
         onClose={() => setPaletteOpen(false)}
-        navGroups={filteredGroups}
+        navGroups={orderedGroups}
         recentPages={recentPages}
       />
 

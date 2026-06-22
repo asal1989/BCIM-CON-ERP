@@ -462,7 +462,7 @@ export default function Dashboard() {
         {isMdRole && (
           <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', padding: '16px 18px', marginBottom: 18, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
             <Suspense fallback={<DashLoader />}>
-              <ApprovalsPage embedded />
+              <ApprovalsPage embedded mdMode />
             </Suspense>
           </div>
         )}
