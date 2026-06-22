@@ -157,7 +157,7 @@ function printStatement({ entries, advances, receipts, projectName }) {
 
 // ── Entry Form (Local Purchase) ───────────────────────────────────────────────
 const EMPTY_ITEM  = { material_name: '', unit: "NO'S", quantity: '' };
-const EMPTY_ENTRY = { project_id: '', entry_date: dayjs().format('YYYY-MM-DD'), supplier: '', invoice_no: '', basic_amount: '', gst_pct: '0', gst_amount: '', amount: '', remarks: '', bill_file_url: '', bill_file_name: '' };
+const EMPTY_ENTRY = { project_id: '', entry_date: dayjs().format('YYYY-MM-DD'), supplier: '', invoice_no: '', basic_amount: '', gst_pct: '0', gst_amount: '', amount: '', remarks: '', bill_file_url: '', bill_file_name: '', voucher_file_url: '', voucher_file_name: '' };
 const GST_RATES = [0, 5, 12, 18, 28];
 
 function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, existingInvoices, onClose }) {
@@ -170,7 +170,8 @@ function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, exi
           supplier: initial.supplier || '', invoice_no: initial.invoice_no || '',
           basic_amount: initial.basic_amount || '', gst_pct: initial.gst_pct ?? '0',
           gst_amount: initial.gst_amount || '', amount: initial.amount || '',
-          remarks: initial.remarks || '', bill_file_url: initial.bill_file_url || '', bill_file_name: initial.bill_file_name || '' }
+          remarks: initial.remarks || '', bill_file_url: initial.bill_file_url || '', bill_file_name: initial.bill_file_name || '',
+          voucher_file_url: initial.voucher_file_url || '', voucher_file_name: initial.voucher_file_name || '' }
       : { ...EMPTY_ENTRY, project_id: defaultProjectId || '' }
   );
   const [items, setItems] = useState(
@@ -178,7 +179,7 @@ function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, exi
       ? initial.items.map(it => ({ material_name: it.material_name, unit: it.unit, quantity: it.quantity }))
       : [{ ...EMPTY_ITEM }]
   );
-  const [uploading, setUploading] = useState(false);
+  const [uploading, setUploading] = useState(null); // 'bill' | 'voucher' | null
 
   const dupWarn = useMemo(() => {
     const inv = form.invoice_no?.trim();
@@ -203,19 +204,19 @@ function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, exi
   const budgetWarning = catCap > 0 && budgetPct >= 80;
   const budgetOver    = catCap > 0 && newTotal > catCap;
 
-  const handleFileChange = async (e) => {
+  const handleFileChange = (kind) => async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploading(true);
+    setUploading(kind);
     try {
       const res = await uploadAPI.uploadSingle(file);
-      set('bill_file_url',  res.data.url);
-      set('bill_file_name', file.name);
-      toast.success('Bill attached');
+      set(`${kind}_file_url`,  res.data.url);
+      set(`${kind}_file_name`, file.name);
+      toast.success(`${kind === 'bill' ? 'Bill' : 'Voucher'} attached`);
     } catch {
       toast.error('Upload failed — try again');
     } finally {
-      setUploading(false);
+      setUploading(null);
     }
   };
 
@@ -379,9 +380,32 @@ function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, exi
             <textarea className={clsx(F, 'resize-none')} rows={2} placeholder="Any additional notes…" value={form.remarks} onChange={e => set('remarks', e.target.value)} />
           </div>
 
-          {/* ── Bill / Voucher Upload ── */}
+          {/* ── Voucher Upload ── */}
           <div>
-            <Lbl>Attach Bill / Voucher</Lbl>
+            <Lbl>Attach Petty Cash Voucher</Lbl>
+            {form.voucher_file_url ? (
+              <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-2.5">
+                <Paperclip className="w-4 h-4 text-green-600 flex-shrink-0" />
+                <span className="text-sm text-green-700 font-medium flex-1 truncate">{form.voucher_file_name || 'Voucher attached'}</span>
+                <a href={form.voucher_file_url} target="_blank" rel="noreferrer"
+                  className="flex items-center gap-1 text-xs text-green-700 font-semibold hover:text-green-900 flex-shrink-0">
+                  <Eye className="w-3.5 h-3.5" /> View
+                </a>
+                <button type="button" onClick={() => { set('voucher_file_url', ''); set('voucher_file_name', ''); }}
+                  className="text-red-400 hover:text-red-600 flex-shrink-0"><X className="w-3.5 h-3.5" /></button>
+              </div>
+            ) : (
+              <label className={clsx('flex items-center gap-3 px-4 py-2.5 border-2 border-dashed border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition-colors', uploading && 'opacity-50 pointer-events-none')}>
+                <Upload className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                <span className="text-sm text-slate-500">{uploading === 'voucher' ? 'Uploading…' : 'Click to attach voucher photo or PDF (max 10 MB)'}</span>
+                <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleFileChange('voucher')} disabled={!!uploading} />
+              </label>
+            )}
+          </div>
+
+          {/* ── Bill Upload ── */}
+          <div>
+            <Lbl>Attach Bill</Lbl>
             {form.bill_file_url ? (
               <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-2.5">
                 <Paperclip className="w-4 h-4 text-green-600 flex-shrink-0" />
@@ -396,8 +420,8 @@ function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, exi
             ) : (
               <label className={clsx('flex items-center gap-3 px-4 py-2.5 border-2 border-dashed border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition-colors', uploading && 'opacity-50 pointer-events-none')}>
                 <Upload className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                <span className="text-sm text-slate-500">{uploading ? 'Uploading…' : 'Click to attach bill photo or PDF (max 10 MB)'}</span>
-                <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleFileChange} disabled={uploading} />
+                <span className="text-sm text-slate-500">{uploading === 'bill' ? 'Uploading…' : 'Click to attach bill photo or PDF (max 10 MB)'}</span>
+                <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleFileChange('bill')} disabled={!!uploading} />
               </label>
             )}
           </div>
@@ -1047,7 +1071,7 @@ export default function StoresPettyCashPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-100">
-                        {['Sl No', 'Date', 'Supplier', 'Materials', 'Invoice', 'Amount (₹)', 'Category', 'Status', 'Bill', 'Running Bal', 'Actions'].map(h => (
+                        {['Sl No', 'Date', 'Supplier', 'Materials', 'Invoice', 'Amount (₹)', 'Category', 'Status', 'Voucher', 'Bill', 'Running Bal', 'Actions'].map(h => (
                           <th key={h} className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-wider text-slate-500 whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -1075,6 +1099,14 @@ export default function StoresPettyCashPage() {
                             </td>
                             <td className="px-4 py-3"><CatBadge cat={cat} /></td>
                             <td className="px-4 py-3"><Badge label={row.status} /></td>
+                            <td className="px-4 py-3 text-center">
+                              {row.voucher_file_url
+                                ? <a href={row.voucher_file_url} target="_blank" rel="noreferrer" title={row.voucher_file_name || 'View Voucher'}
+                                    className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800" onClick={e => e.stopPropagation()}>
+                                    <Paperclip className="w-3.5 h-3.5" />
+                                  </a>
+                                : <span className="text-slate-300 text-xs">—</span>}
+                            </td>
                             <td className="px-4 py-3 text-center">
                               {row.bill_file_url
                                 ? <a href={row.bill_file_url} target="_blank" rel="noreferrer" title={row.bill_file_name || 'View Bill'}
@@ -1110,7 +1142,7 @@ export default function StoresPettyCashPage() {
                       <tr className="bg-slate-100 border-t-2 border-slate-200">
                         <td colSpan={5} className="px-4 py-3 text-right text-xs font-bold text-slate-600 uppercase">Total ({filteredEntries.length} entries)</td>
                         <td className="px-4 py-3 font-mono font-bold text-indigo-700 text-right">{inr(filteredEntries.filter(r => r.status !== 'Rejected').reduce((s, r) => s + Number(r.amount), 0))}</td>
-                        <td colSpan={3} />
+                        <td colSpan={4} />
                         <td className={clsx('px-4 py-3 font-mono font-bold text-right', balanceColor)}>{inr(cashInHand)}</td>
                         <td />
                       </tr>

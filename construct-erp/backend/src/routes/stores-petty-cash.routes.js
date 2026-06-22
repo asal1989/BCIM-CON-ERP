@@ -29,6 +29,8 @@ const router = express.Router();
   await safe(`ALTER TABLE stores_petty_cash_entries ADD COLUMN IF NOT EXISTS status        TEXT DEFAULT 'Pending'`);
   await safe(`ALTER TABLE stores_petty_cash_entries ADD COLUMN IF NOT EXISTS bill_file_url  TEXT`);
   await safe(`ALTER TABLE stores_petty_cash_entries ADD COLUMN IF NOT EXISTS bill_file_name TEXT`);
+  await safe(`ALTER TABLE stores_petty_cash_entries ADD COLUMN IF NOT EXISTS voucher_file_url  TEXT`);
+  await safe(`ALTER TABLE stores_petty_cash_entries ADD COLUMN IF NOT EXISTS voucher_file_name TEXT`);
   await safe(`ALTER TABLE stores_petty_cash_entries ADD COLUMN IF NOT EXISTS basic_amount  NUMERIC(14,2)`);
   await safe(`ALTER TABLE stores_petty_cash_entries ADD COLUMN IF NOT EXISTS gst_pct       NUMERIC(5,2) DEFAULT 0`);
   await safe(`ALTER TABLE stores_petty_cash_entries ADD COLUMN IF NOT EXISTS gst_amount    NUMERIC(14,2) DEFAULT 0`);
@@ -200,7 +202,7 @@ router.get('/entries/:id', authenticate, async (req, res) => {
 
 router.post('/entries', authenticate, async (req, res) => {
   try {
-    const { project_id, entry_date, supplier, invoice_no, amount = 0, remarks, items = [], status = 'Pending', bill_file_url, bill_file_name, basic_amount, gst_pct = 0, gst_amount = 0, total_amount } = req.body;
+    const { project_id, entry_date, supplier, invoice_no, amount = 0, remarks, items = [], status = 'Pending', bill_file_url, bill_file_name, voucher_file_url, voucher_file_name, basic_amount, gst_pct = 0, gst_amount = 0, total_amount } = req.body;
     if (!entry_date) return res.status(400).json({ error: 'entry_date is required' });
     if (!supplier?.trim()) return res.status(400).json({ error: 'supplier is required' });
     if (!items.filter(i => i.material_name?.trim()).length) {
@@ -224,11 +226,12 @@ router.post('/entries', authenticate, async (req, res) => {
       const r = await client.query(
         `INSERT INTO stores_petty_cash_entries
           (company_id, project_id, sl_no, entry_date, supplier, invoice_no, amount, remarks, status,
-           bill_file_url, bill_file_name, basic_amount, gst_pct, gst_amount, total_amount, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+           bill_file_url, bill_file_name, voucher_file_url, voucher_file_name, basic_amount, gst_pct, gst_amount, total_amount, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
         [req.user.company_id, project_id || null, sl_no, entry_date, supplier.trim(),
          invoice_no || null, n(amount), remarks || null, status,
          bill_file_url || null, bill_file_name || null,
+         voucher_file_url || null, voucher_file_name || null,
          basic_amount != null ? n(basic_amount) : null, n(gst_pct), n(gst_amount),
          total_amount != null ? n(total_amount) : null, req.user.id]
       );
@@ -255,7 +258,7 @@ router.put('/entries/:id', authenticate, async (req, res) => {
     const existing = await getEntry(req.params.id, req.user.company_id);
     if (!existing) return res.status(404).json({ error: 'Entry not found' });
 
-    const { project_id, entry_date, supplier, invoice_no, amount = 0, remarks, items = [], status, bill_file_url, bill_file_name, basic_amount, gst_pct = 0, gst_amount = 0, total_amount } = req.body;
+    const { project_id, entry_date, supplier, invoice_no, amount = 0, remarks, items = [], status, bill_file_url, bill_file_name, voucher_file_url, voucher_file_name, basic_amount, gst_pct = 0, gst_amount = 0, total_amount } = req.body;
 
     const invTrimmedPut = invoice_no?.trim();
     if (invTrimmedPut && invTrimmedPut !== '–' && !req.body.force) {
@@ -276,12 +279,15 @@ router.put('/entries/:id', authenticate, async (req, res) => {
            status=COALESCE($7,status),
            bill_file_url=COALESCE($8,bill_file_url),
            bill_file_name=COALESCE($9,bill_file_name),
-           basic_amount=$10, gst_pct=$11, gst_amount=$12, total_amount=$13,
+           voucher_file_url=COALESCE($10,voucher_file_url),
+           voucher_file_name=COALESCE($11,voucher_file_name),
+           basic_amount=$12, gst_pct=$13, gst_amount=$14, total_amount=$15,
            updated_at=NOW()
-         WHERE id=$14`,
+         WHERE id=$16`,
         [project_id || null, entry_date, supplier?.trim(), invoice_no || null, n(amount),
          remarks || null, status || null,
          bill_file_url || null, bill_file_name || null,
+         voucher_file_url || null, voucher_file_name || null,
          basic_amount != null ? n(basic_amount) : null, n(gst_pct), n(gst_amount),
          total_amount != null ? n(total_amount) : null,
          req.params.id]
