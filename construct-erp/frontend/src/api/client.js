@@ -239,6 +239,11 @@ export const boqAPI = {
   import:  (data)   => api.post('/boq/import', data, { headers: { 'Content-Type': undefined } }),
 };
 
+export const boqBudgetAPI = {
+  list:       (projectId)          => api.get(`/boq-budget/${projectId}`),
+  updateItem: (boqItemId, entries) => api.put(`/boq-budget/item/${boqItemId}`, { entries }),
+};
+
 export const boqMappingAPI = {
   // Allocation / mapping
   listMappings:    (pid)    => api.get(`/boq/${pid}/mappings`),
