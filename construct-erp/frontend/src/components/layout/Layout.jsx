@@ -189,6 +189,11 @@ const navGroups = [
     { to: '/accounts/taxes/tds',                        icon: ShieldCheck,     label: 'TDS' },
     { to: '/accounts/taxes/eway-bills',                 icon: Truck,           label: 'E-Way Bills' },
     { to: '/accounts/taxes/summary',                    icon: Landmark,        label: 'Tax Summary' },
+    // ── Compliance ────────────────────────────────────────────────────────────
+    { to: '/accounts/compliance',                       icon: Shield,          label: 'Compliance Overview' },
+    { to: '/accounts/compliance/gst',                   icon: IndianRupee,     label: 'GST Compliance' },
+    { to: '/accounts/compliance/tds',                   icon: FileBarChart,    label: 'TDS Returns & Certs' },
+    { to: '/accounts/compliance/labour',                icon: Users,           label: 'Labour Law (PF/ESI/PT)' },
     // ── Documents & Settings ─────────────────────────────────────────────────
     { to: '/accounts/documents',                        icon: FolderSearch,    label: 'Documents' },
     { to: '/accounts/settings',                         icon: Settings,        label: 'Settings' },
@@ -420,6 +425,7 @@ const NAV_SECTIONS = {
     { label: 'Accountant',  paths: ['/accounts/accountant/chart-of-accounts','/accounts/accountant/journal-entries','/accounts/accountant/transactions','/accounts/accountant/opening-balances','/accounts/accountant/bill-automation'] },
     { label: 'Reports',     paths: ['/accounts/reports/profit-loss','/accounts/reports/balance-sheet','/accounts/reports/trial-balance','/accounts/reports/cash-flow-statement','/accounts/reports/ar-aging','/accounts/reports/sales-by-customer','/accounts/reports/sales-by-item','/accounts/reports/ap-aging','/accounts/reports/purchase-by-vendor','/accounts/reports/expense-report','/accounts/reports/general-ledger','/accounts/reports/day-book','/accounts/reports/journal-report','/accounts/reports/financial','/accounts/reports/billing','/accounts/reports/management-mis','/accounts/reports/control-dashboard','/accounts/reports/budget'] },
     { label: 'Taxes',       paths: ['/accounts/taxes/gst','/accounts/taxes/gstr1','/accounts/taxes/gstr3b','/accounts/taxes/tds','/accounts/taxes/eway-bills','/accounts/taxes/summary'] },
+    { label: 'Compliance',  paths: ['/accounts/compliance','/accounts/compliance/gst','/accounts/compliance/tds','/accounts/compliance/labour'] },
     { label: 'Documents',   paths: ['/accounts/documents'] },
     { label: 'Settings',    paths: ['/accounts/settings'] },
   ],

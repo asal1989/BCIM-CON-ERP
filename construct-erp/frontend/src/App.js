@@ -85,6 +85,10 @@ const AccountExpensesPage     = lazy(() => import('./pages/accounts/AccountExpen
 const RecurringBillsPage      = lazy(() => import('./pages/accounts/RecurringBillsPage'));
 const OpeningBalancesPage     = lazy(() => import('./pages/accounts/OpeningBalancesPage'));
 const EWayBillsPage           = lazy(() => import('./pages/accounts/EWayBillsPage'));
+const ComplianceCalendarPage  = lazy(() => import('./pages/accounts/compliance/ComplianceCalendarPage'));
+const GSTCompliancePage       = lazy(() => import('./pages/accounts/compliance/GSTCompliancePage'));
+const TDSCompliancePage       = lazy(() => import('./pages/accounts/compliance/TDSCompliancePage'));
+const LabourCompliancePage    = lazy(() => import('./pages/accounts/compliance/LabourCompliancePage'));
 const CustomerStatementsPage = lazy(() => import('./pages/finance/CustomerStatementsPage'));
 const BankReconciliationPage = lazy(() => import('./pages/finance/BankReconciliationPage'));
 const PaymentRunPage         = lazy(() => import('./pages/finance/PaymentRunPage'));
@@ -641,6 +645,11 @@ export default function App() {
                 <Route path="accounts/taxes/gstr1" element={<RequireModule module="Finance"><GSTPage /></RequireModule>} />
                 <Route path="accounts/taxes/gstr3b" element={<RequireModule module="Finance"><GSTPage /></RequireModule>} />
                 <Route path="accounts/taxes/eway-bills" element={<RequireModule module="Finance"><EWayBillsPage /></RequireModule>} />
+                {/* Compliance */}
+                <Route path="accounts/compliance" element={<RequireModule module="Finance"><ComplianceCalendarPage /></RequireModule>} />
+                <Route path="accounts/compliance/gst" element={<RequireModule module="Finance"><GSTCompliancePage /></RequireModule>} />
+                <Route path="accounts/compliance/tds" element={<RequireModule module="Finance"><TDSCompliancePage /></RequireModule>} />
+                <Route path="accounts/compliance/labour" element={<RequireModule module="Finance"><LabourCompliancePage /></RequireModule>} />
 
                 {/* Legacy /finance/* redirects */}
                 <Route path="finance" element={<Navigate to="/accounts" replace />} />

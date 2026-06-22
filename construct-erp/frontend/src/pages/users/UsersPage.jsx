@@ -268,6 +268,11 @@ const MENU_CONFIG = {
     { to:'/accounts/taxes/tds',                        label:'TDS' },
     { to:'/accounts/taxes/eway-bills',                 label:'E-Way Bills' },
     { to:'/accounts/taxes/summary',                    label:'Tax Summary' },
+    // Compliance
+    { to:'/accounts/compliance',                       label:'Compliance Overview' },
+    { to:'/accounts/compliance/gst',                   label:'GST Compliance' },
+    { to:'/accounts/compliance/tds',                   label:'TDS Returns & Certs' },
+    { to:'/accounts/compliance/labour',                label:'Labour Law (PF/ESI/PT)' },
     // Documents & Settings
     { to:'/accounts/documents',                        label:'Documents' },
     { to:'/accounts/settings',                         label:'Settings' },
