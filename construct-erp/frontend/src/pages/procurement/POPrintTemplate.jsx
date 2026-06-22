@@ -146,11 +146,26 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
           </tr>
         </thead>
 
-        {/* ── Footer SPACER: reserves the signature band on EVERY page so flowing
-            content never hides behind the position:fixed .po-sig-footer below.
-            Height here must match .po-sig-footer's height in the print CSS. */}
+        {/* ── Signature + registered office — repeats at bottom of EVERY page
+            via browser-native display:table-footer-group behaviour.           */}
         <tfoot className="po-doc-foot-spacer" style={{ display: 'table-footer-group' }}>
-          <tr><td style={{ border: 'none', padding: 0, height: '36mm' }} /></tr>
+          <tr>
+            <td style={{ border: 'none', padding: '4px 0 6mm' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <tbody>
+                  <tr>
+                    {sigCell('Checked by', data.created_by_sig)}
+                    {sigCell('Director', data.released_mgmt_sig)}
+                    {sigCell('Managing Director', data.authorized_md_sig)}
+                  </tr>
+                </tbody>
+              </table>
+              <div style={{ textAlign: 'center', marginTop: '4px', lineHeight: 1.4 }}>
+                <div style={{ fontWeight: 700, fontSize: '10px' }}>BCIM ENGINEERING PRIVATE LIMITED</div>
+                <div style={{ fontSize: '9px' }}>&ldquo;B&rdquo; Wing, DivyaSree Chambers, No. 11, O&rsquo;Shaugnessy Road, Bangalore-560 025.</div>
+              </div>
+            </td>
+          </tr>
         </tfoot>
 
         {/* ── Flowing body ───────────────────────────────────────────────────── */}
@@ -338,22 +353,6 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
         </tbody>
       </table>
 
-      {/* po-sig-footer: position:fixed in print CSS pins this to the bottom of every page */}
-      <div className="po-sig-footer">
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <tbody>
-            <tr>
-              {sigCell('Checked by', data.created_by_sig)}
-              {sigCell('Director', data.released_mgmt_sig)}
-              {sigCell('Managing Director', data.authorized_md_sig)}
-            </tr>
-          </tbody>
-        </table>
-        <div style={{ textAlign: 'center', marginTop: '4px', lineHeight: 1.4 }}>
-          <div style={{ fontWeight: 700, fontSize: '10px' }}>BCIM ENGINEERING PRIVATE LIMITED</div>
-          <div style={{ fontSize: '9px' }}>&ldquo;B&rdquo; Wing, DivyaSree Chambers, No. 11, O&rsquo;Shaugnessy Road, Bangalore-560 025.</div>
-        </div>
-      </div>
     </div>
   );
 });

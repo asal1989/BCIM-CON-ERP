@@ -258,4 +258,19 @@ router.get('/amendments/:id/items', async (req, res) => {
   }
 });
 
+// PATCH /api/v1/variations/:id/reject
+router.patch('/:id/reject', authorize('super_admin', 'admin', 'project_manager'), async (req, res) => {
+  try {
+    const r = await query(
+      `UPDATE variation_orders SET status = 'rejected', updated_at = NOW()
+       WHERE id = $1 AND company_id = $2 AND status = 'pending' RETURNING *`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'VO not found or already processed' });
+    res.json({ data: r.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -387,11 +387,9 @@ function CreateVOModal({ onClose, project_id, projects }) {
   const labelCls = 'text-[10px] font-medium text-[#8e94a3] uppercase tracking-wider block mb-1';
 
   const { data: boqItems = [] } = useQuery({
-    queryKey:  ['boq', selProject],
-    queryFn:   () => boqItems && selProject
-      ? boqAPI.list({ project_id: selProject }).then(r => r.data?.data || [])
-      : Promise.resolve([]),
-    enabled: !!selProject,
+    queryKey: ['boq', selProject],
+    queryFn:  () => boqAPI.list({ project_id: selProject }).then(r => r.data?.data || []),
+    enabled:  !!selProject,
   });
 
   const mutation = useMutation({
@@ -625,6 +623,18 @@ function VODetailPanel({ id, onClose, canApprove }) {
       toast.success(ref ? `VO approved — BOQ Amendment ${ref} created` : 'Variation Order approved');
       onClose();
     },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Approval failed'),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: () => variationAPI.reject(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['variations'] });
+      qc.invalidateQueries({ queryKey: ['variation-detail', id] });
+      toast.success('Variation Order rejected');
+      onClose();
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Reject failed'),
   });
 
   return (
@@ -731,8 +741,12 @@ function VODetailPanel({ id, onClose, canApprove }) {
         {/* Approve / footer */}
         {vo?.status === 'pending' && canApprove && (
           <div className="px-6 py-4 border-t border-[#e2e6ec] bg-[#f8f9fb] flex justify-end gap-2">
-            <button className="px-5 py-2 rounded-lg border border-red-200 text-red-500 text-sm font-medium hover:bg-red-50 transition-colors flex items-center gap-1.5">
-              <XCircle className="w-4 h-4" /> Reject
+            <button
+              onClick={() => window.confirm('Reject this Variation Order?') && rejectMutation.mutate()}
+              disabled={rejectMutation.isPending}
+              className="px-5 py-2 rounded-lg border border-red-200 text-red-500 text-sm font-medium hover:bg-red-50 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+            >
+              <XCircle className="w-4 h-4" /> {rejectMutation.isPending ? 'Rejecting…' : 'Reject'}
             </button>
             <button
               onClick={() => approveMutation.mutate()}

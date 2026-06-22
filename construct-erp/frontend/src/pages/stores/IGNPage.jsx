@@ -46,7 +46,7 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, in
   if (!ign) return null;
   const items = ign.items || [];
   const totalRejected = items.reduce((s, it) => s + parseFloat(it.qty_rejected || 0), 0);
-  const totalValue    = items.reduce((s, it) => s + parseFloat(it.qty_inspected || it.qty_as_per_dc || 0) * parseFloat(it.rate || 0), 0);
+  const totalValue    = items.reduce((s, it) => s + (it.qty_inspected != null ? parseFloat(it.qty_inspected) : parseFloat(it.qty_as_per_dc || 0)) * parseFloat(it.rate || 0), 0);
   const localPrintRef = useRef(null);
   const handlePrint = useReactToPrint({ contentRef: localPrintRef });
 
@@ -790,7 +790,7 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
     const mode = b.tax_mode || 'intrastate';
     let basic = 0, cgst = 0, sgst = 0, igst = 0;
     items.filter(it => it.material_name?.trim()).forEach((it, i) => {
-      const qty  = parseFloat(it.qty_inspected || it.qty_as_per_dc || 0);
+      const qty  = it.qty_inspected != null ? parseFloat(it.qty_inspected) : parseFloat(it.qty_as_per_dc || 0);
       const rate = parseFloat(it.rate || 0);
       const li_basic = qty * rate;
       const gstPct = parseFloat(overrides[String(i)] ?? defaultGst);

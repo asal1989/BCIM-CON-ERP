@@ -117,7 +117,7 @@ export default function RABillPage() {
       body: filtered.map(b => [
         b.bill_number,
         b.project_name,
-        dayjs(b.bill_date).format('DD/MM/YYYY'),
+        dayjs(b.bill_date).isValid() ? dayjs(b.bill_date).format('DD/MM/YYYY') : '—',
         inr(b.gross_amount),
         inr(b.retention_amount),
         inr(b.net_payable),

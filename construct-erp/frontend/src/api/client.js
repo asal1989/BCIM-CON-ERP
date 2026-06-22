@@ -840,6 +840,7 @@ export const variationAPI = {
   get:            (id)     => api.get(`/variations/${id}`),
   create:         (data)   => api.post('/variations', data),
   approve:        (id, d)  => api.patch(`/variations/${id}/approve`, d || {}),
+  reject:         (id)     => api.patch(`/variations/${id}/reject`),
   approvedItems:  (params) => api.get('/variations/approved-items', { params }),
   amendments:     (params) => api.get('/variations/amendments', { params }),
   amendmentItems: (id)     => api.get(`/variations/amendments/${id}/items`),

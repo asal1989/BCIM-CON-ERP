@@ -1111,7 +1111,6 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onDelete, onA
     .po-items-table thead { display: table-header-group; }
     .po-items-table tbody tr { page-break-inside: avoid; }
     .po-terms-block li { page-break-inside: avoid; break-inside: avoid; }
-    .po-sig-footer { position: fixed; bottom: 0; left: 0; right: 0; height: 36mm; background: white; padding: 4px 10mm 6mm; }
     @page { size: A4 portrait; margin: 0; }
   </style>
 </head>
