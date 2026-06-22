@@ -66,7 +66,7 @@ export default function AttendancePage() {
   const stats = Object.fromEntries(Object.keys(STATUS).map(k => [k, allWorkers.filter(w => records[w.id]?.status === k).length]));
   const wageEst = allWorkers.reduce((s, w) => { 
     const st = records[w.id]?.status; 
-    return s + w.daily_rate * (st === 'present' ? 1 : st === 'half_day' ? 0.5 : 0); 
+    return s + (w.daily_rate || 0) * (st === 'present' ? 1 : st === 'half_day' ? 0.5 : 0); 
   }, 0);
 
   return (
@@ -178,7 +178,7 @@ export default function AttendancePage() {
                 const rec = records[w.id]; 
                 const st = rec?.status;
                 const v = STATUS[st] || { label: '?', bg: 'bg-slate-50', text: 'text-slate-300', border: 'border-slate-100' };
-                const wage = w.daily_rate * (st === 'present' ? 1 : st === 'half_day' ? 0.5 : 0);
+                const wage = (w.daily_rate || 0) * (st === 'present' ? 1 : st === 'half_day' ? 0.5 : 0);
                 
                 return (
                   <tr key={w.id} className="hover:bg-slate-50 transition-all group">

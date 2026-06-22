@@ -369,9 +369,9 @@ export default function VendorInvoicePage() {
                         {/* Amount */}
                         <td className="py-4 px-5 text-right">
                           <div className="font-medium font-mono text-slate-900 text-base">{inr(inv.net_amount)}</div>
-                          {inv.due_date && (
+                          {inv.due_date && dayjs(inv.due_date).isValid() && (
                             <div className={clsx('text-[9px] font-medium mt-0.5',
-                              dayjs(inv.due_date).isBefore(dayjs()) && inv.status !== 'paid'
+                              dayjs(inv.due_date).isBefore(dayjs()) && (inv.status || '') !== 'paid'
                                 ? 'text-red-500' : 'text-slate-400'
                             )}>
                               Due {dayjs(inv.due_date).format('D MMM')}

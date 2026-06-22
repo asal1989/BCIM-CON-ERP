@@ -219,7 +219,7 @@ export default function BillBookingPage() {
                                        type="number" 
                                        className="w-24 px-3 py-2 text-center bg-white border border-slate-200 rounded-xl focus:border-indigo-400 outline-none shadow-sm font-mono font-medium text-slate-900 transition-all" 
                                        value={it.quantity_invoiced}
-                                       onChange={e => setItems(p => p.map((x, i) => i === idx ? { ...x, quantity_invoiced: e.target.value } : x))}
+                                       onChange={e => setItems(p => p.map((x, i) => i === idx ? { ...x, quantity_invoiced: parseFloat(e.target.value) || 0 } : x))}
                                     />
                                  </td>
                                  <td className="p-5 text-right flex justify-end">
@@ -227,11 +227,11 @@ export default function BillBookingPage() {
                                        type="number" 
                                        className="w-32 px-3 py-2 text-right bg-white border border-slate-200 rounded-xl focus:border-indigo-400 outline-none shadow-sm font-mono font-medium text-indigo-600 transition-all" 
                                        value={it.rate_invoiced}
-                                       onChange={e => setItems(p => p.map((x, i) => i === idx ? { ...x, rate_invoiced: e.target.value } : x))}
+                                       onChange={e => setItems(p => p.map((x, i) => i === idx ? { ...x, rate_invoiced: parseFloat(e.target.value) || 0 } : x))}
                                     />
                                  </td>
                                  <td className="p-5 text-right">
-                                    <div className="font-mono font-medium text-slate-900 text-sm italic tracking-tighter">₹{(it.quantity_invoiced * it.rate_invoiced).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                    <div className="font-mono font-medium text-slate-900 text-sm italic tracking-tighter">₹{(parseFloat(it.quantity_invoiced || 0) * parseFloat(it.rate_invoiced || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                                  </td>
                               </tr>
                             ))}
@@ -263,7 +263,7 @@ export default function BillBookingPage() {
                               type="number" 
                               className="w-20 px-3 py-1.5 text-right bg-white border border-amber-200 rounded-lg focus:border-amber-400 outline-none shadow-sm font-mono font-medium text-amber-600 transition-all" 
                               value={formData.tds_percent}
-                              onChange={e => setFormData(p => ({ ...p, tds_percent: e.target.value }))}
+                              onChange={e => setFormData(p => ({ ...p, tds_percent: parseFloat(e.target.value) || 0 }))}
                             />
                          </div>
                          <div className="flex justify-between items-center text-[10px] font-medium text-amber-600 uppercase tracking-widest pt-3 border-t border-slate-200 italic">
