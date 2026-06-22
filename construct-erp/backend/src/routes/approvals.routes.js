@@ -234,7 +234,7 @@ router.get('/pending', async (req, res) => {
                  u.name AS submitted_by,
                  s.title AS extra_info,
                  'Submittal' AS doc_type, 'submittal' AS entity_type,
-                 '/quality/document-control' AS action_url
+                 '/quality/documents' AS action_url
           FROM quality_submittals s
           JOIN projects p ON p.id=s.project_id
           LEFT JOIN users u ON u.id=s.created_by
