@@ -360,4 +360,172 @@ router.get('/reports/orders', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RENTAL INVOICE V2 — Category-aware invoice + Crane log sheet endpoints
+// ═══════════════════════════════════════════════════════════════════════════
+
+runSchemaInit('rental_v2_tables', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS rental_log_sheets (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id    UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      project_id    UUID REFERENCES projects(id),
+      wo_id         TEXT,
+      log_no        VARCHAR(80),
+      category_code VARCHAR(20),
+      header        JSONB DEFAULT '{}',
+      period_from   DATE,
+      period_to     DATE,
+      status        VARCHAR(20) DEFAULT 'draft',
+      created_by    UUID REFERENCES users(id),
+      created_at    TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_rls_company ON rental_log_sheets(company_id)`);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS rental_log_rows (
+      id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      log_id           UUID NOT NULL REFERENCES rental_log_sheets(id) ON DELETE CASCADE,
+      row_date         DATE,
+      status           VARCHAR(20) DEFAULT 'Working',
+      shift            VARCHAR(5) DEFAULT '1',
+      start_time       VARCHAR(10),
+      end_time         VARCHAR(10),
+      gross_hrs        NUMERIC(6,2) DEFAULT 0,
+      idle_hrs         NUMERIC(6,2) DEFAULT 0,
+      idle_reason      VARCHAR(10),
+      breakdown_hrs    NUMERIC(6,2) DEFAULT 0,
+      breakdown_reason VARCHAR(10),
+      net_hrs          NUMERIC(6,2) DEFAULT 0,
+      work_description TEXT,
+      location         VARCHAR(200),
+      engr_initial     VARCHAR(20)
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_rlr_log ON rental_log_rows(log_id)`);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS rental_invoices_v2 (
+      id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id       UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      project_id       UUID REFERENCES projects(id),
+      bill_no          VARCHAR(80),
+      category_code    VARCHAR(20),
+      vendor_id        TEXT,
+      wo_id            TEXT,
+      log_sheet_id     UUID REFERENCES rental_log_sheets(id),
+      header           JSONB DEFAULT '{}',
+      usage            JSONB DEFAULT '{}',
+      deductions       JSONB DEFAULT '[]',
+      tax              JSONB DEFAULT '{}',
+      gross_amount     NUMERIC(15,2) DEFAULT 0,
+      taxable_value    NUMERIC(15,2) DEFAULT 0,
+      gst_amount       NUMERIC(15,2) DEFAULT 0,
+      tds_amount       NUMERIC(15,2) DEFAULT 0,
+      retention_amount NUMERIC(15,2) DEFAULT 0,
+      net_payable      NUMERIC(15,2) DEFAULT 0,
+      status           VARCHAR(20) DEFAULT 'draft',
+      qs_checklist     JSONB DEFAULT '{}',
+      qs_certified_by  UUID REFERENCES users(id),
+      qs_cert_no       VARCHAR(80),
+      qs_certified_at  TIMESTAMPTZ,
+      journal_posted   BOOLEAN DEFAULT FALSE,
+      created_by       UUID REFERENCES users(id),
+      created_at       TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_riv2_company ON rental_invoices_v2(company_id, status)`);
+});
+
+// GET /hire-rental/rental/next-seq?prefix=CRN
+router.get('/rental/next-seq', async (req, res) => {
+  try {
+    const { prefix } = req.query;
+    const yr = '2025-26';
+    const pattern = `BCIM/${prefix}/${yr}/%`;
+    const r = await query(
+      `SELECT bill_no FROM rental_invoices_v2 WHERE company_id=$1 AND bill_no LIKE $2 ORDER BY bill_no DESC LIMIT 1`,
+      [CID(req), pattern]
+    );
+    const last = r.rows[0]?.bill_no;
+    const seq  = last ? parseInt(last.split('/').pop()) + 1 : 1;
+    res.json({ seq, bill_no: `BCIM/${prefix}/${yr}/${String(seq).padStart(3, '0')}` });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /hire-rental/rental/log-check?wo_id=&from=&to=
+router.get('/rental/log-check', async (req, res) => {
+  try {
+    const { wo_id, from, to } = req.query;
+    const r = await query(
+      `SELECT log_no FROM rental_log_sheets WHERE company_id=$1 AND wo_id=$2 AND period_from=$3 AND period_to=$4 LIMIT 1`,
+      [CID(req), wo_id, from, to]
+    );
+    res.json({ duplicate: r.rows.length > 0, existing: r.rows[0] || null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /hire-rental/rental/log-sheets
+router.post('/rental/log-sheets', async (req, res) => {
+  try {
+    const { wo_id, log_no, category_code, header, period_from, period_to, rows, status } = req.body;
+    const r = await withTransaction(async (client) => {
+      const ins = await client.query(
+        `INSERT INTO rental_log_sheets (company_id, wo_id, log_no, category_code, header, period_from, period_to, status, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+        [CID(req), wo_id, log_no, category_code, JSON.stringify(header || {}), period_from, period_to, status || 'draft', req.user.id]
+      );
+      const logId = ins.rows[0].id;
+      if (Array.isArray(rows) && rows.length) {
+        for (const row of rows) {
+          await client.query(
+            `INSERT INTO rental_log_rows (log_id, row_date, status, shift, start_time, end_time, gross_hrs, idle_hrs, idle_reason, breakdown_hrs, breakdown_reason, net_hrs, work_description, location, engr_initial)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+            [logId, row.date, row.status, row.shift, row.startTime, row.endTime,
+             row.grossHrs||0, row.idleHrs||0, row.idleReason||null,
+             row.breakdownHrs||0, row.breakdownReason||null,
+             row.netHrs||0, row.workDescription||null, row.location||null, row.engrInitial||null]
+          );
+        }
+      }
+      return ins.rows[0];
+    });
+    res.status(201).json({ data: r });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /hire-rental/rental/log-sheets/:id
+router.get('/rental/log-sheets/:id', async (req, res) => {
+  try {
+    const log = await query(`SELECT * FROM rental_log_sheets WHERE id=$1 AND company_id=$2`, [req.params.id, CID(req)]);
+    if (!log.rows.length) return res.status(404).json({ error: 'Not found' });
+    const rows = await query(`SELECT * FROM rental_log_rows WHERE log_id=$1 ORDER BY row_date, shift`, [req.params.id]);
+    res.json({ data: { ...log.rows[0], rows: rows.rows } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /hire-rental/rental/invoices-v2
+router.post('/rental/invoices-v2', async (req, res) => {
+  try {
+    const { bill_no, category_code, vendor_id, wo_id, log_sheet_id, header, usage, deductions, tax,
+            gross_amount, taxable_value, gst_amount, tds_amount, retention_amount, net_payable } = req.body;
+    const r = await query(
+      `INSERT INTO rental_invoices_v2
+         (company_id, bill_no, category_code, vendor_id, wo_id, log_sheet_id,
+          header, usage, deductions, tax,
+          gross_amount, taxable_value, gst_amount, tds_amount, retention_amount, net_payable,
+          status, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'draft',$17) RETURNING id`,
+      [CID(req), bill_no, category_code, vendor_id, wo_id, log_sheet_id||null,
+       JSON.stringify(header||{}), JSON.stringify(usage||{}),
+       JSON.stringify(deductions||[]), JSON.stringify(tax||{}),
+       gross_amount||0, taxable_value||0, gst_amount||0, tds_amount||0, retention_amount||0, net_payable||0,
+       req.user.id]
+    );
+    res.status(201).json({ data: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

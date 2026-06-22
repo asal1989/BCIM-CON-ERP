@@ -15,7 +15,7 @@ import {
   CalendarOff, FileBarChart, Star, UserCheck, Fingerprint, PackageCheck, ArrowLeftRight,
   Landmark, FileSignature, CircleSlash, ShieldCheck, Clock3, Lightbulb,
   Gavel, Target, Send, Coins, Replace, Link2, Wrench, Layers, MapPin, TrendingDown, FolderOpen, Calculator, UserRound,
-  Cog, Fuel, Gauge, BarChart2, History
+  Cog, Fuel, Gauge, BarChart2, History, FilePlus
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import CommandPalette from './CommandPalette';
@@ -106,7 +106,6 @@ const navGroups = [
     { to: '/qs/boq',                  icon: FileSpreadsheet, label: 'BOQ & Estimation' },
     { to: '/qs/boq-mapping',          icon: Layers,          label: 'BOQ SC Mapping' },
     { to: '/qs/boq-dashboard',        icon: BarChart3,       label: 'BOQ Margin Dashboard' },
-    { to: '/qs/boq-budget',           icon: Wallet,          label: 'BOQ Budget Breakdown' },
     { to: '/qs/measurements',         icon: Ruler,           label: 'Measurement Book' },
     { to: '/qs/ra-bills',             icon: Receipt,         label: 'RA Bills' },
     { to: '/qs/po',                   icon: ShoppingCart,    label: 'Purchase Orders' },
@@ -273,6 +272,8 @@ const navGroups = [
     { to: '/hire-rental/payments',   icon: CreditCard,      label: 'Payment Status' },
     { to: '/hire-rental/reports',    icon: BarChart3,       label: 'Reports' },
     { to: '/plant/masters',          icon: Settings,        label: 'Settings' },
+    { to: '/hire-rental/crane-log',          icon: ClipboardList, label: 'Crane Log Sheet' },
+    { to: '/hire-rental/rental-invoice/new', icon: FilePlus,      label: 'New Rental Invoice' },
   ]},
   { label: 'DMS', items: [
     { to: '/dms',         icon: FolderOpen, label: 'Document Repository' },
@@ -403,7 +404,7 @@ const NAV_SECTIONS = {
   ],
   'QS & Billing': [
     { label: 'Overview',             paths: ['/qs','/qs/boq-dashboard'] },
-    { label: 'Quantity Survey',      paths: ['/qs/boq','/qs/boq-mapping','/qs/boq-budget','/qs/measurements','/qs/ra-bills'] },
+    { label: 'Quantity Survey',      paths: ['/qs/boq','/qs/boq-mapping','/qs/measurements','/qs/ra-bills'] },
     { label: 'Purchase Orders',      paths: ['/qs/po','/qs/po-register'] },
     { label: 'Work Orders',          paths: ['/qs/work-orders','/qs/wo-register'] },
     { label: 'Vendor Certification', paths: ['/qs/vendor-certifications','/qs/retention-releases'] },
