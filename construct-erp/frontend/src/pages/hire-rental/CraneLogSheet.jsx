@@ -244,6 +244,22 @@ export default function CraneLogSheet({ category: categoryProp, vendorList: vend
   const [signatories, setSignatories] = useState(initSignatories);
   const [submitted, setSubmitted] = useState(false);
 
+  // Fetch WO line items when a WO is selected
+  const { data: woDetail } = useQuery({
+    queryKey: ['sc-wo-detail', header.woId],
+    queryFn: () => scAPI.getWO(header.woId).then(r => r.data?.data || r.data || null),
+    enabled: !!header.woId,
+    staleTime: 5 * 60 * 1000,
+  });
+  const woItems = woDetail?.items || [];
+
+  // Auto-populate rate from first WO item when WO detail loads
+  useEffect(() => {
+    if (woItems.length > 0 && !ded.rate) {
+      setDed(d => ({ ...d, rate: String(woItems[0].rate || '') }));
+    }
+  }, [woItems]); // eslint-disable-line
+
   // Auto-fill project location from WO
   useEffect(() => {
     if (!header.woId) return;
@@ -563,6 +579,76 @@ export default function CraneLogSheet({ category: categoryProp, vendorList: vend
           </div>
         </div>
       </SectionBox>
+
+      {/* ── SECTION 3.5: WO LINE ITEMS & BILL CALCULATION ── */}
+      {woItems.length > 0 && (
+        <SectionBox title="Section 3.5 — Work Order Line Items & Bill Calculation">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+              <thead>
+                <tr className="bg-slate-100 text-xs text-slate-600 uppercase">
+                  <th className="px-3 py-2 text-left">#</th>
+                  <th className="px-3 py-2 text-left">Description</th>
+                  <th className="px-3 py-2 text-center">Unit</th>
+                  <th className="px-3 py-2 text-right">Contract Qty</th>
+                  <th className="px-3 py-2 text-right">Rate (₹)</th>
+                  <th className="px-3 py-2 text-right">Certified Hrs (Log)</th>
+                  <th className="px-3 py-2 text-right">Gross Amt (₹)</th>
+                  <th className="px-3 py-2 text-right">Idle Ded (₹)</th>
+                  <th className="px-3 py-2 text-right">Bdown Ded (₹)</th>
+                  <th className="px-3 py-2 text-right font-bold text-amber-700">Net Certifiable (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {woItems.map((item, idx) => {
+                  const rate      = Number(item.rate) || 0;
+                  const certQty   = summary.totalNet;
+                  const grossAmt  = +(certQty * rate).toFixed(2);
+                  let idleRate = 0;
+                  if (ded.idleRule === 'Full') idleRate = rate;
+                  else if (ded.idleRule === '50%') idleRate = rate * 0.5;
+                  else if (ded.idleRule === 'Custom%') idleRate = rate * ((Number(ded.customIdlePct) || 0) / 100);
+                  const idleDed   = +(summary.totalIdle * idleRate).toFixed(2);
+                  const bdownDed  = +(summary.totalBdown * (ded.breakdownRule === 'Full' ? rate : 0)).toFixed(2);
+                  const netCert   = +(grossAmt - idleDed - bdownDed).toFixed(2);
+                  return (
+                    <tr key={item.id || idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                      <td className="px-3 py-2 text-slate-500">{idx + 1}</td>
+                      <td className="px-3 py-2 font-medium text-slate-800">{item.description || '—'}</td>
+                      <td className="px-3 py-2 text-center text-slate-600">{item.unit || header.billingUnit}</td>
+                      <td className="px-3 py-2 text-right text-slate-600">{item.qty ?? '—'}</td>
+                      <td className="px-3 py-2 text-right text-slate-700">{inr(rate)}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-blue-700">{certQty}</td>
+                      <td className="px-3 py-2 text-right text-slate-700">{inr(grossAmt)}</td>
+                      <td className="px-3 py-2 text-right text-red-600">({inr(idleDed)})</td>
+                      <td className="px-3 py-2 text-right text-red-600">({inr(bdownDed)})</td>
+                      <td className="px-3 py-2 text-right font-bold text-amber-700">{inr(netCert)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="bg-amber-50 border-t-2 border-amber-300">
+                  <td colSpan={9} className="px-3 py-2 text-right font-bold text-slate-800">Total Net Certifiable Amount</td>
+                  <td className="px-3 py-2 text-right font-bold text-xl text-amber-700">
+                    {inr(woItems.reduce((sum, item, idx) => {
+                      const rate = Number(item.rate) || 0;
+                      let idleRate = 0;
+                      if (ded.idleRule === 'Full') idleRate = rate;
+                      else if (ded.idleRule === '50%') idleRate = rate * 0.5;
+                      else if (ded.idleRule === 'Custom%') idleRate = rate * ((Number(ded.customIdlePct) || 0) / 100);
+                      const gross = summary.totalNet * rate;
+                      const idle  = summary.totalIdle * idleRate;
+                      const bdown = summary.totalBdown * (ded.breakdownRule === 'Full' ? rate : 0);
+                      return sum + gross - idle - bdown;
+                    }, 0))}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </SectionBox>
+      )}
 
       {/* ── SECTION 4: DEDUCTION CALCULATOR ── */}
       <SectionBox title="Section 4 — Deduction Calculator">
