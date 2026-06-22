@@ -152,8 +152,8 @@ function DayBookView({ entries, from, to, onFrom, onTo }) {
   );
 }
 
-export default function AccountingReportsPage() {
-  const [tab, setTab] = useState('trial-balance');
+export default function AccountingReportsPage({ initialTab }) {
+  const [tab, setTab] = useState(initialTab || 'trial-balance');
   const [dbFrom, setDbFrom] = useState(dayjs().format('YYYY-MM-DD'));
   const [dbTo, setDbTo] = useState(dayjs().format('YYYY-MM-DD'));
 

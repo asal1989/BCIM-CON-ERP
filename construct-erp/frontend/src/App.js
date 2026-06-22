@@ -76,6 +76,15 @@ const BankAccountsPage        = lazy(() => import('./pages/accounts/BankAccounts
 const CustomersPage           = lazy(() => import('./pages/accounts/CustomersPage'));
 const InvoicesPage            = lazy(() => import('./pages/accounts/InvoicesPage'));
 const DebitNotesPage          = lazy(() => import('./pages/accounts/DebitNotesPage'));
+const BankRulesPage           = lazy(() => import('./pages/accounts/BankRulesPage'));
+const ItemsPage               = lazy(() => import('./pages/accounts/ItemsPage'));
+const EstimatesPage           = lazy(() => import('./pages/accounts/EstimatesPage'));
+const RecurringInvoicesPage   = lazy(() => import('./pages/accounts/RecurringInvoicesPage'));
+const DeliveryChallansPage    = lazy(() => import('./pages/accounts/DeliveryChallansPage'));
+const AccountExpensesPage     = lazy(() => import('./pages/accounts/AccountExpensesPage'));
+const RecurringBillsPage      = lazy(() => import('./pages/accounts/RecurringBillsPage'));
+const OpeningBalancesPage     = lazy(() => import('./pages/accounts/OpeningBalancesPage'));
+const EWayBillsPage           = lazy(() => import('./pages/accounts/EWayBillsPage'));
 const CustomerStatementsPage = lazy(() => import('./pages/finance/CustomerStatementsPage'));
 const BankReconciliationPage = lazy(() => import('./pages/finance/BankReconciliationPage'));
 const PaymentRunPage         = lazy(() => import('./pages/finance/PaymentRunPage'));
@@ -598,6 +607,40 @@ export default function App() {
                 <Route path="accounts/taxes/tds" element={<RequireModule module="Finance"><TDSPage /></RequireModule>} />
                 {/* Settings */}
                 <Route path="accounts/settings" element={<RequireModule module="Finance"><AccountSettingsPage /></RequireModule>} />
+                {/* Banking (new) */}
+                <Route path="accounts/banking/bank-rules" element={<RequireModule module="Finance"><BankRulesPage /></RequireModule>} />
+                {/* Items */}
+                <Route path="accounts/items" element={<RequireModule module="Finance"><ItemsPage /></RequireModule>} />
+                {/* Sales (new) */}
+                <Route path="accounts/sales/estimates" element={<RequireModule module="Finance"><EstimatesPage /></RequireModule>} />
+                <Route path="accounts/sales/recurring-invoices" element={<RequireModule module="Finance"><RecurringInvoicesPage /></RequireModule>} />
+                <Route path="accounts/sales/customer-payments" element={<RequireModule module="Finance"><ClientAdvanceRequestsPage /></RequireModule>} />
+                <Route path="accounts/sales/delivery-challans" element={<RequireModule module="Finance"><DeliveryChallansPage /></RequireModule>} />
+                {/* Purchases (new) */}
+                <Route path="accounts/purchases/expenses" element={<RequireModule module="Finance"><AccountExpensesPage /></RequireModule>} />
+                <Route path="accounts/purchases/purchase-orders" element={<Navigate to="/procurement/po" replace />} />
+                <Route path="accounts/purchases/recurring-bills" element={<RequireModule module="Finance"><RecurringBillsPage /></RequireModule>} />
+                <Route path="accounts/purchases/vendor-credits" element={<RequireModule module="Finance"><DebitNotesPage /></RequireModule>} />
+                {/* Accountant (new) */}
+                <Route path="accounts/accountant/opening-balances" element={<RequireModule module="Finance"><OpeningBalancesPage /></RequireModule>} />
+                {/* Reports — individual tabs / redirects */}
+                <Route path="accounts/reports/profit-loss" element={<RequireModule module="Finance"><AccountingReportsPage initialTab="pnl" /></RequireModule>} />
+                <Route path="accounts/reports/balance-sheet" element={<RequireModule module="Finance"><AccountingReportsPage initialTab="balance-sheet" /></RequireModule>} />
+                <Route path="accounts/reports/trial-balance" element={<RequireModule module="Finance"><AccountingReportsPage initialTab="trial-balance" /></RequireModule>} />
+                <Route path="accounts/reports/ar-aging" element={<RequireModule module="Finance"><AccountingReportsPage initialTab="ar-aging" /></RequireModule>} />
+                <Route path="accounts/reports/ap-aging" element={<RequireModule module="Finance"><AccountingReportsPage initialTab="ap-aging" /></RequireModule>} />
+                <Route path="accounts/reports/day-book" element={<RequireModule module="Finance"><AccountingReportsPage initialTab="day-book" /></RequireModule>} />
+                <Route path="accounts/reports/cash-flow-statement" element={<RequireModule module="Finance"><FinanceIntelligencePage /></RequireModule>} />
+                <Route path="accounts/reports/sales-by-customer" element={<RequireModule module="Finance"><CustomersPage /></RequireModule>} />
+                <Route path="accounts/reports/sales-by-item" element={<RequireModule module="Finance"><ItemsPage /></RequireModule>} />
+                <Route path="accounts/reports/purchase-by-vendor" element={<Navigate to="/procurement/vendors" replace />} />
+                <Route path="accounts/reports/expense-report" element={<RequireModule module="Finance"><AccountExpensesPage /></RequireModule>} />
+                <Route path="accounts/reports/general-ledger" element={<RequireModule module="Finance"><AccountTransactionsPage /></RequireModule>} />
+                <Route path="accounts/reports/journal-report" element={<RequireModule module="Finance"><JournalEntryPage /></RequireModule>} />
+                {/* Taxes (new) */}
+                <Route path="accounts/taxes/gstr1" element={<RequireModule module="Finance"><GSTPage /></RequireModule>} />
+                <Route path="accounts/taxes/gstr3b" element={<RequireModule module="Finance"><GSTPage /></RequireModule>} />
+                <Route path="accounts/taxes/eway-bills" element={<RequireModule module="Finance"><EWayBillsPage /></RequireModule>} />
 
                 {/* Legacy /finance/* redirects */}
                 <Route path="finance" element={<Navigate to="/accounts" replace />} />
