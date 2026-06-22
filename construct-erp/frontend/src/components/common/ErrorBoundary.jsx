@@ -14,7 +14,6 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    // Log to console (Winston on backend won't see this — use a service like Sentry in prod)
     console.error('[ErrorBoundary] Uncaught error:', error, errorInfo);
     this.setState({ errorInfo });
   }
@@ -22,6 +21,10 @@ class ErrorBoundary extends React.Component {
   handleReload = () => {
     this.setState({ hasError: false, error: null, errorInfo: null });
     window.location.reload();
+  };
+
+  handleRetry = () => {
+    this.setState({ hasError: false, error: null, errorInfo: null });
   };
 
   render() {
@@ -46,8 +49,7 @@ class ErrorBoundary extends React.Component {
             Something went wrong
           </h1>
           <p style={{ color: '#94a3b8', maxWidth: '480px', marginBottom: '1.5rem' }}>
-            An unexpected error occurred. Please reload the page. If the problem
-            persists, contact your system administrator.
+            An unexpected error occurred. You can try again or reload the page.
           </p>
           {process.env.NODE_ENV !== 'production' && this.state.error && (
             <pre
@@ -68,21 +70,38 @@ class ErrorBoundary extends React.Component {
               {this.state.errorInfo?.componentStack}
             </pre>
           )}
-          <button
-            onClick={this.handleReload}
-            style={{
-              background: '#3b82f6',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '8px',
-              padding: '0.625rem 1.5rem',
-              fontSize: '0.875rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            Reload Page
-          </button>
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <button
+              onClick={this.handleRetry}
+              style={{
+                background: '#1e293b',
+                color: '#f1f5f9',
+                border: '1px solid #334155',
+                borderRadius: '8px',
+                padding: '0.625rem 1.5rem',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Try Again
+            </button>
+            <button
+              onClick={this.handleReload}
+              style={{
+                background: '#3b82f6',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '0.625rem 1.5rem',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Reload Page
+            </button>
+          </div>
         </div>
       );
     }

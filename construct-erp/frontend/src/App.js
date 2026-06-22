@@ -1,6 +1,6 @@
 // src/App.js
 import React, { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import useAuthStore from './store/authStore';
@@ -428,11 +428,15 @@ function AuthInitializer({ children }) {
     const isPublicVendorPortal = window.location.pathname.startsWith('/vendor-rfq/');
     const handleAuthLogout = (event) => {
       queryClient.cancelQueries();
-      queryClient.clear();
+      const reason = event?.detail?.reason || 'session_expired';
       if (!isPublicVendorPortal && !window.location.pathname.startsWith('/login')) {
-        const reason = event?.detail?.reason || 'session_expired';
         navigate(`/login?reason=${reason}`, { replace: true });
       }
+      // Defer cache clear until after React has unmounted the current route's
+      // components — clearing synchronously before navigate causes components
+      // that still have query subscriptions to re-render with data=undefined,
+      // which throws TypeErrors that trip the ErrorBoundary ("reload the screen").
+      setTimeout(() => queryClient.clear(), 100);
     };
     window.addEventListener('auth:logout', handleAuthLogout);
 
@@ -472,12 +476,23 @@ function AuthInitializer({ children }) {
   return children;
 }
 
+// Resets the ErrorBoundary whenever the user navigates to a new route,
+// so a crash on one page doesn't permanently block the whole app.
+function LocationAwareErrorBoundary({ children }) {
+  const location = useLocation();
+  return (
+    <ErrorBoundary key={location.key}>
+      {children}
+    </ErrorBoundary>
+  );
+}
+
 export default function App() {
   return (
-    <ErrorBoundary>
     <LanguageProvider>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <LocationAwareErrorBoundary>
         <AuthInitializer>
           <Suspense fallback={<LoadingScreen />}>
             <Routes>
@@ -856,6 +871,7 @@ export default function App() {
             </Routes>
           </Suspense>
         </AuthInitializer>
+        </LocationAwareErrorBoundary>
         <Toaster
           position="top-right"
           toastOptions={{
@@ -868,6 +884,5 @@ export default function App() {
       </BrowserRouter>
     </QueryClientProvider>
     </LanguageProvider>
-    </ErrorBoundary>
   );
 }
