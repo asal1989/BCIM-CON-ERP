@@ -1,12 +1,14 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import dayjs from 'dayjs';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
   ClipboardList, Save, Send, FileDown, Link2, ChevronDown,
   ChevronUp, Plus, AlertTriangle, CheckCircle, Clock,
 } from 'lucide-react';
 import { RENTAL_CATEGORIES, logSheetNumber } from '../../config/RentalCategoryMaster';
+import { vendorAPI, hireRentalAPI } from '../../api/client';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -130,12 +132,33 @@ const STATUS_BADGE = {
 
 const LOG_CATEGORIES = RENTAL_CATEGORIES.filter(c => c.requiresLogSheet);
 
-export default function CraneLogSheet({ category: categoryProp, vendorList = [], woList = [], approverList = [], onCertified }) {
+export default function CraneLogSheet({ category: categoryProp, vendorList: vendorListProp = [], woList: woListProp = [], approverList = [], onCertified }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [pickedCode, setPickedCode] = useState(categoryProp?.code || location.state?.category?.code || 'CRANE');
   const category = categoryProp || LOG_CATEGORIES.find(c => c.code === pickedCode) || LOG_CATEGORIES[0];
   const isCrane = category?.code === 'CRANE';
+
+  // Fetch vendors and hire orders from API when not supplied as props
+  const { data: fetchedVendors = [] } = useQuery({
+    queryKey: ['vendors-for-log'],
+    queryFn: () => vendorAPI.list({ limit: 500 }).then(r => r.data?.data || r.data || []),
+    enabled: vendorListProp.length === 0,
+    staleTime: 5 * 60 * 1000,
+  });
+  const { data: fetchedOrders = [] } = useQuery({
+    queryKey: ['hire-orders-for-log'],
+    queryFn: () => hireRentalAPI.orders().then(r => r.data?.data || r.data || []),
+    enabled: woListProp.length === 0,
+    staleTime: 5 * 60 * 1000,
+  });
+  const vendorList = vendorListProp.length > 0 ? vendorListProp : fetchedVendors;
+  const woList = woListProp.length > 0 ? woListProp : fetchedOrders.map(o => ({
+    id: o.id,
+    wo_number: o.order_no || o.wo_number || o.id,
+    vendor_id: o.vendor_id,
+    project_name: o.project_name || '',
+  }));
 
   // ── Section 1 — Header state ──
   const [header, setHeader] = useState({
@@ -370,7 +393,7 @@ export default function CraneLogSheet({ category: categoryProp, vendorList = [],
             <input className={inp} value={header.regNo} onChange={e => setHeader(h => ({ ...h, regNo: e.target.value }))} placeholder="Vehicle / Reg. No." />
           </Field>
           <Field label="Vendor" required>
-            <select className={inp} value={header.vendorId} onChange={e => setHeader(h => ({ ...h, vendorId: e.target.value }))}>
+            <select className={inp} value={header.vendorId} onChange={e => setHeader(h => ({ ...h, vendorId: e.target.value, woId: '' }))}>
               <option value="">— Select Vendor —</option>
               {vendorList.map(v => (
                 <option key={v.id || v.value} value={v.id || v.value}>{v.name || v.label}</option>
@@ -378,11 +401,16 @@ export default function CraneLogSheet({ category: categoryProp, vendorList = [],
             </select>
           </Field>
           <Field label="WO No." required>
-            <select className={inp} value={header.woId} onChange={e => setHeader(h => ({ ...h, woId: e.target.value }))}>
+            <select className={inp} value={header.woId} onChange={e => {
+              const wo = woList.find(w => (w.id || w.wo_number) === e.target.value);
+              setHeader(h => ({ ...h, woId: e.target.value, projectLocation: wo?.project_name || h.projectLocation }));
+            }}>
               <option value="">— Select WO —</option>
-              {woList.map(w => (
-                <option key={w.id || w.wo_number} value={w.id || w.wo_number}>{w.wo_number}</option>
-              ))}
+              {woList
+                .filter(w => !header.vendorId || w.vendor_id === header.vendorId)
+                .map(w => (
+                  <option key={w.id || w.wo_number} value={w.id || w.wo_number}>{w.wo_number}</option>
+                ))}
             </select>
           </Field>
           <Field label="Project / Location">
