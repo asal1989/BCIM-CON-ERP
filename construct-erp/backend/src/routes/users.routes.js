@@ -93,7 +93,7 @@ runSchemaInit('users_role_schema', ensureRoleSchema);
       );
       if (exists.rowCount > 0) continue;
 
-      const company = await query(`SELECT id FROM companies WHERE LOWER(email_domain) = 'bcim.in' OR name ILIKE '%BCIM%' LIMIT 1`);
+      const company = await query(`SELECT company_id AS id FROM users WHERE LOWER(email) LIKE '%@bcim.in' AND company_id IS NOT NULL LIMIT 1`);
       if (!company.rowCount) { console.warn('[users] Seed: company not found, skipping', u.email); continue; }
       const companyId = company.rows[0].id;
 
