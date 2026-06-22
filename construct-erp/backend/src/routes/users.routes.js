@@ -72,6 +72,46 @@ runSchemaInit('users_role_schema', ensureRoleSchema);
   }
 })();
 
+// ── One-time user seeds ───────────────────────────────────────────────────────
+// Idempotent: only inserts if the email doesn't already exist for the company.
+(async () => {
+  const seeds = [
+    {
+      email:       'lokpratap@bcim.in',
+      name:        'Lok Pratap',
+      passwordHash: '$2a$10$DL5Tqc6SSIMqZ2MxwP11IuGdw/1egE230s36dO7Mv3muRk9ZkJqcy',
+      role:        'accountant',
+      department:  'Accounts',
+      accessible_modules: ['Stores'],
+    },
+  ];
+  for (const u of seeds) {
+    try {
+      const exists = await query(
+        `SELECT id FROM users WHERE LOWER(email) = $1 LIMIT 1`,
+        [u.email.toLowerCase()]
+      );
+      if (exists.rowCount > 0) continue;
+
+      const company = await query(`SELECT id FROM companies WHERE LOWER(email_domain) = 'bcim.in' OR name ILIKE '%BCIM%' LIMIT 1`);
+      if (!company.rowCount) { console.warn('[users] Seed: company not found, skipping', u.email); continue; }
+      const companyId = company.rows[0].id;
+
+      const empRow = await query(`SELECT COUNT(*) AS c FROM users WHERE company_id=$1`, [companyId]);
+      const empCode = `EMP${String(parseInt(empRow.rows[0].c || 0) + 1).padStart(3, '0')}`;
+
+      await query(
+        `INSERT INTO users (company_id, employee_code, name, email, password_hash, role, department, accessible_modules, is_active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true)`,
+        [companyId, empCode, u.name, u.email.toLowerCase(), u.passwordHash, u.role, u.department, u.accessible_modules]
+      );
+      console.log(`[users] Seeded user: ${u.email}`);
+    } catch (e) {
+      console.error(`[users] Seed failed for ${u.email}:`, e.message);
+    }
+  }
+})();
+
 const normalizeModules = (modules, fallback = []) => {
   const normalizeName = (name) => name === 'DQS Tracker' ? 'Bill Tracker' : name;
   if (modules === undefined || modules === null) return fallback;
