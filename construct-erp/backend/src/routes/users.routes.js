@@ -126,6 +126,26 @@ runSchemaInit('users_role_schema', ensureRoleSchema);
   }
 })();
 
+// ── One-time employee_code fixes ─────────────────────────────────────────────
+(async () => {
+  const codeFixes = [
+    { email: 'kdheena@gmail.com', employee_code: '42' },
+  ];
+  for (const { email, employee_code } of codeFixes) {
+    try {
+      const r = await query(
+        `UPDATE users SET employee_code = $1
+         WHERE LOWER(email) = $2 AND (employee_code IS DISTINCT FROM $1)
+         RETURNING id`,
+        [employee_code, email.toLowerCase()]
+      );
+      if (r.rowCount) console.log(`[users] employee_code updated to '${employee_code}' for ${email}`);
+    } catch (e) {
+      console.error(`[users] employee_code fix failed for ${email}:`, e.message);
+    }
+  }
+})();
+
 // ── One-time new user creation ───────────────────────────────────────────────
 // Idempotent: skips if a user with this email already exists.
 (async () => {
