@@ -1315,7 +1315,7 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onDelete, onA
                       className="flex-[2] h-9 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      {isApproving ? 'Processing…' : currentAction.id === 'procurement-approve' ? 'Procurement Approve' : 'MD Authorize'}
+                      {isApproving ? 'Processing…' : currentAction.id === 'procurement-approve' ? 'Procurement Approve' : 'Review & Authorize'}
                     </button>
                     <button
                       onClick={() => setRejectModal(true)}
