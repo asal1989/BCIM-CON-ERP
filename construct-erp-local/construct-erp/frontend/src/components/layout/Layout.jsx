@@ -1,0 +1,1743 @@
+// src/components/layout/Layout.jsx  — Top-nav layout (full-screen content)
+import React, { useState, useEffect, useRef, Suspense, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import {
+  LayoutDashboard, Building2, FileSpreadsheet, Ruler, Receipt,
+  DollarSign, CreditCard, Wallet, TrendingUp, Users, Clock,
+  Banknote, FileText, ShoppingCart, Truck, Package, PieChart,
+  HardHat, AlertTriangle, Shield, Cpu, Ticket, Key,
+  Home, BarChart3, LogOut, Menu, Bell, ChevronDown,
+  Activity, Building, ClipboardList, ArrowUpRight, BookOpen,
+  Search, Settings, Warehouse, X, ChevronRight, ChevronLeft,
+  ScrollText, BadgeCheck, FileSearch, FolderSearch, ClipboardCheck,
+  Briefcase, UploadCloud, Upload, ChevronUp, Flag, CalendarDays, GanttChartSquare, Hammer,
+  CalendarOff, FileBarChart, Star, UserCheck, Fingerprint, PackageCheck, ArrowLeftRight,
+  Landmark, FileSignature, CircleSlash, ShieldCheck, Clock3, Lightbulb,
+  Gavel, Target, Send, Coins, Replace, Link2, Wrench, Layers, MapPin, TrendingDown, FolderOpen, Calculator, IndianRupee,
+  History, LogOut, Mail, Image, FolderUp, MessageSquare, Database, Filter, UserCog, FileBadge, Network
+} from 'lucide-react';
+import useAuthStore from '../../store/authStore';
+import CommandPalette from './CommandPalette';
+import { clsx } from 'clsx';
+import LoadingScreen from '../common/LoadingScreen';
+import { useLanguage, LANGUAGES } from '../../context/LanguageContext';
+import NotificationPanel, { useNotificationCount } from './NotificationPanel';
+
+// ── Navigation data ─────────────────────────────────────────────────────────
+const navGroups = [
+  { label: 'Overview', items: [
+    { to: '/approvals', icon: BadgeCheck,      label: 'My Approvals' },
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/projects',  icon: Building2,       label: 'Projects' },
+  ]},
+  { label: 'Planning', items: [
+    { to: '/planning',              icon: GanttChartSquare, label: 'P&E Dashboard' },
+    { to: '/planning/p6-dashboard', icon: Activity,         label: 'P6 EVM Dashboard' },
+    { to: '/planning/wbs',          icon: Layers,           label: 'WBS Editor' },
+    { to: '/planning/activities',   icon: ClipboardList,    label: 'Schedule & Activities' },
+    { to: '/planning/milestones',   icon: Flag,             label: 'Milestones' },
+    { to: '/planning/look-ahead',   icon: CalendarDays,     label: 'Look-Ahead Plan' },
+    { to: '/planning/progress',     icon: TrendingUp,       label: 'Progress & S-Curve' },
+    { to: '/planning/delays',       icon: AlertTriangle,    label: 'Delay Analysis' },
+    { to: '/planning/risks',        icon: ShieldCheck,      label: 'Risk Register' },
+    { to: '/planning/mrp',          icon: Package,          label: 'Material Plan (MRP)' },
+    { to: '/planning/engineer-log',  icon: ClipboardList,    label: 'Engineer Daily Log' },
+    { to: '/planning/dpr',          icon: FileText,         label: 'Daily Progress (DPR)' },
+    { to: '/planning/reports',      icon: BarChart3,        label: 'Planning Reports' },
+    { to: '/planning/documents',    icon: FolderSearch,     label: 'Documents' },
+  ]},
+  { label: 'Procurement', items: [
+    { to: '/procurement/material-request', icon: ClipboardList, label: 'Material Request (MRS)' },
+    { to: '/procurement/vendors',          icon: Users,         label: 'Vendors' },
+    { to: '/procurement/live-rate-checker',icon: Search,        label: 'Live Rate Checker' },
+    { to: '/procurement/rate-contracts',   icon: Landmark,      label: 'Rate Contracts' },
+    { to: '/procurement/rfqs',             icon: Send,          label: 'RFQ' },
+    { to: '/procurement/quotations',       icon: FileText,      label: 'Quotations' },
+    { to: '/procurement/comparative-statements', icon: ScrollText, label: 'Comparative Statements' },
+    { to: '/procurement/po',               icon: ShoppingCart,  label: 'Purchase Orders' },
+    { to: '/procurement/po-amendments',    icon: FileSignature, label: 'PO Amendments' },
+    { to: '/procurement/po-register',      icon: ClipboardList, label: 'PO Register' },
+    { to: '/procurement/po-bulk-import',   icon: Upload,        label: 'Import POs (Bulk)' },
+    { to: '/procurement/work-orders',      icon: Hammer,        label: 'Work Orders' },
+    { to: '/procurement/wo-register',      icon: ClipboardList, label: 'WO Register' },
+    { to: '/procurement/wo-bulk-import',   icon: Upload,        label: 'Import WOs (Bulk)' },
+    { to: '/procurement/vendor-performance',icon: Star,         label: 'Vendor Performance' },
+    { to: '/procurement/vendor-payments',  icon: Wallet,        label: 'Vendor Payments' },
+    { to: '/procurement/vendor-mapping',   icon: Link2,         label: 'Vendor–Project Mapping' },
+    { to: '/procurement/inventory',        icon: Package,       label: 'Inventory' },
+    { to: '/procurement/documents',        icon: FolderSearch,  label: 'Documents' },
+  ]},
+  { label: 'Tender Management', items: [
+    { to: '/tender-management',           icon: Gavel,         label: 'Tender Register' },
+    { to: '/tender-management/issue',     icon: FileText,      label: 'Tender Issuance' },
+    { to: '/tender-management/register',  icon: ClipboardList, label: 'Bid Opportunities' },
+    { to: '/tender-management/documents', icon: FolderSearch,  label: 'Documents' },
+  ]},
+  { label: 'Stores', items: [
+    { to: '/stores',            icon: LayoutDashboard, label: 'Stores Dashboard' },
+    { to: '/stores/mrs',        icon: ClipboardList,   label: 'Material Requisition' },
+    { to: '/stores/po',         icon: ShoppingCart,    label: 'Purchase Orders' },
+    { to: '/stores/po-register',icon: ClipboardList,   label: 'PO Register' },
+    { to: '/stores/work-orders',icon: Hammer,          label: 'Work Orders' },
+    { to: '/stores/wo-register',icon: ClipboardList,   label: 'WO Register' },
+    { to: '/stores/grn',        icon: PackageCheck,    label: 'GRN Receiving' },
+    { to: '/stores/ledger',     icon: BookOpen,        label: 'Store Ledger' },
+    { to: '/stores/issue',      icon: ArrowUpRight,    label: 'Issue Notes (MIN)' },
+    { to: '/stores/mtr',        icon: Truck,           label: 'Material Transfer' },
+    { to: '/stores/documents',  icon: FolderSearch,    label: 'Documents' },
+  ]},
+  { label: 'QS & Billing', items: [
+    { to: '/qs',                      icon: LayoutDashboard, label: 'QS Dashboard' },
+    { to: '/qs/boq',                  icon: FileSpreadsheet, label: 'BOQ & Estimation' },
+    { to: '/qs/boq-mapping',          icon: Layers,          label: 'BOQ SC Mapping' },
+    { to: '/qs/boq-dashboard',        icon: BarChart3,       label: 'BOQ Margin Dashboard' },
+    { to: '/qs/measurements',         icon: Ruler,           label: 'Measurement Book' },
+    { to: '/qs/ra-bills',             icon: Receipt,         label: 'RA Bills' },
+    { to: '/qs/vendor-certifications',icon: FileSignature,   label: 'Vendor QS Certification' },
+    { to: '/qs/retention-releases',   icon: ShieldCheck,     label: 'Retention Release' },
+    { to: '/qs/variations',           icon: ArrowLeftRight,  label: 'Variation Orders' },
+    { to: '/qs/material-recon',       icon: Activity,        label: 'Material Recon' },
+    { to: '/qs/norms',                icon: FileSpreadsheet, label: 'Consumption Norms' },
+    { to: '/qs/reports',              icon: BarChart3,       label: 'QS Reports' },
+    { to: '/qs/documents',            icon: FolderSearch,    label: 'Documents' },
+  ]},
+  { label: 'Finance', items: [
+    { to: '/finance',                     icon: LayoutDashboard, label: 'Finance Dashboard' },
+    { to: '/finance/accounts-dashboard',  icon: BookOpen,        label: 'Accounts Dashboard' },
+    { to: '/finance/invoices',            icon: FileText,        label: 'Vendor Invoices' },
+    { to: '/finance/invoices/booking',    icon: ClipboardList,   label: 'Bill Booking' },
+    { to: '/finance/payment-run',         icon: Wallet,          label: 'Payment Run' },
+    { to: '/finance/payments',            icon: CreditCard,      label: 'Payments' },
+    { to: '/finance/customer-statements', icon: Receipt,         label: 'Customer Statements' },
+    { to: '/finance/bank-reconciliation', icon: Banknote,        label: 'Bank Reconciliation' },
+    { to: '/finance/cheque-tracker',      icon: BookOpen,        label: 'Cheque Tracker' },
+    { to: '/finance/petty-cash',          icon: Coins,           label: 'Petty Cash' },
+    { to: '/finance/gst',                 icon: DollarSign,      label: 'GST' },
+    { to: '/finance/tds',                 icon: ShieldCheck,     label: 'TDS' },
+    { to: '/finance/budget',              icon: PieChart,        label: 'Budget vs Actual' },
+    { to: '/finance/intelligence',        icon: TrendingUp,      label: 'Finance Intelligence' },
+    { to: '/finance/management-mis',      icon: BarChart3,       label: 'Management MIS' },
+    { to: '/finance/documents',           icon: FolderSearch,    label: 'Documents' },
+  ]},
+  { label: 'HR & Admin', items: [
+    // Main
+    { to: '/hr-admin',                      icon: LayoutDashboard, label: 'HR Dashboard' },
+    { to: '/ess',                           icon: UserCheck,       label: 'ESS Portal' },
+    { to: '/hr-admin/advanced',             icon: Briefcase,       label: 'Advanced HR' },
+    // Employee > Information
+    { to: '/hr-admin/employees',            icon: Users,           label: 'Employees' },
+    { to: '/hr-admin/position-history',     icon: History,         label: 'Position History' },
+    { to: '/hr-admin/separation',           icon: LogOut,          label: 'Separation' },
+    { to: '/hr-admin/employee-documents',   icon: FileText,        label: 'Employee Documents' },
+    { to: '/hr-admin/employee-salaries',    icon: IndianRupee,     label: 'Employee Salary' },
+    // Employee > Admin
+    { to: '/hr-admin/generate-letter',      icon: Mail,            label: 'Generate Letter' },
+    { to: '/hr-admin/import',               icon: Upload,          label: 'Excel Import' },
+    { to: '/hr-admin/bulk-photo-upload',    icon: Image,           label: 'Bulk Photo Upload' },
+    { to: '/hr-admin/bulk-document-upload', icon: FolderUp,        label: 'Bulk Document Upload' },
+    { to: '/hr-admin/bulletin-board',       icon: Bell,            label: 'Bulletin Board' },
+    { to: '/hr-admin/mass-communication',   icon: MessageSquare,   label: 'Mass Communication' },
+    { to: '/hr-admin/identity-verification',icon: ShieldCheck,     label: 'Identity Verification' },
+    { to: '/hr-admin/contracts',            icon: FileSignature,   label: 'Contract Details' },
+    { to: '/hr-admin/data-drive',           icon: Database,        label: 'Data Drive' },
+    // Employee > Setup
+    { to: '/hr-admin/letter-templates',     icon: FileBadge,       label: 'Letter Templates' },
+    { to: '/hr-admin/policies',             icon: BookOpen,        label: 'Company Policies & Forms' },
+    { to: '/hr-admin/employee-segments',    icon: UserCog,         label: 'Employee Segment' },
+    { to: '/hr-admin/employee-filters',     icon: Filter,          label: 'Employee Filter' },
+    // Time & Attendance
+    { to: '/hr-admin/attendance',           icon: Clock,           label: 'Attendance' },
+    { to: '/hr-admin/leaves',              icon: CalendarOff,     label: 'Leave Management' },
+    { to: '/hr-admin/holidays',            icon: CalendarDays,    label: 'Holiday Calendar' },
+    { to: '/hr-admin/essl-sync',           icon: Fingerprint,     label: 'ESSL Biometric' },
+    // Payroll
+    { to: '/hr-admin/payroll',             icon: CreditCard,      label: 'Payroll' },
+    { to: '/hr-admin/salary-structures',   icon: Banknote,        label: 'Salary Structures' },
+    { to: '/hr-admin/loans',              icon: Wallet,          label: 'Loans & Advances' },
+    { to: '/hr-admin/expenses',           icon: Receipt,         label: 'Expense Claims' },
+    // Admin
+    { to: '/hr-admin/departments',         icon: Building2,       label: 'Departments' },
+    { to: '/hr-admin/appraisals',         icon: Star,            label: 'Appraisals' },
+    // Reports & Docs
+    { to: '/hr-admin/reports',            icon: FileBarChart,    label: 'HR Reports' },
+    { to: '/hr-admin/documents',          icon: FolderSearch,    label: 'Documents' },
+  ]},
+  { label: 'Bill Tracker', items: [
+    { to: '/tqs',                       icon: LayoutDashboard, label: 'Bill Tracker Dashboard' },
+    { to: '/tqs/bills',                 icon: FileText,        label: 'Bills' },
+    { to: '/tqs/transmittal',           icon: Send,            label: 'Transmittal' },
+    { to: '/tqs/material-tracker',      icon: Package,         label: 'Material Tracker' },
+    { to: '/tqs/analytics',             icon: TrendingUp,      label: 'Analytics' },
+    { to: '/tqs/reports',               icon: BarChart3,       label: 'Reports' },
+    { to: '/tqs/liability-register',    icon: BookOpen,        label: 'Liability Register' },
+    { to: '/tqs/advance-tracker',       icon: Wallet,          label: 'Advance Tracker' },
+    { to: '/tqs/deduction-register',    icon: CircleSlash,     label: 'Deduction Register' },
+    { to: '/tqs/wo-bill-register',      icon: ClipboardList,   label: 'WO Bill Register' },
+    { to: '/tqs/cash-flow',             icon: TrendingUp,      label: 'Cash Flow' },
+    { to: '/tqs/cost-report',           icon: PieChart,        label: 'Cost Report' },
+    { to: '/tqs/vendor-certifications', icon: FileSignature,   label: 'QS Certification' },
+    { to: '/tqs/documents',             icon: FolderSearch,    label: 'Documents' },
+  ]},
+  { label: 'Quality (QA/QC)', items: [
+    { to: '/quality',                    icon: LayoutDashboard, label: 'QA/QC Dashboard' },
+    { to: '/quality/itp',                icon: ClipboardList, label: 'ITP Register' },
+    { to: '/quality/method-statements',  icon: BookOpen,      label: 'Method Statements' },
+    { to: '/quality/rfi',                icon: FileSearch,    label: 'RFI / WIR Ledger' },
+    { to: '/quality/mir',                icon: PackageCheck,  label: 'Material Inspection' },
+    { to: '/quality/mtc',                icon: ShieldCheck,   label: 'Test Certificates' },
+    { to: '/quality/lab-tests',          icon: Activity,      label: 'Lab Certifications' },
+    { to: '/quality/pour-cards',         icon: Layers,        label: 'Pour Cards' },
+    { to: '/quality/ncr',                icon: AlertTriangle, label: 'NCR Ledger' },
+    { to: '/quality/documents',          icon: FolderSearch,  label: 'Document Control' },
+    { to: '/quality/templates',          icon: ClipboardCheck,label: 'Checklist Masters' },
+    { to: '/quality/snags',              icon: Hammer,        label: 'Snag List' },
+    { to: '/quality/audits',             icon: Shield,        label: 'Quality Audits' },
+    { to: '/quality/reports',            icon: BarChart3,     label: 'QA/QC Reports' },
+    { to: '/quality/doc-repository',     icon: UploadCloud,   label: 'Documents' },
+    { to: '/quality/document-library',   icon: BookOpen,      label: 'QC Document Library' },
+  ]},
+  { label: 'HSE & Safety', items: [
+    { to: '/hse',              icon: Shield,       label: 'Safety Dashboard' },
+    { to: '/hse/incidents',    icon: AlertTriangle,label: 'Incident Hub' },
+    { to: '/hse/permits',      icon: Key,          label: 'Permit to Work' },
+    { to: '/hse/ppe',          icon: HardHat,      label: 'PPE Tracking' },
+    { to: '/hse/documents',    icon: FolderSearch, label: 'Documents' },
+  ]},
+  { label: 'Assets & IT', items: [
+    { to: '/assets/dashboard',      icon: LayoutDashboard, label: 'Asset Dashboard' },
+    { to: '/assets/categories',     icon: Layers,          label: 'Asset Categories' },
+    { to: '/assets',                icon: Truck,           label: 'Asset Master' },
+    { to: '/assets/tracking',       icon: MapPin,          label: 'Asset Tracking' },
+    { to: '/assets/allocation',     icon: ArrowLeftRight,  label: 'Allocation / Issuance' },
+    { to: '/assets/maintenance',    icon: Wrench,          label: 'Maintenance Management' },
+    { to: '/assets/work-orders',    icon: ClipboardList,   label: 'Work Orders' },
+    { to: '/assets/disposal',       icon: CircleSlash,     label: 'Disposal / Scrap' },
+    { to: '/assets/asset-docs',     icon: FileText,        label: 'Documents & Permits' },
+    { to: '/assets/operations',     icon: Activity,        label: 'Fuel & Usage Logs' },
+    { to: '/assets/depreciation',   icon: TrendingDown,    label: 'Depreciation' },
+    { to: '/assets/reports',        icon: FileBarChart,    label: 'Reports & Analytics' },
+    { to: '/assets/alerts',         icon: Bell,            label: 'Alerts & Notifications' },
+    { to: '/assets/roles',          icon: Shield,          label: 'Roles & Permissions' },
+    { to: '/it/assets',             icon: Cpu,             label: 'IT Register' },
+    { to: '/it/tickets',            icon: Ticket,          label: 'Help Desk' },
+    { to: '/it/licenses',           icon: Key,             label: 'Licenses / AMC' },
+    { to: '/assets/documents',      icon: FolderSearch,    label: 'Module Documents' },
+  ]},
+  { label: 'DMS', items: [
+    { to: '/dms',   icon: FolderOpen, label: 'Document Repository' },
+  ]},
+  { label: 'Subcontractors', items: [
+    { to: '/sc/dashboard',        icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/sc/master',           icon: Users,           label: 'Subcontractor Master' },
+    { to: '/sc/work-orders',      icon: Briefcase,       label: 'Work Order Management' },
+    { to: '/sc/labour',           icon: HardHat,         label: 'Labour / Worker Attendance' },
+    { to: '/sc/progress',         icon: Ruler,           label: 'Work Progress Entry' },
+    { to: '/sc/bill-preparation', icon: Receipt,         label: 'Bill Preparation' },
+    { to: '/sc/bill-approval',    icon: ShieldCheck,     label: 'Bill Approval' },
+    { to: '/sc/payments',         icon: CreditCard,      label: 'Payment Tracking' },
+    { to: '/sc/deductions',       icon: Calculator,      label: 'Retention / Deductions' },
+    { to: '/sc/documents',        icon: FolderSearch,    label: 'Documents' },
+    { to: '/sc/reports',          icon: BarChart3,       label: 'Reports' },
+    { to: '/sc/settings',         icon: Settings,        label: 'Settings' },
+  ]},
+  { label: 'Administration', items: [
+    { to: '/users', icon: Users, label: 'Team Members' },
+  ]},
+  { label: 'Automation Ideas', items: [
+    { to: '/automation-ideas', icon: Lightbulb, label: 'Ideas Dashboard' },
+    { to: '/approval-engine', icon: ShieldCheck, label: 'Approval Engine' },
+  ]},
+  { label: 'Reports', items: [
+    { to: '/reports', icon: FileBarChart, label: 'Reports Hub' },
+  ]},
+];
+
+const GROUP_COLORS = {
+  'Overview':          '#6366F1',
+  'Planning':          '#3B82F6',
+  'Procurement':       '#F59E0B',
+  'Tender Management': '#06B6D4',
+  'Stores':            '#14B8A6',
+  'QS & Billing':      '#10B981',
+  'Finance':           '#10B981',
+  'HR & Admin':        '#7C3AED',
+  'Bill Tracker':      '#6366F1',
+  'Quality (QA/QC)':   '#3B82F6',
+  'HSE & Safety':      '#EF4444',
+  'Assets & IT':       '#64748B',
+  'DMS':               '#0EA5E9',
+  'Subcontractors':    '#F97316',
+  'Administration':    '#A855F7',
+  'Automation Ideas':   '#2563EB',
+  'Approval Engine':    '#0F172A',
+  'Reports':           '#F43F5E',
+};
+
+const NAV_SECTIONS = {
+  'Planning': [
+    { label: 'Dashboard',  paths: ['/planning','/planning/p6-dashboard'] },
+    { label: 'Schedule',   paths: ['/planning/wbs','/planning/activities','/planning/milestones','/planning/look-ahead'] },
+    { label: 'Progress',   paths: ['/planning/dpr','/planning/progress','/planning/delays','/planning/reports'] },
+    { label: 'P6',         paths: ['/planning/risks','/planning/mrp'] },
+    { label: 'Documents',  paths: ['/planning/documents'] },
+  ],
+  'Procurement': [
+    { label: 'Request',          paths: ['/procurement/material-request'] },
+    { label: 'Vendors & Rates',  paths: ['/procurement/vendors','/procurement/live-rate-checker','/procurement/rate-contracts'] },
+    { label: 'RFQ',              paths: ['/procurement/rfqs'] },
+    { label: 'Quotations',       paths: ['/procurement/quotations'] },
+    { label: 'Comparative Statements', paths: ['/procurement/comparative-statements'] },
+    { label: 'Purchase Orders',  paths: ['/procurement/po','/procurement/po-register','/procurement/po-bulk-import','/procurement/po-amendments'] },
+    { label: 'Work Orders',      paths: ['/procurement/work-orders','/procurement/wo-register','/procurement/wo-bulk-import'] },
+    { label: 'Performance & Payment', paths: ['/procurement/vendor-performance','/procurement/vendor-payments'] },
+    { label: 'Stock',            paths: ['/procurement/inventory'] },
+    { label: 'Documents',        paths: ['/procurement/documents'] },
+  ],
+  'Stores': [
+    { label: 'Overview',        paths: ['/stores'] },
+    { label: 'Request',         paths: ['/stores/mrs'] },
+    { label: 'Purchase Orders', paths: ['/stores/po','/stores/po-register'] },
+    { label: 'Work Orders',     paths: ['/stores/work-orders','/stores/wo-register'] },
+    { label: 'Receiving',       paths: ['/stores/grn'] },
+    { label: 'Stock Control',   paths: ['/stores/ledger','/stores/issue'] },
+    { label: 'Transfer',        paths: ['/stores/mtr'] },
+    { label: 'Documents',       paths: ['/stores/documents'] },
+  ],
+  'Finance': [
+    { label: 'Overview',              paths: ['/finance','/finance/accounts-dashboard'] },
+    { label: 'Payables',              paths: ['/finance/invoices','/finance/invoices/booking','/finance/payment-run','/finance/payments'] },
+    { label: 'Receivables & Banking', paths: ['/finance/customer-statements','/finance/bank-reconciliation','/finance/cheque-tracker','/finance/petty-cash'] },
+    { label: 'Tax & Reports',         paths: ['/finance/gst','/finance/tds','/finance/budget','/finance/intelligence','/finance/management-mis'] },
+    { label: 'Documents',             paths: ['/finance/documents'] },
+  ],
+  'HR & Admin': [
+    { label: 'Main',        paths: ['/hr-admin','/ess','/hr-admin/advanced'] },
+    { label: 'Information', paths: ['/hr-admin/employees','/hr-admin/position-history','/hr-admin/separation','/hr-admin/employee-documents','/hr-admin/employee-salaries'] },
+    { label: 'Admin',       paths: ['/hr-admin/generate-letter','/hr-admin/import','/hr-admin/bulk-photo-upload','/hr-admin/bulk-document-upload','/hr-admin/bulletin-board','/hr-admin/mass-communication','/hr-admin/identity-verification','/hr-admin/contracts','/hr-admin/data-drive'] },
+    { label: 'Setup',       paths: ['/hr-admin/letter-templates','/hr-admin/policies','/hr-admin/employee-segments','/hr-admin/employee-filters'] },
+    { label: 'Time',        paths: ['/hr-admin/attendance','/hr-admin/leaves','/hr-admin/holidays','/hr-admin/essl-sync'] },
+    { label: 'Payroll',     paths: ['/hr-admin/payroll','/hr-admin/salary-structures','/hr-admin/loans','/hr-admin/expenses','/hr-admin/departments','/hr-admin/appraisals'] },
+    { label: 'Reports',     paths: ['/hr-admin/reports'] },
+    { label: 'Documents',   paths: ['/hr-admin/documents'] },
+  ],
+  'Bill Tracker': [
+    { label: 'Bills',      paths: ['/tqs','/tqs/bills','/tqs/transmittal'] },
+    { label: 'Trackers',   paths: ['/tqs/material-tracker','/tqs/advance-tracker','/tqs/liability-register'] },
+    { label: 'Reports',    paths: ['/tqs/analytics','/tqs/reports','/tqs/deduction-register','/tqs/wo-bill-register','/tqs/cash-flow','/tqs/cost-report'] },
+    { label: 'QS Cert',    paths: ['/tqs/vendor-certifications'] },
+    { label: 'Documents',  paths: ['/tqs/documents'] },
+  ],
+  'QS & Billing': [
+    { label: 'Overview',             paths: ['/qs'] },
+    { label: 'Quantity Survey',      paths: ['/qs/boq','/qs/measurements','/qs/ra-bills'] },
+    { label: 'Vendor Certification', paths: ['/qs/vendor-certifications','/qs/retention-releases'] },
+    { label: 'Controls',             paths: ['/qs/variations','/qs/material-recon','/qs/reports'] },
+    { label: 'Documents',            paths: ['/qs/documents'] },
+  ],
+  'Quality (QA/QC)': [
+    { label: 'Dashboard',    paths: ['/quality'] },
+    { label: 'Planning',     paths: ['/quality/itp','/quality/method-statements'] },
+    { label: 'Inspection',   paths: ['/quality/rfi'] },
+    { label: 'Materials',    paths: ['/quality/mir','/quality/mtc','/quality/lab-tests'] },
+    { label: 'Pour Cards',   paths: ['/quality/pour-cards'] },
+    { label: 'NCR & Snag',   paths: ['/quality/ncr','/quality/snags'] },
+    { label: 'Audits',       paths: ['/quality/audits'] },
+    { label: 'Doc Control',  paths: ['/quality/documents','/quality/templates','/quality/reports'] },
+    { label: 'Documents',    paths: ['/quality/doc-repository'] },
+  ],
+  'HSE & Safety': [
+    { label: 'Safety',    paths: ['/hse','/hse/incidents','/hse/permits','/hse/ppe'] },
+    { label: 'Documents', paths: ['/hse/documents'] },
+  ],
+  'Assets & IT': [
+    { label: 'Dashboard', paths: ['/assets/dashboard'] },
+    { label: 'Register',  paths: ['/assets','/assets/categories'] },
+    { label: 'Ops',       paths: ['/assets/tracking','/assets/allocation','/assets/maintenance','/assets/work-orders','/assets/disposal','/assets/asset-docs','/assets/operations'] },
+    { label: 'Reports',   paths: ['/assets/reports','/assets/depreciation','/assets/alerts','/assets/roles'] },
+    { label: 'IT',        paths: ['/it/assets','/it/tickets','/it/licenses'] },
+    { label: 'Documents', paths: ['/assets/documents'] },
+  ],
+  'Tender Management': [
+    { label: 'Tenders',   paths: ['/tender-management','/tender-management/issue'] },
+    { label: 'Documents', paths: ['/tender-management/documents'] },
+  ],
+};
+
+function getNavSections(group) {
+  const config = NAV_SECTIONS[group.label];
+  if (!config) return [{ label: null, items: group.items }];
+  const used = new Set();
+  const sections = config.map(s => ({
+    label: s.label,
+    items: s.paths.map(p => group.items.find(i => i.to === p || i.to.split('?')[0] === p)).filter(Boolean),
+  })).filter(s => s.items.length > 0);
+  sections.forEach(s => s.items.forEach(i => used.add(i.to)));
+  const remaining = group.items.filter(i => !used.has(i.to));
+  if (remaining.length) sections.push({ label: null, items: remaining });
+  return sections;
+}
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// ── Dropdown mega-menu ───────────────────────────────────────────────────────
+function GroupDropdown({ group, onClose, pos, onKeepOpen, onStartClose }) {
+  const location = useLocation();
+  const { t } = useLanguage();
+  const color = GROUP_COLORS[group.label] || '#6366F1';
+  const sections = getNavSections(group);
+  const isProcurementMenu = group.label === 'Procurement';
+
+  const matchesPath = (itemTo) => {
+    const p = itemTo.split('?')[0];
+    if (location.pathname === p) return true;
+    const segs = p.split('/').filter(Boolean);
+    return segs.length >= 2 && location.pathname.startsWith(p + '/');
+  };
+
+  // Determine column count based on section count
+  const numCols = sections.length <= 2 ? 1 : sections.length <= 5 ? 2 : 3;
+  const colW    = numCols === 1 ? 210 : numCols === 2 ? 230 : 220;
+  const dropW   = numCols * colW + (numCols - 1) * 1 + 24; // columns + dividers + padding
+
+  // Distribute sections into columns (balanced by section count)
+  const cols = Array.from({ length: numCols }, () => []);
+  sections.forEach((sec, i) => cols[i % numCols].push(sec));
+
+  // Keep dropdown within viewport
+  const vw = window.innerWidth;
+  let left = pos.left;
+  if (left + dropW > vw - 8) left = vw - dropW - 8;
+  if (left < 8) left = 8;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: pos.top,
+        left,
+        background: '#fff',
+        border: '1px solid #E2E8F0',
+        borderTop: `3px solid ${color}`,
+        borderRadius: '0 0 12px 12px',
+        boxShadow: '0 16px 48px rgba(0,0,0,0.14)',
+        width: dropW,
+        zIndex: 9999,
+        padding: '8px 0 12px',
+      }}
+      data-nav-dropdown="true"
+      onMouseEnter={onKeepOpen}
+      onMouseLeave={onStartClose}
+    >
+      {/* Group header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '5px 16px 8px',
+        borderBottom: '1px solid #F1F5F9', marginBottom: 4,
+      }}>
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+        <span style={{ fontSize: 11, fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          {t(group.label)}
+        </span>
+      </div>
+
+      {/* Items — CSS grid columns */}
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${numCols}, 1fr)`, gap: 0 }}>
+        {cols.map((colSections, ci) => (
+          <div key={ci} style={{
+            borderLeft: ci > 0 ? '1px solid #F1F5F9' : 'none',
+            padding: '0 4px',
+          }}>
+            {colSections.map((section, si) => (
+              <div key={si} style={{ marginBottom: si < colSections.length - 1 ? 4 : 0 }}>
+                {section.label && (
+                  <div style={{
+                    padding: '6px 12px 2px',
+                    fontSize: 9, fontWeight: 900, color: color,
+                    textTransform: 'uppercase', letterSpacing: '0.1em',
+                  }}>
+                    {t(section.label)}
+                  </div>
+                )}
+                {section.items.map(item => {
+                  const active = matchesPath(item.to);
+                  const Icon = item.icon;
+                  return (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      onClick={onClose}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '5px 12px',
+                        borderRadius: 6, margin: '1px 4px',
+                        background: active ? hexToRgba(color, 0.08) : 'transparent',
+                        color: active ? color : '#0F172A',
+                        textDecoration: 'none',
+                        fontSize: 11, fontWeight: active ? 700 : 600,
+                        textTransform: 'uppercase', letterSpacing: '0.04em',
+                        whiteSpace: 'nowrap',
+                        transition: 'background 0.12s',
+                      }}
+                      onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#F8FAFC'; }}
+                      onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+                    >
+                      <Icon size={12} style={{ flexShrink: 0, color: active ? color : '#475569' }} />
+                      <span>{t(item.label)}</span>
+                      {item.badge && (
+                        <span style={{ marginLeft: 'auto', background: '#EF4444', color: '#fff', fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 10 }}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </NavLink>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Scrollable nav wrapper with left/right arrows ────────────────────────────
+function NavScroller({ children }) {
+  const navRef   = useRef(null);
+  const [canLeft,  setCanLeft]  = useState(false);
+  const [canRight, setCanRight] = useState(false);
+
+  const check = useCallback(() => {
+    const el = navRef.current;
+    if (!el) return;
+    setCanLeft(el.scrollLeft > 4);
+    setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  }, []);
+
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    check();
+    el.addEventListener('scroll', check, { passive: true });
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => { el.removeEventListener('scroll', check); ro.disconnect(); };
+  }, [check]);
+
+  const scroll = (dir) => {
+    navRef.current?.scrollBy({ left: dir * 200, behavior: 'smooth' });
+  };
+
+  const arrowStyle = (enabled) => ({
+    flexShrink: 0,
+    width: enabled ? 24 : 0, height: 50,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: enabled ? 'rgba(255,255,255,0.06)' : 'transparent',
+    border: 'none', cursor: enabled ? 'pointer' : 'default',
+    color: enabled ? 'rgba(255,255,255,0.7)' : 'transparent',
+    transition: 'background 0.15s, width 0.15s',
+    padding: 0,
+    overflow: 'hidden',
+  });
+
+  return (
+    <div style={{ flex: 1, display: 'flex', alignItems: 'stretch', minWidth: 0, position: 'relative' }}>
+      <button style={arrowStyle(canLeft)} onClick={() => scroll(-1)} tabIndex={-1}>
+        <ChevronLeft size={14} />
+      </button>
+      <nav
+        ref={navRef}
+        style={{ flex: 1, display: 'flex', alignItems: 'center', overflowX: 'auto', minWidth: 0, gap: 4, padding: '0 8px' }}
+        className="nav-scroll"
+      >
+        {children}
+      </nav>
+      <button style={arrowStyle(canRight)} onClick={() => scroll(1)} tabIndex={-1}>
+        <ChevronRight size={14} />
+      </button>
+    </div>
+  );
+}
+
+// ── Nav group button ─────────────────────────────────────────────────────────
+function NavGroupButton({ group, isActive, isOpen, onOpen, onClose, dropPos, setDropPos, closeTimer }) {
+  const color = GROUP_COLORS[group.label] || '#6366F1';
+  const { t } = useLanguage();
+  const ref = useRef(null);
+
+  const calcPos = () => {
+    if (ref.current) {
+      const rect = ref.current.getBoundingClientRect();
+      setDropPos({ top: rect.bottom, left: rect.left });
+    }
+  };
+
+  const handleMouseEnter = () => {
+    clearTimeout(closeTimer.current);
+    calcPos();
+    onOpen();
+  };
+  const handleMouseLeave = () => {
+    closeTimer.current = setTimeout(onClose, 200);
+  };
+
+  return (
+    <div
+      ref={ref}
+      style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 3px' }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <button
+        onClick={() => { if (isOpen) { onClose(); } else { calcPos(); onOpen(); } }}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 7,
+          padding: '5px 13px',
+          height: 34,
+          background: isActive
+            ? hexToRgba(color, 0.22)
+            : isOpen
+              ? hexToRgba(color, 0.12)
+              : 'transparent',
+          border: isActive
+            ? `1px solid ${hexToRgba(color, 0.55)}`
+            : isOpen
+              ? `1px solid ${hexToRgba(color, 0.3)}`
+              : '1px solid transparent',
+          borderRadius: 8,
+          color: isActive ? '#FFFFFF' : isOpen ? '#FFFFFF' : 'rgba(255,255,255,0.92)',
+          fontSize: 11.5, fontWeight: isActive ? 700 : 600,
+          cursor: 'pointer', whiteSpace: 'nowrap',
+          transition: 'all 0.15s ease',
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+          textShadow: isActive ? `0 0 12px ${hexToRgba(color, 0.6)}` : 'none',
+        }}
+        onMouseEnter={e => {
+          if (!isActive && !isOpen) {
+            e.currentTarget.style.background = hexToRgba(color, 0.15);
+            e.currentTarget.style.color = '#fff';
+            e.currentTarget.style.borderColor = hexToRgba(color, 0.35);
+          }
+        }}
+        onMouseLeave={e => {
+          if (!isActive && !isOpen) {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.color = 'rgba(255,255,255,0.92)';
+            e.currentTarget.style.borderColor = 'transparent';
+          }
+        }}
+      >
+        {/* Colored dot — always uses group colour */}
+        <span style={{
+          width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+          background: color,
+          boxShadow: isActive ? `0 0 8px ${color}, 0 0 3px ${color}` : `0 0 5px ${hexToRgba(color, 0.5)}`,
+          transition: 'all 0.15s',
+        }} />
+        {t(group.label)}
+        <ChevronDown
+          size={10}
+          style={{
+            opacity: isActive ? 0.9 : 0.6,
+            transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+            transition: 'transform 0.2s',
+            marginLeft: 1,
+          }}
+        />
+      </button>
+    </div>
+  );
+}
+
+// ── Page title hook ──────────────────────────────────────────────────────────
+function usePageTitle() {
+  const location = useLocation();
+  const smartMatch = (itemTo) => {
+    const p = itemTo.split('?')[0];
+    if (location.pathname === p) return true;
+    const segs = p.split('/').filter(Boolean);
+    return segs.length >= 2 && location.pathname.startsWith(p + '/');
+  };
+  let best = null;
+  for (const g of navGroups) {
+    for (const item of g.items) {
+      if (smartMatch(item.to)) {
+        if (!best || item.to.length > best.item.to.length) best = { item, group: g.label };
+      }
+    }
+  }
+  if (best) return { title: best.item.label, group: best.group };
+  return { title: 'ConstructERP', group: '' };
+}
+
+// ── Mobile slide-in sidebar ──────────────────────────────────────────────────
+function MobileSidebar({ open, onClose, navGroups, user, matchesPath }) {
+  const [expandedGroup, setExpandedGroup] = useState(null);
+  const { t } = useLanguage();
+
+  return (
+    <>
+      {open && <div className="fixed inset-0 z-[90] bg-black/50 backdrop-blur-sm" onClick={onClose} />}
+      <div style={{
+        position: 'fixed', left: 0, top: 0, bottom: 0, width: 280,
+        background: 'linear-gradient(180deg,#1E40AF 0%,#172554 100%)',
+        zIndex: 100, transform: open ? 'translateX(0)' : 'translateX(-100%)',
+        transition: 'transform 0.25s ease', overflowY: 'auto',
+        display: 'flex', flexDirection: 'column',
+      }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <img src="/bcim-logo.png" alt="BCIM" style={{ width: 32, height: 32, objectFit: 'contain', background: '#fff', borderRadius: 8, padding: 3 }} />
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>BCIM ERP</div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.75)' }}>v3.0</div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8, padding: 6, cursor: 'pointer', color: 'rgba(255,255,255,0.7)' }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Groups */}
+        <div style={{ flex: 1, padding: '8px 0' }}>
+          {navGroups.map(group => {
+            const color = GROUP_COLORS[group.label] || '#6366F1';
+            const hasActive = group.items.some(i => matchesPath(i.to));
+            const isOpen = expandedGroup === group.label;
+            return (
+              <div key={group.label}>
+                <button
+                  onClick={() => setExpandedGroup(isOpen ? null : group.label)}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '9px 16px', background: 'transparent', border: 'none',
+                    color: hasActive ? '#fff' : 'rgba(255,255,255,0.85)', cursor: 'pointer',
+                    textAlign: 'left',
+                  }}
+                >
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: color, flexShrink: 0, boxShadow: hasActive ? `0 0 6px ${color}` : 'none' }} />
+                  <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', flex: 1 }}>{t(group.label)}</span>
+                  <ChevronDown size={12} style={{ opacity: 0.75, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                </button>
+                {isOpen && (
+                  <div style={{ paddingBottom: 4 }}>
+                    {group.items.map(item => {
+                      const Icon = item.icon;
+                      const active = matchesPath(item.to);
+                      return (
+                        <NavLink key={item.to} to={item.to} onClick={onClose}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 10,
+                            padding: '7px 16px 7px 28px',
+                            background: active ? hexToRgba(color, 0.18) : 'transparent',
+                            color: active ? '#fff' : 'rgba(255,255,255,0.85)',
+                            textDecoration: 'none', fontSize: 13,
+                            fontWeight: active ? 600 : 400,
+                            borderLeft: active ? `3px solid ${color}` : '3px solid transparent',
+                          }}
+                        >
+                          <Icon size={13} />
+                          {t(item.label)}
+                        </NavLink>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Welcome Screen ────────────────────────────────────────────────────────────
+function DesktopSidebar_UNUSED({ navGroups, matchesPath, collapsed, onToggle, onCollapse }) {
+  const activeGroup = navGroups.find(group => group.items.some(item => matchesPath(item.to)))?.label;
+  const [expandedGroup, setExpandedGroup] = useState(activeGroup || navGroups[0]?.label);
+  const { t } = useLanguage();
+
+  useEffect(() => {
+    if (activeGroup && !collapsed) setExpandedGroup(activeGroup);
+  }, [activeGroup, collapsed]);
+
+  return (
+    <aside
+      className="print:hidden desktop-sidebar"
+      style={{
+        width: 64,
+        flexShrink: 0,
+        position: 'relative',
+        zIndex: 45,
+        background: '#FFFFFF',
+        borderRight: '1px solid #E2E8F0',
+        boxShadow: '1px 0 10px rgba(15,23,42,0.04)',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'visible',
+      }}
+    >
+      <div style={{ height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 10px', borderBottom: '1px solid #EEF2F7' }}>
+        <button
+          onClick={onToggle}
+          title={collapsed ? 'Expand menu' : 'Collapse menu'}
+          style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #E2E8F0', background: '#F8FAFC', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+        >
+          {collapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
+        </button>
+      </div>
+
+      {!collapsed && (
+        <div
+          style={{
+            position: 'absolute',
+            left: 64,
+            top: 0,
+            bottom: 0,
+            width: 264,
+            background: '#FFFFFF',
+            borderRight: '1px solid #E2E8F0',
+            boxShadow: '18px 0 38px rgba(15,23,42,0.16)',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <div style={{ height: 46, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px', borderBottom: '1px solid #EEF2F7' }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Modules</div>
+              <div style={{ fontSize: 10, color: '#64748B' }}>ERP navigation</div>
+            </div>
+            <button
+              onClick={onToggle}
+              title="Collapse menu"
+              style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #E2E8F0', background: '#F8FAFC', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+            >
+              <ChevronLeft size={15} />
+            </button>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
+        {navGroups.map(group => {
+          const color = GROUP_COLORS[group.label] || '#6366F1';
+          const hasActive = group.items.some(item => matchesPath(item.to));
+          const isOpen = expandedGroup === group.label;
+
+          return (
+            <div key={group.label} style={{ marginBottom: 4 }}>
+              <button
+                onClick={() => setExpandedGroup(isOpen ? null : group.label)}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 9,
+                  padding: '9px 10px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: hasActive ? hexToRgba(color, 0.1) : 'transparent',
+                  color: hasActive ? '#0F172A' : '#475569',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0, boxShadow: hasActive ? `0 0 8px ${hexToRgba(color, 0.65)}` : 'none' }} />
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  {t(group.label)}
+                </span>
+                <ChevronDown size={13} style={{ color: '#94A3B8', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s' }} />
+              </button>
+
+              {isOpen && (
+                <div style={{ padding: '3px 0 5px' }}>
+                  {group.items.map(item => {
+                    const Icon = item.icon;
+                    const active = matchesPath(item.to);
+                    return (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        onClick={onCollapse}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 9,
+                          margin: '1px 0',
+                          padding: '7px 10px 7px 22px',
+                          borderRadius: 8,
+                          background: active ? hexToRgba(color, 0.12) : 'transparent',
+                          color: active ? color : '#64748B',
+                          textDecoration: 'none',
+                          fontSize: 11, fontWeight: active ? 700 : 600,
+                          textTransform: 'uppercase', letterSpacing: '0.04em',
+                          borderLeft: active ? `3px solid ${color}` : '3px solid transparent',
+                        }}
+                      >
+                        <Icon size={14} style={{ flexShrink: 0 }} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t(item.label)}</span>
+                      </NavLink>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+          </div>
+        </div>
+      )}
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 6px' }}>
+        {navGroups.map(group => {
+          const color = GROUP_COLORS[group.label] || '#6366F1';
+          const hasActive = group.items.some(item => matchesPath(item.to));
+          const GroupIcon = group.items[0]?.icon || FolderSearch;
+
+          return (
+            <button
+              key={group.label}
+              onClick={() => {
+                setExpandedGroup(group.label);
+                if (collapsed) onToggle();
+              }}
+              title={group.label}
+              style={{
+                width: 44,
+                height: 42,
+                margin: '2px auto 6px',
+                borderRadius: 10,
+                border: hasActive ? `1px solid ${hexToRgba(color, 0.35)}` : '1px solid transparent',
+                background: hasActive ? hexToRgba(color, 0.12) : 'transparent',
+                color: hasActive ? color : '#64748B',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                position: 'relative',
+              }}
+            >
+              <GroupIcon size={18} />
+              {hasActive && <span style={{ position: 'absolute', left: 2, top: 10, bottom: 10, width: 3, borderRadius: 4, background: color }} />}
+            </button>
+          );
+        })}
+      </div>
+    </aside>
+  );
+}
+
+const WELCOME_PARTICLES = [
+  [10, 14, 0,    6],  [22, 8,  1.2, 8],  [38, 18, 0.5, 7],
+  [55, 10, 2,   9],  [68, 16, 0.8, 6],  [80, 7,  1.5, 8],
+  [90, 12, 0.3, 7],  [47, 9,  2.5, 9],
+];
+
+function WelcomeScreen({ user, onDone }) {
+  const [phase, setPhase] = useState('enter'); // enter → stay → exit
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setPhase('exit'), 2600);
+    const t2 = setTimeout(() => onDone(),          3200);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [onDone]);
+
+  const roleLabel = (user?.role || '').replace(/_/g, ' ');
+  const firstName = (user?.name || 'there').split(' ')[0];
+
+  return (
+    <>
+      <style>{`
+        @keyframes ws-fadeIn   { from{opacity:0} to{opacity:1} }
+        @keyframes ws-scaleIn  { from{opacity:0;transform:scale(0.7)} to{opacity:1;transform:scale(1)} }
+        @keyframes ws-slideUp  { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes ws-barGrow  { from{width:0%} to{width:100%} }
+        @keyframes ws-pulse    { 0%,100%{opacity:0.4;transform:scale(1)} 50%{opacity:1;transform:scale(1.5)} }
+        @keyframes ws-floatUp  { 0%{opacity:0;transform:translateY(0) scale(0.6)} 15%{opacity:0.6} 85%{opacity:0.15} 100%{opacity:0;transform:translateY(-120px) scale(1.2)} }
+        @keyframes ws-shimmer  { 0%{background-position:-200% center} 100%{background-position:200% center} }
+        @keyframes ws-ringRot  { to{transform:rotate(360deg)} }
+        @keyframes ws-out      { from{opacity:1;transform:scale(1)} to{opacity:0;transform:scale(1.04)} }
+        @keyframes ws-curtainUp { from{transform:translateY(0)} to{transform:translateY(-100%)} }
+        @keyframes ws-gridFade { 0%,100%{opacity:0.02} 50%{opacity:0.06} }
+
+        .ws-root {
+          position:fixed; inset:0; z-index:10000;
+          display:flex; align-items:center; justify-content:center;
+          flex-direction:column;
+          background:#06102a;
+          overflow:hidden;
+          animation: ${phase === 'exit' ? 'ws-curtainUp 0.6s cubic-bezier(0.4,0,0.2,1) both' : 'ws-fadeIn 0.35s ease both'};
+        }
+        .ws-grid {
+          position:absolute; inset:0; pointer-events:none;
+          background-image:
+            linear-gradient(rgba(255,255,255,0.04) 1px,transparent 1px),
+            linear-gradient(90deg,rgba(255,255,255,0.04) 1px,transparent 1px);
+          background-size:60px 60px;
+          animation: ws-gridFade 4s ease-in-out infinite;
+        }
+        .ws-ring {
+          position:absolute; border-radius:50%; pointer-events:none;
+          border:1px solid rgba(201,162,39,0.12);
+          animation: ws-ringRot linear infinite;
+        }
+        .ws-gold-bar {
+          position:absolute; top:0; left:0; right:0; height:3px;
+          background:linear-gradient(90deg,#c9a227,#f0d060,#e8c547,#c9a227);
+          background-size:200% 100%;
+          animation: ws-shimmer 2s linear infinite;
+        }
+        .ws-bottom-bar {
+          position:absolute; bottom:0; left:0; right:0; height:3px;
+          background:rgba(201,162,39,0.3);
+        }
+        .ws-progress {
+          position:absolute; bottom:0; left:0; height:3px;
+          background:linear-gradient(90deg,#c9a227,#f0d060);
+          animation: ws-barGrow 2.4s 0.3s cubic-bezier(0.4,0,0.2,1) both;
+        }
+        .ws-content {
+          position:relative; z-index:10;
+          display:flex; flex-direction:column; align-items:center; gap:0;
+          text-align:center;
+        }
+        .ws-logo-wrap {
+          width:90px; height:90px; border-radius:20px;
+          background:#fff; padding:10px;
+          display:flex; align-items:center; justify-content:center;
+          box-shadow:0 0 0 0 rgba(201,162,39,0.4);
+          margin-bottom:28px;
+          animation: ws-scaleIn 0.5s 0.1s cubic-bezier(0.34,1.56,0.64,1) both;
+        }
+        .ws-logo-wrap img { width:100%; height:100%; object-fit:contain; }
+        .ws-company {
+          font-size:13px; font-weight:700; color:rgba(255,255,255,0.45);
+          letter-spacing:0.18em; text-transform:uppercase; margin-bottom:20px;
+          animation: ws-slideUp 0.5s 0.4s ease both; opacity:0;
+        }
+        .ws-welcome-line {
+          font-size:15px; font-weight:500; color:rgba(255,255,255,0.5);
+          letter-spacing:0.06em; margin-bottom:8px;
+          animation: ws-slideUp 0.5s 0.55s ease both; opacity:0;
+        }
+        .ws-name {
+          font-size:44px; font-weight:800; color:#fff;
+          letter-spacing:-0.02em; line-height:1.1;
+          animation: ws-slideUp 0.6s 0.65s cubic-bezier(0.22,1,0.36,1) both; opacity:0;
+        }
+        .ws-name span { color:#e8c547; }
+        .ws-role {
+          margin-top:12px; display:inline-flex; align-items:center; gap:7px;
+          background:rgba(201,162,39,0.12); border:1px solid rgba(201,162,39,0.25);
+          border-radius:20px; padding:5px 14px;
+          font-size:11px; font-weight:700; color:#c9a227;
+          letter-spacing:0.1em; text-transform:uppercase;
+          animation: ws-slideUp 0.5s 0.8s ease both; opacity:0;
+        }
+        .ws-role-dot { width:5px; height:5px; border-radius:50%; background:#c9a227; animation:ws-pulse 1.5s ease-in-out infinite; }
+        .ws-modules {
+          margin-top:36px; display:flex; gap:16px; flex-wrap:wrap; justify-content:center;
+          animation: ws-slideUp 0.5s 0.95s ease both; opacity:0;
+        }
+        .ws-module-chip {
+          display:flex; align-items:center; gap:6px;
+          background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1);
+          border-radius:8px; padding:7px 12px;
+          font-size:11px; color:rgba(255,255,255,0.55); font-weight:500;
+          transition:background 0.2s;
+        }
+        .ws-loading-text {
+          position:absolute; bottom:12px; left:50%; transform:translateX(-50%);
+          font-size:10px; color:rgba(255,255,255,0.25); letter-spacing:0.12em;
+          text-transform:uppercase; white-space:nowrap;
+          animation: ws-fadeIn 0.5s 1.2s ease both; opacity:0;
+        }
+        .ws-particle {
+          position:absolute; bottom:-20px; border-radius:50%;
+          background:rgba(201,162,39,0.3); pointer-events:none;
+          animation: ws-floatUp ease-in-out infinite;
+        }
+      `}</style>
+
+      <div className="ws-root">
+        <div className="ws-grid" />
+        <div className="ws-gold-bar" />
+
+        {/* Rotating rings */}
+        {[[380,30],[260,20],[160,15]].map(([size, dur], i) => (
+          <div key={i} className="ws-ring" style={{ width:size, height:size, animationDuration:`${dur}s`, animationDirection: i%2?'reverse':'normal' }} />
+        ))}
+
+        {/* Floating particles */}
+        {WELCOME_PARTICLES.map(([left, size, delay, dur], i) => (
+          <div key={i} className="ws-particle" style={{ left:`${left}%`, width:size, height:size, animationDelay:`${delay}s`, animationDuration:`${dur}s` }} />
+        ))}
+
+        {/* Main content */}
+        <div className="ws-content">
+          <div className="ws-logo-wrap">
+            <img src="/bcim-logo.png" alt="BCIM" />
+          </div>
+
+          <div className="ws-company">BCIM Engineering · ConstructERP</div>
+
+          <div className="ws-welcome-line">Welcome back,</div>
+          <div className="ws-name">
+            Good {getGreeting()}, <span>{firstName}!</span>
+          </div>
+
+          {roleLabel && (
+            <div className="ws-role">
+              <span className="ws-role-dot" />
+              {roleLabel}
+            </div>
+          )}
+
+          <div className="ws-modules">
+            {[
+              { icon: Building2,   label: 'Projects'    },
+              { icon: BarChart3,   label: 'Analytics'   },
+              { icon: FileText,    label: 'Bills'        },
+              { icon: Users,       label: 'Team'         },
+            ].map(({ icon: Icon, label }) => (
+              <div key={label} className="ws-module-chip">
+                <Icon size={12} style={{ color: '#c9a227' }} />
+                {label}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="ws-bottom-bar" />
+        <div className="ws-progress" />
+        <div className="ws-loading-text">Loading your workspace…</div>
+      </div>
+    </>
+  );
+}
+
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Morning';
+  if (h < 17) return 'Afternoon';
+  return 'Evening';
+}
+
+// ── Logout Screen ─────────────────────────────────────────────────────────────
+function LogoutScreen({ user, onDone }) {
+  const [phase, setPhase] = useState('enter');
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setPhase('exit'), 2200);
+    const t2 = setTimeout(() => onDone(),          2700);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [onDone]);
+
+  const firstName = (user?.name || 'there').split(' ')[0];
+
+  return (
+    <>
+      <style>{`
+        @keyframes lo-fadeIn    { from{opacity:0}                            to{opacity:1} }
+        @keyframes lo-scaleIn   { from{opacity:0;transform:scale(0.7)}       to{opacity:1;transform:scale(1)} }
+        @keyframes lo-slideUp   { from{opacity:0;transform:translateY(22px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes lo-barShrink { from{width:100%} to{width:0%} }
+        @keyframes lo-pulse     { 0%,100%{opacity:0.4;transform:scale(1)} 50%{opacity:1;transform:scale(1.5)} }
+        @keyframes lo-floatUp   { 0%{opacity:0;transform:translateY(0) scale(0.6)} 15%{opacity:0.5} 85%{opacity:0.1} 100%{opacity:0;transform:translateY(-130px) scale(1.2)} }
+        @keyframes lo-shimmer   { 0%{background-position:-200% center} 100%{background-position:200% center} }
+        @keyframes lo-ringRot   { to{transform:rotate(360deg)} }
+        @keyframes lo-curtainDown { from{transform:translateY(0)} to{transform:translateY(100%)} }
+        @keyframes lo-iconBob   { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+        @keyframes lo-waveIn    { 0%{clip-path:circle(0% at 50% 50%)} 100%{clip-path:circle(150% at 50% 50%)} }
+        @keyframes lo-checkDraw { from{stroke-dashoffset:60} to{stroke-dashoffset:0} }
+
+        .lo-root {
+          position:fixed; inset:0; z-index:10000;
+          display:flex; align-items:center; justify-content:center; flex-direction:column;
+          overflow:hidden;
+          background: linear-gradient(160deg, #06102a 0%, #0a1f4e 50%, #06102a 100%);
+          animation: ${phase === 'exit' ? 'lo-curtainDown 0.5s cubic-bezier(0.4,0,0.2,1) both' : 'lo-waveIn 0.55s cubic-bezier(0.22,1,0.36,1) both'};
+        }
+        .lo-grid {
+          position:absolute; inset:0; pointer-events:none;
+          background-image:
+            linear-gradient(rgba(255,255,255,0.03) 1px,transparent 1px),
+            linear-gradient(90deg,rgba(255,255,255,0.03) 1px,transparent 1px);
+          background-size:60px 60px;
+        }
+        .lo-gold-bar {
+          position:absolute; top:0; left:0; right:0; height:3px;
+          background:linear-gradient(90deg,#c9a227,#f0d060,#e8c547,#c9a227);
+          background-size:200% 100%;
+          animation: lo-shimmer 2s linear infinite;
+        }
+        .lo-ring {
+          position:absolute; border-radius:50%; pointer-events:none;
+          border:1px solid rgba(201,162,39,0.1);
+          animation: lo-ringRot linear infinite;
+        }
+        .lo-particle {
+          position:absolute; bottom:-20px; border-radius:50%;
+          background:rgba(201,162,39,0.25); pointer-events:none;
+          animation: lo-floatUp ease-in-out infinite;
+        }
+
+        .lo-content {
+          position:relative; z-index:10;
+          display:flex; flex-direction:column; align-items:center;
+          text-align:center;
+        }
+
+        /* Goodbye icon circle */
+        .lo-icon-circle {
+          width:90px; height:90px; border-radius:50%;
+          background:rgba(201,162,39,0.1);
+          border:2px solid rgba(201,162,39,0.3);
+          display:flex; align-items:center; justify-content:center;
+          margin-bottom:28px;
+          animation: lo-scaleIn 0.5s 0.1s cubic-bezier(0.34,1.56,0.64,1) both, lo-iconBob 3s 0.8s ease-in-out infinite;
+          opacity:0;
+        }
+        .lo-icon-circle svg { width:40px; height:40px; }
+
+        .lo-company {
+          font-size:11px; font-weight:700; color:rgba(255,255,255,0.35);
+          letter-spacing:0.18em; text-transform:uppercase; margin-bottom:18px;
+          animation: lo-slideUp 0.5s 0.35s ease both; opacity:0;
+        }
+        .lo-bye-line {
+          font-size:15px; font-weight:500; color:rgba(255,255,255,0.45);
+          letter-spacing:0.06em; margin-bottom:8px;
+          animation: lo-slideUp 0.5s 0.5s ease both; opacity:0;
+        }
+        .lo-name {
+          font-size:44px; font-weight:800; color:#fff;
+          letter-spacing:-0.02em; line-height:1.1;
+          animation: lo-slideUp 0.6s 0.6s cubic-bezier(0.22,1,0.36,1) both; opacity:0;
+        }
+        .lo-name span { color:#e8c547; }
+        .lo-sub {
+          margin-top:14px; font-size:14px; color:rgba(255,255,255,0.4); font-weight:400;
+          animation: lo-slideUp 0.5s 0.75s ease both; opacity:0;
+        }
+        .lo-divider {
+          width:60px; height:2px; background:rgba(201,162,39,0.35);
+          border-radius:2px; margin:22px auto;
+          animation: lo-slideUp 0.4s 0.85s ease both; opacity:0;
+        }
+        .lo-info {
+          font-size:12px; color:rgba(255,255,255,0.25); letter-spacing:0.06em;
+          animation: lo-slideUp 0.4s 0.95s ease both; opacity:0;
+        }
+
+        /* Progress bar draining */
+        .lo-bottom-bar {
+          position:absolute; bottom:0; left:0; right:0; height:3px;
+          background:rgba(201,162,39,0.2);
+        }
+        .lo-progress {
+          position:absolute; bottom:0; left:0; height:3px;
+          width:100%;
+          background:linear-gradient(90deg,#c9a227,#f0d060);
+          animation: lo-barShrink 2s 0.3s cubic-bezier(0.4,0,0.2,1) both;
+        }
+        .lo-signing-out {
+          position:absolute; bottom:12px; left:50%; transform:translateX(-50%);
+          font-size:10px; color:rgba(255,255,255,0.2); letter-spacing:0.12em;
+          text-transform:uppercase; white-space:nowrap;
+          animation: lo-fadeIn 0.5s 1s ease both; opacity:0;
+        }
+      `}</style>
+
+      <div className="lo-root">
+        <div className="lo-grid" />
+        <div className="lo-gold-bar" />
+
+        {/* Rotating rings */}
+        {[[360, 28], [240, 18], [140, 13]].map(([size, dur], i) => (
+          <div key={i} className="lo-ring" style={{ width: size, height: size, animationDuration: `${dur}s`, animationDirection: i % 2 ? 'reverse' : 'normal' }} />
+        ))}
+
+        {/* Floating particles */}
+        {WELCOME_PARTICLES.map(([left, size, delay, dur], i) => (
+          <div key={i} className="lo-particle" style={{ left: `${left}%`, width: size, height: size, animationDelay: `${delay}s`, animationDuration: `${dur}s` }} />
+        ))}
+
+        <div className="lo-content">
+          {/* Goodbye icon */}
+          <div className="lo-icon-circle">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#e8c547" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </div>
+
+          <div className="lo-company">BCIM Engineering · ConstructERP</div>
+          <div className="lo-bye-line">Goodbye,</div>
+          <div className="lo-name"><span>{firstName}!</span></div>
+          <div className="lo-sub">Thanks for using BCIM ERP today.</div>
+          <div className="lo-divider" />
+          <div className="lo-info">Your session has been securely closed.</div>
+        </div>
+
+        <div className="lo-bottom-bar" />
+        <div className="lo-progress" />
+        <div className="lo-signing-out">Signing out securely…</div>
+      </div>
+    </>
+  );
+}
+
+// ── Current-project chip (header) ────────────────────────────────────────────
+function ProjectChip() {
+  const navigate = useNavigate();
+  const { selectedProjectName, selectedProjectCode, selectedProjectId, user } = useAuthStore();
+  const GLOBAL_ROLES = ['super_admin', 'admin', 'managing_director', 'director', 'ceo', 'cfo', 'md'];
+  const isGlobal = GLOBAL_ROLES.includes(user?.role);
+
+  if (!selectedProjectId && isGlobal) return null; // global users without picked project — hide chip
+  return (
+    <button
+      onClick={() => navigate('/select-project')}
+      title={selectedProjectName ? `Switch project (current: ${selectedProjectName})` : 'Select a project'}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '5px 11px',
+        borderRadius: 8,
+        background: selectedProjectId ? 'rgba(255,255,255,0.10)' : 'rgba(239,68,68,0.18)',
+        border: `1px solid ${selectedProjectId ? 'rgba(255,255,255,0.20)' : 'rgba(252,165,165,0.55)'}`,
+        cursor: 'pointer',
+        color: '#fff',
+        maxWidth: 220,
+        transition: 'background 0.15s',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.18)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = selectedProjectId ? 'rgba(255,255,255,0.10)' : 'rgba(239,68,68,0.18)'; }}
+    >
+      <Building2 size={13} style={{ flexShrink: 0, color: '#FBBF24' }} />
+      <div style={{ overflow: 'hidden', textAlign: 'left' }}>
+        <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.65)', lineHeight: 1, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+          Project
+        </div>
+        <div style={{
+          fontSize: 12, fontWeight: 700, color: '#fff', lineHeight: 1.2,
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          maxWidth: 170,
+        }}>
+          {selectedProjectName || 'Select project'}
+        </div>
+      </div>
+      <Replace size={11} style={{ flexShrink: 0, opacity: 0.7 }} />
+    </button>
+  );
+}
+
+// ── Main Layout ──────────────────────────────────────────────────────────────
+export default function Layout() {
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [showLogout,  setShowLogout]  = useState(false);
+  const [openGroup,   setOpenGroup]   = useState(null);
+  const [dropPos,     setDropPos]     = useState({ top: 50, left: 0 });
+  const closeTimer  = useRef(null);
+  const [mobileOpen,  setMobileOpen]  = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [langOpen,    setLangOpen]    = useState(false);
+  const [notifOpen,   setNotifOpen]   = useState(false);
+  const [now,          setNow]         = useState(() => new Date());
+  const notifCount = useNotificationCount();
+  const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { language, setLanguage, t } = useLanguage();
+  const isProcurementPage = location.pathname.startsWith('/procurement');
+  const currentLang = LANGUAGES.find(l => l.code === language) || LANGUAGES[0];
+  const { title: pageTitle, group: pageGroup } = usePageTitle();
+
+  // Ctrl+K → command palette
+  useEffect(() => {
+    const h = (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setPaletteOpen(true); } };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  // Close dropdown on route change
+  useEffect(() => { setOpenGroup(null); }, [location.pathname]);
+
+  const matchesPath = (itemTo) => {
+    const p = itemTo.split('?')[0];
+    if (location.pathname === p) return true;
+    const segs = p.split('/').filter(Boolean);
+    return segs.length >= 2 && location.pathname.startsWith(p + '/');
+  };
+
+  const filteredGroups = navGroups.filter(g => {
+    if (['admin', 'super_admin'].includes(user?.role)) return true;
+    // If no modules configured at all, show everything (fallback for unconfigured accounts)
+    if (!user?.accessible_modules?.length) return true;
+    const aliases = g.label === 'Bill Tracker' ? ['Bill Tracker', 'DQS Tracker'] : [g.label];
+    return aliases.some(label => user?.accessible_modules?.includes(label));
+  });
+
+  const doLogout = useCallback(async () => {
+    sessionStorage.removeItem('erp-welcomed');
+    await logout();
+    setShowLogout(false);
+    navigate('/login', { replace: true });
+  }, [logout, navigate]);
+
+  const handleLogout = () => {
+    doLogout();
+  };
+
+  const initials = (user?.name || 'U').split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+  const roleLabel = (user?.role || '').replace(/_/g, ' ');
+  const clockTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+  const clockDate = now.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' });
+
+  // Close dropdown when clicking outside
+  const navRef = useRef(null);
+  useEffect(() => {
+    const h = (e) => {
+      const inNav = navRef.current && navRef.current.contains(e.target);
+      const inDrop = e.target.closest('[data-nav-dropdown]');
+      if (!inNav && !inDrop) setOpenGroup(null);
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#F8F9FA' }} className="erp-layout-enter">
+
+      {/* ── Top Navigation Bar ── */}
+      <header
+        ref={navRef}
+        className="print:hidden"
+        style={{
+          flexShrink: 0,
+          background: 'linear-gradient(90deg, #111e3a 0%, #172554 35%, #1e3a8a 70%, #1d4ed8 100%)',
+          height: 52,
+          display: 'flex', alignItems: 'stretch',
+          boxShadow: '0 1px 0 rgba(255,255,255,0.06), 0 4px 16px rgba(0,0,0,0.3)',
+          position: 'relative', zIndex: 50,
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+        }}
+      >
+        {/* Logo */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 9,
+          padding: '0 14px 0 14px',
+          borderRight: '1px solid rgba(255,255,255,0.1)',
+          flexShrink: 0,
+          minWidth: 148,
+          background: 'rgba(0,0,0,0.12)',
+        }}>
+          <div style={{ width: 28, height: 28, background: '#fff', borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0, boxShadow: '0 2px 6px rgba(0,0,0,0.2)' }}>
+            <img src="/bcim-logo.png" alt="BCIM" style={{ width: 24, height: 24, objectFit: 'contain' }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#fff', lineHeight: 1.2, letterSpacing: '0.02em' }}>BCIM ERP</div>
+            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', lineHeight: 1, letterSpacing: '0.03em' }}>ConstructERP · v3.0</div>
+          </div>
+        </div>
+
+        {/* ── Module nav groups — horizontal scrollable menu ── */}
+        <div className="lg-show" style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>
+          <NavScroller>
+            {filteredGroups.map(group => {
+              const isActive = group.items.some(item => matchesPath(item.to));
+              const isOpen   = openGroup === group.label;
+              return (
+                <NavGroupButton
+                  key={group.label}
+                  group={group}
+                  isActive={isActive}
+                  isOpen={isOpen}
+                  onOpen={() => setOpenGroup(group.label)}
+                  onClose={() => setOpenGroup(null)}
+                  dropPos={dropPos}
+                  setDropPos={setDropPos}
+                  closeTimer={closeTimer}
+                />
+              );
+            })}
+          </NavScroller>
+        </div>
+
+        {/* Page title — shown on mobile / when sidebar is the primary nav */}
+        <div className="lg-hide" style={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center', padding: '0 14px' }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#FFFFFF', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pageTitle}</div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.80)', lineHeight: 1.2 }}>{pageGroup || 'ERP Workspace'}</div>
+          </div>
+        </div>
+
+        {/* Right actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 12px', flexShrink: 0, borderLeft: '1px solid rgba(255,255,255,0.1)' }}>
+
+          {/* Search */}
+          <button
+            onClick={() => setPaletteOpen(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              padding: '5px 10px', borderRadius: 8,
+              background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)',
+              color: 'rgba(255,255,255,0.90)', cursor: 'pointer', fontSize: 12,
+            }}
+          >
+            <Search size={13} />
+            <span style={{ fontSize: 12 }}>Search</span>
+            <kbd style={{ fontSize: 9, background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.85)', padding: '1px 5px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.15)' }}>⌘K</kbd>
+          </button>
+
+          {/* Language */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setLangOpen(o => !o)}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 8px', borderRadius: 8, background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 12 }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+              onMouseLeave={e => { if (!langOpen) e.currentTarget.style.background = 'transparent'; }}
+            >
+              <span style={{ fontSize: 14 }}>{currentLang.flag}</span>
+              <ChevronDown size={10} style={{ opacity: 0.6 }} />
+            </button>
+            {langOpen && (
+              <>
+                <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setLangOpen(false)} />
+                <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: '#fff', border: '1px solid #E8EAED', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 200, padding: '4px 0', minWidth: 160 }}>
+                  {LANGUAGES.map(lang => (
+                    <button key={lang.code} onClick={() => { setLanguage(lang.code); setLangOpen(false); }}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: language === lang.code ? '#EFF6FF' : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                      <span style={{ fontSize: 16 }}>{lang.flag}</span>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: language === lang.code ? '#2563EB' : '#374151' }}>{lang.native}</div>
+                        <div style={{ fontSize: 10, color: '#64748B' }}>{lang.label}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Current Project chip — switches project for the session */}
+          <ProjectChip />
+
+          {/* Notifications */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setNotifOpen(o => !o)}
+              style={{ position: 'relative', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.90)', cursor: 'pointer' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+              onMouseLeave={e => { if (!notifOpen) e.currentTarget.style.background = 'transparent'; }}
+            >
+              <Bell size={16} />
+              {notifCount > 0 && (
+                <span style={{ position: 'absolute', top: 5, right: 5, minWidth: 14, height: 14, borderRadius: '50%', background: '#EF4444', border: '1.5px solid #1E3A8A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, color: '#fff' }}>
+                  {notifCount > 99 ? '99+' : notifCount}
+                </span>
+              )}
+            </button>
+            {notifOpen && <NotificationPanel onClose={() => setNotifOpen(false)} />}
+          </div>
+
+          {/* Profile + Logout */}
+          <NavLink to="/profile"
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', borderRadius: 8, textDecoration: 'none', border: '1px solid rgba(255,255,255,0.18)' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'linear-gradient(135deg,#6366F1,#8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+              {initials}
+            </div>
+            <div style={{ display: 'none' }} className="sm-show">
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#fff', lineHeight: 1.2 }}>{user?.name?.split(' ')[0] || 'User'}</div>
+              <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.80)', lineHeight: 1, textTransform: 'capitalize' }}>{roleLabel}</div>
+            </div>
+          </NavLink>
+
+          <button
+            onClick={handleLogout}
+            title="Logout"
+            style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.80)', cursor: 'pointer' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.2)'; e.currentTarget.style.color = '#FCA5A5'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.80)'; }}
+          >
+            <LogOut size={15} />
+          </button>
+
+          {/* Mobile hamburger */}
+          <button
+            className="lg-hide"
+            onClick={() => setMobileOpen(true)}
+            style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.90)', cursor: 'pointer' }}
+          >
+            <Menu size={18} />
+          </button>
+        </div>
+      </header>
+
+      {/* ── Breadcrumb sub-bar ── */}
+      {pageGroup && (
+        <div
+          className="print:hidden"
+          style={{
+            flexShrink: 0, height: 28,
+            background: '#F8FAFC',
+            borderBottom: '1px solid #E8EAED',
+            display: 'flex', alignItems: 'center', gap: 5, padding: '0 16px',
+            fontSize: 11.5,
+          }}
+        >
+          <span style={{ color: '#64748B', fontWeight: 500 }}>{pageGroup}</span>
+          <ChevronRight size={11} style={{ color: '#94A3B8' }} />
+          <span style={{ color: '#1E293B', fontWeight: 600 }}>{pageTitle}</span>
+          <div
+            className="erp-clock-pill"
+            title={now.toLocaleString('en-IN', { dateStyle: 'full', timeStyle: 'medium' })}
+            style={{
+              marginLeft: 'auto',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              height: 22,
+              padding: '0 9px',
+              borderRadius: 6,
+              background: '#FFFFFF',
+              border: '1px solid #E2E8F0',
+              color: '#1E293B',
+              boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <Clock3 size={12} style={{ color: '#2563EB', flexShrink: 0 }} />
+            <span style={{ fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{clockTime}</span>
+            <span style={{ fontSize: 10, color: '#64748B', fontWeight: 600 }}>{clockDate}</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Page content (full width) ── */}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
+        <main style={{ flex: 1, minWidth: 0, overflow: 'auto', position: 'relative' }} className="print:overflow-visible print:h-auto">
+          <Suspense fallback={<LoadingScreen />}>
+            <div key={location.key} className={clsx('page-enter', isProcurementPage && 'procurement-strong-text')}>
+              <Outlet />
+            </div>
+          </Suspense>
+        </main>
+      </div>
+
+      {/* Mobile sidebar */}
+      <MobileSidebar
+        open={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        navGroups={filteredGroups}
+        user={user}
+        matchesPath={matchesPath}
+      />
+
+      <CommandPalette
+        isOpen={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        navGroups={filteredGroups}
+      />
+
+      {/* ── Nav dropdown portal — rendered at body root to escape overflow clipping ── */}
+      {openGroup && (() => {
+        const grp = filteredGroups.find(g => g.label === openGroup);
+        if (!grp) return null;
+        return createPortal(
+          <GroupDropdown
+            group={grp}
+            onClose={() => setOpenGroup(null)}
+            pos={dropPos}
+            onKeepOpen={() => clearTimeout(closeTimer.current)}
+            onStartClose={() => { closeTimer.current = setTimeout(() => setOpenGroup(null), 200); }}
+          />,
+          document.body
+        );
+      })()}
+
+      {/* ── Welcome Screen ── */}
+      {showWelcome && (
+        <WelcomeScreen
+          user={user}
+          onDone={() => {
+            sessionStorage.setItem('erp-welcomed', '1');
+            setShowWelcome(false);
+          }}
+        />
+      )}
+
+      {/* ── Logout Screen ── */}
+      {showLogout && (
+        <LogoutScreen user={user} onDone={doLogout} />
+      )}
+
+      <style>{`
+        .nav-scroll::-webkit-scrollbar { height: 0px; }
+        .nav-scroll { scrollbar-width: none; }
+        @media (min-width: 1024px) { .lg-hide { display: none !important; } }
+        @media (max-width: 1023px) { .lg-show { display: none !important; } }
+        @media (min-width: 640px) { .sm-show { display: block !important; } }
+        @media (max-width: 1180px) { .erp-clock-pill { display: none !important; } }
+
+        /* ── Layout entry (login → ERP) ── */
+        @keyframes erp-layout-in {
+          0%   { opacity: 0; transform: scale(0.985) translateY(10px); }
+          100% { opacity: 1; transform: none; }
+        }
+        .erp-layout-enter {
+          /* backwards = apply initial keyframe before delay only; final state reverts to
+             element's own CSS (no transform) so position:fixed children work correctly */
+          animation: erp-layout-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+        }
+
+        /* ── Header slides down ── */
+        @keyframes header-slide-down {
+          0%   { opacity: 0; transform: translateY(-100%); }
+          100% { opacity: 1; transform: none; }
+        }
+        header.print\\:hidden {
+          animation: header-slide-down 0.4s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+        }
+
+        /* ── Page content fades up on every route change ── */
+        @keyframes page-fade-up {
+          0%   { opacity: 0; transform: translateY(16px); }
+          100% { opacity: 1; transform: none; }
+        }
+        .page-enter {
+          /* backwards fill-mode prevents a permanent transform stacking context that
+             would trap position:fixed modals rendered inside page content */
+          animation: page-fade-up 0.28s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+          min-height: 100%;
+        }
+
+        /* ── Global table scroll: every page table overflows horizontally ── */
+        main table {
+          min-width: max-content;
+        }
+        /* Scrollbar styling — thin, consistent across all pages */
+        main::-webkit-scrollbar,
+        main *::-webkit-scrollbar { width: 6px; height: 6px; }
+        main::-webkit-scrollbar-track,
+        main *::-webkit-scrollbar-track { background: transparent; }
+        main::-webkit-scrollbar-thumb,
+        main *::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
+        main::-webkit-scrollbar-thumb:hover,
+        main *::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+      `}</style>
+    </div>
+  );
+}
