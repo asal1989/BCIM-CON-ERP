@@ -72,6 +72,61 @@ runSchemaInit('users_role_schema', ensureRoleSchema);
   }
 })();
 
+// ── One-time new user creation ───────────────────────────────────────────────
+// Idempotent: skips if a user with this email already exists.
+(async () => {
+  const newUsers = [
+    {
+      name:            'Rakesh Maharaja',
+      email:           'mrakesh@bcim.in',
+      // bcrypt hash — same default password convention as other recently-created accounts
+      passwordHash:    '$2b$12$oXLlxucPLgU4UkOEvOLCTuAGwqHB28S6QgbbTvyY3Aj3dFK1tea16',
+      role:            'plant_manager',
+      designation:     'P&M Manager',
+      department:      'Plant & Machinery',
+      modules:         ['Plant & Machinery'],
+      projectNameLike: '%yelahanka%',
+    },
+  ];
+  for (const u of newUsers) {
+    try {
+      const existing = await query(`SELECT id FROM users WHERE LOWER(email) = $1`, [u.email.toLowerCase()]);
+      if (existing.rows.length) continue;
+
+      const company = await query(`SELECT id FROM companies LIMIT 1`);
+      if (!company.rows.length) { console.warn('[users] New-user create skipped — no company found:', u.email); continue; }
+      const companyId = company.rows[0].id;
+
+      const empCode = `EMP-${Date.now().toString().slice(-6)}`;
+      const ins = await query(
+        `INSERT INTO users (company_id, employee_code, name, email, password_hash, role, designation, department, accessible_modules, is_active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::text[],TRUE)
+         RETURNING id`,
+        [companyId, empCode, u.name, u.email.toLowerCase(), u.passwordHash, u.role, u.designation, u.department, u.modules]
+      );
+      const userId = ins.rows[0].id;
+
+      if (u.projectNameLike) {
+        const proj = await query(
+          `SELECT id FROM projects WHERE company_id = $1 AND name ILIKE $2 LIMIT 1`,
+          [companyId, u.projectNameLike]
+        );
+        if (proj.rows.length) {
+          await query(`INSERT INTO project_members (project_id, user_id, role) VALUES ($1,$2,$3)`,
+            [proj.rows[0].id, userId, u.role]);
+          console.log(`[users] Created user ${u.email} and assigned to matching project`);
+        } else {
+          console.warn(`[users] Created user ${u.email} but no project matched "${u.projectNameLike}" — assign manually`);
+        }
+      } else {
+        console.log(`[users] Created user ${u.email}`);
+      }
+    } catch (e) {
+      console.error(`[users] New-user create failed for ${u.email}:`, e.message);
+    }
+  }
+})();
+
 // ── One-time user profile patches ────────────────────────────────────────────
 // Idempotent updates for existing users: password reset, department, module access.
 (async () => {
