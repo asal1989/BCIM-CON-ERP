@@ -98,6 +98,20 @@ const WRITE_ROLES = ['store_keeper','stores_manager','stores_officer','admin','s
 router.use(authenticate);
 router.use(loadProjectScope);
 
+// Steel loads must report a dia-wise breakdown that sums to the invoice qty.
+// The frontend already blocks this, but enforce it here too so any direct API
+// call or future bulk import can't silently save a mismatched load.
+function diaMismatchError(materialType, invoiceQty, dia) {
+  if (materialType !== 'steel' || !dia) return null;
+  const total = ['dia_8mm','dia_10mm','dia_12mm','dia_16mm','dia_20mm','dia_25mm','dia_32mm']
+    .reduce((s, k) => s + (parseFloat(dia[k]) || 0), 0);
+  const qty = parseFloat(invoiceQty || 0);
+  if (qty > 0 && Math.abs(total - qty) > 0.01) {
+    return `Dia breakdown total (${total.toFixed(3)}) does not match invoice qty (${qty.toFixed(3)})`;
+  }
+  return null;
+}
+
 // ── GET /material-tracker/report/abstract ─────────────────────────────────────
 router.get('/report/abstract', async (req, res) => {
   try {
@@ -323,6 +337,9 @@ router.post('/:id/loads', authorize(...WRITE_ROLES), async (req, res) => {
     );
     if (!check.rows.length) return res.status(404).json({ error: 'Entry not found' });
 
+    const diaErr = diaMismatchError(check.rows[0].material_type, invoice_qty, dia);
+    if (diaErr) return res.status(400).json({ error: diaErr });
+
     const load = await query(`
       INSERT INTO material_tracker_loads
         (entry_id, received_date, invoice_no, ign_no, grs_no, vehicle_no,
@@ -386,6 +403,9 @@ router.put('/:id/loads/:loadId', authorize(...WRITE_ROLES), async (req, res) => 
       WHERE l.id = $1 AND l.entry_id = $2 AND e.company_id = $3
     `, [req.params.loadId, req.params.id, companyId]);
     if (!check.rows.length) return res.status(404).json({ error: 'Load not found' });
+
+    const diaErr = diaMismatchError(check.rows[0].material_type, invoice_qty, dia);
+    if (diaErr) return res.status(400).json({ error: diaErr });
 
     await query(`
       UPDATE material_tracker_loads
@@ -460,6 +480,10 @@ const MATERIAL_MATCH = {
   steel:    { include: ['steel', 'tmt', 'rebar', 'ms rod', 'reinforcement'],
               exclude: [] },
 };
+
+// Default GST slab to assume when no matching bill carries a real rate.
+// Cement is taxed at 28%; ready-mix concrete and steel are 18%.
+const DEFAULT_GST_RATE = { cement: 28, concrete: 18, steel: 18 };
 
 // Build a material-match SQL fragment for `alias.col`, with bind params starting
 // at $startIdx. Returns { sql, params } where params = [...includePats, ...excludePats].
@@ -660,7 +684,7 @@ router.post('/auto-import/run', authorize(...WRITE_ROLES), async (req, res) => {
 
     // ── Bulk fetch bills for GST/total lookup (by grn_id and po_id+inv_number) ──
     const gstBills = await query(`
-      SELECT b.grn_id, b.po_id, LOWER(TRIM(b.inv_number)) AS inv_key,
+      SELECT b.id, b.grn_id, b.po_id, LOWER(TRIM(b.inv_number)) AS inv_key,
         b.gst_amount, b.total_amount,
         (COALESCE(b.cgst_pct,0)*2 + COALESCE(b.igst_pct,0)) AS gst_rate
       FROM tqs_bills b
@@ -683,10 +707,13 @@ router.post('/auto-import/run', authorize(...WRITE_ROLES), async (req, res) => {
       if (!entryId) continue;
       const billRow = billByGrn.get(grn.grn_id)
         || billByPoInv.get(`${grn.po_id}|${(grn.invoice_number || '').trim().toLowerCase()}`);
+      // This delivery may already exist as a no-GRN bill import from a prior run,
+      // before this bill's grn_id was linked. Skip to avoid counting it twice.
+      if (billRow?.id && importedBillSet.has(billRow.id)) continue;
       const rate     = parseFloat(grn.rate || 0);
       const qty      = parseFloat(grn.qty  || 0);
       const basic    = qty * rate;
-      const gstRate  = parseFloat(billRow?.gst_rate || 28);
+      const gstRate  = parseFloat(billRow?.gst_rate || DEFAULT_GST_RATE[material_type] || 18);
       const gstAmt   = billRow?.gst_amount   != null ? parseFloat(billRow.gst_amount)   : (basic * gstRate / 100);
       const grandTot = billRow?.total_amount != null ? parseFloat(billRow.total_amount) : (basic + gstAmt);
       grnRows.push([
@@ -733,7 +760,7 @@ router.post('/auto-import/run', authorize(...WRITE_ROLES), async (req, res) => {
       const rate     = parseFloat(bill.rate || 0);
       const qty      = parseFloat(bill.qty  || 0);
       const basic    = qty * rate;
-      const gstRate  = parseFloat(bill.gst_rate || 28);
+      const gstRate  = parseFloat(bill.gst_rate || DEFAULT_GST_RATE[material_type] || 18);
       const gstAmt   = bill.gst_amount  != null ? parseFloat(bill.gst_amount)  : (basic * gstRate / 100);
       const grandTot = bill.total_amount != null ? parseFloat(bill.total_amount): (basic + gstAmt);
       billRows.push([

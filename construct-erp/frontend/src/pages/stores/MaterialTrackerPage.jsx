@@ -502,7 +502,7 @@ function LoadsPanel({ entry, materialType, canWrite, onRefresh }) {
           <div className="mt-2.5">
             <div className="flex justify-between text-[10px] text-slate-400 mb-1">
               <span>Delivery progress</span>
-              <span>{progress}%</span>
+              <span>{Math.min(progress, 100)}%{progress > 100 ? ` (+${progress - 100}% over)` : ''}</span>
             </div>
             <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
               <div className="h-full bg-blue-500 rounded-full transition-all"
@@ -970,7 +970,7 @@ function MaterialTabContent({ materialType, projectId, projects, canWrite }) {
                         <div className="flex-1 h-1 bg-slate-200 rounded-full overflow-hidden">
                           <div className="h-full bg-blue-400 rounded-full" style={{ width: `${Math.min(prog,100)}%` }} />
                         </div>
-                        <span className="text-[10px] text-slate-400">{prog}%</span>
+                        <span className="text-[10px] text-slate-400">{Math.min(prog, 100)}%</span>
                       </div>
                       <div className="text-[10px] mt-1">
                         <span className="text-slate-400">Bal: </span>
