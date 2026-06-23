@@ -1,1 +1,0 @@
-const a=["Nos","Each","Set","Pairs","Lot","LS","MTR","RMT","RFT","Feet","Inch","CM","MM","KM","Yard","SQM","SQFT","SQY","CUM","CFT","Brass","KG","Grams","MT","Ton","QTL","Ltr","ML","KL","Gallon","Bags","Bundle","Roll","Coil","Drum","Box","Packet","Sheet","Sack","Can","Tube","Day","Week","Month","Point","Trip","Load","Joint"];export{a as C};
