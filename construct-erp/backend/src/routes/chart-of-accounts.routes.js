@@ -29,6 +29,20 @@ const router = express.Router();
   await safe(`CREATE INDEX IF NOT EXISTS idx_coa_company ON chart_of_accounts(company_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_coa_type    ON chart_of_accounts(account_type)`);
 
+  // Backfill any STANDARD_COA codes missing for companies that already had a COA
+  // seeded before those codes existed (e.g. the new 60xx expense split codes).
+  try {
+    for (const acc of STANDARD_COA) {
+      await query(
+        `INSERT INTO chart_of_accounts (company_id, code, name, account_type, sub_type)
+         SELECT c.id, $1, $2, $3, $4 FROM companies c
+         WHERE EXISTS (SELECT 1 FROM chart_of_accounts WHERE company_id = c.id)
+         ON CONFLICT (company_id, code) DO NOTHING`,
+        [acc.code, acc.name, acc.account_type, acc.sub_type]
+      );
+    }
+  } catch (_) {}
+
   console.log('[ChartOfAccounts] Schema OK');
 })();
 
@@ -61,6 +75,12 @@ const STANDARD_COA = [
   { code: '6000', name: 'Salaries & Wages',           account_type: 'expense',   sub_type: 'Indirect Expense' },
   { code: '6010', name: 'EPF Employer Contribution',  account_type: 'expense',   sub_type: 'Indirect Expense' },
   { code: '6020', name: 'ESI Employer Contribution',  account_type: 'expense',   sub_type: 'Indirect Expense' },
+  { code: '6030', name: 'Fuel Expense',                account_type: 'expense',   sub_type: 'Indirect Expense' },
+  { code: '6040', name: 'Safety Expense',              account_type: 'expense',   sub_type: 'Indirect Expense' },
+  { code: '6050', name: 'Stationery Expense',          account_type: 'expense',   sub_type: 'Indirect Expense' },
+  { code: '6060', name: 'Pantry / Site Welfare',       account_type: 'expense',   sub_type: 'Indirect Expense' },
+  { code: '6070', name: 'Transport / Conveyance',      account_type: 'expense',   sub_type: 'Indirect Expense' },
+  { code: '6080', name: 'Utilities Expense',           account_type: 'expense',   sub_type: 'Indirect Expense' },
   { code: '6100', name: 'Office & Admin Expenses',    account_type: 'expense',   sub_type: 'Indirect Expense' },
   { code: '6200', name: 'Bank Charges & Interest', account_type: 'expense',   sub_type: 'Indirect Expense' },
 ];

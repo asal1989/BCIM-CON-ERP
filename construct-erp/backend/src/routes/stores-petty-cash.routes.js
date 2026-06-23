@@ -2,7 +2,24 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
+const { postAutoJournalStandalone } = require('../services/journalAutoPost');
 const router = express.Router();
+
+// Mirrors frontend categoryOf() in StoresPettyCashPage.jsx — keep the two in sync.
+const CATEGORY_GL = {
+  Fuel: '6030', Safety: '6040', Stationery: '6050', Pantry: '6060',
+  Transport: '6070', Utilities: '6080', Materials: '5000',
+};
+function categoryOf(text = '') {
+  const d = (text || '').toLowerCase();
+  if (/petrol|fuel|diesel/.test(d))                                           return 'Fuel';
+  if (/safety|glove|shoe|medical|flag|helmet|badge|banner|ppe/.test(d))      return 'Safety';
+  if (/stationery|stationary|file|paper|pen|whitener|stamp|calc|stapler|a4|xerox|print/.test(d)) return 'Stationery';
+  if (/pantry|sweet|food|sugar|tea|poha|zeera|mixture|coconut|biscuit|snack/.test(d)) return 'Pantry';
+  if (/transport|bus|ticket|charges|auto|cab|uber|ola/.test(d))              return 'Transport';
+  if (/electric|bill|power|utility|mobile|recharge|internet/.test(d))        return 'Utilities';
+  return 'Materials';
+}
 
 // ── Auto-migrate ─────────────────────────────────────────────────────────────
 (async () => {
@@ -321,7 +338,36 @@ router.patch('/entries/:id/status', authenticate, async (req, res) => {
       [status, req.params.id, req.user.company_id]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Entry not found' });
-    res.json({ data: r.rows[0] });
+    const entry = r.rows[0];
+
+    // Auto-post JV on approval: Dr expense (by material category) + Input GST, Cr Cash in Hand
+    if (status === 'Approved') {
+      const items = await query(
+        `SELECT material_name FROM stores_petty_cash_items WHERE entry_id = $1 ORDER BY sort_order LIMIT 1`,
+        [entry.id]
+      );
+      const cat = categoryOf(items.rows[0]?.material_name || entry.supplier || '');
+      const expCode = CATEGORY_GL[cat] || CATEGORY_GL.Materials;
+      const basic = parseFloat(entry.basic_amount) || parseFloat(entry.amount) || 0;
+      const gst   = parseFloat(entry.gst_amount) || 0;
+      const total = parseFloat(entry.total_amount) || parseFloat(entry.amount) || (basic + gst);
+      const ref   = entry.invoice_no || `SPC-${entry.sl_no}`;
+      const lines = [{ code: expCode, debit: basic, description: `${cat} — ${entry.supplier} (${ref})` }];
+      if (gst > 0) lines.push({ code: '1300', debit: gst, description: `Input GST / ITC — ${ref}` });
+      lines.push({ code: '1000', credit: total, description: `Petty cash paid — ${entry.supplier} (${ref})` });
+
+      postAutoJournalStandalone({
+        companyId: req.user.company_id,
+        userId:    req.user.id,
+        entryDate: entry.entry_date,
+        reference: ref,
+        narration: `Stores petty cash — ${entry.supplier}`,
+        source:    'auto_stores_petty_cash',
+        lines,
+      }).catch(() => {});
+    }
+
+    res.json({ data: entry });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
