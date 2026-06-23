@@ -117,8 +117,8 @@ function applyProjectScope(req, sqlParts, params, alias = 'po', requestedProject
   sqlParts.push(`${alias}.project_id = ANY($${params.length}::uuid[])`);
 }
 
-// Edit/delete of purchase orders is restricted to procurement & super admin users
-const PROCUREMENT_ROLES = ['super_admin', 'procurement_manager', 'procurement'];
+// Edit/delete of purchase orders is restricted to procurement, super admin & MD users
+const PROCUREMENT_ROLES = ['super_admin', 'procurement_manager', 'procurement', 'managing_director'];
 
 async function getAccessiblePo(req, poId) {
   const { rows } = await query(

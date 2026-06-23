@@ -1198,6 +1198,7 @@ export const mrsAPI = {
   list:              (params, config = {}) => api.get('/stores/mrs', { ...config, params }),
   get:               (id)            => api.get(`/stores/mrs/${id}`),
   create:            (data)          => api.post('/stores/mrs', data),
+  update:            (id, data)      => api.patch(`/stores/mrs/${id}`, data),
   approve:           (id, stage, data) => api.patch(`/stores/mrs/${id}/${stage}`, data),
   reject:            (id, data)      => api.patch(`/stores/mrs/${id}/reject`, data),
   cancelItems:       (id, data)      => api.patch(`/stores/mrs/${id}/cancel-items`, data),

@@ -13,8 +13,8 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 
 router.use(authenticate);
 
-// Editing/deleting a work order is restricted to procurement & super admin users
-const PROCUREMENT_ROLES = ['super_admin', 'procurement_manager', 'procurement'];
+// Editing/deleting a work order is restricted to procurement, super admin & MD users
+const PROCUREMENT_ROLES = ['super_admin', 'procurement_manager', 'procurement', 'managing_director'];
 
 // Dashboard
 router.get('/dashboard', ctrl.getDashboard);

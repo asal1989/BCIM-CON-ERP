@@ -1051,6 +1051,92 @@ router.patch('/:id/cancel-items', async (req, res) => {
   }
 });
 
+// PATCH /stores/mrs/:id — MD edits header fields and/or item details.
+// Existing items are updated in place by id (never deleted/reinserted) because
+// po_items.mrs_item_id references mrs_items.id without a FK — replacing rows
+// would silently orphan that link and break ordered-qty tracking for any item
+// already on a PO. New items (no id) are appended; existing items are never
+// removed here (use /cancel-items for that, which is audit-tracked).
+// NOTE: must be registered BEFORE /:id/:stage so the wildcard can't swallow it.
+const MD_EDIT_ROLES = ['managing_director', 'super_admin'];
+router.patch('/:id', async (req, res) => {
+  try {
+    if (!MD_EDIT_ROLES.includes((req.user.role || '').toLowerCase())) {
+      return res.status(403).json({ error: 'Only the Managing Director can edit a Material Requisition.' });
+    }
+    const {
+      department, head_office_project_name, site_incharge, required_by,
+      priority, remarks, items,
+    } = req.body;
+
+    const mrs = await query(
+      `SELECT mr.*, p.company_id FROM material_requisitions mr
+       JOIN projects p ON mr.project_id = p.id WHERE mr.id = $1`,
+      [req.params.id]
+    );
+    if (!mrs.rows.length || mrs.rows[0].company_id !== req.user.company_id) {
+      return res.status(404).json({ error: 'MRS not found' });
+    }
+    if (!userCanAccessProject(req, mrs.rows[0].project_id)) {
+      return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
+
+    await withTransaction(async (client) => {
+      await client.query(
+        `UPDATE material_requisitions SET
+           department = COALESCE($1, department),
+           head_office_project_name = COALESCE($2, head_office_project_name),
+           site_incharge = COALESCE($3, site_incharge),
+           required_by = COALESCE($4, required_by),
+           priority = COALESCE($5, priority),
+           remarks = COALESCE($6, remarks)
+         WHERE id = $7`,
+        [department || null, head_office_project_name || null, site_incharge || null,
+         required_by || null, priority || null, remarks || null, req.params.id]
+      );
+
+      if (Array.isArray(items)) {
+        const maxSort = await client.query(
+          `SELECT COALESCE(MAX(sort_order), 0) AS m FROM mrs_items WHERE mrs_id = $1`,
+          [req.params.id]
+        );
+        let nextSort = parseInt(maxSort.rows[0].m) + 1;
+
+        for (const it of items) {
+          const { id, material, qty, unit, purpose, item_code, category, est_rate, preferred_vendor_id } = it;
+          if (!material || !qty || !unit) continue;
+          if (id) {
+            await client.query(
+              `UPDATE mrs_items SET
+                 material_name = $1, quantity = $2, unit = $3, purpose = $4,
+                 item_code = $5, category = $6, est_rate = $7, preferred_vendor_id = $8
+               WHERE id = $9 AND mrs_id = $10`,
+              [material, parseFloat(qty), unit, purpose || null, item_code || null,
+               category || null, est_rate ? parseFloat(est_rate) : null,
+               preferred_vendor_id || null, id, req.params.id]
+            );
+          } else {
+            await client.query(
+              `INSERT INTO mrs_items
+                 (mrs_id, material_name, quantity, unit, purpose, sort_order, item_code, category, est_rate, preferred_vendor_id)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+              [req.params.id, material, parseFloat(qty), unit, purpose || null, nextSort++,
+               item_code || null, category || null, est_rate ? parseFloat(est_rate) : null,
+               preferred_vendor_id || null]
+            );
+          }
+        }
+      }
+    });
+
+    const full = await query(`SELECT * FROM material_requisitions WHERE id = $1`, [req.params.id]);
+    const itemsRes = await query(`SELECT * FROM mrs_items WHERE mrs_id = $1 ORDER BY sort_order`, [req.params.id]);
+    res.json({ data: { ...full.rows[0], items: itemsRes.rows } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── PATCH /:id/:stage  — dynamic stage-based approval ─────────────────────
 router.patch('/:id/:stage', async (req, res) => {
   try {

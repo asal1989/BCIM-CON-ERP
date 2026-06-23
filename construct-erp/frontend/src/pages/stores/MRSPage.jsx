@@ -13,7 +13,7 @@ import {
   ChevronRight, AlertCircle, FileText, Trash2, Activity,
   ChevronDown, Tag, CalendarDays, Filter, Eye, Rows3,
   UserRound, Layers3, Send, ClipboardCheck, Settings, GripVertical, RefreshCw,
-  ShoppingCart, Upload, Paperclip, History, Info, MapPin, RotateCcw,
+  ShoppingCart, Upload, Paperclip, History, Info, MapPin, RotateCcw, Pencil,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
@@ -838,6 +838,20 @@ export default function MRSPage() {
   };
 
   const [showMDModal, setShowMDModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+
+  // Only the Managing Director may edit MRS header/item details directly
+  const canEditMRS = ['managing_director', 'super_admin'].includes(userRoleLower);
+  const updateMRSMutation = useMutation({
+    mutationFn: ({ id, data }) => mrsAPI.update(id, data),
+    onSuccess: () => {
+      toast.success('Material Requisition updated');
+      qc.invalidateQueries({ queryKey: ['mrs'] });
+      qc.invalidateQueries({ queryKey: ['mrs', user?.id, selectedMRS?.id] });
+      setShowEditModal(false);
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Update failed'),
+  });
 
   // MD / Procurement may cancel individual items on a fully-approved MR
   const canCancelItems = liveStatus === 'approved_md' &&
@@ -901,6 +915,15 @@ export default function MRSPage() {
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <StatusBadge status={liveStatus} />
+            {canEditMRS && (
+              <button
+                onClick={() => setShowEditModal(true)}
+                disabled={!detailedMRS}
+                className="flex items-center gap-1.5 px-3 h-9 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:border-blue-300 disabled:opacity-40 transition-all"
+              >
+                <Pencil className="w-3.5 h-3.5" /> Edit MRS
+              </button>
+            )}
             <button
               onClick={() => handlePrint()}
               disabled={!detailedMRS}
@@ -1186,6 +1209,17 @@ export default function MRSPage() {
               approveMutation.mutate({ id: selectedMRS.id, stage: 'approve-md', data });
               setShowMDModal(false);
             }}
+          />
+        )}
+
+        {/* MD Edit Modal */}
+        {showEditModal && detailedMRS && (
+          <MRSEditModal
+            mrs={detailedMRS}
+            items={detailItems}
+            loading={updateMRSMutation.isPending}
+            onClose={() => setShowEditModal(false)}
+            onSave={(data) => updateMRSMutation.mutate({ id: selectedMRS.id, data })}
           />
         )}
 
@@ -2355,6 +2389,150 @@ function MDApprovalModal({ mrs, items, loading, onClose, onApprove }) {
               className="px-5 h-9 rounded-lg bg-green-700 text-white text-sm font-semibold hover:bg-green-800 disabled:opacity-50 transition shadow-sm"
             >
               {loading ? 'Authorizing…' : `Authorize ${includedCount} Item${includedCount !== 1 ? 's' : ''} →`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── MD Edit Modal — correct an MRS's header/item details ──────────────────────
+// Existing items are kept and updated in place (id preserved); new rows have no
+// id and are appended. Items are never removed here — that stays on
+// /cancel-items so removals stay audit-tracked.
+function MRSEditModal({ mrs, items, loading, onClose, onSave }) {
+  const [form, setForm] = useState({
+    priority: mrs.priority || 'medium',
+    required_by: mrs.required_by ? dayjs(mrs.required_by).format('YYYY-MM-DD') : '',
+    site_incharge: mrs.site_incharge || '',
+    remarks: mrs.remarks || '',
+  });
+  const [rows, setRows] = useState(() =>
+    items.map(it => ({
+      id: it.id,
+      material: it.material_name || it.material || '',
+      qty: String(it.quantity ?? it.qty ?? ''),
+      unit: it.unit || 'Nos',
+      purpose: it.purpose || '',
+    }))
+  );
+
+  const setField = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const setRow = (idx, k, v) => setRows(p => p.map((r, i) => i === idx ? { ...r, [k]: v } : r));
+  const addRow = () => setRows(p => [...p, { material: '', qty: '', unit: 'Nos', purpose: '' }]);
+  const removeNewRow = (idx) => setRows(p => p.filter((_, i) => i !== idx || p[i].id));
+
+  const canSave = rows.every(r => r.material.trim() && parseFloat(r.qty) > 0 && r.unit.trim());
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+
+        {/* Header */}
+        <div className="bg-blue-800 px-6 py-4 flex items-start justify-between flex-shrink-0">
+          <div>
+            <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <Pencil size={16} className="opacity-80" /> Edit Material Requisition
+            </h2>
+            <p className="text-xs text-blue-200 mt-0.5">
+              {mrs.serial_no_formatted || mrs.mrs_number} — Managing Director correction
+            </p>
+          </div>
+          <button onClick={onClose}
+            className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {/* Header fields */}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1.5">Priority</label>
+              <select value={form.priority} onChange={e => setField('priority', e.target.value)}
+                className="w-full h-9 bg-slate-50 border border-slate-200 rounded-lg px-2 text-sm outline-none focus:border-blue-400 transition">
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1.5">Required By</label>
+              <input type="date" value={form.required_by} onChange={e => setField('required_by', e.target.value)}
+                className="w-full h-9 bg-slate-50 border border-slate-200 rounded-lg px-2 text-sm outline-none focus:border-blue-400 transition" />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1.5">Site Incharge</label>
+              <input value={form.site_incharge} onChange={e => setField('site_incharge', e.target.value)}
+                className="w-full h-9 bg-slate-50 border border-slate-200 rounded-lg px-2 text-sm outline-none focus:border-blue-400 transition" />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-bold text-slate-700 block mb-1.5">Remarks</label>
+            <textarea rows={2} value={form.remarks} onChange={e => setField('remarks', e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm outline-none focus:border-blue-400 resize-none transition" />
+          </div>
+
+          {/* Items */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-bold text-slate-700">Items</label>
+              <button onClick={addRow} className="text-[11px] font-bold text-blue-600 hover:underline">+ Add Item</button>
+            </div>
+            <div className="space-y-2">
+              {rows.map((r, idx) => (
+                <div key={r.id || `new-${idx}`} className="flex items-center gap-2 border border-slate-200 rounded-xl px-3 py-2 bg-slate-50">
+                  <input value={r.material} onChange={e => setRow(idx, 'material', e.target.value)}
+                    placeholder="Material name"
+                    className="flex-1 h-8 bg-white border border-slate-200 rounded-lg px-2 text-sm outline-none focus:border-blue-400 transition" />
+                  <input type="number" min="0" step="any" value={r.qty} onChange={e => setRow(idx, 'qty', e.target.value)}
+                    placeholder="Qty"
+                    className="w-24 h-8 bg-white border border-slate-200 rounded-lg px-2 text-sm font-mono text-right outline-none focus:border-blue-400 transition" />
+                  <select value={r.unit} onChange={e => setRow(idx, 'unit', e.target.value)}
+                    className="w-24 h-8 bg-white border border-slate-200 rounded-lg px-1 text-xs outline-none focus:border-blue-400 transition">
+                    {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                  <input value={r.purpose} onChange={e => setRow(idx, 'purpose', e.target.value)}
+                    placeholder="Purpose (optional)"
+                    className="flex-1 h-8 bg-white border border-slate-200 rounded-lg px-2 text-sm outline-none focus:border-blue-400 transition" />
+                  {!r.id && (
+                    <button onClick={() => removeNewRow(idx)} className="w-7 h-7 rounded hover:bg-red-50 flex items-center justify-center text-red-400 flex-shrink-0">
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1.5">
+              Existing items can be corrected here but not removed — use "Cancel" on the requisition detail to drop an item (kept for audit).
+            </p>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100 bg-slate-50 flex-shrink-0">
+          {!canSave && <p className="text-[11px] text-red-500">Every item needs a material name, qty &gt; 0, and unit.</p>}
+          <div className="flex items-center gap-2 ml-auto">
+            <button onClick={onClose}
+              className="px-4 h-9 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-white transition">
+              Cancel
+            </button>
+            <button
+              onClick={() => onSave({
+                priority: form.priority,
+                required_by: form.required_by || null,
+                site_incharge: form.site_incharge || null,
+                remarks: form.remarks || null,
+                items: rows.map(r => ({
+                  id: r.id, material: r.material.trim(), qty: r.qty, unit: r.unit, purpose: r.purpose || null,
+                })),
+              })}
+              disabled={loading || !canSave}
+              className="px-5 h-9 rounded-lg bg-blue-700 text-white text-sm font-semibold hover:bg-blue-800 disabled:opacity-50 transition shadow-sm"
+            >
+              {loading ? 'Saving…' : 'Save Changes'}
             </button>
           </div>
         </div>

@@ -1079,7 +1079,7 @@ const BILL_STATUS = {
 function canManageProcurement(user) {
   if (!user) return false;
   const role = (user.role || '').toLowerCase();
-  return role === 'super_admin' || role.includes('procurement');
+  return role === 'super_admin' || role === 'managing_director' || role.includes('procurement');
 }
 
 function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onDelete, onApprove, onReject, isApproving, isRejecting, user }) {
