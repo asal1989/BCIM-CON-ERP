@@ -12,7 +12,7 @@ import {
   UserCheck, ChevronRight, ArrowUpRight, ArrowDownRight,
   Fingerprint, FileBarChart, Upload, Award, ShieldCheck,
   Download, FileText, Zap, Bot, Send,
-  Bell,
+  Bell, Link2,
   AlertCircle, CheckCircle2, Briefcase,
   Rocket, HardHat,
   MessageSquare, Search, Banknote,
@@ -283,6 +283,10 @@ export default function HRDashboardPage() {
     queryKey:['hr-employees-all'],
     queryFn:()=>hrEmployeesAPI.list({}).then(r=>r.data),
   });
+  const { data: noProfileData } = useQuery({
+    queryKey:['hr-employees-no-profile'],
+    queryFn:()=>hrEmployeesAPI.list({no_profile:'true'}).then(r=>r.data),
+  });
   const { data: leaveData }  = useQuery({
     queryKey:['hr-leave-requests','pending'],
     queryFn:()=>hrLeaveAPI.listRequests({status:'pending'}).then(r=>r.data),
@@ -311,6 +315,7 @@ export default function HRDashboardPage() {
   // ── Derived values ─────────────────────────────────────────────────────────
   const employees    = empData?.data  || [];
   const allEmployees = allEmpData?.data || [];
+  const noProfileCount = (noProfileData?.data || []).length;
   const leaves       = leaveData?.data || [];
   const payroll      = payrollData?.data || [];
   const totals       = payrollData?.totals || {};
@@ -480,7 +485,7 @@ export default function HRDashboardPage() {
           <div className="space-y-6 min-w-0">
 
             {/* ── KPI ROW ──────────────────────────────────────────────────── */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4">
               <KpiCard delay={0.07} label="Total Employees" value={totalActive||'—'} icon={Users}
                 color={B.blue}    bg="#EFF6FF" sub="All active staff"         onClick={()=>navigate('/hr-admin/employees')}/>
               <KpiCard delay={0.10} label="Permanent"       value={permanent||'—'}  icon={UserCheck}
@@ -493,7 +498,30 @@ export default function HRDashboardPage() {
                 color="#F97316"   bg="#FFF7ED" sub="Awaiting approval"        onClick={()=>navigate('/hr-admin/leaves')}/>
               <KpiCard delay={0.22} label="HR Alerts"       value={compCount||'0'}  icon={ClipboardList}
                 color={B.danger}  bg="#FEF2F2" sub="Compliance issues"        onClick={()=>navigate('/hr-admin/employees')}/>
+              <KpiCard delay={0.25} label="Not Linked"      value={noProfileCount||'0'} icon={Link2}
+                color="#D97706"   bg="#FFFBEB" sub="No HR profile yet"        onClick={()=>navigate('/users')}/>
             </div>
+
+            {/* ── UNLINKED STAFF ALERT ─────────────────────────────────── */}
+            {noProfileCount > 0 && (
+              <motion.div {...fade(0.26)} className="flex items-center justify-between gap-4 px-5 py-3.5 bg-amber-50 border border-amber-200 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <Link2 className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-amber-800">
+                      {noProfileCount} team member{noProfileCount !== 1 ? 's' : ''} without HR profile
+                    </p>
+                    <p className="text-xs text-amber-600 mt-0.5">
+                      These staff have login accounts but no HR records (no joining date, department, designation, etc.)
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => navigate('/users')}
+                  className="flex-shrink-0 px-4 py-2 rounded-xl bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-colors">
+                  Link Now
+                </button>
+              </motion.div>
+            )}
 
             {/* ── DEPT DONUT + ATTENDANCE CHART ──────────────────────────── */}
             <div className="grid lg:grid-cols-5 gap-6">
