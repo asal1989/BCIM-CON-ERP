@@ -1,0 +1,560 @@
+// src/server.js
+require('dotenv').config();
+const { isConfigured } = require('./services/onedrive.service');
+const logger = require('./utils/logger');
+
+// OneDrive Configuration Check
+if (isConfigured()) {
+  logger.info('✅ OneDrive integration configured');
+} else {
+  logger.warn('⚠️ OneDrive integration NOT configured (check .env)');
+}
+require('express-async-errors'); // Automatically catch async route errors
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const compression = require('compression');
+const rateLimit = require('express-rate-limit');
+const path = require('path');
+
+const { pool } = require('./config/database');
+// Route imports
+const authRoutes = require('./routes/auth.routes');
+const projectRoutes = require('./routes/project.routes');
+const boqRoutes = require('./routes/boq.routes');
+const measurementRoutes = require('./routes/measurement.routes');
+const raBillRoutes = require('./routes/raBill.routes');
+const vendorQsCertificationRoutes = require('./routes/vendor-qs-certification.routes');
+const invoiceRoutes = require('./routes/invoice.routes');
+const paymentRoutes = require('./routes/payment.routes');
+const vendorRoutes = require('./routes/vendor.routes');
+const poRoutes = require('./routes/po.routes');
+const poAmendmentRoutes = require('./routes/poAmendment.routes');
+const liveRatesRoutes = require('./routes/live-rates.routes');
+const grnRoutes = require('./routes/grn.routes');
+const inventoryRoutes = require('./routes/inventory.routes');
+const workerRoutes = require('./routes/worker.routes');
+const attendanceRoutes = require('./routes/attendance.routes');
+const payrollRoutes = require('./routes/payroll.routes');
+const dprRoutes      = require('./routes/dpr.routes');
+const planningRoutes   = require('./routes/planning.routes');
+const planningP6Routes = require('./routes/planning-p6.routes');
+const incidentRoutes = require('./routes/incident.routes');
+const permitRoutes = require('./routes/permit.routes');
+const ppeRoutes = require('./routes/ppe.routes');
+const qualityRoutes = require('./routes/quality.routes');
+const { itpRouter: qualityItpRoutes, msRouter: qualityMsRoutes } = require('./routes/quality-itp.routes');
+const { mirRouter: qualityMirRoutes, mtcRouter: qualityMtcRoutes } = require('./routes/quality-mir.routes');
+const qualityPourRoutes = require('./routes/quality-pour.routes');
+const qualityAuditRoutes = require('./routes/quality-audit.routes');
+const assetRoutes = require('./routes/asset.routes');
+const assetMgmtRoutes = require('./routes/asset-mgmt.routes');
+const inventoryAssetRoutes = require('./routes/inventoryAsset.routes');
+const itAssetRoutes = require('./routes/itAsset.routes');
+const itTicketRoutes = require('./routes/itTicket.routes');
+const budgetRoutes = require('./routes/budget.routes');
+const mrsRoutes = require('./routes/mrs.routes');
+const minRoutes = require('./routes/min.routes');
+const mtrRoutes = require('./routes/material-transfer.routes');
+const engineerLogRoutes = require('./routes/engineer-log.routes');
+const bookingRoutes = require('./routes/booking.routes');
+const reportRoutes = require('./routes/report.routes');
+const uploadRoutes        = require('./routes/upload.routes');
+const syncRoutes          = require('./routes/sync.routes');
+const notificationsRoutes = require('./routes/notifications.routes');
+const mailRoutes          = require('./routes/mail.routes');
+const indentRoutes = require('./routes/indent.routes');
+const quotationRoutes = require('./routes/quotation.routes');
+const subcontractorRoutes = require('./routes/subcontractor.routes');
+const usersRoutes  = require('./routes/users.routes');
+const licenseRoutes = require('./routes/license.routes');
+const materialReconRoutes = require('./routes/materialRecon.routes');
+const analyticsRoutes     = require('./routes/analytics.routes');
+const variationRoutes     = require('./routes/variation.routes');
+const normsRoutes         = require('./routes/norms.routes');
+const documentsRoutes     = require('./routes/documents.routes');
+const tqsBillsRoutes         = require('./routes/tqs-bills.routes');
+const tqsTrackerRoutes       = require('./routes/tqs-tracker.routes');
+const tqsVendorsRoutes       = require('./routes/tqs-vendors.routes');
+const tqsTransmittalRoutes   = require('./routes/tqs-transmittal.routes');
+const tqsAdvanceRoutes       = require('./routes/tqs-advance.routes');
+const liabilityRegisterRoutes = require('./routes/liability-register.routes');
+const tdsRoutes           = require('./routes/tds.routes');
+const hrMastersRoutes     = require('./routes/hr-masters.routes');
+const hrEmployeesRoutes   = require('./routes/hr-employees.routes');
+const hrLeaveRoutes       = require('./routes/hr-leave.routes');
+const hrAttendanceRoutes  = require('./routes/hr-attendance.routes');
+const hrSalaryRoutes      = require('./routes/hr-salary.routes');
+const hrPayrollRoutes     = require('./routes/hr-payroll.routes');
+const hrLoansRoutes       = require('./routes/hr-loans.routes');
+const hrExpensesRoutes    = require('./routes/hr-expenses.routes');
+const hrAppraisalsRoutes  = require('./routes/hr-appraisals.routes');
+const hrImportRoutes      = require('./routes/hr-import.routes');
+const hrEsslRoutes        = require('./routes/hr-essl.routes');
+const hrAdvancedRoutes    = require('./routes/hr-advanced.routes');
+const hrPhase5Routes      = require('./routes/hr-phase5.routes');
+const essRoutes           = require('./routes/ess.routes');
+const snagRoutes          = require('./routes/snag.routes');
+const { tenderRouter, bidRouter } = require('./routes/tender.routes');
+const tenderMgmtRoutes    = require('./routes/tender-mgmt.routes');
+const scRoutes            = require('./routes/sc.routes');
+const approvalsRoutes     = require('./routes/approvals.routes');
+const dmsRoutes           = require('./routes/dms.routes');
+const subMgmtRoutes       = require('./routes/subcontractor-mgmt.routes');
+const retentionRoutes             = require('./routes/retention.routes');
+const chatRoutes                  = require('./routes/chat.routes');
+const ocrRoutes                   = require('./routes/ocr.routes');
+const pettyCashRoutes             = require('./routes/petty-cash.routes');
+const automationIdeasRoutes       = require('./routes/automation-ideas.routes');
+const approvalEngineRoutes        = require('./routes/approval-engine.routes');
+
+const http   = require('http');
+const { Server: SocketIO } = require('socket.io');
+const jwt    = require('jsonwebtoken');
+
+const app    = express();
+const server = http.createServer(app);
+const PORT   = process.env.PORT || 5000;
+const extraAllowedOrigins = [
+  'http://bcim.ddns.net:3000',
+  'https://bcim.ddns.net:3000',
+];
+
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+  if (extraAllowedOrigins.includes(origin)) return true;
+  if (/^https?:\/\/localhost(:\d+)?\/?$/.test(origin)) return true;
+  if (/^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(origin)) return true;
+  if (origin.endsWith('.vercel.app')) return true;
+  if (process.env.FRONTEND_URL && origin.startsWith(process.env.FRONTEND_URL)) return true;
+  return false;
+};
+
+// ============================================
+// MIDDLEWARE
+// ============================================
+
+// Security headers
+// CSP is disabled: the React SPA uses Vite's type="module" crossorigin scripts
+// which need 'unsafe-inline' or a nonce-based CSP — not worth the complexity for
+// an internal ERP. All other Helmet protections (HSTS, X-Frame, etc.) stay on.
+app.use(helmet({
+  // App runs on HTTP (not HTTPS) — disable headers that only work on HTTPS
+  // and cause browser console warnings on plain HTTP origins
+  crossOriginResourcePolicy:    { policy: 'cross-origin' },
+  contentSecurityPolicy:        false,  // React/Vite scripts need this off
+  crossOriginOpenerPolicy:      false,  // requires HTTPS — ignore on HTTP
+  crossOriginEmbedderPolicy:    false,  // requires HTTPS — ignore on HTTP
+  originAgentCluster:           false,  // suppresses "site-keyed agent cluster" warning
+  strictTransportSecurity:      false,  // HSTS only applies to HTTPS
+}));
+
+// CORS
+app.use(cors({
+  origin: (origin, cb) => {
+    if (isAllowedOrigin(origin)) return cb(null, true);
+    // no origin = same-origin requests (production), curl, mobile apps
+    if (!origin) return cb(null, true);
+    // any localhost port — allow in dev
+    if (/^https?:\/\/localhost(:\d+)?\/?$/.test(origin)) return cb(null, true);
+    // LAN / local network IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+    if (/^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(origin)) return cb(null, true);
+    // any Vercel preview or production deploy
+    if (origin.endsWith('.vercel.app')) return cb(null, true);
+    // explicit production frontend URL
+    if (process.env.FRONTEND_URL && origin.startsWith(process.env.FRONTEND_URL)) return cb(null, true);
+    cb(new Error(`CORS: ${origin} not allowed`));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// Compression
+app.use(compression());
+
+// Request logging
+app.use(morgan('combined', {
+  stream: { write: msg => logger.info(msg.trim()) }
+}));
+
+// Body parsing
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Static file serving (uploads) — authenticated only
+// Requires a valid JWT so private documents cannot be hot-linked
+const { authenticate } = require('./middleware/auth');
+app.use('/uploads', authenticate, express.static(path.join(__dirname, '../uploads')));
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  max: 500,
+  message: { error: 'Too many requests, please try again later.' }
+});
+app.use('/api/', limiter);
+
+// Auth-specific limiter (brute-force protection)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  max: 200,                   // raised: small team + dev environment
+  message: { error: 'Too many login attempts, try again in 15 minutes.' }
+});
+
+// ============================================
+// HEALTH CHECK
+// ============================================
+
+app.get('/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      db: 'connected',
+      version: '3.0.0',
+      service: 'ConstructERP India'
+    });
+  } catch (err) {
+    res.status(503).json({ status: 'unhealthy', db: 'disconnected', error: err.message });
+  }
+});
+
+// ============================================
+// API ROUTES
+// ============================================
+
+const API = '/api/v1';
+
+// Auth
+app.use(`${API}/auth`, authLimiter, authRoutes);
+
+// Core
+app.use(`${API}/projects`, projectRoutes);
+
+// QS Module
+app.use(`${API}/boq`, boqRoutes);
+app.use(`${API}/measurements`, measurementRoutes);
+app.use(`${API}/ra-bills`, raBillRoutes);
+app.use(`${API}/vendor-qs-certifications`, vendorQsCertificationRoutes);
+app.use(`${API}/material-recon`, materialReconRoutes);
+app.use(`${API}/variations`, variationRoutes);
+app.use(`${API}/norms`, normsRoutes);
+
+// Finance
+app.use(`${API}/invoices`, invoiceRoutes);
+app.use(`${API}/payments`, paymentRoutes);
+app.use(`${API}/tds`, tdsRoutes);
+
+// Procurement
+app.use(`${API}/vendors`, vendorRoutes);
+app.use(`${API}/indents`, indentRoutes);
+app.use(`${API}/quotations`, quotationRoutes);
+app.use(`${API}/purchase-orders`, poRoutes);
+app.use(`${API}/procurement/po-amendments`, poAmendmentRoutes);
+app.use(`${API}/procurement/live-rates`, liveRatesRoutes);
+app.use(`${API}/grn`, grnRoutes);
+app.use(`${API}/inventory`, inventoryRoutes);
+app.use(`${API}/subcontractors`, subcontractorRoutes);
+
+// Site & HR
+app.use(`${API}/workers`, workerRoutes);
+app.use(`${API}/attendance`, attendanceRoutes);
+app.use(`${API}/payroll`, payrollRoutes);
+app.use(`${API}/dpr`,      dprRoutes);
+app.use(`${API}/planning`,    planningRoutes);
+app.use(`${API}/planning-p6`, planningP6Routes);
+
+// HSE & Quality
+app.use(`${API}/incidents`, incidentRoutes);
+app.use(`${API}/permits`, permitRoutes);
+app.use(`${API}/ppe`, ppeRoutes);
+app.use(`${API}/quality`, qualityRoutes);
+app.use(`${API}/quality/itp`, qualityItpRoutes);
+app.use(`${API}/quality/method-statements`, qualityMsRoutes);
+app.use(`${API}/quality/mir`, qualityMirRoutes);
+app.use(`${API}/quality/mtc`, qualityMtcRoutes);
+app.use(`${API}/quality/pour-cards`, qualityPourRoutes);
+app.use(`${API}/quality/audits`, qualityAuditRoutes);
+app.use(`${API}/snags`, snagRoutes);
+
+// Assets
+app.use(`${API}/assets`, assetRoutes);
+app.use(`${API}/asset-mgmt`, assetMgmtRoutes);
+app.use(`${API}/inventory-assets`, inventoryAssetRoutes);
+
+// IT
+app.use(`${API}/it-assets`, itAssetRoutes);
+app.use(`${API}/it-tickets`, itTicketRoutes);
+app.use(`${API}/licenses`, licenseRoutes);
+
+// Budget
+app.use(`${API}/budget`, budgetRoutes);
+
+// Stores
+app.use(`${API}/stores/mrs`, mrsRoutes);
+app.use(`${API}/stores/min`, minRoutes);
+app.use(`${API}/stores/mtr`, mtrRoutes);
+app.use(`${API}/engineer-logs`, engineerLogRoutes);
+
+// CRM
+app.use(`${API}/bookings`, bookingRoutes);
+
+// Reports & Strategic Analytics
+app.use(`${API}/reports`, reportRoutes);
+app.use(`${API}/analytics`, analyticsRoutes);
+
+// File upload
+app.use(`${API}/upload`, uploadRoutes);
+
+// Documents (cross-module, OneDrive-backed)
+app.use(`${API}/documents`, documentsRoutes);
+
+// Mail test endpoint (admin only) — POST /api/mail/test { email }
+app.post(`${API}/mail/test`, require('./middleware/auth').authenticate, async (req, res) => {
+  const { sendTestMail, isGraphConfigured, isSmtpConfigured } = require('./services/mail.service');
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'email is required' });
+  const provider = isGraphConfigured() ? 'graph' : isSmtpConfigured() ? 'smtp' : 'none';
+  if (provider === 'none') {
+    return res.status(503).json({ error: 'No mail provider configured. Set Azure Graph or SMTP variables in .env' });
+  }
+  try {
+    const result = await sendTestMail(email);
+    res.json({ ok: result.sent, provider: result.provider, reason: result.reason });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// WhatsApp test endpoint (admin only) — POST /api/whatsapp/test { phone, message }
+app.post(`${API}/whatsapp/test`, require('./middleware/auth').authenticate, (req, res) => {
+  const wa = require('./services/whatsapp.service');
+  if (!wa.isConfigured()) return res.status(503).json({ error: 'Twilio not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM in .env' });
+  const { phone, message } = req.body;
+  if (!phone || !message) return res.status(400).json({ error: 'phone and message are required' });
+  wa.sendWhatsApp(`whatsapp:${phone}`, message)
+    .then(() => res.json({ ok: true, to: phone }))
+    .catch(err => res.status(500).json({ error: err.message }));
+});
+
+// DQS Invoice Tracker
+app.use(`${API}/tqs/bills`, tqsBillsRoutes);
+app.use(`${API}/tqs/material-tracker`, tqsTrackerRoutes);
+app.use(`${API}/tqs/vendors`,          tqsVendorsRoutes);
+app.use(`${API}/tqs/transmittals`,     tqsTransmittalRoutes);
+app.use(`${API}/tqs/advances`,           tqsAdvanceRoutes);
+app.use(`${API}/tqs/liability-register`, liabilityRegisterRoutes);
+
+// DQS Sync (no JWT — key-based, for cross-app data sharing)
+app.use(`${API}/sync`, syncRoutes);
+
+// Notifications (live alerts from all modules)
+app.use(`${API}/notifications`, notificationsRoutes);
+
+// Mail diagnostics (admin only)
+app.use(`${API}/mail`, mailRoutes);
+
+// HR & Admin Module (salaried permanent employees)
+app.use(`${API}/hr-admin/masters`,     hrMastersRoutes);
+app.use(`${API}/hr-admin/employees`,   hrEmployeesRoutes);
+app.use(`${API}/hr-admin/leave`,       hrLeaveRoutes);
+app.use(`${API}/hr-admin/attendance`,  hrAttendanceRoutes);
+app.use(`${API}/hr-admin/salary`,      hrSalaryRoutes);
+app.use(`${API}/hr-admin/payroll`,     hrPayrollRoutes);
+app.use(`${API}/hr-admin/loans`,       hrLoansRoutes);
+app.use(`${API}/hr-admin/expenses`,    hrExpensesRoutes);
+app.use(`${API}/hr-admin/appraisals`,  hrAppraisalsRoutes);
+app.use(`${API}/hr-admin/import`,      hrImportRoutes);
+app.use(`${API}/hr-admin/essl`,        hrEsslRoutes);
+app.use(`${API}/hr-admin/advanced`,    hrAdvancedRoutes);
+app.use('/api/hr',                     hrPhase5Routes);
+app.use(`${API}/ess`,                  essRoutes);
+
+// Tender Management
+app.use(`${API}/tenders`,             tenderRouter);
+app.use(`${API}/tender-mgmt`,         tenderMgmtRoutes);
+app.use(`${API}/sc`,                  scRoutes);
+app.use(`${API}/approvals`,           approvalsRoutes);
+app.use(`${API}/dms`,                 dmsRoutes);
+app.use(`${API}/subcontractor-mgmt`,  subMgmtRoutes);
+app.use(`${API}/bid-opportunities`,   bidRouter);
+app.use(`${API}/retention-releases`,  retentionRoutes);
+
+// User / Team Management
+app.use(`${API}/users`, usersRoutes);
+
+// ERP Chat
+app.use(`${API}/chat`,       chatRoutes);
+app.use(`${API}/ocr`,        ocrRoutes);
+app.use(`${API}/petty-cash`, pettyCashRoutes);
+app.use(`${API}/automation-ideas`, automationIdeasRoutes);
+app.use(`${API}/approval-engine`, approvalEngineRoutes);
+
+// ============================================
+// SOCKET.IO — Real-time Chat
+// ============================================
+const io = new SocketIO(server, {
+  cors: {
+    origin: (origin, cb) => {
+      if (isAllowedOrigin(origin)) return cb(null, true);
+      cb(new Error(`CORS: ${origin} not allowed`));
+    },
+    credentials: true,
+  },
+});
+
+// Auth middleware for Socket.IO
+io.use((socket, next) => {
+  try {
+    const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace('Bearer ', '');
+    if (!token) return next(new Error('No token'));
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (!decoded?.id) return next(new Error('Invalid token'));
+    socket.user = decoded;
+    next();
+  } catch (e) {
+    next(new Error('Invalid token'));
+  }
+});
+
+io.on('connection', (socket) => {
+  logger.info(`💬 Chat: ${socket.user?.name || socket.user?.id} connected`);
+
+  // Join a channel room
+  socket.on('join_channel', (channel) => {
+    socket.rooms.forEach(r => { if (r !== socket.id) socket.leave(r); });
+    socket.join(channel);
+    socket.currentChannel = channel;
+  });
+
+  // New message — broadcast to everyone in the channel
+  socket.on('send_message', (msg) => {
+    // msg already saved via REST POST, just broadcast to others
+    socket.to(msg.channel).emit('new_message', msg);
+  });
+
+  // Pin toggle
+  socket.on('pin_message', ({ id, channel, pinned }) => {
+    socket.to(channel).emit('message_pinned', { id, pinned });
+  });
+
+  // Reaction
+  socket.on('react_message', ({ id, channel, reactions }) => {
+    socket.to(channel).emit('message_reacted', { id, reactions });
+  });
+
+  // Typing indicator
+  socket.on('typing', ({ channel, name }) => {
+    socket.to(channel).emit('user_typing', { name });
+  });
+  socket.on('stop_typing', ({ channel }) => {
+    socket.to(channel).emit('user_stop_typing');
+  });
+
+  socket.on('disconnect', () => {
+    logger.info(`💬 Chat: ${socket.user?.name || socket.user?.id} disconnected`);
+  });
+});
+
+// ============================================
+// SERVE REACT FRONTEND (production)
+// ============================================
+if (process.env.NODE_ENV === 'production') {
+  const buildPath = path.join(__dirname, '../../frontend/build');
+  app.use(express.static(buildPath));
+  // All non-API routes → React index.html (client-side routing)
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(buildPath, 'index.html'));
+  });
+}
+
+// ============================================
+// ERROR HANDLING
+// ============================================
+
+// 404 (only reached in dev — production falls through to React above)
+app.use((req, res) => {
+  res.status(404).json({ error: `Route ${req.method} ${req.url} not found` });
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+  logger.error(`${err.status || 500} — ${err.message} — ${req.originalUrl}`);
+  res.status(err.status || 500).json({
+    error: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+});
+
+// ============================================
+// START SERVER
+// ============================================
+
+async function runAutoMigrations() {
+  const client = await pool.connect();
+  try {
+    // 003: PO Register fields
+    await client.query(`ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS payment_terms VARCHAR(200)`);
+    await client.query(`ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS tcs_amount NUMERIC(15,2) DEFAULT 0`);
+    await client.query(`ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS po_req_no VARCHAR(100)`);
+    await client.query(`ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS po_req_date DATE`);
+    await client.query(`ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS approval_no VARCHAR(100)`);
+    await client.query(`ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS delivery_address TEXT`);
+    await client.query(`ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS order_intro TEXT`);
+    await client.query(`ALTER TABLE po_items ADD COLUMN IF NOT EXISTS req_date DATE`);
+    // 004: Cost head on PO + WO
+    await client.query(`ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS cost_head VARCHAR(100)`);
+    await client.query(`ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS cost_head VARCHAR(100)`);
+    // 005: Backfill missing tqs_bill_updates rows
+    await client.query(`
+      INSERT INTO tqs_bill_updates (bill_id, balance_to_pay, certified_net)
+      SELECT b.id, b.total_amount,
+        CASE WHEN b.workflow_status IN ('qs','accounts','paid','procurement') THEN b.total_amount ELSE 0 END
+      FROM tqs_bills b
+      LEFT JOIN tqs_bill_updates u ON u.bill_id = b.id
+      WHERE u.bill_id IS NULL AND b.is_deleted = FALSE
+    `);
+    logger.info('✅ Auto-migrations complete (003, 004, 005)');
+  } catch (err) {
+    logger.warn('⚠️  Auto-migration warning:', err.message);
+  } finally {
+    client.release();
+  }
+}
+
+if (require.main === module) {
+  if (process.env.CLEAR_SESSIONS_ON_STARTUP === 'true') {
+    pool.query('DELETE FROM refresh_tokens').catch(() => {});
+    logger.warn('All sessions cleared on startup because CLEAR_SESSIONS_ON_STARTUP=true');
+  }
+
+  // Run pending schema migrations silently on startup
+  runAutoMigrations().catch(err => logger.warn('Migration error:', err.message));
+
+  server.listen(PORT, () => {
+    logger.info(`🚀 ConstructERP API running on port ${PORT}`);
+    logger.info(`📍 Environment: ${process.env.NODE_ENV}`);
+    logger.info(`🏗  India v3.0 — 12 modules active`);
+    logger.info(`💬 Socket.IO chat server ready`);
+    logger.info('Session persistence enabled');
+
+    const { initBackupService } = require('./utils/backup.service');
+    initBackupService();
+
+    const { initLiabilityAutomation } = require('./utils/liability-automation.service');
+    initLiabilityAutomation();
+
+    const { initTodayBillAlert } = require('./utils/today-bill-alert.service');
+    initTodayBillAlert();
+  });
+}
+
+module.exports = app;
+module.exports.app = app;
+module.exports.server = server;
+module.exports.io = io;
+
+
