@@ -1,7 +1,8 @@
 // src/pages/procurement/VendorList.jsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
+import useAuthStore from '../../store/authStore';
 import {
   Users, Plus, X, Phone, Mail, Star, MapPin, CreditCard,
   Shield, Search, Building2, ChevronDown, ChevronUp,
@@ -272,15 +273,20 @@ function ByProjectTab({ projects }) {
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function VendorList() {
+  const { selectedProjectId } = useAuthStore();
   const [activeTab, setActiveTab]   = useState('list');
   const [showForm, setShowForm]     = useState(false);
   const [editVendor, setEditVendor] = useState(null);
   const [filterType, setFilterType] = useState('all');
-  const [filterProjectId, setFilterProjectId] = useState('');
+  const [filterProjectId, setFilterProjectId] = useState(selectedProjectId || '');
   const [search, setSearch]         = useState('');
   const [expanded, setExpanded]     = useState(null);
   const [selectedProjectIds, setSelectedProjectIds] = useState([]);
   const qc = useQueryClient();
+
+  useEffect(() => {
+    setFilterProjectId(selectedProjectId || '');
+  }, [selectedProjectId]);
   const { register, handleSubmit, reset, formState: { errors } } = useForm({
     defaultValues: { credit_days: 30 },
   });
