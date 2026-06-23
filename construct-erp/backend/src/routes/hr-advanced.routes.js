@@ -1421,8 +1421,8 @@ router.get('/org-chart', async (req, res) => {
         COALESCE(des.grade, '')                   AS grade
       FROM users u
       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
-      LEFT JOIN departments dep ON dep.id = ep.department_id
-      LEFT JOIN designations des ON des.id = ep.designation_id
+      LEFT JOIN hr_departments dep ON dep.id = ep.department_id
+      LEFT JOIN hr_designations des ON des.id = ep.designation_id
       WHERE u.company_id = $1
         AND u.is_active = TRUE
         AND u.role NOT IN ('super_admin','vendor','customer','contractor')
