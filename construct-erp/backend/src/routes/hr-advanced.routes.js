@@ -1299,21 +1299,23 @@ router.get('/org-chart', async (req, res) => {
         u.id,
         u.name,
         u.email,
-        ep.reporting_manager_id,
-        ep.work_location,
-        ep.employment_type,
-        ep.profile_photo_url,
-        dep.name  AS department,
-        des.name  AS designation,
-        des.grade AS grade
+        u.role,
+        COALESCE(ep.reporting_manager_id, NULL)  AS reporting_manager_id,
+        COALESCE(ep.work_location, '')            AS work_location,
+        COALESCE(ep.employment_type, '')          AS employment_type,
+        COALESCE(ep.profile_photo_url, '')        AS profile_photo_url,
+        COALESCE(ep.employee_code, '')            AS employee_code,
+        COALESCE(dep.name, 'Unassigned')          AS department,
+        COALESCE(des.name, '')                    AS designation,
+        COALESCE(des.grade, '')                   AS grade
       FROM users u
-      JOIN employee_profiles ep ON ep.user_id = u.id
+      LEFT JOIN employee_profiles ep ON ep.user_id = u.id
       LEFT JOIN departments dep ON dep.id = ep.department_id
       LEFT JOIN designations des ON des.id = ep.designation_id
       WHERE u.company_id = $1
         AND u.is_active = TRUE
-        AND ep.employment_status = 'active'
-      ORDER BY dep.name NULLS LAST, u.name
+        AND u.role NOT IN ('super_admin','vendor','customer','contractor')
+      ORDER BY COALESCE(dep.name,'Unassigned'), u.name
     `, [req.user.company_id]);
     res.json({ success: true, data: rows });
   } catch (err) { res.status(500).json({ error: err.message }); }

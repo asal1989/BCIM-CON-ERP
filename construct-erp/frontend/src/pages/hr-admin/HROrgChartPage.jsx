@@ -1,237 +1,149 @@
-// HR Organization Chart — tree view based on reporting_manager_id
+// HR Organization Chart — Department View (default) + Hierarchy View
 import React, { useState, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
-  Users, ChevronDown, ChevronRight, Search,
-  GitBranch, Building2, MapPin, Briefcase,
+  Users, Search, GitBranch, Building2, MapPin,
+  ChevronDown, ChevronRight, Layers, Network,
+  Mail, Phone, Briefcase,
 } from 'lucide-react';
 import { hrAdvancedAPI } from '../../api/client';
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
 const AVATAR_COLORS = [
   ['#6366F1','#4F46E5'],['#0EA5E9','#0284C7'],['#10B981','#059669'],
   ['#F59E0B','#D97706'],['#EF4444','#DC2626'],['#8B5CF6','#7C3AED'],
-  ['#EC4899','#DB2777'],['#14B8A6','#0D9488'],
+  ['#EC4899','#DB2777'],['#14B8A6','#0D9488'],['#F97316','#EA580C'],
+  ['#06B6D4','#0891B2'],
 ];
-const avatarGrad = (n) => AVATAR_COLORS[(n?.charCodeAt(0)||0) % AVATAR_COLORS.length];
-const initials   = (n) => (n||'U').split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase();
+const DEPT_COLORS = [
+  '#2563EB','#059669','#D97706','#DC2626','#7C3AED',
+  '#0D9488','#DB2777','#F97316','#0891B2','#65A30D',
+];
+const avatarGrad = (n='') => AVATAR_COLORS[(n.charCodeAt(0)||0) % AVATAR_COLORS.length];
+const initials   = (n='') => n.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase() || 'U';
+const fade = (d=0) => ({ initial:{opacity:0,y:14}, animate:{opacity:1,y:0}, transition:{duration:0.35,delay:d,ease:[0.16,1,0.3,1]} });
 
-function Avatar({ name, photo, size=40 }) {
+// ── Avatar ────────────────────────────────────────────────────────────────────
+function Avatar({ name='', photo='', size=40, ring=false }) {
   const [g1, g2] = avatarGrad(name);
-  if (photo) return <img src={photo} alt={name} className="rounded-full object-cover flex-shrink-0" style={{width:size,height:size}}/>;
+  const style = { width:size, height:size, fontSize:Math.round(size*0.36), flexShrink:0 };
+  const cls = `rounded-full flex-shrink-0 ${ring?'ring-2 ring-white ring-offset-1':''}`;
+  if (photo) return <img src={photo} alt={name} className={`${cls} object-cover`} style={style}/>;
   return (
-    <div className="rounded-full flex items-center justify-center font-bold text-white flex-shrink-0"
-      style={{width:size,height:size,fontSize:size*0.35,background:`linear-gradient(135deg,${g1},${g2})`}}>
+    <div className={`${cls} flex items-center justify-center font-bold text-white`}
+      style={{...style, background:`linear-gradient(135deg,${g1},${g2})`}}>
       {initials(name)}
     </div>
   );
 }
 
-function OrgNode({ node, depth=0, allNodes, collapsed, toggle, navigate, searchQ }) {
-  const children = allNodes.filter(n => n.reporting_manager_id === node.id);
-  const isCollapsed = collapsed[node.id];
-  const isRoot = depth === 0;
-
-  const highlight = searchQ && (
-    node.name?.toLowerCase().includes(searchQ) ||
-    node.designation?.toLowerCase().includes(searchQ) ||
-    node.department?.toLowerCase().includes(searchQ)
-  );
-
+// ── Employee Card (compact) ───────────────────────────────────────────────────
+function EmpCard({ emp, onClick, highlight=false, compact=false }) {
   return (
-    <div className={`flex flex-col items-center ${depth > 0 ? 'mt-0' : ''}`}>
-      {/* Node Card */}
-      <div className="relative flex flex-col items-center">
-        <motion.div
-          initial={{opacity:0,scale:0.9}} animate={{opacity:1,scale:1}}
-          transition={{duration:0.3,delay:depth*0.05}}
-          className={`relative rounded-2xl border transition-all cursor-pointer select-none
-            ${isRoot ? 'w-52' : depth===1 ? 'w-44' : 'w-40'}
-            ${highlight ? 'border-yellow-400 shadow-[0_0_0_3px_rgba(251,191,36,0.3)]' : 'border-gray-100 hover:border-blue-300'}
-          `}
-          style={{
-            background: isRoot ? 'linear-gradient(135deg,#0A1F5C,#1e40af)' : '#fff',
-            boxShadow: isRoot ? '0 8px 24px rgba(10,31,92,0.25)' : '0 2px 12px rgba(10,31,92,0.08)',
-          }}
-          onClick={() => navigate(`/hr-admin/employees/${node.id}`)}
-        >
-          <div className="p-4 flex flex-col items-center text-center gap-2">
-            <Avatar name={node.name} photo={node.profile_photo_url} size={isRoot?48:38}/>
-            <div>
-              <p className={`font-bold leading-tight text-${isRoot?'white':'gray-900'} ${isRoot?'text-[13px]':'text-[12px]'}`}>
-                {node.name}
-              </p>
-              {node.designation && (
-                <p className={`text-[10px] mt-0.5 font-semibold ${isRoot?'text-blue-200':'text-blue-600'}`}>
-                  {node.designation}
-                </p>
-              )}
-              {node.department && (
-                <p className={`text-[10px] mt-0.5 ${isRoot?'text-blue-300':'text-gray-400'}`}>
-                  {node.department}
-                </p>
-              )}
-              {node.work_location && (
-                <p className={`text-[9px] mt-0.5 flex items-center justify-center gap-0.5 ${isRoot?'text-blue-300':'text-gray-400'}`}>
-                  <MapPin size={8}/>{node.work_location}
-                </p>
-              )}
-            </div>
-            {children.length > 0 && (
-              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${isRoot?'bg-white/20 text-white':'bg-blue-50 text-blue-600'}`}>
-                {children.length} report{children.length!==1?'s':''}
-              </span>
-            )}
-          </div>
-        </motion.div>
-
-        {/* Collapse toggle */}
-        {children.length > 0 && (
-          <button
-            onClick={e => { e.stopPropagation(); toggle(node.id); }}
-            className="mt-1 w-6 h-6 rounded-full bg-white border-2 border-blue-300 flex items-center justify-center text-blue-600 shadow-sm hover:bg-blue-50 transition-colors z-10"
-            title={isCollapsed ? 'Expand' : 'Collapse'}
-          >
-            {isCollapsed ? <ChevronRight size={11}/> : <ChevronDown size={11}/>}
-          </button>
+    <motion.div
+      whileHover={{y:-2, boxShadow:'0 8px 24px rgba(10,31,92,0.14)'}}
+      onClick={() => onClick(emp)}
+      className={`bg-white rounded-2xl border cursor-pointer transition-all flex flex-col items-center text-center p-4 gap-2
+        ${compact ? 'w-36' : 'w-44'}
+        ${highlight ? 'ring-2 ring-yellow-400 ring-offset-1 border-yellow-300' : 'border-gray-100 hover:border-blue-200'}
+      `}
+      style={{boxShadow:'0 2px 10px rgba(10,31,92,0.07)'}}>
+      <Avatar name={emp.name} photo={emp.profile_photo_url} size={compact?36:44} ring/>
+      <div className="w-full min-w-0">
+        <p className={`font-bold text-gray-900 leading-tight truncate ${compact?'text-[11px]':'text-[12px]'}`}>{emp.name}</p>
+        {emp.designation && (
+          <p className={`text-blue-600 font-semibold mt-0.5 truncate ${compact?'text-[9px]':'text-[10px]'}`}>{emp.designation}</p>
+        )}
+        {!compact && emp.work_location && (
+          <p className="text-[9px] text-gray-400 mt-0.5 flex items-center justify-center gap-0.5 truncate">
+            <MapPin size={7}/>{emp.work_location}
+          </p>
         )}
       </div>
-
-      {/* Children */}
-      {children.length > 0 && !isCollapsed && (
-        <div className="flex flex-col items-center">
-          {/* Vertical connector */}
-          <div className="w-px h-4 bg-gray-300"/>
-          {children.length === 1 ? (
-            <div className="flex flex-col items-center">
-              <OrgNode node={children[0]} depth={depth+1} allNodes={allNodes}
-                collapsed={collapsed} toggle={toggle} navigate={navigate} searchQ={searchQ}/>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center">
-              {/* Horizontal connector bar */}
-              <div className="flex items-start">
-                {children.map((child, idx) => {
-                  const isFirst = idx === 0;
-                  const isLast  = idx === children.length - 1;
-                  return (
-                    <div key={child.id} className="flex flex-col items-center px-2">
-                      {/* Top connector */}
-                      <div className={`h-4 border-t border-gray-300 ${
-                        isFirst  ? 'border-l rounded-tl-md ml-1/2 w-1/2 self-end' :
-                        isLast   ? 'border-r rounded-tr-md mr-1/2 w-1/2 self-start' :
-                        'w-full'
-                      }`}/>
-                      <div className="w-px h-3 bg-gray-300"/>
-                      <OrgNode node={child} depth={depth+1} allNodes={allNodes}
-                        collapsed={collapsed} toggle={toggle} navigate={navigate} searchQ={searchQ}/>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+    </motion.div>
   );
 }
 
-// Simpler flat children layout
-function OrgTree({ node, allNodes, collapsed, toggle, navigate, searchQ, depth=0 }) {
-  const children = allNodes.filter(n => n.reporting_manager_id === node.id);
-  const isCollapsed = collapsed[node.id];
-  const isRoot = depth === 0;
+// ── Org Node (for hierarchy tree) ─────────────────────────────────────────────
+function OrgTreeNode({ node, allEmps, collapsed, toggle, onClick, searchQ, depth=0 }) {
+  const children = allEmps.filter(e => e.reporting_manager_id === node.id);
+  const isOpen   = !collapsed[node.id];
+  const isRoot   = depth === 0;
 
-  const highlight = searchQ && (
+  const hl = searchQ && (
     node.name?.toLowerCase().includes(searchQ) ||
     node.designation?.toLowerCase().includes(searchQ) ||
     node.department?.toLowerCase().includes(searchQ)
   );
 
-  const cardW = isRoot ? 'w-52' : depth===1 ? 'w-44' : 'w-40';
-
   return (
-    <div style={{display:'inline-flex', flexDirection:'column', alignItems:'center', margin:'0 8px'}}>
+    <div className="flex flex-col items-center" style={{margin:'0 6px'}}>
       {/* Card */}
       <motion.div
-        initial={{opacity:0,scale:0.92}} animate={{opacity:1,scale:1}}
-        transition={{duration:0.3,delay:Math.min(depth*0.06,0.4)}}
-        onClick={() => navigate(`/hr-admin/employees/${node.id}`)}
-        className={`${cardW} rounded-2xl border cursor-pointer transition-all hover:shadow-lg
-          ${highlight ? 'ring-2 ring-yellow-400 ring-offset-1' : ''}
+        initial={{opacity:0,scale:0.9}} animate={{opacity:1,scale:1}}
+        transition={{duration:0.3,delay:Math.min(depth*0.05,0.3)}}
+        onClick={() => onClick(node)}
+        className={`cursor-pointer rounded-2xl border flex flex-col items-center text-center transition-all
+          ${isRoot ? 'w-52 p-5' : depth===1 ? 'w-44 p-4' : 'w-36 p-3'}
+          ${hl ? 'ring-2 ring-yellow-400 border-yellow-300' : ''}
         `}
         style={{
           background: isRoot ? 'linear-gradient(135deg,#0A1F5C,#1d4ed8)' : '#fff',
-          boxShadow: isRoot ? '0 8px 28px rgba(10,31,92,0.22)' : '0 2px 10px rgba(10,31,92,0.07)',
-          border: isRoot ? 'none' : '1px solid #e5e7eb',
+          boxShadow: isRoot ? '0 10px 32px rgba(10,31,92,0.28)' : '0 2px 12px rgba(10,31,92,0.08)',
+          border: isRoot ? 'none' : hl ? undefined : '1px solid #e5e7eb',
         }}
       >
-        <div className="p-4 flex flex-col items-center text-center gap-2">
-          <Avatar name={node.name} photo={node.profile_photo_url} size={isRoot?50:40}/>
-          <div>
-            <p className={`font-bold leading-tight ${isRoot?'text-white text-[13px]':'text-gray-900 text-[12px]'}`}>
-              {node.name}
+        <Avatar name={node.name} photo={node.profile_photo_url} size={isRoot?52:depth===1?42:34} ring/>
+        <div className="mt-2 w-full min-w-0">
+          <p className={`font-bold leading-tight truncate ${isRoot?'text-white text-[13px]':depth===1?'text-gray-900 text-[12px]':'text-gray-900 text-[11px]'}`}>
+            {node.name}
+          </p>
+          {node.designation && (
+            <p className={`font-semibold mt-0.5 truncate ${isRoot?'text-blue-200 text-[10px]':'text-blue-600 text-[10px]'}`}>
+              {node.designation}
             </p>
-            {node.designation && (
-              <p className={`text-[10px] mt-0.5 font-semibold ${isRoot?'text-blue-200':'text-blue-600'}`}>
-                {node.designation}
-              </p>
-            )}
-            {node.department && (
-              <p className={`text-[10px] mt-0.5 ${isRoot?'text-blue-300':'text-gray-400'}`}>
-                {node.department}
-              </p>
-            )}
-            {node.work_location && (
-              <p className={`text-[9px] mt-1 flex items-center justify-center gap-0.5 ${isRoot?'text-blue-300':'text-gray-400'}`}>
-                <MapPin size={8}/>{node.work_location}
-              </p>
-            )}
-          </div>
-          {children.length > 0 && (
-            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${isRoot?'bg-white/20 text-white':'bg-blue-50 text-blue-600'}`}>
-              {children.length} direct report{children.length!==1?'s':''}
-            </span>
+          )}
+          {node.department && !isRoot && (
+            <p className="text-[9px] text-gray-400 mt-0.5 truncate">{node.department}</p>
+          )}
+          {node.work_location && (
+            <p className={`text-[9px] mt-0.5 flex items-center justify-center gap-0.5 truncate ${isRoot?'text-blue-300':'text-gray-400'}`}>
+              <MapPin size={7}/>{node.work_location}
+            </p>
           )}
         </div>
+        {children.length > 0 && (
+          <span className={`mt-2 text-[9px] font-bold px-2 py-0.5 rounded-full ${isRoot?'bg-white/20 text-white':'bg-blue-50 text-blue-600'}`}>
+            {children.length} report{children.length!==1?'s':''}
+          </span>
+        )}
       </motion.div>
 
-      {/* Collapse toggle */}
+      {/* Toggle */}
       {children.length > 0 && (
         <button
-          onClick={e => { e.stopPropagation(); toggle(node.id); }}
-          className="mt-1.5 w-6 h-6 rounded-full bg-white border-2 border-blue-300 flex items-center justify-center text-blue-600 shadow hover:bg-blue-50 transition-colors"
+          onClick={e=>{e.stopPropagation(); toggle(node.id);}}
+          className="mt-1.5 w-6 h-6 rounded-full bg-white border-2 border-blue-300 flex items-center justify-center text-blue-600 shadow-sm hover:bg-blue-50 transition-colors z-10 flex-shrink-0"
         >
-          {isCollapsed ? <ChevronRight size={11}/> : <ChevronDown size={11}/>}
+          {isOpen ? <ChevronDown size={11}/> : <ChevronRight size={11}/>}
         </button>
       )}
 
-      {/* Children branch */}
-      {children.length > 0 && !isCollapsed && (
-        <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}>
-          {/* Vertical line from toggle to horizontal bar */}
-          <div style={{width:1,height:16,background:'#d1d5db'}}/>
+      {/* Children */}
+      {children.length > 0 && isOpen && (
+        <div className="flex flex-col items-center">
+          <div style={{width:1,height:12,background:'#d1d5db'}}/>
           {children.length > 1 && (
-            <div style={{
-              display:'flex',
-              borderTop:'1px solid #d1d5db',
-              width: `calc(100% - 32px)`,
-              minWidth: children.length * 120,
-              height:1,
-            }}/>
+            <div style={{display:'flex',width:'100%',borderTop:'1px solid #d1d5db',minWidth:children.length*160}}/>
           )}
-          {/* Children row */}
-          <div style={{display:'flex',alignItems:'flex-start',gap:0}}>
-            {children.map((child,i) => (
-              <div key={child.id} style={{display:'flex',flexDirection:'column',alignItems:'center'}}>
-                {/* Vertical stub down */}
-                <div style={{width:1,height:children.length>1?16:0,background:'#d1d5db'}}/>
-                <OrgTree
-                  node={child} allNodes={allNodes} collapsed={collapsed}
-                  toggle={toggle} navigate={navigate} searchQ={searchQ} depth={depth+1}
-                />
+          <div className="flex items-start">
+            {children.map(child => (
+              <div key={child.id} className="flex flex-col items-center">
+                <div style={{width:1,height:14,background:'#d1d5db'}}/>
+                <OrgTreeNode node={child} allEmps={allEmps} collapsed={collapsed}
+                  toggle={toggle} onClick={onClick} searchQ={searchQ} depth={depth+1}/>
               </div>
             ))}
           </div>
@@ -241,165 +153,388 @@ function OrgTree({ node, allNodes, collapsed, toggle, navigate, searchQ, depth=0
   );
 }
 
-export default function HROrgChartPage() {
-  const navigate = useNavigate();
+// ── Department View ────────────────────────────────────────────────────────────
+function DepartmentView({ employees, onClick, searchQ }) {
   const [collapsed, setCollapsed] = useState({});
-  const [search, setSearch] = useState('');
+  const toggle = (d) => setCollapsed(c => ({...c,[d]:!c[d]}));
 
-  const { data: employees = [], isLoading } = useQuery({
-    queryKey: ['hr-org-chart'],
-    queryFn: () => hrAdvancedAPI.orgChart().then(r => r.data?.data ?? []),
-  });
+  const grouped = useMemo(() => {
+    const map = {};
+    employees.forEach(e => {
+      const d = e.department || 'Unassigned';
+      if (!map[d]) map[d]=[];
+      map[d].push(e);
+    });
+    return Object.entries(map).sort(([a],[b]) => {
+      if (a==='Unassigned') return 1;
+      if (b==='Unassigned') return -1;
+      return a.localeCompare(b);
+    });
+  }, [employees]);
 
-  const toggle = (id) => setCollapsed(c => ({...c, [id]: !c[id]}));
-  const searchQ = search.trim().toLowerCase();
+  const filtered = useMemo(() => {
+    if (!searchQ) return grouped;
+    return grouped.map(([dept, members]) => {
+      const f = members.filter(e =>
+        e.name?.toLowerCase().includes(searchQ) ||
+        e.designation?.toLowerCase().includes(searchQ) ||
+        dept.toLowerCase().includes(searchQ)
+      );
+      return [dept, f];
+    }).filter(([,m]) => m.length > 0);
+  }, [grouped, searchQ]);
 
-  // Build tree roots = employees whose manager is not in the list (or has no manager)
+  return (
+    <div className="flex flex-col items-center pb-16">
+      {/* Company Root */}
+      <motion.div {...fade(0)} className="flex flex-col items-center mb-2">
+        <div className="rounded-2xl px-8 py-4 flex items-center gap-3"
+          style={{background:'linear-gradient(135deg,#0A1F5C,#1d4ed8)',boxShadow:'0 8px 28px rgba(10,31,92,0.25)'}}>
+          <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+            <Building2 size={20} className="text-white"/>
+          </div>
+          <div>
+            <p className="font-bold text-white text-base">BCIM</p>
+            <p className="text-blue-200 text-[11px]">{employees.length} staff</p>
+          </div>
+        </div>
+        {/* Vertical line to departments */}
+        <div style={{width:1,height:20,background:'#d1d5db'}}/>
+        {/* Horizontal span */}
+        {filtered.length > 1 && (
+          <div style={{width:Math.min(filtered.length,6)*200,maxWidth:'80vw',height:1,background:'#d1d5db'}}/>
+        )}
+      </motion.div>
+
+      {/* Departments Row */}
+      <div className="flex flex-wrap justify-center gap-8 px-4">
+        {filtered.map(([dept, members], di) => {
+          const deptColor = DEPT_COLORS[di % DEPT_COLORS.length];
+          const isOpen = !collapsed[dept];
+          return (
+            <motion.div key={dept} {...fade(di*0.06)} className="flex flex-col items-center">
+              {/* Vertical connector */}
+              <div style={{width:1,height:16,background:'#d1d5db'}}/>
+
+              {/* Dept header card */}
+              <div className="rounded-2xl border px-5 py-3 flex items-center gap-3 cursor-pointer transition-all hover:shadow-lg"
+                style={{borderColor:`${deptColor}40`,background:`${deptColor}0d`,boxShadow:`0 2px 12px ${deptColor}18`}}
+                onClick={()=>toggle(dept)}>
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{background:`${deptColor}22`}}>
+                  <Building2 size={15} style={{color:deptColor}}/>
+                </div>
+                <div>
+                  <p className="font-bold text-gray-900 text-[12px] leading-tight">{dept}</p>
+                  <p className="text-[10px]" style={{color:deptColor}}>{members.length} member{members.length!==1?'s':''}</p>
+                </div>
+                <div className="ml-2 text-gray-400">
+                  {isOpen ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
+                </div>
+              </div>
+
+              {/* Employees */}
+              <AnimatePresence>
+                {isOpen && (
+                  <motion.div
+                    initial={{opacity:0,height:0}} animate={{opacity:1,height:'auto'}} exit={{opacity:0,height:0}}
+                    className="overflow-hidden">
+                    <div style={{width:1,height:12,background:'#d1d5db',margin:'0 auto'}}/>
+                    {/* Members grid */}
+                    <div className={`flex flex-wrap justify-center gap-3 ${members.length>4?'max-w-[360px]':''}`}>
+                      {members.map((emp, ei) => {
+                        const hl = searchQ && (
+                          emp.name?.toLowerCase().includes(searchQ) ||
+                          emp.designation?.toLowerCase().includes(searchQ)
+                        );
+                        return (
+                          <div key={emp.id} className="flex flex-col items-center">
+                            <div style={{width:1,height:10,background:'#e5e7eb'}}/>
+                            <EmpCard emp={emp} onClick={onClick} highlight={hl} compact={members.length>3}/>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {filtered.length === 0 && (
+        <div className="mt-16 flex flex-col items-center gap-3 text-gray-400">
+          <Users size={40} className="text-gray-200"/>
+          <p className="text-sm">No employees match your search</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Hierarchy View ─────────────────────────────────────────────────────────────
+function HierarchyView({ employees, onClick, searchQ }) {
+  const [collapsed, setCollapsed] = useState({});
+  const toggle = (id) => setCollapsed(c => ({...c,[id]:!c[id]}));
+
   const empIds = useMemo(() => new Set(employees.map(e => e.id)), [employees]);
+
+  // Roots = no manager OR manager not in our list
   const roots = useMemo(() =>
     employees.filter(e => !e.reporting_manager_id || !empIds.has(e.reporting_manager_id)),
     [employees, empIds]
   );
 
-  // Unlinked employees (if no employees returned but we know there are staff)
-  const isolated = useMemo(() => {
-    const inTree = new Set();
-    function mark(id) {
-      inTree.add(id);
-      employees.filter(e => e.reporting_manager_id === id).forEach(c => mark(c.id));
+  // Everyone who is NOT reachable from roots
+  const reachable = useMemo(() => {
+    const seen = new Set();
+    function walk(id) {
+      seen.add(id);
+      employees.filter(e => e.reporting_manager_id === id).forEach(c => walk(c.id));
     }
-    roots.forEach(r => mark(r.id));
-    return employees.filter(e => !inTree.has(e.id));
-  }, [employees, roots]);
+    roots.forEach(r => walk(r.id));
+    return seen;
+  }, [roots, employees]);
 
-  const expandAll = () => setCollapsed({});
+  const unlinked = employees.filter(e => !reachable.has(e.id));
+
+  const expandAll  = () => setCollapsed({});
   const collapseAll = () => {
     const c = {};
-    employees.forEach(e => { c[e.id] = true; });
+    employees.forEach(e => { c[e.id]=true; });
     setCollapsed(c);
   };
 
+  if (roots.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-60 text-sm text-gray-400 gap-3">
+        <GitBranch size={40} className="text-gray-200"/>
+        <p className="text-center max-w-xs">No hierarchy configured yet.<br/>
+          Set <strong>Reporting Manager</strong> in employee profiles to build the hierarchy tree.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen" style={{background:'#F8FAFC'}}>
-      {/* Header */}
-      <motion.div initial={{opacity:0,y:-12}} animate={{opacity:1,y:0}} transition={{duration:0.4}}
-        className="bg-white border-b border-gray-100 px-8 py-6">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-3">
-            <div className="rounded-2xl p-3 bg-blue-50">
-              <GitBranch size={22} className="text-blue-600"/>
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">Organization Chart</h1>
-              <p className="text-xs text-gray-400 mt-0.5">{employees.length} active employees</p>
-            </div>
+    <div className="flex flex-col items-center pb-20">
+      <div className="flex gap-2 mb-6 self-end mr-4">
+        <button onClick={expandAll}  className="px-3 py-1.5 text-xs font-semibold border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors">Expand All</button>
+        <button onClick={collapseAll} className="px-3 py-1.5 text-xs font-semibold border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors">Collapse All</button>
+      </div>
+
+      <div className="overflow-x-auto w-full flex justify-center">
+        <div className="inline-flex gap-16 flex-wrap justify-center px-8">
+          {roots.map(root => (
+            <OrgTreeNode key={root.id} node={root} allEmps={employees}
+              collapsed={collapsed} toggle={toggle} onClick={onClick} searchQ={searchQ} depth={0}/>
+          ))}
+        </div>
+      </div>
+
+      {unlinked.length > 0 && (
+        <div className="mt-10 w-full px-8">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="flex-1 h-px bg-gray-200"/>
+            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider px-2">No Manager Set ({unlinked.length})</span>
+            <div className="flex-1 h-px bg-gray-200"/>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="relative">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
-              <input value={search} onChange={e=>setSearch(e.target.value)}
-                placeholder="Search employee…"
-                className="pl-8 pr-4 py-2 text-sm border border-gray-200 rounded-xl bg-white w-52 focus:outline-none focus:ring-2 focus:ring-blue-500/20"/>
-            </div>
-            <button onClick={expandAll}
-              className="px-3 py-2 text-xs font-semibold border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors">
-              Expand All
-            </button>
-            <button onClick={collapseAll}
-              className="px-3 py-2 text-xs font-semibold border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors">
-              Collapse All
-            </button>
+          <div className="flex flex-wrap justify-center gap-3">
+            {unlinked.map(emp => <EmpCard key={emp.id} emp={emp} onClick={onClick} compact/>)}
           </div>
         </div>
-      </motion.div>
+      )}
+    </div>
+  );
+}
 
-      {/* Chart area */}
-      <div className="px-8 py-8 overflow-x-auto">
-        {isLoading && (
-          <div className="flex items-center justify-center h-60 text-sm text-gray-400">Loading org chart…</div>
-        )}
-
-        {!isLoading && employees.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-60 text-sm text-gray-400 gap-2">
-            <GitBranch size={36} className="text-gray-200"/>
-            <p>No employees found. Add reporting managers in employee profiles to build the org chart.</p>
+// ── Employee Detail Popup ─────────────────────────────────────────────────────
+function EmpDetailPopup({ emp, onClose, onOpen }) {
+  if (!emp) return null;
+  const [g1,g2] = avatarGrad(emp.name);
+  return (
+    <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{background:'rgba(10,31,92,0.35)'}}
+      onClick={onClose}>
+      <motion.div initial={{scale:0.9,y:20}} animate={{scale:1,y:0}} exit={{scale:0.9,y:20}}
+        className="bg-white rounded-3xl shadow-2xl w-72 overflow-hidden"
+        onClick={e=>e.stopPropagation()}>
+        {/* Banner */}
+        <div className="h-20 relative" style={{background:`linear-gradient(135deg,${g1},${g2})`}}>
+          <button onClick={onClose} className="absolute top-3 right-3 w-7 h-7 rounded-full bg-white/20 text-white flex items-center justify-center hover:bg-white/30">
+            ×
+          </button>
+        </div>
+        <div className="px-5 pb-5">
+          <div className="-mt-8 mb-3 flex justify-center">
+            <Avatar name={emp.name} photo={emp.profile_photo_url} size={56} ring/>
           </div>
-        )}
-
-        {!isLoading && employees.length > 0 && roots.length === 0 && (
-          <div className="mb-6 px-5 py-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">
-            <strong>No root node detected.</strong> Set reporting managers in employee profiles to build the hierarchy.
+          <div className="text-center mb-4">
+            <p className="font-bold text-gray-900 text-base">{emp.name}</p>
+            {emp.designation && <p className="text-sm text-blue-600 font-semibold mt-0.5">{emp.designation}</p>}
+            {emp.department && <p className="text-xs text-gray-500 mt-0.5">{emp.department}</p>}
+            {emp.grade && (
+              <span className="inline-block mt-2 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-600">
+                Grade {emp.grade}
+              </span>
+            )}
           </div>
-        )}
-
-        {!isLoading && roots.length > 0 && (
-          <div style={{display:'inline-flex',flexDirection:'column',alignItems:'center',minWidth:'100%',paddingBottom:40}}>
-            {roots.map(root => (
-              <div key={root.id} className="mb-10">
-                <OrgTree
-                  node={root} allNodes={employees}
-                  collapsed={collapsed} toggle={toggle}
-                  navigate={navigate} searchQ={searchQ}
-                  depth={0}
-                />
+          <div className="space-y-2 text-xs text-gray-600">
+            {emp.email && (
+              <div className="flex items-center gap-2">
+                <Mail size={12} className="text-gray-400 flex-shrink-0"/>
+                <span className="truncate">{emp.email}</span>
               </div>
-            ))}
-
-            {/* Isolated employees (no manager, not root — shouldn't happen but safety net) */}
-            {isolated.length > 0 && (
-              <div className="mt-8 w-full">
-                <div className="flex items-center gap-2 mb-4 px-2">
-                  <div className="flex-1 h-px bg-gray-200"/>
-                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider px-2">
-                    Unlinked ({isolated.length})
-                  </span>
-                  <div className="flex-1 h-px bg-gray-200"/>
-                </div>
-                <div className="flex flex-wrap gap-4 justify-center">
-                  {isolated.map(emp => (
-                    <div key={emp.id} className="flex flex-col items-center">
-                      <motion.div
-                        whileHover={{y:-2}}
-                        onClick={() => navigate(`/hr-admin/employees/${emp.id}`)}
-                        className="w-40 rounded-2xl border border-gray-100 bg-white cursor-pointer p-4 flex flex-col items-center text-center gap-2"
-                        style={{boxShadow:'0 2px 8px rgba(10,31,92,0.06)'}}>
-                        <Avatar name={emp.name} photo={emp.profile_photo_url} size={38}/>
-                        <div>
-                          <p className="font-bold text-gray-900 text-[12px]">{emp.name}</p>
-                          {emp.designation && <p className="text-[10px] text-blue-600 mt-0.5">{emp.designation}</p>}
-                          {emp.department && <p className="text-[10px] text-gray-400">{emp.department}</p>}
-                        </div>
-                      </motion.div>
-                    </div>
-                  ))}
-                </div>
+            )}
+            {emp.work_location && (
+              <div className="flex items-center gap-2">
+                <MapPin size={12} className="text-gray-400 flex-shrink-0"/>
+                {emp.work_location}
+              </div>
+            )}
+            {emp.employment_type && (
+              <div className="flex items-center gap-2">
+                <Briefcase size={12} className="text-gray-400 flex-shrink-0"/>
+                <span className="capitalize">{emp.employment_type.replace(/_/g,' ')}</span>
               </div>
             )}
           </div>
+          <button onClick={()=>onOpen(emp.id)}
+            className="mt-4 w-full py-2.5 rounded-xl text-xs font-bold text-white transition-colors"
+            style={{background:'linear-gradient(135deg,#0A1F5C,#2563EB)'}}>
+            View Full Profile
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
+export default function HROrgChartPage() {
+  const navigate  = useNavigate();
+  const [view, setView]     = useState('department'); // 'department' | 'hierarchy'
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState(null);
+
+  const { data: employees=[], isLoading, error } = useQuery({
+    queryKey: ['hr-org-chart'],
+    queryFn: () => hrAdvancedAPI.orgChart().then(r => r.data?.data ?? []),
+  });
+
+  const searchQ = search.trim().toLowerCase();
+
+  // Has any reporting manager relationship?
+  const hasHierarchy = useMemo(() =>
+    employees.some(e => e.reporting_manager_id && employees.find(m => m.id === e.reporting_manager_id)),
+    [employees]
+  );
+
+  const handleSelect = (emp) => setSelected(emp);
+  const handleOpen   = (id) => navigate(`/hr-admin/employees/${id}`);
+
+  return (
+    <div className="min-h-screen" style={{background:'#F8FAFC'}}>
+
+      {/* Header */}
+      <motion.div {...fade(0)} className="bg-white border-b border-gray-100 px-6 py-5 sticky top-0 z-20">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <div className="rounded-2xl p-3 bg-blue-50">
+              <GitBranch size={20} className="text-blue-600"/>
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-gray-900">Organization Chart</h1>
+              <p className="text-xs text-gray-400">{employees.length} staff members</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Search */}
+            <div className="relative">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+              <input value={search} onChange={e=>setSearch(e.target.value)}
+                placeholder="Search name, role, dept…"
+                className="pl-8 pr-4 py-2 text-sm border border-gray-200 rounded-xl bg-white w-44 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"/>
+            </div>
+
+            {/* View Toggle */}
+            <div className="flex rounded-xl border border-gray-200 overflow-hidden">
+              <button onClick={()=>setView('department')}
+                className={`px-3 py-2 text-xs font-semibold flex items-center gap-1.5 transition-colors ${view==='department'?'bg-blue-600 text-white':'text-gray-600 hover:bg-gray-50'}`}>
+                <Layers size={13}/> Dept View
+              </button>
+              <button onClick={()=>setView('hierarchy')}
+                className={`px-3 py-2 text-xs font-semibold flex items-center gap-1.5 transition-colors ${view==='hierarchy'?'bg-blue-600 text-white':'text-gray-600 hover:bg-gray-50'}`}>
+                <Network size={13}/> Hierarchy
+                {!hasHierarchy && <span className="text-[9px] opacity-60">(not set)</span>}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Info bar */}
+        {view === 'hierarchy' && !hasHierarchy && employees.length > 0 && (
+          <div className="mt-3 flex items-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
+            <GitBranch size={13} className="flex-shrink-0"/>
+            <span>No reporting manager relationships set yet. Go to <strong>Employee profile → Edit</strong> to set reporting managers and build the hierarchy.</span>
+          </div>
+        )}
+      </motion.div>
+
+      {/* Chart area — scrollable */}
+      <div className="overflow-x-auto overflow-y-auto px-4 pt-6 min-h-[calc(100vh-80px)]">
+        {isLoading && (
+          <div className="flex items-center justify-center h-60 text-sm text-gray-400">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-8 h-8 rounded-full border-2 border-blue-300 border-t-blue-600 animate-spin"/>
+              Loading staff…
+            </div>
+          </div>
+        )}
+
+        {!isLoading && error && (
+          <div className="flex items-center justify-center h-60 text-sm text-red-500">
+            Failed to load staff data
+          </div>
+        )}
+
+        {!isLoading && !error && employees.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-60 text-sm text-gray-400 gap-3">
+            <Users size={40} className="text-gray-200"/>
+            <p>No staff found. Add team members via Administration → Team Members.</p>
+          </div>
+        )}
+
+        {!isLoading && !error && employees.length > 0 && view === 'department' && (
+          <DepartmentView employees={employees} onClick={handleSelect} searchQ={searchQ}/>
+        )}
+
+        {!isLoading && !error && employees.length > 0 && view === 'hierarchy' && (
+          <HierarchyView employees={employees} onClick={handleSelect} searchQ={searchQ}/>
         )}
       </div>
 
+      {/* Employee popup */}
+      <AnimatePresence>
+        {selected && (
+          <EmpDetailPopup emp={selected} onClose={()=>setSelected(null)} onOpen={handleOpen}/>
+        )}
+      </AnimatePresence>
+
       {/* Legend */}
       {!isLoading && employees.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-white/90 backdrop-blur border border-gray-200 rounded-2xl px-5 py-3 text-xs text-gray-500 shadow-lg">
-          <div className="flex items-center gap-1.5">
-            <div className="w-5 h-5 rounded-lg" style={{background:'linear-gradient(135deg,#0A1F5C,#1d4ed8)'}}/>
-            <span>Top-level</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-5 h-5 rounded-lg border border-gray-200 bg-white"/>
-            <span>Reporting employee</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-4 h-4 rounded-full bg-white border-2 border-blue-300 flex items-center justify-center">
-              <ChevronDown size={8} className="text-blue-600"/>
-            </div>
-            <span>Expand / Collapse</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-5 h-3 rounded bg-yellow-200 border border-yellow-400"/>
-            <span>Search match</span>
-          </div>
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-white/95 backdrop-blur border border-gray-200 rounded-2xl px-4 py-2.5 text-[11px] text-gray-500 shadow-lg">
+          <span className="font-semibold text-gray-700">Click any card</span>
+          <span className="text-gray-300">|</span>
+          <span>to view employee details</span>
+          {view === 'hierarchy' && (
+            <>
+              <span className="text-gray-300">|</span>
+              <span><ChevronDown size={11} className="inline"/> toggle subtree</span>
+            </>
+          )}
         </div>
       )}
     </div>
