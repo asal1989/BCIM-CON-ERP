@@ -95,7 +95,7 @@ router.get('/balances', async (req, res) => {
       `SELECT lb.*, lt.name as leave_type_name, lt.code, lt.is_paid
        FROM hr_leave_balances lb
        JOIN hr_leave_types lt ON lt.id = lb.leave_type_id
-       WHERE lb.user_id=$1 AND lb.year=$2
+       WHERE lb.user_id=$1 AND lb.year=$2 AND lt.is_active=TRUE
        ORDER BY lt.name`,
       [uid, yr]
     );
