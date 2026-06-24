@@ -737,9 +737,13 @@ function EmpMasterTab({ employees, headcountRows, month, year, expiryDays, setEx
   const probation = list.filter((e) =>
     e.probation_end_date && !SEPARATED.includes(String(e.employment_status || '').toLowerCase())
   );
-  const separations = list.filter((e) =>
-    SEPARATED.includes(String(e.employment_status || '').toLowerCase())
-  );
+  // Separated employees; if a leaving date exists, scope to the selected month/year
+  const separations = list.filter((e) => {
+    if (!SEPARATED.includes(String(e.employment_status || '').toLowerCase())) return false;
+    const d = parseD(e.date_of_leaving);
+    if (!d) return true; // no leaving date on file → always show
+    return (d.getMonth() + 1) === month && d.getFullYear() === year;
+  });
   const headcount = Array.isArray(headcountRows) ? headcountRows : [];
   const today = new Date();
   const contractExpiry = list.filter((e) =>
@@ -802,10 +806,10 @@ function EmpMasterTab({ employees, headcountRows, month, year, expiryDays, setEx
     },
     'separations': {
       label: '4. Separation / Exit Report',
-      subtitle: 'Employees who have separated (resigned, terminated, exited)',
+      subtitle: `Separations in ${MONTHS[month]} ${year} (plus any without a recorded leaving date)`,
       rows: separations,
-      filename: 'separations.csv',
-      empty: 'No separations recorded',
+      filename: `separations-${MONTHS[month]}-${year}.csv`,
+      empty: `No separations in ${MONTHS[month]} ${year}`,
       columns: [
         { key: 'employee_code', label: 'Code' },
         { key: 'name', label: 'Name' },
