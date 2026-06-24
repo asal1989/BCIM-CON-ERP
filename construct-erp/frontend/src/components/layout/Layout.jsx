@@ -1337,7 +1337,7 @@ function WelcomeScreen({ user, onDone }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const roleLabel = (user?.role || '').replace(/_/g, ' ');
-  const firstName = (user?.name || 'there').split(' ')[0];
+  const firstName = `Mr. ${(user?.name || 'there').split(' ')[0]}`;
 
   return (
     <>
