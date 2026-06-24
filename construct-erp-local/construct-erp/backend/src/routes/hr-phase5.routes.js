@@ -2717,4 +2717,189 @@ router.post('/resettlement', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// EMPLOYEE MASTER REPORTS — 8 reports in a single consolidated payload
+//   1. master            2. new_joinees       3. probation
+//   4. separations       5. headcount         6. contract_expiry
+//   7. transfers         8. document_checklist
+// Query params: month, year, expiry_days (default 60)
+// ════════════════════════════════════════════════════════════════════════════
+const REQUIRED_DOCS = ['PAN', 'Aadhaar', 'Resume', 'Offer Letter', 'Education', 'Bank Proof', 'Photo'];
+
+router.get('/reports/employee-master', async (req, res) => {
+  try {
+    const companyId = req.user.company_id;
+    const now = new Date();
+    const month = parseInt(req.query.month, 10) || (now.getMonth() + 1);
+    const year  = parseInt(req.query.year, 10)  || now.getFullYear();
+    const expiryDays = parseInt(req.query.expiry_days, 10) || 60;
+
+    // Base employee projection — reused for several reports
+    const empBase = `
+      SELECT u.id, u.employee_code, u.name, u.email, u.phone,
+             ep.date_of_joining, ep.date_of_birth, ep.gender,
+             ep.employment_type, ep.employment_status,
+             ep.probation_end_date, ep.date_of_leaving, ep.leaving_reason,
+             ep.work_location, ep.notice_period_days,
+             mgr.name AS reporting_manager_name,
+             dep.name AS department_name, des.name AS designation_name, des.grade
+      FROM users u
+      LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+      LEFT JOIN hr_departments dep ON dep.id = ep.department_id
+      LEFT JOIN hr_designations des ON des.id = ep.designation_id
+      LEFT JOIN users mgr ON mgr.id = ep.reporting_manager_id
+      WHERE u.company_id = $1
+    `;
+
+    const [
+      masterQ, newJoineesQ, probationQ, separationsQ,
+      headcountQ, contractsQ, transfersQ, docsQ,
+    ] = await Promise.all([
+      // 1. Master — every employee
+      query(`${empBase} ORDER BY u.name`, [companyId]),
+
+      // 2. New Joinees — joined within the selected month/year
+      query(
+        `${empBase} AND EXTRACT(MONTH FROM ep.date_of_joining) = $2
+                    AND EXTRACT(YEAR  FROM ep.date_of_joining) = $3
+         ORDER BY ep.date_of_joining DESC`,
+        [companyId, month, year]
+      ),
+
+      // 3. Probation / Confirmation — on probation OR probation ending within window
+      query(
+        `${empBase} AND (
+            ep.employment_type = 'probation'
+            OR (ep.probation_end_date IS NOT NULL
+                AND ep.probation_end_date >= CURRENT_DATE - INTERVAL '30 days')
+         )
+         AND COALESCE(ep.employment_status,'active') = 'active'
+         ORDER BY ep.probation_end_date NULLS LAST`,
+        [companyId]
+      ),
+
+      // 4. Separations / Exit — left, resigned, or has a separation record
+      query(
+        `SELECT u.id, u.employee_code, u.name,
+                dep.name AS department_name, des.name AS designation_name,
+                ep.date_of_joining, ep.date_of_leaving, ep.leaving_reason,
+                ep.employment_status,
+                sep.resignation_date, sep.last_working_day,
+                sep.reason AS separation_reason, sep.clearance_status
+         FROM users u
+         LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+         LEFT JOIN hr_departments dep ON dep.id = ep.department_id
+         LEFT JOIN hr_designations des ON des.id = ep.designation_id
+         LEFT JOIN hr_separation sep ON sep.employee_id = u.id AND sep.company_id = $1
+         WHERE u.company_id = $1
+           AND (ep.date_of_leaving IS NOT NULL
+                OR ep.employment_status IN ('resigned','terminated','exited','separated')
+                OR sep.id IS NOT NULL)
+         ORDER BY COALESCE(sep.last_working_day, ep.date_of_leaving) DESC NULLS LAST`,
+        [companyId]
+      ),
+
+      // 5. Headcount — department-wise active mix
+      query(
+        `SELECT COALESCE(dep.name,'Unassigned') AS department,
+                COUNT(*)::int AS total,
+                COUNT(*) FILTER (WHERE COALESCE(ep.employment_status,'active') = 'active')::int AS active,
+                COUNT(*) FILTER (WHERE ep.employment_status IN ('resigned','terminated','exited','separated'))::int AS separated,
+                COUNT(*) FILTER (WHERE ep.employment_type = 'permanent')::int AS permanent,
+                COUNT(*) FILTER (WHERE ep.employment_type = 'contract')::int AS contract,
+                COUNT(*) FILTER (WHERE ep.employment_type = 'probation')::int AS probation
+         FROM users u
+         LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+         LEFT JOIN hr_departments dep ON dep.id = ep.department_id
+         WHERE u.company_id = $1
+         GROUP BY COALESCE(dep.name,'Unassigned')
+         ORDER BY total DESC`,
+        [companyId]
+      ),
+
+      // 6. Contract Expiry — labour contracts ending within the window
+      query(
+        `SELECT id, firm_name, nature_of_work, contractor_code,
+                start_date, end_date, emp_count, status,
+                (end_date - CURRENT_DATE) AS days_to_expiry
+         FROM hr_contracts
+         WHERE company_id = $1 AND end_date IS NOT NULL
+           AND end_date <= CURRENT_DATE + ($2 || ' days')::interval
+         ORDER BY end_date ASC`,
+        [companyId, expiryDays]
+      ).catch(() => ({ rows: [] })),
+
+      // 7. Transfers — timeline events of transfer / department change
+      query(
+        `SELECT t.id, t.user_id, u.name AS employee_name, u.employee_code,
+                t.title, t.description, t.event_date, t.event_type
+         FROM employee_timeline t
+         JOIN users u ON u.id = t.user_id
+         WHERE t.company_id = $1
+           AND (t.event_type IN ('transfer','department_change','promotion','location_change')
+                OR t.title ILIKE '%transfer%' OR t.title ILIKE '%promot%')
+         ORDER BY t.event_date DESC`,
+        [companyId]
+      ).catch(() => ({ rows: [] })),
+
+      // 8. Document Checklist — which docs each active employee has on file
+      query(
+        `SELECT u.id, u.employee_code, u.name,
+                dep.name AS department_name,
+                COALESCE(
+                  ARRAY_AGG(DISTINCT d.doc_type) FILTER (WHERE d.doc_type IS NOT NULL),
+                  '{}'
+                ) AS doc_types
+         FROM users u
+         LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+         LEFT JOIN hr_departments dep ON dep.id = ep.department_id
+         LEFT JOIN employee_documents d ON d.user_id = u.id
+         WHERE u.company_id = $1
+           AND COALESCE(ep.employment_status,'active') = 'active'
+         GROUP BY u.id, u.employee_code, u.name, dep.name
+         ORDER BY u.name`,
+        [companyId]
+      ),
+    ]);
+
+    // Build document checklist matrix
+    const documentChecklist = docsQ.rows.map((r) => {
+      const held = (r.doc_types || []).map((d) => String(d).toLowerCase());
+      const matches = (req) => held.some((h) => h.includes(req.toLowerCase().split(' ')[0]));
+      const status = REQUIRED_DOCS.reduce((acc, doc) => {
+        acc[doc] = matches(doc);
+        return acc;
+      }, {});
+      const present = REQUIRED_DOCS.filter((d) => status[d]).length;
+      return {
+        id: r.id,
+        employee_code: r.employee_code,
+        name: r.name,
+        department_name: r.department_name,
+        status,
+        present_count: present,
+        missing_count: REQUIRED_DOCS.length - present,
+        missing: REQUIRED_DOCS.filter((d) => !status[d]),
+        complete: present === REQUIRED_DOCS.length,
+      };
+    });
+
+    res.json({
+      data: {
+        required_docs: REQUIRED_DOCS,
+        master: masterQ.rows,
+        new_joinees: newJoineesQ.rows,
+        probation: probationQ.rows,
+        separations: separationsQ.rows,
+        headcount: headcountQ.rows,
+        contract_expiry: contractsQ.rows,
+        transfers: transfersQ.rows,
+        document_checklist: documentChecklist,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

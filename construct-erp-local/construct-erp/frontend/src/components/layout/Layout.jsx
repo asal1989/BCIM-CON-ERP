@@ -207,6 +207,7 @@ const navGroups = [
     { to: '/hr-admin/statutory-registers', icon: BookMarked,      label: 'Statutory Registers' },
     // Reports & Docs
     { to: '/hr-admin/reports',            icon: FileBarChart,    label: 'HR Reports' },
+    { to: '/hr-admin/reports/employee-master', icon: Users,      label: 'Employee Master Reports' },
     { to: '/hr-admin/documents',          icon: FolderSearch,    label: 'Documents' },
   ]},
   { label: 'Bill Tracker', items: [
@@ -365,7 +366,7 @@ const NAV_SECTIONS = {
     { label: 'Time',        paths: ['/hr-admin/attendance','/hr-admin/leaves','/hr-admin/holidays','/hr-admin/essl-sync'] },
     { label: 'Payroll',     paths: ['/hr-admin/salary-revision-history','/hr-admin/salary-revision-analytics','/hr-admin/payroll','/hr-admin/salary-structures','/hr-admin/loans','/hr-admin/expenses','/hr-admin/lop-days','/hr-admin/arrears','/hr-admin/overtime','/hr-admin/stop-salary','/hr-admin/release-salary','/hr-admin/final-settlement','/hr-admin/resettlement','/hr-admin/quick-salary-statement','/hr-admin/payroll-statement','/hr-admin/payroll-differences','/hr-admin/accounts-jv','/hr-admin/bank-transfer','/hr-admin/cheque-cash-statement','/hr-admin/hold-salary','/hr-admin/ytd-summary','/hr-admin/pf-ytd','/hr-admin/it-statement','/hr-admin/it-declaration','/hr-admin/loan-statement','/hr-admin/reimbursement-statement','/hr-admin/ctc-payslip','/hr-admin/pay-item-groups','/hr-admin/payroll-repository','/hr-admin/payslip-gallery','/hr-admin/departments','/hr-admin/appraisals'] },
     { label: 'Compliance',  paths: ['/hr-admin/compliance','/hr-admin/pf-compliance','/hr-admin/esi-compliance','/hr-admin/professional-tax','/hr-admin/tds-compliance','/hr-admin/gratuity-register','/hr-admin/bonus-register','/hr-admin/lwf','/hr-admin/minimum-wages','/hr-admin/statutory-registers'] },
-    { label: 'Reports',     paths: ['/hr-admin/reports'] },
+    { label: 'Reports',     paths: ['/hr-admin/reports', '/hr-admin/reports/employee-master'] },
     { label: 'Documents',   paths: ['/hr-admin/documents'] },
   ],
   'Bill Tracker': [
