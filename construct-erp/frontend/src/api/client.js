@@ -1855,6 +1855,13 @@ export const hrComplianceAPI = {
   departments:         ()  => api.get('/hr-admin/compliance/departments'),
 };
 
+export const mailAPI = {
+  status:        ()        => api.get('/mail/status'),
+  test:          (to)      => api.post('/mail/test', { to }),
+  send:          (data)    => api.post('/mail/send', data),
+  resendWelcome: (to)      => api.post('/mail/welcome', { to }),
+};
+
 const multipart = { headers: { 'Content-Type': undefined } };
 export const hrImportAPI = {
   previewEmployees: (file)       => { const fd = new FormData(); fd.append('file', file); return api.post('/hr-admin/import/preview-employees', fd, multipart); },

@@ -6,9 +6,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, User, Calendar, CreditCard, TrendingUp, FileText, Briefcase,
   Phone, Mail, MapPin, Shield, Building2, Edit2, Upload, Trash2, Download, Plus, Clock,
-  FileSignature, Printer, ClipboardCheck, CheckCircle2, Circle, Ban, X
+  FileSignature, Printer, ClipboardCheck, CheckCircle2, Circle, Ban, X, Send
 } from 'lucide-react';
-import { hrEmployeesAPI, hrLeaveAPI, hrPayrollAPI, hrLoansAPI, hrAppraisalsAPI } from '../../api/client';
+import { hrEmployeesAPI, hrLeaveAPI, hrPayrollAPI, hrLoansAPI, hrAppraisalsAPI, mailAPI } from '../../api/client';
 import toast from 'react-hot-toast';
 
 const B = { navy:'#0A1F5C', blue:'#2563EB', yellow:'#F4C430', success:'#10B981' };
@@ -818,6 +818,16 @@ export default function EmployeeDetailPage() {
   });
   const emp = data?.data;
 
+  const welcomeMut = useMutation({
+    mutationFn: (to) => mailAPI.resendWelcome(to).then(r => r.data),
+    onMutate:   () => { toast.loading('Sending welcome email…', { id:'welcome-mail' }); },
+    onSuccess:  (res) => {
+      if (res?.sent) toast.success(`Welcome email sent to ${emp?.email}`, { id:'welcome-mail' });
+      else toast.error(res?.reason || 'Email not sent — check mail settings', { id:'welcome-mail' });
+    },
+    onError:    (e) => toast.error(e.response?.data?.error || 'Failed to send welcome email', { id:'welcome-mail' }),
+  });
+
   if (isLoading) return (
     <div className="flex items-center justify-center py-24" style={{background:'#F8FAFC',minHeight:'100vh'}}>
       <div className="w-8 h-8 rounded-full border-2 border-blue-200 border-t-blue-600 animate-spin"/>
@@ -863,6 +873,18 @@ export default function EmployeeDetailPage() {
               {emp.phone && <span className="flex items-center gap-1 text-white/50 text-xs"><Phone className="w-3 h-3"/>{emp.phone}</span>}
             </div>
           </div>
+          {/* Resend Welcome Email */}
+          <button
+            onClick={() => {
+              if (!emp.email) { toast.error('This employee has no email address'); return; }
+              welcomeMut.mutate(emp.email);
+            }}
+            disabled={welcomeMut.isLoading || !emp.email}
+            title={emp.email ? `Send login-access welcome email to ${emp.email}` : 'No email on file'}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-sm font-bold transition-all flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed mt-1">
+            <Send className="w-4 h-4"/>
+            {welcomeMut.isLoading ? 'Sending…' : 'Resend Welcome'}
+          </button>
         </div>
       </motion.div>
 
