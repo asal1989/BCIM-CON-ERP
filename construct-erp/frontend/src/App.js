@@ -301,6 +301,7 @@ const HROrgChartPage          = lazy(() => import('./pages/hr-admin/HROrgChartPa
 const HRPoliciesPage          = lazy(() => import('./pages/hr-admin/HRPoliciesPage'));
 const HRSegmentsPage          = lazy(() => import('./pages/hr-admin/HRSegmentsPage'));
 const HREmployeeFiltersPage   = lazy(() => import('./pages/hr-admin/HREmployeeFiltersPage'));
+const HRCompliancePage        = lazy(() => import('./pages/hr-admin/HRCompliancePage'));
 
 // ── Home route resolver — sends each user to their first accessible page ──────
 const MODULE_HOME = {
@@ -759,7 +760,8 @@ export default function App() {
                 <Route path="hr-admin/org-chart" element={<RequireModule module="HR & Admin"><HROrgChartPage /></RequireModule>} />
                 <Route path="hr-admin/policies" element={<RequireModule module="HR & Admin"><HRPoliciesPage /></RequireModule>} />
                 <Route path="hr-admin/segments" element={<RequireModule module="HR & Admin"><HRSegmentsPage /></RequireModule>} />
-                <Route path="hr-admin/emp-filters" element={<RequireModule module="HR & Admin"><HREmployeeFiltersPage /></RequireModule>} />
+                <Route path="hr-admin/emp-filters"  element={<RequireModule module="HR & Admin"><HREmployeeFiltersPage /></RequireModule>} />
+                <Route path="hr-admin/compliance"  element={<RequireModule module="HR & Admin"><HRCompliancePage /></RequireModule>} />
                 <Route path="hr-admin/employees" element={<RequireModule module="HR & Admin"><HREmployeeListPage /></RequireModule>} />
                 <Route path="hr-admin/employees/new" element={<RequireModule module="HR & Admin"><HREmployeeFormPage /></RequireModule>} />
                 <Route path="hr-admin/employees/:id" element={<RequireModule module="HR & Admin"><HREmployeeDetailPage /></RequireModule>} />

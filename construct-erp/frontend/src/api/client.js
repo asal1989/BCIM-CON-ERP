@@ -1844,6 +1844,17 @@ export const hrEsslAPI = {
   agentKey:       ()           => api.get('/hr-admin/essl/agent-key'),
 };
 
+export const hrComplianceAPI = {
+  pfRegister:          (p) => api.get('/hr-admin/compliance/pf-register',          { params: p }),
+  esiRegister:         (p) => api.get('/hr-admin/compliance/esi-register',         { params: p }),
+  ptRegister:          (p) => api.get('/hr-admin/compliance/pt-register',          { params: p }),
+  employmentRegister:  (p) => api.get('/hr-admin/compliance/employment-register',  { params: p }),
+  musterRoll:          (p) => api.get('/hr-admin/compliance/muster-roll',          { params: p }),
+  wageRegister:        (p) => api.get('/hr-admin/compliance/wage-register',        { params: p }),
+  incomeTaxRegister:   (p) => api.get('/hr-admin/compliance/income-tax-register',  { params: p }),
+  departments:         ()  => api.get('/hr-admin/compliance/departments'),
+};
+
 const multipart = { headers: { 'Content-Type': undefined } };
 export const hrImportAPI = {
   previewEmployees: (file)       => { const fd = new FormData(); fd.append('file', file); return api.post('/hr-admin/import/preview-employees', fd, multipart); },

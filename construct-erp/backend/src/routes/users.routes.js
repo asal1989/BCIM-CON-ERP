@@ -129,7 +129,7 @@ runSchemaInit('users_role_schema', ensureRoleSchema);
 // ── One-time employee_code fixes ─────────────────────────────────────────────
 (async () => {
   const codeFixes = [
-    { email: 'kdheena@gmail.com', employee_code: '42' },
+    { email: 'dheenadayalan@bcim.in', employee_code: '42' },
   ];
   for (const { email, employee_code } of codeFixes) {
     try {
