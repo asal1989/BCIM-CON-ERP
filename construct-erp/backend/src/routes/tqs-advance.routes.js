@@ -192,10 +192,11 @@ router.get('/lookup/vendors', async (req, res) => {
 router.get('/lookup/wos', async (req, res) => {
   try {
     const { company_id } = req.user;
-    const { project_id } = req.query;
+    const { project_id, vendor_id } = req.query;
     const wheres = [`p.company_id=$1`, `wo.is_deleted IS NOT TRUE`];
     const params = [company_id];
     applyProjectScope(req, wheres, params, 'wo', project_id);
+    if (vendor_id) { params.push(vendor_id); wheres.push(`wo.vendor_id=$${params.length}`); }
     const { rows } = await query(`
       SELECT wo.id, wo.wo_number, wo.subject, wo.total_value, wo.wo_date,
              v.name AS vendor_name, v.id AS vendor_id
@@ -216,10 +217,11 @@ router.get('/lookup/wos', async (req, res) => {
 router.get('/lookup/pos', async (req, res) => {
   try {
     const { company_id } = req.user;
-    const { project_id } = req.query;
+    const { project_id, vendor_id } = req.query;
     const wheres = [`p.company_id=$1`, `COALESCE(po.status,'') NOT IN ('cancelled','rejected')`];
     const params = [company_id];
     applyProjectScope(req, wheres, params, 'po', project_id);
+    if (vendor_id) { params.push(vendor_id); wheres.push(`po.vendor_id=$${params.length}`); }
     const { rows } = await query(`
       SELECT po.id, COALESCE(po.po_number, po.serial_no_formatted) AS po_number,
              po.po_date, po.grand_total AS total_value,

@@ -163,14 +163,14 @@ function NewAdvanceModal({ onClose, projects, defaultProjectId }) {
   });
 
   const { data: wos = [] } = useQuery({
-    queryKey: ['advance-wos', form.project_id],
-    queryFn: () => tqsAdvanceAPI.lookupWOs({ project_id: form.project_id || undefined }).then(r => r.data?.data ?? []),
+    queryKey: ['advance-wos', form.project_id, form.vendor_id],
+    queryFn: () => tqsAdvanceAPI.lookupWOs({ project_id: form.project_id || undefined, vendor_id: form.vendor_id || undefined }).then(r => r.data?.data ?? []),
     staleTime: 5 * 60 * 1000,
   });
 
   const { data: pos = [] } = useQuery({
-    queryKey: ['advance-pos', form.project_id],
-    queryFn: () => tqsAdvanceAPI.lookupPOs({ project_id: form.project_id || undefined }).then(r => r.data?.data ?? []),
+    queryKey: ['advance-pos', form.project_id, form.vendor_id],
+    queryFn: () => tqsAdvanceAPI.lookupPOs({ project_id: form.project_id || undefined, vendor_id: form.vendor_id || undefined }).then(r => r.data?.data ?? []),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -258,20 +258,12 @@ function NewAdvanceModal({ onClose, projects, defaultProjectId }) {
                         className="w-full text-left px-3 py-2 text-sm text-slate-900 hover:bg-blue-50"
                         onMouseDown={() => {
                           set('vendor_id', v.id); set('vendor_name', v.name); setVendorSearch(''); setShowVendors(false);
-                          // Auto-fill PO/WO no., date and value if this vendor has exactly one open WO or PO
-                          const vendorWOs = wos.filter(w => w.vendor_id === v.id);
-                          const vendorPOs = pos.filter(p => p.vendor_id === v.id);
-                          if (vendorWOs.length === 1 && !vendorPOs.length) {
-                            const w = vendorWOs[0];
-                            set('wo_number', w.wo_number);
-                            if (w.wo_date) set('po_date', w.wo_date.slice(0, 10));
-                            if (w.total_value) set('order_value', w.total_value);
-                          } else if (vendorPOs.length === 1 && !vendorWOs.length) {
-                            const p = vendorPOs[0];
-                            set('po_number', p.po_number);
-                            if (p.po_date) set('po_date', p.po_date.slice(0, 10));
-                            if (p.total_value) set('order_value', p.total_value);
-                          }
+                          set('wo_number', ''); set('po_number', '');
+                          // wos/pos re-query scoped to this vendor (see queryKey above) and the
+                          // dropdowns below read straight from that query's current state, so
+                          // opening them here shows whatever comes back — one match, several, or
+                          // none — once it resolves, instead of guessing synchronously.
+                          setWoSearch(''); setPoSearch(''); setShowWOs(true); setShowPOs(true);
                         }}>
                         {v.name} {v.vendor_code && <span className="text-slate-900 font-medium text-[13px] ml-1">({v.vendor_code})</span>}
                       </button>
@@ -317,6 +309,11 @@ function NewAdvanceModal({ onClose, projects, defaultProjectId }) {
                     ))}
                   </div>
                 )}
+                {showWOs && filteredWOs.length === 0 && form.vendor_id && (
+                  <div className="absolute z-10 w-full mt-1 bg-white rounded-xl shadow-xl border border-slate-200 px-3 py-2 text-xs text-slate-400">
+                    No work order found for {form.vendor_name} — type the WO number manually.
+                  </div>
+                )}
               </div>
               <div className="relative">
                 <Lbl>PO Number</Lbl>
@@ -342,6 +339,11 @@ function NewAdvanceModal({ onClose, projects, defaultProjectId }) {
                         {p.vendor_name && <span className="text-slate-900 font-medium text-[13px] ml-2">— {p.vendor_name}</span>}
                       </button>
                     ))}
+                  </div>
+                )}
+                {showPOs && filteredPOs.length === 0 && form.vendor_id && (
+                  <div className="absolute z-10 w-full mt-1 bg-white rounded-xl shadow-xl border border-slate-200 px-3 py-2 text-xs text-slate-400">
+                    No purchase order found for {form.vendor_name} — type the PO number manually.
                   </div>
                 )}
               </div>
