@@ -367,7 +367,7 @@ router.post('/', async (req, res) => {
     const code = employee_code || await generateEmpCode(req.user.company_id);
 
     // Create user with a temporary password (emp code as password, they should change)
-    const bcrypt = require('bcrypt');
+    const bcrypt = require('bcryptjs');
     const tempPassword = await bcrypt.hash(code, 10);
 
     // Get dept/desig names for denormalized user fields
