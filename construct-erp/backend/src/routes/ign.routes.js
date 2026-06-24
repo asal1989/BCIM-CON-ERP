@@ -116,7 +116,7 @@ async function nextIgnNumber(companyId) {
 // ── GET /ign ──────────────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
   try {
-    const { project_id, status, from_date, to_date } = req.query;
+    const { project_id, po_id, status, from_date, to_date } = req.query;
     let sql = `
       SELECT n.*,
              p.name  AS project_name,
@@ -133,6 +133,7 @@ router.get('/', async (req, res) => {
     let params = [req.user.company_id];
     let i = 2;
     if (project_id) { sql += ` AND n.project_id = $${i++}`; params.push(project_id); }
+    if (po_id)      { sql += ` AND n.po_id = $${i++}`;      params.push(po_id); }
     if (status)     { sql += ` AND n.status = $${i++}`;     params.push(status); }
     if (from_date) { sql += ` AND n.date_time >= $${i++}`; params.push(from_date); }
     if (to_date)   { sql += ` AND n.date_time <= $${i++}`; params.push(to_date); }
