@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Save, User, Briefcase, Shield } from 'lucide-react';
+import { ArrowLeft, Save, User, Briefcase, Shield, X, Check } from 'lucide-react';
 import { hrEmployeesAPI, hrMastersAPI } from '../../api/client';
 import toast from 'react-hot-toast';
 
@@ -24,6 +24,39 @@ function Field({ label, required, children }) {
       <label className={lbl}>{label}{required && <span className="text-red-500 ml-0.5">*</span>}</label>
       {children}
     </div>
+  );
+}
+
+// Dropdown that lets the user add a brand-new option inline instead of
+// having to leave the form and visit the Masters page first.
+function SelectWithAdd({ value, onChange, options, placeholder, adding, onStartAdd, onCancelAdd, newValue, onNewValueChange, onConfirmAdd, saving }) {
+  if (adding) {
+    return (
+      <div className="flex gap-1.5">
+        <input
+          className={inp} autoFocus value={newValue} placeholder={placeholder}
+          onChange={e=>onNewValueChange(e.target.value)}
+          onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); onConfirmAdd(); } if(e.key==='Escape') onCancelAdd(); }}
+        />
+        <button type="button" onClick={onConfirmAdd} disabled={saving || !newValue.trim()}
+          className="px-2.5 rounded-xl bg-emerald-600 text-white disabled:opacity-50 hover:bg-emerald-700">
+          <Check className="w-4 h-4"/>
+        </button>
+        <button type="button" onClick={onCancelAdd} className="px-2.5 rounded-xl bg-gray-100 text-gray-500 hover:bg-gray-200">
+          <X className="w-4 h-4"/>
+        </button>
+      </div>
+    );
+  }
+  return (
+    <select className={inp} value={value} onChange={e=>{
+      if (e.target.value === '__add_new__') onStartAdd();
+      else onChange(e.target.value);
+    }}>
+      <option value="">{placeholder}</option>
+      {options.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
+      <option value="__add_new__">+ Add New…</option>
+    </select>
   );
 }
 
@@ -84,6 +117,34 @@ export default function EmployeeFormPage() {
   },[empData]);
 
   const set = (k,v) => setForm(prev=>({...prev,[k]:v}));
+
+  // Inline "+ Add New" for Department / Designation dropdowns
+  const [addingDept, setAddingDept] = useState(false);
+  const [newDeptName, setNewDeptName] = useState('');
+  const [addingDesig, setAddingDesig] = useState(false);
+  const [newDesigName, setNewDesigName] = useState('');
+
+  const createDeptMut = useMutation({
+    mutationFn:(name)=>hrMastersAPI.createDept({ name }),
+    onSuccess:(res)=>{
+      qc.invalidateQueries({ queryKey:['hr-departments'] });
+      set('department_id', res.data?.data?.id || '');
+      set('designation_id', '');
+      setAddingDept(false); setNewDeptName('');
+      toast.success('Department added');
+    },
+    onError:e=>toast.error(e.response?.data?.error||'Could not add department'),
+  });
+  const createDesigMut = useMutation({
+    mutationFn:(name)=>hrMastersAPI.createDesig({ name, department_id: form.department_id || null }),
+    onSuccess:(res)=>{
+      qc.invalidateQueries({ queryKey:['hr-designations', form.department_id] });
+      set('designation_id', res.data?.data?.id || '');
+      setAddingDesig(false); setNewDesigName('');
+      toast.success('Designation added');
+    },
+    onError:e=>toast.error(e.response?.data?.error||'Could not add designation'),
+  });
 
   const saveMut = useMutation({
     mutationFn:(data)=>isEdit ? hrEmployeesAPI.update(id,data) : hrEmployeesAPI.create(data),
@@ -186,16 +247,26 @@ export default function EmployeeFormPage() {
             <h2 className="font-black text-gray-900">Job Details</h2>
             <div className="grid grid-cols-2 gap-4">
               <Field label="Department">
-                <select className={inp} value={form.department_id} onChange={e=>{ set('department_id',e.target.value); set('designation_id',''); }}>
-                  <option value="">Select Department</option>
-                  {departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
+                <SelectWithAdd
+                  value={form.department_id} options={departments} placeholder="Select Department"
+                  onChange={v=>{ set('department_id',v); set('designation_id',''); }}
+                  adding={addingDept} onStartAdd={()=>setAddingDept(true)}
+                  onCancelAdd={()=>{ setAddingDept(false); setNewDeptName(''); }}
+                  newValue={newDeptName} onNewValueChange={setNewDeptName}
+                  onConfirmAdd={()=>createDeptMut.mutate(newDeptName.trim())}
+                  saving={createDeptMut.isPending}
+                />
               </Field>
               <Field label="Designation">
-                <select className={inp} value={form.designation_id} onChange={e=>set('designation_id',e.target.value)}>
-                  <option value="">Select Designation</option>
-                  {designations.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
+                <SelectWithAdd
+                  value={form.designation_id} options={designations} placeholder="Select Designation"
+                  onChange={v=>set('designation_id',v)}
+                  adding={addingDesig} onStartAdd={()=>setAddingDesig(true)}
+                  onCancelAdd={()=>{ setAddingDesig(false); setNewDesigName(''); }}
+                  newValue={newDesigName} onNewValueChange={setNewDesigName}
+                  onConfirmAdd={()=>createDesigMut.mutate(newDesigName.trim())}
+                  saving={createDesigMut.isPending}
+                />
               </Field>
               <Field label="Employment Type">
                 <select className={inp} value={form.employment_type} onChange={e=>set('employment_type',e.target.value)}>
