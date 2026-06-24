@@ -1,6 +1,6 @@
 // HR Organisation Chart — Construction Sector
 // Views: Division View (default) | Department View | Reporting Hierarchy
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -8,7 +8,7 @@ import {
   Users, Search, Building2, MapPin, ChevronDown, ChevronRight,
   HardHat, Wrench, ShieldAlert, Truck, Package, IndianRupee,
   TrendingUp, Mail, Phone, X, ExternalLink, Network, Layers,
-  Briefcase, BadgeCheck, AlignLeft, ZoomIn, ZoomOut, Maximize
+  Briefcase, BadgeCheck, AlignLeft, ZoomIn, ZoomOut, Maximize, Move
 } from 'lucide-react';
 import { hrAdvancedAPI } from '../../api/client';
 
@@ -690,9 +690,51 @@ function HierarchyView({ employees, onClick, searchQ }) {
   const [collapsed, setCollapsed] = useState({});
   const [zoom, setZoom] = useState(1);
   const toggle = (id) => setCollapsed(c => ({...c,[id]:!c[id]}));
+
+  // ── Click-and-drag panning (grab the background and slide the chart) ──────
+  const scrollRef = useRef(null);
+  const drag = useRef({ active:false, startX:0, startY:0, scrollLeft:0, scrollTop:0, moved:false });
+  const [isDragging, setIsDragging] = useState(false);
+
   const zoomIn  = () => setZoom(z => Math.min(1.25, +(z + 0.1).toFixed(2)));
   const zoomOut = () => setZoom(z => Math.max(0.4, +(z - 0.1).toFixed(2)));
-  const zoomReset = () => setZoom(1);
+  const zoomReset = () => {
+    setZoom(1);
+    if (scrollRef.current) { scrollRef.current.scrollLeft = 0; scrollRef.current.scrollTop = 0; }
+  };
+
+  const startDrag = (e) => {
+    if (e.button !== undefined && e.button !== 0) return; // left mouse / touch only
+    const el = scrollRef.current;
+    if (!el) return;
+    const point = e.touches ? e.touches[0] : e;
+    drag.current = { active:true, startX:point.clientX, startY:point.clientY, scrollLeft:el.scrollLeft, scrollTop:el.scrollTop, moved:false };
+    setIsDragging(true);
+  };
+  const onDragMove = (e) => {
+    if (!drag.current.active) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const point = e.touches ? e.touches[0] : e;
+    const dx = point.clientX - drag.current.startX;
+    const dy = point.clientY - drag.current.startY;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) drag.current.moved = true;
+    el.scrollLeft = drag.current.scrollLeft - dx;
+    el.scrollTop  = drag.current.scrollTop  - dy;
+    if (drag.current.moved) e.preventDefault();
+  };
+  const endDrag = () => {
+    drag.current.active = false;
+    setIsDragging(false);
+  };
+  // Suppress the click that opens a node's detail popup if the mousedown
+  // on that node turned into a drag, so panning never mis-fires a click.
+  const onClickCapture = (e) => {
+    if (drag.current.moved) {
+      e.stopPropagation();
+      drag.current.moved = false;
+    }
+  };
 
   const { mode, employees: tree } = useMemo(() => buildHierarchy(employees), [employees]);
 
@@ -735,22 +777,39 @@ function HierarchyView({ employees, onClick, searchQ }) {
         </div>
       )}
 
-      {/* Zoom controls — sticky so they stay reachable while scrolling a wide tree */}
-      <div className="sticky left-4 z-20 mb-4 mx-4 inline-flex items-center gap-1 bg-white border border-gray-200 rounded-xl shadow-sm px-2 py-1.5 w-fit">
-        <button onClick={zoomOut} title="Zoom out" className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-30" disabled={zoom<=0.4}>
-          <ZoomOut size={14}/>
-        </button>
-        <span className="text-xs font-bold text-gray-500 w-11 text-center">{Math.round(zoom*100)}%</span>
-        <button onClick={zoomIn} title="Zoom in" className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-30" disabled={zoom>=1.25}>
-          <ZoomIn size={14}/>
-        </button>
-        <div className="w-px h-5 bg-gray-200 mx-0.5"/>
-        <button onClick={zoomReset} title="Reset zoom" className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-100">
-          <Maximize size={13}/>
-        </button>
+      {/* Zoom + pan controls — sticky so they stay reachable while panning a wide tree */}
+      <div className="sticky left-4 z-20 mb-3 mx-4 inline-flex items-center gap-2 w-fit">
+        <div className="inline-flex items-center gap-1 bg-white border border-gray-200 rounded-xl shadow-sm px-2 py-1.5">
+          <button onClick={zoomOut} title="Zoom out" className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-30" disabled={zoom<=0.4}>
+            <ZoomOut size={14}/>
+          </button>
+          <span className="text-xs font-bold text-gray-500 w-11 text-center">{Math.round(zoom*100)}%</span>
+          <button onClick={zoomIn} title="Zoom in" className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-30" disabled={zoom>=1.25}>
+            <ZoomIn size={14}/>
+          </button>
+          <div className="w-px h-5 bg-gray-200 mx-0.5"/>
+          <button onClick={zoomReset} title="Reset zoom & position" className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-100">
+            <Maximize size={13}/>
+          </button>
+        </div>
+        <span className="text-[10px] font-semibold text-gray-400 bg-gray-50 border border-gray-100 rounded-full px-2.5 py-1 hidden sm:inline-flex items-center gap-1">
+          <Move size={11}/> Click &amp; drag the chart to move it
+        </span>
       </div>
 
-      <div className="overflow-x-auto px-4" style={{overflowY:'hidden'}}>
+      <div
+        ref={scrollRef}
+        className="px-4 select-none"
+        style={{ overflow:'auto', maxHeight:'68vh', cursor:isDragging?'grabbing':'grab' }}
+        onMouseDown={startDrag}
+        onMouseMove={onDragMove}
+        onMouseUp={endDrag}
+        onMouseLeave={endDrag}
+        onTouchStart={startDrag}
+        onTouchMove={onDragMove}
+        onTouchEnd={endDrag}
+        onClickCapture={onClickCapture}
+      >
         <div className="flex justify-center flex-wrap gap-8" style={{minWidth:'max-content', transform:`scale(${zoom})`, transformOrigin:'top center', transition:'transform 0.15s ease'}}>
           {roots.map((root) => (
             <div key={root.id} className="flex flex-col items-center">
