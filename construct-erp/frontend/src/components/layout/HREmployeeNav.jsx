@@ -41,6 +41,7 @@ const NAV_MENUS = [
       { label: 'Advanced HR',         to: '/hr-admin/advanced' },
       { label: 'HR Reports',          to: '/hr-admin/reports' },
       { label: 'Compliance Reports',  to: '/hr-admin/compliance' },
+      { label: 'Confirmation Report', to: '/hr-admin/reports/confirmation' },
     ],
   },
   {

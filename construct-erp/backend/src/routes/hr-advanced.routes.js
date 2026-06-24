@@ -1432,4 +1432,96 @@ router.get('/org-chart', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── Employee Master Reports ────────────────────────────────────────────────────
+
+// Add date_of_confirmation column if it doesn't exist (idempotent)
+query(`ALTER TABLE employee_profiles ADD COLUMN IF NOT EXISTS date_of_confirmation DATE`).catch(() => {});
+
+// GET /confirmation-report — employees on probation with status
+router.get('/confirmation-report', async (req, res) => {
+  if (!hasHrAccess(req)) return res.status(403).json({ error: 'Forbidden' });
+  try {
+    const { department_id, status, from_date, to_date } = req.query;
+    const params = [req.user.company_id];
+    let where = `u.company_id = $1 AND u.is_active = TRUE AND ep.probation_end_date IS NOT NULL`;
+
+    if (department_id) { params.push(department_id); where += ` AND ep.department_id = $${params.length}`; }
+    if (from_date)     { params.push(from_date);     where += ` AND ep.probation_end_date >= $${params.length}`; }
+    if (to_date)       { params.push(to_date);       where += ` AND ep.probation_end_date <= $${params.length}`; }
+
+    const { rows } = await query(`
+      SELECT
+        u.id,
+        u.name,
+        u.employee_code,
+        u.email,
+        ep.date_of_joining,
+        ep.probation_end_date,
+        ep.date_of_confirmation,
+        ep.employment_type,
+        ep.employment_status,
+        ep.work_location,
+        dep.name                              AS department,
+        des.name                              AS designation,
+        mgr.name                              AS reporting_manager,
+        (ep.probation_end_date - CURRENT_DATE)::int AS days_left,
+        CASE
+          WHEN ep.date_of_confirmation IS NOT NULL          THEN 'confirmed'
+          WHEN ep.probation_end_date < CURRENT_DATE - 7    THEN 'overdue'
+          WHEN ep.probation_end_date <= CURRENT_DATE + 30  THEN 'due_soon'
+          ELSE 'upcoming'
+        END AS confirmation_status
+      FROM users u
+      LEFT JOIN employee_profiles ep  ON ep.user_id = u.id
+      LEFT JOIN hr_departments    dep ON dep.id = ep.department_id
+      LEFT JOIN hr_designations   des ON des.id = ep.designation_id
+      LEFT JOIN users             mgr ON mgr.id = ep.reporting_manager_id
+      WHERE ${where}
+      ORDER BY
+        CASE
+          WHEN ep.date_of_confirmation IS NOT NULL THEN 4
+          WHEN ep.probation_end_date < CURRENT_DATE - 7   THEN 1
+          WHEN ep.probation_end_date <= CURRENT_DATE + 30 THEN 2
+          ELSE 3
+        END,
+        ep.probation_end_date ASC
+    `, params);
+
+    // Filter by status after query (simpler than nested CASE in WHERE)
+    const filtered = status
+      ? rows.filter(r => r.confirmation_status === status)
+      : rows;
+
+    // Summary counts
+    const summary = {
+      total:     rows.length,
+      overdue:   rows.filter(r => r.confirmation_status === 'overdue').length,
+      due_soon:  rows.filter(r => r.confirmation_status === 'due_soon').length,
+      upcoming:  rows.filter(r => r.confirmation_status === 'upcoming').length,
+      confirmed: rows.filter(r => r.confirmation_status === 'confirmed').length,
+    };
+
+    res.json({ success: true, data: filtered, summary });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PATCH /employees/:id/confirm — mark employee as confirmed
+router.patch('/employees/:id/confirm', async (req, res) => {
+  if (!hasHrAccess(req)) return res.status(403).json({ error: 'Forbidden' });
+  try {
+    const { id } = req.params;
+    const { date_of_confirmation } = req.body;
+    const confirmDate = date_of_confirmation || new Date().toISOString().slice(0, 10);
+    const { rows } = await query(`
+      UPDATE employee_profiles
+         SET date_of_confirmation = $1, updated_at = NOW()
+       WHERE user_id = $2
+         AND (SELECT company_id FROM users WHERE id = $2) = $3
+      RETURNING user_id, date_of_confirmation
+    `, [confirmDate, id, req.user.company_id]);
+    if (!rows.length) return res.status(404).json({ error: 'Employee not found' });
+    res.json({ success: true, data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;
