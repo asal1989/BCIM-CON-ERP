@@ -29,6 +29,7 @@ import {
   hrPayrollAPI,
 } from '../../api/client';
 import HRConfirmationReportPage from './HRConfirmationReportPage';
+import HRCompliancePage from './HRCompliancePage';
 
 const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const currentYear = new Date().getFullYear();
@@ -64,15 +65,15 @@ function asRows(payload) {
 }
 
 const tabs = [
-  { id: 'overview',      label: 'Overview',       icon: FileBarChart },
-  { id: 'employees',     label: 'Employees',       icon: Users },
-  { id: 'attendance',    label: 'Attendance',      icon: CalendarCheck },
-  { id: 'leave',         label: 'Leave',           icon: CalendarOff },
-  { id: 'payroll',       label: 'Payroll',         icon: BadgeIndianRupee },
-  { id: 'statutory',     label: 'PF / ESI',        icon: ShieldCheck },
-  { id: 'compliance',    label: 'Compliance',      icon: AlertTriangle },
-  { id: 'advanced',      label: 'Advanced HR',     icon: Briefcase },
-  { id: 'confirmation',  label: 'Confirmation',    icon: CheckCircle2 },
+  { id: 'overview',        label: 'Overview',            icon: FileBarChart   },
+  { id: 'employees',       label: 'Employees',           icon: Users          },
+  { id: 'attendance',      label: 'Attendance',          icon: CalendarCheck  },
+  { id: 'leave',           label: 'Leave',               icon: CalendarOff    },
+  { id: 'payroll',         label: 'Payroll',             icon: BadgeIndianRupee },
+  { id: 'statutory',       label: 'Statutory Reports',   icon: ShieldCheck    },
+  { id: 'compliance',      label: 'Compliance Alerts',   icon: AlertTriangle  },
+  { id: 'confirmation',    label: 'Confirmation',        icon: CheckCircle2   },
+  { id: 'advanced',        label: 'Advanced HR',         icon: Briefcase      },
 ];
 
 function MonthFilter({ month, setMonth, year, setYear }) {
@@ -822,10 +823,10 @@ export default function HRReportsPage() {
           {activeTab === 'attendance' && <AttendanceTab rows={attendanceRows} month={month} year={year} />}
           {activeTab === 'leave' && <LeaveTab rows={leaveRows} />}
           {activeTab === 'payroll' && <PayrollTab records={payrollRecords} totals={payrollTotals} month={month} year={year} />}
-          {activeTab === 'statutory' && <StatutoryTab pfRows={pfRows} esiRows={esiRows} month={month} year={year} />}
-          {activeTab === 'compliance' && <ComplianceTab compliance={compliance} />}
-          {activeTab === 'advanced' && <AdvancedHRTab summary={advancedSummary} jobs={jobs} candidates={candidates} training={training} goals={goals} cases={cases} exits={exits} letters={letters} policies={policies} serviceRequests={serviceRequests} />}
-          {activeTab === 'confirmation' && <HRConfirmationReportPage />}
+          {activeTab === 'statutory'    && <HRCompliancePage embedded />}
+          {activeTab === 'compliance'   && <ComplianceTab compliance={compliance} />}
+          {activeTab === 'confirmation' && <HRConfirmationReportPage embedded />}
+          {activeTab === 'advanced'     && <AdvancedHRTab summary={advancedSummary} jobs={jobs} candidates={candidates} training={training} goals={goals} cases={cases} exits={exits} letters={letters} policies={policies} serviceRequests={serviceRequests} />}
         </>
       )}
     </div>

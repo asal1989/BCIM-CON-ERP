@@ -79,7 +79,7 @@ function ConfirmModal({ emp, onClose, onConfirm }) {
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
-export default function HRConfirmationReportPage() {
+export default function HRConfirmationReportPage({ embedded = false }) {
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
@@ -160,29 +160,31 @@ export default function HRConfirmationReportPage() {
   ];
 
   return (
-    <div className="min-h-screen" style={{ background: '#F8FAFC' }}>
+    <div className={embedded ? '' : 'min-h-screen'} style={embedded ? {} : { background: '#F8FAFC' }}>
 
-      {/* Header */}
-      <motion.div {...fade(0)} className="relative overflow-hidden"
-        style={{ background: 'linear-gradient(135deg,#0A1F5C,#1e3a8a)', boxShadow: '0 4px 20px rgba(10,31,92,0.2)' }}>
-        <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-[0.06]"
-          style={{ background: 'radial-gradient(circle,#fff,transparent 70%)', transform: 'translate(25%,-25%)' }} />
-        <div className="relative z-10 px-7 py-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <p className="text-white/60 text-sm font-semibold mb-1">HR & Admin · Employee Master Reports</p>
-              <h1 className="text-2xl font-black text-white">Employee Confirmation Report</h1>
-              <p className="text-white/55 text-sm mt-1">Track probation periods and confirmation status</p>
+      {/* Header — hidden when embedded inside HRReportsPage */}
+      {!embedded && (
+        <motion.div {...fade(0)} className="relative overflow-hidden"
+          style={{ background: 'linear-gradient(135deg,#0A1F5C,#1e3a8a)', boxShadow: '0 4px 20px rgba(10,31,92,0.2)' }}>
+          <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-[0.06]"
+            style={{ background: 'radial-gradient(circle,#fff,transparent 70%)', transform: 'translate(25%,-25%)' }} />
+          <div className="relative z-10 px-7 py-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <p className="text-white/60 text-sm font-semibold mb-1">HR & Admin · Employee Master Reports</p>
+                <h1 className="text-2xl font-black text-white">Employee Confirmation Report</h1>
+                <p className="text-white/55 text-sm mt-1">Track probation periods and confirmation status</p>
+              </div>
+              <button onClick={exportExcel}
+                className="flex items-center gap-2 px-5 py-2.5 bg-white/15 hover:bg-white/25 border border-white/25 text-white text-sm font-bold rounded-xl transition-all flex-shrink-0">
+                <Download size={14} /> Export Excel
+              </button>
             </div>
-            <button onClick={exportExcel}
-              className="flex items-center gap-2 px-5 py-2.5 bg-white/15 hover:bg-white/25 border border-white/25 text-white text-sm font-bold rounded-xl transition-all flex-shrink-0">
-              <Download size={14} /> Export Excel
-            </button>
           </div>
-        </div>
-      </motion.div>
+        </motion.div>
+      )}
 
-      <div className="px-7 py-6 space-y-6">
+      <div className={embedded ? 'py-4 space-y-6' : 'px-7 py-6 space-y-6'}>
 
         {/* Stat Cards */}
         <motion.div {...fade(0.05)} className="grid grid-cols-2 sm:grid-cols-5 gap-4">

@@ -665,7 +665,7 @@ function IncomeTaxRegister() {
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
-export default function HRCompliancePage() {
+export default function HRCompliancePage({ embedded = false }) {
   const [activeTab, setActiveTab] = useState('pf');
 
   const { data: deptsRes } = useQuery({
@@ -678,23 +678,25 @@ export default function HRCompliancePage() {
   const c   = COLOR[tab?.color || 'blue'];
 
   return (
-    <div className="min-h-screen" style={{ background: '#F8FAFC' }}>
-      {/* Header */}
-      <motion.div {...fade(0)} className="relative overflow-hidden"
-        style={{ background: 'linear-gradient(135deg,#0A1F5C,#1e3a8a)', boxShadow: '0 4px 20px rgba(10,31,92,0.2)' }}>
-        <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-[0.07]"
-          style={{ background: 'radial-gradient(circle,#fff,transparent 70%)', transform: 'translate(25%,-25%)' }}/>
-        <div className="relative z-10 px-7 py-6">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center">
-              <ShieldCheck className="w-5 h-5 text-white"/>
+    <div className={embedded ? '' : 'min-h-screen'} style={embedded ? {} : { background: '#F8FAFC' }}>
+      {/* Header — hidden when embedded inside HRReportsPage */}
+      {!embedded && (
+        <motion.div {...fade(0)} className="relative overflow-hidden"
+          style={{ background: 'linear-gradient(135deg,#0A1F5C,#1e3a8a)', boxShadow: '0 4px 20px rgba(10,31,92,0.2)' }}>
+          <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-[0.07]"
+            style={{ background: 'radial-gradient(circle,#fff,transparent 70%)', transform: 'translate(25%,-25%)' }}/>
+          <div className="relative z-10 px-7 py-6">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center">
+                <ShieldCheck className="w-5 h-5 text-white"/>
+              </div>
+              <span className="text-white/60 text-sm font-semibold">HR & Admin</span>
             </div>
-            <span className="text-white/60 text-sm font-semibold">HR & Admin</span>
+            <h1 className="text-2xl font-black text-white">Compliance Reports</h1>
+            <p className="text-white/55 text-sm mt-1">PF · ESI · Professional Tax · Wage Register · Muster Roll · Income Tax</p>
           </div>
-          <h1 className="text-2xl font-black text-white">Compliance Reports</h1>
-          <p className="text-white/55 text-sm mt-1">PF · ESI · Professional Tax · Wage Register · Muster Roll · Income Tax</p>
-        </div>
-      </motion.div>
+        </motion.div>
+      )}
 
       {/* Tab Bar */}
       <motion.div {...fade(0.06)} className="bg-white border-b border-gray-100 px-7">
