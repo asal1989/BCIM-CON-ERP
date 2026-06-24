@@ -245,7 +245,7 @@ export default function Dashboard() {
     else if (role === 'site_engineer')   RoleDash = SiteEngineerDashboard;
     else if (role === 'qs_engineer')     RoleDash = QSDashboard;
     else if (role === 'accountant')      RoleDash = AccountsDashboard;
-    else if (role === 'hr')              RoleDash = HRDashboard;
+    else if (['hr', 'hr_admin', 'hr_manager'].includes(role)) RoleDash = HRDashboard;
     else if (role === 'hse_officer')     RoleDash = HSEDashboard;
     else if (dept.includes('store'))     RoleDash = StoresDashboard;
     else if (dept.includes('procurement') || dept.includes('purchase')) RoleDash = ProcurementDashboard;

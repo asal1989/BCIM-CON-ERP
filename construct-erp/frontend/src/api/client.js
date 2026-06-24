@@ -1780,8 +1780,10 @@ export const hrLeaveAPI = {
 };
 
 export const hrAttendanceAPI = {
-  list:    (params) => api.get('/hr-admin/attendance', { params }),
-  summary: (params) => api.get('/hr-admin/attendance/summary', { params }),
+  list:        (params) => api.get('/hr-admin/attendance', { params }),
+  summary:     (params) => api.get('/hr-admin/attendance/summary', { params }),
+  dailyTrend:  (params) => api.get('/hr-admin/attendance/daily-trend', { params }),
+  deptSummary: (params) => api.get('/hr-admin/attendance/department-summary', { params }),
   bulk:    (data)   => api.post('/hr-admin/attendance/bulk', data),
   baseline:(data)   => api.post('/hr-admin/attendance/month-baseline', data),
   upsert:  (data)   => api.post('/hr-admin/attendance', data),

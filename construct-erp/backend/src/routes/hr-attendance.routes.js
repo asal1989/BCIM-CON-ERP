@@ -109,6 +109,60 @@ router.get('/summary', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
+// DAILY TREND — present-count per day for the month (dashboard chart)
+// ═══════════════════════════════════════════════════════════
+router.get('/daily-trend', async (req, res) => {
+  try {
+    const { month, year } = req.query;
+    const m = parseInt(month) || new Date().getMonth() + 1;
+    const y = parseInt(year)  || new Date().getFullYear();
+    const { rows } = await query(
+      `SELECT attendance_date,
+              COUNT(*) FILTER (WHERE status='present')  AS present,
+              COUNT(*) FILTER (WHERE status='absent')   AS absent,
+              COUNT(*) FILTER (WHERE status='leave')    AS on_leave
+       FROM hr_attendance
+       WHERE company_id=$1
+         AND EXTRACT(MONTH FROM attendance_date)=$2
+         AND EXTRACT(YEAR  FROM attendance_date)=$3
+       GROUP BY attendance_date
+       ORDER BY attendance_date`,
+      [req.user.company_id, m, y]
+    );
+    res.json({ data: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// DEPARTMENT SUMMARY — per-department attendance rollup for the month
+// ═══════════════════════════════════════════════════════════
+router.get('/department-summary', async (req, res) => {
+  try {
+    const { month, year } = req.query;
+    const m = parseInt(month) || new Date().getMonth() + 1;
+    const y = parseInt(year)  || new Date().getFullYear();
+    const { rows } = await query(
+      `SELECT COALESCE(dep.name, 'Unassigned') AS department_name,
+              COUNT(DISTINCT u.id)                                       AS headcount,
+              COUNT(a.id) FILTER (WHERE a.status='present')              AS present,
+              COUNT(a.id) FILTER (WHERE a.status='absent')               AS absent,
+              COUNT(a.id) FILTER (WHERE a.status='leave')                AS on_leave
+       FROM users u
+       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+       LEFT JOIN hr_departments dep ON dep.id = ep.department_id
+       LEFT JOIN hr_attendance a ON a.user_id = u.id
+         AND EXTRACT(MONTH FROM a.attendance_date)=$2
+         AND EXTRACT(YEAR  FROM a.attendance_date)=$3
+       WHERE u.company_id=$1 AND u.is_active=TRUE
+       GROUP BY dep.name
+       ORDER BY headcount DESC`,
+      [req.user.company_id, m, y]
+    );
+    res.json({ data: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
 // BULK MARK — mark attendance for a date (one or all employees)
 // ═══════════════════════════════════════════════════════════
 router.post('/bulk', async (req, res) => {
