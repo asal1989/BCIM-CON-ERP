@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import {
   AlertTriangle,
+  ArrowLeft,
   BadgeIndianRupee,
   Briefcase,
   CalendarCheck,
@@ -13,7 +14,9 @@ import {
   FileBarChart,
   FileText,
   Headphones,
+  Search,
   ShieldCheck,
+  Star,
   Users,
   XCircle,
 } from 'lucide-react';
@@ -64,18 +67,51 @@ function asRows(payload) {
   return Array.isArray(payload) ? payload : payload?.data || [];
 }
 
-const tabs = [
-  { id: 'overview',        label: 'Overview',            icon: FileBarChart   },
-  { id: 'employees',       label: 'Employees',           icon: Users          },
-  { id: 'attendance',      label: 'Attendance',          icon: CalendarCheck  },
-  { id: 'leave',           label: 'Leave',               icon: CalendarOff    },
-  { id: 'payroll',         label: 'Payroll',             icon: BadgeIndianRupee },
-  { id: 'statutory',       label: 'Statutory Reports',   icon: ShieldCheck    },
-  { id: 'compliance',      label: 'Compliance Alerts',   icon: AlertTriangle  },
-  { id: 'confirmation',    label: 'Confirmation',        icon: CheckCircle2   },
-  { id: 'advanced',        label: 'Advanced HR',         icon: Briefcase      },
-  { id: 'emp-master',      label: 'Emp. Master',         icon: FileText       },
+// ── Report catalog (greytHR-style directory of category cards) ──
+const REPORT_CATALOG = [
+  { title: 'Employee Master', icon: Users, items: [
+    { id: 'empm:master',          label: 'Employee Master List' },
+    { id: 'empm:new-joinees',     label: 'New Joinee Report' },
+    { id: 'empm:probation',       label: 'Confirmation / Probation Report' },
+    { id: 'empm:separations',     label: 'Separation / Exit Report' },
+    { id: 'empm:headcount',       label: 'Headcount Summary Report' },
+    { id: 'empm:contract-expiry', label: 'Contract Expiry Alert Report' },
+    { id: 'empm:transfers',       label: 'Employee Transfer Report' },
+    { id: 'empm:documents',       label: 'Document Checklist Report' },
+  ]},
+  { title: 'Attendance & Leave', icon: CalendarCheck, items: [
+    { id: 'attendance', label: 'Monthly Attendance Report' },
+    { id: 'leave',      label: 'Leave Register' },
+  ]},
+  { title: 'Payroll', icon: BadgeIndianRupee, items: [
+    { id: 'payroll',   label: 'Payroll Summary (Monthly)' },
+    { id: 'employees', label: 'Employee Register' },
+  ]},
+  { title: 'PF & ESI — Statutory', icon: ShieldCheck, items: [
+    { id: 'pf-esi', label: 'PF ECR & ESI Returns' },
+  ]},
+  { title: 'Compliance', icon: AlertTriangle, items: [
+    { id: 'compliance',           label: 'HR Compliance Register' },
+    { id: 'statutory-compliance', label: 'Statutory Compliance Dashboard' },
+    { id: 'confirmation',         label: 'Employee Confirmation Report' },
+  ]},
+  { title: 'Talent & Recruitment', icon: Briefcase, items: [
+    { id: 'adv:recruitment', label: 'Recruitment Pipeline' },
+    { id: 'adv:training',    label: 'Training Tracker' },
+    { id: 'adv:goals',       label: 'Performance Goals' },
+    { id: 'adv:cases',       label: 'HR Cases' },
+    { id: 'adv:exits',       label: 'Exit Clearance' },
+    { id: 'adv:letters',     label: 'Issued Letters' },
+    { id: 'adv:policies',    label: 'Policy Acknowledgement' },
+    { id: 'adv:service',     label: 'HR Service Desk' },
+  ]},
+  { title: 'Dashboards', icon: FileBarChart, items: [
+    { id: 'overview', label: 'HR Reports Overview' },
+  ]},
 ];
+
+const ALL_REPORT_ITEMS = REPORT_CATALOG.flatMap((c) => c.items);
+const labelOf = (id) => ALL_REPORT_ITEMS.find((it) => it.id === id)?.label || 'Report';
 
 function MonthFilter({ month, setMonth, year, setYear }) {
   const sel = "h-9 rounded-xl border border-white/20 bg-white/15 px-3 text-sm font-black text-white focus:outline-none focus:border-white/40 transition backdrop-blur-sm";
@@ -665,9 +701,9 @@ function AdvancedHRTab({ summary, jobs, candidates, training, goals, cases, exit
 // ── Employee Master Reports (8 reports, derived client-side from the master list) ──
 const SEPARATED = ['resigned', 'terminated', 'inactive', 'exited', 'separated', 'left'];
 
-function EmpMasterTab({ employees, headcountRows, month, year, expiryDays, setExpiryDays }) {
-  const [selectedId, setSelectedId] = useState('');   // dropdown value
-  const [activeId, setActiveId] = useState('');        // report shown after Generate
+function EmpMasterTab({ employees, headcountRows, month, year, expiryDays, setExpiryDays, initialReport = '' }) {
+  const [selectedId, setSelectedId] = useState(initialReport);   // dropdown value
+  const [activeId, setActiveId] = useState(initialReport);        // report shown after Generate
 
   const list = Array.isArray(employees) ? employees : [];
   const fmtDate = (v) => (v ? String(v).slice(0, 10) : '-');
@@ -906,7 +942,16 @@ function EmpMasterTab({ employees, headcountRows, month, year, expiryDays, setEx
 
 export default function HRReportsPage() {
   const now = new Date();
-  const [activeTab, setActiveTab] = useState('overview');
+  const [view, setView] = useState('');        // '' = catalog landing; otherwise a report id
+  const [search, setSearch] = useState('');
+  const [favorites, setFavorites] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('hrReportFavs') || '[]'); } catch { return []; }
+  });
+  const toggleFav = (id) => setFavorites((prev) => {
+    const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+    try { localStorage.setItem('hrReportFavs', JSON.stringify(next)); } catch (_) {}
+    return next;
+  });
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [expiryDays, setExpiryDays] = useState(60);
@@ -1005,7 +1050,27 @@ export default function HRReportsPage() {
   const serviceRequests = asRows(serviceRequestsData);
 
   const loading = loadingEmployees;
-  const activeLabel = useMemo(() => tabs.find((tab) => tab.id === activeTab)?.label || 'Overview', [activeTab]);
+
+  const renderReport = (id) => {
+    if (id.startsWith('empm:')) {
+      return <EmpMasterTab employees={employees} headcountRows={headcountRows} month={month} year={year} expiryDays={expiryDays} setExpiryDays={setExpiryDays} initialReport={id.slice(5)} />;
+    }
+    if (id.startsWith('adv')) {
+      return <AdvancedHRTab summary={advancedSummary} jobs={jobs} candidates={candidates} training={training} goals={goals} cases={cases} exits={exits} letters={letters} policies={policies} serviceRequests={serviceRequests} />;
+    }
+    switch (id) {
+      case 'overview':              return <OverviewTab employees={employees} headcountRows={headcountRows} payrollRecords={payrollRecords} payrollTotals={payrollTotals} leaveRows={leaveRows} attendanceRows={attendanceRows} compliance={compliance} />;
+      case 'employees':             return <EmployeesTab employees={employees} headcountRows={headcountRows} />;
+      case 'attendance':            return <AttendanceTab rows={attendanceRows} month={month} year={year} />;
+      case 'leave':                 return <LeaveTab rows={leaveRows} />;
+      case 'payroll':               return <PayrollTab records={payrollRecords} totals={payrollTotals} month={month} year={year} />;
+      case 'pf-esi':                return <StatutoryTab pfRows={pfRows} esiRows={esiRows} month={month} year={year} />;
+      case 'compliance':            return <ComplianceTab compliance={compliance} />;
+      case 'statutory-compliance':  return <HRCompliancePage embedded />;
+      case 'confirmation':          return <HRConfirmationReportPage embedded />;
+      default:                      return null;
+    }
+  };
 
   return (
     <div className="min-h-screen p-6 space-y-6" style={{background:'#F8FAFC'}}>
@@ -1032,48 +1097,99 @@ export default function HRReportsPage() {
         </div>
       </motion.div>
 
-      {/* Tab Bar */}
-      <motion.div {...fade(0.08)} className="bg-white rounded-2xl border border-gray-100 p-1.5"
-        style={{boxShadow:'0 2px 12px rgba(10,31,92,0.06)'}}>
-        <div className="flex gap-1 overflow-x-auto">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`inline-flex min-h-10 items-center gap-2 rounded-xl px-4 py-2 text-sm font-black transition whitespace-nowrap ${
-                  isActive ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-      </motion.div>
-
       {loading ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center text-sm font-bold text-gray-400"
           style={{boxShadow:'0 2px 12px rgba(10,31,92,0.06)'}}>
-          Loading {activeLabel}…
+          Loading reports…
         </div>
+      ) : view ? (
+        /* ── Single report view ── */
+        <motion.div {...fade(0.05)} className="space-y-4">
+          <button
+            onClick={() => setView('')}
+            className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-black text-slate-700 border border-gray-200 hover:bg-gray-50 transition"
+            style={{boxShadow:'0 2px 12px rgba(10,31,92,0.06)'}}
+          >
+            <ArrowLeft className="h-4 w-4" /> All Reports
+          </button>
+          <div className="flex items-center gap-2 text-sm font-bold text-slate-500">
+            <span>HR Reports</span><span className="text-slate-300">/</span>
+            <span className="text-slate-900">{labelOf(view)}</span>
+          </div>
+          {renderReport(view)}
+        </motion.div>
       ) : (
+        /* ── Report catalog (directory of category cards) ── */
         <>
-          {activeTab === 'overview' && <OverviewTab employees={employees} headcountRows={headcountRows} payrollRecords={payrollRecords} payrollTotals={payrollTotals} leaveRows={leaveRows} attendanceRows={attendanceRows} compliance={compliance} />}
-          {activeTab === 'employees' && <EmployeesTab employees={employees} headcountRows={headcountRows} />}
-          {activeTab === 'attendance' && <AttendanceTab rows={attendanceRows} month={month} year={year} />}
-          {activeTab === 'leave' && <LeaveTab rows={leaveRows} />}
-          {activeTab === 'payroll' && <PayrollTab records={payrollRecords} totals={payrollTotals} month={month} year={year} />}
-          {activeTab === 'statutory'    && <HRCompliancePage embedded />}
-          {activeTab === 'compliance'   && <ComplianceTab compliance={compliance} />}
-          {activeTab === 'confirmation' && <HRConfirmationReportPage embedded />}
-          {activeTab === 'advanced'     && <AdvancedHRTab summary={advancedSummary} jobs={jobs} candidates={candidates} training={training} goals={goals} cases={cases} exits={exits} letters={letters} policies={policies} serviceRequests={serviceRequests} />}
-          {activeTab === 'emp-master'   && <EmpMasterTab employees={employees} headcountRows={headcountRows} month={month} year={year} expiryDays={expiryDays} setExpiryDays={setExpiryDays} />}
+          {/* Search */}
+          <motion.div {...fade(0.06)} className="bg-white rounded-2xl border border-gray-100 p-3"
+            style={{boxShadow:'0 2px 12px rgba(10,31,92,0.06)'}}>
+            <div className="flex items-center gap-2 px-2">
+              <Search className="h-4 w-4 text-slate-400" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search reports…"
+                className="h-9 w-full bg-transparent text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none"
+              />
+            </div>
+          </motion.div>
+
+          {/* Favorites row */}
+          {favorites.length > 0 && !search && (
+            <motion.div {...fade(0.07)} className="bg-white rounded-2xl border border-gray-100 overflow-hidden"
+              style={{boxShadow:'0 2px 12px rgba(10,31,92,0.06)'}}>
+              <div className="flex items-center gap-2 px-5 py-3 text-white" style={{background:'linear-gradient(135deg,#0A1F5C,#1e3a8a)'}}>
+                <Star className="h-4 w-4 fill-yellow-300 text-yellow-300" />
+                <h3 className="text-sm font-black tracking-wide">Favorites</h3>
+              </div>
+              <div className="p-2">
+                {favorites.map((id) => (
+                  <ReportLink key={id} id={id} label={labelOf(id)} fav onOpen={() => setView(id)} onFav={() => toggleFav(id)} />
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {/* Category cards */}
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {REPORT_CATALOG.map((cat, ci) => {
+              const Icon = cat.icon;
+              const items = cat.items.filter((it) => it.label.toLowerCase().includes(search.toLowerCase()));
+              if (!items.length) return null;
+              return (
+                <motion.div key={cat.title} {...fade(0.08 + ci * 0.02)}
+                  className="bg-white rounded-2xl border border-gray-100 overflow-hidden self-start"
+                  style={{boxShadow:'0 2px 12px rgba(10,31,92,0.06)'}}>
+                  <div className="flex items-center gap-2 px-5 py-3 text-white" style={{background:'linear-gradient(135deg,#0A1F5C,#1e3a8a)'}}>
+                    <Icon className="h-4 w-4" />
+                    <h3 className="text-sm font-black tracking-wide">{cat.title}</h3>
+                  </div>
+                  <div className="p-2">
+                    {items.map((it) => (
+                      <ReportLink key={it.id} id={it.id} label={it.label}
+                        fav={favorites.includes(it.id)} onOpen={() => setView(it.id)} onFav={() => toggleFav(it.id)} />
+                    ))}
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
         </>
       )}
+    </div>
+  );
+}
+
+function ReportLink({ id, label, fav, onOpen, onFav }) {
+  return (
+    <div className="group flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-blue-50/60 transition">
+      <button onClick={onOpen} className="flex-1 text-left text-sm font-bold text-slate-700 group-hover:text-blue-700 transition">
+        {label}
+      </button>
+      <button onClick={onFav} title={fav ? 'Remove favorite' : 'Add favorite'} className="shrink-0 p-1">
+        <Star className={`h-4 w-4 transition ${fav ? 'fill-yellow-400 text-yellow-400' : 'text-slate-300 hover:text-yellow-400'}`} />
+      </button>
     </div>
   );
 }
