@@ -27,7 +27,7 @@ export default function EmployeeDocumentsPage() {
 
   const { data: docsData, isLoading } = useQuery({
     queryKey: ['hr-employee-docs', empId],
-    queryFn: () => hrEmployeesAPI.getDocuments?.(empId).then(r => r.data) ?? Promise.resolve({ data: [] }),
+    queryFn: () => hrEmployeesAPI.get(empId).then(r => ({ data: r.data?.data?.documents || [] })),
     enabled: !!empId,
   });
   const docs = docsData?.data || [];
@@ -36,16 +36,16 @@ export default function EmployeeDocumentsPage() {
     mutationFn: (file) => {
       const fd = new FormData();
       fd.append('file', file);
-      fd.append('category', category || 'Other');
-      fd.append('employee_id', empId);
-      return hrEmployeesAPI.uploadDocument?.(empId, fd) ?? Promise.resolve();
+      fd.append('doc_type', category || 'Other');
+      fd.append('doc_name', file.name);
+      return hrEmployeesAPI.uploadDocument(empId, fd);
     },
     onSuccess: () => { toast.success('Document uploaded'); qc.invalidateQueries({ queryKey: ['hr-employee-docs', empId] }); },
     onError: e => toast.error(e?.response?.data?.error || 'Upload failed'),
   });
 
   const deleteMut = useMutation({
-    mutationFn: (docId) => hrEmployeesAPI.deleteDocument?.(empId, docId) ?? Promise.resolve(),
+    mutationFn: (docId) => hrEmployeesAPI.deleteDocument(empId, docId),
     onSuccess: () => { toast.success('Document removed'); qc.invalidateQueries({ queryKey: ['hr-employee-docs', empId] }); },
     onError: e => toast.error('Delete failed'),
   });
@@ -137,24 +137,24 @@ export default function EmployeeDocumentsPage() {
                 </tr>
               </thead>
               <tbody>
-                {docs.filter(d => !category || d.category === category).map((doc, i) => (
+                {docs.filter(d => !category || d.doc_type === category).map((doc, i) => (
                   <tr key={doc.id || i} style={{ borderBottom: '1px solid #F8FAFC' }}
                     onMouseEnter={e => e.currentTarget.style.background = '#FAFBFF'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                     <td style={{ padding: '12px 16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <FileText size={14} color="#7C3AED" />
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#0F172A' }}>{doc.name || doc.file_name || 'Document'}</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#0F172A' }}>{doc.doc_name || doc.file_name || 'Document'}</span>
                       </div>
                     </td>
                     <td style={{ padding: '12px 16px' }}>
-                      <span style={{ fontSize: 12, background: '#F0F4FF', color: '#4F46E5', borderRadius: 6, padding: '3px 8px', fontWeight: 600 }}>{doc.category || 'Other'}</span>
+                      <span style={{ fontSize: 12, background: '#F0F4FF', color: '#4F46E5', borderRadius: 6, padding: '3px 8px', fontWeight: 600 }}>{doc.doc_type || 'Other'}</span>
                     </td>
-                    <td style={{ padding: '12px 16px', fontSize: 13, color: '#64748B' }}>{doc.created_at ? new Date(doc.created_at).toLocaleDateString('en-IN') : '—'}</td>
+                    <td style={{ padding: '12px 16px', fontSize: 13, color: '#64748B' }}>{doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString('en-IN') : '—'}</td>
                     <td style={{ padding: '12px 16px' }}>
                       <div style={{ display: 'flex', gap: 6 }}>
-                        {doc.url && <a href={doc.url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 11, color: '#4F46E5', textDecoration: 'none', fontWeight: 600 }}><Eye size={12} /> View</a>}
-                        {doc.url && <a href={doc.url} download style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 11, color: '#16A34A', textDecoration: 'none', fontWeight: 600 }}><Download size={12} /> Download</a>}
+                        {doc.file_url && <a href={doc.file_url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 11, color: '#4F46E5', textDecoration: 'none', fontWeight: 600 }}><Eye size={12} /> View</a>}
+                        {doc.file_url && <a href={doc.file_url} download style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 11, color: '#16A34A', textDecoration: 'none', fontWeight: 600 }}><Download size={12} /> Download</a>}
                         <button onClick={() => deleteMut.mutate(doc.id)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', border: '1px solid #FEE2E2', borderRadius: 6, fontSize: 11, color: '#EF4444', background: 'transparent', cursor: 'pointer', fontWeight: 600 }}><Trash2 size={12} /> Delete</button>
                       </div>
                     </td>

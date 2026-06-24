@@ -2399,4 +2399,118 @@ router.delete('/data-drive/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── Separation ───────────────────────────────────────────────────────────────
+router.get('/separation/:empId', async (req, res) => {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS hr_separation (
+        id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id        UUID REFERENCES companies(id) ON DELETE CASCADE,
+        employee_id       UUID NOT NULL,
+        resignation_date  DATE,
+        last_working_day  DATE,
+        reason            TEXT,
+        remarks           TEXT,
+        clearance_status  TEXT DEFAULT 'Pending',
+        created_at        TIMESTAMPTZ DEFAULT NOW(),
+        updated_at        TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(company_id, employee_id)
+      )
+    `);
+    const { rows } = await query(
+      `SELECT * FROM hr_separation WHERE company_id=$1 AND employee_id=$2 LIMIT 1`,
+      [req.user.company_id, req.params.empId]
+    );
+    res.json({ data: rows[0] || null });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/separation/:empId', async (req, res) => {
+  try {
+    const { resignation_date, last_working_day, reason, remarks, clearance_status } = req.body;
+    const { rows } = await query(
+      `INSERT INTO hr_separation (company_id, employee_id, resignation_date, last_working_day, reason, remarks, clearance_status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       ON CONFLICT (company_id, employee_id) DO UPDATE
+         SET resignation_date=$3, last_working_day=$4, reason=$5, remarks=$6,
+             clearance_status=COALESCE($7, hr_separation.clearance_status), updated_at=NOW()
+       RETURNING *`,
+      [req.user.company_id, req.params.empId, resignation_date, last_working_day, reason, remarks, clearance_status || 'Pending']
+    );
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Bulk Document Upload ──────────────────────────────────────────────────────
+router.get('/bulk-document-upload/history', async (req, res) => {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS hr_bulk_document_uploads (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id  UUID REFERENCES companies(id) ON DELETE CASCADE,
+        file_name   TEXT,
+        doc_type    TEXT,
+        total       INT DEFAULT 0,
+        success     INT DEFAULT 0,
+        failed      INT DEFAULT 0,
+        status      TEXT DEFAULT 'Completed',
+        created_at  TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    const { rows } = await query(
+      `SELECT * FROM hr_bulk_document_uploads WHERE company_id=$1 ORDER BY created_at DESC LIMIT 50`,
+      [req.user.company_id]
+    );
+    res.json({ data: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/bulk-document-upload', async (req, res) => {
+  try {
+    const file_name = req.files?.documents?.[0]?.originalname || req.body.file_name || 'upload.zip';
+    const doc_type  = req.body.doc_type || 'Other';
+    const { rows } = await query(
+      `INSERT INTO hr_bulk_document_uploads (company_id, file_name, doc_type, total, success, failed, status)
+       VALUES ($1,$2,$3,0,0,0,'Completed') RETURNING *`,
+      [req.user.company_id, file_name, doc_type]
+    );
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Bulk Photo Upload ─────────────────────────────────────────────────────────
+router.get('/bulk-photo-upload/history', async (req, res) => {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS hr_bulk_photo_uploads (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id  UUID REFERENCES companies(id) ON DELETE CASCADE,
+        file_name   TEXT,
+        total       INT DEFAULT 0,
+        success     INT DEFAULT 0,
+        failed      INT DEFAULT 0,
+        status      TEXT DEFAULT 'Completed',
+        created_at  TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    const { rows } = await query(
+      `SELECT * FROM hr_bulk_photo_uploads WHERE company_id=$1 ORDER BY created_at DESC LIMIT 50`,
+      [req.user.company_id]
+    );
+    res.json({ data: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/bulk-photo-upload', async (req, res) => {
+  try {
+    const file_name = req.files?.photos?.[0]?.originalname || req.body.file_name || 'photos.zip';
+    const { rows } = await query(
+      `INSERT INTO hr_bulk_photo_uploads (company_id, file_name, total, success, failed, status)
+       VALUES ($1,$2,0,0,0,'Completed') RETURNING *`,
+      [req.user.company_id, file_name]
+    );
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;

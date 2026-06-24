@@ -3,8 +3,10 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { LogOut, Search, Plus, X, Calendar, FileText } from 'lucide-react';
 import { hrEmployeesAPI } from '../../api/client';
+import axios from 'axios';
 import toast from 'react-hot-toast';
 
+const API = axios.create({ baseURL: '/api', withCredentials: true });
 const B = { purple: '#7C3AED' };
 const inp = 'w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:border-purple-400';
 const lbl = { fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 6 };
@@ -28,13 +30,13 @@ export default function SeparationPage() {
 
   const { data: sepData, isLoading } = useQuery({
     queryKey: ['hr-separation', empId],
-    queryFn: () => hrEmployeesAPI.getSeparation?.(empId).then(r => r.data) ?? Promise.resolve({ data: null }),
+    queryFn: () => API.get(`/hr/separation/${empId}`).then(r => r.data),
     enabled: !!empId,
   });
   const sep = sepData?.data;
 
   const saveMut = useMutation({
-    mutationFn: () => hrEmployeesAPI.saveSeparation?.(empId, form) ?? Promise.resolve(),
+    mutationFn: () => API.post(`/hr/separation/${empId}`, form).then(r => r.data),
     onSuccess: () => { toast.success('Separation details saved'); qc.invalidateQueries({ queryKey: ['hr-separation', empId] }); setModal(false); },
     onError: e => toast.error(e?.response?.data?.error || 'Failed to save'),
   });

@@ -7,7 +7,6 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 
 const _API = axios.create({ baseURL: '/api', withCredentials: true });
-import toast from 'react-hot-toast';
 
 const B = { purple: '#7C3AED' };
 const lbl = { fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 6 };
