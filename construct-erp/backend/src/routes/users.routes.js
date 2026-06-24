@@ -10,13 +10,15 @@ const { createPasswordResetToken, getResetBaseUrl } = require('../controllers/au
 const { logAudit } = require('../utils/auditLog');
 
 // Fire-and-forget welcome email with a 24-hour password reset link
-const sendWelcomeMail = (req, { id, name, email, role }) => {
+const sendWelcomeMail = (req, { id, name, email, role, department }) => {
   const baseUrl = getResetBaseUrl();
   createPasswordResetToken(id)
     .then(token => sendWelcomeLoginMail({
       to:       email,
       name,
       role,
+      department,
+      company:  req?.user?.company_name,
       loginUrl: baseUrl,
       resetUrl: `${baseUrl}/reset-password?token=${token}`,
     }))
@@ -372,7 +374,7 @@ router.post('/', admin, async (req, res) => {
     await syncEmployeeProfileDeptDesig(result.rows[0].id, req.user.company_id, department, designation);
 
     await logAudit(req, { action: 'create', tableName: 'users', recordId: result.rows[0].id, newValues: result.rows[0] });
-    sendWelcomeMail(req, result.rows[0]);
+    sendWelcomeMail(req, { ...result.rows[0], department });
     res.status(201).json({ message: 'User created successfully', data: result.rows[0] });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -668,7 +670,7 @@ router.post('/bulk-import', admin, async (req, res) => {
              hash, role, designation, department, modules]
           );
           created.push({ row: rowNum, name, email, employee_code: r.rows[0].employee_code });
-          sendWelcomeMail(req, { id: r.rows[0].id, name, email, role });
+          sendWelcomeMail(req, { id: r.rows[0].id, name, email, role, department });
         } catch (insertErr) {
           skipped.push({ row: rowNum, email, reason: insertErr.message });
         }

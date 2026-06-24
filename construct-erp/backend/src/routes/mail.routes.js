@@ -55,7 +55,15 @@ router.post('/welcome', async (req, res) => {
   if (!to) return res.status(400).json({ error: 'to is required' });
   try {
     const { rows } = await query(
-      `SELECT id, name, email, role FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+      `SELECT u.id, u.name, u.email, u.role,
+              COALESCE(dep.name, u.department, '') AS department,
+              COALESCE(co.name, '')               AS company
+         FROM users u
+         LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+         LEFT JOIN hr_departments    dep ON dep.id = ep.department_id
+         LEFT JOIN companies         co ON co.id = u.company_id
+        WHERE LOWER(u.email) = LOWER($1)
+        LIMIT 1`,
       [to]
     );
     if (!rows.length) return res.status(404).json({ error: `No user found with email ${to}` });
@@ -64,11 +72,13 @@ router.post('/welcome', async (req, res) => {
     const baseUrl  = getResetBaseUrl();
     const token    = await createPasswordResetToken(user.id);
     const result   = await sendWelcomeLoginMail({
-      to:       user.email,
-      name:     user.name,
-      role:     user.role,
-      loginUrl: `${baseUrl}/login`,
-      resetUrl: `${baseUrl}/reset-password?token=${token}`,
+      to:         user.email,
+      name:       user.name,
+      role:       user.role,
+      department: user.department,
+      company:    user.company,
+      loginUrl:   `${baseUrl}/login`,
+      resetUrl:   `${baseUrl}/reset-password?token=${token}`,
     });
     res.json(result);
   } catch (err) {

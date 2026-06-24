@@ -15,7 +15,7 @@ router.use(authenticate);
 router.use(authorize('super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager'));
 
 // Fire-and-forget welcome email with a password-reset link — mirrors users.routes.js
-const sendWelcomeMail = ({ id, name, email, role }) => {
+const sendWelcomeMail = ({ id, name, email, role, department }) => {
   if (!email) return;
   const baseUrl = getResetBaseUrl();
   createPasswordResetToken(id)
@@ -23,6 +23,7 @@ const sendWelcomeMail = ({ id, name, email, role }) => {
       to:       email,
       name,
       role,
+      department,
       loginUrl: baseUrl,
       resetUrl: `${baseUrl}/reset-password?token=${token}`,
     }))
@@ -441,7 +442,7 @@ router.post('/', async (req, res) => {
 
     await client.query('COMMIT');
 
-    sendWelcomeMail({ id: userId, name, email, role: role || 'viewer' });
+    sendWelcomeMail({ id: userId, name, email, role: role || 'viewer', department: deptName });
 
     // Return full employee record
     const { rows } = await query(`${employeeSelect} WHERE u.id = $1`, [userId]);
