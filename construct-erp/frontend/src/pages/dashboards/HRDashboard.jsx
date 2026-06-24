@@ -13,51 +13,15 @@ import {
   hrEmployeesAPI, hrAttendanceAPI, hrPayrollAPI, hrLeaveAPI, hrShiftsAPI, hrAdvancedAPI,
 } from '../../api/client';
 import useAuthStore from '../../store/authStore';
+import { Theme, PageHeader, KpiCard } from '../../theme';
 
-// ── Theme ────────────────────────────────────────────────────────────────────
-const C = {
-  bg:       'linear-gradient(135deg, #0A0E27 0%, #0D1128 50%, #0A0E27 100%)',
-  card:     'rgba(255,255,255,0.05)',
-  cardHover:'rgba(255,255,255,0.08)',
-  border:   'rgba(255,255,255,0.1)',
-  text:     '#FFFFFF',
-  textDim:  '#8B92A8',
-  violet:   '#534AB7',
-  violetLt: '#7F77DD',
-  green:    '#1D9E75',
-  amber:    '#BA7517',
-  red:      '#E24B4A',
-  blue:     '#378ADD',
-};
-
-const cardStyle = {
-  background: C.card, backdropFilter: 'blur(20px)', border: `1px solid ${C.border}`,
-  borderRadius: 12, padding: '1.5rem', position: 'relative', overflow: 'hidden',
-};
-
-function MetricCard({ label, value, sub, icon: Icon, loading }) {
+function ChartCard({ title, action, children }) {
   return (
-    <div style={{ ...cardStyle, transition: 'all 0.3s ease' }}
-      onMouseEnter={e => { e.currentTarget.style.background = C.cardHover; e.currentTarget.style.transform = 'translateY(-4px)'; }}
-      onMouseLeave={e => { e.currentTarget.style.background = C.card; e.currentTarget.style.transform = 'translateY(0)'; }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.85rem' }}>
-        <span style={{ fontSize: 12, color: C.textDim, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</span>
-        <div style={{ width: 36, height: 36, background: 'rgba(83,74,183,0.18)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.violetLt, flexShrink: 0 }}>
-          <Icon size={16} />
-        </div>
+    <div className="bg-white rounded-xl border shadow-sm p-5" style={{ borderColor: Theme.borderSoft }}>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-medium" style={{ color: Theme.textDark }}>{title}</h3>
+        {action}
       </div>
-      {loading
-        ? <div style={{ height: 28, width: 70, background: 'rgba(255,255,255,0.08)', borderRadius: 6 }} />
-        : <div style={{ fontSize: 28, fontWeight: 700, color: C.text, lineHeight: 1.1 }}>{value}</div>}
-      {sub && <div style={{ fontSize: 12, color: C.textDim, marginTop: 6 }}>{sub}</div>}
-    </div>
-  );
-}
-
-function ChartCard({ title, children, full }) {
-  return (
-    <div style={{ ...cardStyle, gridColumn: full ? '1 / -1' : undefined }}>
-      <h3 style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: '1.25rem' }}>{title}</h3>
       <div style={{ height: 260 }}>{children}</div>
     </div>
   );
@@ -65,37 +29,38 @@ function ChartCard({ title, children, full }) {
 
 function TableCard({ title, action, children }) {
   return (
-    <div style={cardStyle}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.1rem' }}>
-        <h3 style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{title}</h3>
+    <div className="bg-white rounded-xl border shadow-sm" style={{ borderColor: Theme.borderSoft }}>
+      <div className="flex items-center justify-between px-5 py-3.5 border-b" style={{ borderColor: Theme.borderSoft }}>
+        <h3 className="text-sm font-medium" style={{ color: Theme.textDark }}>{title}</h3>
         {action}
       </div>
-      <div style={{ overflowX: 'auto' }}>{children}</div>
+      <div className="p-4 overflow-x-auto">{children}</div>
     </div>
   );
 }
 
-const th = { padding: '0.7rem 0.6rem', textAlign: 'left', fontSize: 11, fontWeight: 600, color: C.textDim, textTransform: 'uppercase', letterSpacing: '0.04em', borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' };
-const td = { padding: '0.8rem 0.6rem', fontSize: 13, color: C.text, borderBottom: '1px solid rgba(255,255,255,0.05)' };
+const th = 'px-3 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-slate-400 whitespace-nowrap';
+const td = 'px-3 py-2.5 text-[13px] text-slate-700 border-t border-slate-50';
 
-function Badge({ label, tone }) {
+function Badge({ label, tone = 'slate' }) {
   const map = {
-    success: { bg: 'rgba(29,158,117,0.15)', color: C.green,  border: 'rgba(29,158,117,0.3)' },
-    warning: { bg: 'rgba(186,117,23,0.15)', color: C.amber,  border: 'rgba(186,117,23,0.3)' },
-    danger:  { bg: 'rgba(226,75,74,0.15)',  color: C.red,    border: 'rgba(226,75,74,0.3)' },
-    info:    { bg: 'rgba(83,74,183,0.15)',  color: C.violetLt, border: 'rgba(83,74,183,0.3)' },
+    success: 'bg-emerald-50 text-emerald-700',
+    warning: 'bg-amber-50 text-amber-700',
+    danger:  'bg-red-50 text-red-600',
+    info:    'bg-blue-50 text-blue-700',
+    slate:   'bg-slate-100 text-slate-500',
   };
-  const c = map[tone] || map.info;
-  return (
-    <span style={{ display: 'inline-block', padding: '0.3rem 0.7rem', borderRadius: 6, fontSize: 11, fontWeight: 600, background: c.bg, color: c.color, border: `1px solid ${c.border}` }}>
-      {label}
-    </span>
-  );
+  return <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ${map[tone] || map.slate}`}>{label}</span>;
 }
 
 const EmptyRow = ({ span, text }) => (
-  <tr><td colSpan={span} style={{ ...td, textAlign: 'center', color: C.textDim, padding: '1.5rem' }}>{text}</td></tr>
+  <tr><td colSpan={span} className="text-center text-sm text-slate-400 py-8">{text}</td></tr>
 );
+
+const CHART_LINE  = '#3b82f6';
+const CHART_BAR_1 = '#1a3a6b';
+const CHART_GRID  = '#e2e8f0';
+const CHART_TICK  = '#94a3b8';
 
 export default function HRDashboard() {
   const { user } = useAuthStore();
@@ -170,45 +135,38 @@ export default function HRDashboard() {
     onLeave: parseInt(d.on_leave || 0),
   }));
 
-  const greeting = dayjs().hour() < 12 ? 'Good morning' : dayjs().hour() < 17 ? 'Good afternoon' : 'Good evening';
-
   return (
-    <div style={{ background: C.bg, minHeight: '100%', color: C.text, fontFamily: "'Inter', -apple-system, 'Segoe UI', sans-serif" }}>
-      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '1.75rem' }}>
+    <div style={{ background: Theme.pageBg, minHeight: '100%' }}>
+      <PageHeader
+        title={`Good ${dayjs().hour() < 12 ? 'morning' : dayjs().hour() < 17 ? 'afternoon' : 'evening'}, ${user?.name?.split(' ')[0] || 'there'}`}
+        subtitle={`HR Dashboard — ${dayjs().format('dddd, D MMMM YYYY')}`}
+        breadcrumbs={[{ label: 'Overview' }, { label: 'HR Dashboard' }]}
+      />
 
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '2rem' }}>
-          <div>
-            <h1 style={{ fontSize: 26, fontWeight: 700, margin: 0, background: 'linear-gradient(135deg,#fff,#B8BFD1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-              {greeting}, {user?.name?.split(' ')[0] || 'there'} 👋
-            </h1>
-            <p style={{ color: C.textDim, fontSize: 13, marginTop: 4 }}>HR Dashboard — {dayjs().format('dddd, D MMMM YYYY')}</p>
-          </div>
-        </div>
-
+      <div className="p-5 md:p-6 max-w-[1400px] mx-auto space-y-5">
         {/* Metrics */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.75rem' }}>
-          <MetricCard icon={Users}      label="Active Employees"  value={employees.length}                 loading={loadE}  sub="Company-wide" />
-          <MetricCard icon={UserCheck}  label="Attendance Rate"   value={`${attendanceRate}%`}              loading={loadA}  sub="This month" />
-          <MetricCard icon={CalendarOff} label="Pending Leaves"   value={leaves.length}                     loading={loadL}  sub="Awaiting approval" />
-          <MetricCard icon={IndianRupee} label="Payroll Pending"  value={`₹${(payrollPendingAmt/1e5).toFixed(2)}L`} loading={loadP} sub={`${payrollPending.length} employee(s)`} />
-          <MetricCard icon={Clock}      label="Overtime Hours"    value={otHoursTotal.toFixed(0)}           loading={loadOT} sub="This month" />
-          <MetricCard icon={Ticket}     label="Open HR Requests"  value={pendingRequests.length}            loading={loadReq} sub="Open / in progress" />
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+          <KpiCard icon={Users}       label="Active Employees" value={loadE ? '…' : employees.length}              color="blue"    sub="Company-wide" />
+          <KpiCard icon={UserCheck}   label="Attendance Rate"  value={loadA ? '…' : `${attendanceRate}%`}           color="emerald" sub="This month" />
+          <KpiCard icon={CalendarOff} label="Pending Leaves"   value={loadL ? '…' : leaves.length}                  color="amber"   sub="Awaiting approval" />
+          <KpiCard icon={IndianRupee} label="Payroll Pending"  value={loadP ? '…' : `₹${(payrollPendingAmt/1e5).toFixed(2)}L`} color="orange" sub={`${payrollPending.length} employee(s)`} />
+          <KpiCard icon={Clock}       label="Overtime Hours"   value={loadOT ? '…' : otHoursTotal.toFixed(0)}       color="slate"   sub="This month" />
+          <KpiCard icon={Ticket}      label="Open HR Requests" value={loadReq ? '…' : pendingRequests.length}       color="red"     sub="Open / in progress" />
         </div>
 
         {/* Charts row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '1rem', marginBottom: '1.75rem' }}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <ChartCard title="Daily Attendance (this month)">
             {loadTrend ? null : !trend.length ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: C.textDim, fontSize: 13 }}>No attendance marked yet this month</div>
+              <div className="flex items-center justify-center h-full text-sm text-slate-400">No attendance marked yet this month</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={trend} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                  <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-                  <XAxis dataKey="date" tick={{ fill: C.textDim, fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: C.textDim, fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ background: '#1a1f3a', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12 }} labelStyle={{ color: C.text }} />
-                  <Line type="monotone" dataKey="present" name="Present" stroke={C.violetLt} strokeWidth={2.5} dot={{ r: 3, fill: C.violetLt }} />
+                  <CartesianGrid stroke={CHART_GRID} vertical={false} />
+                  <XAxis dataKey="date" tick={{ fill: CHART_TICK, fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: CHART_TICK, fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12, border: `1px solid ${Theme.borderSoft}` }} />
+                  <Line type="monotone" dataKey="present" name="Present" stroke={CHART_LINE} strokeWidth={2.5} dot={{ r: 3, fill: CHART_LINE }} />
                 </LineChart>
               </ResponsiveContainer>
             )}
@@ -216,18 +174,18 @@ export default function HRDashboard() {
 
           <ChartCard title="Attendance by Department">
             {loadDept ? null : !depts.length ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: C.textDim, fontSize: 13 }}>No department data yet</div>
+              <div className="flex items-center justify-center h-full text-sm text-slate-400">No department data yet</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={depts} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                  <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-                  <XAxis dataKey="department" tick={{ fill: C.textDim, fontSize: 10 }} axisLine={false} tickLine={false} interval={0} angle={-20} textAnchor="end" height={50} />
-                  <YAxis tick={{ fill: C.textDim, fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ background: '#1a1f3a', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12 }} labelStyle={{ color: C.text }} />
-                  <Legend wrapperStyle={{ fontSize: 11, color: C.textDim }} />
-                  <Bar dataKey="present" name="Present" stackId="a" fill={C.violet} radius={[0,0,0,0]} />
-                  <Bar dataKey="absent"  name="Absent"  stackId="a" fill={C.red} radius={[0,0,0,0]} />
-                  <Bar dataKey="onLeave" name="On Leave" stackId="a" fill={C.amber} radius={[4,4,0,0]} />
+                  <CartesianGrid stroke={CHART_GRID} vertical={false} />
+                  <XAxis dataKey="department" tick={{ fill: CHART_TICK, fontSize: 10 }} axisLine={false} tickLine={false} interval={0} angle={-20} textAnchor="end" height={50} />
+                  <YAxis tick={{ fill: CHART_TICK, fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12, border: `1px solid ${Theme.borderSoft}` }} />
+                  <Legend wrapperStyle={{ fontSize: 11, color: Theme.textMuted }} />
+                  <Bar dataKey="present" name="Present"  stackId="a" fill="#34d399" />
+                  <Bar dataKey="absent"  name="Absent"   stackId="a" fill="#f87171" />
+                  <Bar dataKey="onLeave" name="On Leave" stackId="a" fill="#fbbf24" radius={[4,4,0,0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -235,44 +193,42 @@ export default function HRDashboard() {
         </div>
 
         {/* Department headcount — full width */}
-        <div style={{ marginBottom: '1.75rem' }}>
-          <ChartCard title="Headcount by Department" full>
-            {loadDept ? null : !depts.length ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: C.textDim, fontSize: 13 }}>No department data yet</div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={depts} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                  <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-                  <XAxis dataKey="department" tick={{ fill: C.textDim, fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: C.textDim, fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ background: '#1a1f3a', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12 }} labelStyle={{ color: C.text }} />
-                  <Bar dataKey="headcount" name="Employees" fill={C.violetLt} radius={[6,6,0,0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </ChartCard>
-        </div>
+        <ChartCard title="Headcount by Department">
+          {loadDept ? null : !depts.length ? (
+            <div className="flex items-center justify-center h-full text-sm text-slate-400">No department data yet</div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={depts} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                <CartesianGrid stroke={CHART_GRID} vertical={false} />
+                <XAxis dataKey="department" tick={{ fill: CHART_TICK, fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: CHART_TICK, fontSize: 11 }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12, border: `1px solid ${Theme.borderSoft}` }} />
+                <Bar dataKey="headcount" name="Employees" fill={CHART_BAR_1} radius={[6,6,0,0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
 
         {/* Tables */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', gap: '1rem' }}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <TableCard title="Department Attendance Summary (this month)">
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table className="w-full text-sm">
               <thead><tr>
-                <th style={th}>Department</th>
-                <th style={{ ...th, textAlign: 'right' }}>Headcount</th>
-                <th style={{ ...th, textAlign: 'right' }}>Present</th>
-                <th style={{ ...th, textAlign: 'right' }}>Absent</th>
-                <th style={{ ...th, textAlign: 'right' }}>On Leave</th>
+                <th className={th}>Department</th>
+                <th className={`${th} text-right`}>Headcount</th>
+                <th className={`${th} text-right`}>Present</th>
+                <th className={`${th} text-right`}>Absent</th>
+                <th className={`${th} text-right`}>On Leave</th>
               </tr></thead>
               <tbody>
                 {!loadDept && !depts.length && <EmptyRow span={5} text="No department data yet" />}
                 {depts.map((d, i) => (
                   <tr key={i}>
-                    <td style={td}>{d.department}</td>
-                    <td style={{ ...td, textAlign: 'right' }}>{d.headcount}</td>
-                    <td style={{ ...td, textAlign: 'right', color: C.green, fontWeight: 600 }}>{d.present}</td>
-                    <td style={{ ...td, textAlign: 'right' }}>{d.absent}</td>
-                    <td style={{ ...td, textAlign: 'right' }}>{d.onLeave}</td>
+                    <td className={td}>{d.department}</td>
+                    <td className={`${td} text-right`}>{d.headcount}</td>
+                    <td className={`${td} text-right font-semibold text-emerald-700`}>{d.present}</td>
+                    <td className={`${td} text-right`}>{d.absent}</td>
+                    <td className={`${td} text-right`}>{d.onLeave}</td>
                   </tr>
                 ))}
               </tbody>
@@ -280,24 +236,24 @@ export default function HRDashboard() {
           </TableCard>
 
           <TableCard title="Open HR Requests"
-            action={<Link to="/hr-admin/advanced" style={{ fontSize: 12, color: C.violetLt, display: 'flex', alignItems: 'center', gap: 4, textDecoration: 'none' }}>All <ArrowRight size={12} /></Link>}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            action={<Link to="/hr-admin/advanced" className="text-xs font-medium text-blue-600 flex items-center gap-1 hover:underline">All <ArrowRight className="w-3 h-3" /></Link>}>
+            <table className="w-full text-sm">
               <thead><tr>
-                <th style={th}>Employee</th>
-                <th style={th}>Subject</th>
-                <th style={th}>Priority</th>
-                <th style={th}>Status</th>
+                <th className={th}>Employee</th>
+                <th className={th}>Subject</th>
+                <th className={th}>Priority</th>
+                <th className={th}>Status</th>
               </tr></thead>
               <tbody>
                 {!loadReq && !pendingRequests.length && <EmptyRow span={4} text="No open HR requests" />}
                 {pendingRequests.slice(0, 8).map((r) => (
                   <tr key={r.id}>
-                    <td style={td}>{r.employee_name || '—'}</td>
-                    <td style={td}>{r.subject}</td>
-                    <td style={td}>
+                    <td className={td}>{r.employee_name || '—'}</td>
+                    <td className={td}>{r.subject}</td>
+                    <td className={td}>
                       <Badge label={r.priority || 'normal'} tone={r.priority === 'urgent' ? 'danger' : r.priority === 'high' ? 'warning' : 'info'} />
                     </td>
-                    <td style={td}>
+                    <td className={td}>
                       <Badge label={r.status === 'in_progress' ? 'In Progress' : 'Open'} tone={r.status === 'in_progress' ? 'info' : 'warning'} />
                     </td>
                   </tr>
