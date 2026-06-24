@@ -166,7 +166,7 @@ export default function TQSAdvanceVoucherPrint() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
           <img src="/bcim-logo.png" alt="BCIM" style={{ height: '40px', objectFit: 'contain' }} />
           <h1 style={{ fontSize: '17px', fontWeight: 700, letterSpacing: '0.5px', margin: 0, flex: 1, textAlign: 'center' }}>
-            ADVANCE PAYMENT VOUCHER
+            PAYMENT CERTIFICATION
           </h1>
           <div style={{ width: '40px' }} />
         </div>
