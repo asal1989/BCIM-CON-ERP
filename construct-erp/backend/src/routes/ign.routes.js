@@ -614,7 +614,7 @@ router.patch('/:id/approve', async (req, res) => {
         const received = parseFloat(row?.total_received || 0);
         if (ordered > 0 && received >= ordered) {
           await client.query(
-            `UPDATE purchase_orders SET status = 'received' WHERE id = $1 AND status NOT IN ('received','cancelled','rejected')`,
+            `UPDATE purchase_orders SET status = 'fully_received' WHERE id = $1 AND status NOT IN ('fully_received','cancelled','rejected')`,
             [ign.po_id]
           );
         }
@@ -744,7 +744,7 @@ router.delete('/:id', authorize('super_admin'), async (req, res) => {
         }
         await client.query(`DELETE FROM stock_transactions WHERE reference_number = $1 AND transaction_type = 'grn'`, [ign.ign_number]);
         if (ign.po_id) {
-          await client.query(`UPDATE purchase_orders SET status = 'approved' WHERE id = $1 AND status = 'received'`, [ign.po_id]);
+          await client.query(`UPDATE purchase_orders SET status = 'approved' WHERE id = $1 AND status = 'fully_received'`, [ign.po_id]);
         }
       }
 

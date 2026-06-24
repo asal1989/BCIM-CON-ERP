@@ -24,7 +24,7 @@ router.get('/summary', async (req, res) => {
         JOIN projects p ON p.id = po.project_id
         WHERE p.company_id = $1
           AND po.delivery_date < CURRENT_DATE
-          AND po.status NOT IN ('received','cancelled','rejected')
+          AND po.status NOT IN ('received','fully_received','cancelled','rejected')
           ${project_id ? `AND po.project_id = '${project_id}'` : ''}
       `, [cid]),
 
@@ -34,7 +34,7 @@ router.get('/summary', async (req, res) => {
         FROM purchase_orders po
         JOIN projects p ON p.id = po.project_id
         WHERE p.company_id = $1
-          AND po.status NOT IN ('received','cancelled','rejected')
+          AND po.status NOT IN ('received','fully_received','cancelled','rejected')
           AND EXISTS (
             SELECT 1 FROM grn g WHERE g.po_id = po.id AND g.quality_status = 'approved'
           )
@@ -111,7 +111,7 @@ router.get('/overdue', async (req, res) => {
       LEFT JOIN po_items poi ON poi.po_id = po.id
       WHERE p.company_id = $1
         AND po.delivery_date < CURRENT_DATE
-        AND po.status NOT IN ('received','cancelled','rejected')`;
+        AND po.status NOT IN ('received','fully_received','cancelled','rejected')`;
     const params = [cid];
     let i = 2;
     if (project_id) { sql += ` AND po.project_id = $${i++}`; params.push(project_id); }
@@ -142,7 +142,7 @@ router.get('/partial', async (req, res) => {
       LEFT JOIN vendors v ON v.id = po.vendor_id
       LEFT JOIN po_items poi ON poi.po_id = po.id
       WHERE p.company_id = $1
-        AND po.status NOT IN ('received','cancelled','rejected')
+        AND po.status NOT IN ('received','fully_received','cancelled','rejected')
         AND EXISTS (SELECT 1 FROM grn g WHERE g.po_id = po.id AND g.quality_status = 'approved')`;
     const params = [cid];
     let i = 2;
