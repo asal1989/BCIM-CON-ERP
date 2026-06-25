@@ -920,17 +920,20 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
 
   return (
     <div className="fixed inset-0 z-[60] bg-white flex flex-col overflow-hidden">
-      <div className="bg-slate-900 px-6 py-4 flex items-center justify-between flex-shrink-0">
+      <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-blue-900/70 px-6 py-4 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-4">
           <button onClick={onClose} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition">
             <X size={16} />
           </button>
-          <div>
-            <div className="text-[10px] text-slate-400 font-medium uppercase tracking-widest mb-0.5">New Entry</div>
-            <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-              <ClipboardCheck size={16} className="text-blue-400" /> New Inward Goods Note
-            </h2>
-            <p className="text-xs text-slate-400 mt-0.5">Inspection receipt — DC qty, inspected qty, rejections, optional bill creation</p>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center flex-shrink-0">
+              <ClipboardCheck size={18} className="text-blue-300" />
+            </div>
+            <div>
+              <div className="text-[10px] text-slate-400 font-medium uppercase tracking-widest mb-0.5">New Entry</div>
+              <h2 className="text-xl font-semibold text-white leading-tight">New Inward Goods Note</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Inspection receipt — DC qty, inspected qty, rejections, optional bill creation</p>
+            </div>
           </div>
         </div>
       </div>
@@ -939,8 +942,16 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
         <div className="max-w-5xl mx-auto p-6 space-y-5">
 
           {/* Header details */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5">
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Header Details</h3>
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center">
+                <Truck size={15} className="text-blue-600" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800">Header Details</h3>
+                <p className="text-[11px] text-slate-400">Project, vendor, PO/GRS link & delivery info</p>
+              </div>
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="col-span-2 space-y-1.5">
                 <label className="text-xs font-bold text-slate-700">Project *</label>
@@ -1046,14 +1057,19 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
           </div>
 
           {/* Items */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5">
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
             <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Materials</h3>
-                <p className="text-[10px] text-slate-400 mt-0.5">DC qty · inspected qty · rejections · rate</p>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center">
+                  <Package size={15} className="text-indigo-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-800">Materials</h3>
+                  <p className="text-[11px] text-slate-400">DC qty · inspected qty · rejections · rate</p>
+                </div>
               </div>
               <button onClick={addRow}
-                className="flex items-center gap-1.5 px-3 h-7 rounded-lg text-xs font-semibold text-indigo-600 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 transition">
+                className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-semibold text-indigo-600 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 transition">
                 <Plus size={12} /> Add Row
               </button>
             </div>
