@@ -14,7 +14,7 @@ import { grsAPI, projectAPI, poAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
 import { FIELD_HL } from '../../constants/fieldStyles';
 import toast from 'react-hot-toast';
-import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
+import { PageHeader, Theme } from '../../theme';
 import { CONSTRUCTION_UNITS as UNITS } from '../../constants/units';
 import GRSPrintTemplate from './GRSPrintTemplate';
 
@@ -327,13 +327,6 @@ export default function GRSPage() {
     toast.success('CSV exported');
   };
 
-  const STATUS_FILTERS = [
-    { key: 'all',         label: 'All',          count: grsList.length },
-    { key: 'pending',     label: 'Pending',      count: counts.pending,      color: 'bg-amber-500' },
-    { key: 'acknowledged',label: 'Acknowledged', count: counts.acknowledged, color: 'bg-emerald-500' },
-    { key: 'cancelled',   label: 'Cancelled',    count: counts.cancelled,    color: 'bg-red-400' },
-  ];
-
   return (
     <div style={{ background: Theme.pageBg, minHeight: '100vh' }}>
       <PageHeader
@@ -363,11 +356,33 @@ export default function GRSPage() {
 
       <div className="p-6 md:p-8 max-w-full mx-auto">
 
-        {/* KPIs */}
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
-          <ThemeKpiCard icon={FileText}     label="Total GRS"      value={grsList.length}    color="slate"   />
-          <ThemeKpiCard icon={Clock}        label="Pending"        value={counts.pending}    color="amber"   />
-          <ThemeKpiCard icon={CheckCircle2} label="Acknowledged"   value={counts.acknowledged} color="emerald" />
+        {/* KPI summary cards — also act as status filters */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          {[
+            { key: 'all',          label: 'Total GRS',    value: grsList.length,      icon: FileText,     topbar: 'before:bg-slate-400',   soft: 'bg-slate-100',   text: 'text-slate-600' },
+            { key: 'pending',      label: 'Pending',      value: counts.pending,      icon: Clock,        topbar: 'before:bg-amber-500',   soft: 'bg-amber-50',    text: 'text-amber-600' },
+            { key: 'acknowledged', label: 'Acknowledged', value: counts.acknowledged, icon: CheckCircle2, topbar: 'before:bg-emerald-500', soft: 'bg-emerald-50',  text: 'text-emerald-600' },
+            { key: 'cancelled',    label: 'Cancelled',    value: counts.cancelled,    icon: XCircle,      topbar: 'before:bg-red-400',     soft: 'bg-red-50',      text: 'text-red-600' },
+          ].map(c => {
+            const Icon = c.icon;
+            const active = statusFilter === c.key;
+            return (
+              <button key={c.key} onClick={() => setStatusFilter(c.key)}
+                className={clsx(
+                  'relative bg-white border rounded-xl p-4 text-left transition-all hover:shadow-md overflow-hidden',
+                  "before:content-[''] before:absolute before:top-0 before:left-0 before:right-0 before:h-1", c.topbar,
+                  active ? 'border-slate-900 ring-2 ring-slate-200' : 'border-slate-200')}>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{c.label}</span>
+                  <span className={clsx('w-7 h-7 rounded-lg flex items-center justify-center', c.soft)}>
+                    <Icon className={clsx('w-4 h-4', c.text)} />
+                  </span>
+                </div>
+                <div className="text-2xl font-bold text-slate-800 mt-2 tabular-nums">{c.value}</div>
+                <div className="text-[11px] text-slate-400 mt-0.5">{active ? '● Filtering by this' : 'Tap to filter'}</div>
+              </button>
+            );
+          })}
         </div>
 
         {/* Pending banner */}
@@ -383,37 +398,29 @@ export default function GRSPage() {
           </div>
         )}
 
-        {/* Filters */}
+        {/* Toolbar */}
         <div className="bg-white border border-slate-200 rounded-xl p-3 mb-5 flex flex-wrap items-center gap-3 shadow-sm">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {STATUS_FILTERS.map(f => (
-              <button key={f.key} onClick={() => setStatusFilter(f.key)}
-                className={clsx('flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all',
-                  statusFilter === f.key
-                    ? 'bg-slate-900 text-white border-slate-900'
-                    : 'bg-white text-slate-700 border-slate-200 hover:border-slate-400'
-                )}>
-                {f.color && <span className={clsx('w-1.5 h-1.5 rounded-full', f.color)} />}
-                {f.label}
-                <span className={clsx('px-1.5 py-0.5 rounded text-[10px] font-medium',
-                  statusFilter === f.key ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                )}>{f.count}</span>
-              </button>
-            ))}
+          {statusFilter !== 'all' && (
+            <button onClick={() => setStatusFilter('all')}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-900 text-white">
+              {STATUS_CONFIG[statusFilter]?.label || statusFilter}
+              <X size={12} />
+            </button>
+          )}
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search GRS, vehicle, security…"
+              className="h-9 pl-9 pr-4 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:border-indigo-400 transition w-64" />
           </div>
-          <div className="flex-1" />
           <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)}
             className="h-9 bg-slate-50 border border-slate-200 rounded-lg px-3 text-sm text-slate-700 outline-none focus:border-indigo-400">
             <option value="">All Projects</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search GRS, vehicle, security…"
-              className="h-9 pl-9 pr-4 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:border-indigo-400 transition w-56" />
-          </div>
-          <span className="text-xs text-slate-500">{filtered.length} of {grsList.length}</span>
+          <span className="ml-auto text-xs text-slate-500 font-medium">
+            {filtered.length} <span className="text-slate-400">of {grsList.length}</span>
+          </span>
         </div>
 
         {/* Table */}
@@ -436,7 +443,10 @@ export default function GRSPage() {
                   ))
                 ) : filtered.map(grs => (
                   <tr key={grs.id} onClick={() => setSelectedId(grs.id)}
-                    className="cursor-pointer hover:bg-indigo-50/30 transition-colors group">
+                    className={clsx('cursor-pointer hover:bg-indigo-50/30 transition-colors group border-l-2',
+                      grs.status === 'acknowledged' ? 'border-l-emerald-400'
+                        : grs.status === 'cancelled' ? 'border-l-red-300'
+                        : 'border-l-amber-400')}>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         <div className="w-7 h-7 rounded-lg bg-teal-50 border border-teal-100 flex items-center justify-center flex-shrink-0">
