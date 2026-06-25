@@ -786,7 +786,7 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
   const calcBillAmounts = (billIdx) => {
     const b = bills[billIdx] || {};
     const overrides = allGstOverrides[billIdx] || {};
-    const defaultGst = parseFloat(b.gst_pct) || 18;
+    const defaultGst = parseFloat(b.gst_pct || '18');
     const mode = b.tax_mode || 'intrastate';
     let basic = 0, cgst = 0, sgst = 0, igst = 0;
     items.filter(it => it.material_name?.trim()).forEach((it, i) => {
@@ -799,7 +799,7 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
       else { cgst += li_basic * gstPct / 200; sgst += li_basic * gstPct / 200; }
     });
     const tc = parseFloat(b.transport_charges) || 0;
-    const tgst = tc * (parseFloat(b.transport_gst_pct) || 18) / 100;
+    const tgst = tc * parseFloat(b.transport_gst_pct || '18') / 100;
     const oc = parseFloat(b.other_charges) || 0;
     const gst = cgst + sgst + igst;
     return { basic, cgst, sgst, igst, gst, tc, tgst, oc, total: basic + gst + tc + tgst + oc };
