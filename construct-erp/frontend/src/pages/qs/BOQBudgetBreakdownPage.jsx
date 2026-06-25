@@ -97,28 +97,34 @@ export default function BOQBudgetBreakdownPage() {
 
   const totals = useMemo(() => {
     const t = {};
-    const ts = {};
+    const ta = {};
+    const ti = {};
     const tb = {};
-    for (const h of costHeads) { t[h] = 0; ts[h] = 0; tb[h] = 0; }
+    for (const h of costHeads) { t[h] = 0; ta[h] = 0; ti[h] = 0; tb[h] = 0; }
     let grand = 0;
-    let grandSpent = 0;
+    let grandAdvance = 0;
+    let grandInvoiced = 0;
     let grandBalance = 0;
     let unallocated = 0;
     for (const item of items) {
       for (const h of costHeads) {
         const v = item.breakdown?.[h]?.amount || 0;
-        const s = item.breakdown?.[h]?.actual || 0;
-        const b = v - s;
+        const a = item.breakdown?.[h]?.advance || 0;
+        const inv = item.breakdown?.[h]?.invoiced || 0;
+        const total = a + inv;
+        const b = v - total;
         t[h] += v;
-        ts[h] += s;
+        ta[h] += a;
+        ti[h] += inv;
         tb[h] += b;
         grand += v;
-        grandSpent += s;
+        grandAdvance += a;
+        grandInvoiced += inv;
         grandBalance += b;
       }
       unallocated += item.unallocated_actual || 0;
     }
-    return { byHead: t, byHeadSpent: ts, byHeadBalance: tb, grand, grandSpent, grandBalance, unallocated };
+    return { byHead: t, byHeadAdvance: ta, byHeadInvoiced: ti, byHeadBalance: tb, grand, grandAdvance, grandInvoiced, grandBalance, unallocated };
   }, [items, costHeads]);
 
   return (
@@ -167,8 +173,9 @@ export default function BOQBudgetBreakdownPage() {
                 {costHeads.map(h => (
                   <React.Fragment key={h}>
                     <th className="px-3 py-2 text-center font-medium text-slate-600 bg-blue-50 border-l border-slate-200 whitespace-nowrap text-[11px]">{h}</th>
-                    <th className="px-3 py-2 text-center font-medium text-slate-600 bg-green-50 whitespace-nowrap text-[11px]">Budget Spent</th>
-                    <th className="px-3 py-2 text-center font-medium text-slate-600 bg-amber-50 border-r border-slate-200 whitespace-nowrap text-[11px]">Balance Budget</th>
+                    <th className="px-3 py-2 text-center font-medium text-slate-600 bg-purple-50 whitespace-nowrap text-[11px]">Advance</th>
+                    <th className="px-3 py-2 text-center font-medium text-slate-600 bg-green-50 whitespace-nowrap text-[11px]">Invoiced</th>
+                    <th className="px-3 py-2 text-center font-medium text-slate-600 bg-amber-50 border-r border-slate-200 whitespace-nowrap text-[11px]">Balance</th>
                   </React.Fragment>
                 ))}
                 <th className="px-3 py-2 text-right font-medium text-amber-600 whitespace-nowrap">Unallocated</th>
@@ -186,10 +193,12 @@ export default function BOQBudgetBreakdownPage() {
                     <td className="px-3 py-2 text-right font-medium">{inr(item.amount)}</td>
                     {costHeads.map(h => {
                       const cell = item.breakdown?.[h] || {};
-                      const spent = cell.actual || 0;
+                      const advance = cell.advance || 0;
+                      const invoiced = cell.invoiced || 0;
+                      const totalSpent = advance + invoiced;
                       const budgetAmt = cell.amount || 0;
-                      const balance = budgetAmt - spent;
-                      const isOverBudget = spent > budgetAmt + 0.01;
+                      const balance = budgetAmt - totalSpent;
+                      const isOverBudget = totalSpent > budgetAmt + 0.01;
                       return (
                         <React.Fragment key={h}>
                           <td className="px-1 py-1 bg-blue-50 border-l border-slate-200">
@@ -200,13 +209,18 @@ export default function BOQBudgetBreakdownPage() {
                               onSave={v => saveCell(item, h, mode, v)}
                             />
                           </td>
-                          <td className={clsx('px-2 py-2 text-right text-xs', isOverBudget ? 'bg-rose-50 border-l border-rose-300' : 'bg-green-50')}>
+                          <td className="px-2 py-2 text-right text-xs bg-purple-50">
+                            <span className="text-slate-700">
+                              {advance > 0 ? inr(advance) : <span className="text-slate-300">—</span>}
+                            </span>
+                          </td>
+                          <td className={clsx('px-2 py-2 text-right text-xs bg-green-50', isOverBudget && 'border-l border-rose-300')}>
                             <span className={clsx(isOverBudget ? 'text-rose-600 font-bold' : 'text-slate-700')}>
-                              {spent > 0 ? inr(spent) : <span className="text-slate-300">—</span>}
+                              {invoiced > 0 ? inr(invoiced) : <span className="text-slate-300">—</span>}
                             </span>
                             {isOverBudget && <div className="text-[9px] text-rose-600 font-bold">⚠ Over Budget</div>}
                           </td>
-                          <td className={clsx('px-2 py-2 text-right text-xs border-r border-slate-200', balance < 0 ? 'bg-rose-50 border-r border-rose-300' : 'bg-amber-50')}>
+                          <td className={clsx('px-2 py-2 text-right text-xs border-r border-slate-200', balance < 0 ? 'bg-rose-50' : 'bg-amber-50')}>
                             <span className={clsx(balance < 0 ? 'text-rose-600 font-bold' : 'text-emerald-600')}>
                               {balance !== 0 ? inr(balance) : <span className="text-slate-300">—</span>}
                             </span>
@@ -239,8 +253,11 @@ export default function BOQBudgetBreakdownPage() {
                   {costHeads.map(h => (
                     <React.Fragment key={h}>
                       <td className="px-1 py-2 text-right border-l border-slate-200 bg-blue-50 text-slate-700">{inr(totals.byHead[h])}</td>
-                      <td className="px-2 py-2 text-right bg-green-50 text-emerald-600">
-                        {totals.byHeadSpent[h] > 0 ? inr(totals.byHeadSpent[h]) : <span className="text-slate-300">—</span>}
+                      <td className="px-2 py-2 text-right bg-purple-50 text-slate-700">
+                        {totals.byHeadAdvance[h] > 0 ? inr(totals.byHeadAdvance[h]) : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="px-2 py-2 text-right bg-green-50 text-slate-700">
+                        {totals.byHeadInvoiced[h] > 0 ? inr(totals.byHeadInvoiced[h]) : <span className="text-slate-300">—</span>}
                       </td>
                       <td className="px-2 py-2 text-right border-r border-slate-200 bg-amber-50 text-emerald-600">
                         {totals.byHeadBalance[h] > 0 ? inr(totals.byHeadBalance[h]) : <span className={totals.byHeadBalance[h] < 0 ? 'text-rose-600 font-bold' : 'text-slate-300'}>

@@ -67,6 +67,13 @@ router.get('/:project_id', async (req, res) => {
       GROUP BY swi.boq_item_id, bi.cost_head
     `, [project_id]);
 
+    const advanceActuals = await query(`
+      SELECT NULL::uuid AS boq_item_id, 'Sub Con' AS cost_head, SUM(paid_amount) AS actual
+      FROM tqs_advance_vouchers
+      WHERE project_id = $1 AND status IN ('issued','partial','recovered') AND is_deleted = false
+      GROUP BY cost_head
+    `, [project_id]);
+
     const tqsActuals = await query(`
       SELECT li.boq_item_id, li.cost_head, SUM(li.basic_amount) AS actual
       FROM tqs_bill_line_items li
@@ -82,11 +89,13 @@ router.get('/:project_id', async (req, res) => {
         pct: parseFloat(row.budgeted_pct) || 0,
         amount: parseFloat(row.budgeted_amount) || 0,
         actual: 0,
+        advance: 0,
+        invoiced: 0,
       };
     }
 
     const unallocated = {};
-    const addActual = (rows) => {
+    const addActual = (rows, isAdvance = false) => {
       for (const row of rows) {
         const itemId = row.boq_item_id;
         const amt = parseFloat(row.actual) || 0;
@@ -95,13 +104,19 @@ router.get('/:project_id', async (req, res) => {
           continue;
         }
         if (!byItem[itemId]) byItem[itemId] = {};
-        if (!byItem[itemId][row.cost_head]) byItem[itemId][row.cost_head] = { pct: 0, amount: 0, actual: 0 };
-        byItem[itemId][row.cost_head].actual += amt;
+        if (!byItem[itemId][row.cost_head]) byItem[itemId][row.cost_head] = { pct: 0, amount: 0, actual: 0, advance: 0, invoiced: 0 };
+        if (isAdvance) {
+          byItem[itemId][row.cost_head].advance += amt;
+        } else {
+          byItem[itemId][row.cost_head].invoiced += amt;
+          byItem[itemId][row.cost_head].actual += amt;
+        }
       }
     };
-    addActual(raActuals.rows);
-    addActual(scActuals.rows);
-    addActual(tqsActuals.rows);
+    addActual(raActuals.rows, false);
+    addActual(scActuals.rows, false);
+    addActual(tqsActuals.rows, false);
+    addActual(advanceActuals.rows, true);
 
     const data = items.rows.map(item => ({
       ...item,
