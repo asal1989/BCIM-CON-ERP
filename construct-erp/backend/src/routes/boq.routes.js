@@ -341,17 +341,30 @@ router.post('/mappings', authorize(...BOQ_ROLES), async (req, res) => {
 });
 
 // PUT /boq/mappings/:id — update (draft only)
-// POST /boq/link-existing-wo-item — link an already-created WO item to client BOQ for amount-based tracking
+// POST /boq/link-existing-wo-item — link an already-created WO item to one OR more client BOQ items
+// (amount-based). The WO cost is split across the selected BOQ items proportionally to each
+// BOQ item's value, so the vendor's total committed cost is never double-counted.
+//
+// Storage trick: client_amount / sc_amount / margin_amount are GENERATED columns
+// (allocated_qty * rate). To represent pure amounts without unit-mismatch we store
+// allocated_qty = 1, client_rate = full BOQ amount, sc_rate = that BOQ item's share of WO cost.
 router.post('/link-existing-wo-item', authorize(...BOQ_ROLES), async (req, res) => {
   try {
-    const { wo_item_id, boq_item_id, notes } = req.body || {};
-    if (!wo_item_id || !boq_item_id) {
-      return res.status(400).json({ error: 'wo_item_id and boq_item_id are required' });
+    const body = req.body || {};
+    const { wo_item_id, notes } = body;
+    // Accept either boq_item_ids (array, multi-link) or boq_item_id (single, backward compat)
+    let boqIds = Array.isArray(body.boq_item_ids) ? body.boq_item_ids.filter(Boolean) : [];
+    if (!boqIds.length && body.boq_item_id) boqIds = [body.boq_item_id];
+    // De-duplicate
+    boqIds = [...new Set(boqIds.map(String))];
+
+    if (!wo_item_id || !boqIds.length) {
+      return res.status(400).json({ error: 'wo_item_id and at least one boq_item_id are required' });
     }
 
     const itemR = await query(`
       SELECT
-        wi.id AS wo_item_id, wi.wo_id, wi.description, wi.unit, wi.qty, wi.rate,
+        wi.id AS wo_item_id, wi.wo_id, wi.description, wi.unit, wi.qty, wi.rate, wi.boq_item_id,
         ROUND((wi.qty * wi.rate)::numeric, 2) AS wo_amount,
         wo.project_id, wo.company_id, wo.sc_id, wo.wo_number,
         sc.name AS sc_name
@@ -363,66 +376,87 @@ router.post('/link-existing-wo-item', authorize(...BOQ_ROLES), async (req, res) 
     if (!itemR.rows.length) return res.status(404).json({ error: 'WO item not found' });
     const woItem = itemR.rows[0];
 
-    const boqR = await query(`
-      SELECT bi.*, p.company_id, ROUND((bi.quantity * bi.rate)::numeric, 2) AS boq_amount
-      FROM boq_items bi
-      JOIN projects p ON p.id = bi.project_id
-      WHERE bi.id = $1 AND p.company_id = $2 AND bi.is_active = true
-    `, [boq_item_id, CID(req)]);
-    if (!boqR.rows.length) return res.status(404).json({ error: 'BOQ item not found' });
-    const boqItem = boqR.rows[0];
-    if (String(boqItem.project_id) !== String(woItem.project_id)) {
-      return res.status(400).json({ error: 'WO item and BOQ item must belong to the same project' });
-    }
-
     const woAmount = Number(woItem.wo_amount || 0);
     if (!woAmount || woAmount <= 0) return res.status(400).json({ error: 'WO item amount must be greater than zero' });
 
-    // Check if linked amounts don't exceed BOQ amount
-    const linkedR = await query(`
-      SELECT COALESCE(SUM((wi.qty * wi.rate)::numeric), 0) AS linked_amount
-      FROM boq_sc_mapping m
-      JOIN sc_wo_items wi ON wi.id::text = m.notes
-      WHERE m.boq_item_id=$1 AND m.status != 'cancelled'
-    `, [boq_item_id]);
-    const linkedAmount = Number(linkedR.rows[0].linked_amount || 0);
-    const boqAmount = Number(boqItem.boq_amount || 0);
-
-    if (linkedAmount + woAmount > boqAmount + 0.01) {
-      return res.status(400).json({
-        error: `Link exceeds BOQ amount. BOQ total: ${boqAmount}, already linked: ${linkedAmount}, this link: ${woAmount}, balance: ${Math.max(0, boqAmount - linkedAmount)}`
-      });
+    // Load all selected BOQ items, validate company + project + active
+    const boqR = await query(`
+      SELECT bi.id, bi.item_no, bi.project_id, bi.rate, bi.quantity,
+             ROUND((bi.quantity * bi.rate)::numeric, 2) AS boq_amount
+      FROM boq_items bi
+      JOIN projects p ON p.id = bi.project_id
+      WHERE bi.id = ANY($1::uuid[]) AND p.company_id = $2 AND bi.is_active = true
+    `, [boqIds, CID(req)]);
+    if (boqR.rows.length !== boqIds.length) {
+      return res.status(404).json({ error: 'One or more BOQ items not found' });
+    }
+    const boqItems = boqR.rows;
+    if (boqItems.some(b => String(b.project_id) !== String(woItem.project_id))) {
+      return res.status(400).json({ error: 'WO item and all BOQ items must belong to the same project' });
     }
 
-    const result = await withTransaction(async (client) => {
-      const linkNote = [
-        notes || null,
-        `WO: ${woItem.wo_number} | Amount: ₹${woAmount}`
-      ].filter(Boolean).join(' | ');
+    // Prevent duplicate links of this same WO item to the same BOQ item
+    const dupR = await query(`
+      SELECT boq_item_id FROM boq_sc_mapping
+      WHERE wo_id = $1 AND boq_item_id = ANY($2::uuid[]) AND status != 'cancelled'
+    `, [woItem.wo_id, boqIds]);
+    if (dupR.rows.length) {
+      return res.status(400).json({ error: 'One or more of these BOQ items are already linked to this WO' });
+    }
 
-      // Store the WO item ID in notes for tracking
-      const m = await client.query(`
-        INSERT INTO boq_sc_mapping
-          (company_id, project_id, boq_item_id, sc_id, execution_type, allocated_qty,
-           client_rate, sc_rate, wo_id, notes, status, created_by)
-        VALUES ($1,$2,$3,$4,'subcontractor',$5,$6,$7,$8,$9,'wo_issued',$10)
-        RETURNING *
-      `, [
-        CID(req), woItem.project_id, boq_item_id, woItem.sc_id, woItem.qty,
-        boqItem.rate, Number(woItem.rate || 0), woItem.wo_id, linkNote, req.user.id
-      ]);
-      await client.query(`UPDATE sc_wo_items SET boq_item_id=$1 WHERE id=$2`, [boq_item_id, wo_item_id]);
-      return m.rows[0];
+    // Split WO cost proportionally by BOQ value
+    const totalBoqAmount = boqItems.reduce((s, b) => s + Number(b.boq_amount || 0), 0);
+    if (totalBoqAmount <= 0) return res.status(400).json({ error: 'Selected BOQ items have zero value' });
+
+    const result = await withTransaction(async (client) => {
+      const created = [];
+      let allocated = 0;
+      for (let i = 0; i < boqItems.length; i++) {
+        const b = boqItems[i];
+        const boqAmt = Number(b.boq_amount || 0);
+        // Last item absorbs any rounding remainder so the split sums exactly to woAmount
+        const isLast = i === boqItems.length - 1;
+        const scPortion = isLast
+          ? Math.round((woAmount - allocated) * 100) / 100
+          : Math.round((woAmount * (boqAmt / totalBoqAmount)) * 100) / 100;
+        allocated += scPortion;
+
+        const linkNote = [
+          notes || null,
+          `WO: ${woItem.wo_number} | WO Amt: ₹${woAmount}` +
+            (boqItems.length > 1 ? ` | Share: ₹${scPortion} of ₹${woAmount}` : '')
+        ].filter(Boolean).join(' | ');
+
+        const m = await client.query(`
+          INSERT INTO boq_sc_mapping
+            (company_id, project_id, boq_item_id, sc_id, execution_type, allocated_qty,
+             client_rate, sc_rate, wo_id, notes, status, created_by)
+          VALUES ($1,$2,$3,$4,'subcontractor',1,$5,$6,$7,$8,'wo_issued',$9)
+          RETURNING *
+        `, [
+          CID(req), woItem.project_id, b.id, woItem.sc_id,
+          boqAmt, scPortion, woItem.wo_id, linkNote, req.user.id
+        ]);
+        created.push(m.rows[0]);
+      }
+      // Mark WO item as linked (single FK — point to first BOQ item) so it leaves the unlinked list
+      if (!woItem.boq_item_id) {
+        await client.query(`UPDATE sc_wo_items SET boq_item_id=$1 WHERE id=$2`, [boqItems[0].id, wo_item_id]);
+      }
+      return created;
     });
 
+    const margin = totalBoqAmount - woAmount;
     res.status(201).json({
       data: result,
-      message: 'WO linked to BOQ by amount',
+      message: boqItems.length > 1
+        ? `WO linked to ${boqItems.length} BOQ items by amount`
+        : 'WO linked to BOQ by amount',
       amounts: {
-        boq_total: boqItem.boq_amount,
+        boq_total: totalBoqAmount,
         wo_amount: woAmount,
-        linked_total: linkedAmount + woAmount,
-        remaining_balance: boqItem.boq_amount - (linkedAmount + woAmount)
+        margin_amount: margin,
+        margin_pct: totalBoqAmount > 0 ? Math.round((margin / totalBoqAmount) * 10000) / 100 : 0
       }
     });
   } catch(e){ res.status(500).json({ error: e.message }); }

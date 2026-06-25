@@ -392,9 +392,15 @@ function OwnTeamCostModal({ mappingId, boqItem, onClose }) {
 // ─── Link Existing WO Modal ───────────────────────────────────────────────────
 function ExistingWOLinkModal({ projectId, boqItems, onClose }) {
   const qc = useQueryClient();
-  const [form, setForm] = useState({ wo_item_id: '', boq_item_id: '', allocated_qty: '', notes: '' });
+  const [form, setForm] = useState({ wo_item_id: '', boq_item_ids: [], notes: '' });
   const [search, setSearch] = useState('');
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const toggleBOQ = (id) => setForm(f => ({
+    ...f,
+    boq_item_ids: f.boq_item_ids.includes(id)
+      ? f.boq_item_ids.filter(x => x !== id)
+      : [...f.boq_item_ids, id],
+  }));
 
   const { data: woItems = [], isLoading } = useQuery({
     queryKey: ['boq-unlinked-wo-items', projectId],
@@ -407,25 +413,26 @@ function ExistingWOLinkModal({ projectId, boqItems, onClose }) {
     staleTime: 0,
   });
 
-  const selectedWO  = woItems.find(i => i.wo_item_id === form.wo_item_id);
-  const selectedBOQ = boqItems.find(i => i.boq_item_id === form.boq_item_id);
-  const woAmount    = num(selectedWO?.qty || 0) * num(selectedWO?.rate || 0);
-  const boqAmount   = num(selectedBOQ?.client_qty || 0) * num(selectedBOQ?.client_rate || 0);
-  const margin      = boqAmount - woAmount;
-  const marginPct   = boqAmount > 0 ? (margin / boqAmount) * 100 : 0;
-  const mc          = marginColor(marginPct);
+  const selectedWO   = woItems.find(i => i.wo_item_id === form.wo_item_id);
+  const selectedBOQs = boqItems.filter(i => form.boq_item_ids.includes(i.boq_item_id));
+  const boqAmt       = (i) => num(i?.client_qty || 0) * num(i?.client_rate || 0);
+  const woAmount     = num(selectedWO?.qty || 0) * num(selectedWO?.rate || 0);
+  const boqAmount    = selectedBOQs.reduce((s, i) => s + boqAmt(i), 0);
+  const margin       = boqAmount - woAmount;
+  const marginPct    = boqAmount > 0 ? (margin / boqAmount) * 100 : 0;
+  const mc           = marginColor(marginPct);
 
   const filteredBOQ = boqItems.filter(i => !search ||
     [i.item_no, boqDesc(i), i.chapter_name].some(v => v?.toLowerCase().includes(search.toLowerCase())));
 
   const mut = useMutation({
     mutationFn: () => boqMappingAPI.linkExistingWOItem({
-      wo_item_id:   form.wo_item_id,
-      boq_item_id:  form.boq_item_id,
+      wo_item_id:    form.wo_item_id,
+      boq_item_ids:  form.boq_item_ids,
       notes:         form.notes,
     }),
-    onSuccess: () => {
-      toast.success('WO linked to BOQ by amount');
+    onSuccess: (r) => {
+      toast.success(r?.data?.message || 'WO linked to BOQ by amount');
       qc.invalidateQueries({ queryKey: ['boq-mappings', projectId] });
       qc.invalidateQueries({ queryKey: ['boq-unlinked-wo-items', projectId] });
       qc.invalidateQueries({ queryKey: ['boq-balance'] });
@@ -434,7 +441,7 @@ function ExistingWOLinkModal({ projectId, boqItems, onClose }) {
     onError: e => toast.error(e?.response?.data?.error || 'Failed to link WO'),
   });
 
-  const canSave = form.wo_item_id && form.boq_item_id && woAmount > 0;
+  const canSave = form.wo_item_id && form.boq_item_ids.length > 0 && woAmount > 0;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -454,10 +461,7 @@ function ExistingWOLinkModal({ projectId, boqItems, onClose }) {
           <div className="grid md:grid-cols-2 gap-4">
             <div>
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Existing WO Item *</label>
-              <select value={form.wo_item_id} onChange={e => {
-                const item = woItems.find(i => i.wo_item_id === e.target.value);
-                setForm(f => ({ ...f, wo_item_id: e.target.value, allocated_qty: item?.qty || '' }));
-              }} className={inp}>
+              <select value={form.wo_item_id} onChange={e => set('wo_item_id', e.target.value)} className={inp}>
                 <option value="">Select WO item...</option>
                 {isLoading && <option>Loading...</option>}
                 {woItems.map(i => (
@@ -478,26 +482,39 @@ function ExistingWOLinkModal({ projectId, boqItems, onClose }) {
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Search BOQ</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                  Client BOQ Item(s) * {form.boq_item_ids.length > 0 && (
+                    <span className="text-indigo-600">· {form.boq_item_ids.length} selected</span>
+                  )}
+                </label>
+              </div>
               <input value={search} onChange={e => setSearch(e.target.value)} className={inp} placeholder="Search BOQ item/code..."/>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-3 mb-1.5">Client BOQ Item *</label>
-              <select value={form.boq_item_id} onChange={e => set('boq_item_id', e.target.value)} className={inp}>
-                <option value="">Select BOQ item...</option>
-                {filteredBOQ.map(i => (
-                  <option key={i.boq_item_id} value={i.boq_item_id}>
-                    {i.item_no} - {boqDesc(i).slice(0, 90)}
-                  </option>
-                ))}
-              </select>
-              {selectedBOQ && (
-                <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
-                  <p className="font-bold text-slate-800">{selectedBOQ.item_no}</p>
-                  <p className="text-slate-600 mt-1">{boqDesc(selectedBOQ)}</p>
-                  <p className="mt-2 font-semibold text-slate-700">
-                    BOQ Qty: {selectedBOQ.client_qty || 0} {selectedBOQ.unit || ''} | Client Rate: {fmt2(selectedBOQ.client_rate)}
-                  </p>
-                </div>
-              )}
+              <p className="text-[10px] text-slate-400 mt-1.5 mb-1.5">Tick one or more BOQ items this WO covers — the WO cost is split across them by value.</p>
+              <div className="border border-slate-200 rounded-lg max-h-52 overflow-y-auto divide-y divide-slate-100">
+                {filteredBOQ.length === 0 && (
+                  <p className="text-xs text-slate-400 p-3 text-center">No BOQ items match.</p>
+                )}
+                {filteredBOQ.map(i => {
+                  const checked = form.boq_item_ids.includes(i.boq_item_id);
+                  return (
+                    <label key={i.boq_item_id}
+                      className={clsx('flex items-start gap-2 p-2.5 cursor-pointer transition',
+                        checked ? 'bg-indigo-50' : 'hover:bg-slate-50')}>
+                      <input type="checkbox" checked={checked}
+                        onChange={() => toggleBOQ(i.boq_item_id)}
+                        className="mt-0.5 accent-indigo-600"/>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-slate-800">{i.item_no}</p>
+                        <p className="text-[11px] text-slate-600 truncate">{boqDesc(i)}</p>
+                        <p className="text-[10px] font-semibold text-slate-500 mt-0.5">
+                          {i.client_qty || 0} {i.unit || ''} × {fmt2(i.client_rate)} = {fmt(boqAmt(i))}
+                        </p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
@@ -506,14 +523,16 @@ function ExistingWOLinkModal({ projectId, boqItems, onClose }) {
             <input value={form.notes} onChange={e => set('notes', e.target.value)} className={inp} placeholder="e.g., Partial allocation, split coverage, etc."/>
           </div>
 
-          {selectedWO && selectedBOQ && woAmount > 0 && (
+          {selectedWO && selectedBOQs.length > 0 && woAmount > 0 && (
             <div className={clsx('rounded-xl p-4 border-2', mc.bg, marginPct < 0 ? 'border-red-300' : 'border-emerald-300')}>
-              <p className={clsx('text-[10px] font-bold uppercase tracking-widest mb-3', mc.text)}>Amount-Based Linking</p>
+              <p className={clsx('text-[10px] font-bold uppercase tracking-widest mb-3', mc.text)}>
+                Amount-Based Linking {selectedBOQs.length > 1 && `· ${selectedBOQs.length} BOQ items`}
+              </p>
               <div className="grid grid-cols-3 gap-4">
                 <div className="text-center">
                   <p className="text-[9px] text-slate-500 uppercase font-bold mb-1">BOQ Amount</p>
                   <p className="text-lg font-bold text-slate-800">{fmt(boqAmount)}</p>
-                  <p className="text-[9px] text-slate-500 mt-1">Total BOQ value</p>
+                  <p className="text-[9px] text-slate-500 mt-1">{selectedBOQs.length > 1 ? 'Combined BOQ value' : 'Total BOQ value'}</p>
                 </div>
                 <div className="text-center">
                   <p className="text-[9px] text-slate-500 uppercase font-bold mb-1">WO Amount</p>
@@ -526,6 +545,24 @@ function ExistingWOLinkModal({ projectId, boqItems, onClose }) {
                   <p className={clsx('text-[9px] mt-1', mc.text)}>{pct(marginPct)}</p>
                 </div>
               </div>
+              {selectedBOQs.length > 1 && (
+                <div className="mt-3 pt-3 border-t border-white/40">
+                  <p className="text-[9px] font-bold text-slate-500 uppercase mb-1.5">WO cost split by BOQ value</p>
+                  <div className="space-y-1">
+                    {selectedBOQs.map(i => {
+                      const share = boqAmount > 0 ? (boqAmt(i) / boqAmount) * woAmount : 0;
+                      return (
+                        <div key={i.boq_item_id} className="flex items-center justify-between text-[11px]">
+                          <span className="font-semibold text-slate-700 truncate mr-2">{i.item_no}</span>
+                          <span className="text-slate-600 whitespace-nowrap">
+                            {fmt(boqAmt(i))} → WO share {fmt(share)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
