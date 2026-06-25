@@ -5,8 +5,9 @@ import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
 import {
   BookOpen, Plus, Search, X, Sparkles, Trash2, Pencil,
-  ChevronDown, ChevronRight, Scale, TrendingUp, TrendingDown,
+  ChevronDown, ChevronRight, Scale,
   Wallet, Landmark, PiggyBank, ArrowDownLeft, ArrowUpRight,
+  ListTree, Table2, BarChart3,
 } from 'lucide-react';
 import { chartOfAccountsAPI, projectAPI } from '../../api/client';
 import { inr } from '../dashboards/DashKPI';
@@ -15,11 +16,11 @@ const TYPES = ['asset', 'liability', 'equity', 'income', 'expense'];
 
 // Display metadata per account type. `nature` = the side that increases the account.
 const TYPE_META = {
-  asset:     { label: 'Assets',      nature: 'Dr', icon: Wallet,    badge: 'bg-blue-50 text-blue-600 border-blue-100',       bar: 'bg-blue-500',    text: 'text-blue-600',    soft: 'bg-blue-50' },
-  liability: { label: 'Liabilities', nature: 'Cr', icon: Landmark,  badge: 'bg-amber-50 text-amber-600 border-amber-100',     bar: 'bg-amber-500',   text: 'text-amber-600',   soft: 'bg-amber-50' },
-  equity:    { label: 'Equity',      nature: 'Cr', icon: PiggyBank, badge: 'bg-purple-50 text-purple-600 border-purple-100',  bar: 'bg-purple-500',  text: 'text-purple-600',  soft: 'bg-purple-50' },
-  income:    { label: 'Income',      nature: 'Cr', icon: ArrowDownLeft,  badge: 'bg-emerald-50 text-emerald-600 border-emerald-100', bar: 'bg-emerald-500', text: 'text-emerald-600', soft: 'bg-emerald-50' },
-  expense:   { label: 'Expenses',    nature: 'Dr', icon: ArrowUpRight,   badge: 'bg-red-50 text-red-600 border-red-100',         bar: 'bg-red-500',     text: 'text-red-600',     soft: 'bg-red-50' },
+  asset:     { label: 'Assets',      nature: 'Dr', icon: Wallet,        badge: 'bg-blue-50 text-blue-600 border-blue-100',         bar: 'bg-blue-500',    dot: 'bg-blue-500',    text: 'text-blue-600',    soft: 'bg-blue-50',    ring: 'ring-blue-100',    topbar: 'before:bg-blue-500' },
+  liability: { label: 'Liabilities', nature: 'Cr', icon: Landmark,      badge: 'bg-amber-50 text-amber-600 border-amber-100',       bar: 'bg-amber-500',   dot: 'bg-amber-500',   text: 'text-amber-600',   soft: 'bg-amber-50',   ring: 'ring-amber-100',   topbar: 'before:bg-amber-500' },
+  equity:    { label: 'Equity',      nature: 'Cr', icon: PiggyBank,     badge: 'bg-purple-50 text-purple-600 border-purple-100',    bar: 'bg-purple-500',  dot: 'bg-purple-500',  text: 'text-purple-600',  soft: 'bg-purple-50',  ring: 'ring-purple-100',  topbar: 'before:bg-purple-500' },
+  income:    { label: 'Income',      nature: 'Cr', icon: ArrowDownLeft, badge: 'bg-emerald-50 text-emerald-600 border-emerald-100', bar: 'bg-emerald-500', dot: 'bg-emerald-500', text: 'text-emerald-600', soft: 'bg-emerald-50', ring: 'ring-emerald-100', topbar: 'before:bg-emerald-500' },
+  expense:   { label: 'Expenses',    nature: 'Dr', icon: ArrowUpRight,  badge: 'bg-red-50 text-red-600 border-red-100',             bar: 'bg-red-500',     dot: 'bg-red-500',     text: 'text-red-600',     soft: 'bg-red-50',     ring: 'ring-red-100',     topbar: 'before:bg-red-500' },
 };
 
 const F = 'w-full border border-slate-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 bg-white';
@@ -195,25 +196,52 @@ function LedgerDrawer({ account, projectId, onClose }) {
   );
 }
 
-/* ── Account row ─────────────────────────────────────────────────────────── */
-function AccountRow({ a, onOpen, onEdit, onDelete }) {
+/* ── Balance cell ────────────────────────────────────────────────────────── */
+function BalanceCell({ a }) {
   const { amount, side } = balanceParts(a);
+  if (!Number(a.balance)) return <span className="font-mono text-xs text-slate-300">—</span>;
   return (
-    <tr className="hover:bg-slate-50 group">
-      <td className="pl-10 pr-4 py-2.5 font-mono text-xs text-slate-500">{a.code}</td>
+    <span className={clsx('font-mono font-semibold', side === 'Dr' ? 'text-blue-600' : 'text-emerald-600')}>
+      ₹{inr(amount)} <span className="text-[10px] font-medium opacity-70">{side}</span>
+    </span>
+  );
+}
+
+/* ── Account row (used in both grouped & flat tables) ────────────────────── */
+function AccountRow({ a, indent, onOpen, onEdit, onDelete }) {
+  const m = TYPE_META[a.account_type];
+  return (
+    <tr className="group hover:bg-slate-50 border-b border-slate-50 last:border-0">
+      <td className="w-1.5 p-0"><div className={clsx('w-1 h-9 mx-auto rounded-full opacity-30', m.bar)} /></td>
+      <td className={clsx('pr-4 py-2.5 font-mono text-xs text-slate-500', indent ? 'pl-8' : 'pl-4')}>{a.code}</td>
       <td className="px-4 py-2.5">
         <button onClick={() => onOpen(a)} className="font-medium text-slate-800 hover:text-blue-600 text-left">{a.name}</button>
       </td>
+      <td className="px-4 py-2.5">
+        <span className={clsx('inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border', m.badge)}>{m.label}</span>
+      </td>
       <td className="px-4 py-2.5 text-slate-500 text-xs">{a.sub_type || '—'}</td>
-      <td className="px-4 py-2.5 text-right font-mono text-xs text-slate-400">{Number(a.opening_balance) ? inr(a.opening_balance) : '—'}</td>
-      <td className="px-4 py-2.5 text-right">
-        <button onClick={() => onOpen(a)} className="font-mono font-semibold text-slate-800 hover:text-blue-600">
-          ₹{inr(amount)} <span className="text-[10px] font-medium text-slate-400">{side}</span>
-        </button>
+      <td className="px-4 py-2.5 text-right whitespace-nowrap">
+        <button onClick={() => onOpen(a)} className="hover:opacity-80"><BalanceCell a={a} /></button>
+      </td>
+      <td className="px-4 py-2.5 text-center">
+        <span className="font-mono text-[11px] text-slate-400">{m.nature}</span>
       </td>
       <td className="px-4 py-2.5 text-right whitespace-nowrap">
-        <button onClick={() => onEdit(a)} className="text-slate-300 group-hover:text-blue-600 mr-2"><Pencil className="w-3.5 h-3.5" /></button>
-        <button onClick={() => onDelete(a)} className="text-slate-300 group-hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
+        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={() => onOpen(a)} title="View Ledger"
+            className="w-7 h-7 rounded-md border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 flex items-center justify-center">
+            <BarChart3 className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={() => onEdit(a)} title="Edit"
+            className="w-7 h-7 rounded-md border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 flex items-center justify-center">
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={() => onDelete(a)} title="Delete"
+            className="w-7 h-7 rounded-md border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 flex items-center justify-center">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </td>
     </tr>
   );
@@ -298,11 +326,31 @@ function OpeningBalancesModal({ accounts, onClose }) {
   );
 }
 
+/* ── Sidebar filter item ─────────────────────────────────────────────────── */
+function FilterItem({ active, dot, label, count, onClick }) {
+  return (
+    <button onClick={onClick}
+      className={clsx('w-full flex items-center justify-between px-2.5 py-2 rounded-md text-sm transition-colors',
+        active ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-100')}>
+      <span className="flex items-center gap-2 truncate">
+        {dot && <span className={clsx('w-2 h-2 rounded-full shrink-0', dot)} />}
+        <span className="truncate">{label}</span>
+      </span>
+      {count != null && (
+        <span className={clsx('text-[11px] rounded-full px-1.5 py-0.5', active ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-400')}>{count}</span>
+      )}
+    </button>
+  );
+}
+
 /* ── Main page ───────────────────────────────────────────────────────────── */
 export default function ChartOfAccountsPage() {
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');        // '' = all
+  const [normalFilter, setNormalFilter] = useState('all'); // all | dr | cr
+  const [subFilter, setSubFilter] = useState('');          // sub-type
   const [projectFilter, setProjectFilter] = useState('');
+  const [view, setView] = useState('grouped');             // grouped | flat
   const [modal, setModal] = useState(null);     // null | {} | account
   const [drill, setDrill] = useState(null);      // account being viewed
   const [collapsed, setCollapsed] = useState({}); // { [type]: true }
@@ -315,11 +363,13 @@ export default function ChartOfAccountsPage() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Fetch ALL accounts (no type filter) so sidebar counts stay accurate; type
+  // filtering is applied client-side.
   const { data, isLoading } = useQuery({
-    queryKey: ['chart-of-accounts', typeFilter, search, projectFilter],
-    queryFn: () => chartOfAccountsAPI.list({ account_type: typeFilter || undefined, search: search || undefined, project_id: projectFilter || undefined }).then(r => r.data),
+    queryKey: ['chart-of-accounts', search, projectFilter],
+    queryFn: () => chartOfAccountsAPI.list({ search: search || undefined, project_id: projectFilter || undefined }).then(r => r.data),
   });
-  const rows = data?.data ?? [];
+  const allRows = data?.data ?? [];
 
   const seedMut = useMutation({
     mutationFn: () => chartOfAccountsAPI.seed().then(r => r.data),
@@ -333,31 +383,48 @@ export default function ChartOfAccountsPage() {
     onError: e => toast.error(e?.response?.data?.error || 'Delete failed'),
   });
 
-  // Totals per type (natural balance)
+  // Totals / counts per type from the full set (drives sidebar + summary cards)
   const totals = useMemo(() => {
     const t = { asset: 0, liability: 0, equity: 0, income: 0, expense: 0 };
-    rows.forEach(r => { t[r.account_type] = (t[r.account_type] || 0) + Number(r.balance || 0); });
+    allRows.forEach(r => { t[r.account_type] = (t[r.account_type] || 0) + Number(r.balance || 0); });
     return t;
-  }, [rows]);
+  }, [allRows]);
 
   const counts = useMemo(() => {
     const c = { asset: 0, liability: 0, equity: 0, income: 0, expense: 0 };
-    rows.forEach(r => { c[r.account_type] = (c[r.account_type] || 0) + 1; });
+    allRows.forEach(r => { c[r.account_type] = (c[r.account_type] || 0) + 1; });
     return c;
-  }, [rows]);
+  }, [allRows]);
+
+  // Distinct sub-types for the sub-group dropdown
+  const subTypes = useMemo(() => {
+    const s = new Set();
+    allRows.forEach(r => s.add(r.sub_type || 'Other'));
+    return [...s].sort();
+  }, [allRows]);
 
   const netIncome = (totals.income || 0) - (totals.expense || 0);
-  // Assets = Liabilities + Equity + (Income − Expense)
   const lhs = totals.asset || 0;
   const rhs = (totals.liability || 0) + (totals.equity || 0) + netIncome;
   const diff = lhs - rhs;
   const balanced = Math.abs(diff) < 1;
+  const typesPresent = TYPES.filter(t => counts[t] > 0).length;
 
-  // Group accounts by type → sub_type
+  // Apply client-side filters (type / normal-side / sub-group) to get displayed rows
+  const displayed = useMemo(() => {
+    return allRows.filter(r => {
+      if (typeFilter && r.account_type !== typeFilter) return false;
+      if (normalFilter !== 'all' && (TYPE_META[r.account_type]?.nature || 'Dr').toLowerCase() !== normalFilter) return false;
+      if (subFilter && (r.sub_type || 'Other') !== subFilter) return false;
+      return true;
+    });
+  }, [allRows, typeFilter, normalFilter, subFilter]);
+
+  // Group displayed rows by type → sub_type
   const grouped = useMemo(() => {
     return TYPES
       .map(type => {
-        const accts = rows.filter(r => r.account_type === type);
+        const accts = displayed.filter(r => r.account_type === type);
         if (!accts.length) return null;
         const subMap = {};
         accts.forEach(a => {
@@ -367,10 +434,16 @@ export default function ChartOfAccountsPage() {
         const subGroups = Object.entries(subMap)
           .map(([sub, items]) => ({ sub, items, subtotal: items.reduce((s, a) => s + Number(a.balance || 0), 0) }))
           .sort((a, b) => a.sub.localeCompare(b.sub));
-        return { type, accts, subGroups, total: totals[type], count: accts.length };
+        const total = accts.reduce((s, a) => s + Number(a.balance || 0), 0);
+        return { type, accts, subGroups, total, count: accts.length };
       })
       .filter(Boolean);
-  }, [rows, totals]);
+  }, [displayed]);
+
+  const flatSorted = useMemo(
+    () => [...displayed].sort((a, b) => String(a.code).localeCompare(String(b.code), undefined, { numeric: true })),
+    [displayed]
+  );
 
   const allCollapsed = grouped.length > 0 && grouped.every(g => collapsed[g.type]);
   const toggleAll = () => {
@@ -378,28 +451,92 @@ export default function ChartOfAccountsPage() {
     else setCollapsed(Object.fromEntries(TYPES.map(t => [t, true])));
   };
 
+  const rowActions = {
+    onOpen: setDrill,
+    onEdit: setModal,
+    onDelete: (acc) => { if (window.confirm(`Delete account ${acc.code} — ${acc.name}?`)) deleteMut.mutate(acc.id); },
+  };
+
+  const TH = ({ children, className }) => (
+    <th className={clsx('px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 whitespace-nowrap', className)}>{children}</th>
+  );
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <div className="bg-white border-b border-slate-200 px-6 py-4">
-        <div className="flex items-center justify-between flex-wrap gap-3">
+    <div className="flex min-h-screen bg-slate-50">
+
+      {/* ── FILTER SIDEBAR ─────────────────────────────────────────────── */}
+      <aside className="w-60 shrink-0 bg-white border-r border-slate-200 sticky top-0 self-start max-h-screen overflow-y-auto py-5 hidden lg:block">
+        <div className="px-4">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-1 mb-2">Filter by Type</p>
+          <div className="space-y-0.5">
+            <FilterItem active={!typeFilter} dot="bg-blue-400" label="All Accounts" count={allRows.length} onClick={() => setTypeFilter('')} />
+            {TYPES.map(t => (
+              <FilterItem key={t} active={typeFilter === t} dot={TYPE_META[t].dot} label={TYPE_META[t].label}
+                count={counts[t] || 0} onClick={() => setTypeFilter(typeFilter === t ? '' : t)} />
+            ))}
+          </div>
+        </div>
+
+        <div className="h-px bg-slate-100 my-4 mx-4" />
+
+        <div className="px-4">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-1 mb-2">Projects</p>
+          <div className="space-y-0.5">
+            <FilterItem active={!projectFilter} label="All Projects" onClick={() => setProjectFilter('')} />
+            {projects.map(p => (
+              <FilterItem key={p.id} active={projectFilter === p.id}
+                label={`${p.project_code ? p.project_code + ' — ' : ''}${p.name}`}
+                onClick={() => setProjectFilter(projectFilter === p.id ? '' : p.id)} />
+            ))}
+          </div>
+        </div>
+
+        <div className="h-px bg-slate-100 my-4 mx-4" />
+
+        {/* KPI mini stack */}
+        <div className="px-4 space-y-2">
+          <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">Total Accounts</p>
+            <p className="text-xl font-bold text-blue-600 leading-none mt-1">{allRows.length}</p>
+            <p className="text-[11px] text-slate-400 mt-1">Across {typesPresent} categor{typesPresent === 1 ? 'y' : 'ies'}</p>
+          </div>
+          <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">Accounting Equation</p>
+            <p className={clsx('text-sm font-bold leading-none mt-1.5', balanced ? 'text-emerald-600' : 'text-amber-600')}>
+              {balanced ? 'Balanced' : `Off by ₹${inr(Math.abs(diff))}`}
+            </p>
+            <p className="text-[11px] text-slate-400 mt-1">A = L + E + Net Income</p>
+          </div>
+          <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">Net Income (YTD)</p>
+            <p className={clsx('text-sm font-bold font-mono leading-none mt-1.5', netIncome >= 0 ? 'text-emerald-600' : 'text-red-600')}>₹{inr(netIncome)}</p>
+            <p className="text-[11px] text-slate-400 mt-1">Income − Expense</p>
+          </div>
+        </div>
+      </aside>
+
+      {/* ── MAIN ───────────────────────────────────────────────────────── */}
+      <main className="flex-1 min-w-0 px-6 py-5 space-y-5">
+
+        {/* Page header */}
+        <div className="flex items-start justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center">
               <BookOpen className="w-4 h-4 text-blue-600" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">Chart of Accounts</h1>
-              <p className="text-xs text-slate-400">Ledger accounts grouped by type — click any account to see its entries</p>
+              <h1 className="text-xl font-bold text-slate-800 tracking-tight">Chart of Accounts</h1>
+              <p className="text-xs text-slate-400">Structured account hierarchy — Indian GAAP · GST-compliant</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {rows.length === 0 && !isLoading && (
+            {allRows.length === 0 && !isLoading && (
               <button onClick={() => seedMut.mutate()} disabled={seedMut.isPending}
                 className="flex items-center gap-1.5 px-4 py-2 text-sm border border-blue-200 text-blue-600 rounded-md hover:bg-blue-50 disabled:opacity-50">
                 <Sparkles className="w-4 h-4" /> {seedMut.isPending ? 'Seeding…' : 'Seed Standard COA'}
               </button>
             )}
-            {rows.length > 0 && (
+            {allRows.length > 0 && (
               <button onClick={() => setObModal(true)}
                 className="flex items-center gap-1.5 px-4 py-2 text-sm border border-slate-200 text-slate-600 rounded-md hover:bg-slate-50">
                 <Scale className="w-4 h-4" /> Opening Balances
@@ -411,162 +548,169 @@ export default function ChartOfAccountsPage() {
             </button>
           </div>
         </div>
-      </div>
 
-      {/* Summary cards */}
-      <div className="px-6 pt-5 grid grid-cols-2 md:grid-cols-5 gap-3">
-        {TYPES.map(t => {
-          const m = TYPE_META[t];
-          const Icon = m.icon;
-          return (
-            <button key={t} onClick={() => setTypeFilter(typeFilter === t ? '' : t)}
-              className={clsx('bg-white border rounded-xl p-4 text-left transition-all hover:shadow-sm',
-                typeFilter === t ? 'border-blue-300 ring-2 ring-blue-100' : 'border-slate-200')}>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-400">{m.label}</span>
-                <Icon className={clsx('w-4 h-4', m.text)} />
-              </div>
-              <div className="text-lg font-semibold text-slate-800 mt-1.5 font-mono">₹{inr(totals[t] || 0)}</div>
-              <div className="text-[11px] text-slate-400 mt-0.5">{counts[t] || 0} account{counts[t] !== 1 ? 's' : ''} · {m.nature} balance</div>
-            </button>
-          );
-        })}
-      </div>
+        {/* Summary cards */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {TYPES.map(t => {
+            const m = TYPE_META[t];
+            const Icon = m.icon;
+            return (
+              <button key={t} onClick={() => setTypeFilter(typeFilter === t ? '' : t)}
+                className={clsx(
+                  'relative bg-white border rounded-xl p-4 text-left transition-all hover:shadow-sm overflow-hidden',
+                  "before:content-[''] before:absolute before:top-0 before:left-0 before:right-0 before:h-[3px]", m.topbar,
+                  typeFilter === t ? clsx('border-transparent ring-2', m.ring) : 'border-slate-200')}>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{m.label}</span>
+                  <Icon className={clsx('w-4 h-4', m.text)} />
+                </div>
+                <div className={clsx('text-xl font-bold mt-2 font-mono tracking-tight', m.text)}>₹{inr(totals[t] || 0)}</div>
+                <div className="text-[11px] text-slate-400 mt-0.5">{counts[t] || 0} account{counts[t] !== 1 ? 's' : ''} · {m.nature} normal</div>
+              </button>
+            );
+          })}
+        </div>
 
-      {/* Accounting equation strip */}
-      {rows.length > 0 && !projectFilter && (
-        <div className="px-6 pt-3">
-          <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-wrap items-center gap-x-6 gap-y-2">
-            <div className="flex items-center gap-2">
-              <Scale className={clsx('w-4 h-4', balanced ? 'text-emerald-500' : 'text-amber-500')} />
-              <span className="text-xs font-semibold text-slate-600">Accounting Equation</span>
+        {/* Toolbar */}
+        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            <input className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-md bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
+              placeholder="Search by name or code…" value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          <div className="w-px h-7 bg-slate-200" />
+          <select className="border border-slate-200 rounded-md px-3 py-2 text-sm bg-white text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            value={normalFilter} onChange={e => setNormalFilter(e.target.value)}>
+            <option value="all">All Normal Bal.</option>
+            <option value="dr">Debit Normal</option>
+            <option value="cr">Credit Normal</option>
+          </select>
+          <select className="border border-slate-200 rounded-md px-3 py-2 text-sm bg-white text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            value={subFilter} onChange={e => setSubFilter(e.target.value)}>
+            <option value="">All Sub-groups</option>
+            {subTypes.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+
+          <div className="ml-auto flex items-center gap-2">
+            <div className="flex bg-slate-100 rounded-md p-0.5 border border-slate-200">
+              <button onClick={() => setView('grouped')} title="Grouped"
+                className={clsx('px-2 py-1 rounded flex items-center gap-1 text-xs', view === 'grouped' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400')}>
+                <ListTree className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={() => setView('flat')} title="Flat table"
+                className={clsx('px-2 py-1 rounded flex items-center gap-1 text-xs', view === 'flat' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400')}>
+                <Table2 className="w-3.5 h-3.5" />
+              </button>
             </div>
-            <div className="flex items-center gap-2 text-sm font-mono">
-              <span className="text-blue-600">Assets ₹{inr(lhs)}</span>
-              <span className="text-slate-300">=</span>
-              <span className="text-amber-600">Liab ₹{inr(totals.liability || 0)}</span>
-              <span className="text-slate-300">+</span>
-              <span className="text-purple-600">Equity ₹{inr(totals.equity || 0)}</span>
-              <span className="text-slate-300">+</span>
-              <span className={clsx(netIncome >= 0 ? 'text-emerald-600' : 'text-red-600')}>Net Income ₹{inr(netIncome)}</span>
-            </div>
-            <div className="ml-auto flex items-center gap-3">
-              <span className="flex items-center gap-1 text-xs">
-                {netIncome >= 0 ? <TrendingUp className="w-3.5 h-3.5 text-emerald-500" /> : <TrendingDown className="w-3.5 h-3.5 text-red-500" />}
-                <span className="text-slate-400">Income ₹{inr(totals.income || 0)} − Expense ₹{inr(totals.expense || 0)}</span>
-              </span>
-              <span className={clsx('px-2.5 py-1 rounded-full text-[11px] font-medium border',
-                balanced ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100')}>
-                {balanced ? 'Balanced' : `Off by ₹${inr(Math.abs(diff))}`}
-              </span>
-            </div>
+            {view === 'grouped' && grouped.length > 0 && (
+              <button onClick={toggleAll} className="text-xs text-slate-500 hover:text-blue-600 border border-slate-200 rounded-md px-2.5 py-2">
+                {allCollapsed ? 'Expand all' : 'Collapse all'}
+              </button>
+            )}
           </div>
         </div>
-      )}
 
-      {/* Filter bar */}
-      <div className="px-6 pt-4 pb-3 flex flex-wrap gap-2 items-center">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-          <input className="pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-md bg-white w-56 focus:outline-none focus:ring-2 focus:ring-blue-200"
-            placeholder="Search code or name…" value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-        <select className="border border-slate-200 rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
-          value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
-          <option value="">All Types</option>
-          {TYPES.map(t => <option key={t} value={t}>{TYPE_META[t].label}</option>)}
-        </select>
-        <select className="border border-slate-200 rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
-          value={projectFilter} onChange={e => setProjectFilter(e.target.value)}>
-          <option value="">All Projects (company-wide)</option>
-          {projects.map(p => <option key={p.id} value={p.id}>{p.project_code ? `${p.project_code} — ` : ''}{p.name}</option>)}
-        </select>
-        {grouped.length > 0 && (
-          <button onClick={toggleAll} className="text-xs text-slate-500 hover:text-blue-600 px-2 py-2">
-            {allCollapsed ? 'Expand all' : 'Collapse all'}
-          </button>
-        )}
-        <span className="ml-auto text-xs text-slate-400">{rows.length} account{rows.length !== 1 ? 's' : ''}</span>
-      </div>
-      {projectFilter && (
-        <div className="px-6 pb-2">
+        {projectFilter && (
           <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-100 rounded-md px-3 py-1.5 inline-block">
             Project view — balances reflect only this project's posted entries; company-wide opening balances are excluded.
           </p>
-        </div>
-      )}
+        )}
 
-      {/* Grouped accounts */}
-      <div className="px-6 pb-12 space-y-4">
-        {isLoading ? (
-          <div className="bg-white border border-slate-200 rounded-xl flex justify-center py-16">
-            <div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : rows.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-xl flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
-            <BookOpen className="w-10 h-10 opacity-20" />
-            <p className="text-sm font-medium">No accounts {search || typeFilter ? 'match your filters' : 'yet'}</p>
-            {!search && !typeFilter && <button onClick={() => seedMut.mutate()} className="text-sm text-blue-600 hover:underline">Seed the standard Chart of Accounts</button>}
-          </div>
-        ) : (
-          grouped.map(g => {
-            const m = TYPE_META[g.type];
-            const Icon = m.icon;
-            const isCollapsed = collapsed[g.type];
-            return (
-              <div key={g.type} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                {/* Section header */}
-                <button onClick={() => setCollapsed(c => ({ ...c, [g.type]: !c[g.type] }))}
-                  className="w-full flex items-center gap-3 px-5 py-3.5 border-b border-slate-100 hover:bg-slate-50/60">
-                  <span className={clsx('w-1.5 h-6 rounded-full', m.bar)} />
-                  {isCollapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-                  <Icon className={clsx('w-4 h-4', m.text)} />
-                  <span className="font-semibold text-slate-800 text-sm">{m.label}</span>
-                  <span className="text-[11px] text-slate-400">{g.count} account{g.count !== 1 ? 's' : ''}</span>
-                  <span className="ml-auto font-mono font-semibold text-slate-800">₹{inr(g.total)}</span>
-                  <span className="text-[10px] font-medium text-slate-400 w-5 text-right">{m.nature}</span>
-                </button>
-
-                {!isCollapsed && (
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-slate-50/50 text-[10px] font-medium uppercase tracking-wider text-slate-400">
-                        <th className="pl-10 pr-4 py-2 text-left w-24">Code</th>
-                        <th className="px-4 py-2 text-left">Account</th>
-                        <th className="px-4 py-2 text-left w-40">Sub-Type</th>
-                        <th className="px-4 py-2 text-right w-32">Opening</th>
-                        <th className="px-4 py-2 text-right w-40">Balance</th>
-                        <th className="px-4 py-2 w-20" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {g.subGroups.map(sg => (
-                        <React.Fragment key={sg.sub}>
-                          <tr className="bg-slate-50/40">
-                            <td colSpan={4} className="pl-10 pr-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{sg.sub}</td>
-                            <td className="px-4 py-1.5 text-right font-mono text-[11px] text-slate-400">₹{inr(sg.subtotal)}</td>
-                            <td />
+        {/* Table */}
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          {isLoading ? (
+            <div className="flex justify-center py-16"><div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" /></div>
+          ) : allRows.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
+              <BookOpen className="w-10 h-10 opacity-20" />
+              <p className="text-sm font-medium">No accounts {search ? 'match your search' : 'yet'}</p>
+              {!search && <button onClick={() => seedMut.mutate()} className="text-sm text-blue-600 hover:underline">Seed the standard Chart of Accounts</button>}
+            </div>
+          ) : displayed.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-2 text-slate-400">
+              <Search className="w-8 h-8 opacity-20" />
+              <p className="text-sm">No accounts match the current filters.</p>
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="w-1.5 p-0" />
+                  <TH>Code</TH>
+                  <TH>Account Name</TH>
+                  <TH>Type</TH>
+                  <TH>Sub-group</TH>
+                  <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">Balance (₹)</th>
+                  <th className="px-4 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-slate-400">Normal</th>
+                  <th className="w-24" />
+                </tr>
+              </thead>
+              <tbody>
+                {view === 'flat'
+                  ? flatSorted.map(a => <AccountRow key={a.id} a={a} {...rowActions} />)
+                  : grouped.map(g => {
+                      const m = TYPE_META[g.type];
+                      const Icon = m.icon;
+                      const isCollapsed = collapsed[g.type];
+                      return (
+                        <React.Fragment key={g.type}>
+                          {/* Group header */}
+                          <tr className="bg-slate-50/80 border-y border-slate-200">
+                            <td className="w-1.5 p-0"><div className={clsx('w-1 h-full min-h-[40px] mx-auto rounded-full', m.bar)} /></td>
+                            <td colSpan={7} className="px-4 py-2.5">
+                              <button onClick={() => setCollapsed(c => ({ ...c, [g.type]: !c[g.type] }))}
+                                className="w-full flex items-center gap-2.5">
+                                {isCollapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                                <Icon className={clsx('w-4 h-4', m.text)} />
+                                <span className={clsx('font-semibold text-sm', m.text)}>{m.label}</span>
+                                <span className="text-[11px] text-slate-400">{g.count} account{g.count !== 1 ? 's' : ''}</span>
+                                <span className="ml-auto font-mono font-semibold text-slate-700">₹{inr(g.total)}</span>
+                                <span className="text-[10px] font-medium text-slate-400 w-6 text-right">{m.nature}</span>
+                              </button>
+                            </td>
                           </tr>
-                          {sg.items.map(a => (
-                            <AccountRow key={a.id} a={a}
-                              onOpen={setDrill}
-                              onEdit={setModal}
-                              onDelete={(acc) => { if (window.confirm(`Delete account ${acc.code} — ${acc.name}?`)) deleteMut.mutate(acc.id); }} />
+                          {!isCollapsed && g.subGroups.map(sg => (
+                            <React.Fragment key={sg.sub}>
+                              {/* Sub-group label (only when more than one sub-group) */}
+                              {g.subGroups.length > 1 && (
+                                <tr className="bg-slate-50/40">
+                                  <td className="w-1.5 p-0" />
+                                  <td colSpan={4} className="pl-8 pr-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{sg.sub}</td>
+                                  <td className="px-4 py-1.5 text-right font-mono text-[11px] text-slate-400">₹{inr(sg.subtotal)}</td>
+                                  <td colSpan={2} />
+                                </tr>
+                              )}
+                              {sg.items.map(a => (
+                                <AccountRow key={a.id} a={a} indent={g.subGroups.length > 1} {...rowActions} />
+                              ))}
+                            </React.Fragment>
                           ))}
                         </React.Fragment>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            );
-          })
-        )}
-      </div>
+                      );
+                    })}
+              </tbody>
+            </table>
+          )}
+
+          {/* Footer */}
+          {displayed.length > 0 && (
+            <div className="flex items-center justify-between px-4 py-2.5 border-t border-slate-200 bg-slate-50/60">
+              <span className="text-xs text-slate-400">
+                Showing {displayed.length} of {allRows.length} account{allRows.length !== 1 ? 's' : ''}
+                {(typeFilter || normalFilter !== 'all' || subFilter) && ' · filtered'}
+              </span>
+              {(typeFilter || normalFilter !== 'all' || subFilter) && (
+                <button onClick={() => { setTypeFilter(''); setNormalFilter('all'); setSubFilter(''); }}
+                  className="text-xs text-blue-600 hover:underline">Clear filters</button>
+              )}
+            </div>
+          )}
+        </div>
+      </main>
 
       {modal !== null && <AccountModal initial={modal.id ? modal : null} onClose={() => setModal(null)} />}
       {drill && <LedgerDrawer account={drill} projectId={projectFilter} onClose={() => setDrill(null)} />}
-      {obModal && <OpeningBalancesModal accounts={rows} onClose={() => setObModal(false)} />}
+      {obModal && <OpeningBalancesModal accounts={allRows} onClose={() => setObModal(false)} />}
     </div>
   );
 }
