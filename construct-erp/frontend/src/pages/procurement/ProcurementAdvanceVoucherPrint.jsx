@@ -57,11 +57,11 @@ const printStyles = `
 const TD = { border: '1px solid #000', padding: '4px 6px', verticalAlign: 'top' };
 const TH = { border: '1px solid #000', padding: '4px 6px', fontWeight: 700, background: '#f0f0f0', textAlign: 'center' };
 
-export default function TQSAdvanceVoucherPrint() {
+export default function ProcurementAdvanceVoucherPrint() {
   const { id } = useParams();
 
   const { data: voucher, isLoading } = useQuery({
-    queryKey: ['tqs-advance-print', id],
+    queryKey: ['procurement-advance-print', id],
     queryFn: () => procurementAdvanceAPI.get(id).then(r => r.data?.data ?? r.data),
     staleTime: 5 * 60 * 1000,
   });
