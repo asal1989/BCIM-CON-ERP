@@ -228,7 +228,8 @@ router.post('/', authorize(...WRITE_ROLES), async (req, res) => {
     }
 
     const poRes = await query(
-      `SELECT po.id, po.vendor_id, po.project_id, p.project_code
+      `SELECT po.id, po.vendor_id, po.project_id, p.project_code,
+              po.po_ref_no, po.serial_no_formatted, po.po_number
        FROM purchase_orders po
        JOIN projects p ON po.project_id = p.id
        WHERE po.id = $1 AND p.company_id = $2`,
@@ -241,17 +242,27 @@ router.post('/', authorize(...WRITE_ROLES), async (req, res) => {
       return res.status(403).json({ error: 'Access denied for this project.' });
     }
 
-    // Only count AMD-YYYY-NNN numbers — other flows store the revised PO ref
-    // (e.g. "POTQS001-A4") in amendment_no, which breaks the trailing int cast.
-    const yr = new Date().getFullYear();
-    const countRes = await query(
-      `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(amendment_no, '^.*-', '') AS INTEGER)), 0)::int AS last_seq
-       FROM po_amendments
-       WHERE company_id = $1 AND amendment_no ~ ('^AMD-' || $2 || '-[0-9]+$')`,
-      [req.user.company_id, String(yr)]
+    // Amendment number follows the PO ref convention (e.g. "POTQS001-A1").
+    // Strip any existing -A{n} suffix, then find the next free suffix for this PO,
+    // considering both logged amendments AND revised POs so the two never collide.
+    const poRef = poRes.rows[0].po_ref_no || poRes.rows[0].serial_no_formatted || poRes.rows[0].po_number || '';
+    const baseRef = String(poRef).replace(/-A\d+$/i, '');
+    const existing = await query(
+      `SELECT amendment_no AS ref FROM po_amendments
+        WHERE company_id = $1 AND UPPER(REGEXP_REPLACE(amendment_no, '-A[0-9]+$', '', 'i')) = UPPER($2)
+       UNION ALL
+       SELECT COALESCE(NULLIF(po.po_ref_no,''), NULLIF(po.serial_no_formatted,''), po.po_number) AS ref
+        FROM purchase_orders po JOIN projects p ON p.id = po.project_id
+        WHERE p.company_id = $1
+          AND UPPER(REGEXP_REPLACE(COALESCE(NULLIF(po.po_ref_no,''), NULLIF(po.serial_no_formatted,''), po.po_number), '-A[0-9]+$', '', 'i')) = UPPER($2)`,
+      [req.user.company_id, baseRef]
     );
-    const seq = String(countRes.rows[0].last_seq + 1).padStart(3, '0');
-    const amendment_no = `AMD-${yr}-${seq}`;
+    let maxN = 0;
+    for (const row of existing.rows) {
+      const m = String(row.ref || '').match(/-A(\d+)$/i);
+      if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
+    }
+    const amendment_no = `${baseRef}-A${maxN + 1}`;
 
     const insertRes = await query(
       `INSERT INTO po_amendments (

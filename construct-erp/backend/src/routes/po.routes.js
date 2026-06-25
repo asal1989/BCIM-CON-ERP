@@ -825,18 +825,24 @@ function stripAmendSuffix(ref) {
 // `query` helper, or `(sql, params) => client.query(sql, params)` for a
 // transaction client.
 async function nextAmendSuffix(queryFn, companyId, baseRef) {
+  // Consider revised PO refs in purchase_orders AND amendment numbers logged in
+  // po_amendments (the "Log Other Change" flow), so the two never collide.
   const r = await queryFn(
-    `SELECT po.po_ref_no, po.serial_no_formatted, po.po_number
+    `SELECT COALESCE(NULLIF(po.po_ref_no,''), NULLIF(po.serial_no_formatted,''), po.po_number) AS ref
      FROM purchase_orders po
      JOIN projects p ON p.id = po.project_id
      WHERE p.company_id = $1
-       AND UPPER(REGEXP_REPLACE(COALESCE(NULLIF(po.po_ref_no,''), NULLIF(po.serial_no_formatted,''), po.po_number), '-A[0-9]+$', '', 'i')) = UPPER($2)`,
+       AND UPPER(REGEXP_REPLACE(COALESCE(NULLIF(po.po_ref_no,''), NULLIF(po.serial_no_formatted,''), po.po_number), '-A[0-9]+$', '', 'i')) = UPPER($2)
+     UNION ALL
+     SELECT amendment_no AS ref
+     FROM po_amendments
+     WHERE company_id = $1
+       AND UPPER(REGEXP_REPLACE(amendment_no, '-A[0-9]+$', '', 'i')) = UPPER($2)`,
     [companyId, baseRef]
   );
   let max = 0;
   for (const row of r.rows) {
-    const ref = row.po_ref_no || row.serial_no_formatted || row.po_number;
-    const m = String(ref).match(/-A(\d+)$/i);
+    const m = String(row.ref || '').match(/-A(\d+)$/i);
     if (m) max = Math.max(max, parseInt(m[1], 10));
   }
   return max + 1;
@@ -972,18 +978,8 @@ router.post('/:id/amend', async (req, res) => {
       const diff = grandTotal - parseFloat(base.grand_total || 0);
       const impactType = diff > 0 ? 'increase' : diff < 0 ? 'decrease' : 'none';
 
-      // Only consider amendment numbers in this endpoint's own AMD-YYYY-NNN format.
-      // Other flows store the revised PO ref (e.g. "POTQS001-A4") in amendment_no,
-      // which would break the integer cast on the trailing segment ("A4").
-      const yr = new Date().getFullYear();
-      const countRes = await client.query(
-        `SELECT COALESCE(MAX(CAST(REGEXP_REPLACE(amendment_no, '^.*-', '') AS INTEGER)), 0)::int AS last_seq
-         FROM po_amendments
-         WHERE company_id = $1 AND amendment_no ~ ('^AMD-' || $2 || '-[0-9]+$')`,
-        [req.user.company_id, String(yr)]
-      );
-      const seq = String(countRes.rows[0].last_seq + 1).padStart(3, '0');
-      const amendmentNo = `AMD-${yr}-${seq}`;
+      // Amendment number follows the revised PO ref convention (e.g. "POTQS001-A1").
+      const amendmentNo = newRef;
 
       const amendRes = await client.query(
         `INSERT INTO po_amendments (
