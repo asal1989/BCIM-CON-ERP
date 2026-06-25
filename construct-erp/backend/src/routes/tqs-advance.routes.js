@@ -4,6 +4,7 @@ const { query, withTransaction } = require('../config/database');
 const { authenticate } = require('../middleware/auth');
 const { loadProjectScope, userCanAccessProject } = require('../middleware/projectScope');
 const { runSchemaInit } = require('../utils/schemaInit');
+const { postAutoJournal, postAutoJournalStandalone } = require('../services/journalAutoPost');
 
 router.use(authenticate);
 router.use(loadProjectScope);
@@ -477,19 +478,42 @@ router.delete('/:id', async (req, res) => {
 // ── PATCH /tqs/advances/:id/issue — disburse the advance ─────────────────────
 router.patch('/:id/issue', async (req, res) => {
   try {
-    const { company_id } = req.user;
+    const { company_id, id: user_id } = req.user;
     const { id } = req.params;
     const { paid_amount, pay_date } = req.body;
+    const paidAmt = parseFloat(paid_amount || 0);
 
     const { rows } = await query(`
       UPDATE tqs_advance_vouchers SET
         status='issued', paid_amount=$1, pay_date=$2, updated_at=NOW()
       WHERE id=$3 AND company_id=$4 AND is_deleted=FALSE
       RETURNING *
-    `, [parseFloat(paid_amount || 0), pay_date || null, id, company_id]);
+    `, [paidAmt, pay_date || null, id, company_id]);
 
     if (!rows.length) return res.status(404).json({ success: false, message: 'Not found' });
-    res.json({ success: true, data: rows[0] });
+    const voucher = rows[0];
+
+    // Auto-post: Dr Advance to Vendors/Subcontractors (1150), Cr Bank (1010).
+    // Money is out but it's not an expense yet — it's recovered later against
+    // the vendor's actual bill, at which point it clears against Accounts
+    // Payable (see /:id/recover) instead of being expensed twice.
+    if (paidAmt > 0) {
+      const ref = voucher.voucher_number || voucher.sl_number;
+      await postAutoJournalStandalone({
+        companyId: company_id,
+        userId: user_id,
+        entryDate: pay_date || new Date().toISOString().slice(0, 10),
+        reference: ref,
+        narration: `Advance paid — ${voucher.vendor_name || ''} (${ref})`,
+        source: 'auto_tqs_advance',
+        lines: [
+          { code: '1150', debit: paidAmt, description: `Advance to ${voucher.vendor_name || 'vendor'} — ${ref}` },
+          { code: '1010', credit: paidAmt, description: `Advance paid — ${ref}` },
+        ],
+      });
+    }
+
+    res.json({ success: true, data: voucher });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -510,7 +534,7 @@ router.post('/:id/recover', async (req, res) => {
     await withTransaction(async (client) => {
       // Verify voucher belongs to company
       const { rows: [vch] } = await client.query(
-        `SELECT id, advance_value, recovered_amount FROM tqs_advance_vouchers WHERE id=$1 AND company_id=$2 AND is_deleted=FALSE FOR UPDATE`,
+        `SELECT id, vendor_name, voucher_number, sl_number, advance_value, recovered_amount FROM tqs_advance_vouchers WHERE id=$1 AND company_id=$2 AND is_deleted=FALSE FOR UPDATE`,
         [id, company_id]
       );
       if (!vch) throw Object.assign(new Error('Not found'), { status: 404 });
@@ -530,6 +554,24 @@ router.post('/:id/recover', async (req, res) => {
 
       // Recalculate status
       await syncVoucherStatus(client, id);
+
+      // Auto-post: Dr Accounts Payable (2000), Cr Advance to Vendors/Subcontractors
+      // (1150) — clears part of the vendor's payable using the advance already
+      // paid out, instead of that bill needing a fresh cash payment for this amount.
+      const recAmt = parseFloat(amount);
+      const ref = vch.voucher_number || vch.sl_number;
+      await postAutoJournal(client, {
+        companyId: company_id,
+        userId: user_id,
+        entryDate: recovery_date,
+        reference: ref,
+        narration: `Advance recovery — ${vch.vendor_name || ''} (${ref})`,
+        source: 'auto_tqs_advance_recovery',
+        lines: [
+          { code: '2000', debit: recAmt, description: `Advance recovered against bill — ${ref}` },
+          { code: '1150', credit: recAmt, description: `Advance to ${vch.vendor_name || 'vendor'} — ${ref}` },
+        ],
+      });
     });
 
     // Return updated voucher
