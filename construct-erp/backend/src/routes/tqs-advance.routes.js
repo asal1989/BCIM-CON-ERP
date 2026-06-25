@@ -201,7 +201,10 @@ router.get('/lookup/wos', async (req, res) => {
     const wheres = [`p.company_id=$1`, `COALESCE(wo.status,'') NOT IN ('cancelled','rejected')`];
     const params = [company_id];
     applyProjectScope(req, wheres, params, 'wo', project_id);
-    if (vendor_id) { params.push(vendor_id); wheres.push(`wo.vendor_id=$${params.length}`); }
+    if (vendor_id && String(vendor_id).trim()) {
+      params.push(vendor_id);
+      wheres.push(`wo.vendor_id=$${params.length}`);
+    }
     const { rows } = await query(`
       SELECT wo.id, wo.wo_number, wo.subject, wo.total_value, wo.wo_date,
              v.name AS vendor_name, v.id AS vendor_id
@@ -226,7 +229,10 @@ router.get('/lookup/pos', async (req, res) => {
     const wheres = [`p.company_id=$1`, `COALESCE(po.status,'') NOT IN ('cancelled','rejected')`];
     const params = [company_id];
     applyProjectScope(req, wheres, params, 'po', project_id);
-    if (vendor_id) { params.push(vendor_id); wheres.push(`po.vendor_id=$${params.length}`); }
+    if (vendor_id && String(vendor_id).trim()) {
+      params.push(vendor_id);
+      wheres.push(`po.vendor_id=$${params.length}`);
+    }
     const { rows } = await query(`
       SELECT po.id, COALESCE(po.po_number, po.serial_no_formatted) AS po_number,
              po.po_date, po.grand_total AS total_value,
