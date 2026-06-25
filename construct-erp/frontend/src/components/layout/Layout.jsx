@@ -90,6 +90,7 @@ const navGroups = [
     { to: '/stores/stock-verification', icon: ClipboardCheck, label: 'Stock Verification' },
     { to: '/stores/credit-notes',      icon: TrendingDown,    label: 'Credit Notes' },
     { to: '/stores/petty-cash',        icon: Wallet,          label: 'Petty Cash Tracker' },
+    { to: '/stores/reports',           icon: BarChart3,       label: 'Reports' },
     { to: '/stores/documents',         icon: FolderSearch,    label: 'Documents' },
   ]},
   { label: 'QS & Billing', items: [
