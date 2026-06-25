@@ -1678,22 +1678,25 @@ export const liabilityRegisterAPI = {
   runAutomation: ()         => api.post('/tqs/liability-register/automation/run'),
 };
 
-export const tqsAdvanceAPI = {
-  list:          (params)   => api.get('/tqs/advances', { params }),
-  summary:       (params)   => api.get('/tqs/advances/summary', { params }),
-  get:           (id)       => api.get(`/tqs/advances/${id}`),
-  create:        (data)     => api.post('/tqs/advances', data),
-  update:        (id, data) => api.put(`/tqs/advances/${id}`, data),
-  delete:        (id)       => api.delete(`/tqs/advances/${id}`),
-  issue:         (id, data) => api.patch(`/tqs/advances/${id}/issue`, data),
-  recover:       (id, data) => api.post(`/tqs/advances/${id}/recover`, data),
-  lookupVendors:       (params) => api.get('/tqs/advances/lookup/vendors', { params }),
-  lookupWOs:           (params) => api.get('/tqs/advances/lookup/wos', { params }),
-  lookupPOs:           (params) => api.get('/tqs/advances/lookup/pos', { params }),
-  lookupBillsByVendor: (params) => api.get('/tqs/advances/lookup/bills-by-vendor', { params }),
-  importExcel:         (fd)     => api.post('/tqs/advances/import', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
-  resyncFromBills:     ()       => api.post('/tqs/advances/resync-from-bills'),
+export const procurementAdvanceAPI = {
+  list:          (params)   => api.get('/procurement/advances', { params }),
+  summary:       (params)   => api.get('/procurement/advances/summary', { params }),
+  get:           (id)       => api.get(`/procurement/advances/${id}`),
+  create:        (data)     => api.post('/procurement/advances', data),
+  update:        (id, data) => api.put(`/procurement/advances/${id}`, data),
+  delete:        (id)       => api.delete(`/procurement/advances/${id}`),
+  issue:         (id, data) => api.patch(`/procurement/advances/${id}/issue`, data),
+  recover:       (id, data) => api.post(`/procurement/advances/${id}/recover`, data),
+  lookupVendors:       (params) => api.get('/procurement/advances/lookup/vendors', { params }),
+  lookupWOs:           (params) => api.get('/procurement/advances/lookup/wos', { params }),
+  lookupPOs:           (params) => api.get('/procurement/advances/lookup/pos', { params }),
+  lookupBillsByVendor: (params) => api.get('/procurement/advances/lookup/bills-by-vendor', { params }),
+  importExcel:         (fd)     => api.post('/procurement/advances/import', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  resyncFromBills:     ()       => api.post('/procurement/advances/resync-from-bills'),
 };
+
+// Backwards compatibility alias
+export const tqsAdvanceAPI = procurementAdvanceAPI;
 
 export const tqsTrackerAPI = {
   list:      (params) => api.get('/tqs/material-tracker', { params }),

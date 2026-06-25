@@ -98,7 +98,7 @@ const tqsBillsRoutes         = require('./routes/tqs-bills.routes');
 const tqsTrackerRoutes       = require('./routes/tqs-tracker.routes');
 const tqsVendorsRoutes       = require('./routes/tqs-vendors.routes');
 const tqsTransmittalRoutes   = require('./routes/tqs-transmittal.routes');
-const tqsAdvanceRoutes       = require('./routes/tqs-advance.routes');
+const procurementAdvanceRoutes       = require('./routes/procurement-advance.routes');
 const liabilityRegisterRoutes = require('./routes/liability-register.routes');
 const tdsRoutes           = require('./routes/tds.routes');
 const hrMastersRoutes     = require('./routes/hr-masters.routes');
@@ -405,7 +405,7 @@ app.use(`${API}/tqs/bills`, tqsBillsRoutes);
 app.use(`${API}/tqs/material-tracker`, tqsTrackerRoutes);
 app.use(`${API}/tqs/vendors`,          tqsVendorsRoutes);
 app.use(`${API}/tqs/transmittals`,     tqsTransmittalRoutes);
-app.use(`${API}/tqs/advances`,           tqsAdvanceRoutes);
+app.use(`${API}/procurement/advances`,           procurementAdvanceRoutes);
 app.use(`${API}/tqs/liability-register`, liabilityRegisterRoutes);
 
 // DQS Sync (no JWT — key-based, for cross-app data sharing)
