@@ -1,6 +1,6 @@
 // src/routes/chart-of-accounts.routes.js
 const express = require('express');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
 const router = express.Router();
 
