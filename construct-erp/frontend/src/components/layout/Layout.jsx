@@ -207,6 +207,7 @@ const navGroups = [
     { to: '/hr-admin/advanced',          icon: Briefcase,       label: 'Advanced HR' },
     { to: '/hr-admin/shifts',           icon: Clock,           label: 'Shifts & OT' },
     { to: '/hr-admin/lop-days',         icon: MinusCircle,     label: 'LOP Days' },
+    { to: '/hr-admin/stop-salary',      icon: CircleSlash,     label: 'Stop Salary' },
     { to: '/hr-admin/fnf',              icon: Wallet,          label: 'Full & Final' },
     { to: '/hr-admin/letters',          icon: FileText,        label: 'Letter Generation' },
     { to: '/hr-admin/policies',         icon: FileText,        label: 'Company Policies & Forms' },
@@ -421,7 +422,7 @@ const NAV_SECTIONS = {
   'HR & Admin': [
     { label: 'People',       paths: ['/hr-admin','/hr-admin/analytics','/hr-admin/directory','/hr-admin/org-chart','/hr-admin/employees','/ess'] },
     { label: 'Time',         paths: ['/hr-admin/attendance','/hr-admin/leaves','/hr-admin/holidays'] },
-    { label: 'Payroll',      paths: ['/hr-admin/payroll','/hr-admin/salary-structures','/hr-admin/employee-salaries','/hr-admin/loans','/hr-admin/expenses','/hr-admin/lop-days'] },
+    { label: 'Payroll',      paths: ['/hr-admin/payroll','/hr-admin/salary-structures','/hr-admin/employee-salaries','/hr-admin/loans','/hr-admin/expenses','/hr-admin/lop-days','/hr-admin/stop-salary'] },
     { label: 'Admin',        paths: ['/hr-admin/departments','/hr-admin/appraisals','/hr-admin/advanced'] },
     { label: 'Setup',        paths: ['/hr-admin/letters','/hr-admin/policies','/hr-admin/segments','/hr-admin/emp-filters'] },
     { label: 'Talent',       paths: ['/hr-admin/shifts','/hr-admin/fnf','/hr-admin/letters','/hr-admin/training','/hr-admin/emp-assets','/hr-admin/travel','/hr-admin/recruitment'] },

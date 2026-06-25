@@ -1819,6 +1819,12 @@ export const hrLopAPI = {
   remove: (id)     => api.delete(`/hr-admin/payroll/lop/${id}`),
 };
 
+export const hrStopSalaryAPI = {
+  list:   ()       => api.get('/hr-admin/payroll/stop-salary'),
+  save:   (data)   => api.post('/hr-admin/payroll/stop-salary', data),
+  remove: (id)     => api.delete(`/hr-admin/payroll/stop-salary/${id}`),
+};
+
 export const hrLoansAPI = {
   list:    (params) => api.get('/hr-admin/loans', { params }),
   create:  (data)   => api.post('/hr-admin/loans', data),

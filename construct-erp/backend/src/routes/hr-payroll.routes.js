@@ -667,5 +667,69 @@ router.delete('/lop/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ═══════════════════════════════════════════════════════════
+// STOP SALARY PROCESSING — flag employees to exclude from payroll run
+// ═══════════════════════════════════════════════════════════
+const initStopSalaryTable = async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS hr_stop_salary (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID REFERENCES companies(id),
+      user_id UUID REFERENCES users(id),
+      remarks TEXT,
+      stopped_by UUID REFERENCES users(id),
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(company_id, user_id)
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_hr_stop_salary_company ON hr_stop_salary(company_id)`);
+};
+runSchemaInit('hr-stop-salary', initStopSalaryTable);
+
+// GET /hr-admin/payroll/stop-salary
+router.get('/stop-salary', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT s.*, u.name as employee_name, u.employee_code,
+              dep.name as department_name, des.name as designation_name,
+              su.name as stopped_by_name
+       FROM hr_stop_salary s
+       JOIN users u ON u.id = s.user_id
+       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+       LEFT JOIN hr_departments dep ON dep.id = ep.department_id
+       LEFT JOIN hr_designations des ON des.id = ep.designation_id
+       LEFT JOIN users su ON su.id = s.stopped_by
+       WHERE s.company_id = $1
+       ORDER BY u.name`,
+      [req.user.company_id]
+    );
+    res.json({ data: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /hr-admin/payroll/stop-salary
+router.post('/stop-salary', async (req, res) => {
+  try {
+    const { user_id, remarks } = req.body;
+    if (!user_id) return res.status(400).json({ error: 'user_id required' });
+    const { rows } = await query(
+      `INSERT INTO hr_stop_salary (company_id, user_id, remarks, stopped_by)
+       VALUES ($1,$2,$3,$4)
+       ON CONFLICT (company_id, user_id) DO UPDATE SET remarks=$3, stopped_by=$4
+       RETURNING *`,
+      [req.user.company_id, user_id, remarks || '', req.user.id]
+    );
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DELETE /hr-admin/payroll/stop-salary/:id
+router.delete('/stop-salary/:id', async (req, res) => {
+  try {
+    await query(`DELETE FROM hr_stop_salary WHERE id=$1 AND company_id=$2`, [req.params.id, req.user.company_id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;
 
