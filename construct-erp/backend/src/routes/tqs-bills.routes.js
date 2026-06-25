@@ -885,7 +885,7 @@ router.get('/lookup/pos', async (req, res) => {
       LEFT JOIN vendors v ON v.id = po.vendor_id
       LEFT JOIN projects p ON p.id = po.project_id
       WHERE p.company_id = $1
-        AND po.status IN ('approved','completed')
+        AND po.status IN ('approved','completed','fully_received')
     `;
     const params = [req.user.company_id];
     let i = 2;
