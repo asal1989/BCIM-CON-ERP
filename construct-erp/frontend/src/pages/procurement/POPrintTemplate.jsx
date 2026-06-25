@@ -65,6 +65,13 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
   const items     = data.items || [];
   const isTaxIncl = Boolean(data.gst_inclusive);
 
+  // ── Amendment detection — a "-A{n}" suffix means this is a revised PO ────────
+  const poRefStr     = String(data.po_ref_no || data.serial_no_formatted || data.po_number || '');
+  const amendMatch   = poRefStr.match(/-A(\d+)$/i);
+  const isAmendment  = !!amendMatch;
+  const amendmentNo  = amendMatch ? amendMatch[1] : null;
+  const originalPoRef = isAmendment ? poRefStr.replace(/-A\d+$/i, '') : '';
+
   // ── Company header (left block) — live company settings, BCIM fallback ──────
   const BCIM = {
     name: 'BCIM ENGINEERING PRIVATE LIMITED',
@@ -160,7 +167,16 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
             {/* TITLE + LOGO */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
               <img src="/bcim-logo.png" alt="BCIM" style={{ height: '40px', objectFit: 'contain' }} />
-              <h1 style={{ fontSize: '17px', fontWeight: 700, letterSpacing: '0.5px', margin: 0, flex: 1, textAlign: 'center' }}>PURCHASE ORDER</h1>
+              <div style={{ flex: 1, textAlign: 'center' }}>
+                <h1 style={{ fontSize: '17px', fontWeight: 700, letterSpacing: '0.5px', margin: 0 }}>
+                  {isAmendment ? 'AMENDMENT PURCHASE ORDER' : 'PURCHASE ORDER'}
+                </h1>
+                {isAmendment && (
+                  <div style={{ fontSize: '11px', fontWeight: 700, marginTop: '2px' }}>
+                    (Amendment No. A{amendmentNo} to PO {originalPoRef})
+                  </div>
+                )}
+              </div>
               <div style={{ width: '40px' }} />
             </div>
 
@@ -180,7 +196,8 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
                       <tbody>
                         {[
                           ['Project:',    data.project_name || '—', true],
-                          ['PO No:',      data.serial_no_formatted || data.po_number || '—'],
+                          ['PO No:',      data.serial_no_formatted || data.po_number || '—', true],
+                          ...(isAmendment ? [['Original PO:', originalPoRef]] : []),
                           ['Date:',       data.po_date ? dayjs(data.po_date).format('DD.MM.YYYY') : '—'],
                           ['PO Req No:',  data.po_req_no || '—'],
                           ['PO Req Date:', data.po_req_date ? dayjs(data.po_req_date).format('DD.MM.YYYY') : '—'],
@@ -222,7 +239,9 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
 
             {/* INTRO LINE */}
             <div style={{ marginBottom: '6px' }}>
-              {data.order_intro || 'We hereby place an order on you for supply of the following materials with same terms and conditions as per original order.'}
+              {data.order_intro || (isAmendment
+                ? `This is an amendment to Purchase Order ${originalPoRef}. The following revised details supersede the original order; all other terms and conditions remain unchanged.`
+                : 'We hereby place an order on you for supply of the following materials with same terms and conditions as per original order.')}
             </div>
 
             {/* ITEMS TABLE */}
