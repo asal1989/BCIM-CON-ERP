@@ -409,11 +409,10 @@ function ExistingWOLinkModal({ projectId, boqItems, onClose }) {
 
   const selectedWO  = woItems.find(i => i.wo_item_id === form.wo_item_id);
   const selectedBOQ = boqItems.find(i => i.boq_item_id === form.boq_item_id);
-  const qty         = num(form.allocated_qty || selectedWO?.qty || 0);
-  const clientAmt   = qty * num(selectedBOQ?.client_rate);
-  const scAmt       = qty * num(selectedWO?.rate);
-  const margin      = clientAmt - scAmt;
-  const marginPct   = clientAmt > 0 ? (margin / clientAmt) * 100 : 0;
+  const woAmount    = num(selectedWO?.qty || 0) * num(selectedWO?.rate || 0);
+  const boqAmount   = num(selectedBOQ?.client_qty || 0) * num(selectedBOQ?.client_rate || 0);
+  const margin      = boqAmount - woAmount;
+  const marginPct   = boqAmount > 0 ? (margin / boqAmount) * 100 : 0;
   const mc          = marginColor(marginPct);
 
   const filteredBOQ = boqItems.filter(i => !search ||
@@ -423,11 +422,10 @@ function ExistingWOLinkModal({ projectId, boqItems, onClose }) {
     mutationFn: () => boqMappingAPI.linkExistingWOItem({
       wo_item_id:   form.wo_item_id,
       boq_item_id:  form.boq_item_id,
-      allocated_qty: qty,
       notes:         form.notes,
     }),
     onSuccess: () => {
-      toast.success('Existing WO linked to BOQ margin');
+      toast.success('WO linked to BOQ by amount');
       qc.invalidateQueries({ queryKey: ['boq-mappings', projectId] });
       qc.invalidateQueries({ queryKey: ['boq-unlinked-wo-items', projectId] });
       qc.invalidateQueries({ queryKey: ['boq-balance'] });
@@ -436,7 +434,7 @@ function ExistingWOLinkModal({ projectId, boqItems, onClose }) {
     onError: e => toast.error(e?.response?.data?.error || 'Failed to link WO'),
   });
 
-  const canSave = form.wo_item_id && form.boq_item_id && qty > 0;
+  const canSave = form.wo_item_id && form.boq_item_id && woAmount > 0;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -503,24 +501,30 @@ function ExistingWOLinkModal({ projectId, boqItems, onClose }) {
             </div>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Mapped Qty *</label>
-              <input type="number" value={form.allocated_qty} onChange={e => set('allocated_qty', e.target.value)} className={inp}/>
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Remarks</label>
-              <input value={form.notes} onChange={e => set('notes', e.target.value)} className={inp} placeholder="Optional linking remarks"/>
-            </div>
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Remarks (Optional)</label>
+            <input value={form.notes} onChange={e => set('notes', e.target.value)} className={inp} placeholder="e.g., Partial allocation, split coverage, etc."/>
           </div>
 
-          {selectedWO && selectedBOQ && qty > 0 && (
+          {selectedWO && selectedBOQ && woAmount > 0 && (
             <div className={clsx('rounded-xl p-4 border-2', mc.bg, marginPct < 0 ? 'border-red-300' : 'border-emerald-300')}>
-              <p className={clsx('text-[10px] font-bold uppercase tracking-widest mb-2', mc.text)}>Margin Preview</p>
-              <div className="grid grid-cols-3 gap-3">
-                <div><p className="text-[9px] text-slate-500 uppercase font-bold">Client Value</p><p className="text-sm font-bold text-slate-800">{fmt(clientAmt)}</p></div>
-                <div><p className="text-[9px] text-slate-500 uppercase font-bold">WO Cost</p><p className={clsx('text-sm font-bold', mc.text)}>{fmt(scAmt)}</p></div>
-                <div><p className="text-[9px] text-slate-500 uppercase font-bold">Margin</p><p className={clsx('text-sm font-bold', mc.text)}>{fmt(margin)} ({pct(marginPct)})</p></div>
+              <p className={clsx('text-[10px] font-bold uppercase tracking-widest mb-3', mc.text)}>Amount-Based Linking</p>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="text-center">
+                  <p className="text-[9px] text-slate-500 uppercase font-bold mb-1">BOQ Amount</p>
+                  <p className="text-lg font-bold text-slate-800">{fmt(boqAmount)}</p>
+                  <p className="text-[9px] text-slate-500 mt-1">Total BOQ value</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[9px] text-slate-500 uppercase font-bold mb-1">WO Amount</p>
+                  <p className="text-lg font-bold text-emerald-700">{fmt(woAmount)}</p>
+                  <p className="text-[9px] text-slate-500 mt-1">This WO value</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[9px] text-slate-500 uppercase font-bold mb-1">Margin</p>
+                  <p className={clsx('text-lg font-bold', mc.text)}>{fmt(margin)}</p>
+                  <p className={clsx('text-[9px] mt-1', mc.text)}>{pct(marginPct)}</p>
+                </div>
               </div>
             </div>
           )}

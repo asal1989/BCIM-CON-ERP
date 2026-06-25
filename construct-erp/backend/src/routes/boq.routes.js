@@ -341,10 +341,10 @@ router.post('/mappings', authorize(...BOQ_ROLES), async (req, res) => {
 });
 
 // PUT /boq/mappings/:id — update (draft only)
-// POST /boq/link-existing-wo-item — link an already-created WO item to client BOQ for margin tracking
+// POST /boq/link-existing-wo-item — link an already-created WO item to client BOQ for amount-based tracking
 router.post('/link-existing-wo-item', authorize(...BOQ_ROLES), async (req, res) => {
   try {
-    const { wo_item_id, boq_item_id, allocated_qty, notes } = req.body || {};
+    const { wo_item_id, boq_item_id, notes } = req.body || {};
     if (!wo_item_id || !boq_item_id) {
       return res.status(400).json({ error: 'wo_item_id and boq_item_id are required' });
     }
@@ -352,6 +352,7 @@ router.post('/link-existing-wo-item', authorize(...BOQ_ROLES), async (req, res) 
     const itemR = await query(`
       SELECT
         wi.id AS wo_item_id, wi.wo_id, wi.description, wi.unit, wi.qty, wi.rate,
+        ROUND((wi.qty * wi.rate)::numeric, 2) AS wo_amount,
         wo.project_id, wo.company_id, wo.sc_id, wo.wo_number,
         sc.name AS sc_name
       FROM sc_wo_items wi
@@ -363,7 +364,7 @@ router.post('/link-existing-wo-item', authorize(...BOQ_ROLES), async (req, res) 
     const woItem = itemR.rows[0];
 
     const boqR = await query(`
-      SELECT bi.*, p.company_id
+      SELECT bi.*, p.company_id, ROUND((bi.quantity * bi.rate)::numeric, 2) AS boq_amount
       FROM boq_items bi
       JOIN projects p ON p.id = bi.project_id
       WHERE bi.id = $1 AND p.company_id = $2 AND bi.is_active = true
@@ -374,29 +375,32 @@ router.post('/link-existing-wo-item', authorize(...BOQ_ROLES), async (req, res) 
       return res.status(400).json({ error: 'WO item and BOQ item must belong to the same project' });
     }
 
-    const qty = Number(allocated_qty || woItem.qty || 0);
-    if (!qty || qty <= 0) return res.status(400).json({ error: 'Allocated quantity must be greater than zero' });
-    if (Number(woItem.qty || 0) > 0 && qty > Number(woItem.qty) + 0.001) {
-      return res.status(400).json({ error: `Allocated quantity cannot exceed WO item quantity (${woItem.qty})` });
-    }
+    const woAmount = Number(woItem.wo_amount || 0);
+    if (!woAmount || woAmount <= 0) return res.status(400).json({ error: 'WO item amount must be greater than zero' });
 
-    const usedR = await query(`
-      SELECT COALESCE(SUM(allocated_qty),0) AS used
-      FROM boq_sc_mapping
-      WHERE boq_item_id=$1 AND status != 'cancelled'
+    // Check if linked amounts don't exceed BOQ amount
+    const linkedR = await query(`
+      SELECT COALESCE(SUM((wi.qty * wi.rate)::numeric), 0) AS linked_amount
+      FROM boq_sc_mapping m
+      JOIN sc_wo_items wi ON wi.id::text = m.notes
+      WHERE m.boq_item_id=$1 AND m.status != 'cancelled'
     `, [boq_item_id]);
-    const used = Number(usedR.rows[0].used || 0);
-    if (used + qty > Number(boqItem.quantity || 0) + 0.001) {
+    const linkedAmount = Number(linkedR.rows[0].linked_amount || 0);
+    const boqAmount = Number(boqItem.boq_amount || 0);
+
+    if (linkedAmount + woAmount > boqAmount + 0.01) {
       return res.status(400).json({
-        error: `BOQ balance exceeded. BOQ qty ${boqItem.quantity}, already mapped ${used.toFixed(3)}, this link ${qty.toFixed(3)}`
+        error: `Link exceeds BOQ amount. BOQ total: ${boqAmount}, already linked: ${linkedAmount}, this link: ${woAmount}, balance: ${Math.max(0, boqAmount - linkedAmount)}`
       });
     }
 
     const result = await withTransaction(async (client) => {
       const linkNote = [
         notes || null,
-        `Linked existing WO item ${wo_item_id} from ${woItem.wo_number}`
+        `WO: ${woItem.wo_number} | Amount: ₹${woAmount}`
       ].filter(Boolean).join(' | ');
+
+      // Store the WO item ID in notes for tracking
       const m = await client.query(`
         INSERT INTO boq_sc_mapping
           (company_id, project_id, boq_item_id, sc_id, execution_type, allocated_qty,
@@ -404,14 +408,23 @@ router.post('/link-existing-wo-item', authorize(...BOQ_ROLES), async (req, res) 
         VALUES ($1,$2,$3,$4,'subcontractor',$5,$6,$7,$8,$9,'wo_issued',$10)
         RETURNING *
       `, [
-        CID(req), woItem.project_id, boq_item_id, woItem.sc_id, qty,
+        CID(req), woItem.project_id, boq_item_id, woItem.sc_id, woItem.qty,
         boqItem.rate, Number(woItem.rate || 0), woItem.wo_id, linkNote, req.user.id
       ]);
       await client.query(`UPDATE sc_wo_items SET boq_item_id=$1 WHERE id=$2`, [boq_item_id, wo_item_id]);
       return m.rows[0];
     });
 
-    res.status(201).json({ data: result, message: 'Existing WO item linked to BOQ margin register' });
+    res.status(201).json({
+      data: result,
+      message: 'WO linked to BOQ by amount',
+      amounts: {
+        boq_total: boqItem.boq_amount,
+        wo_amount: woAmount,
+        linked_total: linkedAmount + woAmount,
+        remaining_balance: boqItem.boq_amount - (linkedAmount + woAmount)
+      }
+    });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
