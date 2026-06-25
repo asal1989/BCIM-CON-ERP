@@ -743,228 +743,199 @@ export default function BOQMappingPage() {
               <ThemeKpiCard icon={AlertTriangle} label="Unmapped Items"  value={totals.items-totals.mapped} color="amber" sub="Need SC allocation"/>
             </div>
 
-            {/* Chapter-grouped table */}
+            {/* Chapter-grouped cards */}
             {grouped.map(chapter => {
               const isOpen = !collapsed[chapter.name];
               const chMarginPct = chapter.totals.clientAmt > 0
                 ? (chapter.totals.margin / chapter.totals.clientAmt) * 100 : 0;
               const cmc = marginColor(chMarginPct);
               return (
-                <div key={chapter.name} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-                  {/* Chapter header */}
+                <div key={chapter.name} className="rounded-2xl border border-slate-200 overflow-hidden shadow-sm bg-white">
+
+                  {/* Chapter header — collapsible */}
                   <button onClick={()=>setCollapsed(c=>({...c,[chapter.name]:!c[chapter.name]}))}
-                    className="w-full flex items-center justify-between px-5 py-3 hover:bg-slate-50 transition-colors"
-                    style={{background:`linear-gradient(90deg, ${Theme.navy}08 0%, transparent 100%)`}}>
+                    className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors border-b border-slate-100"
+                    style={{background:`linear-gradient(90deg,${Theme.navy}0a 0%,transparent 60%)`}}>
                     <div className="flex items-center gap-3">
                       {isOpen ? <ChevronDown className="w-4 h-4 text-slate-400"/> : <ChevronRight className="w-4 h-4 text-slate-400"/>}
-                      <span className="font-bold text-slate-800 text-sm">{chapter.name}</span>
-                      <span className="text-[11px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{chapter.items.length} items</span>
+                      <span className="font-bold text-slate-800">{chapter.name}</span>
+                      <span className="text-xs bg-slate-100 text-slate-500 px-2.5 py-0.5 rounded-full font-medium">{chapter.items.length} items</span>
                     </div>
-                    <div className="flex items-center gap-6 text-xs">
-                      <span className="text-slate-500">Client: <span className="font-bold text-slate-800">{fmt(chapter.totals.clientAmt)}</span></span>
-                      <span className="text-slate-500">SC: <span className="font-bold text-orange-700">{fmt(chapter.totals.scAmt)}</span></span>
-                      <span className={clsx('px-2 py-0.5 rounded-full font-bold', cmc.bg, cmc.text)}>
-                        Margin: {fmt(chapter.totals.margin)} ({pct(chMarginPct)})
-                      </span>
+                    <div className="flex items-center gap-5 text-sm">
+                      <div className="text-right hidden md:block">
+                        <p className="text-[10px] text-slate-400 uppercase font-bold">Client</p>
+                        <p className="font-bold text-slate-700">{fmt(chapter.totals.clientAmt)}</p>
+                      </div>
+                      <div className="text-right hidden md:block">
+                        <p className="text-[10px] text-slate-400 uppercase font-bold">SC Cost</p>
+                        <p className="font-bold text-orange-600">{fmt(chapter.totals.scAmt)}</p>
+                      </div>
+                      <div className={clsx('px-3 py-1.5 rounded-xl text-right', cmc.bg)}>
+                        <p className={clsx('text-[10px] font-bold uppercase', cmc.text)}>Margin</p>
+                        <p className={clsx('font-bold text-sm', cmc.text)}>{fmt(chapter.totals.margin)} <span className="text-xs">({pct(chMarginPct)})</span></p>
+                      </div>
                     </div>
                   </button>
 
                   {isOpen && (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr style={{background:`linear-gradient(90deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)`}}>
-                            {['BOQ No.','Description','Unit','Client Qty','Client Rate','Client Amt',
-                              'SC Vendor','SC Qty','SC Rate','SC Amt','Advance Paid','Billed Amt','Balance','Margin ₹','Margin %','Actions'].map(h=>(
-                              <th key={h} className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-white/80 whitespace-nowrap">{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {chapter.items.map((item, ii) => {
-                            const allocs    = (item.allocations||[]).filter(Boolean);
-                            const allocated = allocs.reduce((s,a)=>s+num(a.allocated_qty),0);
-                            const balance   = num(item.client_qty) - allocated;
-                            const imc       = marginColor(num(item.margin_pct));
+                    <div className="divide-y divide-slate-100">
+                      {chapter.items.map((item) => {
+                        const allocs = (item.allocations||[]).filter(Boolean);
+                        const imc    = marginColor(num(item.margin_pct));
+                        const boqItemObj = { ...item, id: item.boq_item_id, rate: item.client_rate, description: boqDesc(item), quantity: item.client_qty };
 
-                            if (!allocs.length) {
-                              return (
-                                <tr key={item.boq_item_id} className={clsx('border-b border-slate-50', ii%2===0?'bg-white':'bg-amber-50/30')}>
-                                  <td className="px-3 py-2.5 font-mono text-xs font-bold text-slate-600">{item.item_no}</td>
-                                  <td className="px-3 py-2.5 max-w-[200px] text-slate-700 font-medium truncate">{boqDesc(item)}</td>
-                                  <td className="px-3 py-2.5 text-slate-500">{item.unit}</td>
-                                  <td className="px-3 py-2.5 text-right">{item.client_qty}</td>
-                                  <td className="px-3 py-2.5 text-right font-mono">{fmt2(item.client_rate)}</td>
-                                  <td className="px-3 py-2.5 text-right font-semibold">{fmt(item.client_amount)}</td>
-                                  <td colSpan={7} className="px-3 py-2.5 text-center">
-                                    <span className="text-amber-600 font-semibold flex items-center gap-1 justify-center">
-                                      <AlertTriangle className="w-3.5 h-3.5"/> Not allocated
+                        return (
+                          <div key={item.boq_item_id} className="p-4 hover:bg-slate-50/60 transition-colors">
+
+                            {/* BOQ item header row */}
+                            <div className="flex items-start gap-3 mb-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs font-bold font-mono text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">{item.item_no}</span>
+                                  {allocs.length === 0 && (
+                                    <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                      <AlertTriangle className="w-2.5 h-2.5"/> Not Allocated
                                     </span>
-                                  </td>
-                                  <td className="px-3 py-2.5"/>
-                                  <td className="px-3 py-2.5">
-                                    <button
-                                      onClick={()=>setAllocModal({
-                                        boqItem:{...item,id:item.boq_item_id,rate:item.client_rate,description:boqDesc(item),quantity:item.client_qty},
-                                        balance: num(item.client_qty)
-                                      })}
-                                      className="flex items-center gap-1 px-2.5 py-1 bg-indigo-600 text-white rounded-lg text-[10px] font-bold hover:bg-indigo-700">
-                                      <Plus className="w-3 h-3"/> Allocate
-                                    </button>
-                                  </td>
-                                </tr>
-                              );
-                            }
-
-                            return allocs.map((alloc, ai) => {
-                              const allocated_amt = num(alloc.allocated_qty) * num(alloc.sc_rate);
-                              const advance_paid = num(alloc.advance_paid) || 0;
-                              const billed_amt = num(alloc.billed_amount) || 0;
-                              const balance = allocated_amt - advance_paid - billed_amt;
-                              const isOverBilled = billed_amt > allocated_amt + 0.01;
-
-                              const amc = marginColor(
-                                alloc.margin_amount > 0 && num(alloc.sc_amount) > 0
-                                  ? (alloc.margin_amount / (num(alloc.allocated_qty)*num(item.client_rate)))*100 : 0
-                              );
-                              const canCancel  = alloc.status === 'draft' || alloc.status === 'confirmed';
-                              const canEdit    = alloc.status === 'draft';
-                              const canConfirm = alloc.status === 'draft' && !alloc.wo_id;
-                              const canCreateWO = (alloc.status === 'draft' || alloc.status === 'confirmed') && !alloc.wo_id && alloc.execution_type !== 'own_team';
-
-                              return (
-                                <tr key={alloc.id} className={clsx('border-b border-slate-50', ai===0 && ii%2===0?'bg-white':ai===0?'bg-slate-50/30':'bg-blue-50/20')}>
-                                  {ai === 0 ? (
-                                    <>
-                                      <td className="px-3 py-2.5 font-mono text-xs font-bold text-indigo-700">{item.item_no}</td>
-                                      <td className="px-3 py-2.5 max-w-[200px] text-slate-700 font-medium truncate">{boqDesc(item)}</td>
-                                      <td className="px-3 py-2.5 text-slate-500">{item.unit}</td>
-                                      <td className="px-3 py-2.5 text-right">{item.client_qty}</td>
-                                      <td className="px-3 py-2.5 text-right font-mono">{fmt2(item.client_rate)}</td>
-                                      <td className="px-3 py-2.5 text-right font-semibold">{fmt(item.client_amount)}</td>
-                                    </>
-                                  ) : (
-                                    <td colSpan={6} className="px-3 py-2.5">
-                                      <span className="text-[10px] text-slate-400 italic pl-2">↳ split allocation</span>
-                                    </td>
                                   )}
-                                  <td className="px-3 py-2.5">
-                                    <p className="font-semibold text-slate-800 text-[11px]">{alloc.sc_name}</p>
-                                    {alloc.wo_number && <p className="text-[9px] font-mono text-slate-500 mt-0.5">{alloc.wo_number}</p>}
-                                    <span className={clsx('text-[9px] px-1.5 py-0.5 rounded-full font-bold',
-                                      alloc.execution_type==='own_team'?'bg-blue-100 text-blue-700':'bg-orange-100 text-orange-700')}>
-                                      {alloc.execution_type==='own_team'?'Own Team':'SC'}
+                                  {allocs.length > 0 && (
+                                    <span className={clsx('text-xs font-bold px-2.5 py-0.5 rounded-full', imc.bg, imc.text)}>
+                                      {pct(item.margin_pct)} margin
                                     </span>
-                                    {alloc.status==='confirmed' && (
-                                      <span className="ml-1 text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-blue-100 text-blue-700">
-                                        Confirmed
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="px-3 py-2.5 text-right font-mono">{alloc.allocated_qty}</td>
-                                  <td className="px-3 py-2.5 text-right font-mono">{fmt2(alloc.sc_rate)}</td>
-                                  <td className="px-3 py-2.5 text-right font-semibold text-orange-700">{fmt(alloc.sc_amount)}</td>
-                                  <td className="px-3 py-2.5 text-right font-semibold text-purple-600">{fmt(advance_paid)}</td>
-                                  <td className={clsx('px-3 py-2.5 text-right font-semibold', isOverBilled ? 'text-red-600 bg-red-50' : 'text-green-600')}>{fmt(billed_amt)}</td>
-                                  <td className={clsx('px-3 py-2.5 text-right font-bold', balance < 0 ? 'text-red-600' : 'text-emerald-600')}>{fmt(balance)}</td>
-                                  <td className={clsx('px-3 py-2.5 text-right font-bold', amc.text)}>{fmt(alloc.margin_amount)}</td>
-                                  <td className="px-3 py-2.5">
-                                    {ai === allocs.length - 1 && (
-                                      <span className={clsx('text-[10px] px-2 py-0.5 rounded-full font-bold', imc.bg, imc.text)}>
-                                        {pct(item.margin_pct)}
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="px-3 py-2.5">
-                                    <div className="flex gap-1 items-center flex-wrap">
-                                      {/* Edit — draft only */}
-                                      {canEdit && (
-                                        <button
-                                          title="Edit allocation"
-                                          onClick={()=>setEditModal({
-                                            boqItem:{...item,id:item.boq_item_id,rate:item.client_rate,description:boqDesc(item),quantity:item.client_qty},
-                                            balance: balance + num(alloc.allocated_qty),
-                                            existing: alloc,
-                                          })}
-                                          className="p-1 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded">
-                                          <Edit2 className="w-3 h-3"/>
-                                        </button>
-                                      )}
-                                      {/* Confirm — draft, no WO yet */}
-                                      {canConfirm && (
-                                        <button
-                                          onClick={()=>confirmMut.mutate(alloc.id)}
-                                          disabled={confirmMut.isPending}
-                                          title="Confirm allocation"
-                                          className="px-2 py-0.5 bg-blue-600 text-white rounded text-[10px] font-bold hover:bg-blue-700 disabled:opacity-40">
-                                          Confirm
-                                        </button>
-                                      )}
-                                      {/* Create WO — draft or confirmed, no wo yet, not own_team */}
-                                      {canCreateWO && (
-                                        <button
-                                          onClick={()=>createWOMut.mutate(alloc.id)}
-                                          disabled={createWOMut.isPending}
-                                          className="px-2 py-0.5 bg-emerald-600 text-white rounded text-[10px] font-bold hover:bg-emerald-700 disabled:opacity-40">
-                                          +WO
-                                        </button>
-                                      )}
-                                      {/* WO issued badge */}
-                                      {alloc.wo_id && (
-                                        <span className="px-2 py-0.5 bg-teal-100 text-teal-700 rounded text-[10px] font-bold">WO ✓</span>
-                                      )}
-                                      {/* Own-team cost tracking */}
-                                      {alloc.execution_type === 'own_team' && (
-                                        <button
-                                          title="Track own-team costs"
-                                          onClick={()=>setCostModal({
-                                            mappingId: alloc.id,
-                                            boqItem: {...item, id:item.boq_item_id, description:boqDesc(item)},
-                                          })}
-                                          className="p-1 text-amber-500 hover:text-amber-700 hover:bg-amber-50 rounded">
-                                          <IndianRupee className="w-3 h-3"/>
-                                        </button>
-                                      )}
-                                      {/* Cancel — draft or confirmed (not wo_issued) */}
-                                      {canCancel && !alloc.wo_id && (
-                                        <button
-                                          onClick={()=>{ if(window.confirm('Cancel this allocation?')) cancelMut.mutate(alloc.id); }}
-                                          className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded">
-                                          <X className="w-3 h-3"/>
-                                        </button>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            });
-                          })}
+                                  )}
+                                </div>
+                                <p className="text-sm font-semibold text-slate-800 mt-1 leading-snug line-clamp-2">{boqDesc(item)}</p>
+                              </div>
 
-                          {/* Add another allocation row if balance remains */}
-                          {chapter.items.map(item => {
-                            const allocs    = (item.allocations||[]).filter(Boolean);
-                            const allocated = allocs.reduce((s,a)=>s+num(a.allocated_qty),0);
-                            const balance   = num(item.client_qty) - allocated;
-                            if (allocs.length > 0 && balance > 0.001) {
-                              return (
-                                <tr key={`add-${item.boq_item_id}`} className="border-b border-slate-50 bg-indigo-50/20">
-                                  <td colSpan={13} className="px-3 py-2">
-                                    <button
-                                      onClick={()=>setAllocModal({
-                                        boqItem:{...item,id:item.boq_item_id,rate:item.client_rate,description:boqDesc(item),quantity:item.client_qty},
-                                        balance
-                                      })}
-                                      className="flex items-center gap-1 text-indigo-600 text-[11px] font-semibold hover:text-indigo-800">
-                                      <Plus className="w-3 h-3"/> Add another allocation — {Number(balance).toFixed(3)} {item.unit} remaining
-                                    </button>
-                                  </td>
-                                </tr>
-                              );
-                            }
-                            return null;
-                          })}
-                        </tbody>
-                      </table>
+                              {/* BOQ financials — right side */}
+                              <div className="flex items-center gap-4 shrink-0 text-right">
+                                <div>
+                                  <p className="text-[9px] text-slate-400 uppercase font-bold">Qty / Unit</p>
+                                  <p className="text-sm font-semibold text-slate-700">{item.client_qty} <span className="text-xs text-slate-400">{item.unit}</span></p>
+                                </div>
+                                <div>
+                                  <p className="text-[9px] text-slate-400 uppercase font-bold">Rate</p>
+                                  <p className="text-sm font-semibold text-slate-700">{fmt2(item.client_rate)}</p>
+                                </div>
+                                <div className="bg-blue-50 rounded-lg px-3 py-1.5">
+                                  <p className="text-[9px] text-blue-400 uppercase font-bold">BOQ Value</p>
+                                  <p className="text-base font-bold text-blue-700">{fmt(item.client_amount)}</p>
+                                </div>
+                                <button
+                                  onClick={()=>setAllocModal({ boqItem: boqItemObj, balance: num(item.client_qty) })}
+                                  className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 whitespace-nowrap">
+                                  <Plus className="w-3 h-3"/> Allocate
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* SC Allocations sub-table */}
+                            {allocs.length > 0 && (
+                              <div className="rounded-xl border border-slate-200 overflow-hidden">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="bg-slate-100 border-b border-slate-200">
+                                      <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">SC Vendor / WO</th>
+                                      <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wide text-slate-500">SC Amount</th>
+                                      <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wide text-purple-500">Advance Paid</th>
+                                      <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wide text-emerald-600">Billed Amt</th>
+                                      <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wide text-amber-600">Balance</th>
+                                      <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wide text-slate-500">Margin</th>
+                                      <th className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">Actions</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100">
+                                    {allocs.map((alloc) => {
+                                      const sc_amt    = num(alloc.sc_amount);
+                                      const adv       = num(alloc.advance_paid) || 0;
+                                      const billed    = num(alloc.billed_amount) || 0;
+                                      const bal       = sc_amt - adv - billed;
+                                      const isOverBilled = billed > sc_amt + 0.01;
+                                      const allocMarginPct = num(alloc.client_amount) > 0
+                                        ? (num(alloc.margin_amount) / num(alloc.client_amount)) * 100 : 0;
+                                      const amc = marginColor(allocMarginPct);
+                                      const canCancel   = (alloc.status === 'draft' || alloc.status === 'confirmed') && !alloc.wo_id;
+                                      const canEdit     = alloc.status === 'draft';
+                                      const canConfirm  = alloc.status === 'draft' && !alloc.wo_id;
+                                      const canCreateWO = (alloc.status === 'draft' || alloc.status === 'confirmed') && !alloc.wo_id && alloc.execution_type !== 'own_team';
+
+                                      return (
+                                        <tr key={alloc.id} className="hover:bg-slate-50 transition-colors">
+                                          {/* Vendor + WO */}
+                                          <td className="px-3 py-2.5">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                              <span className={clsx('text-[9px] px-1.5 py-0.5 rounded font-bold',
+                                                alloc.execution_type==='own_team'?'bg-blue-100 text-blue-700':'bg-orange-100 text-orange-700')}>
+                                                {alloc.execution_type==='own_team'?'OWN':'SC'}
+                                              </span>
+                                              <span className="font-semibold text-slate-800">{alloc.sc_name}</span>
+                                              {alloc.wo_number && (
+                                                <span className="font-mono text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{alloc.wo_number}</span>
+                                              )}
+                                              {alloc.status === 'confirmed' && <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-blue-100 text-blue-700">Confirmed</span>}
+                                              {alloc.wo_id && <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-teal-100 text-teal-700">WO ✓</span>}
+                                            </div>
+                                          </td>
+                                          {/* SC Amount */}
+                                          <td className="px-3 py-2.5 text-right font-bold text-orange-700">{fmt(sc_amt)}</td>
+                                          {/* Advance */}
+                                          <td className="px-3 py-2.5 text-right font-semibold text-purple-600">{adv > 0 ? fmt(adv) : <span className="text-slate-300">—</span>}</td>
+                                          {/* Billed */}
+                                          <td className={clsx('px-3 py-2.5 text-right font-semibold', isOverBilled ? 'text-red-600' : 'text-emerald-600')}>
+                                            {billed > 0 ? fmt(billed) : <span className="text-slate-300">—</span>}
+                                            {isOverBilled && <div className="text-[9px] text-red-500 font-bold">Over billed</div>}
+                                          </td>
+                                          {/* Balance */}
+                                          <td className={clsx('px-3 py-2.5 text-right font-bold', bal < 0 ? 'text-red-600' : 'text-amber-600')}>{fmt(bal)}</td>
+                                          {/* Margin */}
+                                          <td className="px-3 py-2.5 text-right">
+                                            <span className={clsx('font-bold', amc.text)}>{fmt(alloc.margin_amount)}</span>
+                                            <div className={clsx('text-[10px] font-bold', amc.text)}>{pct(allocMarginPct)}</div>
+                                          </td>
+                                          {/* Actions */}
+                                          <td className="px-3 py-2.5">
+                                            <div className="flex gap-1 items-center">
+                                              {canEdit && (
+                                                <button title="Edit" onClick={()=>setEditModal({ boqItem: boqItemObj, balance: num(alloc.allocated_qty), existing: alloc })}
+                                                  className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition">
+                                                  <Edit2 className="w-3.5 h-3.5"/>
+                                                </button>
+                                              )}
+                                              {canConfirm && (
+                                                <button onClick={()=>confirmMut.mutate(alloc.id)} disabled={confirmMut.isPending}
+                                                  className="px-2 py-1 bg-blue-600 text-white rounded-lg text-[10px] font-bold hover:bg-blue-700 disabled:opacity-40">
+                                                  Confirm
+                                                </button>
+                                              )}
+                                              {canCreateWO && (
+                                                <button onClick={()=>createWOMut.mutate(alloc.id)} disabled={createWOMut.isPending}
+                                                  className="px-2 py-1 bg-emerald-600 text-white rounded-lg text-[10px] font-bold hover:bg-emerald-700 disabled:opacity-40">
+                                                  + WO
+                                                </button>
+                                              )}
+                                              {alloc.execution_type === 'own_team' && (
+                                                <button title="Track costs" onClick={()=>setCostModal({ mappingId: alloc.id, boqItem: {...item, id:item.boq_item_id, description:boqDesc(item)} })}
+                                                  className="p-1.5 text-amber-500 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition">
+                                                  <IndianRupee className="w-3.5 h-3.5"/>
+                                                </button>
+                                              )}
+                                              {canCancel && (
+                                                <button title="Cancel" onClick={()=>{ if(window.confirm('Cancel this allocation?')) cancelMut.mutate(alloc.id); }}
+                                                  className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition">
+                                                  <X className="w-3.5 h-3.5"/>
+                                                </button>
+                                              )}
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -972,14 +943,23 @@ export default function BOQMappingPage() {
             })}
 
             {/* Grand total */}
-            <div className="bg-slate-900 rounded-xl p-4 flex items-center justify-between">
-              <span className="font-bold text-white text-sm uppercase tracking-wider">Grand Total</span>
-              <div className="flex items-center gap-6 text-sm">
-                <span className="text-slate-400">Client: <span className="font-bold text-white font-mono">{fmt(totals.clientAmt)}</span></span>
-                <span className="text-slate-400">SC Cost: <span className="font-bold text-orange-400 font-mono">{fmt(totals.scAmt)}</span></span>
-                <span className={clsx('font-bold font-mono text-base', totals.margin>=0?'text-emerald-400':'text-red-400')}>
-                  Margin: {fmt(totals.margin)} ({pct(totals.clientAmt>0?(totals.margin/totals.clientAmt)*100:0)})
-                </span>
+            <div className="bg-slate-900 rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4">
+              <span className="font-bold text-white text-base uppercase tracking-wider">Grand Total</span>
+              <div className="flex items-center gap-6 flex-wrap">
+                <div className="text-right">
+                  <p className="text-[10px] text-slate-400 uppercase font-bold">Client BOQ</p>
+                  <p className="text-lg font-bold text-white">{fmt(totals.clientAmt)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] text-slate-400 uppercase font-bold">SC Cost</p>
+                  <p className="text-lg font-bold text-orange-400">{fmt(totals.scAmt)}</p>
+                </div>
+                <div className={clsx('text-right px-4 py-2 rounded-xl', totals.margin>=0?'bg-emerald-900/50':'bg-red-900/50')}>
+                  <p className="text-[10px] text-slate-400 uppercase font-bold">Net Margin</p>
+                  <p className={clsx('text-xl font-bold', totals.margin>=0?'text-emerald-400':'text-red-400')}>
+                    {fmt(totals.margin)} <span className="text-sm">({pct(totals.clientAmt>0?(totals.margin/totals.clientAmt)*100:0)})</span>
+                  </p>
+                </div>
               </div>
             </div>
           </>
