@@ -85,12 +85,12 @@ router.get('/gst', async (req, res) => {
     const scopeParams = [req.user.company_id];
     applyProjectScope(req, scopeConditions, scopeParams, 'p', project_id);
 
-    let gstSql = `SELECT gst_type,
-       SUM(taxable_amount) as taxable,
-       SUM(cgst_amount) as cgst,
-       SUM(sgst_amount) as sgst,
-       SUM(igst_amount) as igst,
-       SUM(cgst_amount+sgst_amount+igst_amount) as total_gst,
+    let gstSql = `SELECT i.gst_type,
+       SUM(i.taxable_amount) as taxable,
+       SUM(i.cgst_amount) as cgst,
+       SUM(i.sgst_amount) as sgst,
+       SUM(i.igst_amount) as igst,
+       SUM(i.cgst_amount+i.sgst_amount+i.igst_amount) as total_gst,
      COUNT(*) as invoice_count
      FROM invoices i JOIN projects p ON i.project_id=p.id
      WHERE ${scopeConditions.join(' AND ')} AND EXTRACT(YEAR FROM i.invoice_date)=$${scopeParams.length + 1}`;
@@ -99,7 +99,7 @@ router.get('/gst', async (req, res) => {
       gstSql += ` AND EXTRACT(QUARTER FROM i.invoice_date) = $${gstParams.length + 1}`;
       gstParams.push(parseInt(quarter));
     }
-    gstSql += ' GROUP BY gst_type';
+    gstSql += ' GROUP BY i.gst_type';
 
     const output = await query(gstSql, gstParams);
     const itc = await query(
@@ -111,6 +111,100 @@ router.get('/gst', async (req, res) => {
     const total_output = output.rows.reduce((s,r) => s + parseFloat(r.total_gst||0), 0);
     const total_itc = parseFloat(itc.rows[0].total_itc||0);
     res.json({ output: output.rows, itc: itc.rows[0], net_payable: (total_output - total_itc).toFixed(2) });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// ── GST Compliance — month-wise output GST (RA bills) + input GST/ITC (vendor
+// invoices) for a financial year (Apr–Mar). Feeds the Accounts GST Compliance
+// page so its Returns Tracker / ITC Reconciliation reflect real ERP data
+// instead of placeholder zeros. `fy` = starting calendar year of the FY
+// (e.g. 2025 → FY 2025-26). Defaults to the current financial year.
+router.get('/gst/compliance', async (req, res) => {
+  try {
+    const now = new Date();
+    // Current FY starts in April; before April we're still in the prior FY.
+    const currentFyStart = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+    const fyStart = parseInt(req.query.fy) || currentFyStart;
+    const fromDate = `${fyStart}-04-01`;
+    const toDate   = `${fyStart + 1}-03-31`;
+
+    const { project_id } = req.query;
+
+    // ── Output GST — client RA bills (sales). Intra-state GST splits 50/50
+    //    into CGST/SGST; we surface that split for the returns table. ──
+    const outConds = ['p.company_id=$1', 'rb.bill_date BETWEEN $2 AND $3'];
+    const outParams = [req.user.company_id, fromDate, toDate];
+    applyProjectScope(req, outConds, outParams, 'p', project_id);
+    const output = await query(`
+      SELECT to_char(rb.bill_date, 'YYYY-MM') AS month,
+             SUM(rb.gross_amount) AS taxable,
+             SUM(rb.gst_amount)   AS output_gst,
+             COUNT(*)             AS bill_count
+      FROM ra_bills rb JOIN projects p ON rb.project_id = p.id
+      WHERE ${outConds.join(' AND ')} AND rb.status NOT IN ('cancelled','draft')
+      GROUP BY 1 ORDER BY 1
+    `, outParams);
+
+    // ── Input GST / ITC — vendor purchase invoices ──
+    const itcConds = ['p.company_id=$1', 'i.invoice_date BETWEEN $2 AND $3'];
+    const itcParams = [req.user.company_id, fromDate, toDate];
+    applyProjectScope(req, itcConds, itcParams, 'p', project_id);
+    const itc = await query(`
+      SELECT to_char(i.invoice_date, 'YYYY-MM') AS month,
+             SUM(i.taxable_amount) AS taxable,
+             SUM(i.cgst_amount + i.sgst_amount + i.igst_amount) AS itc,
+             COUNT(*) AS invoice_count
+      FROM invoices i JOIN projects p ON i.project_id = p.id
+      WHERE ${itcConds.join(' AND ')} AND i.status <> 'cancelled'
+      GROUP BY 1 ORDER BY 1
+    `, itcParams);
+
+    // ── Build a row per FY month (Apr→Mar) so empty months still show ──
+    const itcByMonth = Object.fromEntries(itc.rows.map(r => [r.month, r]));
+    const outByMonth = Object.fromEntries(output.rows.map(r => [r.month, r]));
+    const MONTHS = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
+    const returns = MONTHS.map((label, idx) => {
+      const cal = idx < 9 ? fyStart : fyStart + 1;       // Apr-Dec = fyStart, Jan-Mar = fyStart+1
+      const mm  = String(idx < 9 ? idx + 4 : idx - 8).padStart(2, '0');
+      const key = `${cal}-${mm}`;
+      const o = outByMonth[key];
+      const ic = itcByMonth[key];
+      const taxable   = parseFloat(o?.taxable || 0);
+      const outputGst = parseFloat(o?.output_gst || 0);
+      const itcAmt    = parseFloat(ic?.itc || 0);
+      return {
+        month:       `${label} ${cal}`,
+        month_key:   key,
+        taxable,
+        cgst:        +(outputGst / 2).toFixed(2),  // intra-state split
+        sgst:        +(outputGst / 2).toFixed(2),
+        igst:        0,
+        output_gst:  outputGst,
+        itc_books:   itcAmt,
+        net_payable: +(outputGst - itcAmt).toFixed(2),
+        has_activity: !!(o || ic),
+      };
+    });
+
+    const totals = returns.reduce((s, r) => ({
+      taxable:    s.taxable + r.taxable,
+      output_gst: s.output_gst + r.output_gst,
+      itc:        s.itc + r.itc_books,
+    }), { taxable: 0, output_gst: 0, itc: 0 });
+
+    res.json({
+      fy: `FY ${fyStart}-${String(fyStart + 1).slice(-2)}`,
+      returns,
+      summary: {
+        total_taxable:    +totals.taxable.toFixed(2),
+        total_output_gst: +totals.output_gst.toFixed(2),
+        total_itc:        +totals.itc.toFixed(2),
+        net_payable:      +(totals.output_gst - totals.itc).toFixed(2),
+        months_with_activity: returns.filter(r => r.has_activity).length,
+      },
+    });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
   }

@@ -1253,6 +1253,7 @@ export const bookingAPI = {
 export const reportAPI = {
   profitability: (params) => api.get('/reports/profitability', { params }),
   gstReport:     (params) => api.get('/reports/gst', { params }),
+  gstCompliance: (params) => api.get('/reports/gst/compliance', { params }),
   tdsReport:     (params) => api.get('/reports/tds', { params }),
   vendorLedger:  (params) => api.get('/reports/vendor-ledger', { params }),
   laborReport:   (params) => api.get('/reports/labor', { params }),
