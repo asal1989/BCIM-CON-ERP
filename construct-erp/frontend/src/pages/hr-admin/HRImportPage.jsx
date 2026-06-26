@@ -19,7 +19,7 @@ const TABS = [
   { id:'attendance', label:'Attendance',         icon:Clock },
 ];
 
-const EMPLOYEE_SAMPLE = `Employee Code,Employee Name,Email,Mobile,Department,Designation,Date of Joining,Date of Birth,Gender,PAN,UAN,Bank Account No,IFSC Code,Bank Name,Employment Type,Status,CTC\nEMP001,Ravi Kumar,ravi@company.com,9876543210,Engineering,Site Engineer,01-04-2023,15-06-1990,male,ABCDE1234F,100234567890,123456789012,SBIN0001234,SBI,permanent,active,600000`;
+const EMPLOYEE_SAMPLE = `Employee Code,Employee Name,Email,Mobile,Department,Designation,Date of Joining,Date of Birth,Gender,PAN,UAN,Bank Account No,IFSC Code,Bank Name,Employment Type,Employee Category,Status,CTC\nBCIM-0001,Ravi Kumar,ravi@company.com,9876543210,Engineering,Site Engineer,01-04-2023,15-06-1990,male,ABCDE1234F,100234567890,123456789012,SBIN0001234,SBI,permanent,BCIM Staff,active,600000\n18001,Suresh M,,9876543211,Civil,Mason,01-01-2022,10-03-1985,male,XYZAB5678G,100234567891,234567890123,HDFC0001234,HDFC,permanent,BCIM Workers,active,`;
 const ATTENDANCE_WIDE_SAMPLE = `Employee Code,Employee Name,01,02,03,04,05,06,07,08,09,10\nEMP001,Ravi Kumar,P,P,P,P,P,WO,WO,P,P,P\nEMP002,Priya Sharma,P,P,A,P,P,WO,WO,P,P,P`;
 
 function downloadSample(content, filename) {

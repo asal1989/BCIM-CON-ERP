@@ -175,6 +175,8 @@ router.post('/employees', upload.single('file'), async (req, res) => {
         const address  = pick(row, 'Permanent Address', 'Address');
         const noticeDays = parseInt(pick(row, 'Notice Period', 'Notice Period (Days)')) || 30;
         const ctc      = parseFloat(pick(row, 'CTC', 'Annual CTC', 'CTC Annual')) || null;
+        const categoryRaw = pick(row, 'Employee Category', 'Category', 'Staff Type').toLowerCase();
+        const empCategory = categoryRaw.includes('work') ? 'workman' : 'staff';
 
         if (!empCode && !name) {
           results.errors.push({ row: rowNum, error: 'Missing Employee Code and Name' });
@@ -200,9 +202,9 @@ router.post('/employees', upload.single('file'), async (req, res) => {
                 date_of_joining, date_of_birth, gender, father_name, marital_status,
                 blood_group, pan_number, aadhaar_number, uan_number, pf_account_number,
                 esi_number, bank_account_number, bank_ifsc, bank_name,
-                employment_type, employment_status, permanent_address, notice_period_days,
+                employment_type, employee_category, employment_status, permanent_address, notice_period_days,
                 updated_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,NOW())
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,NOW())
              ON CONFLICT (user_id) DO UPDATE SET
                department_id=EXCLUDED.department_id,
                designation_id=EXCLUDED.designation_id,
@@ -221,6 +223,7 @@ router.post('/employees', upload.single('file'), async (req, res) => {
                bank_ifsc=COALESCE(NULLIF(EXCLUDED.bank_ifsc,''), employee_profiles.bank_ifsc),
                bank_name=COALESCE(NULLIF(EXCLUDED.bank_name,''), employee_profiles.bank_name),
                employment_type=COALESCE(NULLIF(EXCLUDED.employment_type,''), employee_profiles.employment_type),
+               employee_category=EXCLUDED.employee_category,
                employment_status=COALESCE(NULLIF(EXCLUDED.employment_status,''), employee_profiles.employment_status),
                permanent_address=COALESCE(NULLIF(EXCLUDED.permanent_address,''), employee_profiles.permanent_address),
                notice_period_days=EXCLUDED.notice_period_days,
@@ -229,7 +232,7 @@ router.post('/employees', upload.single('file'), async (req, res) => {
              doj, dob, gender||null, fatherName||null, marital||null,
              blood||null, pan||null, aadhaar||null, uan||null, pf||null,
              esi||null, bankAcc||null, ifsc||null, bankName||null,
-             empType||'permanent', empStatus, address||null, noticeDays]
+             empType||'permanent', empCategory, empStatus, address||null, noticeDays]
           );
           results.updated++;
         } else {
@@ -268,13 +271,13 @@ router.post('/employees', upload.single('file'), async (req, res) => {
                   date_of_joining, date_of_birth, gender, father_name, marital_status,
                   blood_group, pan_number, aadhaar_number, uan_number, pf_account_number,
                   esi_number, bank_account_number, bank_ifsc, bank_name,
-                  employment_type, employment_status, permanent_address, notice_period_days)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
+                  employment_type, employee_category, employment_status, permanent_address, notice_period_days)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
               [userId, companyId, deptId, desigId,
                doj, dob, gender||null, fatherName||null, marital||null,
                blood||null, pan||null, aadhaar||null, uan||null, pf||null,
                esi||null, bankAcc||null, ifsc||null, bankName||null,
-               empType||'permanent', empStatus, address||null, noticeDays]
+               empType||'permanent', empCategory, empStatus, address||null, noticeDays]
             );
 
             // Auto-assign salary if CTC present
