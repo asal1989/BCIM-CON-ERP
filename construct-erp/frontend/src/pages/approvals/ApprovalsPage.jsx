@@ -474,6 +474,11 @@ export default function ApprovalsPage({ embedded = false, mdMode = false }) {
       const label = vars.action === 'approve' ? 'Approved' : vars.action === 'check' ? 'Checked' : 'Rejected';
       toast.success(`${label} — ${vars.item.ref_no}`);
       qc.invalidateQueries({ queryKey: ['my-approvals'] });
+      // Refresh dashboard KPIs and petty cash data so changes appear immediately
+      qc.invalidateQueries({ queryKey: ['analytics-executive'] });
+      qc.invalidateQueries({ queryKey: ['spc-entries'] });
+      qc.invalidateQueries({ queryKey: ['spc-summary'] });
+      qc.invalidateQueries({ queryKey: ['spc-receipts'] });
       setAction(null);
     },
     onError: e => toast.error(e?.response?.data?.error || 'Action failed'),
