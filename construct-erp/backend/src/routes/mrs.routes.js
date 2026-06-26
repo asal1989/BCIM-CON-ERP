@@ -494,19 +494,43 @@ router.use(loadProjectScope);
 
   // ── One-time: give DQS Tower its own MR numbering starting from 001 ────────────
   // Previously DQS Tower shared a mrs_seq_group with Yelahanka, so its MR numbers
-  // continued from Yelahanka's counter. Clear the shared pool and reset start to 1
-  // so the next MR raised on any DQS Tower project gets -001.
+  // continued from Yelahanka's counter. Clear the shared pool, reset start to 1,
+  // and renumber existing DQS MRs in chronological order to -001, -002, …
   try {
-    const dqsRes = await query(
+    // 1. Reset project-level config
+    const dqsProjects = await query(
       `UPDATE projects
-          SET mrs_seq_group  = NULL,
-              mrs_start_seq  = 1
+          SET mrs_seq_group = NULL,
+              mrs_start_seq = 1
         WHERE LOWER(name) LIKE '%dqs%'
-          AND (mrs_seq_group IS NOT NULL OR COALESCE(mrs_start_seq, 0) != 1)
-        RETURNING name`
+        RETURNING id, name, project_code, mrs_prefix`
     );
-    if (dqsRes.rowCount > 0) {
-      console.log(`[mrs] DQS Tower MR numbering reset to independent sequence starting at 001 for: ${dqsRes.rows.map(r => r.name).join(', ')}`);
+
+    // 2. Renumber existing MRs for each DQS project in created_at order
+    for (const proj of dqsProjects.rows) {
+      const existing = await query(
+        `SELECT id FROM material_requisitions
+          WHERE project_id = $1
+          ORDER BY created_at ASC, id ASC`,
+        [proj.id]
+      );
+      if (!existing.rows.length) continue;
+
+      const mrsPrefix = proj.mrs_prefix;
+      const projectCode = proj.project_code || 'DQS';
+      const sep = mrsPrefix && /[0-9]$/.test(mrsPrefix) ? '-' : '';
+      const basePrefix = mrsPrefix ? `${mrsPrefix}${sep}` : `BCIM-${projectCode}-GEN-MR-`;
+
+      for (let i = 0; i < existing.rows.length; i++) {
+        const newSerial = `${basePrefix}${String(i + 1).padStart(3, '0')}`;
+        await query(
+          `UPDATE material_requisitions
+              SET serial_no_formatted = $1, mrs_number = $1
+            WHERE id = $2`,
+          [newSerial, existing.rows[i].id]
+        );
+      }
+      console.log(`[mrs] Renumbered ${existing.rows.length} DQS MR(s) for "${proj.name}" → ${basePrefix}001…`);
     }
   } catch (e) {
     console.error('[mrs] DQS Tower numbering reset failed:', e.message);
