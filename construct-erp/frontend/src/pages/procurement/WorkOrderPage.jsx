@@ -548,6 +548,7 @@ function CreateWOModal({ onClose, vendors, projects, onCreate, onUpdate, isPendi
   const [items, setItems] = useState(
     editingWO?.items?.length
       ? editingWO.items.map(it => ({
+          id:          it.id,
           description: it.description || '',
           quantity:    String(it.quantity || ''),
           unit:        it.unit || 'SQM',
