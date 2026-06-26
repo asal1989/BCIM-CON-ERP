@@ -103,8 +103,11 @@ const getWorkOrders = async (req, res) => {
          OR (tqs_billed.vendor_id IS NULL AND LOWER(TRIM(tqs_billed.vendor_name)) = LOWER(TRIM(v.name)))
        )
       WHERE p.company_id = $1
-        AND LOWER(v.vendor_type) IN ('sub-contractor', 'subcontractor', 'labour contractor', 'labour_contractor', 'service provider')
     `;
+    // NOTE: previously this list was hard-filtered to subcontractor/labour/
+    // service vendor types, which silently hid work orders created for any
+    // other vendor type. The WO Register should show every created work order;
+    // narrowing is handled by the project / vendor / status filters below.
     const params = [req.user.company_id];
     let i = 2;
 
