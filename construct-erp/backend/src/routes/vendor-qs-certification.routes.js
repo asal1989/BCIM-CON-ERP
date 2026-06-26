@@ -253,11 +253,14 @@ router.get('/accounts-pending', async (req, res) => {
               c.net_payable AS total_certified,
               COALESCE(c.paid_amount, 0) AS total_paid,
               GREATEST(0, c.net_payable - COALESCE(c.paid_amount, 0)) AS balance_due,
+              GREATEST(0, c.net_payable - COALESCE(c.paid_amount, 0)) AS net_balance,
               c.tds_amount AS total_tds,
+              c.advance_recovered AS advance_balance,
               c.sent_to_accounts_at AS accounts_since,
               c.order_number, c.order_type,
-              c.advance_recovered, c.retention_amount, c.other_deductions,
+              c.retention_amount, c.other_deductions,
               c.gross_amount, c.tax_amount,
+              c.invoice_count AS bill_count,
               'vendor_qs_cert' AS source
        FROM vendor_qs_certifications c
        LEFT JOIN projects p ON p.id = c.project_id

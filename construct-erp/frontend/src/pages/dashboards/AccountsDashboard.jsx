@@ -224,7 +224,9 @@ function PCPaymentModal({ pc, onClose, onSuccess }) {
                 isPartial ? 'bg-amber-500 hover:bg-amber-600' : 'bg-indigo-600 hover:bg-indigo-700')}>
               {saving ? 'Saving…' : isPartial
                 ? `Record Partial — ${inrFmt(enteredAmt)}`
-                : `Pay ${inrFmt(enteredAmt)} → Mark ${pc.bill_count} Bill${pc.bill_count !== 1 ? 's' : ''} Paid`}
+                : pc.bill_count
+                  ? `Pay ${inrFmt(enteredAmt)} → Mark ${pc.bill_count} Bill${pc.bill_count !== 1 ? 's' : ''} Paid`
+                  : `Pay ${inrFmt(enteredAmt)} → Mark as Paid`}
             </button>
           </div>
         </form>
@@ -293,7 +295,23 @@ function PCRow({ pc, onPay }) {
           )}
         </td>
       </tr>
-      {expanded && (pc.bills || []).map((b, i) => (
+      {expanded && pc.source === 'vendor_qs_cert' && (
+        <tr className="bg-indigo-50/50">
+          <td className="px-3 py-2" colSpan={3} />
+          <td className="px-3 py-2 text-[11px] text-slate-600" colSpan={3}>
+            RA Bill: <span className="font-medium">{pc.ra_bill_number || pc.pc_number}</span>
+            {pc.order_number && <> · Order: <span className="font-medium">{pc.order_number}</span></>}
+            {pc.project_name && <> · <span className="text-indigo-600">{pc.project_name}</span></>}
+          </td>
+          <td className="px-3 py-2 text-right text-[11px] text-emerald-600">{parseFloat(pc.advance_balance||0)>0 ? `−${inrFmt(pc.advance_balance)}` : '—'}</td>
+          <td className="px-3 py-2 text-right text-[11px] font-medium text-red-600">{inrFmt(pc.balance_due)}</td>
+          <td />
+          <td className="px-3 py-2">
+            <Link to={`/qs/vendor-certifications/${pc.id}`} className="text-[10px] text-indigo-500 hover:underline">View Cert</Link>
+          </td>
+        </tr>
+      )}
+      {expanded && pc.source !== 'vendor_qs_cert' && (pc.bills || []).map((b, i) => (
         <tr key={i} className="bg-indigo-50/50">
           <td className="px-3 py-1.5" />
           <td className="px-3 py-1.5">
