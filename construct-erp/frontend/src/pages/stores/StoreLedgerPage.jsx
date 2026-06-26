@@ -482,6 +482,8 @@ export default function StoreLedgerPage() {
   const [groupByMajorHead, setGroupByMajorHead] = useState(false);
   const [showImport, setShowImport]       = useState(false);
   const [showValues, setShowValues]       = useState(false);
+  const [sortField, setSortField]         = useState('material_name');
+  const [sortDir, setSortDir]             = useState('asc');
   const [page, setPage]                   = useState(1);
   const PAGE_SIZE = 50;
   // Monthly Movement tab state
@@ -542,6 +544,37 @@ export default function StoreLedgerPage() {
     return true;
   });
 
+  // Sorting
+  const toggleSort = (field) => {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortField(field); setSortDir(field === 'closing_stock' || field === 'grand_total' ? 'desc' : 'asc'); }
+    setPage(1);
+  };
+  const sortIndicator = (field) => sortField === field ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ' ↕';
+
+  const sortedSummary = [...filteredSummary].sort((a, b) => {
+    let va, vb;
+    switch (sortField) {
+      case 'closing_stock': va = rq3(a.closing_stock); vb = rq3(b.closing_stock); break;
+      case 'opening_stock': va = rq3(a.opening_stock); vb = rq3(b.opening_stock); break;
+      case 'unit_rate':     va = parseFloat(a.unit_rate || 0); vb = parseFloat(b.unit_rate || 0); break;
+      case 'grand_total':
+        va = rq3(a.closing_stock) * parseFloat(a.unit_rate || 0) * (1 + GST_RATE);
+        vb = rq3(b.closing_stock) * parseFloat(b.unit_rate || 0) * (1 + GST_RATE);
+        break;
+      case 'category': va = (a.category || '').toLowerCase(); vb = (b.category || '').toLowerCase(); break;
+      case 'status': {
+        const ord = { out_of_stock: 0, critical_low: 1, reorder: 2, ok: 3 };
+        const st = (s) => { const c = rq3(s.closing_stock), m = parseFloat(s.min_stock||0), r = parseFloat(s.reorder_level||0); return c<=0?'out_of_stock':(m>0&&c<=m)?'critical_low':(r>0&&c<=r)?'reorder':'ok'; };
+        va = ord[st(a)]; vb = ord[st(b)]; break;
+      }
+      default: va = (a.material_name || '').toLowerCase(); vb = (b.material_name || '').toLowerCase();
+    }
+    if (va < vb) return sortDir === 'asc' ? -1 : 1;
+    if (va > vb) return sortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
   // Summary totals for footer
   const totalOpeningValue  = filteredSummary.reduce((sum, s) => sum + (rq3(s.opening_stock) * parseFloat(s.unit_rate || 0)), 0);
   const totalIssuedValue   = filteredSummary.reduce((sum, s) => {
@@ -553,9 +586,9 @@ export default function StoreLedgerPage() {
   const totalGrandTotal    = totalClosingValue + totalGST;
 
   // Pagination for the Stock Report table
-  const totalPages   = Math.max(1, Math.ceil(filteredSummary.length / PAGE_SIZE));
+  const totalPages   = Math.max(1, Math.ceil(sortedSummary.length / PAGE_SIZE));
   const currentPage  = Math.min(page, totalPages);
-  const pagedSummary = filteredSummary.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pagedSummary = sortedSummary.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   useEffect(() => {
     setPage(1);
@@ -1078,6 +1111,29 @@ export default function StoreLedgerPage() {
             >
               {showValues ? 'Hide Values' : 'Show Values'}
             </button>
+            <div className="flex items-center gap-1 h-10 border border-slate-200 rounded-xl bg-slate-50 px-3 shrink-0">
+              <span className="text-xs font-bold text-slate-500 whitespace-nowrap">Sort:</span>
+              <select
+                value={sortField}
+                onChange={e => { setSortField(e.target.value); setPage(1); setSortDir(e.target.value === 'closing_stock' || e.target.value === 'grand_total' ? 'desc' : 'asc'); }}
+                className="h-8 bg-transparent text-sm font-bold text-slate-800 outline-none border-none"
+              >
+                <option value="material_name">Name</option>
+                <option value="closing_stock">Closing Stock</option>
+                <option value="opening_stock">Opening Stock</option>
+                <option value="unit_rate">Rate</option>
+                <option value="grand_total">Grand Total</option>
+                <option value="category">Category</option>
+                <option value="status">Status</option>
+              </select>
+              <button
+                onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+                className="w-6 h-6 flex items-center justify-center rounded text-slate-600 hover:bg-slate-200 transition font-bold text-sm"
+                title={sortDir === 'asc' ? 'Ascending — click for descending' : 'Descending — click for ascending'}
+              >
+                {sortDir === 'asc' ? '↑' : '↓'}
+              </button>
+            </div>
             <div className="relative shrink-0">
               <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-900 font-semibold" />
               <select
@@ -1121,16 +1177,26 @@ export default function StoreLedgerPage() {
               </div>
             ) : (
               <>
-                {/* Column header */}
-                <div className="bg-slate-800 text-white px-4 py-2.5 flex items-center gap-3 text-[11px] font-bold uppercase tracking-wider">
+                {/* Column header — clickable for sort */}
+                <div className="bg-slate-800 text-white px-4 py-2.5 flex items-center gap-3 text-[11px] font-bold uppercase tracking-wider select-none">
                   <span className="w-7 shrink-0 text-center">#</span>
-                  <span className="flex-1 min-w-0">Material / Category</span>
+                  <button onClick={() => toggleSort('material_name')} className={clsx('flex-1 min-w-0 text-left hover:text-slate-200 transition', sortField==='material_name'&&'text-blue-300')}>
+                    Material / Category{sortIndicator('material_name')}
+                  </button>
                   <span className="w-20 shrink-0 text-center">Unit</span>
                   <span className="w-14 shrink-0 text-center">DC/IDC</span>
-                  <span className="w-24 shrink-0 text-right">Opening</span>
-                  <span className="w-40 shrink-0 text-right">Closing Stock</span>
-                  <span className="w-28 shrink-0 text-right">Rate (₹)</span>
-                  <span className="w-32 shrink-0 text-right">Grand Total</span>
+                  <button onClick={() => toggleSort('opening_stock')} className={clsx('w-24 shrink-0 text-right hover:text-slate-200 transition', sortField==='opening_stock'&&'text-blue-300')}>
+                    Opening{sortIndicator('opening_stock')}
+                  </button>
+                  <button onClick={() => toggleSort('closing_stock')} className={clsx('w-40 shrink-0 text-right hover:text-slate-200 transition', sortField==='closing_stock'&&'text-blue-300')}>
+                    Closing{sortIndicator('closing_stock')}
+                  </button>
+                  <button onClick={() => toggleSort('unit_rate')} className={clsx('w-28 shrink-0 text-right hover:text-slate-200 transition', sortField==='unit_rate'&&'text-blue-300')}>
+                    Rate (₹){sortIndicator('unit_rate')}
+                  </button>
+                  <button onClick={() => toggleSort('grand_total')} className={clsx('w-32 shrink-0 text-right hover:text-slate-200 transition', sortField==='grand_total'&&'text-blue-300')}>
+                    Grand Total{sortIndicator('grand_total')}
+                  </button>
                   <span className="w-6 shrink-0" />
                 </div>
 
