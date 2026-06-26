@@ -78,12 +78,14 @@ const getWorkOrders = async (req, res) => {
              v.gst_number AS vendor_gstin,
              v.pan_number AS vendor_pan,
              u.name AS manager_name,
+             mr.mrs_number,
              COALESCE(SUM(b.bill_amount), 0) + COALESCE(tqs_billed.total_billed, 0) AS total_billed,
              COALESCE(tqs_billed.total_paid, 0) AS total_paid
       FROM work_orders wo
       LEFT JOIN projects p ON wo.project_id = p.id
       LEFT JOIN vendors v ON wo.vendor_id = v.id
       LEFT JOIN users u ON wo.created_by = u.id
+      LEFT JOIN material_requisitions mr ON mr.id = wo.mrs_id
       LEFT JOIN subcontractor_bills b ON b.wo_id = wo.id
       LEFT JOIN (
         SELECT
@@ -115,7 +117,7 @@ const getWorkOrders = async (req, res) => {
     if (vendor_id)  { sql += ` AND wo.vendor_id = $${i++}`;  params.push(vendor_id); }
     if (status)     { sql += ` AND wo.status = $${i++}`;     params.push(status); }
 
-    sql += ' GROUP BY wo.id, p.id, p.name, v.name, v.vendor_type, v.gst_number, v.pan_number, u.name, tqs_billed.total_billed, tqs_billed.total_paid ORDER BY COALESCE(wo.start_date, wo.created_at) DESC NULLS LAST';
+    sql += ' GROUP BY wo.id, p.id, p.name, v.name, v.vendor_type, v.gst_number, v.pan_number, u.name, mr.mrs_number, tqs_billed.total_billed, tqs_billed.total_paid ORDER BY COALESCE(wo.start_date, wo.created_at) DESC NULLS LAST';
     const result = await query(sql, params);
     res.json({ data: result.rows, count: result.rowCount });
   } catch (err) {
@@ -135,11 +137,13 @@ const getWorkOrder = async (req, res) => {
               v.address AS vendor_address,
               v.contact_person AS vendor_contact_person,
               v.phone AS vendor_phone, v.email AS vendor_email,
-              u.name AS manager_name
+              u.name AS manager_name,
+              mr.mrs_number
        FROM work_orders wo
        JOIN projects p ON wo.project_id = p.id
        JOIN vendors v ON wo.vendor_id = v.id
        LEFT JOIN users u ON wo.created_by = u.id
+       LEFT JOIN material_requisitions mr ON mr.id = wo.mrs_id
        WHERE wo.id = $1 AND p.company_id = $2`,
       [req.params.id, req.user.company_id]
     );
@@ -220,11 +224,13 @@ const createWorkOrder = async (req, res) => {
     start_date, end_date, terms_conditions, items,
     cost_head, work_category, tower_block,
     gst_pct, tds_pct, retention_pct, advance_recovery_pct,
+    mrs_id, mrs_ids,
   } = req.body;
 
   const wo_date       = req.body.wo_date || new Date().toISOString().split('T')[0];
   const finalSubject  = subject || scope_of_work || '';
   const finalValue    = parseFloat(contract_value || total_value || 0);
+  const mrsIdList     = (Array.isArray(mrs_ids) ? mrs_ids : (mrs_id ? [mrs_id] : [])).filter(Boolean);
 
   if (!project_id) return res.status(400).json({ error: 'project_id required' });
   if (!vendor_id)  return res.status(400).json({ error: 'vendor_id required' });
@@ -248,8 +254,9 @@ const createWorkOrder = async (req, res) => {
             start_date, end_date, total_value, contract_amount,
             terms_conditions, cost_head, work_category, tower_block,
             status, created_by,
-            gst_pct, tds_pct, retention_pct, advance_recovery_pct)
-         VALUES ($1,$2,$3,$4,$5,$5,$6,$7,$8,$9,$9,$10,$11,$12,$13,'pending',$14,$15,$16,$17,$18)
+            gst_pct, tds_pct, retention_pct, advance_recovery_pct,
+            mrs_id, mrs_ids)
+         VALUES ($1,$2,$3,$4,$5,$5,$6,$7,$8,$9,$9,$10,$11,$12,$13,'pending',$14,$15,$16,$17,$18,$19,$20)
          RETURNING *`,
         [
           project_id, vendor_id, wo_number, wo_date,
@@ -260,6 +267,7 @@ const createWorkOrder = async (req, res) => {
           req.user.id,
           parseFloat(gst_pct) || 18, parseFloat(tds_pct) || 2,
           parseFloat(retention_pct) || 5, parseFloat(advance_recovery_pct) || 10,
+          mrsIdList[0] || null, mrsIdList.length ? mrsIdList : null,
         ]
       );
       const wo = woResult.rows[0];
@@ -585,7 +593,7 @@ const updateWorkOrder = async (req, res) => {
       start_date, end_date, total_value, contract_value,
       cost_head, work_category, tower_block, vendor_id,
       gst_pct, tds_pct, retention_pct, advance_recovery_pct,
-      wo_number, items,
+      wo_number, items, mrs_id, mrs_ids,
     } = req.body;
 
     if (status && !VALID_WO_STATUSES.includes(status))
@@ -622,6 +630,11 @@ const updateWorkOrder = async (req, res) => {
     if (tds_pct              !== undefined && tds_pct !== '')              { sets.push(`tds_pct = $${i++}`);              params.push(parseFloat(tds_pct) || 0); }
     if (retention_pct        !== undefined && retention_pct !== '')        { sets.push(`retention_pct = $${i++}`);        params.push(parseFloat(retention_pct) || 0); }
     if (advance_recovery_pct !== undefined && advance_recovery_pct !== '') { sets.push(`advance_recovery_pct = $${i++}`); params.push(parseFloat(advance_recovery_pct) || 0); }
+    if (mrs_id !== undefined || mrs_ids !== undefined) {
+      const list = (Array.isArray(mrs_ids) ? mrs_ids : (mrs_id ? [mrs_id] : [])).filter(Boolean);
+      sets.push(`mrs_ids = $${i++}`); params.push(list.length ? list : null);
+      sets.push(`mrs_id = $${i++}`);  params.push(list[0] || null);
+    }
 
     const finalValue = parseFloat(contract_value || total_value || 0);
     if ((contract_value !== undefined || total_value !== undefined) && finalValue > 0) {

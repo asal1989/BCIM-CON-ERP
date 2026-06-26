@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
-import { subcontractorAPI, vendorAPI, projectAPI, companySettingsAPI } from '../../api/client';
+import { subcontractorAPI, vendorAPI, projectAPI, companySettingsAPI, mrsAPI } from '../../api/client';
 import { FIELD_HL } from '../../constants/fieldStyles';
 import SearchableSelect from '../../components/shared/SearchableSelect';
 import VendorSelect from '../../components/shared/VendorSelect';
@@ -525,11 +525,12 @@ function PdfImportModal({ onClose, vendors, projects, onImported }) {
 }
 
 /* ── Create WO Modal ─────────────────────────────────────────────────────── */
-function CreateWOModal({ onClose, vendors, projects, onCreate, onUpdate, isPending, editingWO }) {
+function CreateWOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpdate, isPending, editingWO }) {
   const isEditing = !!editingWO;
   const [form, setForm] = useState({
     project_id:           editingWO?.project_id   || '',
     vendor_id:            editingWO?.vendor_id     || '',
+    mrs_id:               editingWO?.mrs_id        || '',
     wo_number:            editingWO?.wo_number     || '',
     wo_date:              editingWO?.wo_date ? dayjs(editingWO.wo_date).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
     start_date:           editingWO?.start_date ? dayjs(editingWO.start_date).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
@@ -597,6 +598,16 @@ function CreateWOModal({ onClose, vendors, projects, onCreate, onUpdate, isPendi
 
   const vendor = (vendors || []).find(v => String(v.id) === String(form.vendor_id));
   const project = (projects || []).find(p => String(p.id) === String(form.project_id));
+
+  // Approved MRs (Material Requisitions) this WO can be issued against — same
+  // "exclude only rejected" rule used by Purchase Orders, scoped to the chosen
+  // project once one is selected.
+  const activeMrsList = (mrsList || [])
+    .filter(m => m.status !== 'rejected')
+    .filter(m => !form.project_id || String(m.project_id) === String(form.project_id));
+  const mrLabel = (m) => m ? `${m.mrs_number || m.id?.slice(0, 8)} — ${m.project_name || 'Project'} — ${(m.status || 'pending').replaceAll('_', ' ')}` : '';
+  const linkedMr = activeMrsList.find(m => String(m.id) === String(form.mrs_id))
+    || (mrsList || []).find(m => String(m.id) === String(form.mrs_id));
 
   const formTotal  = items.reduce((s, it) => s + parseFloat(it.quantity||0) * parseFloat(it.rate||0), 0);
 
@@ -696,6 +707,19 @@ function CreateWOModal({ onClose, vendors, projects, onCreate, onUpdate, isPendi
               </ZField>
               <ZField label="Cost Head">
                 <input className={Z_INP} placeholder="e.g. Civil Works" value={form.cost_head} onChange={e => f('cost_head', e.target.value)} />
+              </ZField>
+              <ZField label="Approved MR (optional)" className="col-span-2 md:col-span-2">
+                <select className={Z_INP} value={form.mrs_id} onChange={e => f('mrs_id', e.target.value)}>
+                  <option value="">— Not linked to an MR —</option>
+                  {activeMrsList.map(m => (
+                    <option key={m.id} value={m.id}>{mrLabel(m)}</option>
+                  ))}
+                </select>
+                {linkedMr && (
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Issuing this WO against MR {linkedMr.mrs_number || linkedMr.id?.slice(0, 8)} ({linkedMr.project_name})
+                  </p>
+                )}
               </ZField>
             </div>
 
@@ -1025,7 +1049,10 @@ function WODetailPanel({ wo, onClose, onEdit, onDelete, onApprove, onMDApprove, 
             </div>
             <div>
               <p className="text-base font-medium text-slate-900 font-mono">{displayWO.wo_number}</p>
-              <p className="text-xs text-slate-900 font-medium mt-0.5">{displayWO.vendor_name || '—'} · {displayWO.start_date ? dayjs(displayWO.start_date).format('DD MMM YYYY') : (displayWO.created_at ? dayjs(displayWO.created_at).format('DD MMM YYYY') : '—')}</p>
+              <p className="text-xs text-slate-900 font-medium mt-0.5">
+                {displayWO.vendor_name || '—'} · {displayWO.start_date ? dayjs(displayWO.start_date).format('DD MMM YYYY') : (displayWO.created_at ? dayjs(displayWO.created_at).format('DD MMM YYYY') : '—')}
+                {displayWO.mrs_number && <> · Against MR <span className="font-mono">{displayWO.mrs_number}</span></>}
+              </p>
             </div>
             <StatusBadge status={liveStatus} />
           </div>
@@ -1377,6 +1404,11 @@ export default function WorkOrderPage() {
     queryFn: () => projectAPI.list().then(r => r.data?.data ?? []),
   });
 
+  const { data: mrsData = [] } = useQuery({
+    queryKey: ['mrs-for-wo'],
+    queryFn: () => mrsAPI.list({}, { skipProjectInject: true }).then(r => r.data?.data || []),
+  });
+
   // Auto-open WO when navigated from Approvals dashboard
   useEffect(() => {
     const viewId = location.state?.viewId;
@@ -1703,6 +1735,7 @@ export default function WorkOrderPage() {
           onClose={() => setShowCreate(false)}
           vendors={vendorsData}
           projects={projectsData}
+          mrsList={mrsData}
           onCreate={data => createMutation.mutate(data)}
           isPending={createMutation.isPending}
         />
@@ -1747,6 +1780,7 @@ export default function WorkOrderPage() {
           onClose={() => setEditingWO(null)}
           vendors={vendorsData}
           projects={projectsData}
+          mrsList={mrsData}
           onUpdate={data => updateMutation.mutate({ id: editingWO.id, data })}
           isPending={updateMutation.isPending}
           editingWO={editingWO}

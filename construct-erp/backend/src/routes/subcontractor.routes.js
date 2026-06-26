@@ -8,8 +8,18 @@ const { query, withTransaction } = require('../config/database');
 const { extractWO } = require('../services/woExtraction.service');
 const { getNextDqsNumber } = require('../services/documentNumber.service');
 const { logAudit } = require('../utils/auditLog');
+const { runSchemaInit } = require('../utils/schemaInit');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+// Ensure columns linking a Work Order to its source Material Requisition(s) exist
+runSchemaInit('work_orders_mrs_columns', async () => {
+  await query(`
+    ALTER TABLE work_orders
+      ADD COLUMN IF NOT EXISTS mrs_id UUID REFERENCES material_requisitions(id),
+      ADD COLUMN IF NOT EXISTS mrs_ids UUID[]
+  `);
+});
 
 router.use(authenticate);
 
