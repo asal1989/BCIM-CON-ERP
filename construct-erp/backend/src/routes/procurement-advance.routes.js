@@ -301,13 +301,14 @@ router.get('/lookup/bills-by-vendor', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const { company_id } = req.user;
-    const { project_id, status, search } = req.query;
+    const { project_id, status, approval_status, search } = req.query;
 
     const wheres = [`av.company_id=$1`, `av.is_deleted=FALSE`];
     const params = [company_id];
 
     applyProjectScope(req, wheres, params, 'av', project_id);
     if (status && status !== 'all') { params.push(status); wheres.push(`av.status=$${params.length}`); }
+    if (approval_status) { params.push(approval_status); wheres.push(`av.approval_status=$${params.length}`); }
     if (search) {
       params.push(`%${search}%`);
       wheres.push(`(av.vendor_name ILIKE $${params.length} OR av.wo_number ILIKE $${params.length} OR av.voucher_number ILIKE $${params.length} OR av.sl_number ILIKE $${params.length})`);

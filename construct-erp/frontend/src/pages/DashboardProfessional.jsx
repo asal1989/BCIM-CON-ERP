@@ -15,9 +15,10 @@ import {
   TrendingUp, FileWarning, ClipboardList, Users, CheckCircle2,
   ArrowUpRight, ArrowDownRight, Activity, FileSpreadsheet,
 } from 'lucide-react';
-import { projectAPI, analyticsAPI, tqsBillsAPI } from '../api/client';
+import { projectAPI, analyticsAPI, tqsBillsAPI, procurementAdvanceAPI } from '../api/client';
 import useAuthStore from '../store/authStore';
 import { useLanguage } from '../context/LanguageContext';
+import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
 
 const PMDashboard           = lazy(() => import('./dashboards/PMDashboard'));
@@ -67,6 +68,12 @@ const relTime = (date) => {
 };
 
 const toArray = (r) => Array.isArray(r?.data) ? r.data : (Array.isArray(r?.data?.data) ? r.data?.data : []);
+
+const fmtDate = (d) => {
+  if (!d) return '—';
+  try { return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); }
+  catch { return '—'; }
+};
 
 const getRangeBounds = (range) => {
   if (range === 'all') return { dateFrom: null, dateTo: null };
@@ -237,6 +244,8 @@ export default function Dashboard() {
 
   // Managing director, admins, and specific users see approvals embedded on dashboard.
   const isMdRole = isMDDashboardUser(user);
+  const navigate = useNavigate();
+  const qc = useQueryClient();
 
   // Role-based routing — skip for admin/super_admin/md/named emails
   if (!['super_admin', 'admin'].includes(role) && !isMdRole) {
@@ -314,6 +323,24 @@ export default function Dashboard() {
     queryKey: ['dashboard-tqs-bills', refreshKey, tqsBillsParams],
     queryFn: () => tqsBillsAPI.list(tqsBillsParams).then(r => Array.isArray(r.data) ? r.data : (r.data?.data ?? [])).catch(() => []),
     staleTime: 60 * 1000,
+  });
+
+  const { data: pendingMDAdvances = [] } = useQuery({
+    queryKey: ['md-pending-advances', refreshKey],
+    queryFn: () => procurementAdvanceAPI.list({ approval_status: 'procurement_approved' }).then(r => r.data?.data ?? []),
+    enabled: isMdRole,
+    staleTime: 0,
+    refetchOnMount: 'always',
+  });
+
+  const advanceMDMut = useMutation({
+    mutationFn: (id) => procurementAdvanceAPI.approveMD(id),
+    onSuccess: () => {
+      toast.success('Advance voucher authorized');
+      qc.invalidateQueries({ queryKey: ['md-pending-advances'] });
+      qc.invalidateQueries({ queryKey: ['procurement-advances'] });
+    },
+    onError: (e) => toast.error(e?.response?.data?.message || 'Authorization failed'),
   });
 
   // ── Derived ──
@@ -464,6 +491,76 @@ export default function Dashboard() {
             <Suspense fallback={<DashLoader />}>
               <ApprovalsPage embedded mdMode />
             </Suspense>
+          </div>
+        )}
+
+        {/* ════════════════════ ADVANCE VOUCHERS — AWAITING MD APPROVAL ════════════════════ */}
+        {isMdRole && pendingMDAdvances.length > 0 && (
+          <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', padding: '16px 18px', marginBottom: 18, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <Wallet className="w-4 h-4 text-indigo-600" />
+                  Advance Vouchers — Awaiting Your Authorization
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {pendingMDAdvances.length} voucher{pendingMDAdvances.length !== 1 ? 's' : ''} approved by Procurement · pending your sign-off
+                </p>
+              </div>
+              <Link to="/procurement/advances" className="prof-panel-action" style={{ fontSize: 11 }}>
+                View all <ChevronRight size={11} />
+              </Link>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="prof-table">
+                <thead>
+                  <tr>
+                    <th>Voucher #</th>
+                    <th>Vendor</th>
+                    <th>Project</th>
+                    <th className="num">Advance Amount</th>
+                    <th>Proc. Approved By</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingMDAdvances.map(av => (
+                    <tr key={av.id}>
+                      <td className="font-medium text-slate-800">{av.sl_number || av.voucher_number || '—'}</td>
+                      <td>{av.vendor_name}</td>
+                      <td>{av.project_name || '—'}</td>
+                      <td className="num font-semibold text-slate-800">{inr(av.advance_value)}</td>
+                      <td>{av.procurement_approved_by_name || '—'}</td>
+                      <td>{fmtDate(av.created_at)}</td>
+                      <td>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => navigate(`/procurement/advances/${av.id}`)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+                            style={{ background: '#f1f5f9', color: '#475569' }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
+                            onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}
+                          >
+                            <FileText className="w-3 h-3" /> Review
+                          </button>
+                          <button
+                            onClick={() => advanceMDMut.mutate(av.id)}
+                            disabled={advanceMDMut.isPending}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-white transition-colors disabled:opacity-50"
+                            style={{ background: '#15803d' }}
+                            onMouseEnter={e => { if (!advanceMDMut.isPending) e.currentTarget.style.background = '#166534'; }}
+                            onMouseLeave={e => e.currentTarget.style.background = '#15803d'}
+                          >
+                            <CheckCircle2 className="w-3 h-3" /> Authorize
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
