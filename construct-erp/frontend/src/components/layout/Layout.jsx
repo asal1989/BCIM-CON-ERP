@@ -1111,7 +1111,7 @@ function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle, topOffset
       {/* ── Layout gap ── keeps the correct space in the flex row (invisible) */}
       <div
         className="print:hidden desktop-sidebar"
-        style={{ width: collapsed ? 64 : 264, flexShrink: 0, transition: 'width 0.22s ease' }}
+        style={{ width: collapsed ? 80 : 264, flexShrink: 0, transition: 'width 0.22s ease' }}
       />
 
       {/* ── Actual sidebar ── always position:fixed so expanding NEVER shifts page content.
@@ -1125,11 +1125,11 @@ function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle, topOffset
           top: topOffset,   // passed from Layout: 52px (no breadcrumb) or 80px (with breadcrumb)
           left: 0,
           bottom: 0,
-          width: isExpanded ? 264 : 64,
+          width: isExpanded ? 264 : 80,
           zIndex: 44,       // below header (50), above page content
           background: 'linear-gradient(180deg, #111e3a 0%, #172554 60%, #1e3a8a 100%)',
-          borderRight: 'none',
-          boxShadow: isExpanded ? '4px 0 24px rgba(0,0,0,0.35)' : '2px 0 12px rgba(0,0,0,0.25)',
+          borderRight: isExpanded ? 'none' : '3px solid rgba(99,102,241,0.5)',
+          boxShadow: isExpanded ? '4px 0 24px rgba(0,0,0,0.35)' : '3px 0 16px rgba(0,0,0,0.4)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
@@ -1271,55 +1271,76 @@ function DesktopSidebar({ navGroups, matchesPath, collapsed, onToggle, topOffset
           </div>
         ) : (
           /* ── Collapsed: icon-only strip (hover to expand) ── */
-          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 6px' }}>
-            {recentPages.length > 0 && (
-              <>
-                {recentPages.slice(0, 3).map(page => {
-                  const navItem = navGroups.flatMap(g => g.items).find(i => i.to === page.to);
-                  const Icon = navItem?.icon || Clock3;
-                  const isActive = matchesPath(page.to);
-                  return (
-                    <NavLink key={page.to} to={page.to} onClick={handleNavClick}
-                      title={page.label}
-                      style={{
-                        width: 44, height: 38, margin: '2px auto 4px', display: 'flex',
-                        alignItems: 'center', justifyContent: 'center', borderRadius: 9,
-                        textDecoration: 'none',
-                        background: isActive ? 'rgba(255,255,255,0.18)' : 'transparent',
-                        color: isActive ? '#fff' : 'rgba(255,255,255,0.55)',
-                      }}
-                    >
-                      <Icon size={16} />
-                    </NavLink>
-                  );
-                })}
-                <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '4px 8px 6px' }} />
-              </>
-            )}
-            {navGroups.map(group => {
-              const hasActive = group.items.some(item => matchesPath(item.to));
-              const GroupIcon = group.items[0]?.icon || FolderSearch;
-              return (
-                <button
-                  key={group.label}
-                  onClick={() => setExpandedGroup(group.label)}
-                  title={group.label}
-                  style={{
-                    width: 44, height: 42,
-                    margin: '2px auto 6px',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    borderRadius: 10, border: 'none',
-                    background: hasActive ? 'rgba(255,255,255,0.18)' : 'transparent',
-                    color: hasActive ? '#fff' : 'rgba(255,255,255,0.5)',
-                    cursor: 'pointer', position: 'relative',
-                  }}
-                >
-                  <GroupIcon size={18} />
-                  {hasActive && <span style={{ position: 'absolute', left: 2, top: 10, bottom: 10, width: 3, borderRadius: 4, background: '#fff' }} />}
-                </button>
-              );
-            })}
-          </div>
+          <>
+            {/* ▲ Scroll up arrow */}
+            <button
+              onClick={() => { const el = document.getElementById('sidebar-icon-scroll'); if (el) el.scrollBy({ top: -120, behavior: 'smooth' }); }}
+              style={{ width: '100%', height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.06)', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', flexShrink: 0 }}
+              title="Scroll up"
+            >
+              <ChevronUp size={14} />
+            </button>
+
+            <div id="sidebar-icon-scroll" style={{ flex: 1, overflowY: 'auto', padding: '6px 8px', scrollbarWidth: 'none' }}>
+              {recentPages.length > 0 && (
+                <>
+                  {recentPages.slice(0, 3).map(page => {
+                    const navItem = navGroups.flatMap(g => g.items).find(i => i.to === page.to);
+                    const Icon = navItem?.icon || Clock3;
+                    const isActive = matchesPath(page.to);
+                    return (
+                      <NavLink key={page.to} to={page.to} onClick={handleNavClick}
+                        title={page.label}
+                        style={{
+                          width: 52, height: 40, margin: '2px auto 4px', display: 'flex',
+                          alignItems: 'center', justifyContent: 'center', borderRadius: 10,
+                          textDecoration: 'none',
+                          background: isActive ? 'rgba(99,102,241,0.35)' : 'rgba(255,255,255,0.04)',
+                          color: isActive ? '#fff' : 'rgba(255,255,255,0.75)',
+                          border: isActive ? '1px solid rgba(99,102,241,0.6)' : '1px solid rgba(255,255,255,0.06)',
+                        }}
+                      >
+                        <Icon size={18} />
+                      </NavLink>
+                    );
+                  })}
+                  <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', margin: '4px 6px 6px' }} />
+                </>
+              )}
+              {navGroups.map(group => {
+                const hasActive = group.items.some(item => matchesPath(item.to));
+                const GroupIcon = group.items[0]?.icon || FolderSearch;
+                return (
+                  <button
+                    key={group.label}
+                    onClick={() => setExpandedGroup(group.label)}
+                    title={group.label}
+                    style={{
+                      width: 52, height: 44,
+                      margin: '2px auto 4px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      borderRadius: 10, border: hasActive ? '1px solid rgba(255,255,255,0.25)' : '1px solid rgba(255,255,255,0.06)',
+                      background: hasActive ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.04)',
+                      color: hasActive ? '#fff' : 'rgba(255,255,255,0.65)',
+                      cursor: 'pointer', position: 'relative',
+                    }}
+                  >
+                    <GroupIcon size={20} />
+                    {hasActive && <span style={{ position: 'absolute', left: 0, top: 10, bottom: 10, width: 3, borderRadius: '0 3px 3px 0', background: '#6366f1' }} />}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* ▼ Scroll down arrow */}
+            <button
+              onClick={() => { const el = document.getElementById('sidebar-icon-scroll'); if (el) el.scrollBy({ top: 120, behavior: 'smooth' }); }}
+              style={{ width: '100%', height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.06)', border: 'none', borderTop: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', flexShrink: 0 }}
+              title="Scroll down"
+            >
+              <ChevronDown size={14} />
+            </button>
+          </>
         )}
       </aside>
     </>
