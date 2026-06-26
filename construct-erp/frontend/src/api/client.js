@@ -1526,7 +1526,7 @@ export const scAPI = {
   reportSummary:      (p)       => api.get('/sc/reports/summary', { params: p }),
   reportWOBalance:    (p)       => api.get('/sc/reports/wo-balance', { params: p }),
   reportOutstanding:  (p)       => api.get('/sc/reports/outstanding', { params: p }),
-  reportRetention:    ()        => api.get('/sc/reports/retention'),
+  reportRetention:    (p={})    => api.get('/sc/reports/retention', { params: p }),
   reportLabour:       (p)       => api.get('/sc/reports/labour', { params: p }),
   // Settings
   getSettings:        ()        => api.get('/sc/settings'),

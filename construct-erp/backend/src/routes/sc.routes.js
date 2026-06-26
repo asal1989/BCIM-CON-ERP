@@ -1149,7 +1149,10 @@ router.get('/reports/outstanding', async (req, res) => {
 
 router.get('/reports/retention', async (req, res) => {
   try {
-    const r = await query(`SELECT sc.name AS sc_name, COALESCE(SUM(b.retention_amount) FILTER (WHERE b.status NOT IN ('draft','rejected')),0) AS total_retention, COALESCE(SUM(b.retention_amount) FILTER (WHERE b.status='paid'),0) AS released FROM sc_subcontractors sc JOIN sc_work_orders wo ON wo.sc_id=sc.id LEFT JOIN sc_bills b ON b.wo_id=wo.id WHERE sc.company_id=$1 GROUP BY sc.id, sc.name ORDER BY total_retention DESC`, [CID(req)]);
+    const { project_id } = req.query;
+    let pClause = ''; const pp = [CID(req)];
+    if (project_id) { pClause = ` AND wo.project_id=$2`; pp.push(project_id); }
+    const r = await query(`SELECT sc.name AS sc_name, COALESCE(SUM(b.retention_amount) FILTER (WHERE b.status NOT IN ('draft','rejected')),0) AS total_retention, COALESCE(SUM(b.retention_amount) FILTER (WHERE b.status='paid'),0) AS released FROM sc_subcontractors sc JOIN sc_work_orders wo ON wo.sc_id=sc.id LEFT JOIN sc_bills b ON b.wo_id=wo.id WHERE sc.company_id=$1${pClause} GROUP BY sc.id, sc.name ORDER BY total_retention DESC`, pp);
     res.json({ data: r.rows });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
