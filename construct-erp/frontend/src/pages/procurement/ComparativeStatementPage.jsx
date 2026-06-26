@@ -18,7 +18,7 @@ const STAGES = [
   { id: 'approve', label: 'MD Approval',         status: 'pending_approval' },
 ];
 
-const fmt  = d  => d ? dayjs(d).format('DD.MM.YYYY') : '—';
+const fmt  = d  => d ? dayjs(d).format('DD-MM-YYYY') : '—';
 const inr  = v  => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const inr0 = v  => Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
 
@@ -814,7 +814,7 @@ export default function ComparativeStatementPage() {
               ...p,
               [activeSigModal.key]: {
                 dataUrl,
-                signedAt: dayjs().format('DD MMM YYYY HH:mm'),
+                signedAt: dayjs().format('DD-MM-YYYY HH:mm'),
                 name: activeSigModal.name,
               },
             }));

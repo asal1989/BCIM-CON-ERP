@@ -260,7 +260,7 @@ const DetailPanel = ({ row, benchmarks, onClose, onSaveBenchmark, onDeleteBenchm
         {row.vendor_name && <p><span className="font-medium">Vendor:</span> {row.vendor_name}</p>}
         {row.doc_ref && <p><span className="font-medium">Ref:</span> {row.doc_ref}</p>}
         {row.rate_date && (
-          <p><span className="font-medium">Rate Date:</span> {new Date(row.rate_date).toLocaleDateString('en-IN')}</p>
+          <p><span className="font-medium">Rate Date:</span> {(() => { const x = new Date(row.rate_date); return isNaN(x.getTime()) ? '—' : `${String(x.getDate()).padStart(2,'0')}-${String(x.getMonth()+1).padStart(2,'0')}-${x.getFullYear()}`; })()}</p>
         )}
         {parseFloat(row.reorder_level || 0) > 0 && (
           <p><span className="font-medium">Reorder Level:</span> {row.reorder_level}</p>

@@ -53,7 +53,7 @@ export default function MINPrintTemplate({ min }) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <span className="text-[10px] font-medium text-slate-400 uppercase tracking-widest block mb-1">Issue Date</span>
-              <p className="text-sm font-medium">{dayjs(min.issue_date).format('DD MMMM YYYY')}</p>
+              <p className="text-sm font-medium">{dayjs(min.issue_date).format('DD-MM-YYYY')}</p>
             </div>
             <div>
                <span className="text-[10px] font-medium text-slate-400 uppercase tracking-widest block mb-1">Vehicle No.</span>

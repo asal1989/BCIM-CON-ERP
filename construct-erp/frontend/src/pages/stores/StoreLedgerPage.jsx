@@ -705,7 +705,7 @@ export default function StoreLedgerPage() {
           const isIssue = txn.transaction_type === 'issue' || txn.transaction_type === 'transfer_out';
           const txnQty = parseFloat(txn.quantity || 0);
           return [
-            txn.transacted_at ? dayjs(txn.transacted_at).format('DD MMM YYYY') : '-',
+            txn.transacted_at ? dayjs(txn.transacted_at).format('DD-MM-YYYY') : '-',
             cfg.label,
             txn.reference_number || '-',
             isReceipt ? fmt2(txnQty) : '-',
@@ -851,7 +851,7 @@ export default function StoreLedgerPage() {
             <td class="meta-cell">
               <div class="meta-row"><span class="meta-label">Project :</span><span class="meta-value">${escapeHtml(projectName)}</span></div>
               <div class="meta-row"><span class="meta-label">Prepared by :</span><span class="meta-value">${escapeHtml(storesPersonName)}</span></div>
-              <div class="meta-row"><span class="meta-label">Print Date :</span><span class="meta-value">${dayjs().format('DD MMM YYYY, hh:mm A')}</span></div>
+              <div class="meta-row"><span class="meta-label">Print Date :</span><span class="meta-value">${dayjs().format('DD-MM-YYYY hh:mm A')}</span></div>
             </td>
           </tr>
         </table>
@@ -865,7 +865,7 @@ export default function StoreLedgerPage() {
         <!-- Footer -->
         <div class="doc-footer">
           <span>BCIM Construct-ERP v3.0 &bull; Store Ledger &bull; ${escapeHtml(storesPersonName)}</span>
-          <span>Confidential &mdash; For internal use only &bull; Printed: ${dayjs().format('DD/MM/YYYY HH:mm')}</span>
+          <span>Confidential &mdash; For internal use only &bull; Printed: ${dayjs().format('DD-MM-YYYY HH:mm')}</span>
         </div>
 
       </body>
@@ -888,7 +888,7 @@ export default function StoreLedgerPage() {
     doc.text(report.title, 40, 34);
     doc.setFontSize(9);
     doc.setTextColor(71, 85, 105);
-    doc.text(`BCIM Engineering Pvt Ltd | Generated ${dayjs().format('DD MMM YYYY, hh:mm A')}`, 40, 50);
+    doc.text(`BCIM Engineering Pvt Ltd | Generated ${dayjs().format('DD-MM-YYYY hh:mm A')}`, 40, 50);
     autoTable(doc, {
       startY: 66,
       head: [report.columns],
@@ -1708,7 +1708,7 @@ export default function StoreLedgerPage() {
                           <td className="px-4 py-2.5"><span className="text-xs font-medium uppercase text-slate-900 font-medium bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">{row.unit}</span></td>
                           <td className="px-4 py-2.5 text-xs font-mono text-slate-600">{fmt2(row.opening_stock)}</td>
                           <td className="px-4 py-2.5 text-xs font-medium font-mono text-amber-600">{fmt2(row.closing_stock)}</td>
-                          <td className="px-4 py-2.5 text-xs text-slate-900 font-semibold">{row.last_issued_at ? dayjs(row.last_issued_at).format('DD MMM YYYY') : 'Never issued'}</td>
+                          <td className="px-4 py-2.5 text-xs text-slate-900 font-semibold">{row.last_issued_at ? dayjs(row.last_issued_at).format('DD-MM-YYYY') : 'Never issued'}</td>
                         </tr>
                       ))}
                     {movSlowMoving.length === 0 && (
@@ -1851,7 +1851,7 @@ export default function StoreLedgerPage() {
                           return (
                             <tr key={i} className="hover:bg-slate-50 transition-colors">
                               <td className="px-4 py-3 text-xs text-slate-900 whitespace-nowrap">
-                                {dayjs(txn.transacted_at).format('DD MMM YYYY')}
+                                {dayjs(txn.transacted_at).format('DD-MM-YYYY')}
                               </td>
                               <td className="px-4 py-3 whitespace-nowrap">
                                 <span className={clsx('px-2.5 py-1 rounded-full text-xs font-medium border', cfg.bg, cfg.color)}>

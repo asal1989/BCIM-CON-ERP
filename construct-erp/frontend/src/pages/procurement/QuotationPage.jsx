@@ -275,7 +275,7 @@ export default function QuotationPage({ mode = 'all' }) {
                       {indent.serial_no_formatted || indent.mrs_number || indent.id?.slice(0, 8)}
                     </div>
                     <div className="text-[11px] text-slate-900 font-medium mt-0.5">
-                      {indent.required_by ? dayjs(indent.required_by).format('D MMM YY') : '—'}
+                      {indent.required_by ? dayjs(indent.required_by).format('DD-MM-YYYY') : '—'}
                     </div>
                   </div>
 

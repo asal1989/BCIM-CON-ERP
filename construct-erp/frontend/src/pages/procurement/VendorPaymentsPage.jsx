@@ -27,7 +27,7 @@ const asArray = payload => {
 };
 
 const money = value => `₹${Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const fmt = value => (value ? dayjs(value).format('DD MMM YYYY') : '—');
+const fmt = value => (value ? dayjs(value).format('DD-MM-YYYY') : '—');
 const clean = value => String(value || '').trim().toLowerCase();
 
 const PAYMENT_MODES = ['RTGS', 'NEFT', 'IMPS', 'UPI', 'Cheque', 'Cash', 'DD'];

@@ -17,7 +17,7 @@ function getSigBox(stageId, data) {
 
 const ALL_STAGE_IDS = ['stores-approve', 'approve-pm', 'approve-mgmt', 'approve-md'];
 
-const fmtDate = (value, fallback = '-') => value ? dayjs(value).format('DD-MMM-YYYY') : fallback;
+const fmtDate = (value, fallback = '-') => value ? dayjs(value).format('DD-MM-YYYY') : fallback;
 const val = (value, fallback = '-') => value || fallback;
 const qty = (item) => item?.quantity ?? item?.qty ?? '';
 const material = (item) => item?.material_name || item?.material || item?.description || '';

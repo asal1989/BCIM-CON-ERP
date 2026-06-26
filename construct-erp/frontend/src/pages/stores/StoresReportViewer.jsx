@@ -17,8 +17,19 @@ const storesReportAPI = {
 
 // ── Column formatters ─────────────────────────────────────────────────────────
 const fmt = {
-  date:  (v) => v ? new Date(v).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—',
-  dt:    (v) => v ? new Date(v).toLocaleString('en-IN',  { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—',
+  date:  (v) => {
+    if (!v) return '—';
+    const x = new Date(v);
+    if (isNaN(x.getTime())) return '—';
+    return `${String(x.getDate()).padStart(2,'0')}-${String(x.getMonth()+1).padStart(2,'0')}-${x.getFullYear()}`;
+  },
+  dt:    (v) => {
+    if (!v) return '—';
+    const x = new Date(v);
+    if (isNaN(x.getTime())) return '—';
+    const d = `${String(x.getDate()).padStart(2,'0')}-${String(x.getMonth()+1).padStart(2,'0')}-${x.getFullYear()}`;
+    return `${d} ${String(x.getHours()).padStart(2,'0')}:${String(x.getMinutes()).padStart(2,'0')}`;
+  },
   num:   (v) => v == null ? '—' : Number(v).toLocaleString('en-IN'),
   dec:   (v) => v == null ? '—' : Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
   qty:   (v) => v == null ? '—' : Number(v).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 3 }),

@@ -83,7 +83,7 @@ function GRSDetailPanel({ grs, onClose, onAcknowledge, ackLoading, onCancel, can
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
               ['Vehicle No.',        grs.vehicle_no       || '—'],
-              ['Date & Time',        grs.date_time ? dayjs(grs.date_time).format('DD MMM YYYY, HH:mm') : '—'],
+              ['Date & Time',        grs.date_time ? dayjs(grs.date_time).format('DD-MM-YYYY HH:mm') : '—'],
               ['Security In-charge', grs.security_incharge || '—'],
               ['GRS No.',            grs.grs_number       || '—'],
             ].map(([lbl, val]) => (
@@ -151,7 +151,7 @@ function GRSDetailPanel({ grs, onClose, onAcknowledge, ackLoading, onCancel, can
               <p className="text-xs text-emerald-800 font-medium">Received the above materials in good condition</p>
               <div className="mt-2 text-xs text-emerald-700">
                 Acknowledged by: <strong>{grs.acknowledged_by_name}</strong>
-                {grs.acknowledged_at && <span className="ml-2 text-emerald-600">· {dayjs(grs.acknowledged_at).format('DD MMM YYYY, HH:mm')}</span>}
+                {grs.acknowledged_at && <span className="ml-2 text-emerald-600">· {dayjs(grs.acknowledged_at).format('DD-MM-YYYY HH:mm')}</span>}
               </div>
             </div>
           )}
@@ -311,7 +311,7 @@ export default function GRSPage() {
     const headers = ['GRS Number','Date & Time','Project','Vehicle No','Security In-charge','Items','Status'];
     const rows = filtered.map(g => [
       g.grs_number,
-      g.date_time ? dayjs(g.date_time).format('DD/MM/YYYY HH:mm') : '',
+      g.date_time ? dayjs(g.date_time).format('DD-MM-YYYY HH:mm') : '',
       g.project_name,
       g.vehicle_no || '',
       g.security_incharge || '',
@@ -457,7 +457,7 @@ export default function GRSPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-500">
-                      {grs.date_time ? dayjs(grs.date_time).format('DD MMM YYYY HH:mm') : '—'}
+                      {grs.date_time ? dayjs(grs.date_time).format('DD-MM-YYYY HH:mm') : '—'}
                     </td>
                     <td className="px-4 py-3">
                       <div className="text-xs font-medium text-slate-900 max-w-[140px] truncate">{grs.project_name}</div>

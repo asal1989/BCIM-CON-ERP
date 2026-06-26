@@ -166,8 +166,8 @@ function OverdueTable({ rows, loading }) {
            <td className="px-3 py-2 font-medium text-[#4a6fa5]">{r.serial_no_formatted || r.po_number}</td>
            <td className="px-3 py-2">{r.vendor_name || '—'}</td>
            <td className="px-3 py-2">{r.project_name}</td>
-           <td className="px-3 py-2">{dayjs(r.po_date).format('DD MMM YY')}</td>
-           <td className="px-3 py-2 text-red-600 font-medium">{dayjs(r.delivery_date).format('DD MMM YY')}</td>
+           <td className="px-3 py-2">{dayjs(r.po_date).format('DD-MM-YYYY')}</td>
+           <td className="px-3 py-2 text-red-600 font-medium">{dayjs(r.delivery_date).format('DD-MM-YYYY')}</td>
            <td className="px-3 py-2">
              <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">{r.days_overdue}d</span>
            </td>
@@ -195,8 +195,8 @@ function PartialTable({ rows, loading }) {
              <td className="px-3 py-2 font-medium text-[#4a6fa5]">{r.serial_no_formatted || r.po_number}</td>
              <td className="px-3 py-2">{r.vendor_name || '—'}</td>
              <td className="px-3 py-2">{r.project_name}</td>
-             <td className="px-3 py-2">{dayjs(r.po_date).format('DD MMM YY')}</td>
-             <td className="px-3 py-2">{r.delivery_date ? dayjs(r.delivery_date).format('DD MMM YY') : '—'}</td>
+             <td className="px-3 py-2">{dayjs(r.po_date).format('DD-MM-YYYY')}</td>
+             <td className="px-3 py-2">{r.delivery_date ? dayjs(r.delivery_date).format('DD-MM-YYYY') : '—'}</td>
              <td className="px-3 py-2 text-right">{fmt(r.total_ordered)}</td>
              <td className="px-3 py-2 text-right">{fmt(r.total_received)}</td>
              <td className="px-3 py-2">
@@ -258,7 +258,7 @@ function OrphanTable({ rows, loading }) {
            <td className="px-3 py-2 font-medium text-[#4a6fa5]">{r.sl_number}</td>
            <td className="px-3 py-2">{r.vendor_name}</td>
            <td className="px-3 py-2">{r.inv_number || '—'}</td>
-           <td className="px-3 py-2">{r.inv_date ? dayjs(r.inv_date).format('DD MMM YY') : '—'}</td>
+           <td className="px-3 py-2">{r.inv_date ? dayjs(r.inv_date).format('DD-MM-YYYY') : '—'}</td>
            <td className="px-3 py-2">{r.po_number || '—'}</td>
            <td className="px-3 py-2">{r.project_name}</td>
            <td className="px-3 py-2 text-right font-medium">₹{fmt(r.total_amount)}</td>

@@ -75,7 +75,7 @@ export default function POVerificationPage() {
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-medium text-slate-900 font-medium uppercase tracking-widest mb-1">Issue Date</p>
-                <div className="text-slate-200 font-bold">{dayjs(po.po_date).format('DD MMM YYYY')}</div>
+                <div className="text-slate-200 font-bold">{dayjs(po.po_date).format('DD-MM-YYYY')}</div>
               </div>
             </div>
 

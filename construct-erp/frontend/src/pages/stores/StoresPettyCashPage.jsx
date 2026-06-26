@@ -120,9 +120,9 @@ function printStatement({ entries, advances, receipts, projectName }) {
   const totalAdv  = advances.reduce((s, r) => s + Number(r.amount), 0);
   const balance   = totalRec - totalLP - totalAdv;
 
-  const recRows  = receipts.map(r => `<tr><td>${dayjs(r.receipt_date).format('DD/MM/YYYY')}</td><td>${r.voucher_no || '–'}</td><td>${r.received_by || '–'}</td><td style="text-align:right">${fmt(r.amount)}</td></tr>`).join('');
-  const lpRows   = approved.map(r => `<tr><td>${dayjs(r.entry_date).format('DD/MM/YYYY')}</td><td>${r.supplier}</td><td>${(r.items || []).map(i => i.material_name).join(', ') || '–'}</td><td>${r.invoice_no || '–'}</td><td style="text-align:right">${fmt(r.amount)}</td></tr>`).join('');
-  const advRows  = advances.map(r => `<tr><td>${dayjs(r.advance_date).format('DD/MM/YYYY')}</td><td>${r.payee_name}</td><td>${r.description || '–'}</td><td style="text-align:right">${fmt(r.amount)}</td></tr>`).join('');
+  const recRows  = receipts.map(r => `<tr><td>${dayjs(r.receipt_date).format('DD-MM-YYYY')}</td><td>${r.voucher_no || '–'}</td><td>${r.received_by || '–'}</td><td style="text-align:right">${fmt(r.amount)}</td></tr>`).join('');
+  const lpRows   = approved.map(r => `<tr><td>${dayjs(r.entry_date).format('DD-MM-YYYY')}</td><td>${r.supplier}</td><td>${(r.items || []).map(i => i.material_name).join(', ') || '–'}</td><td>${r.invoice_no || '–'}</td><td style="text-align:right">${fmt(r.amount)}</td></tr>`).join('');
+  const advRows  = advances.map(r => `<tr><td>${dayjs(r.advance_date).format('DD-MM-YYYY')}</td><td>${r.payee_name}</td><td>${r.description || '–'}</td><td style="text-align:right">${fmt(r.amount)}</td></tr>`).join('');
 
   const html = `<html><head><title>Petty Cash Statement</title>
   <style>body{font-family:Arial,sans-serif;font-size:12px;color:#1C2533;margin:32px}
@@ -306,7 +306,7 @@ function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, exi
     onError: (err, variables) => {
       if (err?.response?.status === 409 && err?.response?.data?.errorCode === 'DUPLICATE_INVOICE') {
         const ex = err.response.data.existing;
-        const msg = `Invoice "${variables.invoice_no || ''}" already recorded in entry #${ex.sl_no} (${ex.supplier}, ${dayjs(ex.entry_date).format('DD MMM YY')}).\n\nSave anyway?`;
+        const msg = `Invoice "${variables.invoice_no || ''}" already recorded in entry #${ex.sl_no} (${ex.supplier}, ${dayjs(ex.entry_date).format('DD-MM-YYYY')}).\n\nSave anyway?`;
         if (window.confirm(msg)) saveMut.mutate({ ...variables, force: true });
       } else {
         toast.error(err?.response?.data?.error || 'Save failed');
@@ -358,7 +358,7 @@ function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, exi
                 {dupWarn && (
                   <div className="flex items-center gap-2 mt-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200">
                     <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                    Already in entry #{dupWarn.sl_no} — {dupWarn.supplier} · {dayjs(dupWarn.entry_date).format('DD MMM YY')}
+                    Already in entry #{dupWarn.sl_no} — {dupWarn.supplier} · {dayjs(dupWarn.entry_date).format('DD-MM-YYYY')}
                   </div>
                 )}
               </div>
@@ -1436,7 +1436,7 @@ export default function StoresPettyCashPage() {
                         <tr key={row.id} className={clsx('transition-colors cursor-pointer group', i % 2 === 0 ? 'bg-white hover:bg-green-50/40' : 'bg-slate-50/40 hover:bg-green-50/40')}
                           onClick={() => { setEditReceipt(row); setShowReceiptForm(true); }}>
                           <td className="px-4 py-3 text-slate-400 text-xs font-mono w-10">{i + 1}</td>
-                          <td className="px-4 py-3 text-slate-600 whitespace-nowrap text-sm">{dayjs(row.receipt_date).format('DD MMM YYYY')}</td>
+                          <td className="px-4 py-3 text-slate-600 whitespace-nowrap text-sm">{dayjs(row.receipt_date).format('DD-MM-YYYY')}</td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <div className="w-1.5 h-6 rounded-full bg-green-400 flex-shrink-0" />
@@ -1546,7 +1546,7 @@ export default function StoresPettyCashPage() {
                             {/* # */}
                             <td className="px-4 py-3 font-mono text-xs font-bold text-indigo-600 w-10">{row.sl_no}</td>
                             {/* Date */}
-                            <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">{dayjs(row.entry_date).format('DD MMM YY')}</td>
+                            <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">{dayjs(row.entry_date).format('DD-MM-YYYY')}</td>
                             {/* Supplier + Materials */}
                             <td className="px-4 py-3 max-w-[220px]">
                               <p className="font-semibold text-slate-800 truncate text-sm">{row.supplier}</p>
@@ -1711,7 +1711,7 @@ export default function StoresPettyCashPage() {
                         .map((row, i) => (
                         <tr key={row.id} className={clsx('transition-colors cursor-pointer group', i % 2 === 0 ? 'bg-white hover:bg-amber-50/30' : 'bg-slate-50/40 hover:bg-amber-50/30')}
                           onClick={() => { setEditAdv(row); setShowAdvForm(true); }}>
-                          <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">{dayjs(row.advance_date).format('DD MMM YY')}</td>
+                          <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">{dayjs(row.advance_date).format('DD-MM-YYYY')}</td>
                           <td className="px-4 py-3">
                             <p className="font-semibold text-slate-800">{row.payee_name}</p>
                           </td>
@@ -1809,7 +1809,7 @@ export default function StoresPettyCashPage() {
                     <tbody className="divide-y divide-slate-100">
                       {scAdvances.map((row, i) => (
                         <tr key={row.id} className={clsx('transition-colors group', i % 2 === 0 ? 'bg-white hover:bg-orange-50/30' : 'bg-slate-50/40 hover:bg-orange-50/30')}>
-                          <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">{dayjs(row.advance_date).format('DD MMM YY')}</td>
+                          <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">{dayjs(row.advance_date).format('DD-MM-YYYY')}</td>
                           {/* Merged: Sub-Contractor + WO */}
                           <td className="px-4 py-3 max-w-[200px]">
                             <p className="font-semibold text-slate-800 truncate">{row.vendor_name}</p>
@@ -2078,12 +2078,12 @@ function ReplenishmentModal({ totalReceived, totalSpent, cashInHand, projectName
 
   const printRequest = () => {
     const fmt = (v) => '₹' + Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
-    const today = dayjs().format('DD MMMM YYYY');
+    const today = dayjs().format('DD-MM-YYYY');
     const entriesRows = entries.map(e =>
-      `<tr><td>${dayjs(e.entry_date).format('DD/MM/YY')}</td><td>${e.supplier}</td><td>${(e.items || []).map(i => i.material_name).join(', ') || '–'}</td><td style="text-align:right">${fmt(e.amount)}</td></tr>`
+      `<tr><td>${dayjs(e.entry_date).format('DD-MM-YYYY')}</td><td>${e.supplier}</td><td>${(e.items || []).map(i => i.material_name).join(', ') || '–'}</td><td style="text-align:right">${fmt(e.amount)}</td></tr>`
     ).join('');
     const advRows = advances.map(a =>
-      `<tr><td>${dayjs(a.advance_date).format('DD/MM/YY')}</td><td>${a.payee_name}</td><td>${a.description || '–'}</td><td style="text-align:right">${fmt(a.amount)}</td></tr>`
+      `<tr><td>${dayjs(a.advance_date).format('DD-MM-YYYY')}</td><td>${a.payee_name}</td><td>${a.description || '–'}</td><td style="text-align:right">${fmt(a.amount)}</td></tr>`
     ).join('');
 
     const html = `<html><head><title>Petty Cash Replenishment Request</title>

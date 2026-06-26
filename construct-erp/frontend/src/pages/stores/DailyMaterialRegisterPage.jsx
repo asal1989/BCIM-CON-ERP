@@ -6,7 +6,12 @@ import { Calendar, Download, TrendingUp, AlertCircle, ArrowDown, ArrowUp } from 
 import * as XLSX from 'xlsx';
 
 const inr = (v) => `₹${Number(v||0).toLocaleString('en-IN',{maximumFractionDigits:2})}`;
-const fmt_date = (d) => d ? new Date(d).toLocaleDateString('en-IN', {day:'2-digit',month:'short',year:'numeric'}) : '—';
+const fmt_date = (d) => {
+  if (!d) return '—';
+  const x = new Date(d);
+  if (isNaN(x.getTime())) return '—';
+  return `${String(x.getDate()).padStart(2,'0')}-${String(x.getMonth()+1).padStart(2,'0')}-${x.getFullYear()}`;
+};
 
 export default function DailyMaterialRegisterPage() {
   const [searchParams] = useSearchParams();

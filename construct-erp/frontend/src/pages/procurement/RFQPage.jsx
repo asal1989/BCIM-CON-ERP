@@ -228,7 +228,7 @@ export default function RFQPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Info label="MRS No." value={indent.serial_no_formatted || indent.mrs_number || '-'} />
           <Info label="Project" value={indent.project_name || '-'} />
-          <Info label="Required By" value={indent.required_by ? dayjs(indent.required_by).format('D MMM YYYY') : '-'} />
+          <Info label="Required By" value={indent.required_by ? dayjs(indent.required_by).format('DD-MM-YYYY') : '-'} />
           <Info label="Items" value={`${(indent.items || []).filter(it => it.effective_included !== false && it.md_included !== false).length} materials`} />
         </div>
       </div>

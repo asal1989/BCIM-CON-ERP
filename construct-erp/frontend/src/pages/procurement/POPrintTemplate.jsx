@@ -206,9 +206,9 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
                           ['Project:',    data.project_name || '—', true],
                           ['PO No:',      data.serial_no_formatted || data.po_number || '—', true],
                           ...(isAmendment ? [['Original PO:', originalPoRef]] : []),
-                          ['Date:',       data.po_date ? dayjs(data.po_date).format('DD.MM.YYYY') : '—'],
+                          ['Date:',       data.po_date ? dayjs(data.po_date).format('DD-MM-YYYY') : '—'],
                           ['PO Req No:',  data.po_req_no || '—'],
-                          ['PO Req Date:', data.po_req_date ? dayjs(data.po_req_date).format('DD.MM.YYYY') : '—'],
+                          ['PO Req Date:', data.po_req_date ? dayjs(data.po_req_date).format('DD-MM-YYYY') : '—'],
                         ].map(([label, value, bold]) => (
                           <tr key={label}>
                             <td style={{ fontWeight: 700, padding: '1px 8px 1px 0', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{label}</td>
@@ -282,7 +282,7 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
                       <td style={{ ...TD, textAlign: 'center' }}>{qty.toLocaleString('en-IN')}</td>
                       <td style={{ ...TD, textAlign: 'right' }}>{isTaxIncl ? f2(rate) + ' (Incl.)' : f2(rate)}</td>
                       <td style={{ ...TD, textAlign: 'right' }}>{inr0(basic)}</td>
-                      <td style={{ ...TD, textAlign: 'center' }}>{it.req_date ? dayjs(it.req_date).format('DD.MM.YY') : ''}</td>
+                      <td style={{ ...TD, textAlign: 'center' }}>{it.req_date ? dayjs(it.req_date).format('DD-MM-YYYY') : ''}</td>
                     </tr>
                   );
                 })}

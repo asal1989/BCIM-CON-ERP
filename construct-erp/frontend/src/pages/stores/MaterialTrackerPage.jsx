@@ -546,7 +546,7 @@ function LoadsPanel({ entry, materialType, canWrite, onRefresh }) {
                   <React.Fragment key={l.id}>
                     <tr className="border-b border-slate-100 hover:bg-slate-50">
                       <td className="px-2.5 py-2 text-slate-400">{idx + 1}</td>
-                      <td className="px-2.5 py-2 whitespace-nowrap">{dayjs(l.received_date).format('DD-MM-YY')}</td>
+                      <td className="px-2.5 py-2 whitespace-nowrap">{dayjs(l.received_date).format('DD-MM-YYYY')}</td>
                       <td className="px-2.5 py-2 font-mono text-[10px]">{l.vehicle_no || '—'}</td>
                       <td className="px-2.5 py-2">{l.invoice_no || '—'}</td>
                       <td className="px-2.5 py-2 text-slate-500">{l.ign_no || '—'}</td>

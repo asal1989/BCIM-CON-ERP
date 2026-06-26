@@ -65,7 +65,7 @@ const STAGE_ACTIONS = [
 ];
 
 const inr  = v => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const fmt  = d => d ? dayjs(d).format('DD MMM YYYY') : '—';
+const fmt  = d => d ? dayjs(d).format('DD-MM-YYYY') : '—';
 
 /* ─── Signature Pad Modal ─── */
 function SignaturePadModal({ signerName, signerRole, onSave, onClose }) {
@@ -142,7 +142,7 @@ function SignaturePadModal({ signerName, signerRole, onSave, onClose }) {
           <p className="text-[11px] text-slate-500">
             Signing as: <span className="font-medium text-slate-700">{signerName}</span>
             &nbsp;·&nbsp; {signerRole}
-            &nbsp;·&nbsp; {dayjs().format('DD MMM YYYY, HH:mm')}
+            &nbsp;·&nbsp; {dayjs().format('DD-MM-YYYY HH:mm')}
           </p>
         </div>
         <div className="flex gap-3 px-5 pb-5">
@@ -888,8 +888,8 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
               {[
                 ['Vendor', selectedVendor?.name || '—'],
                 ['Project', projects.find(p => p.id === form.project_id)?.name || '—'],
-                ['PO Date', form.po_date ? dayjs(form.po_date).format('DD MMM YYYY') : '—'],
-                ['Required By', form.delivery_date ? dayjs(form.delivery_date).format('DD MMM YYYY') : '—'],
+                ['PO Date', form.po_date ? dayjs(form.po_date).format('DD-MM-YYYY') : '—'],
+                ['Required By', form.delivery_date ? dayjs(form.delivery_date).format('DD-MM-YYYY') : '—'],
                 ['Department', form.department || '—'],
                 ['Payment Terms', form.payment_terms || '—'],
                 ['Freight', form.freight_mode || '—'],
@@ -1394,7 +1394,7 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onDelete, onA
                             {b.work_desc && <div className="text-slate-900 font-medium font-normal truncate max-w-[140px]">{b.work_desc}</div>}
                           </td>
                           <td className="px-3 py-2.5 text-slate-900 font-medium whitespace-nowrap">
-                            {b.inv_date ? dayjs(b.inv_date).format('DD MMM YY') : '—'}
+                            {b.inv_date ? dayjs(b.inv_date).format('DD-MM-YYYY') : '—'}
                           </td>
                           <td className="px-3 py-2.5 font-medium text-slate-900 font-medium whitespace-nowrap">{inr(b.total_amount)}</td>
                           <td className="px-3 py-2.5">
@@ -1474,7 +1474,7 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onDelete, onA
                             <div className="mt-1.5 flex items-center gap-2">
                               <img src={sig.img} alt="signature"
                                 className="h-8 max-w-[120px] object-contain bg-white border border-slate-200 rounded px-1" />
-                              <span className="text-[10px] text-slate-400">{sig.by} · {sig.at ? dayjs(sig.at).format('DD MMM, HH:mm') : ''}</span>
+                              <span className="text-[10px] text-slate-400">{sig.by} · {sig.at ? dayjs(sig.at).format('DD-MM-YYYY HH:mm') : ''}</span>
                             </div>
                           )}
                         </div>

@@ -17,7 +17,7 @@ const asArray = payload => {
 
 const clean = value => String(value || '').trim().toLowerCase();
 const money = value => `₹${Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const fmt = value => (value ? dayjs(value).format('DD MMM YYYY') : '—');
+const fmt = value => (value ? dayjs(value).format('DD-MM-YYYY') : '—');
 
 const extractItems = record => {
   const nested = [record?.items, record?.po_items, record?.line_items, record?.quotation_items, record?.quote_items].find(Array.isArray);

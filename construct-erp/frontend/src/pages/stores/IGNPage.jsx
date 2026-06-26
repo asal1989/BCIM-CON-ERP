@@ -85,7 +85,7 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, in
               ['Bill No.',          ign.bill_number    || '—'],
               ['PO No.',            ign.po_number      || '—'],
               ['GRS No.',           ign.grs_number     || '—'],
-              ['Date & Time',       ign.date_time ? dayjs(ign.date_time).format('DD MMM YYYY, HH:mm') : '—'],
+              ['Date & Time',       ign.date_time ? dayjs(ign.date_time).format('DD-MM-YYYY HH:mm') : '—'],
               ['Driver',            ign.driver_name    || '—'],
               ['Gate Pass No.',     ign.gate_pass_no   || '—'],
               ['WB Slip No.',       ign.wb_slip_no     || '—'],
@@ -251,7 +251,7 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, in
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
               <p className="text-xs font-medium text-emerald-800">
                 Approved by <strong>{ign.approved_by_name}</strong> — Stock posted to inventory
-                {ign.approved_at && <span className="text-emerald-600 ml-2">· {dayjs(ign.approved_at).format('DD MMM YYYY, HH:mm')}</span>}
+                {ign.approved_at && <span className="text-emerald-600 ml-2">· {dayjs(ign.approved_at).format('DD-MM-YYYY HH:mm')}</span>}
               </p>
             </div>
           )}
@@ -409,7 +409,7 @@ export default function IGNPage() {
   const exportCSV = () => {
     const headers = ['IGN No.','Date','Project','Supplier/Vendor','Vehicle No.','DC No.','GRS No.','Items','Status'];
     const rows = filtered.map(g => [
-      g.ign_number, g.date_time ? dayjs(g.date_time).format('DD/MM/YYYY HH:mm') : '',
+      g.ign_number, g.date_time ? dayjs(g.date_time).format('DD-MM-YYYY HH:mm') : '',
       g.project_name, g.vendor_name || g.supplier_name || '', g.vehicle_no || '',
       g.dc_number || '', g.grs_number || '', g.item_count || 0, g.status,
     ]);
@@ -541,7 +541,7 @@ export default function IGNPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-500">
-                      {ign.date_time ? dayjs(ign.date_time).format('DD MMM YYYY HH:mm') : '—'}
+                      {ign.date_time ? dayjs(ign.date_time).format('DD-MM-YYYY HH:mm') : '—'}
                     </td>
                     <td className="px-4 py-3 text-xs font-medium text-slate-900 max-w-[130px] truncate">{ign.project_name}</td>
                     <td className="px-4 py-3 text-xs text-slate-600 max-w-[120px] truncate">{ign.vendor_name || ign.supplier_name || '—'}</td>

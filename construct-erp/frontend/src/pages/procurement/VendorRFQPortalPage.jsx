@@ -251,8 +251,8 @@ export default function VendorRFQPortalPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Info label="Vendor" value={data.vendor.name} />
             <Info label="Project" value={data.mrs.project_name} />
-            <Info label="Due Date" value={data.rfq.due_date ? dayjs(data.rfq.due_date).format('DD MMM YYYY') : '-'} />
-            <Info label="Required By" value={data.mrs.required_by ? dayjs(data.mrs.required_by).format('DD MMM YYYY') : '-'} />
+            <Info label="Due Date" value={data.rfq.due_date ? dayjs(data.rfq.due_date).format('DD-MM-YYYY') : '-'} />
+            <Info label="Required By" value={data.mrs.required_by ? dayjs(data.mrs.required_by).format('DD-MM-YYYY') : '-'} />
           </div>
         </section>
 

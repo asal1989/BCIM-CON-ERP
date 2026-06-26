@@ -165,8 +165,8 @@ export default function TenderDetailPage() {
               ['Work Package', tender.work_package || '—'],
               ['Estimated Value', fmt(tender.estimated_value)],
               ['Awarded Amount', fmt(tender.awarded_amount)],
-              ['Bid Close Date', tender.bid_close_date ? dayjs(tender.bid_close_date).format('DD MMM YYYY') : '—'],
-              ['Pre-Bid Date', tender.pre_bid_date ? dayjs(tender.pre_bid_date).format('DD MMM YYYY') : '—'],
+              ['Bid Close Date', tender.bid_close_date ? dayjs(tender.bid_close_date).format('DD-MM-YYYY') : '—'],
+              ['Pre-Bid Date', tender.pre_bid_date ? dayjs(tender.pre_bid_date).format('DD-MM-YYYY') : '—'],
               ['Contract Duration', tender.contract_duration ? `${tender.contract_duration} days` : '—'],
               ['EMD Required', tender.emd_required ? `Yes — ${fmt(tender.emd_amount)}` : 'No'],
             ].map(([k, v]) => (
@@ -432,7 +432,7 @@ export default function TenderDetailPage() {
                         <td className="px-4 py-3 text-slate-300">{d.file_name}</td>
                         <td className="px-4 py-3 text-slate-900 font-medium text-xs">{d.doc_type}</td>
                         <td className="px-4 py-3 text-slate-400">{d.uploaded_by_name || '—'}</td>
-                        <td className="px-4 py-3 text-slate-900 font-medium text-xs">{dayjs(d.uploaded_at).format('DD MMM YY HH:mm')}</td>
+                        <td className="px-4 py-3 text-slate-900 font-medium text-xs">{dayjs(d.uploaded_at).format('DD-MM-YYYY HH:mm')}</td>
                         <td className="px-4 py-3">
                           <button onClick={async () => {
                             await tenderAPI.removeDoc(id, d.id);

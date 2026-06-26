@@ -74,7 +74,7 @@ export default function MINVerificationPage() {
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-medium text-slate-900 font-medium uppercase tracking-widest mb-1">Issue Date</p>
-                <div className="text-slate-900 font-medium uppercase">{dayjs(min.issue_date).format('DD MMM YYYY')}</div>
+                <div className="text-slate-900 font-medium uppercase">{dayjs(min.issue_date).format('DD-MM-YYYY')}</div>
               </div>
             </div>
 
@@ -149,7 +149,7 @@ export default function MINVerificationPage() {
                <FileText className="w-6 h-6 text-slate-900 mb-2 opacity-30" />
                <p className="text-[8px] text-slate-900 font-medium uppercase tracking-widest leading-relaxed max-w-xs px-4">
                  This certificate provides one-way forensic proof of material consumption against the BCIM Global Ledger. 
-                 Stock was deducted on {dayjs(min.issue_date).format('DD/MM/YYYY')}.
+                 Stock was deducted on {dayjs(min.issue_date).format('DD-MM-YYYY')}.
                </p>
             </div>
           </div>

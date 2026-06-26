@@ -88,14 +88,14 @@ function GatePassDetailPanel({ gp, onClose, onReturn, onClose2, returnLoading, c
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
               ['Vehicle No.',      gp.vehicle_no       || '—'],
-              ['Date & Time',      gp.date_time ? dayjs(gp.date_time).format('DD MMM YYYY, HH:mm') : '—'],
+              ['Date & Time',      gp.date_time ? dayjs(gp.date_time).format('DD-MM-YYYY HH:mm') : '—'],
               ['Issued By',        gp.issued_by        || '—'],
               ['Issued To',        gp.issued_to        || '—'],
               ['Indented By',      gp.indented_by      || '—'],
               ['Authorised By',    gp.authorised_by    || '—'],
               ...(gp.pass_type === 'returnable' ? [
-                ['Expected Return', gp.expected_return_date ? dayjs(gp.expected_return_date).format('DD MMM YYYY') : '—'],
-                ['Returned At',     gp.returned_at ? dayjs(gp.returned_at).format('DD MMM YYYY, HH:mm') : '—'],
+                ['Expected Return', gp.expected_return_date ? dayjs(gp.expected_return_date).format('DD-MM-YYYY') : '—'],
+                ['Returned At',     gp.returned_at ? dayjs(gp.returned_at).format('DD-MM-YYYY HH:mm') : '—'],
               ] : []),
             ].map(([lbl, val]) => (
               <div key={lbl} className="bg-white border border-slate-200 rounded-lg px-3 py-2.5">
@@ -110,7 +110,7 @@ function GatePassDetailPanel({ gp, onClose, onReturn, onClose2, returnLoading, c
             <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center gap-3">
               <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />
               <span className="text-sm font-medium text-red-800">
-                Overdue — expected return {dayjs(gp.expected_return_date).format('DD MMM YYYY')}
+                Overdue — expected return {dayjs(gp.expected_return_date).format('DD-MM-YYYY')}
               </span>
             </div>
           )}
@@ -267,7 +267,7 @@ export default function GatePassPage() {
   const exportCSV = () => {
     const headers = ['GP No.','Type','Date','Project','Vehicle','Issued To','Items','Status'];
     const rows = filtered.map(g => [
-      g.gp_number, g.pass_type, g.date_time ? dayjs(g.date_time).format('DD/MM/YYYY HH:mm') : '',
+      g.gp_number, g.pass_type, g.date_time ? dayjs(g.date_time).format('DD-MM-YYYY HH:mm') : '',
       g.project_name, g.vehicle_no || '', g.issued_to || '', g.item_count || 0, g.status,
     ]);
     const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
@@ -398,7 +398,7 @@ export default function GatePassPage() {
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap"><TypeBadge type={gp.pass_type} /></td>
                       <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-500">
-                        {gp.date_time ? dayjs(gp.date_time).format('DD MMM YYYY HH:mm') : '—'}
+                        {gp.date_time ? dayjs(gp.date_time).format('DD-MM-YYYY HH:mm') : '—'}
                       </td>
                       <td className="px-4 py-3 text-xs font-medium text-slate-900 max-w-[130px] truncate">{gp.project_name}</td>
                       <td className="px-4 py-3 whitespace-nowrap">

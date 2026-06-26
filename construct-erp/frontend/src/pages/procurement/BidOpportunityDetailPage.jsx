@@ -145,8 +145,8 @@ export default function BidOpportunityDetailPage() {
               ['Source', opp.source],
               ['Estimated Value', fmtL(opp.estimated_value)],
               ['Bid Value', fmtL(opp.bid_value)],
-              ['Submission Date', opp.bid_submission_date ? dayjs(opp.bid_submission_date).format('DD MMM YYYY') : '—'],
-              ['Decision Date', opp.decision_date ? dayjs(opp.decision_date).format('DD MMM YYYY') : '—'],
+              ['Submission Date', opp.bid_submission_date ? dayjs(opp.bid_submission_date).format('DD-MM-YYYY') : '—'],
+              ['Decision Date', opp.decision_date ? dayjs(opp.decision_date).format('DD-MM-YYYY') : '—'],
               ['Bid Manager', opp.bid_manager_name || '—'],
               ['Estimator', opp.estimator_name || '—'],
             ].map(([k, v]) => (
@@ -305,7 +305,7 @@ export default function BidOpportunityDetailPage() {
                         <td className="px-4 py-3 text-slate-300">{d.file_name}</td>
                         <td className="px-4 py-3 text-slate-900 font-medium text-xs">{d.doc_type}</td>
                         <td className="px-4 py-3 text-slate-400">{d.uploaded_by_name || '—'}</td>
-                        <td className="px-4 py-3 text-slate-900 font-medium text-xs">{dayjs(d.uploaded_at).format('DD MMM YY HH:mm')}</td>
+                        <td className="px-4 py-3 text-slate-900 font-medium text-xs">{dayjs(d.uploaded_at).format('DD-MM-YYYY HH:mm')}</td>
                         <td className="px-4 py-3">
                           <button onClick={async () => { await bidOpportunityAPI.removeDoc(id, d.id); qInvalidate(); toast.success('Deleted'); }}
                             className="text-slate-900 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
@@ -350,7 +350,7 @@ export default function BidOpportunityDetailPage() {
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-xs text-slate-500">{log.performed_by_name || 'System'}</span>
                           <span className="text-xs text-slate-600">·</span>
-                          <span className="text-xs text-slate-500">{dayjs(log.performed_at).format('DD MMM YYYY HH:mm')}</span>
+                          <span className="text-xs text-slate-500">{dayjs(log.performed_at).format('DD-MM-YYYY HH:mm')}</span>
                         </div>
                       </div>
                     </div>

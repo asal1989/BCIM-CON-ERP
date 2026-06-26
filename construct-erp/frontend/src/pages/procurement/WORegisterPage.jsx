@@ -212,7 +212,7 @@ function WODrawer({ wo, onClose }) {
           <div>
             <p className="text-base font-medium text-slate-900 font-mono">{data.wo_number}</p>
             <p className="text-xs text-slate-500 font-medium mt-0.5 truncate max-w-[420px]">
-              {data.vendor_name || '—'} · {data.created_at ? dayjs(data.created_at).format('DD MMM YYYY') : '—'}
+              {data.vendor_name || '—'} · {data.created_at ? dayjs(data.created_at).format('DD-MM-YYYY') : '—'}
             </p>
           </div>
           <StatusBadge status={liveStatus} />
@@ -245,8 +245,8 @@ function WODrawer({ wo, onClose }) {
               ['Vendor Type',       data.vendor_type     || '—'],
               ['Vendor GSTIN',      data.vendor_gstin    || '—'],
               ['Project',           data.project_name    || '—'],
-              ['Start Date',        data.start_date  ? dayjs(data.start_date).format('DD MMM YYYY')  : '—'],
-              ['End / Target Date', data.end_date    ? dayjs(data.end_date).format('DD MMM YYYY')    : '—'],
+              ['Start Date',        data.start_date  ? dayjs(data.start_date).format('DD-MM-YYYY')  : '—'],
+              ['End / Target Date', data.end_date    ? dayjs(data.end_date).format('DD-MM-YYYY')    : '—'],
               ['Contract Amount',   `₹ ${inr(data.contract_amount || val)}`],
               ['Cost Head',         data.cost_head      || '—'],
               ['Work Category',     data.work_category  || '—'],
@@ -388,7 +388,7 @@ function WODrawer({ wo, onClose }) {
                           <td className="px-3 py-2.5 text-slate-400 font-mono">{i + 1}</td>
                           <td className="px-3 py-2.5 font-medium text-slate-800">{b.bill_number || '—'}</td>
                           <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">
-                            {b.bill_date ? dayjs(b.bill_date).format('DD MMM YY') : '—'}
+                            {b.bill_date ? dayjs(b.bill_date).format('DD-MM-YYYY') : '—'}
                           </td>
                           <td className="px-3 py-2.5 font-medium text-slate-800 whitespace-nowrap">₹{inr(b.total_amount)}</td>
                           <td className="px-3 py-2.5">
@@ -519,7 +519,7 @@ function WODrawer({ wo, onClose }) {
       {/* Footer */}
       <div className="flex-shrink-0 flex items-center justify-between px-6 py-3 border-t border-slate-100 bg-white">
         <span className="text-xs text-slate-400">
-          WO created: {data.created_at ? dayjs(data.created_at).format('DD MMM YYYY') : '—'}
+          WO created: {data.created_at ? dayjs(data.created_at).format('DD-MM-YYYY') : '—'}
         </span>
       </div>
 
@@ -843,7 +843,7 @@ export default function WORegisterPage() {
                       return (
                         <tr key={wo.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedWO(wo)}>
                           <TD className="font-mono font-medium text-indigo-700">{wo.wo_number}</TD>
-                          <TD>{wo.start_date ? dayjs(wo.start_date).format('DD MMM YYYY') : '-'}</TD>
+                          <TD>{wo.start_date ? dayjs(wo.start_date).format('DD-MM-YYYY') : '-'}</TD>
                           <TD className="font-medium text-slate-800">{wo.vendor_name || '-'}</TD>
                           <TD>{wo.project_name || '-'}</TD>
                           <TD className="max-w-[260px] truncate">{wo.subject || '-'}</TD>
@@ -878,7 +878,7 @@ export default function WORegisterPage() {
                       return (
                         <tr key={`${row.wo.id}-${row.id || idx}`} className="hover:bg-slate-50">
                           <TD className="font-mono font-medium text-indigo-700">{row.wo.wo_number}</TD>
-                          <TD>{row.wo.start_date ? dayjs(row.wo.start_date).format('DD MMM YYYY') : '-'}</TD>
+                          <TD>{row.wo.start_date ? dayjs(row.wo.start_date).format('DD-MM-YYYY') : '-'}</TD>
                           <TD>{row.wo.vendor_name || '-'}</TD>
                           <TD className="max-w-[420px]">{row.description || '-'}</TD>
                           <TD>{row.unit || '-'}</TD>

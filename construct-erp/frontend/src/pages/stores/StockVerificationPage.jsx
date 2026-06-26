@@ -359,7 +359,7 @@ export default function StockVerificationPage() {
           <div className="h-4 w-px bg-slate-200" />
           <ClipboardList size={15} className="text-teal-600" />
           <span className="text-[13px] font-semibold text-slate-800">
-            Stock Verification — {sv?.project_name} &middot; {sv?.verification_date ? dayjs(sv.verification_date).format('DD MMM YYYY') : ''}
+            Stock Verification — {sv?.project_name} &middot; {sv?.verification_date ? dayjs(sv.verification_date).format('DD-MM-YYYY') : ''}
           </span>
           <span className={clsx(
             'ml-2 px-2 py-0.5 rounded-full text-[10px] font-medium border',
@@ -439,7 +439,7 @@ export default function StockVerificationPage() {
               {verifications.map(sv => (
                 <tr key={sv.id} className="hover:bg-slate-50/60">
                   <td className="px-4 py-3 font-medium text-slate-800">
-                    {dayjs(sv.verification_date).format('DD MMM YYYY')}
+                    {dayjs(sv.verification_date).format('DD-MM-YYYY')}
                   </td>
                   <td className="px-4 py-3 text-slate-700">{sv.project_name}</td>
                   <td className="px-4 py-3 text-slate-500">{sv.location || '—'}</td>

@@ -613,13 +613,13 @@ export default function InventoryPage() {
                                         <span className="text-xs text-slate-900 font-medium ml-1">{item.unit}</span>
                                       </div>
                                       <div className="text-[10px] text-slate-900 font-medium mt-1">
-                                        Rcvd: {dayjs(b.received_date).format('DD MMM YYYY')}
+                                        Rcvd: {dayjs(b.received_date).format('DD-MM-YYYY')}
                                       </div>
                                       {b.expiry_date && (
                                         <div className={clsx('text-[10px] font-medium mt-1 flex items-center gap-1',
                                           isExpired ? 'text-red-500' : isNearExp ? 'text-amber-500' : 'text-slate-900 font-semibold'
                                         )}>
-                                          <Clock size={10} /> Exp: {dayjs(b.expiry_date).format('DD MMM YYYY')}
+                                          <Clock size={10} /> Exp: {dayjs(b.expiry_date).format('DD-MM-YYYY')}
                                         </div>
                                       )}
                                     </div>

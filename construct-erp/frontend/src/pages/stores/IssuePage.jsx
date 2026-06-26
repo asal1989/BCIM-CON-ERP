@@ -59,7 +59,7 @@ function MINDetailPanel({ min, onClose, onAuthorize, authLoading, onReceive, rec
               ['Activity',     min.activity_name   || '—'],
               ['Issued To',    min.issued_to        || 'Site Team'],
               ['Contractor',   min.contractor_name  || '—'],
-              ['Issue Date',   min.issue_date ? dayjs(min.issue_date).format('DD MMM YYYY, HH:mm') : '—'],
+              ['Issue Date',   min.issue_date ? dayjs(min.issue_date).format('DD-MM-YYYY HH:mm') : '—'],
               ['Total Value',  `₹${inr(min.total_value)}`],
               ['Issued By',    min.issued_by_name   || '—'],
               ['Received By',  min.received_by_name || '—'],
@@ -333,7 +333,7 @@ export default function IssuePage() {
                         </span>
                       </div>
                       <div className="text-xs text-slate-900 font-medium mt-0.5 ml-4">
-                        {dayjs(min.issue_date).format('D MMM, HH:mm')}
+                        {dayjs(min.issue_date).format('DD-MM-YYYY HH:mm')}
                       </div>
                     </td>
                     <td className="px-5 py-3.5 text-right">

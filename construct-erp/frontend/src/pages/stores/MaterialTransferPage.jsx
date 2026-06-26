@@ -563,7 +563,7 @@ function MTRDetail({ mtr, onClose, onEdit }) {
             <StatusBadge status={d.status} />
           </h2>
           <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>
-            {dayjs(d.transfer_date).format('DD MMM YYYY')} · {tt.label}
+            {dayjs(d.transfer_date).format('DD-MM-YYYY')} · {tt.label}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -640,7 +640,7 @@ function MTRDetail({ mtr, onClose, onEdit }) {
         {/* Info grid */}
         <div className="grid grid-cols-4 gap-3 text-xs">
           {[
-            ['Transfer Date', dayjs(d.transfer_date).format('DD MMM YYYY')],
+            ['Transfer Date', dayjs(d.transfer_date).format('DD-MM-YYYY')],
             ['Driver', d.driver_name || '—'],
             ['Driver Mobile', d.driver_mobile || '—'],
             ['LR / Challan', d.lr_number || '—'],
@@ -709,7 +709,7 @@ function MTRDetail({ mtr, onClose, onEdit }) {
       {/* Action footer */}
       <div className="flex-shrink-0 flex justify-between items-center px-6 py-4 border-t bg-slate-50/60">
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400">MTR #{d.mtr_number} · {dayjs(d.created_at).format('DD MMM YYYY HH:mm')}</span>
+          <span className="text-xs text-slate-400">MTR #{d.mtr_number} · {dayjs(d.created_at).format('DD-MM-YYYY HH:mm')}</span>
           {(d.status === 'draft' || d.status === 'pending_approval') && (
             <button onClick={() => setShowCancel(true)}
               className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded border border-transparent hover:border-red-200 hover:bg-red-50 transition ml-2">
@@ -927,7 +927,7 @@ export default function MaterialTransferPage() {
                         <span className="font-bold text-teal-700 font-mono">{t.mtr_number}</span>
                       </td>
                       <td className="px-4 py-3.5 text-slate-600 text-xs whitespace-nowrap">
-                        {dayjs(t.transfer_date).format('DD MMM YYYY')}
+                        {dayjs(t.transfer_date).format('DD-MM-YYYY')}
                       </td>
                       <td className="px-4 py-3.5">
                         <span className={clsx('px-2 py-0.5 rounded-full text-xs font-semibold', tt.color)}>{tt.label}</span>

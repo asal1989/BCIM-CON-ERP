@@ -14,8 +14,9 @@ const inr = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigit
 
 function fmt(d) {
   if (!d) return '—';
-  try { return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); }
-  catch { return '—'; }
+  const x = new Date(d);
+  if (isNaN(x.getTime())) return '—';
+  return `${String(x.getDate()).padStart(2,'0')}-${String(x.getMonth()+1).padStart(2,'0')}-${x.getFullYear()}`;
 }
 
 const STATUS_CFG = {

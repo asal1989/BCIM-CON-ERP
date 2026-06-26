@@ -148,7 +148,7 @@ export default function TenderListPage() {
                   <td className="px-4 py-3 text-slate-900 font-medium text-xs">{TYPE_LABELS[t.tender_type] || t.tender_type}</td>
                   <td className="px-4 py-3 text-slate-300">{fmt(t.estimated_value)}</td>
                   <td className="px-4 py-3 text-slate-900 font-medium text-xs">
-                    {t.bid_close_date ? dayjs(t.bid_close_date).format('DD MMM YY') : '—'}
+                    {t.bid_close_date ? dayjs(t.bid_close_date).format('DD-MM-YYYY') : '—'}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <span className="px-2 py-0.5 bg-slate-700 rounded text-slate-300 text-xs">{t.bid_count ?? 0}</span>

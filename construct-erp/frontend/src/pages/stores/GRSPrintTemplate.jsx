@@ -49,7 +49,7 @@ const GRSPrintTemplate = React.forwardRef(({ data }, ref) => {
               {/* GRS meta */}
               <td style={{ width: '28%', border: '2px solid black', padding: '6px', fontSize: '9px', verticalAlign: 'top' }}>
                 <MetaRow label="GRS No."  value={data.grs_number} bold />
-                <MetaRow label="Date"     value={data.date_time ? dayjs(data.date_time).format('DD/MM/YYYY') : '—'} />
+                <MetaRow label="Date"     value={data.date_time ? dayjs(data.date_time).format('DD-MM-YYYY') : '—'} />
                 <MetaRow label="Status"   value={statusLabel} />
               </td>
             </tr>
@@ -69,7 +69,7 @@ const GRSPrintTemplate = React.forwardRef(({ data }, ref) => {
 
               {/* Right column */}
               <td style={{ width: '50%', padding: '6px', verticalAlign: 'top', fontSize: '9px' }}>
-                <InfoRow label="Date & Time"  value={data.date_time ? dayjs(data.date_time).format('DD/MM/YYYY HH:mm') : '—'} />
+                <InfoRow label="Date & Time"  value={data.date_time ? dayjs(data.date_time).format('DD-MM-YYYY HH:mm') : '—'} />
                 <InfoRow label="GRS No."      value={data.grs_number || '—'} />
                 <InfoRow label="Created By"   value={data.created_by_name || '—'} />
               </td>
@@ -154,7 +154,7 @@ const GRSPrintTemplate = React.forwardRef(({ data }, ref) => {
                     Name: {data.status === 'acknowledged' && data.acknowledged_by_name ? data.acknowledged_by_name : '________________________'}
                   </div>
                   <div>
-                    Date: {data.status === 'acknowledged' && data.acknowledged_at ? dayjs(data.acknowledged_at).format('DD/MM/YYYY') : '________________________'}
+                    Date: {data.status === 'acknowledged' && data.acknowledged_at ? dayjs(data.acknowledged_at).format('DD-MM-YYYY') : '________________________'}
                   </div>
                 </div>
               </td>
@@ -165,7 +165,7 @@ const GRSPrintTemplate = React.forwardRef(({ data }, ref) => {
         {/* ── FOOTER ───────────────────────────────────────────── */}
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '7px', color: '#aaa' }}>
           <span>Doc ID: GRS-{data.id?.slice(0, 8)?.toUpperCase() ?? '—'} • BCIM Construct-ERP v3.0</span>
-          <span>Printed: {dayjs().format('DD/MM/YYYY HH:mm')} • This document is system-generated</span>
+          <span>Printed: {dayjs().format('DD-MM-YYYY HH:mm')} • This document is system-generated</span>
         </div>
       </div>
     </div>

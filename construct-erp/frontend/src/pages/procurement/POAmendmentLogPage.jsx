@@ -398,7 +398,7 @@ function POAmendEditor({ poId, pos, onClose, onSubmitted }) {
                           onChange={e => setDeliveryDate(e.target.value)}
                           className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400" />
                         {deliveryDate !== origTerms.del && origTerms.del && (
-                          <p className="text-[11px] text-slate-400 mt-1">was {dayjs(origTerms.del).format('DD MMM YYYY')}</p>
+                          <p className="text-[11px] text-slate-400 mt-1">was {dayjs(origTerms.del).format('DD-MM-YYYY')}</p>
                         )}
                       </div>
                     </div>
@@ -454,7 +454,7 @@ const asArray = payload => {
 const clean = value => String(value || '').trim().toLowerCase();
 const poRef = po => po?.po_ref_no || po?.serial_no_formatted || po?.po_number || po?.poNo || '';
 const money = value => `₹${Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const fmt = value => (value ? dayjs(value).format('DD MMM YYYY') : '—');
+const fmt = value => (value ? dayjs(value).format('DD-MM-YYYY') : '—');
 
 const AMENDMENT_TYPES = ['Qty Change', 'Rate Change', 'Date Extension', 'Item Addition', 'Item Deletion', 'Cancellation'];
 const STATUS_COLORS = {

@@ -360,7 +360,7 @@ function CNForm({ initial, onClose, onSaved }) {
                           <span className="ml-2 text-[10px] text-slate-400 font-mono">{b.sl_number}</span>
                         </div>
                         <div className="flex items-center gap-3 text-[11px] text-slate-500 flex-shrink-0">
-                          {b.inv_date && <span>{dayjs(b.inv_date).format('DD MMM YYYY')}</span>}
+                          {b.inv_date && <span>{dayjs(b.inv_date).format('DD-MM-YYYY')}</span>}
                           <span className="font-semibold text-emerald-700">
                             ₹{Number(b.total_amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                           </span>
@@ -382,7 +382,7 @@ function CNForm({ initial, onClose, onSaved }) {
                   <FileText className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
                   <span className="text-xs font-medium text-indigo-700">
                     Linked: {form.bill_sl} — {form.invoice_number}
-                    {form.invoice_date && ` · ${dayjs(form.invoice_date).format('DD MMM YYYY')}`}
+                    {form.invoice_date && ` · ${dayjs(form.invoice_date).format('DD-MM-YYYY')}`}
                   </span>
                   <button type="button" onClick={() => { set('bill_id',''); set('bill_sl',''); }}
                     className="ml-auto text-indigo-400 hover:text-indigo-700">
@@ -643,7 +643,7 @@ function CNDetail({ cn, onClose, onEdit }) {
             </div>
             <div>
               <p className="font-semibold text-slate-900">{cn.cn_number}</p>
-              <p className="text-xs text-slate-500">{cn.vendor_name} · {dayjs(cn.cn_date).format('DD MMM YYYY')}</p>
+              <p className="text-xs text-slate-500">{cn.vendor_name} · {dayjs(cn.cn_date).format('DD-MM-YYYY')}</p>
             </div>
             <StatusBadge status={cn.status} />
           </div>
@@ -657,12 +657,12 @@ function CNDetail({ cn, onClose, onEdit }) {
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {[
               ['CN Number',       cn.cn_number],
-              ['CN Date',         dayjs(cn.cn_date).format('DD MMM YYYY')],
+              ['CN Date',         dayjs(cn.cn_date).format('DD-MM-YYYY')],
               ['CN Type',         typeLabel],
               ['Vendor',          cn.vendor_name],
               ['Project',         cn.project_name || '—'],
               ['Invoice Number',  cn.invoice_number || '—'],
-              ['Invoice Date',    cn.invoice_date ? dayjs(cn.invoice_date).format('DD MMM YYYY') : '—'],
+              ['Invoice Date',    cn.invoice_date ? dayjs(cn.invoice_date).format('DD-MM-YYYY') : '—'],
               ['Linked PO',       cn.po_number || '—'],
               ['Linked GRN',      cn.grn_number || '—'],
               ['Tax Mode',        cn.tax_mode === 'intrastate' ? 'Intrastate' : 'Interstate'],
@@ -933,7 +933,7 @@ export default function CreditNotePage() {
                             <span className="font-mono text-xs font-semibold text-indigo-700">{row.cn_number}</span>
                           </td>
                           <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
-                            {dayjs(row.cn_date).format('DD MMM YYYY')}
+                            {dayjs(row.cn_date).format('DD-MM-YYYY')}
                           </td>
                           <td className="px-4 py-3 font-medium text-slate-800">{row.vendor_name}</td>
                           <td className="px-4 py-3 text-slate-500 text-xs">{row.project_name || '—'}</td>

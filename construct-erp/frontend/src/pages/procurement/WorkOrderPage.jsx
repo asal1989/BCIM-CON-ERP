@@ -1073,7 +1073,7 @@ function WODetailPanel({ wo, onClose, onEdit, onDelete, onApprove, onMDApprove, 
             <div>
               <p className="text-base font-medium text-slate-900 font-mono">{displayWO.wo_number}</p>
               <p className="text-xs text-slate-900 font-medium mt-0.5">
-                {displayWO.vendor_name || '—'} · {displayWO.start_date ? dayjs(displayWO.start_date).format('DD MMM YYYY') : (displayWO.created_at ? dayjs(displayWO.created_at).format('DD MMM YYYY') : '—')}
+                {displayWO.vendor_name || '—'} · {displayWO.start_date ? dayjs(displayWO.start_date).format('DD-MM-YYYY') : (displayWO.created_at ? dayjs(displayWO.created_at).format('DD-MM-YYYY') : '—')}
                 {displayWO.mrs_number && <> · Against MR <span className="font-mono">{displayWO.mrs_number}</span></>}
               </p>
             </div>
@@ -1124,8 +1124,8 @@ function WODetailPanel({ wo, onClose, onEdit, onDelete, onApprove, onMDApprove, 
             {[
               ['Vendor / Sub-Con', displayWO.vendor_name || '—'],
               ['Project',          displayWO.project_name || '—'],
-              ['Start Date',       displayWO.start_date ? dayjs(displayWO.start_date).format('DD MMM YYYY') : '—'],
-              ['End Date',         displayWO.end_date   ? dayjs(displayWO.end_date).format('DD MMM YYYY')   : '—'],
+              ['Start Date',       displayWO.start_date ? dayjs(displayWO.start_date).format('DD-MM-YYYY') : '—'],
+              ['End Date',         displayWO.end_date   ? dayjs(displayWO.end_date).format('DD-MM-YYYY')   : '—'],
               ['Contract Amount',  `₹ ${inr(displayWO.contract_amount || val)}`],
               ['Work Category',    displayWO.work_category || '—'],
               ['Cost Head',        displayWO.cost_head || '—'],
@@ -1133,7 +1133,7 @@ function WODetailPanel({ wo, onClose, onEdit, onDelete, onApprove, onMDApprove, 
               ['Vendor Type',      displayWO.vendor_type || '—'],
               ['Vendor GSTIN',     displayWO.vendor_gstin || '—'],
               ['Manager',          displayWO.manager_name || '—'],
-              ['Created',          displayWO.created_at ? dayjs(displayWO.created_at).format('DD MMM YYYY') : '—'],
+              ['Created',          displayWO.created_at ? dayjs(displayWO.created_at).format('DD-MM-YYYY') : '—'],
             ].map(([label, value]) => (
               <div key={label} className="bg-white border border-slate-200 rounded-lg p-3">
                 <p className="text-xs text-slate-900 font-medium uppercase tracking-wider mb-1">{label}</p>
@@ -1674,7 +1674,7 @@ export default function WorkOrderPage() {
                       <p className="text-xs text-slate-900 font-medium max-w-[140px] truncate">{wo.project_name || '—'}</p>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-500">
-                      {wo.start_date ? dayjs(wo.start_date).format('DD MMM YYYY') : wo.created_at ? dayjs(wo.created_at).format('DD MMM YYYY') : '—'}
+                      {wo.start_date ? dayjs(wo.start_date).format('DD-MM-YYYY') : wo.created_at ? dayjs(wo.created_at).format('DD-MM-YYYY') : '—'}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className="text-sm font-medium font-mono text-slate-800">₹{inr(wo.total_value)}</span>

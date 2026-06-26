@@ -237,7 +237,7 @@ export default function QuotationEntryPage() {
           <div>
             <p className="text-[11px] text-slate-900 font-medium uppercase tracking-wide mb-0.5">Required By</p>
             <p className="text-sm text-slate-700">
-              {indent.required_by ? dayjs(indent.required_by).format('D MMM YYYY') : '—'}
+              {indent.required_by ? dayjs(indent.required_by).format('DD-MM-YYYY') : '—'}
             </p>
           </div>
           <div>

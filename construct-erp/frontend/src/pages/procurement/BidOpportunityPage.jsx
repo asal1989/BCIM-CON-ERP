@@ -166,7 +166,7 @@ export default function BidOpportunityPage() {
                     <span className={`text-sm font-medium ${probColor(o.win_probability)}`}>{o.win_probability}%</span>
                   </td>
                   <td className="px-4 py-3 text-slate-900 font-medium text-xs">
-                    {o.bid_submission_date ? dayjs(o.bid_submission_date).format('DD MMM YY') : '—'}
+                    {o.bid_submission_date ? dayjs(o.bid_submission_date).format('DD-MM-YYYY') : '—'}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[o.status] || 'bg-slate-700 text-slate-300'}`}>

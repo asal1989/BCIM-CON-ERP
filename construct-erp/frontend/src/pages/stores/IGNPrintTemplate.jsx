@@ -55,7 +55,7 @@ const IGNPrintTemplate = React.forwardRef(({ data }, ref) => {
               {/* IGN meta */}
               <td style={{ width: '28%', border: '2px solid black', padding: '6px', fontSize: '9px', verticalAlign: 'top' }}>
                 <MetaRow label="IGN No."  value={data.ign_number} bold />
-                <MetaRow label="Date"     value={data.date_time ? dayjs(data.date_time).format('DD/MM/YYYY') : '—'} />
+                <MetaRow label="Date"     value={data.date_time ? dayjs(data.date_time).format('DD-MM-YYYY') : '—'} />
                 <MetaRow label="Status"   value={statusLabel} />
               </td>
             </tr>
@@ -79,7 +79,7 @@ const IGNPrintTemplate = React.forwardRef(({ data }, ref) => {
                 <InfoRow label="Bill No."    value={data.bill_number || '—'} />
                 <InfoRow label="PO No."      value={data.po_number || '—'} />
                 <InfoRow label="GRS No."     value={data.grs_number || '—'} />
-                <InfoRow label="Date & Time" value={data.date_time ? dayjs(data.date_time).format('DD/MM/YYYY HH:mm') : '—'} />
+                <InfoRow label="Date & Time" value={data.date_time ? dayjs(data.date_time).format('DD-MM-YYYY HH:mm') : '—'} />
               </td>
             </tr>
           </tbody>
@@ -219,7 +219,7 @@ const IGNPrintTemplate = React.forwardRef(({ data }, ref) => {
                     Name: {data.status === 'approved' && data.approved_by_name ? data.approved_by_name : '________________________'}
                   </div>
                   <div>
-                    Date: {data.status === 'approved' && data.approved_at ? dayjs(data.approved_at).format('DD/MM/YYYY') : '________________________'}
+                    Date: {data.status === 'approved' && data.approved_at ? dayjs(data.approved_at).format('DD-MM-YYYY') : '________________________'}
                   </div>
                 </div>
               </td>
@@ -230,7 +230,7 @@ const IGNPrintTemplate = React.forwardRef(({ data }, ref) => {
         {/* ── FOOTER ───────────────────────────────────────────── */}
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '7px', color: '#aaa' }}>
           <span>Doc ID: IGN-{data.id?.slice(0, 8)?.toUpperCase() ?? '—'} • BCIM Construct-ERP v3.0</span>
-          <span>Printed: {dayjs().format('DD/MM/YYYY HH:mm')} • This document is system-generated</span>
+          <span>Printed: {dayjs().format('DD-MM-YYYY HH:mm')} • This document is system-generated</span>
         </div>
       </div>
     </div>

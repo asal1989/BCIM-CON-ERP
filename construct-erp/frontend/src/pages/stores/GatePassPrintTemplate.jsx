@@ -73,7 +73,7 @@ const GatePassPrintTemplate = React.forwardRef(({ data }, ref) => {
               {/* GP meta */}
               <td style={{ width: '28%', border: '2px solid black', padding: '6px', fontSize: '9px', verticalAlign: 'top' }}>
                 <MetaRow label="GP No."   value={data.gp_number} bold />
-                <MetaRow label="Date"     value={data.date_time ? dayjs(data.date_time).format('DD/MM/YYYY') : '—'} />
+                <MetaRow label="Date"     value={data.date_time ? dayjs(data.date_time).format('DD-MM-YYYY') : '—'} />
                 <MetaRow label="Status"   value={statusLabel} />
               </td>
             </tr>
@@ -100,11 +100,11 @@ const GatePassPrintTemplate = React.forwardRef(({ data }, ref) => {
                   <>
                     <InfoRow
                       label="Expected Return"
-                      value={data.expected_return_date ? dayjs(data.expected_return_date).format('DD/MM/YYYY') : '________________________'}
+                      value={data.expected_return_date ? dayjs(data.expected_return_date).format('DD-MM-YYYY') : '________________________'}
                     />
                     <InfoRow
                       label="Returned At"
-                      value={data.returned_at ? dayjs(data.returned_at).format('DD/MM/YYYY HH:mm') : '________________________'}
+                      value={data.returned_at ? dayjs(data.returned_at).format('DD-MM-YYYY HH:mm') : '________________________'}
                     />
                   </>
                 )}
@@ -153,7 +153,7 @@ const GatePassPrintTemplate = React.forwardRef(({ data }, ref) => {
             <span style={{ fontWeight: 800 }}>IMPORTANT:</span> This is a <span style={{ fontWeight: 800 }}>RETURNABLE</span> gate pass.
             Items must be returned by{' '}
             <span style={{ fontWeight: 800 }}>
-              {data.expected_return_date ? dayjs(data.expected_return_date).format('DD/MM/YYYY') : '___/___/______'}
+              {data.expected_return_date ? dayjs(data.expected_return_date).format('DD-MM-YYYY') : '___/___/______'}
             </span>.
             {' '}Non-return is subject to recovery.
           </div>
@@ -214,7 +214,7 @@ const GatePassPrintTemplate = React.forwardRef(({ data }, ref) => {
         {/* ── FOOTER ───────────────────────────────────────────── */}
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '7px', color: '#aaa' }}>
           <span>Doc ID: GP-{data.id?.slice(0, 8)?.toUpperCase() ?? '—'} • BCIM Construct-ERP v3.0</span>
-          <span>Printed: {dayjs().format('DD/MM/YYYY HH:mm')} • This document is system-generated</span>
+          <span>Printed: {dayjs().format('DD-MM-YYYY HH:mm')} • This document is system-generated</span>
         </div>
       </div>
     </div>

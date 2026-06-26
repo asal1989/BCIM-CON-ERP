@@ -181,9 +181,9 @@ const WOPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
                         {[
                           ['Project:',          data.project_name || '—', true],
                           ['WO No:',            data.wo_number || '—'],
-                          ['Date:',             data.wo_date ? dayjs(data.wo_date).format('DD.MM.YYYY') : (data.created_at ? dayjs(data.created_at).format('DD.MM.YYYY') : '—')],
-                          ['Start Date:',       data.start_date ? dayjs(data.start_date).format('DD.MM.YYYY') : '—'],
-                          ['Completion Date:',  data.end_date ? dayjs(data.end_date).format('DD.MM.YYYY') : '—'],
+                          ['Date:',             data.wo_date ? dayjs(data.wo_date).format('DD-MM-YYYY') : (data.created_at ? dayjs(data.created_at).format('DD-MM-YYYY') : '—')],
+                          ['Start Date:',       data.start_date ? dayjs(data.start_date).format('DD-MM-YYYY') : '—'],
+                          ['Completion Date:',  data.end_date ? dayjs(data.end_date).format('DD-MM-YYYY') : '—'],
                         ].map(([label, value, bold]) => (
                           <tr key={label}>
                             <td style={{ fontWeight: 700, padding: '1px 8px 1px 0', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{label}</td>

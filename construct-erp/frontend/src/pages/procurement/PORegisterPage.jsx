@@ -21,7 +21,12 @@ const STATUS_CFG = {
 };
 
 const fmt     = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN') : '—';
+const fmtDate = (d) => {
+  if (!d) return '—';
+  const x = new Date(d);
+  if (isNaN(x.getTime())) return '—';
+  return `${String(x.getDate()).padStart(2,'0')}-${String(x.getMonth()+1).padStart(2,'0')}-${x.getFullYear()}`;
+};
 
 // ── Fuzzy vendor match (strips M/s., normalises spaces)
 function matchVendor(vendors, name) {

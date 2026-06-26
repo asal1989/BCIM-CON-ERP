@@ -116,7 +116,7 @@ export default function MRSVerificationPage() {
             </div>
             <div className="space-y-1">
               <div className="text-[10px] font-medium text-slate-900 font-medium uppercase">Created On</div>
-              <div className="text-sm font-medium text-slate-900 leading-tight">{dayjs(mrs.created_at).format('DD MMM YYYY')}</div>
+              <div className="text-sm font-medium text-slate-900 leading-tight">{dayjs(mrs.created_at).format('DD-MM-YYYY')}</div>
             </div>
             <div className="space-y-1">
               <div className="text-[10px] font-medium text-slate-900 font-medium uppercase">Serial No</div>

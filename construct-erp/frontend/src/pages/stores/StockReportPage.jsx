@@ -516,7 +516,7 @@ export default function StockReportPage() {
                       </td>
                       <td className="px-4 py-2.5 text-xs text-slate-900 font-semibold">
                         {row.last_issued_at
-                          ? dayjs(row.last_issued_at).format('DD MMM YYYY')
+                          ? dayjs(row.last_issued_at).format('DD-MM-YYYY')
                           : 'Never issued'}
                       </td>
                     </tr>
@@ -539,7 +539,7 @@ export default function StockReportPage() {
 
       {/* Footer note */}
       <div className="mt-4 text-xs text-slate-900 font-medium text-right">
-        Data as of {dayjs().format('D MMM YYYY, HH:mm')} • {dayjs(month).format('MMMM YYYY')}
+        Data as of {dayjs().format('DD-MM-YYYY HH:mm')} • {dayjs(month).format('MMMM YYYY')}
       </div>
       </div>
     </div>

@@ -11,8 +11,9 @@ const nv   = (v) => parseFloat(v || 0);
 const inr0 = (v) => Math.round(nv(v)).toLocaleString('en-IN', { maximumFractionDigits: 0 });
 const fmtD = (d) => {
   if (!d) return '';
-  try { return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
-  catch { return ''; }
+  const x = new Date(d);
+  if (isNaN(x.getTime())) return '';
+  return `${String(x.getDate()).padStart(2,'0')}-${String(x.getMonth()+1).padStart(2,'0')}-${x.getFullYear()}`;
 };
 
 // ── Number to words (Indian numbering) ───────────────────────────────────────
