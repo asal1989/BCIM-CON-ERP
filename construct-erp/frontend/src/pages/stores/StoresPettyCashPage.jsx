@@ -13,6 +13,7 @@ import {
   Paperclip, Eye, Upload, Send, ThumbsUp, ThumbsDown,
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
+import { PageHeader, Theme } from '../../theme';
 import { storesPettyCashAPI, projectAPI, uploadAPI } from '../../api/client';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -973,49 +974,47 @@ export default function StoresPettyCashPage() {
   const balanceColor = cashInHand < 0 ? 'text-red-600' : cashInHand < 5000 ? 'text-amber-600' : 'text-green-700';
 
   return (
-    <div className="min-h-screen bg-[#f4f6f9]">
+    <div style={{ background: Theme.pageBg, minHeight: '100vh' }}>
 
-      {/* ── Header bar ── */}
-      <div className="bg-slate-800 px-6 py-0 flex items-center justify-between h-14 gap-4">
-        <div className="flex items-center gap-3 flex-shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center">
-            <Wallet className="w-4 h-4 text-white" />
-          </div>
-          <span className="text-white font-semibold text-sm">Stores Petty Cash</span>
-          <span className="text-slate-400 text-xs hidden sm:block">· Site Cash Book</span>
-        </div>
-
-        <div className="flex items-center gap-3 flex-shrink-0">
-          {pendingCount > 0 && (
-            <button onClick={() => { setTab('local'); setStatusFilter('Pending'); }}
-              className="flex items-center gap-1.5 bg-amber-500/20 border border-amber-400/30 text-amber-300 text-xs font-semibold px-3 py-1.5 rounded-full">
-              <Clock className="w-3 h-3" /> {pendingCount} Pending
+      <PageHeader
+        title="Stores Petty Cash"
+        subtitle={`Site cash book${selectedProject ? ' · ' + selectedProject.name : ''}`}
+        breadcrumbs={[{ label: 'Stores' }, { label: 'Petty Cash Tracker' }]}
+        actions={
+          <div className="flex items-center gap-2 flex-wrap">
+            {pendingCount > 0 && (
+              <button onClick={() => { setTab('local'); setStatusFilter('Pending'); }}
+                className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg"
+                style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.3)', color: '#FCD34D' }}>
+                <Clock className="w-3 h-3" /> {pendingCount} Pending
+              </button>
+            )}
+            <div className={clsx('flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg',
+              cashInHand < 0 ? 'bg-red-500/20 text-red-300' :
+              cashInHand < 5000 ? 'bg-amber-500/20 text-amber-300' : 'bg-green-500/20 text-green-300')}
+              style={{ border: '1px solid rgba(255,255,255,0.15)' }}>
+              {cashInHand < 0 ? <AlertTriangle className="w-3 h-3" /> : <CheckCircle className="w-3 h-3" />}
+              {inr(Math.abs(cashInHand))} {cashInHand < 0 ? 'OVERDRAWN' : 'in Hand'}
+            </div>
+            <button onClick={() => printStatement({ entries: approvedEntries, advances, receipts, projectName: selectedProject?.name })}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg"
+              style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', color: '#fff' }}>
+              <Printer className="w-3.5 h-3.5" /> Print
             </button>
-          )}
-          <div className={clsx('flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border',
-            cashInHand < 0 ? 'bg-red-500/20 border-red-400/30 text-red-300' :
-            cashInHand < 5000 ? 'bg-amber-500/20 border-amber-400/30 text-amber-300' :
-            'bg-green-500/20 border-green-400/30 text-green-300')}>
-            {cashInHand < 0 ? <AlertTriangle className="w-3 h-3" /> : <CheckCircle className="w-3 h-3" />}
-            {inr(Math.abs(cashInHand))} {cashInHand < 0 ? 'OVERDRAWN' : 'in Hand'}
           </div>
-        </div>
-      </div>
+        }
+      />
 
       {/* ── Project selector + Tab bar ── */}
       <div className="bg-white border-b border-slate-200 px-6">
-        <div className="flex items-center gap-4 pt-3 flex-wrap">
-          <select className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 w-56 mb-2"
+        <div className="flex items-center gap-3 pt-3 pb-0 flex-wrap">
+          <select className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 w-56"
             value={projectId} onChange={e => setProjectId(e.target.value)}>
             <option value="">All Projects</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <button onClick={() => printStatement({ entries: approvedEntries, advances, receipts, projectName: selectedProject?.name })}
-            className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 mb-2">
-            <Printer className="w-3.5 h-3.5" /> Print Statement
-          </button>
         </div>
-        <div className="flex gap-0 overflow-x-auto">
+        <div className="flex gap-0 overflow-x-auto mt-1">
           {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={clsx('flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap',
