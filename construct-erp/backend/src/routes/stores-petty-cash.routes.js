@@ -26,9 +26,10 @@ const router = express.Router();
     )
   `);
 
-  await safe(`ALTER TABLE stores_petty_cash_entries ADD COLUMN IF NOT EXISTS status       TEXT DEFAULT 'Pending'`);
-  await safe(`ALTER TABLE stores_petty_cash_entries ADD COLUMN IF NOT EXISTS bill_file_url  TEXT`);
-  await safe(`ALTER TABLE stores_petty_cash_entries ADD COLUMN IF NOT EXISTS bill_file_name TEXT`);
+  await safe(`ALTER TABLE stores_petty_cash_entries ADD COLUMN IF NOT EXISTS status            TEXT DEFAULT 'Pending'`);
+  await safe(`ALTER TABLE stores_petty_cash_entries ADD COLUMN IF NOT EXISTS bill_file_url     TEXT`);
+  await safe(`ALTER TABLE stores_petty_cash_entries ADD COLUMN IF NOT EXISTS bill_file_name    TEXT`);
+  await safe(`ALTER TABLE stores_petty_cash_entries ADD COLUMN IF NOT EXISTS bill_onedrive_url TEXT`);
 
   await safe(`
     CREATE TABLE IF NOT EXISTS stores_petty_cash_items (
@@ -196,7 +197,7 @@ router.get('/entries/:id', authenticate, async (req, res) => {
 
 router.post('/entries', authenticate, async (req, res) => {
   try {
-    const { project_id, entry_date, supplier, invoice_no, amount = 0, remarks, items = [], status = 'Pending', bill_file_url, bill_file_name } = req.body;
+    const { project_id, entry_date, supplier, invoice_no, amount = 0, remarks, items = [], status = 'Pending', bill_file_url, bill_file_name, bill_onedrive_url } = req.body;
     if (!entry_date) return res.status(400).json({ error: 'entry_date is required' });
     if (!supplier?.trim()) return res.status(400).json({ error: 'supplier is required' });
     if (!items.filter(i => i.material_name?.trim()).length) {
@@ -219,11 +220,11 @@ router.post('/entries', authenticate, async (req, res) => {
       const sl_no = await nextSlNo(client, req.user.company_id, project_id);
       const r = await client.query(
         `INSERT INTO stores_petty_cash_entries
-          (company_id, project_id, sl_no, entry_date, supplier, invoice_no, amount, remarks, status, bill_file_url, bill_file_name, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+          (company_id, project_id, sl_no, entry_date, supplier, invoice_no, amount, remarks, status, bill_file_url, bill_file_name, bill_onedrive_url, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
         [req.user.company_id, project_id || null, sl_no, entry_date, supplier.trim(),
          invoice_no || null, n(amount), remarks || null, status,
-         bill_file_url || null, bill_file_name || null, req.user.id]
+         bill_file_url || null, bill_file_name || null, bill_onedrive_url || null, req.user.id]
       );
       const entryId = r.rows[0].id;
       for (let i = 0; i < items.length; i++) {
@@ -248,7 +249,7 @@ router.put('/entries/:id', authenticate, async (req, res) => {
     const existing = await getEntry(req.params.id, req.user.company_id);
     if (!existing) return res.status(404).json({ error: 'Entry not found' });
 
-    const { project_id, entry_date, supplier, invoice_no, amount = 0, remarks, items = [], status, bill_file_url, bill_file_name } = req.body;
+    const { project_id, entry_date, supplier, invoice_no, amount = 0, remarks, items = [], status, bill_file_url, bill_file_name, bill_onedrive_url } = req.body;
 
     const invTrimmedPut = invoice_no?.trim();
     if (invTrimmedPut && invTrimmedPut !== '–' && !req.body.force) {
@@ -269,11 +270,12 @@ router.put('/entries/:id', authenticate, async (req, res) => {
            status=COALESCE($7,status),
            bill_file_url=COALESCE($8,bill_file_url),
            bill_file_name=COALESCE($9,bill_file_name),
+           bill_onedrive_url=COALESCE($10,bill_onedrive_url),
            updated_at=NOW()
-         WHERE id=$10`,
+         WHERE id=$11`,
         [project_id || null, entry_date, supplier?.trim(), invoice_no || null, n(amount),
          remarks || null, status || null,
-         bill_file_url || null, bill_file_name || null,
+         bill_file_url || null, bill_file_name || null, bill_onedrive_url || null,
          req.params.id]
       );
       await client.query(`DELETE FROM stores_petty_cash_items WHERE entry_id = $1`, [req.params.id]);

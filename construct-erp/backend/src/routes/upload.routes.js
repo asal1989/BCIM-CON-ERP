@@ -2,8 +2,10 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 const { v4: uuid } = require('uuid');
 const { authenticate } = require('../middleware/auth');
+const { uploadToSharePoint } = require('../services/azureService');
 const router = express.Router();
 router.use(authenticate);
 
@@ -32,6 +34,7 @@ const fileFilter = (req, file, cb) => {
 
 const upload = multer({ storage, fileFilter, limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB
 
+// ── Standard local-disk upload ──────────────────────────────────────────────
 router.post('/', upload.array('files', 10), (req, res) => {
   if (!req.files?.length) return res.status(400).json({ error: 'No files uploaded' });
   const urls = req.files.map(f => `/uploads/${f.filename}`);
@@ -41,6 +44,43 @@ router.post('/', upload.array('files', 10), (req, res) => {
 router.post('/single', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   res.json({ url: `/uploads/${req.file.filename}`, filename: req.file.filename });
+});
+
+// ── OneDrive upload — stores file in Microsoft OneDrive via Graph API ────────
+// Query param `folder` controls the OneDrive subfolder (default: 'Uploads').
+// Falls back to local-disk URL if OneDrive credentials are not configured.
+router.post('/onedrive', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+  const localUrl = `/uploads/${req.file.filename}`;
+  const folder = req.body.folder || req.query.folder || 'Uploads';
+
+  // Prefix filename with timestamp to avoid collisions in the same folder
+  const ts = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const safeName = `${ts}_${req.file.originalname.replace(/[<>:"|?*]/g, '_')}`;
+
+  try {
+    const fileBuffer = fs.readFileSync(req.file.path);
+    const result = await uploadToSharePoint(safeName, fileBuffer, folder);
+
+    res.json({
+      url:          result.webUrl,       // OneDrive shareable link
+      downloadUrl:  result.downloadUrl,  // Direct download URL
+      localUrl,                          // Local fallback (still saved to disk)
+      filename:     req.file.originalname,
+      onedrive:     true,
+    });
+  } catch (e) {
+    console.warn(`[OneDrive upload] Failed for ${req.file.originalname}: ${e.message} — returning local URL`);
+    // Return local URL so the UI still works even if OneDrive is down
+    res.json({
+      url:      localUrl,
+      localUrl,
+      filename: req.file.originalname,
+      onedrive: false,
+      warning:  'Saved locally — OneDrive upload failed: ' + e.message,
+    });
+  }
 });
 
 module.exports = router;

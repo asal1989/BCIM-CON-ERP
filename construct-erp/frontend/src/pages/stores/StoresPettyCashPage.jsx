@@ -157,7 +157,7 @@ function printStatement({ entries, advances, receipts, projectName }) {
 
 // ── Entry Form (Local Purchase) ───────────────────────────────────────────────
 const EMPTY_ITEM  = { material_name: '', unit: "NO'S", quantity: '' };
-const EMPTY_ENTRY = { project_id: '', entry_date: dayjs().format('YYYY-MM-DD'), supplier: '', invoice_no: '', amount: '', remarks: '', bill_file_url: '', bill_file_name: '' };
+const EMPTY_ENTRY = { project_id: '', entry_date: dayjs().format('YYYY-MM-DD'), supplier: '', invoice_no: '', amount: '', remarks: '', bill_file_url: '', bill_file_name: '', bill_onedrive_url: '' };
 
 function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, existingInvoices, onClose }) {
   const qc = useQueryClient();
@@ -167,7 +167,8 @@ function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, exi
     isEdit
       ? { project_id: initial.project_id || '', entry_date: initial.entry_date?.slice(0, 10) || dayjs().format('YYYY-MM-DD'),
           supplier: initial.supplier || '', invoice_no: initial.invoice_no || '', amount: initial.amount || '',
-          remarks: initial.remarks || '', bill_file_url: initial.bill_file_url || '', bill_file_name: initial.bill_file_name || '' }
+          remarks: initial.remarks || '', bill_file_url: initial.bill_file_url || '', bill_file_name: initial.bill_file_name || '',
+          bill_onedrive_url: initial.bill_onedrive_url || '' }
       : { ...EMPTY_ENTRY, project_id: defaultProjectId || '' }
   );
   const [items, setItems] = useState(
@@ -205,10 +206,19 @@ function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, exi
     if (!file) return;
     setUploading(true);
     try {
-      const res = await uploadAPI.uploadSingle(file);
-      set('bill_file_url',  res.data.url);
-      set('bill_file_name', file.name);
-      toast.success('Bill attached');
+      // Build a descriptive OneDrive folder: Stores/Petty Cash/{YYYY-MM}
+      const ym = dayjs().format('YYYY-MM');
+      const folder = `Stores/Petty Cash/${ym}`;
+      const res = await uploadAPI.uploadToOneDrive(file, folder);
+      const d = res.data;
+      set('bill_file_url',      d.url);        // OneDrive webUrl (or local fallback)
+      set('bill_file_name',     file.name);
+      set('bill_onedrive_url',  d.onedrive ? d.url : '');
+      if (d.onedrive) {
+        toast.success('Bill uploaded to OneDrive');
+      } else {
+        toast.success('Bill attached' + (d.warning ? ' (stored locally)' : ''));
+      }
     } catch {
       toast.error('Upload failed — try again');
     } finally {
@@ -349,18 +359,26 @@ function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, exi
             {form.bill_file_url ? (
               <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-2.5">
                 <Paperclip className="w-4 h-4 text-green-600 flex-shrink-0" />
-                <span className="text-sm text-green-700 font-medium flex-1 truncate">{form.bill_file_name || 'Bill attached'}</span>
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm text-green-700 font-medium truncate block">{form.bill_file_name || 'Bill attached'}</span>
+                  {form.bill_onedrive_url && (
+                    <span className="text-xs text-blue-600 font-medium">☁ Saved to OneDrive</span>
+                  )}
+                </div>
                 <a href={form.bill_file_url} target="_blank" rel="noreferrer"
                   className="flex items-center gap-1 text-xs text-green-700 font-semibold hover:text-green-900 flex-shrink-0">
                   <Eye className="w-3.5 h-3.5" /> View
                 </a>
-                <button type="button" onClick={() => { set('bill_file_url', ''); set('bill_file_name', ''); }}
+                <button type="button" onClick={() => { set('bill_file_url', ''); set('bill_file_name', ''); set('bill_onedrive_url', ''); }}
                   className="text-red-400 hover:text-red-600 flex-shrink-0"><X className="w-3.5 h-3.5" /></button>
               </div>
             ) : (
-              <label className={clsx('flex items-center gap-3 px-4 py-2.5 border-2 border-dashed border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition-colors', uploading && 'opacity-50 pointer-events-none')}>
+              <label className={clsx('flex items-center gap-3 px-4 py-2.5 border-2 border-dashed border-slate-200 rounded-lg cursor-pointer hover:border-blue-300 hover:bg-blue-50 transition-colors', uploading && 'opacity-50 pointer-events-none')}>
                 <Upload className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                <span className="text-sm text-slate-500">{uploading ? 'Uploading…' : 'Click to attach bill photo or PDF (max 10 MB)'}</span>
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm text-slate-500 block">{uploading ? 'Uploading to OneDrive…' : 'Click to attach bill photo or PDF (max 10 MB)'}</span>
+                  {!uploading && <span className="text-xs text-blue-500">Files are saved to Microsoft OneDrive</span>}
+                </div>
                 <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleFileChange} disabled={uploading} />
               </label>
             )}
@@ -1041,9 +1059,10 @@ export default function StoresPettyCashPage() {
                             <td className="px-4 py-3"><Badge label={row.status} /></td>
                             <td className="px-4 py-3 text-center">
                               {row.bill_file_url
-                                ? <a href={row.bill_file_url} target="_blank" rel="noreferrer" title={row.bill_file_name || 'View Bill'}
-                                    className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800" onClick={e => e.stopPropagation()}>
+                                ? <a href={row.bill_file_url} target="_blank" rel="noreferrer" title={row.bill_onedrive_url ? 'View Bill on OneDrive' : (row.bill_file_name || 'View Bill')}
+                                    className={clsx('inline-flex items-center gap-1 hover:opacity-80', row.bill_onedrive_url ? 'text-blue-600' : 'text-indigo-600')} onClick={e => e.stopPropagation()}>
                                     <Paperclip className="w-3.5 h-3.5" />
+                                    {row.bill_onedrive_url && <span className="text-[9px] font-bold leading-none">☁</span>}
                                   </a>
                                 : <span className="text-slate-300 text-xs">—</span>}
                             </td>

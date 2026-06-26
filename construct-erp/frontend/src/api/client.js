@@ -1255,6 +1255,14 @@ export const uploadAPI = {
     fd.append('file', file);
     return api.post('/upload/single', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
+  // Uploads a file to OneDrive via Microsoft Graph. Returns { url, downloadUrl, onedrive, warning? }.
+  // Falls back to local storage URL if OneDrive is not configured on the backend.
+  uploadToOneDrive: (file, folder = 'Uploads') => {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('folder', folder);
+    return api.post('/upload/onedrive', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
 };
 
 export const indentAPI = {
