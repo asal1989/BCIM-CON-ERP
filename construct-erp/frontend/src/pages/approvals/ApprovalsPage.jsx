@@ -22,9 +22,10 @@ const fmt = (n) => n > 0 ? `₹${Number(n).toLocaleString('en-IN', { maximumFrac
 
 // Items that specifically require MD-level authorization
 const isMDStageItem = (item) =>
-  (item.entity_type === 'mrs'        && item.status === 'approved_mgmt') ||
-  (item.entity_type === 'po'         && ['verified_audit', 'released_mgmt'].includes(item.status)) ||
-  (item.entity_type === 'work_order' && ['submitted', 'active'].includes(item.status));
+  (item.entity_type === 'mrs'              && item.status === 'approved_mgmt') ||
+  (item.entity_type === 'po'              && ['verified_audit', 'released_mgmt'].includes(item.status)) ||
+  (item.entity_type === 'work_order'      && ['submitted', 'active'].includes(item.status)) ||
+  (item.entity_type === 'petty_cash_entry' && item.status === 'ph_approved');
 const daysAgo = (d) => {
   const diff = Math.floor((Date.now() - new Date(d)) / 86400000);
   return diff === 0 ? 'Today' : diff === 1 ? '1 day ago' : `${diff} days ago`;
