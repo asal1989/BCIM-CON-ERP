@@ -940,6 +940,7 @@ const MD_SHORTCUTS = [
   { label: 'BOQ Breakdown',     to: '/qs/boq-budget-breakdown',         icon: BarChart3     },
   { label: 'Budget',            to: '/procurement/budget-control',      icon: PieChart      },
   { label: 'RA Bills',          to: '/qs/ra-bills',                     icon: Receipt       },
+  { label: 'Chart of Accounts', to: '/accounts/accountant/chart-of-accounts', icon: BookOpen },
 ];
 
 function MDQuickAccessBar() {
