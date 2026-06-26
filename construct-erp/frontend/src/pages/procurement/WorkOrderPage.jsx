@@ -609,6 +609,29 @@ function CreateWOModal({ onClose, vendors, projects, mrsList = [], onCreate, onU
   const linkedMr = activeMrsList.find(m => String(m.id) === String(form.mrs_id))
     || (mrsList || []).find(m => String(m.id) === String(form.mrs_id));
 
+  // Selecting an MR pulls its requisitioned items into the BOQ table (rate left
+  // blank for the user to price); clearing the selection only blanks the field —
+  // it doesn't strip rows the user may have already edited.
+  const selectMR = (mrsId) => {
+    f('mrs_id', mrsId);
+    if (!mrsId) return;
+    const selected = (mrsList || []).find(m => String(m.id) === String(mrsId));
+    if (!selected?.items?.length) return;
+    const pulled = selected.items.map(it => ({
+      description: it.material_name || it.description || '',
+      quantity:    String(it.quantity || ''),
+      unit:        it.unit || 'SQM',
+      rate:        '',
+      gst_rate:    String(form.gst_pct ?? '18'),
+      remarks:     it.purpose || '',
+    }));
+    setItems(prev => {
+      const isBlankStarter = prev.length === 1 && !prev[0].description && !prev[0].quantity && !prev[0].rate;
+      return isBlankStarter ? pulled : [...prev, ...pulled];
+    });
+    if (!form.project_id && selected.project_id) f('project_id', selected.project_id);
+  };
+
   const formTotal  = items.reduce((s, it) => s + parseFloat(it.quantity||0) * parseFloat(it.rate||0), 0);
 
   // GST break-up by rate, tracking which item numbers fall under each rate
@@ -709,7 +732,7 @@ function CreateWOModal({ onClose, vendors, projects, mrsList = [], onCreate, onU
                 <input className={Z_INP} placeholder="e.g. Civil Works" value={form.cost_head} onChange={e => f('cost_head', e.target.value)} />
               </ZField>
               <ZField label="Approved MR (optional)" className="col-span-2 md:col-span-2">
-                <select className={Z_INP} value={form.mrs_id} onChange={e => f('mrs_id', e.target.value)}>
+                <select className={Z_INP} value={form.mrs_id} onChange={e => selectMR(e.target.value)}>
                   <option value="">— Not linked to an MR —</option>
                   {activeMrsList.map(m => (
                     <option key={m.id} value={m.id}>{mrLabel(m)}</option>
