@@ -1026,26 +1026,38 @@ export default function StoresPettyCashPage() {
   const { data: entriesResp,  isLoading: loadingEntries  } = useQuery({
     queryKey: ['spc-entries', baseParams],
     queryFn: () => storesPettyCashAPI.listEntries({ ...baseParams, limit: 1000 }).then(r => r.data),
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
   const { data: advancesResp, isLoading: loadingAdvances } = useQuery({
     queryKey: ['spc-advances', baseParams],
     queryFn: () => storesPettyCashAPI.listAdvances({ ...baseParams, limit: 1000 }).then(r => r.data),
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
   const { data: receiptsResp, isLoading: loadingReceipts } = useQuery({
     queryKey: ['spc-receipts', baseParams],
     queryFn: () => storesPettyCashAPI.listReceipts({ project_id: projectId || undefined, limit: 500 }).then(r => r.data),
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
   const { data: summaryResp } = useQuery({
     queryKey: ['spc-summary', projectId],
     queryFn: () => storesPettyCashAPI.summary({ project_id: projectId || undefined }).then(r => r.data),
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
   const { data: budgetsResp } = useQuery({
     queryKey: ['spc-budgets', projectId],
     queryFn: () => storesPettyCashAPI.getBudgets({ project_id: projectId || undefined }).then(r => r.data),
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
   const { data: scAdvancesResp, isLoading: loadingScAdv } = useQuery({
     queryKey: ['spc-sc-advances', projectId],
     queryFn: () => storesPettyCashAPI.listScAdvances({ project_id: projectId || undefined }).then(r => r.data),
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   const entries    = entriesResp?.data    ?? [];
@@ -1081,8 +1093,8 @@ export default function StoresPettyCashPage() {
     onSuccess: (_, vars) => {
       toast.success(vars.status === 'Approved' ? 'Entry approved ✓' : 'Entry rejected');
       setApprovalModal(null);
-      qc.invalidateQueries({ queryKey: ['spc-entries'] });
-      qc.invalidateQueries({ queryKey: ['spc-summary'] });
+      qc.refetchQueries({ queryKey: ['spc-entries'] });
+      qc.refetchQueries({ queryKey: ['spc-summary'] });
       qc.invalidateQueries({ queryKey: ['spc-budgets'] });
       qc.invalidateQueries({ queryKey: ['analytics-executive'] });
       qc.invalidateQueries({ queryKey: ['my-approvals'] });
