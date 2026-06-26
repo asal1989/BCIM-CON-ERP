@@ -3,6 +3,7 @@ const express = require('express');
 const router  = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { query } = require('../config/database');
+const { postAutoJournalStandalone } = require('../services/journalAutoPost');
 const {
   notifyScBillApproved, notifyScBillFullyApproved, notifyScBillRejected,
   notifyScWoApproved, notifyScWoRejected,
@@ -10,6 +11,22 @@ const {
   notifyScNmrApproved,
   notifyRetentionApproved, notifyRetentionRejected,
 } = require('../services/notif.helper');
+
+// GL mapping for stores petty cash auto-JV (mirrors stores-petty-cash.routes.js)
+const SPC_CATEGORY_GL = {
+  Fuel: '6030', Safety: '6040', Stationery: '6050', Pantry: '6060',
+  Transport: '6070', Utilities: '6080', Materials: '5000',
+};
+function spcCategoryOf(text = '') {
+  const d = (text || '').toLowerCase();
+  if (/petrol|fuel|diesel/.test(d))                                                         return 'Fuel';
+  if (/safety|glove|shoe|medical|flag|helmet|badge|banner|ppe/.test(d))                    return 'Safety';
+  if (/stationery|stationary|file|paper|pen|whitener|stamp|calc|stapler|a4|xerox|print/.test(d)) return 'Stationery';
+  if (/pantry|sweet|food|sugar|tea|poha|zeera|mixture|coconut|biscuit|snack/.test(d))      return 'Pantry';
+  if (/transport|bus|ticket|charges|auto|cab|uber|ola/.test(d))                            return 'Transport';
+  if (/electric|bill|power|utility|mobile|recharge|internet/.test(d))                      return 'Utilities';
+  return 'Materials';
+}
 
 router.use(authenticate);
 
@@ -683,6 +700,32 @@ router.post('/action', async (req, res) => {
              WHERE id=$3 AND company_id=$4`,
             [uid, comments || null, entity_id, CID(req)]
           );
+          // Auto-post JV: Dr expense + Input GST, Cr Cash in Hand
+          const fullEntry = await query(
+            `SELECT e.*, i.material_name AS first_item
+               FROM stores_petty_cash_entries e
+               LEFT JOIN stores_petty_cash_items i ON i.entry_id = e.id
+               WHERE e.id = $1 ORDER BY i.sort_order LIMIT 1`,
+            [entity_id]
+          );
+          if (fullEntry.rows.length) {
+            const fe = fullEntry.rows[0];
+            const cat     = spcCategoryOf(fe.first_item || fe.supplier || '');
+            const expCode = SPC_CATEGORY_GL[cat] || SPC_CATEGORY_GL.Materials;
+            const basic   = parseFloat(fe.basic_amount) || parseFloat(fe.amount) || 0;
+            const gst     = parseFloat(fe.gst_amount) || 0;
+            const total   = parseFloat(fe.total_amount) || parseFloat(fe.amount) || (basic + gst);
+            const ref     = fe.invoice_no || `SPC-${fe.sl_no}`;
+            const lines   = [{ code: expCode, debit: basic, description: `${cat} — ${fe.supplier} (${ref})` }];
+            if (gst > 0) lines.push({ code: '1300', debit: gst, description: `Input GST / ITC — ${ref}` });
+            lines.push({ code: '1000', credit: total, description: `Petty cash paid — ${fe.supplier} (${ref})` });
+            postAutoJournalStandalone({
+              companyId: CID(req), userId: uid,
+              entryDate: fe.entry_date, projectId: fe.project_id || undefined,
+              reference: ref, narration: `Stores petty cash — ${fe.supplier}`,
+              source: 'auto_stores_petty_cash', lines,
+            }).catch(() => {});
+          }
         } else {
           await query(
             `UPDATE stores_petty_cash_entries

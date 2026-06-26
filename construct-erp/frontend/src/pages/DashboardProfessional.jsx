@@ -3,8 +3,8 @@
 // Neutral palette, dense KPI strip, section-based layout with tables + charts per department.
 import React, { Suspense, lazy, useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
-import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { Link, useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, Legend,

@@ -1,13 +1,13 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { pettyCashAPI, projectAPI } from '../../api/client';
+import { pettyCashAPI, projectAPI, storesPettyCashAPI } from '../../api/client';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import dayjs from 'dayjs';
 import {
   Wallet, PlusCircle, CheckCircle, XCircle, Clock, BarChart2,
   FileText, RefreshCw, Settings, Send, IndianRupee, TrendingUp,
-  AlertCircle, Layers
+  AlertCircle, Layers, Store
 } from 'lucide-react';
 
 const fmt = n => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
@@ -31,14 +31,18 @@ const PRIORITY_COLORS = {
 };
 
 const TABS = [
-  { id: 'dashboard',   label: 'Dashboard',   icon: BarChart2  },
-  { id: 'requests',    label: 'Requests',     icon: FileText   },
-  { id: 'expenses',    label: 'Expenses',     icon: Wallet     },
-  { id: 'approvals',   label: 'Approvals',    icon: CheckCircle},
-  { id: 'settlements', label: 'Settlements',  icon: Layers     },
-  { id: 'masters',     label: 'Masters',      icon: Settings   },
-  { id: 'reports',     label: 'Reports',      icon: TrendingUp },
+  { id: 'dashboard',    label: 'Dashboard',      icon: BarChart2  },
+  { id: 'stores-pc',   label: 'Stores PC',       icon: Store      },
+  { id: 'requests',     label: 'Requests',        icon: FileText   },
+  { id: 'expenses',     label: 'Expenses',        icon: Wallet     },
+  { id: 'sc-advances',  label: 'SC Advances',     icon: Send       },
+  { id: 'approvals',    label: 'Approvals',       icon: CheckCircle},
+  { id: 'settlements',  label: 'Settlements',     icon: Layers     },
+  { id: 'masters',      label: 'Masters',         icon: Settings   },
+  { id: 'reports',      label: 'Reports',         icon: TrendingUp },
 ];
+
+const COST_HEADS = ['Material', 'Consumables', 'Electrical', 'Safety', 'P&M'];
 
 // ── Shared helpers ─────────────────────────────────────────────────────────────
 function KpiCard({ title, value, sub, icon: Icon, color = 'blue' }) {
@@ -320,7 +324,7 @@ function ExpensesTab({ projectId, custodians, categories }) {
   const qc = useQueryClient();
   const [filters, setFilters] = useState({ status: '', from_date: '', to_date: '' });
   const [showForm, setShowForm] = useState(false);
-  const blankExp = { expense_date: dayjs().format('YYYY-MM-DD'), description: '', amount: '', category_id: '', custodian_id: '', site_location: '', payment_mode: 'cash', bill_number: '', vendor_name: '', remarks: '' };
+  const blankExp = { expense_date: dayjs().format('YYYY-MM-DD'), description: '', amount: '', category_id: '', cost_head: '', custodian_id: '', site_location: '', payment_mode: 'cash', bill_number: '', vendor_name: '', remarks: '' };
   const [form, setForm] = useState(blankExp);
 
   const params = useMemo(() => ({ project_id: projectId || undefined, ...Object.fromEntries(Object.entries(filters).filter(([,v]) => v)) }), [projectId, filters]);
@@ -356,7 +360,7 @@ function ExpensesTab({ projectId, custodians, categories }) {
         <div className="overflow-x-auto rounded-2xl border border-gray-100">
           <table className="w-full text-xs">
             <thead className="bg-gray-50">
-              <tr>{['Voucher','Date','Category','Description','Vendor','Custodian','Amount','Status','Actions'].map(h => (
+              <tr>{['Voucher','Date','Cost Head','Category','Description','Vendor','Custodian','Amount','Status','Actions'].map(h => (
                 <th key={h} className="px-3 py-2.5 text-left font-semibold text-gray-500 whitespace-nowrap">{h}</th>
               ))}</tr>
             </thead>
@@ -365,6 +369,7 @@ function ExpensesTab({ projectId, custodians, categories }) {
                 <tr key={e.id} className="hover:bg-gray-50">
                   <td className="px-3 py-2 font-mono text-blue-600">{e.voucher_number}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{fmtD(e.expense_date)}</td>
+                  <td className="px-3 py-2">{e.cost_head ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-semibold">{e.cost_head}</span> : <span className="text-gray-300">—</span>}</td>
                   <td className="px-3 py-2"><span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">{e.category_name || 'Misc'}</span></td>
                   <td className="px-3 py-2 max-w-[160px] truncate">{e.description}</td>
                   <td className="px-3 py-2 text-gray-500">{e.vendor_name || '—'}</td>
@@ -381,7 +386,7 @@ function ExpensesTab({ projectId, custodians, categories }) {
                   </td>
                 </tr>
               ))}
-              {(data || []).length === 0 && <tr><td colSpan={9} className="py-8 text-center text-gray-400">No expenses found</td></tr>}
+              {(data || []).length === 0 && <tr><td colSpan={10} className="py-8 text-center text-gray-400">No expenses found</td></tr>}
             </tbody>
           </table>
         </div>
@@ -393,6 +398,12 @@ function ExpensesTab({ projectId, custodians, categories }) {
             <Field label="Expense Date *"><input type="date" className={inputCls} value={form.expense_date} onChange={e => setForm(f => ({...f, expense_date: e.target.value}))} /></Field>
             <Field label="Amount *"><input type="number" className={inputCls} value={form.amount} onChange={e => setForm(f => ({...f, amount: e.target.value}))} /></Field>
             <div className="col-span-2"><Field label="Description *"><input className={inputCls} value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} /></Field></div>
+            <Field label="Cost Head (BOQ Budget)">
+              <select className={inputCls} value={form.cost_head} onChange={e => setForm(f => ({...f, cost_head: e.target.value}))}>
+                <option value="">— Select Head —</option>
+                {COST_HEADS.map(h => <option key={h} value={h}>{h}</option>)}
+              </select>
+            </Field>
             <Field label="Category">
               <select className={inputCls} value={form.category_id} onChange={e => setForm(f => ({...f, category_id: e.target.value}))}>
                 <option value="">— Select —</option>
@@ -931,6 +942,184 @@ function MastersTab({ projects }) {
   );
 }
 
+// ── SC Advances Tab ─────────────────────────────────────────────────────────────
+function ScAdvancesTab({ projectId, projects }) {
+  const qc = useQueryClient();
+  const [showForm, setShowForm] = useState(false);
+  const [vendorSearch, setVendorSearch] = useState('');
+  const blank = {
+    advance_date: dayjs().format('YYYY-MM-DD'),
+    project_id: projectId || '',
+    vendor_id: '', vendor_name: '',
+    amount: '', wo_number: '',
+    payment_mode: 'cash', reference_number: '', remarks: '',
+  };
+  const [form, setForm] = useState(blank);
+
+  const { data: listData, isLoading } = useQuery({
+    queryKey: ['pc-sc-advances', projectId],
+    queryFn: () => pettyCashAPI.scAdvances({ project_id: projectId || undefined }).then(r => r.data),
+  });
+
+  const { data: vendorData } = useQuery({
+    queryKey: ['pc-sc-vendors', vendorSearch],
+    queryFn: () => pettyCashAPI.scVendorLookup({ search: vendorSearch || undefined }).then(r => r.data),
+    enabled: showForm,
+  });
+  const vendors = vendorData?.data || [];
+
+  const createMut = useMutation({
+    mutationFn: d => pettyCashAPI.createScAdvance(d),
+    onSuccess: () => {
+      toast.success('SC Advance recorded & linked to BOQ budget');
+      qc.invalidateQueries({ queryKey: ['pc-sc-advances'] });
+      qc.invalidateQueries({ queryKey: ['pc-dashboard'] });
+      setShowForm(false); setForm(blank);
+    },
+    onError: e => toast.error(e.response?.data?.error || 'Save failed'),
+  });
+
+  const rows = listData?.data || [];
+  const total = rows.reduce((s, r) => s + Number(r.amount), 0);
+
+  return (
+    <div className="space-y-4">
+      {/* Header bar */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex gap-4 text-xs text-gray-500">
+          <span>Total advances: <strong className="text-gray-800">{rows.length}</strong></span>
+          <span>Total amount: <strong className="text-orange-700">{fmt(total)}</strong></span>
+        </div>
+        <div className="ml-auto">
+          <button onClick={() => setShowForm(true)} className={btnPrimary}>
+            <PlusCircle size={14} className="inline mr-1" />New SC Advance
+          </button>
+        </div>
+      </div>
+
+      {/* Info banner */}
+      <div className="flex items-start gap-2 bg-orange-50 border border-orange-200 rounded-xl px-4 py-2.5 text-xs text-orange-700">
+        <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
+        <span>Sub-contractor petty cash advances are automatically recorded in the Advance Tracker and appear under <strong>Sub Con</strong> cost in the BOQ Budget Breakdown.</span>
+      </div>
+
+      {/* List */}
+      {isLoading ? <div className="text-center py-8 text-gray-400">Loading…</div> : (
+        <div className="overflow-x-auto rounded-2xl border border-gray-100">
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50">
+              <tr>{['Voucher','Date','Sub-Contractor','Project','WO No.','Amount','Mode','Status'].map(h => (
+                <th key={h} className="px-3 py-2.5 text-left font-semibold text-gray-500 whitespace-nowrap">{h}</th>
+              ))}</tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {rows.map(r => (
+                <tr key={r.id} className="hover:bg-gray-50">
+                  <td className="px-3 py-2 font-mono text-orange-600 font-semibold">{r.voucher_number}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">{fmtD(r.advance_date)}</td>
+                  <td className="px-3 py-2 font-medium text-gray-800">{r.vendor_name}</td>
+                  <td className="px-3 py-2 text-gray-500">{r.project_name || '—'}</td>
+                  <td className="px-3 py-2 font-mono text-gray-500">{r.wo_number || '—'}</td>
+                  <td className="px-3 py-2 text-right font-semibold text-orange-700">{fmt(r.amount)}</td>
+                  <td className="px-3 py-2 capitalize text-gray-500">{(r.payment_mode||'cash').replace('_',' ')}</td>
+                  <td className="px-3 py-2">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 font-semibold">{r.status}</span>
+                  </td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr><td colSpan={8} className="py-8 text-center text-gray-400">No SC advances recorded yet</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* New SC Advance modal */}
+      {showForm && (
+        <Modal title="Record Sub-Contractor Advance (Petty Cash)" onClose={() => setShowForm(false)} wide>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Date *">
+              <input type="date" className={inputCls} value={form.advance_date} onChange={e => setForm(f => ({...f, advance_date: e.target.value}))} />
+            </Field>
+            <Field label="Amount *">
+              <input type="number" className={inputCls} value={form.amount} onChange={e => setForm(f => ({...f, amount: e.target.value}))} placeholder="0.00" />
+            </Field>
+
+            {/* Vendor search */}
+            <div className="col-span-2">
+              <Field label="Sub-Contractor *">
+                <input
+                  className={inputCls} placeholder="Type to search sub-contractor…"
+                  value={vendorSearch || form.vendor_name}
+                  onChange={e => { setVendorSearch(e.target.value); setForm(f => ({...f, vendor_id:'', vendor_name: e.target.value})); }}
+                />
+                {vendors.length > 0 && vendorSearch && (
+                  <div className="mt-1 border border-gray-200 rounded-xl bg-white shadow-sm max-h-40 overflow-y-auto">
+                    {vendors.map(v => (
+                      <button key={v.id} type="button"
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 text-gray-700"
+                        onClick={() => { setForm(f => ({...f, vendor_id: v.id, vendor_name: v.name})); setVendorSearch(''); }}>
+                        {v.name} {v.vendor_code ? `(${v.vendor_code})` : ''}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </Field>
+            </div>
+
+            <Field label="Project">
+              <select className={inputCls} value={form.project_id} onChange={e => setForm(f => ({...f, project_id: e.target.value}))}>
+                <option value="">— Select —</option>
+                {(projects||[]).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Work Order No.">
+              <input className={inputCls} value={form.wo_number} onChange={e => setForm(f => ({...f, wo_number: e.target.value}))} placeholder="e.g. WOLANLH10004" />
+            </Field>
+
+            <Field label="Payment Mode">
+              <select className={inputCls} value={form.payment_mode} onChange={e => setForm(f => ({...f, payment_mode: e.target.value}))}>
+                <option value="cash">Cash</option>
+                <option value="upi">UPI</option>
+                <option value="bank_transfer">Bank Transfer</option>
+                <option value="cheque">Cheque</option>
+              </select>
+            </Field>
+            <Field label="Reference No.">
+              <input className={inputCls} value={form.reference_number} onChange={e => setForm(f => ({...f, reference_number: e.target.value}))} placeholder="UPI ref / cheque no." />
+            </Field>
+
+            <div className="col-span-2">
+              <Field label="Remarks">
+                <input className={inputCls} value={form.remarks} onChange={e => setForm(f => ({...f, remarks: e.target.value}))} />
+              </Field>
+            </div>
+          </div>
+
+          <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs text-amber-700">
+            <strong>Note:</strong> This will also create an entry in the Advance Tracker so it appears in BOQ Budget Breakdown under "Sub Con" cost head.
+          </div>
+
+          <div className="flex gap-2 mt-4 justify-end">
+            <button onClick={() => setShowForm(false)} className={btnSecondary}>Cancel</button>
+            <button
+              onClick={() => {
+                if (!form.vendor_name || !form.advance_date || !form.amount) return toast.error('Sub-contractor, date and amount are required');
+                createMut.mutate(form);
+              }}
+              disabled={createMut.isPending}
+              className={btnPrimary}
+            >
+              {createMut.isPending ? 'Saving…' : 'Record SC Advance'}
+            </button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 // ── Reports Tab ────────────────────────────────────────────────────────────────
 function ReportsTab({ projectId }) {
   const [activeReport, setActiveReport] = useState('cash-book');
@@ -1024,6 +1213,117 @@ function ReportsTab({ projectId }) {
   );
 }
 
+// ── Stores Petty Cash Tab ──────────────────────────────────────────────────────
+function StoresPCTab({ projectId }) {
+  const [search, setSearch] = useState('');
+  const { data: resp, isLoading } = useQuery({
+    queryKey: ['spc-entries-accounts', projectId],
+    queryFn: () => storesPettyCashAPI.listEntries({ project_id: projectId || undefined, limit: 1000 })
+      .then(r => r.data),
+    staleTime: 0,
+    refetchOnMount: 'always',
+  });
+
+  const entries = (resp?.data ?? []).filter(e => e.status === 'Approved');
+  const filtered = useMemo(() => {
+    if (!search.trim()) return entries;
+    const q = search.toLowerCase();
+    return entries.filter(e =>
+      [e.supplier, e.invoice_no, e.project_name, e.approved_by_name].some(v => v?.toLowerCase().includes(q))
+    );
+  }, [entries, search]);
+
+  const totalAmount = entries.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
+  const totalGST    = entries.reduce((s, e) => s + parseFloat(e.gst_amount || 0), 0);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+        <div>
+          <h2 className="text-base font-bold text-gray-900">Stores Petty Cash — Approved Entries</h2>
+          <p className="text-xs text-gray-500 mt-0.5">Entries approved in the Stores Petty Cash Tracker · JV auto-posted on approval</p>
+        </div>
+        <a href="/stores/petty-cash" className="text-xs text-blue-600 hover:underline font-medium">Open Tracker →</a>
+      </div>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <KpiCard title="Approved Entries" value={entries.length} icon={CheckCircle} color="green" />
+        <KpiCard title="Total Amount" value={fmt(totalAmount)} icon={IndianRupee} color="blue" />
+        <KpiCard title="Total GST / ITC" value={fmt(totalGST)} icon={TrendingUp} color="purple" />
+      </div>
+
+      {/* Search */}
+      <div className="mb-3">
+        <input
+          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300"
+          placeholder="Search supplier, invoice, project…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+
+      {/* Table */}
+      {isLoading ? (
+        <div className="py-12 text-center text-gray-400 text-sm">Loading…</div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-gray-100">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wide">
+                <th className="px-3 py-2 text-left">#</th>
+                <th className="px-3 py-2 text-left">Date</th>
+                <th className="px-3 py-2 text-left">Supplier</th>
+                <th className="px-3 py-2 text-left">Invoice</th>
+                <th className="px-3 py-2 text-left">Project</th>
+                <th className="px-3 py-2 text-right">Basic Amt</th>
+                <th className="px-3 py-2 text-right">GST</th>
+                <th className="px-3 py-2 text-right">Total</th>
+                <th className="px-3 py-2 text-left">Approved By</th>
+                <th className="px-3 py-2 text-left">JV</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {filtered.map((e, i) => (
+                <tr key={e.id} className="hover:bg-gray-50">
+                  <td className="px-3 py-2 text-gray-400">{e.sl_no || i + 1}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">{fmtD(e.entry_date)}</td>
+                  <td className="px-3 py-2 font-medium text-gray-800 max-w-[160px] truncate">{e.supplier}</td>
+                  <td className="px-3 py-2 text-gray-500">{e.invoice_no || '—'}</td>
+                  <td className="px-3 py-2 text-gray-500 max-w-[120px] truncate">{e.project_name || '—'}</td>
+                  <td className="px-3 py-2 text-right font-medium">{fmt(e.basic_amount || e.amount)}</td>
+                  <td className="px-3 py-2 text-right text-purple-600">{fmt(e.gst_amount)}</td>
+                  <td className="px-3 py-2 text-right font-bold text-green-700">{fmt(e.total_amount || e.amount)}</td>
+                  <td className="px-3 py-2 text-gray-500">{e.approved_by_name || '—'}</td>
+                  <td className="px-3 py-2">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700">
+                      <CheckCircle size={9} /> Posted
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr><td colSpan={10} className="py-10 text-center text-gray-400">No approved entries found</td></tr>
+              )}
+            </tbody>
+            {filtered.length > 0 && (
+              <tfoot>
+                <tr className="bg-gray-50 font-bold text-gray-700">
+                  <td colSpan={5} className="px-3 py-2">Total ({filtered.length} entries)</td>
+                  <td className="px-3 py-2 text-right">{fmt(filtered.reduce((s, e) => s + parseFloat(e.basic_amount || e.amount || 0), 0))}</td>
+                  <td className="px-3 py-2 text-right text-purple-600">{fmt(filtered.reduce((s, e) => s + parseFloat(e.gst_amount || 0), 0))}</td>
+                  <td className="px-3 py-2 text-right text-green-700">{fmt(filtered.reduce((s, e) => s + parseFloat(e.total_amount || e.amount || 0), 0))}</td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function PettyCashPage() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -1077,6 +1377,7 @@ export default function PettyCashPage() {
         {activeTab === 'settlements' && <SettlementsTab projectId={projectId} custodians={custodians} accounts={accounts} />}
         {activeTab === 'masters'     && <MastersTab projects={projects} />}
         {activeTab === 'reports'     && <ReportsTab projectId={projectId} />}
+        {activeTab === 'stores-pc'   && <StoresPCTab projectId={projectId} />}
       </div>
     </div>
   );
