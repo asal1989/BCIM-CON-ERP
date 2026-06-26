@@ -5,6 +5,7 @@
 // kept but restyled into the same bordered/Times-New-Roman look.
 import React from 'react';
 import dayjs from 'dayjs';
+import { LANCO_DELIVERY_ADDRESS } from '../../constants/poAddresses';
 
 // ─── Amount to words ─────────────────────────────────────────────────────────
 const ONES  = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
@@ -87,7 +88,9 @@ const WOPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
   const coStatePin = [coState, coPin].filter(Boolean).join(' – ');
 
   const vendorFullAddr = data.vendor_address || '—';
-  const siteAddress = data.delivery_address || data.project_name || '—';
+  const siteAddress = isLanco
+    ? LANCO_DELIVERY_ADDRESS
+    : (data.delivery_address || data.project_name || '—');
 
   // Split terms; strip any leading "1 ", "1. ", "1) " etc. because the <ol> below
   // adds its own numbering (otherwise we get "1. 1 All work…").

@@ -4,6 +4,7 @@
 // row + registered-office footer repeat on every page via <tfoot>.
 import React from 'react';
 import dayjs from 'dayjs';
+import { LANCO_DELIVERY_ADDRESS } from '../../constants/poAddresses';
 
 // ─── Amount to words ─────────────────────────────────────────────────────────
 const ONES  = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
@@ -104,9 +105,11 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
   ].filter(Boolean).join(', ');
   const vendorFullAddr = [data.vendor_address, vendorCityStatePin].filter(Boolean).join(', ');
 
-  const deliveryAddr = data.delivery_address
-    || [data.project_location, data.project_city, data.project_state].filter(Boolean).join(', ')
-    || '—';
+  const deliveryAddr = isLanco
+    ? LANCO_DELIVERY_ADDRESS
+    : (data.delivery_address
+        || [data.project_location, data.project_city, data.project_state].filter(Boolean).join(', ')
+        || '—');
 
   // Split terms; strip any leading "1 ", "1. ", "1) " etc. because the <ol> below
   // adds its own numbering (otherwise we get "1. 1 All Bills…").
