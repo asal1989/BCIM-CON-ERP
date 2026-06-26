@@ -14,6 +14,7 @@ import {
   ChevronDown, Tag, CalendarDays, Filter, Eye, Rows3,
   UserRound, Layers3, Send, ClipboardCheck, Settings, GripVertical, RefreshCw,
   ShoppingCart, Upload, Paperclip, History, Info, MapPin, RotateCcw, Pencil,
+  ArrowDownUp, ArrowUp, ArrowDown,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
@@ -429,6 +430,8 @@ export default function MRSPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [showWorkflowConfig, setShowWorkflowConfig] = useState(false);
   const [projectFilter, setProjectFilter] = useState(selectedProjectId || 'all');
+  const [sortBy, setSortBy]   = useState('mrs');   // 'mrs' | 'required_by' | 'created_at'
+  const [sortDir, setSortDir] = useState('desc');  // 'asc' | 'desc'
   const [items, setItems] = useState([{ material: '', qty: '', unit: 'Nos', purpose: '', item_code: '', category: '', est_rate: '', preferred_vendor_id: '' }]);
   const [attachments, setAttachments] = useState([]);
   const [dragOver, setDragOver] = useState(false);
@@ -680,9 +683,24 @@ export default function MRSPage() {
     return true;
   });
 
+  // Stable, predictable ordering. Serial sequence is reliable even when
+  // created_at timestamps are inconsistent, so it is the default sort key.
+  const sorted = [...filtered].sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    if (sortBy === 'mrs') {
+      const sa = a.serial_no_formatted || a.mrs_number || '';
+      const sb = b.serial_no_formatted || b.mrs_number || '';
+      return dir * sa.localeCompare(sb, undefined, { numeric: true, sensitivity: 'base' });
+    }
+    const key = sortBy === 'required_by' ? 'required_by' : 'created_at';
+    const ta = a[key] ? new Date(a[key]).getTime() : 0;
+    const tb = b[key] ? new Date(b[key]).getTime() : 0;
+    return dir * (ta - tb);
+  });
+
   const exportToCSV = () => {
     const headers = ['Serial No', 'Project', 'Department', 'Required By', 'Status', 'Date', 'Requested By'];
-    const rows = filtered.map(m => [
+    const rows = sorted.map(m => [
       m.serial_no_formatted || m.mrs_number, m.project_name, m.department,
       dayjs(m.required_by).format('DD-MM-YYYY'), m.status,
       dayjs(m.created_at).format('DD-MM-YYYY'), m.raised_by_name,
@@ -1349,6 +1367,29 @@ export default function MRSPage() {
                 )}>{count}</span>
               </button>
             ))}
+
+            {/* Sort control */}
+            <div className="flex items-center gap-1.5 ml-auto">
+              <ArrowDownUp className="w-4 h-4 text-slate-400 flex-shrink-0" />
+              <select
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value)}
+                className="h-8 bg-white border border-slate-200 rounded-lg pl-3 pr-7 text-xs font-semibold text-slate-700 outline-none focus:border-indigo-400 transition-all appearance-none cursor-pointer"
+                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+              >
+                <option value="mrs">MRS No.</option>
+                <option value="required_by">Required By</option>
+                <option value="created_at">Date Created</option>
+              </select>
+              <button
+                onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+                title={sortDir === 'asc' ? 'Ascending' : 'Descending'}
+                className="h-8 px-2.5 rounded-lg text-xs font-semibold border border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:text-indigo-700 transition-all flex items-center gap-1 whitespace-nowrap"
+              >
+                {sortDir === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />}
+                {sortDir === 'asc' ? 'Asc' : 'Desc'}
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -1363,7 +1404,7 @@ export default function MRSPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.map(mrs => {
+                {sorted.map(mrs => {
                   const materials = mrs.items || [];
                   const firstMaterial = materials[0]?.material_name || materials[0]?.material || 'No material linked';
                   return (
