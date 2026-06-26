@@ -126,6 +126,61 @@ runSchemaInit('users_role_schema', ensureRoleSchema);
   }
 })();
 
+// ── One-time role promotions ─────────────────────────────────────────────────
+// Ensures specific users have the correct role + modules (idempotent).
+(async () => {
+  const promotions = [
+    {
+      email:       'praveen@bcim.in',
+      role:        'procurement_manager',
+      department:  'Procurement',
+      designation: 'Procurement Manager',
+      modules:     ['Overview', 'Procurement', 'Stores', 'Finance', 'Reports', 'Documents'],
+    },
+  ];
+  for (const p of promotions) {
+    try {
+      const existing = await query(
+        `SELECT id, name, role FROM users WHERE LOWER(email) = $1`,
+        [p.email.toLowerCase()]
+      );
+      if (!existing.rows.length) {
+        // User does not exist yet — create them
+        const company = await query(`SELECT id FROM companies LIMIT 1`);
+        if (!company.rows.length) { console.warn('[users] Role promotion skipped — no company found:', p.email); continue; }
+        const empCode = `EMP-${Date.now().toString().slice(-6)}`;
+        const defaultHash = '$2b$12$oXLlxucPLgU4UkOEvOLCTuAGwqHB28S6QgbbTvyY3Aj3dFK1tea16';
+        const ins = await query(
+          `INSERT INTO users (company_id, employee_code, name, email, password_hash, role, designation, department, accessible_modules, is_active)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::text[],TRUE)
+           RETURNING id, name`,
+          [company.rows[0].id, empCode, p.designation, p.email.toLowerCase(), defaultHash, p.role, p.designation, p.department, p.modules]
+        );
+        console.log(`[users] Created new ${p.role}: ${p.email} (id=${ins.rows[0].id})`);
+      } else {
+        const u = existing.rows[0];
+        if (u.role !== p.role) {
+          await query(
+            `UPDATE users
+                SET role = $1,
+                    department = COALESCE(NULLIF(department,''), $2),
+                    designation = COALESCE(NULLIF(designation,''), $3),
+                    accessible_modules = ARRAY(
+                      SELECT DISTINCT unnest(COALESCE(accessible_modules, ARRAY[]::text[]) || $4::text[])
+                    ),
+                    updated_at = NOW()
+              WHERE id = $5`,
+            [p.role, p.department, p.designation, p.modules, u.id]
+          );
+          console.log(`[users] Promoted ${p.email} from ${u.role} → ${p.role}`);
+        }
+      }
+    } catch (e) {
+      console.error(`[users] Role promotion failed for ${p.email}:`, e.message);
+    }
+  }
+})();
+
 // ── One-time new user creation ───────────────────────────────────────────────
 // Idempotent: skips if a user with this email already exists.
 (async () => {
