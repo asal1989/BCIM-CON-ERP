@@ -5,6 +5,7 @@ import api, { reportAPI } from '../../api/client';
 import dayjs from 'dayjs';
 import { clsx } from 'clsx';
 import DataToolbar from '../../components/common/DataToolbar';
+import useAuthStore from '../../store/authStore';
 
 const fmt  = v => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -33,10 +34,11 @@ function download26Q(records) {
 
 export default function TDSPage() {
   const [activeTab, setActiveTab] = useState('outgoing'); // 'outgoing' | 'incoming'
+  const { selectedProjectId } = useAuthStore();
 
   const { data: raw } = useQuery({
-    queryKey: ['tds'],
-    queryFn: () => api.get('/tds').then(r => r.data),
+    queryKey: ['tds', selectedProjectId],
+    queryFn: () => api.get('/tds', { params: { project_id: selectedProjectId || '' } }).then(r => r.data),
   });
 
   const outgoing = raw?.outgoing || [];

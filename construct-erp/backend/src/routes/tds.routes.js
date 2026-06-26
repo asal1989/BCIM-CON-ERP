@@ -7,10 +7,13 @@ const { query } = require('../config/database');
 
 router.use(authenticate);
 
-// GET /tds — combined TDS register (deducted by us + deducted by client)
+// GET /tds?project_id=xxx — combined TDS register (deducted by us + deducted by client)
+// project_id is optional — when provided only that project's records are returned.
 router.get('/', async (req, res) => {
   try {
-    // TDS deducted BY US from vendor/labour/subcontractor payments (outgoing — we must deposit)
+    const cid = req.user.company_id;
+    const pid = req.query.project_id || null;
+
     const outgoing = await query(
       `SELECT
          pay.id,
@@ -33,11 +36,11 @@ router.get('/', async (req, res) => {
        JOIN projects p ON pay.project_id = p.id
        WHERE p.company_id = $1
          AND pay.tds_deducted > 0
+         AND ($2::uuid IS NULL OR pay.project_id = $2::uuid)
        ORDER BY pay.payment_date DESC`,
-      [req.user.company_id]
+      [cid, pid]
     );
 
-    // TDS deducted BY CLIENT from our RA bill receipts (incoming — our credit with govt)
     const incoming = await query(
       `SELECT
          rb.id,
@@ -61,8 +64,9 @@ router.get('/', async (req, res) => {
        WHERE p.company_id = $1
          AND rb.status = 'paid'
          AND rb.client_tds_amount > 0
+         AND ($2::uuid IS NULL OR rb.project_id = $2::uuid)
        ORDER BY rb.payment_date DESC`,
-      [req.user.company_id]
+      [cid, pid]
     );
 
     res.json({ outgoing: outgoing.rows, incoming: incoming.rows });
