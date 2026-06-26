@@ -6,6 +6,8 @@ import dayjs from 'dayjs';
 import toast from 'react-hot-toast';
 import { ArrowUpRight, Building2, ChevronRight, FileText, Package, Plus, Search, Trash2, X } from 'lucide-react';
 import { debitNoteAPI, projectAPI, vendorAPI } from '../../api/client';
+import useAuthStore from '../../store/authStore';
+import ProjectFilter from '../../components/ProjectFilter';
 
 const STATUS_CFG = {
   pending:   { cls: 'bg-amber-50  text-amber-700  border-amber-200',   label: 'Pending' },
@@ -445,10 +447,11 @@ export default function DebitNotesPage() {
   const [viewRecord, setViewRecord] = useState(null);
   const [filters, setFilters] = useState({ search: '', status: '' });
   const qc = useQueryClient();
+  const { selectedProjectId } = useAuthStore();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['debit-notes', filters],
-    queryFn: () => debitNoteAPI.list(filters).then(r => r.data),
+    queryKey: ['debit-notes', filters, selectedProjectId],
+    queryFn: () => debitNoteAPI.list({ ...filters, project_id: selectedProjectId || undefined }).then(r => r.data),
   });
   const rows = data?.data ?? [];
 
@@ -504,6 +507,7 @@ export default function DebitNotesPage() {
           <option value="">All Statuses</option>
           {Object.entries(STATUS_CFG).map(([v, c]) => <option key={v} value={v}>{c.label}</option>)}
         </select>
+        <ProjectFilter />
         <span className="ml-auto text-xs text-slate-400">{rows.length} record{rows.length !== 1 ? 's' : ''}</span>
       </div>
 

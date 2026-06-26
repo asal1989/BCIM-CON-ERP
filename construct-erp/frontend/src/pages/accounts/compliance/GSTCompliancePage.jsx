@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { IndianRupee, Download, RefreshCw } from 'lucide-react';
 import { reportAPI } from '../../../api/client';
 import useAuthStore from '../../../store/authStore';
+import ProjectFilter from '../../../components/ProjectFilter';
 
 const inr = v => `₹${(+v || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
@@ -45,7 +46,8 @@ export default function GSTCompliancePage() {
               <p className="text-xs text-slate-400">{fyLabel} — output GST, input tax credit, net liability from your ERP transactions</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <ProjectFilter />
             <select value={fy} onChange={e => setFy(Number(e.target.value))}
               className="px-3 py-1.5 border border-slate-200 text-slate-600 text-xs rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-violet-200">
               {fyOptions.map(y => <option key={y} value={y}>FY {y}-{String(y + 1).slice(-2)}</option>)}

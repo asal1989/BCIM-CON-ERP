@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { FileText, RefreshCw } from 'lucide-react';
 import { reportAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
+import ProjectFilter from '../../components/ProjectFilter';
 
 const inr = v => `₹${(+v || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 const now = new Date();
@@ -37,7 +38,8 @@ export default function GSTR3BPage() {
               <p className="text-xs text-slate-400">{fyLabel} — output tax vs input tax credit, net payable. Due 20th of the following month.</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <ProjectFilter />
             <select value={fy} onChange={e => setFy(Number(e.target.value))}
               className="px-3 py-1.5 border border-slate-200 text-slate-600 text-xs rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-violet-200">
               {fyOptions.map(y => <option key={y} value={y}>FY {y}-{String(y + 1).slice(-2)}</option>)}

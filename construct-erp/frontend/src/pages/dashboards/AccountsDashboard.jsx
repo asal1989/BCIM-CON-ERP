@@ -9,6 +9,7 @@ import {
 import { tqsBillsAPI, paymentAPI, vendorQSCertificationAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
 import { DashKPI, DashSection, DashTable, Badge, FlatKPI, inr } from './DashKPI';
+import ProjectFilter from '../../components/ProjectFilter';
 import dayjs from 'dayjs';
 import { clsx } from 'clsx';
 
@@ -453,7 +454,10 @@ export default function AccountsDashboard() {
           </h1>
           <p className="text-sm text-slate-400 mt-0.5">Accounts Overview — {dayjs().format('dddd, D MMMM YYYY')}</p>
         </div>
-        <Badge label="Accountant" cls="bg-emerald-50 text-emerald-700 text-xs px-3 py-1" />
+        <div className="flex items-center gap-2 flex-wrap">
+          <ProjectFilter />
+          <Badge label="Accountant" cls="bg-emerald-50 text-emerald-700 text-xs px-3 py-1" />
+        </div>
       </div>
 
       {/* ── KPIs ── */}

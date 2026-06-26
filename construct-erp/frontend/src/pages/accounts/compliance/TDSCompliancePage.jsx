@@ -4,6 +4,7 @@ import { FileBarChart, RefreshCw } from 'lucide-react';
 import dayjs from 'dayjs';
 import { reportAPI } from '../../../api/client';
 import useAuthStore from '../../../store/authStore';
+import ProjectFilter from '../../../components/ProjectFilter';
 
 const inr = v => `₹${(+v || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 const now = new Date();
@@ -59,7 +60,8 @@ export default function TDSCompliancePage() {
               <p className="text-xs text-slate-400">{fyLabel} — TDS deducted from your payments, grouped into 26Q / 24Q returns</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <ProjectFilter />
             <select value={fy} onChange={e => setFy(Number(e.target.value))}
               className="px-3 py-1.5 border border-slate-200 text-slate-600 text-xs rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-200">
               {fyOptions.map(y => <option key={y} value={y}>FY {y}-{String(y + 1).slice(-2)}</option>)}

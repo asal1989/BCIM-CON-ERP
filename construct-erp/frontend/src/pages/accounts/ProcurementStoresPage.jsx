@@ -7,6 +7,7 @@ import { clsx } from 'clsx';
 import { Truck, Package, ExternalLink } from 'lucide-react';
 import { reportAPI } from '../../api/client';
 import { inr } from '../dashboards/DashKPI';
+import ProjectFilter from '../../components/ProjectFilter';
 
 const PO_STATUS_CLS = {
   pending:        'bg-amber-50 text-amber-600 border-amber-100',
@@ -37,14 +38,17 @@ export default function ProcurementStoresPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="bg-white border-b border-slate-200 px-6 py-4">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-md bg-amber-50 flex items-center justify-center">
-            <Truck className="w-4 h-4 text-amber-600" />
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-md bg-amber-50 flex items-center justify-center">
+              <Truck className="w-4 h-4 text-amber-600" />
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold text-slate-800">Procurement &amp; Stores</h1>
+              <p className="text-xs text-slate-400">Live PO and GRN/stock data — read-only view inside Accounts</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-semibold text-slate-800">Procurement &amp; Stores</h1>
-            <p className="text-xs text-slate-400">Live PO and GRN/stock data — read-only view inside Accounts</p>
-          </div>
+          <ProjectFilter />
         </div>
       </div>
 

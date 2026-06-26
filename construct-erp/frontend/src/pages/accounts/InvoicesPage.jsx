@@ -7,6 +7,8 @@ import { clsx } from 'clsx';
 import { Receipt, Search, ExternalLink } from 'lucide-react';
 import { raBillAPI } from '../../api/client';
 import { inr } from '../dashboards/DashKPI';
+import useAuthStore from '../../store/authStore';
+import ProjectFilter from '../../components/ProjectFilter';
 
 const STATUS_CLS = {
   submitted:        'bg-slate-100 text-slate-600 border-slate-200',
@@ -21,10 +23,11 @@ const STATUS_CLS = {
 export default function InvoicesPage() {
   const [search, setSearch] = useState('');
   const navigate = useNavigate();
+  const { selectedProjectId } = useAuthStore();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['accounts-invoices'],
-    queryFn: () => raBillAPI.list({ limit: 500 }).then(r => r.data?.data ?? []),
+    queryKey: ['accounts-invoices', selectedProjectId],
+    queryFn: () => raBillAPI.list({ limit: 500, project_id: selectedProjectId || undefined }).then(r => r.data?.data ?? []),
   });
   const rows = data ?? [];
   const filtered = rows.filter(r =>
@@ -48,10 +51,13 @@ export default function InvoicesPage() {
               <p className="text-xs text-slate-400">Client RA Bills — create &amp; manage in QS &amp; Billing</p>
             </div>
           </div>
-          <button onClick={() => navigate('/qs/ra-bills')}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm border border-slate-200 rounded-md text-slate-700 hover:bg-slate-50">
-            Open RA Bills <ExternalLink className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <ProjectFilter />
+            <button onClick={() => navigate('/qs/ra-bills')}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm border border-slate-200 rounded-md text-slate-700 hover:bg-slate-50">
+              Open RA Bills <ExternalLink className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
 

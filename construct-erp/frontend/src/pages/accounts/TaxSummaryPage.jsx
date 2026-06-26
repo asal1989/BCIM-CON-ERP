@@ -7,6 +7,7 @@ import { Landmark, ArrowRight, Download, FileDown } from 'lucide-react';
 import { chartOfAccountsAPI } from '../../api/client';
 import { inr, FlatKPI } from '../dashboards/DashKPI';
 import { downloadCsv, downloadPdf } from '../../utils/exportCsv';
+import ProjectFilter from '../../components/ProjectFilter';
 
 const CODE = {
   outputGst: '2100', // Output GST Payable
@@ -64,7 +65,8 @@ export default function TaxSummaryPage() {
               <p className="text-xs text-slate-400">GST and TDS position from posted journal entries</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <ProjectFilter />
             <button onClick={exportCsv} disabled={monthly.length === 0}
               className="flex items-center gap-1.5 px-4 py-2 text-sm border border-slate-200 rounded-md text-slate-700 hover:bg-slate-50 disabled:opacity-50">
               <Download className="w-3.5 h-3.5" /> CSV
