@@ -24,36 +24,36 @@ const dedBg  = '#FFFBF0';
 const netBg  = '#EAF1FB';
 
 const T = {
-  page:     { fontFamily: "'Tinos','Times New Roman',Times,serif", fontSize: '12px', color: '#0A0A0A', fontWeight: '500' },
-  sheet:    { width: '100%', background: '#fff', padding: '2mm 8mm 10mm 8mm', boxSizing: 'border-box', pageBreakAfter: 'always' },
-  masthead: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: `3px double ${navy}`, paddingBottom: '10px', marginBottom: '12px' },
+  page:     { fontFamily: "'Tinos','Times New Roman',Times,serif", fontSize: '11px', color: '#0A0A0A', fontWeight: '500' },
+  sheet:    { width: '100%', background: '#fff', padding: '6mm 8mm 10mm 8mm', boxSizing: 'border-box', pageBreakAfter: 'always' },
+  masthead: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: `3px double ${navy}`, paddingBottom: '10px', marginBottom: '10px' },
   logoArea: { display: 'flex', alignItems: 'center', gap: '12px' },
-  coName:   { fontSize: '16px', fontWeight: 'bold', color: navy, letterSpacing: '0.6px', lineHeight: 1.2 },
-  coSub:    { fontSize: '10px', color: '#222', marginTop: '3px', fontStyle: 'italic', fontWeight: '600' },
-  docTitle: { fontSize: '14px', fontWeight: 'bold', color: rust, textAlign: 'right', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '4px' },
-  badge:    { display: 'inline-block', background: navy, color: '#fff', fontSize: '10px', fontWeight: 'bold', padding: '3px 10px', borderRadius: '2px', letterSpacing: '0.5px' },
-  certDt:   { fontSize: '10px', color: '#222', marginTop: '4px', textAlign: 'right', fontStyle: 'italic', fontWeight: '600' },
-  infoPanel:{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 32px', marginBottom: '12px', background: lightBg, border: `1px solid #C8D8EE`, padding: '8px 12px', fontSize: '11px' },
+  coName:   { fontSize: '15px', fontWeight: 'bold', color: navy, letterSpacing: '0.6px', lineHeight: 1.2 },
+  coSub:    { fontSize: '9.5px', color: '#222', marginTop: '3px', fontStyle: 'italic', fontWeight: '600' },
+  docTitle: { fontSize: '13px', fontWeight: 'bold', color: rust, textAlign: 'right', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '4px' },
+  badge:    { display: 'inline-block', background: navy, color: '#fff', fontSize: '9.5px', fontWeight: 'bold', padding: '3px 10px', borderRadius: '2px', letterSpacing: '0.5px' },
+  certDt:   { fontSize: '9.5px', color: '#222', marginTop: '4px', textAlign: 'right', fontStyle: 'italic', fontWeight: '600' },
+  infoPanel:{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 24px', marginBottom: '10px', background: lightBg, border: `1px solid #C8D8EE`, padding: '7px 10px', fontSize: '10.5px' },
   infoRow:  { display: 'flex', alignItems: 'baseline', gap: '4px', paddingBottom: '2px', borderBottom: '1px dotted #D0DCF0' },
-  infoLbl:  { fontWeight: 'bold', color: navy, minWidth: '160px', flexShrink: 0, fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.3px' },
-  infoVal:  { color: '#0A0A0A', fontSize: '11px', fontWeight: '600' },
-  secHead:  { background: navy, color: '#fff', fontWeight: 'bold', fontSize: '11px', padding: '5px 10px', marginTop: '12px', marginBottom: '4px', letterSpacing: '0.8px', textTransform: 'uppercase' },
-  tbl:      { width: '100%', borderCollapse: 'collapse', fontSize: '10px' },
-  th:       { background: navy, color: '#fff', padding: '5px 4px', textAlign: 'center', border: `1px solid #8AAAD0`, fontWeight: 'bold', verticalAlign: 'middle', letterSpacing: '0.3px', fontSize: '10px' },
-  td:       { padding: '4px 5px', border: '1px solid #9AB0CC', verticalAlign: 'top', lineHeight: '1.5', fontWeight: '500', color: '#0A0A0A' },
-  tdC:      { padding: '4px 5px', border: '1px solid #9AB0CC', textAlign: 'center', verticalAlign: 'middle', fontWeight: '500', color: '#0A0A0A' },
-  tdR:      { padding: '4px 5px', border: '1px solid #9AB0CC', textAlign: 'right', verticalAlign: 'middle', fontFamily: "'Courier New',monospace", fontSize: '10px', fontWeight: '600', color: '#0A0A0A' },
+  infoLbl:  { fontWeight: 'bold', color: navy, minWidth: '150px', flexShrink: 0, fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.3px' },
+  infoVal:  { color: '#0A0A0A', fontSize: '10.5px', fontWeight: '600' },
+  secHead:  { background: navy, color: '#fff', fontWeight: 'bold', fontSize: '10px', padding: '4px 10px', marginTop: '10px', marginBottom: '3px', letterSpacing: '0.8px', textTransform: 'uppercase' },
+  tbl:      { width: '100%', borderCollapse: 'collapse', fontSize: '9px', tableLayout: 'fixed' },
+  th:       { background: navy, color: '#fff', padding: '4px 3px', textAlign: 'center', border: `1px solid #8AAAD0`, fontWeight: 'bold', verticalAlign: 'middle', letterSpacing: '0.2px', fontSize: '9px', lineHeight: '1.3' },
+  td:       { padding: '3px 4px', border: '1px solid #9AB0CC', verticalAlign: 'top', lineHeight: '1.4', fontWeight: '500', color: '#0A0A0A', wordBreak: 'break-word' },
+  tdC:      { padding: '3px 4px', border: '1px solid #9AB0CC', textAlign: 'center', verticalAlign: 'middle', fontWeight: '500', color: '#0A0A0A' },
+  tdR:      { padding: '3px 4px', border: '1px solid #9AB0CC', textAlign: 'right', verticalAlign: 'middle', fontFamily: "'Courier New',monospace", fontSize: '9px', fontWeight: '600', color: '#0A0A0A' },
   totRow:   { background: '#D6E6F8', fontWeight: 'bold' },
   netRow:   { background: navy, color: '#fff', fontWeight: 'bold' },
   dedRow:   { background: dedBg },
-  claimTbl: { width: '65%', margin: '0 auto', borderCollapse: 'collapse', fontSize: '11px' },
-  amtBox:   { marginTop: '10px', border: `1px solid ${navy}`, borderLeft: `4px solid ${navy}`, padding: '7px 14px', fontSize: '11.5px', background: netBg, lineHeight: 1.6, fontWeight: '600' },
-  remarks:  { fontSize: '10px', color: '#111', marginTop: '10px', borderTop: `1px solid #C8D6E8`, paddingTop: '6px', fontWeight: '500' },
-  sigGrid:  { display: 'flex', gap: '8px', marginTop: '20px' },
-  sigBox:   { flex: 1, border: `1px solid #BCC8DC`, padding: '8px 6px', textAlign: 'center', fontSize: '9.5px', background: '#FAFCFF' },
-  stamp:    { width: '56px', height: '48px', border: '1px dashed #AAB8CC', margin: '0 auto 6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '8px', color: '#666', letterSpacing: '0.4px', fontWeight: 'bold' },
-  sigRole:  { fontWeight: 'bold', color: navy, fontSize: '10px', marginBottom: '3px' },
-  sigDate:  { marginTop: '6px', fontSize: '9px', color: '#111', borderTop: '1px solid #C0C8D8', paddingTop: '4px', fontWeight: '500' },
+  claimTbl: { width: '100%', borderCollapse: 'collapse', fontSize: '11px' },
+  amtBox:   { marginTop: '10px', border: `1px solid ${navy}`, borderLeft: `4px solid ${navy}`, padding: '7px 14px', fontSize: '11px', background: netBg, lineHeight: 1.6, fontWeight: '600' },
+  remarks:  { fontSize: '9.5px', color: '#111', marginTop: '8px', borderTop: `1px solid #C8D6E8`, paddingTop: '5px', fontWeight: '500' },
+  sigGrid:  { display: 'flex', gap: '6px', marginTop: '16px', flexWrap: 'wrap' },
+  sigBox:   { flex: '1 1 110px', minWidth: '100px', border: `1px solid #BCC8DC`, padding: '7px 5px', textAlign: 'center', fontSize: '9px', background: '#FAFCFF' },
+  stamp:    { width: '52px', height: '44px', border: '1px dashed #AAB8CC', margin: '0 auto 5px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '7.5px', color: '#666', letterSpacing: '0.4px', fontWeight: 'bold' },
+  sigRole:  { fontWeight: 'bold', color: navy, fontSize: '9px', marginBottom: '3px', lineHeight: '1.3' },
+  sigDate:  { marginTop: '5px', fontSize: '8.5px', color: '#111', borderTop: '1px solid #C0C8D8', paddingTop: '3px', fontWeight: '500' },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -202,13 +202,32 @@ function AbstractSheet({ cert }) {
       </div>
 
       <div style={T.secHead}>Bill of Quantities — Abstract</div>
+      {/* colgroup sets explicit column widths so the 15-col table fills landscape A4 correctly.
+          Total ≈ 281mm (A4 landscape 297mm − 8mm margins each side − 8mm sheet padding each side) */}
       <table style={T.tbl}>
+        <colgroup>
+          <col style={{width:'22px'}}/>  {/* Sl */}
+          <col style={{width:'32px'}}/>  {/* RA */}
+          <col style={{width:'18%'}}/>   {/* Description — proportional, takes remaining space */}
+          <col style={{width:'28px'}}/>  {/* Unit */}
+          <col style={{width:'36px'}}/>  {/* Order Qty */}
+          <col style={{width:'52px'}}/>  {/* Order Rate */}
+          <col style={{width:'54px'}}/>  {/* Order Amount */}
+          <col style={{width:'36px'}}/>  {/* Inv Prev Qty */}
+          <col style={{width:'36px'}}/>  {/* Inv Pres Qty */}
+          <col style={{width:'54px'}}/>  {/* Inv Amount */}
+          <col style={{width:'36px'}}/>  {/* QS Prev Qty */}
+          <col style={{width:'36px'}}/>  {/* QS Pres Qty */}
+          <col style={{width:'54px'}}/>  {/* QS Amount */}
+          <col style={{width:'36px'}}/>  {/* Bal Qty */}
+          <col style={{width:'54px'}}/>  {/* Bal Amount */}
+        </colgroup>
         <thead>
           <tr>
-            <th style={{...T.th, width:'24px'}}  rowSpan={2}>Sl.</th>
-            <th style={{...T.th, width:'18px'}}  rowSpan={2}>RA</th>
-            <th style={{...T.th, width:'180px'}} rowSpan={2}>Description of Work</th>
-            <th style={{...T.th, width:'34px'}}  rowSpan={2}>Unit</th>
+            <th style={T.th} rowSpan={2}>Sl.</th>
+            <th style={T.th} rowSpan={2}>RA</th>
+            <th style={T.th} rowSpan={2}>Description of Work</th>
+            <th style={T.th} rowSpan={2}>Unit</th>
             <th style={T.th} colSpan={3}>As Per Work / Purchase Order</th>
             <th style={T.th} colSpan={3}>As Per Invoice</th>
             <th style={T.th} colSpan={3}>As Per QS Certified</th>
@@ -392,12 +411,17 @@ function PaymentCertificate({ cert }) {
       </div>
 
       <div style={T.secHead}>Claim Summary</div>
-      <table style={{ ...T.claimTbl, width: '80%' }}>
+      <table style={{ ...T.claimTbl }}>
+        <colgroup>
+          <col style={{width:'36px'}}/>
+          <col/>
+          <col style={{width:'140px'}}/>
+        </colgroup>
         <thead>
           <tr>
-            <th style={{...T.th, width:'28px'}}>No.</th>
-            <th style={{...T.th, textAlign:'left', width:'260px', padding:'4px 10px'}}>Particulars</th>
-            <th style={{...T.th, width:'110px'}}>Amount (₹)</th>
+            <th style={{...T.th, textAlign:'center'}}>No.</th>
+            <th style={{...T.th, textAlign:'left', padding:'5px 12px'}}>Particulars</th>
+            <th style={{...T.th, textAlign:'right', padding:'5px 12px'}}>Amount (₹)</th>
           </tr>
         </thead>
         <tbody>
@@ -408,12 +432,12 @@ function PaymentCertificate({ cert }) {
             const isNeg = row.value != null && row.value < 0;
             return (
               <tr key={row.no}>
-                <td style={{...T.tdC, background: bg, color: col, fontWeight: fw}}>{row.no}</td>
-                <td style={{...T.td, background: bg, color: col, fontWeight: fw, padding:'4px 10px'}}>
+                <td style={{...T.tdC, background: bg, color: col, fontWeight: fw, fontSize:'11px'}}>{row.no}</td>
+                <td style={{...T.td, background: bg, color: col, fontWeight: fw, fontSize:'11px', padding:'5px 12px'}}>
                   {row.isDed && <span style={{color: rust, marginRight:'4px'}}>▸</span>}
                   {row.label}
                 </td>
-                <td style={{...T.tdR, background: bg, color: isNeg ? rust : col, fontWeight: fw}}>
+                <td style={{...T.tdR, background: bg, color: isNeg ? rust : col, fontWeight: fw, fontSize:'11px', padding:'5px 12px'}}>
                   {row.value == null ? '—' : (isNeg ? `(${raw(Math.abs(row.value))})` : raw(row.value))}
                 </td>
               </tr>
@@ -422,7 +446,7 @@ function PaymentCertificate({ cert }) {
         </tbody>
       </table>
 
-      <div style={{...T.amtBox, marginLeft:'auto', marginRight:'auto', width:'80%', boxSizing:'border-box'}}>
+      <div style={{...T.amtBox, width:'100%', boxSizing:'border-box'}}>
         <div style={{fontSize:'10px', color:'#111', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'3px', fontWeight:'bold'}}>Amount Certified in Words</div>
         <div style={{fontWeight:'bold', color: navy, fontSize:'12px'}}>Rupees {numberToWords(currentDue)}</div>
         <div style={{fontSize:'10px', color:'#111', marginTop:'2px', fontWeight:'600'}}>( ₹ {inr(currentDue)}.00 )</div>
@@ -837,11 +861,11 @@ export default function VendorQSCertificationDetailPage() {
 
           ${printMode === 'abstract'
             ? `.print-payment { display: none !important; }
-               @page { size: A4 landscape; margin: 2mm 4mm 4mm 4mm; }`
+               @page { size: A4 landscape; margin: 8mm 8mm 10mm 8mm; }`
             : printMode === 'payment'
             ? `.print-abstract { display: none !important; }
-               @page { size: A4 portrait; margin: 2mm 5mm 5mm 5mm; }`
-            : `@page { size: A4 landscape; margin: 2mm 4mm 4mm 4mm; }`
+               @page { size: A4 portrait; margin: 10mm 10mm 12mm 10mm; }`
+            : `@page { size: A4 landscape; margin: 8mm 8mm 10mm 8mm; }`
           }
         }
       `}</style>
