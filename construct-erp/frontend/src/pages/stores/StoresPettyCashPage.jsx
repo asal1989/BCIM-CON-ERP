@@ -10,7 +10,7 @@ import {
   Wallet, Plus, Search, Trash2, X, Package,
   ShoppingBag, Users, BarChart2, BookOpen, AlertTriangle,
   CheckCircle, Clock, TrendingUp, Printer, RefreshCw,
-  Paperclip, Eye, Upload, Send,
+  Paperclip, Eye, Upload, Send, ThumbsUp, ThumbsDown,
 } from 'lucide-react';
 import { storesPettyCashAPI, projectAPI, uploadAPI } from '../../api/client';
 
@@ -695,6 +695,63 @@ function ReceiptForm({ initial, projects, defaultProjectId, onClose }) {
   );
 }
 
+// ── Approval Modal ────────────────────────────────────────────────────────────
+function ApprovalModal({ entry, mode, onConfirm, onClose }) {
+  const [remarks, setRemarks] = useState('');
+  const isApprove = mode === 'approve';
+  return (
+    <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className={clsx('w-9 h-9 rounded-lg flex items-center justify-center', isApprove ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200')}>
+              {isApprove ? <ThumbsUp className="w-4 h-4 text-green-600" /> : <ThumbsDown className="w-4 h-4 text-red-600" />}
+            </div>
+            <div>
+              <p className="font-semibold text-slate-900">{isApprove ? 'Approve Entry' : 'Reject Entry'}</p>
+              <p className="text-xs text-slate-500 mt-0.5">{entry.supplier} · {inr(entry.amount)}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-6 space-y-3">
+          {isApprove ? (
+            <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-700">
+              Approving this entry confirms the expense is valid and deducts <strong>{inr(entry.amount)}</strong> from the petty cash balance.
+            </div>
+          ) : (
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
+              Rejecting this entry will exclude it from the petty cash balance. The entry remains visible for audit.
+            </div>
+          )}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">{isApprove ? 'Approval Remarks (optional)' : 'Reason for Rejection *'}</label>
+            <textarea
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+              rows={3}
+              placeholder={isApprove ? 'Any notes for the project head record…' : 'State the reason for rejection…'}
+              value={remarks}
+              onChange={e => setRemarks(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="flex gap-2 px-6 pb-5 justify-end">
+          <button onClick={onClose} className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
+          <button
+            onClick={() => {
+              if (!isApprove && !remarks.trim()) return toast.error('Please state a reason for rejection');
+              onConfirm(remarks);
+            }}
+            className={clsx('px-5 py-2 text-white text-sm font-medium rounded-lg', isApprove ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700')}
+          >
+            {isApprove ? 'Approve' : 'Reject'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════════════════════
 export default function StoresPettyCashPage() {
   const qc = useQueryClient();
@@ -707,6 +764,7 @@ export default function StoresPettyCashPage() {
   const [editAdv,         setEditAdv]         = useState(null);
   const [showScAdvForm,   setShowScAdvForm]   = useState(false);
   const [showReceiptForm, setShowReceiptForm] = useState(false);
+  const [approvalModal,   setApprovalModal]   = useState(null); // { entry, mode: 'approve'|'reject' }
   const [editReceipt,     setEditReceipt]     = useState(null);
   const [showRepl,        setShowRepl]        = useState(false);
   const [editBudgets,     setEditBudgets]     = useState(false);
@@ -784,8 +842,13 @@ export default function StoresPettyCashPage() {
     onError: e => toast.error(e?.response?.data?.error || 'Delete failed'),
   });
   const patchStatusMut = useMutation({
-    mutationFn: ({ id, status }) => storesPettyCashAPI.patchStatus(id, status),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['spc-entries'] }); qc.invalidateQueries({ queryKey: ['spc-summary'] }); },
+    mutationFn: ({ id, status, remarks, rejected_reason }) => storesPettyCashAPI.patchStatus(id, status, remarks, rejected_reason),
+    onSuccess: (_, vars) => {
+      toast.success(vars.status === 'Approved' ? 'Entry approved ✓' : 'Entry rejected');
+      setApprovalModal(null);
+      qc.invalidateQueries({ queryKey: ['spc-entries'] });
+      qc.invalidateQueries({ queryKey: ['spc-summary'] });
+    },
     onError: e => toast.error(e?.response?.data?.error || 'Status update failed'),
   });
   const saveBudgetsMut = useMutation({
@@ -1238,18 +1301,30 @@ export default function StoresPettyCashPage() {
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-1">
                                 {row.status !== 'Approved' && (
-                                  <button onClick={() => patchStatusMut.mutate({ id: row.id, status: 'Approved' })} title="Approve"
-                                    className="text-[10px] font-bold text-green-700 bg-green-100 hover:bg-green-200 rounded px-1.5 py-0.5">✓</button>
+                                  <button onClick={() => setApprovalModal({ entry: row, mode: 'approve' })} title="Approve"
+                                    className="text-[10px] font-bold text-green-700 bg-green-100 hover:bg-green-200 rounded px-1.5 py-0.5">✓ Approve</button>
                                 )}
                                 {row.status !== 'Rejected' && (
-                                  <button onClick={() => patchStatusMut.mutate({ id: row.id, status: 'Rejected' })} title="Reject"
-                                    className="text-[10px] font-bold text-red-700 bg-red-100 hover:bg-red-200 rounded px-1.5 py-0.5">✗</button>
+                                  <button onClick={() => setApprovalModal({ entry: row, mode: 'reject' })} title="Reject"
+                                    className="text-[10px] font-bold text-red-700 bg-red-100 hover:bg-red-200 rounded px-1.5 py-0.5">✗ Reject</button>
                                 )}
-                                <button onClick={() => { setEditEntry(row); setShowEntryForm(true); }}
-                                  className="text-[10px] font-bold text-indigo-700 bg-indigo-100 hover:bg-indigo-200 rounded px-1.5 py-0.5">Edit</button>
+                                {row.status !== 'Approved' && (
+                                  <button onClick={() => { setEditEntry(row); setShowEntryForm(true); }}
+                                    className="text-[10px] font-bold text-indigo-700 bg-indigo-100 hover:bg-indigo-200 rounded px-1.5 py-0.5">Edit</button>
+                                )}
                                 <button onClick={() => { if (window.confirm('Delete this entry?')) deleteEntryMut.mutate(row.id); }}
                                   className="text-red-400 hover:text-red-600 ml-1"><Trash2 className="w-3 h-3" /></button>
                               </div>
+                              {row.status === 'Approved' && row.approved_by_name && (
+                                <p className="text-[9px] text-green-600 mt-1 whitespace-nowrap">
+                                  ✓ {row.approved_by_name} · {dayjs(row.approved_at).format('DD MMM')}
+                                </p>
+                              )}
+                              {row.status === 'Rejected' && row.rejected_reason && (
+                                <p className="text-[9px] text-red-500 mt-1 max-w-[120px] truncate" title={row.rejected_reason}>
+                                  ✗ {row.rejected_reason}
+                                </p>
+                              )}
                             </td>
                           </tr>
                         );
@@ -1601,6 +1676,22 @@ export default function StoresPettyCashPage() {
           projects={projects}
           defaultProjectId={projectId}
           onClose={() => setShowScAdvForm(false)}
+        />
+      )}
+      {approvalModal && (
+        <ApprovalModal
+          entry={approvalModal.entry}
+          mode={approvalModal.mode}
+          onClose={() => setApprovalModal(null)}
+          onConfirm={(remarks) => {
+            const isApprove = approvalModal.mode === 'approve';
+            patchStatusMut.mutate({
+              id: approvalModal.entry.id,
+              status: isApprove ? 'Approved' : 'Rejected',
+              remarks: isApprove ? remarks : undefined,
+              rejected_reason: !isApprove ? remarks : undefined,
+            });
+          }}
         />
       )}
 

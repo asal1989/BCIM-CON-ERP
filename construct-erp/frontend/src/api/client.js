@@ -605,7 +605,7 @@ export const storesPettyCashAPI = {
   getEntry:      (id)          => api.get(`/stores-petty-cash/entries/${id}`),
   createEntry:   (data)        => api.post('/stores-petty-cash/entries', data),
   updateEntry:   (id, d)       => api.put(`/stores-petty-cash/entries/${id}`, d),
-  patchStatus:   (id, status)  => api.patch(`/stores-petty-cash/entries/${id}/status`, { status }),
+  patchStatus:   (id, status, remarks, rejected_reason)  => api.patch(`/stores-petty-cash/entries/${id}/status`, { status, remarks, rejected_reason }),
   deleteEntry:   (id)          => api.delete(`/stores-petty-cash/entries/${id}`),
   // Other Petty Cash (advances)
   listAdvances:  (params)      => api.get('/stores-petty-cash/advances', { params }),
