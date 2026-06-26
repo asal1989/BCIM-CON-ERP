@@ -181,11 +181,6 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
                 <h1 style={{ fontSize: '17px', fontWeight: 700, letterSpacing: '0.5px', margin: 0 }}>
                   {isAmendment ? 'AMENDMENT PURCHASE ORDER' : 'PURCHASE ORDER'}
                 </h1>
-                {isAmendment && (
-                  <div style={{ fontSize: '11px', fontWeight: 700, marginTop: '2px' }}>
-                    (Amendment No. A{amendmentNo} to PO {originalPoRef})
-                  </div>
-                )}
               </div>
               <div style={{ width: '40px' }} />
             </div>
@@ -240,7 +235,7 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
                   </td>
                   <td style={{ padding: '5px 6px', verticalAlign: 'top' }}>
                     <div style={{ fontWeight: 700, textDecoration: 'underline' }}>DELIVERY ADDRESS:-</div>
-                    <div style={{ fontWeight: 700 }}>{data.project_name || ''}</div>
+                    {!isLanco && <div style={{ fontWeight: 700 }}>{data.project_name || ''}</div>}
                     <div style={{ whiteSpace: 'pre-line', lineHeight: 1.4 }}>{deliveryAddr}</div>
                   </td>
                 </tr>

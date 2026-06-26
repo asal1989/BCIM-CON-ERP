@@ -211,7 +211,7 @@ const WOPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
                   </td>
                   <td style={{ padding: '5px 6px', verticalAlign: 'top' }}>
                     <div style={{ fontWeight: 700, textDecoration: 'underline' }}>SITE / WORK ADDRESS:-</div>
-                    <div style={{ fontWeight: 700 }}>{data.project_name || ''}</div>
+                    {!isLanco && <div style={{ fontWeight: 700 }}>{data.project_name || ''}</div>}
                     <div style={{ whiteSpace: 'pre-line', lineHeight: 1.4 }}>{siteAddress}</div>
                   </td>
                 </tr>
