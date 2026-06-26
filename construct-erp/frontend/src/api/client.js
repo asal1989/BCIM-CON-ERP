@@ -1859,6 +1859,16 @@ export const hrAppraisalsAPI = {
   acknowledge: (id)     => api.patch(`/hr-admin/appraisals/${id}/acknowledge`),
 };
 
+export const hrEvaluationsAPI = {
+  kraTemplate:  ()       => api.get('/hr-admin/evaluations/kra-template'),
+  list:         (params) => api.get('/hr-admin/evaluations', { params }),
+  get:          (id)     => api.get(`/hr-admin/evaluations/${id}`),
+  create:       (data)   => api.post('/hr-admin/evaluations', data),
+  update:       (id, d)  => api.put(`/hr-admin/evaluations/${id}`, d),
+  updateStatus: (id, s)  => api.patch(`/hr-admin/evaluations/${id}/status`, { status: s }),
+  remove:       (id)     => api.delete(`/hr-admin/evaluations/${id}`),
+};
+
 export const hrEsslAPI = {
   getConfig:      ()           => api.get('/hr-admin/essl/config'),
   saveConfig:     (data)       => api.post('/hr-admin/essl/config', data),

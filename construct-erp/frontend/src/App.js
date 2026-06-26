@@ -287,6 +287,7 @@ const HRDepartmentPage      = lazy(() => import('./pages/hr-admin/DepartmentPage
 const HRLoanPage            = lazy(() => import('./pages/hr-admin/LoanPage'));
 const HRExpenseClaimPage    = lazy(() => import('./pages/hr-admin/ExpenseClaimPage'));
 const HRAppraisalPage       = lazy(() => import('./pages/hr-admin/AppraisalPage'));
+const HRPerformancePage     = lazy(() => import('./pages/hr-admin/PerformancePage'));
 const HRHolidayCalendarPage = lazy(() => import('./pages/hr-admin/HolidayCalendarPage'));
 const HRESSLSyncPage        = lazy(() => import('./pages/hr-admin/ESSLSyncPage'));
 const HRImportPage          = lazy(() => import('./pages/hr-admin/HRImportPage'));
@@ -785,6 +786,7 @@ export default function App() {
                 <Route path="hr-admin/loans" element={<RequireModule module="HR & Admin"><HRLoanPage /></RequireModule>} />
                 <Route path="hr-admin/expenses" element={<RequireModule module="HR & Admin"><HRExpenseClaimPage /></RequireModule>} />
                 <Route path="hr-admin/appraisals" element={<RequireModule module="HR & Admin"><HRAppraisalPage /></RequireModule>} />
+                <Route path="hr-admin/performance" element={<RequireModule module="HR & Admin"><HRPerformancePage /></RequireModule>} />
                 <Route path="hr-admin/holidays" element={<RequireModule module="HR & Admin"><HRHolidayCalendarPage /></RequireModule>} />
                 <Route path="hr-admin/essl-sync" element={<RequireModule module="HR & Admin"><HRESSLSyncPage /></RequireModule>} />
                 <Route path="hr-admin/import" element={<RequireModule module="HR & Admin"><HRImportPage /></RequireModule>} />
