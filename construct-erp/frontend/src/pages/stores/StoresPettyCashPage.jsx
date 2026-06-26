@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { PageHeader, Theme } from '../../theme';
-import { storesPettyCashAPI, projectAPI, uploadAPI } from '../../api/client';
+import { storesPettyCashAPI, projectAPI, uploadAPI, subcontractorAPI } from '../../api/client';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const inr = (v) =>
@@ -498,7 +498,7 @@ function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, exi
 }
 
 // ── Advance Form ──────────────────────────────────────────────────────────────
-const EMPTY_ADVANCE = { project_id: '', advance_date: dayjs().format('YYYY-MM-DD'), payee_name: '', description: 'SALARY ADVANCE', amount: '', remarks: '' };
+const EMPTY_ADVANCE = { project_id: '', advance_date: dayjs().format('YYYY-MM-DD'), payee_name: '', description: 'SALARY ADVANCE', amount: '', payment_mode: 'cash', reference_number: '', remarks: '' };
 
 function AdvanceForm({ initial, projects, defaultProjectId, onClose }) {
   const qc = useQueryClient();
@@ -507,7 +507,8 @@ function AdvanceForm({ initial, projects, defaultProjectId, onClose }) {
   const [form, setForm] = useState(
     isEdit
       ? { project_id: initial.project_id || '', advance_date: initial.advance_date?.slice(0, 10) || dayjs().format('YYYY-MM-DD'),
-          payee_name: initial.payee_name || '', description: initial.description || 'SALARY ADVANCE', amount: initial.amount || '', remarks: initial.remarks || '' }
+          payee_name: initial.payee_name || '', description: initial.description || 'SALARY ADVANCE', amount: initial.amount || '',
+          payment_mode: initial.payment_mode || 'cash', reference_number: initial.reference_number || '', remarks: initial.remarks || '' }
       : { ...EMPTY_ADVANCE, project_id: defaultProjectId || '' }
   );
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -571,6 +572,27 @@ function AdvanceForm({ initial, projects, defaultProjectId, onClose }) {
             <input type="number" step="0.01" className="w-full border border-amber-200 bg-white rounded-xl px-4 py-3 text-xl font-bold text-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-400 placeholder:text-amber-200"
               placeholder="0.00" value={form.amount} onChange={e => set('amount', e.target.value)} required />
           </div>
+
+          <div>
+            <Lbl>Payment Mode</Lbl>
+            <div className="grid grid-cols-4 gap-2">
+              {['cash', 'upi', 'bank_transfer', 'cheque'].map(mode => (
+                <button key={mode} type="button" onClick={() => set('payment_mode', mode)}
+                  className={clsx('flex flex-col items-center gap-1 p-2.5 rounded-xl border text-xs font-semibold transition-colors',
+                    form.payment_mode === mode ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50')}>
+                  <span className="text-base">{PAYMENT_MODE_ICON[mode]}</span>
+                  <span className="capitalize">{mode.replace('_', ' ')}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {form.payment_mode !== 'cash' && (
+            <div><Lbl>Reference No. / UPI ID / Cheque No.</Lbl>
+              <input className={F} placeholder="Ref / ID / Cheque no." value={form.reference_number} onChange={e => set('reference_number', e.target.value)} />
+            </div>
+          )}
+
           <div><Lbl>Remarks</Lbl>
             <textarea className={clsx(F, 'resize-none')} rows={2} placeholder="Notes…" value={form.remarks} onChange={e => set('remarks', e.target.value)} />
           </div>
@@ -597,13 +619,26 @@ const PAYMENT_MODE_ICON = { cash: '💵', upi: '📱', bank_transfer: '🏦', ch
 function ScAdvanceForm({ projects, defaultProjectId, onClose }) {
   const qc = useQueryClient();
   const [form, setForm] = useState({ ...EMPTY_SC_ADV, project_id: defaultProjectId || '' });
-  const [vendorSearch, setVendorSearch] = useState('');
+  const [woSearch, setWoSearch] = useState('');
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
+  // Load all WOs for the selected project
+  const { data: woData, isLoading: loadingWOs } = useQuery({
+    queryKey: ['sc-advance-wos', form.project_id],
+    queryFn: () => subcontractorAPI.listWorkOrders({ project_id: form.project_id || undefined, limit: 500 }).then(r => r.data?.data ?? r.data ?? []),
+    staleTime: 60000,
+  });
+  const allWOs = Array.isArray(woData) ? woData : (woData?.data ?? []);
+  const filteredWOs = woSearch
+    ? allWOs.filter(w => w.wo_number?.toLowerCase().includes(woSearch.toLowerCase()) || w.subject?.toLowerCase().includes(woSearch.toLowerCase()) || w.vendor_name?.toLowerCase().includes(woSearch.toLowerCase()))
+    : allWOs;
+
+  // Legacy vendor search fallback (still available if WO list is empty)
+  const [vendorSearch, setVendorSearch] = useState('');
   const { data: vendorData } = useQuery({
     queryKey: ['spc-sc-vendors', vendorSearch],
     queryFn: () => storesPettyCashAPI.scVendorLookup({ search: vendorSearch || undefined }).then(r => r.data),
-    enabled: vendorSearch.length > 0,
+    enabled: vendorSearch.length > 0 && allWOs.length === 0,
   });
   const vendors = vendorData?.data || [];
 
@@ -654,27 +689,69 @@ function ScAdvanceForm({ projects, defaultProjectId, onClose }) {
             </div>
           </div>
 
-          {/* Sub-contractor search */}
-          <div className="relative">
-            <Lbl req>Sub-Contractor Name</Lbl>
-            <input className={F} placeholder="Type to search or enter name…"
-              value={vendorSearch || form.vendor_name}
-              onChange={e => { setVendorSearch(e.target.value); set('vendor_id', ''); set('vendor_name', e.target.value); }} />
-            {vendors.length > 0 && vendorSearch && (
-              <div className="absolute left-0 right-0 mt-1 border border-slate-200 rounded-xl bg-white shadow-lg max-h-48 overflow-y-auto z-20">
-                {vendors.map(v => (
-                  <button key={v.id} type="button"
-                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-orange-50 text-slate-700 border-b border-slate-50 last:border-0 flex items-center justify-between"
-                    onClick={() => { set('vendor_id', v.id); set('vendor_name', v.name); setVendorSearch(''); }}>
-                    <span className="font-medium">{v.name}</span>
-                    {v.vendor_code && <span className="text-xs text-slate-400 font-mono">{v.vendor_code}</span>}
-                  </button>
-                ))}
+          {/* Work Order dropdown */}
+          <div>
+            <Lbl req>Work Order</Lbl>
+            {loadingWOs ? (
+              <div className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-400">
+                <div className="w-3.5 h-3.5 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" /> Loading work orders…
+              </div>
+            ) : allWOs.length > 0 ? (
+              <div>
+                <div className="relative mb-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <input className={clsx(F, 'pl-8')} placeholder="Search by WO No, subject or vendor…"
+                    value={woSearch} onChange={e => setWoSearch(e.target.value)} />
+                </div>
+                <div className="border border-slate-200 rounded-xl max-h-48 overflow-y-auto">
+                  {filteredWOs.length === 0 ? (
+                    <p className="text-center text-slate-400 text-xs py-6">No work orders match</p>
+                  ) : filteredWOs.map(w => (
+                    <button key={w.id} type="button"
+                      onClick={() => { set('wo_number', w.wo_number); set('vendor_id', w.vendor_id); set('vendor_name', w.vendor_name || ''); }}
+                      className={clsx('w-full text-left px-4 py-2.5 border-b border-slate-50 last:border-0 transition-colors flex items-start justify-between gap-3',
+                        form.wo_number === w.wo_number ? 'bg-orange-50' : 'hover:bg-orange-50/50')}>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-800">{w.wo_number}</p>
+                        <p className="text-xs text-slate-500 truncate">{w.subject || '—'}</p>
+                        <p className="text-xs text-orange-600 font-medium">{w.vendor_name || '—'}</p>
+                      </div>
+                      {form.wo_number === w.wo_number && <CheckCircle className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />}
+                    </button>
+                  ))}
+                </div>
+                {form.wo_number && (
+                  <div className="mt-2 flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+                    <CheckCircle className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />
+                    <span className="text-xs font-semibold text-orange-700">Selected: {form.wo_number}</span>
+                    {form.vendor_name && <span className="text-xs text-orange-500">· {form.vendor_name}</span>}
+                    <button type="button" onClick={() => { set('wo_number', ''); set('vendor_id', ''); set('vendor_name', ''); }} className="ml-auto text-slate-400 hover:text-red-500"><X className="w-3 h-3" /></button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Fallback: manual entry if no WOs exist */
+              <div className="space-y-3">
+                <div className="relative">
+                  <input className={F} placeholder="Type sub-contractor name…"
+                    value={vendorSearch || form.vendor_name}
+                    onChange={e => { setVendorSearch(e.target.value); set('vendor_id', ''); set('vendor_name', e.target.value); }} />
+                  {vendors.length > 0 && vendorSearch && (
+                    <div className="absolute left-0 right-0 mt-1 border border-slate-200 rounded-xl bg-white shadow-lg max-h-40 overflow-y-auto z-20">
+                      {vendors.map(v => (
+                        <button key={v.id} type="button"
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-orange-50 text-slate-700 border-b border-slate-50 last:border-0"
+                          onClick={() => { set('vendor_id', v.id); set('vendor_name', v.name); setVendorSearch(''); }}>
+                          {v.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div><Lbl>Work Order No.</Lbl><input className={F} placeholder="e.g. WOLANLH10004" value={form.wo_number} onChange={e => set('wo_number', e.target.value)} /></div>
               </div>
             )}
           </div>
-
-          <div><Lbl>Work Order No.</Lbl><input className={F} placeholder="e.g. WOLANLH10004" value={form.wo_number} onChange={e => set('wo_number', e.target.value)} /></div>
 
           {/* Amount — prominent */}
           <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
@@ -726,7 +803,7 @@ function ScAdvanceForm({ projects, defaultProjectId, onClose }) {
 }
 
 // ── Receipt Form (HO Cash) ────────────────────────────────────────────────────
-const EMPTY_RECEIPT = { project_id: '', receipt_date: dayjs().format('YYYY-MM-DD'), amount: '', received_by: '', voucher_no: '', remarks: '' };
+const EMPTY_RECEIPT = { project_id: '', receipt_date: dayjs().format('YYYY-MM-DD'), amount: '', received_by: '', voucher_no: '', payment_mode: 'cash', reference_number: '', remarks: '' };
 
 function ReceiptForm({ initial, projects, defaultProjectId, onClose }) {
   const qc = useQueryClient();
@@ -735,7 +812,8 @@ function ReceiptForm({ initial, projects, defaultProjectId, onClose }) {
   const [form, setForm] = useState(
     isEdit
       ? { project_id: initial.project_id || '', receipt_date: initial.receipt_date?.slice(0, 10) || dayjs().format('YYYY-MM-DD'),
-          amount: initial.amount || '', received_by: initial.received_by || '', voucher_no: initial.voucher_no || '', remarks: initial.remarks || '' }
+          amount: initial.amount || '', received_by: initial.received_by || '', voucher_no: initial.voucher_no || '',
+          payment_mode: initial.payment_mode || 'cash', reference_number: initial.reference_number || '', remarks: initial.remarks || '' }
       : { ...EMPTY_RECEIPT, project_id: defaultProjectId || '' }
   );
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -804,6 +882,26 @@ function ReceiptForm({ initial, projects, defaultProjectId, onClose }) {
           <div><Lbl>HO Voucher / Ref No.</Lbl>
             <input className={F} placeholder="e.g. HO-PC-MAR-01" value={form.voucher_no} onChange={e => set('voucher_no', e.target.value)} />
           </div>
+
+          <div>
+            <Lbl>Payment Mode</Lbl>
+            <div className="grid grid-cols-4 gap-2">
+              {['cash', 'upi', 'bank_transfer', 'cheque'].map(mode => (
+                <button key={mode} type="button" onClick={() => set('payment_mode', mode)}
+                  className={clsx('flex flex-col items-center gap-1 p-2.5 rounded-xl border text-xs font-semibold transition-colors',
+                    form.payment_mode === mode ? 'border-green-400 bg-green-50 text-green-700' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50')}>
+                  <span className="text-base">{PAYMENT_MODE_ICON[mode]}</span>
+                  <span className="capitalize">{mode.replace('_', ' ')}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {form.payment_mode !== 'cash' && (
+            <div><Lbl>Reference No. / UPI ID / Cheque No.</Lbl>
+              <input className={F} placeholder="Ref / ID / Cheque no." value={form.reference_number} onChange={e => set('reference_number', e.target.value)} />
+            </div>
+          )}
 
           <div><Lbl>Remarks</Lbl>
             <textarea className={clsx(F, 'resize-none')} rows={2} placeholder="Notes…" value={form.remarks} onChange={e => set('remarks', e.target.value)} />
