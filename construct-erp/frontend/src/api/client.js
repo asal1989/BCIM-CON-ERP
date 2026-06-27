@@ -627,6 +627,8 @@ export const storesPettyCashAPI = {
   scVendorLookup:  (params) => api.get('/stores-petty-cash/sc-advances/lookup/vendors', { params }),
   // Summary
   summary:       (params)      => api.get('/stores-petty-cash/summary', { params }),
+  // Weekly report email
+  emailWeeklyReport: (params)  => api.post('/stores-petty-cash/email-weekly-report', params),
 };
 
 export const debitNoteAPI = {

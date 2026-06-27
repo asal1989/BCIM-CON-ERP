@@ -1,6 +1,6 @@
 // src/pages/stores/StoresPettyCashPage.jsx
 // Stores Petty Cash Tracker — site-level cash book mirroring the Excel register.
-// 7 tabs: Dashboard · HO Receipts · Local Purchase · Salary Advances · SC Advances · Ledger · Analytics · Budgets
+// 7 tabs: Dashboard · HO Receipts · Local Purchase · Salary Advances · Sub Contractor Advances · Ledger · Analytics · Budgets
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
@@ -11,7 +11,7 @@ import {
   ShoppingBag, Users, BarChart2, BookOpen, AlertTriangle,
   CheckCircle, Clock, TrendingUp, Printer, RefreshCw,
   Paperclip, Eye, Upload, Send, ThumbsUp, ThumbsDown,
-  Rows3, CalendarRange, Hash,
+  Rows3, CalendarRange, Hash, Mail,
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { PageHeader, Theme } from '../../theme';
@@ -388,7 +388,7 @@ function printStatement({ entries, advances, scAdvances, receipts, projectName, 
           <td style="${TD}text-align:right;">(${fmt(totalAdv)})</td>
         </tr>
         <tr>
-          <td style="${TD}">Less: SC Advances</td>
+          <td style="${TD}">Less: Sub Contractor Advances</td>
           <td style="${TD}text-align:right;">(${fmt(totalScAdv)})</td>
         </tr>
         <tr style="background:#f0f0f0;">
@@ -1013,7 +1013,7 @@ function ScAdvanceForm({ projects, defaultProjectId, onClose }) {
   const saveMut = useMutation({
     mutationFn: (payload) => storesPettyCashAPI.createScAdvance(payload).then(r => r.data),
     onSuccess: () => {
-      toast.success('SC Advance recorded');
+      toast.success('Sub Contractor Advance recorded');
       qc.invalidateQueries({ queryKey: ['spc-sc-advances'] });
       qc.invalidateQueries({ queryKey: ['spc-summary'] });
       onClose();
@@ -1038,7 +1038,7 @@ function ScAdvanceForm({ projects, defaultProjectId, onClose }) {
             <Send style={{ width: 18, height: 18, color: '#fff' }} />
           </div>
           <div>
-            <p className="font-bold text-slate-900">New SC Advance</p>
+            <p className="font-bold text-slate-900">New Sub Contractor Advance</p>
             <p className="text-xs text-slate-500">Petty cash paid to sub-contractor</p>
           </div>
         </div>
@@ -1542,7 +1542,7 @@ export default function StoresPettyCashPage() {
   });
   const deleteScAdvMut = useMutation({
     mutationFn: (id) => storesPettyCashAPI.deleteScAdvance(id),
-    onSuccess: () => { toast.success('SC Advance deleted'); qc.invalidateQueries({ queryKey: ['spc-sc-advances'] }); qc.invalidateQueries({ queryKey: ['spc-summary'] }); },
+    onSuccess: () => { toast.success('Sub Contractor Advance deleted'); qc.invalidateQueries({ queryKey: ['spc-sc-advances'] }); qc.invalidateQueries({ queryKey: ['spc-summary'] }); },
     onError: e => toast.error(e?.response?.data?.error || 'Delete failed'),
   });
   const deleteReceiptMut = useMutation({
@@ -1658,7 +1658,7 @@ export default function StoresPettyCashPage() {
         color: 'amber',
       })),
       ...scAdvances.map(s => ({
-        date: s.advance_date, type: 'sc-advance', label: 'SC Advance',
+        date: s.advance_date, type: 'sc-advance', label: 'Sub Contractor Advance',
         desc: [s.vendor_name, s.wo_number].filter(Boolean).join(' · '),
         credit: 0, debit: Number(s.amount), id: s.id,
         color: 'orange',
@@ -1674,7 +1674,7 @@ export default function StoresPettyCashPage() {
     { id: 'receipts',     label: 'HO Receipts',     Icon: Wallet      },
     { id: 'local',        label: 'Local Purchase',  Icon: ShoppingBag },
     { id: 'advances',     label: 'Salary Advances', Icon: Users       },
-    { id: 'sc-advances',  label: 'SC Advances',     Icon: Send        },
+    { id: 'sc-advances',  label: 'Sub Contractor Advances', Icon: Send },
     { id: 'ledger',       label: 'Ledger',          Icon: Rows3       },
     { id: 'analytics',    label: 'Analytics',       Icon: TrendingUp  },
     { id: 'budgets',      label: 'Budgets',         Icon: BookOpen    },
@@ -1709,6 +1709,24 @@ export default function StoresPettyCashPage() {
               className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg"
               style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', color: '#fff' }}>
               <Printer className="w-3.5 h-3.5" /> Print
+            </button>
+            <button
+              onClick={async () => {
+                const tid = toast.loading('Sending weekly report…');
+                try {
+                  const r = await storesPettyCashAPI.emailWeeklyReport({});
+                  toast.dismiss(tid);
+                  toast.success(`Weekly report sent to it@bcim.in (${r.data?.period?.from} – ${r.data?.period?.to})`);
+                } catch (e) {
+                  toast.dismiss(tid);
+                  toast.error(e?.response?.data?.error || 'Failed to send report');
+                }
+              }}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg"
+              style={{ background: 'rgba(59,130,246,0.25)', border: '1px solid rgba(59,130,246,0.5)', color: '#93c5fd' }}
+              title="Email last-week petty cash report to it@bcim.in"
+            >
+              <Mail className="w-3.5 h-3.5" /> Weekly Report
             </button>
             {isAdmin && (
               <button
@@ -2288,7 +2306,7 @@ export default function StoresPettyCashPage() {
             {/* Summary */}
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 border-l-4 border-l-orange-400">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total SC Advances</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Sub Contractor Advances</p>
                 <p className="text-2xl font-bold text-orange-600 mt-1">{inr(scTotal)}</p>
                 <p className="text-xs text-slate-400 mt-0.5">{scAdvances.length} payments to sub-contractors</p>
               </div>
@@ -2312,7 +2330,7 @@ export default function StoresPettyCashPage() {
               </div>
               <button onClick={() => setShowScAdvForm(true)}
                 className="flex items-center gap-1.5 px-4 py-1.5 bg-orange-500 text-white text-sm font-semibold rounded-lg hover:bg-orange-600 shadow-sm whitespace-nowrap ml-auto">
-                <Plus className="w-3.5 h-3.5" /> New SC Advance
+                <Plus className="w-3.5 h-3.5" /> New Sub Contractor Advance
               </button>
             </div>
 
@@ -2323,7 +2341,7 @@ export default function StoresPettyCashPage() {
               ) : scAdvances.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-400">
                   <Send className="w-12 h-12 opacity-20" />
-                  <p className="text-sm font-medium">No SC advances recorded yet</p>
+                  <p className="text-sm font-medium">No Sub Contractor Advances recorded yet</p>
                   <button onClick={() => setShowScAdvForm(true)} className="text-sm text-orange-600 hover:underline flex items-center gap-1">
                     <Plus className="w-3.5 h-3.5" /> Add first entry
                   </button>
@@ -2362,7 +2380,7 @@ export default function StoresPettyCashPage() {
                           </td>
                           <td className="px-4 py-3 text-slate-400 text-xs max-w-[140px] truncate">{row.remarks || '—'}</td>
                           <td className="px-4 py-3">
-                            <button onClick={() => { if (window.confirm('Delete this SC advance?')) deleteScAdvMut.mutate(row.id); }}
+                            <button onClick={() => { if (window.confirm('Delete this Sub Contractor Advance?')) deleteScAdvMut.mutate(row.id); }}
                               className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md opacity-0 group-hover:opacity-100 transition-all">
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
