@@ -646,78 +646,98 @@ function AdvanceForm({ initial, projects, defaultProjectId, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-auto">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl flex flex-col max-h-[96vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0 bg-gradient-to-r from-amber-50 to-white rounded-t-2xl">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center shadow-sm">
-              <Users className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <p className="font-bold text-slate-900 text-base">{isEdit ? 'Edit Salary Advance' : 'New Salary Advance'}</p>
-              <p className="text-xs text-slate-500 mt-0.5">Cash paid to contractor or employee</p>
-            </div>
+    <div className="fixed inset-0 z-[70] bg-slate-100 flex flex-col">
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-slate-200 flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-amber-500 flex items-center justify-center shadow-sm">
+            <Users style={{ width: 18, height: 18, color: '#fff' }} />
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"><X className="w-4 h-4" /></button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div><Lbl req>Date</Lbl><input type="date" className={F} value={form.advance_date} onChange={e => set('advance_date', e.target.value)} required /></div>
-            <div><Lbl>Project</Lbl>
-              <select className={FS} value={form.project_id} onChange={e => set('project_id', e.target.value)}>
-                <option value="">— Not linked —</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
-          </div>
-          <div><Lbl req>Contractor / Employee Name</Lbl>
-            <input className={F} placeholder="e.g. Mukesh 3250008" value={form.payee_name} onChange={e => set('payee_name', e.target.value)} required />
-          </div>
-          <div><Lbl>Description</Lbl>
-            <input className={F} placeholder="SALARY ADVANCE" value={form.description} onChange={e => set('description', e.target.value)} />
-          </div>
-          {/* Amount — prominent */}
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-            <Lbl req>Amount Paid (₹)</Lbl>
-            <input type="number" step="0.01" className="w-full border border-amber-200 bg-white rounded-xl px-4 py-3 text-xl font-bold text-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-400 placeholder:text-amber-200"
-              placeholder="0.00" value={form.amount} onChange={e => set('amount', e.target.value)} required />
-          </div>
-
           <div>
-            <Lbl>Payment Mode</Lbl>
-            <div className="grid grid-cols-4 gap-2">
-              {['cash', 'upi', 'bank_transfer', 'cheque'].map(mode => (
-                <button key={mode} type="button" onClick={() => set('payment_mode', mode)}
-                  className={clsx('flex flex-col items-center gap-1 p-2.5 rounded-xl border text-xs font-semibold transition-colors',
-                    form.payment_mode === mode ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50')}>
-                  <span className="text-base">{PAYMENT_MODE_ICON[mode]}</span>
-                  <span className="capitalize">{mode.replace('_', ' ')}</span>
-                </button>
-              ))}
-            </div>
+            <p className="font-bold text-slate-900">{isEdit ? 'Edit Salary Advance' : 'New Salary Advance'}</p>
+            <p className="text-xs text-slate-500">Cash paid to contractor or employee from petty cash</p>
           </div>
-
-          {form.payment_mode !== 'cash' && (
-            <div><Lbl>Reference No. / UPI ID / Cheque No.</Lbl>
-              <input className={F} placeholder="Ref / ID / Cheque no." value={form.reference_number} onChange={e => set('reference_number', e.target.value)} />
-            </div>
-          )}
-
-          <div><Lbl>Remarks</Lbl>
-            <textarea className={clsx(F, 'resize-none')} rows={2} placeholder="Notes…" value={form.remarks} onChange={e => set('remarks', e.target.value)} />
-          </div>
-        </form>
-
-        <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
-          <button type="button" onClick={onClose} className="px-4 py-2 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-white transition-colors">Cancel</button>
-          <button onClick={handleSubmit} disabled={saveMut.isPending}
-            className="flex items-center gap-2 px-6 py-2 bg-amber-500 text-white text-sm font-semibold rounded-xl hover:bg-amber-600 disabled:opacity-50 shadow-sm transition-colors">
-            {saveMut.isPending ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-            {saveMut.isPending ? 'Saving…' : isEdit ? 'Update Advance' : 'Record Advance'}
-          </button>
         </div>
+        <button onClick={onClose} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-sm text-slate-500 hover:bg-slate-50 transition-colors">
+          <X className="w-4 h-4" /> Close
+        </button>
+      </div>
+
+      {/* Body */}
+      <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex">
+
+        {/* LEFT — main fields + amount */}
+        <div className="w-[420px] flex-shrink-0 bg-white border-r border-slate-200 overflow-y-auto">
+          <div className="p-6 space-y-4">
+            <SectionLabel icon={Users} color="bg-amber-50 text-amber-700" label="Advance Details" />
+            <div className="grid grid-cols-2 gap-3">
+              <div><Lbl req>Date</Lbl><input type="date" className={F} value={form.advance_date} onChange={e => set('advance_date', e.target.value)} required /></div>
+              <div><Lbl>Project</Lbl>
+                <select className={FS} value={form.project_id} onChange={e => set('project_id', e.target.value)}>
+                  <option value="">— Not linked —</option>
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+            </div>
+            <div><Lbl req>Contractor / Employee Name</Lbl>
+              <input className={F} placeholder="e.g. Mukesh 3250008" value={form.payee_name} onChange={e => set('payee_name', e.target.value)} required />
+            </div>
+            <div><Lbl>Description</Lbl>
+              <input className={F} placeholder="SALARY ADVANCE" value={form.description} onChange={e => set('description', e.target.value)} />
+            </div>
+            {/* Amount */}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <Lbl req>Amount Paid (₹)</Lbl>
+              <input type="number" step="0.01"
+                className="w-full border border-amber-200 bg-white rounded-xl px-4 py-3 text-2xl font-bold text-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-400 placeholder:text-amber-200"
+                placeholder="0.00" value={form.amount} onChange={e => set('amount', e.target.value)} required autoFocus />
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT — payment + remarks */}
+        <div className="flex-1 overflow-y-auto bg-slate-50">
+          <div className="p-6 space-y-5 max-w-xl">
+            <SectionLabel icon={Wallet} color="bg-green-50 text-green-700" label="Payment Details" />
+            <div>
+              <Lbl>Payment Mode</Lbl>
+              <div className="grid grid-cols-4 gap-3">
+                {['cash', 'upi', 'bank_transfer', 'cheque'].map(mode => (
+                  <button key={mode} type="button" onClick={() => set('payment_mode', mode)}
+                    className={clsx('flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-semibold transition-colors',
+                      form.payment_mode === mode ? 'border-amber-400 bg-amber-50 text-amber-700 shadow-sm' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50')}>
+                    <span className="text-xl">{PAYMENT_MODE_ICON[mode]}</span>
+                    <span className="capitalize">{mode.replace('_', ' ')}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            {form.payment_mode !== 'cash' && (
+              <div><Lbl>Reference No. / UPI ID / Cheque No.</Lbl>
+                <input className={F} placeholder="Ref / ID / Cheque no." value={form.reference_number} onChange={e => set('reference_number', e.target.value)} />
+              </div>
+            )}
+            <div><Lbl>Remarks</Lbl>
+              <textarea className={clsx(F, 'resize-none')} rows={4} placeholder="Notes…" value={form.remarks} onChange={e => set('remarks', e.target.value)} />
+            </div>
+
+            {/* Info card */}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-700 leading-relaxed">
+              <p className="font-semibold mb-1">About Salary Advances</p>
+              This advance is recorded as a debit to petty cash. It will be reconciled once the employee submits a settlement voucher. Approved advances appear in the petty cash balance sheet.
+            </div>
+          </div>
+        </div>
+      </form>
+
+      {/* Footer */}
+      <div className="flex-shrink-0 flex items-center justify-between px-6 py-3 bg-white border-t border-slate-200">
+        <button type="button" onClick={onClose} className="px-5 py-2 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition-colors">Cancel</button>
+        <button onClick={handleSubmit} disabled={saveMut.isPending}
+          className="flex items-center gap-2 px-8 py-2.5 bg-amber-500 text-white text-sm font-semibold rounded-xl hover:bg-amber-600 disabled:opacity-50 shadow-sm transition-colors">
+          {saveMut.isPending ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+          {saveMut.isPending ? 'Saving…' : isEdit ? 'Update Advance' : 'Record Advance'}
+        </button>
       </div>
     </div>
   );
@@ -774,76 +794,118 @@ function ScAdvanceForm({ projects, defaultProjectId, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-auto">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl flex flex-col max-h-[96vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0 bg-gradient-to-r from-orange-50 to-white rounded-t-2xl">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-orange-500 flex items-center justify-center shadow-sm">
-              <Send className="w-5 h-5 text-white" />
+    <div className="fixed inset-0 z-[70] bg-slate-100 flex flex-col">
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-slate-200 flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-orange-500 flex items-center justify-center shadow-sm">
+            <Send style={{ width: 18, height: 18, color: '#fff' }} />
+          </div>
+          <div>
+            <p className="font-bold text-slate-900">New SC Advance</p>
+            <p className="text-xs text-slate-500">Petty cash paid to sub-contractor</p>
+          </div>
+        </div>
+        <button onClick={onClose} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-sm text-slate-500 hover:bg-slate-50 transition-colors">
+          <X className="w-4 h-4" /> Close
+        </button>
+      </div>
+
+      {/* Body */}
+      <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex">
+
+        {/* LEFT — date, project, amount */}
+        <div className="w-[420px] flex-shrink-0 bg-white border-r border-slate-200 overflow-y-auto">
+          <div className="p-6 space-y-4">
+            <SectionLabel icon={Send} color="bg-orange-50 text-orange-700" label="Advance Details" />
+            <div className="grid grid-cols-2 gap-3">
+              <div><Lbl req>Date</Lbl><input type="date" className={F} value={form.advance_date} onChange={e => set('advance_date', e.target.value)} required /></div>
+              <div><Lbl>Project</Lbl>
+                <select className={FS} value={form.project_id} onChange={e => set('project_id', e.target.value)}>
+                  <option value="">— Not linked —</option>
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
             </div>
+
+            {/* Amount */}
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+              <Lbl req>Amount Paid (₹)</Lbl>
+              <input type="number" step="0.01"
+                className="w-full border border-orange-200 bg-white rounded-xl px-4 py-3 text-2xl font-bold text-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-400 placeholder:text-orange-200"
+                placeholder="0.00" value={form.amount} onChange={e => set('amount', e.target.value)} required autoFocus />
+            </div>
+
+            {/* Payment mode */}
             <div>
-              <p className="font-bold text-slate-900 text-base">New SC Advance</p>
-              <p className="text-xs text-slate-500 mt-0.5">Petty cash paid to sub-contractor</p>
+              <Lbl>Payment Mode</Lbl>
+              <div className="grid grid-cols-4 gap-2">
+                {['cash', 'upi', 'bank_transfer', 'cheque'].map(mode => (
+                  <button key={mode} type="button" onClick={() => set('payment_mode', mode)}
+                    className={clsx('flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-semibold transition-colors',
+                      form.payment_mode === mode ? 'border-orange-400 bg-orange-50 text-orange-700 shadow-sm' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50')}>
+                    <span className="text-xl">{PAYMENT_MODE_ICON[mode]}</span>
+                    <span className="capitalize">{mode.replace('_', ' ')}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            {form.payment_mode !== 'cash' && (
+              <div><Lbl>Reference No. / UPI ID / Cheque No.</Lbl>
+                <input className={F} placeholder="Ref / ID / Cheque no." value={form.reference_number} onChange={e => set('reference_number', e.target.value)} />
+              </div>
+            )}
+            <div><Lbl>Remarks</Lbl>
+              <textarea className={clsx(F, 'resize-none')} rows={3} placeholder="Notes…" value={form.remarks} onChange={e => set('remarks', e.target.value)} />
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"><X className="w-4 h-4" /></button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div><Lbl req>Date</Lbl><input type="date" className={F} value={form.advance_date} onChange={e => set('advance_date', e.target.value)} required /></div>
-            <div><Lbl>Project</Lbl>
-              <select className={FS} value={form.project_id} onChange={e => set('project_id', e.target.value)}>
-                <option value="">— Not linked —</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
-          </div>
+        {/* RIGHT — Work Order selection */}
+        <div className="flex-1 overflow-y-auto bg-slate-50">
+          <div className="p-6">
+            <SectionLabel icon={Search} color="bg-orange-50 text-orange-700" label="Work Order" />
 
-          {/* Work Order dropdown */}
-          <div>
-            <Lbl req>Work Order</Lbl>
             {loadingWOs ? (
-              <div className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-400">
-                <div className="w-3.5 h-3.5 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" /> Loading work orders…
+              <div className="flex items-center gap-2 px-3 py-3 border border-slate-200 rounded-xl text-sm text-slate-400 bg-white">
+                <div className="w-4 h-4 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" /> Loading work orders…
               </div>
             ) : allWOs.length > 0 ? (
               <div>
-                <div className="relative mb-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                  <input className={clsx(F, 'pl-8')} placeholder="Search by WO No, subject or vendor…"
+                <div className="relative mb-3">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input className={clsx(F, 'pl-10 bg-white')} placeholder="Search by WO No, subject or vendor…"
                     value={woSearch} onChange={e => setWoSearch(e.target.value)} />
                 </div>
-                <div className="border border-slate-200 rounded-xl max-h-48 overflow-y-auto">
+                {form.wo_number && (
+                  <div className="mb-3 flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-xl px-4 py-2.5">
+                    <CheckCircle className="w-4 h-4 text-orange-500 flex-shrink-0" />
+                    <span className="text-sm font-semibold text-orange-700">{form.wo_number}</span>
+                    {form.vendor_name && <span className="text-sm text-orange-500">· {form.vendor_name}</span>}
+                    <button type="button" onClick={() => { set('wo_number', ''); set('vendor_id', ''); set('vendor_name', ''); }}
+                      className="ml-auto text-slate-400 hover:text-red-500"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                )}
+                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm max-h-[calc(100vh-340px)] overflow-y-auto">
                   {filteredWOs.length === 0 ? (
-                    <p className="text-center text-slate-400 text-xs py-6">No work orders match</p>
+                    <p className="text-center text-slate-400 text-sm py-10">No work orders match</p>
                   ) : filteredWOs.map(w => (
                     <button key={w.id} type="button"
                       onClick={() => { set('wo_number', w.wo_number); set('vendor_id', w.vendor_id); set('vendor_name', w.vendor_name || ''); }}
-                      className={clsx('w-full text-left px-4 py-2.5 border-b border-slate-50 last:border-0 transition-colors flex items-start justify-between gap-3',
+                      className={clsx('w-full text-left px-5 py-3 border-b border-slate-100 last:border-0 transition-colors flex items-start justify-between gap-3',
                         form.wo_number === w.wo_number ? 'bg-orange-50' : 'hover:bg-orange-50/50')}>
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-slate-800">{w.wo_number}</p>
-                        <p className="text-xs text-slate-500 truncate">{w.subject || '—'}</p>
-                        <p className="text-xs text-orange-600 font-medium">{w.vendor_name || '—'}</p>
+                        <p className="text-xs text-slate-500 truncate mt-0.5">{w.subject || '—'}</p>
+                        <p className="text-xs text-orange-600 font-medium mt-0.5">{w.vendor_name || '—'}</p>
                       </div>
-                      {form.wo_number === w.wo_number && <CheckCircle className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />}
+                      {form.wo_number === w.wo_number && <CheckCircle className="w-4 h-4 text-orange-500 flex-shrink-0 mt-1" />}
                     </button>
                   ))}
                 </div>
-                {form.wo_number && (
-                  <div className="mt-2 flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
-                    <CheckCircle className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />
-                    <span className="text-xs font-semibold text-orange-700">Selected: {form.wo_number}</span>
-                    {form.vendor_name && <span className="text-xs text-orange-500">· {form.vendor_name}</span>}
-                    <button type="button" onClick={() => { set('wo_number', ''); set('vendor_id', ''); set('vendor_name', ''); }} className="ml-auto text-slate-400 hover:text-red-500"><X className="w-3 h-3" /></button>
-                  </div>
-                )}
               </div>
             ) : (
-              /* Fallback: manual entry if no WOs exist */
-              <div className="space-y-3">
+              <div className="space-y-3 max-w-lg">
                 <div className="relative">
                   <input className={F} placeholder="Type sub-contractor name…"
                     value={vendorSearch || form.vendor_name}
@@ -860,55 +922,23 @@ function ScAdvanceForm({ projects, defaultProjectId, onClose }) {
                     </div>
                   )}
                 </div>
-                <div><Lbl>Work Order No.</Lbl><input className={F} placeholder="e.g. WOLANLH10004" value={form.wo_number} onChange={e => set('wo_number', e.target.value)} /></div>
+                <div><Lbl>Work Order No.</Lbl>
+                  <input className={F} placeholder="e.g. WOLANLH10004" value={form.wo_number} onChange={e => set('wo_number', e.target.value)} />
+                </div>
               </div>
             )}
           </div>
-
-          {/* Amount — prominent */}
-          <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
-            <Lbl req>Amount Paid (₹)</Lbl>
-            <input type="number" step="0.01" className="w-full border border-orange-200 bg-white rounded-xl px-4 py-3 text-xl font-bold text-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-400 placeholder:text-orange-200"
-              placeholder="0.00" value={form.amount} onChange={e => set('amount', e.target.value)} required />
-          </div>
-
-          {/* Payment mode */}
-          <div>
-            <Lbl>Payment Mode</Lbl>
-            <div className="grid grid-cols-4 gap-2">
-              {['cash', 'upi', 'bank_transfer', 'cheque'].map(mode => (
-                <button key={mode} type="button"
-                  onClick={() => set('payment_mode', mode)}
-                  className={clsx('flex flex-col items-center gap-1 p-2.5 rounded-xl border text-xs font-semibold transition-colors',
-                    form.payment_mode === mode
-                      ? 'border-orange-400 bg-orange-50 text-orange-700'
-                      : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50')}>
-                  <span className="text-base">{PAYMENT_MODE_ICON[mode]}</span>
-                  <span className="capitalize">{mode.replace('_', ' ')}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {form.payment_mode !== 'cash' && (
-            <div><Lbl>Reference No. / UPI ID / Cheque No.</Lbl>
-              <input className={F} placeholder="Ref / ID / Cheque no." value={form.reference_number} onChange={e => set('reference_number', e.target.value)} />
-            </div>
-          )}
-
-          <div><Lbl>Remarks</Lbl>
-            <textarea className={clsx(F, 'resize-none')} rows={2} placeholder="Notes…" value={form.remarks} onChange={e => set('remarks', e.target.value)} />
-          </div>
-        </form>
-
-        <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
-          <button type="button" onClick={onClose} className="px-4 py-2 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-white transition-colors">Cancel</button>
-          <button onClick={handleSubmit} disabled={saveMut.isPending}
-            className="flex items-center gap-2 px-6 py-2 bg-orange-500 text-white text-sm font-semibold rounded-xl hover:bg-orange-600 disabled:opacity-50 shadow-sm transition-colors">
-            {saveMut.isPending ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-            {saveMut.isPending ? 'Saving…' : 'Record SC Advance'}
-          </button>
         </div>
+      </form>
+
+      {/* Footer */}
+      <div className="flex-shrink-0 flex items-center justify-between px-6 py-3 bg-white border-t border-slate-200">
+        <button type="button" onClick={onClose} className="px-5 py-2 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition-colors">Cancel</button>
+        <button onClick={handleSubmit} disabled={saveMut.isPending}
+          className="flex items-center gap-2 px-8 py-2.5 bg-orange-500 text-white text-sm font-semibold rounded-xl hover:bg-orange-600 disabled:opacity-50 shadow-sm transition-colors">
+          {saveMut.isPending ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+          {saveMut.isPending ? 'Saving…' : 'Record SC Advance'}
+        </button>
       </div>
     </div>
   );
