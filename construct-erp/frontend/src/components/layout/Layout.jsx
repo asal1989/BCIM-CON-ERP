@@ -932,6 +932,63 @@ function useRecentPages() {
   return recents;
 }
 
+// ── Procurement Quick-Access Bar ─────────────────────────────────────────────
+const PROC_SHORTCUTS = [
+  { label: 'Purchase Orders',    to: '/procurement/po',               icon: ShoppingCart  },
+  { label: 'Work Orders',        to: '/procurement/work-orders',      icon: Hammer        },
+  { label: 'Material Requests',  to: '/procurement/material-request', icon: ClipboardList },
+  { label: 'IGN',                to: '/stores/ign',                   icon: ClipboardCheck },
+  { label: 'Petty Cash',         to: '/stores/petty-cash',            icon: Wallet        },
+  { label: 'Bill Tracker',       to: '/tqs/bills',                    icon: FileText      },
+  { label: 'Budget & Cost',      to: '/procurement/budget-control',   icon: PieChart      },
+];
+
+function ProcurementQuickAccessBar() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isActive = (to) => location.pathname === to || location.pathname.startsWith(to + '/');
+  return (
+    <div
+      className="print:hidden"
+      style={{
+        flexShrink: 0,
+        height: 36,
+        background: 'linear-gradient(90deg, #064e3b 0%, #065f46 55%, #047857 100%)',
+        borderBottom: '1px solid rgba(255,255,255,0.1)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: '0 14px',
+        overflowX: 'auto',
+        scrollbarWidth: 'none',
+      }}
+    >
+      <span style={{ fontSize: 9, fontWeight: 800, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap', marginRight: 6 }}>
+        Quick Access
+      </span>
+      {PROC_SHORTCUTS.map(({ label, to, icon: Icon }) => {
+        const active = isActive(to);
+        return (
+          <button key={to} onClick={() => navigate(to)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '3px 10px', borderRadius: 6,
+              border: active ? '1px solid rgba(255,255,255,0.45)' : '1px solid rgba(255,255,255,0.12)',
+              background: active ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.06)',
+              color: active ? '#fff' : 'rgba(255,255,255,0.8)',
+              fontSize: 11, fontWeight: active ? 700 : 500,
+              cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+            }}
+          >
+            <Icon size={11} />
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── MD Quick-Access Bar ───────────────────────────────────────────────────────
 const MD_SHORTCUTS = [
   { label: 'Projects',          to: '/projects',                        icon: Building2   },
@@ -1945,6 +2002,12 @@ export default function Layout() {
     return ['md', 'managing_director'].includes(r)
       || ['stephen@bcim.in', 'it@bcim.in'].includes(String(user?.email || '').toLowerCase());
   })();
+  const isProcurementUser = (() => {
+    if (isMDNavUser) return false; // MD already has its own bar
+    const r = String(user?.role || '').toLowerCase();
+    const d = String(user?.department || '').toLowerCase();
+    return r.includes('procurement') || d.includes('procurement') || d.includes('purchase');
+  })();
   const orderedGroups = isMDNavUser
     ? [
         ...MD_NAV_ORDER.map(lbl => filteredGroups.find(g => g.label === lbl)).filter(Boolean),
@@ -2200,6 +2263,8 @@ export default function Layout() {
 
       {/* ── MD Quick-Access Bar ── */}
       {isMDNavUser && <MDQuickAccessBar />}
+      {/* ── Procurement Quick-Access Bar ── */}
+      {isProcurementUser && <ProcurementQuickAccessBar />}
 
       {/* ── Page content: sidebar + main ── */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
@@ -2209,7 +2274,7 @@ export default function Layout() {
           matchesPath={matchesPath}
           collapsed={sidebarCollapsed}
           onToggle={() => setSidebarCollapsed(c => !c)}
-          topOffset={(pageGroup ? 80 : 52) + (isMDNavUser ? 36 : 0)}
+          topOffset={(pageGroup ? 80 : 52) + (isMDNavUser || isProcurementUser ? 36 : 0)}
           recentPages={recentPages}
         />
         <main style={{ flex: 1, minWidth: 0, overflow: 'auto', position: 'relative' }} className="print:overflow-visible print:h-auto">
