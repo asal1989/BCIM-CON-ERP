@@ -15,6 +15,7 @@ import {
 import { useLocation } from 'react-router-dom';
 import { PageHeader, Theme } from '../../theme';
 import { storesPettyCashAPI, projectAPI, uploadAPI, subcontractorAPI } from '../../api/client';
+import useAuthStore from '../../store/authStore';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const inr = (v) =>
@@ -1026,6 +1027,8 @@ function ApprovalModal({ entry, mode, onConfirm, onClose }) {
 // ════════════════════════════════════════════════════════════════════════════════
 export default function StoresPettyCashPage() {
   const qc = useQueryClient();
+  const { user } = useAuthStore();
+  const isAdmin = ['super_admin', 'admin'].includes(user?.role);
   const location = useLocation();
   const highlightId = location.state?.viewId || null;
   const highlightRef = useRef(null);
@@ -1259,6 +1262,29 @@ export default function StoresPettyCashPage() {
               style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', color: '#fff' }}>
               <Printer className="w-3.5 h-3.5" /> Print
             </button>
+            {isAdmin && (
+              <button
+                onClick={async () => {
+                  if (!window.confirm(
+                    projectId
+                      ? `Remove ALL attachments from every petty cash voucher in this project?\n\nThis cannot be undone.`
+                      : `Remove ALL attachments from EVERY petty cash voucher across all projects?\n\nThis cannot be undone.`
+                  )) return;
+                  try {
+                    const r = await storesPettyCashAPI.clearAttachments(projectId || undefined);
+                    toast.success(`Attachments cleared from ${r.data?.rows_updated ?? 0} voucher(s)`);
+                    qc.invalidateQueries({ queryKey: ['spc-entries'] });
+                  } catch (e) {
+                    toast.error(e?.response?.data?.error || 'Failed to clear attachments');
+                  }
+                }}
+                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg"
+                style={{ background: 'rgba(239,68,68,0.25)', border: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5' }}
+                title="Remove all file attachments from vouchers (admin only)"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Clear Attachments
+              </button>
+            )}
           </div>
         }
       />
