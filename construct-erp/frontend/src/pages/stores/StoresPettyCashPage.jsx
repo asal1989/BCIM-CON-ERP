@@ -1267,8 +1267,8 @@ export default function StoresPettyCashPage() {
                 onClick={async () => {
                   if (!window.confirm(
                     projectId
-                      ? `Remove ALL attachments from every petty cash voucher in this project?\n\nThis cannot be undone.`
-                      : `Remove ALL attachments from EVERY petty cash voucher across all projects?\n\nThis cannot be undone.`
+                      ? `Clear file attachments (bill & voucher PDFs/images) from all entries in this project?\n\nThe voucher entries themselves (amount, date, supplier, items) will NOT be deleted.`
+                      : `Clear file attachments (bill & voucher PDFs/images) from ALL project entries?\n\nThe voucher entries themselves (amount, date, supplier, items) will NOT be deleted.`
                   )) return;
                   try {
                     const r = await storesPettyCashAPI.clearAttachments(projectId || undefined);
