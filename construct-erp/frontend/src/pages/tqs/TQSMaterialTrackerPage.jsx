@@ -7,9 +7,10 @@ import {
   Activity, ClipboardList, RefreshCw, AlertCircle, CheckCircle2,
   Clock, Truck, FileCheck, IndianRupee, ExternalLink, Filter, Link2,
 } from 'lucide-react';
+import dayjs from 'dayjs';
 
 const inr  = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmt  = (d) => d ? new Date(d).toLocaleDateString('en-IN') : '—';
+const fmt  = (d) => d ? dayjs(d).format('DD-MM-YYYY') : '—';
 
 /* ─── Lifecycle stage config ────────────────────────────────────────────────── */
 const LIFECYCLE_STAGES = {

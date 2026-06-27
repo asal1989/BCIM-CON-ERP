@@ -12,6 +12,7 @@ import { clsx } from 'clsx';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
 import { FileText, Plus, Search, ChevronRight, X, ChevronUp, ChevronDown, Pencil, Trash2, AlertTriangle, Upload, Download, CheckCircle2, IndianRupee, SlidersHorizontal, FileSpreadsheet, ChevronsRight, ExternalLink, Edit2 } from 'lucide-react';
+import dayjs from 'dayjs';
 
 const STATUS_CONFIG = {
   pending:             { label: 'Pending',       cls: 'bg-amber-100 text-amber-700' },
@@ -830,7 +831,7 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                     <option value="">- No IGN/GRN link -</option>
                     {availableGRNs.map(g => (
                       <option key={g.id} value={g.id}>
-                        {g.serial_no_formatted || g.grn_number || g.ign_number} - {(g.grn_date || g.date_time)?.slice(0,10)} - Qty {Number(g.total_quantity||0).toLocaleString()}
+                        {g.serial_no_formatted || g.grn_number || g.ign_number} - {(g.grn_date || g.date_time) ? dayjs(g.grn_date || g.date_time).format('DD-MM-YYYY') : '—'} - Qty {Number(g.total_quantity||0).toLocaleString()}
                       </option>
                     ))}
                   </select>
@@ -2632,7 +2633,7 @@ export default function TQSBillsPage() {
                       </td>;
                     case 'inv_date':
                       return <td key={col.key} className={cls}>
-                        <span className="text-slate-900 text-[12px] font-medium">{b.inv_date ? new Date(b.inv_date).toLocaleDateString('en-IN') : <span className="text-slate-400">—</span>}</span>
+                        <span className="text-slate-900 text-[12px] font-medium">{b.inv_date ? dayjs(b.inv_date).format('DD-MM-YYYY') : <span className="text-slate-400">—</span>}</span>
                       </td>;
                     case 'po_number':
                       return <td key={col.key} className={cls}>
@@ -2681,7 +2682,7 @@ export default function TQSBillsPage() {
                     case 'payment_date':
                       return <td key={col.key} className={cls}>
                         <span className="text-slate-900 text-[12px] font-medium">
-                          {b.payment_date ? new Date(b.payment_date).toLocaleDateString('en-IN') : <span className="text-slate-400">—</span>}
+                          {b.payment_date ? dayjs(b.payment_date).format('DD-MM-YYYY') : <span className="text-slate-400">—</span>}
                         </span>
                       </td>;
                     case 'workflow_status': {
@@ -2701,7 +2702,7 @@ export default function TQSBillsPage() {
                         b.reference_number ? `UTR: ${b.reference_number}` : null,
                         b.bank_name        ? `Bank: ${b.bank_name}` : null,
                         b.payment_mode     ? `Mode: ${b.payment_mode}` : null,
-                        b.paid_amount      ? `Paid: Rs ${inr(b.paid_amount)}${b.payment_date ? ' on ' + new Date(b.payment_date).toLocaleDateString('en-IN') : ''}` : null,
+                        b.paid_amount      ? `Paid: Rs ${inr(b.paid_amount)}${b.payment_date ? ' on ' + dayjs(b.payment_date).format('DD-MM-YYYY') : ''}` : null,
                       ].filter(Boolean) : [];
                       const badge = (
                         <span className={`inline-flex items-center px-2.5 py-1 rounded text-[11px] font-medium ${wfCfg.badge}`}>

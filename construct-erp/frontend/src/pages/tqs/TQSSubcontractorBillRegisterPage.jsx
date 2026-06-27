@@ -4,9 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import { tqsBillsAPI, projectAPI } from '../../api/client';
 import * as XLSX from 'xlsx';
 import { Download, Search, ExternalLink } from 'lucide-react';
+import dayjs from 'dayjs';
 
 const inr = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmt = (d) => d ? new Date(d).toLocaleDateString('en-IN') : '—';
+const fmt = (d) => d ? dayjs(d).format('DD-MM-YYYY') : '—';
 
 const STATUS_COLORS = {
   pending:  'bg-amber-100 text-amber-700',

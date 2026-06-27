@@ -3,9 +3,10 @@ import { useQuery } from '@tanstack/react-query';
 import { tqsBillsAPI, projectAPI } from '../../api/client';
 import * as XLSX from 'xlsx';
 import { Download, Filter, Search } from 'lucide-react';
+import dayjs from 'dayjs';
 
 const inr = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmt = (d) => d ? new Date(d).toLocaleDateString('en-IN') : '—';
+const fmt = (d) => d ? dayjs(d).format('DD-MM-YYYY') : '—';
 
 function KPICard({ label, value, sub, color = 'text-slate-800' }) {
   return (

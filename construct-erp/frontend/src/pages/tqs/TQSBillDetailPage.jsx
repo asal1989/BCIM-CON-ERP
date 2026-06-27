@@ -13,9 +13,10 @@ import {
   Inbox, Eye,
   Cloud, CloudOff, ChevronRight
 } from 'lucide-react';
+import dayjs from 'dayjs';
 
 const inr = (v) => Math.round(Number(v || 0)).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-const fmt = (d) => d ? new Date(d).toLocaleDateString('en-IN') : '—';
+const fmt = (d) => d ? dayjs(d).format('DD-MM-YYYY') : '—';
 
 const STATUS_COLORS = {
   pending:             'bg-amber-100 text-amber-700',
