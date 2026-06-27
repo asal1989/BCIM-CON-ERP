@@ -721,6 +721,47 @@ export default function MRSPage() {
     toast.success('Exporting MRS log…');
   };
 
+  const handleDateImport = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const XLSX = await import('xlsx');
+      const ab = await file.arrayBuffer();
+      const wb = XLSX.read(ab, { type: 'array', cellDates: false });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      // Find header row — look for columns named "MRS No" / "MRS Number" / "Date" / "Request Date"
+      let headerIdx = 0, mrsCol = 0, dateCol = 1;
+      for (let i = 0; i < Math.min(5, raw.length); i++) {
+        const row = raw[i].map(c => String(c).toLowerCase().trim());
+        const mi = row.findIndex(c => c.includes('mrs') || c.includes('serial'));
+        const di = row.findIndex(c => c.includes('date') || c.includes('raised') || c.includes('request'));
+        if (mi !== -1 && di !== -1) { headerIdx = i; mrsCol = mi; dateCol = di; break; }
+      }
+      const rows = [];
+      for (let i = headerIdx + 1; i < raw.length; i++) {
+        const r = raw[i];
+        const mrs_number = String(r[mrsCol] || '').trim();
+        let request_date = String(r[dateCol] || '').trim();
+        if (!mrs_number || !request_date) continue;
+        // Handle Excel serial date numbers
+        if (/^\d{4,6}$/.test(request_date)) {
+          const d = XLSX.SSF.parse_date_code(parseInt(request_date));
+          request_date = `${String(d.d).padStart(2,'0')}-${String(d.m).padStart(2,'0')}-${d.y}`;
+        }
+        rows.push({ mrs_number, request_date });
+      }
+      if (!rows.length) return toast.error('No valid rows found. Check column headers.');
+      toast.loading(`Updating ${rows.length} MRS dates…`, { id: 'date-import' });
+      const res = await mrsAPI.bulkUpdateDates(rows);
+      toast.success(`Updated ${res.data.updated} MRS, skipped ${res.data.skipped}`, { id: 'date-import' });
+      qc.invalidateQueries({ queryKey: ['mrs'] });
+    } catch (err) {
+      toast.error('Import failed: ' + (err.response?.data?.error || err.message), { id: 'date-import' });
+    }
+  };
+
   // Build stage actions dynamically from the selected MRS's project workflow
   const projectWorkflowStages = detailedMRS?.mrs_workflow?.stages || ACTIVE_STAGES.map(s => s.id);
   const enabledStages = ACTIVE_STAGES.filter(s => projectWorkflowStages.includes(s.id));
@@ -1294,6 +1335,12 @@ export default function MRSPage() {
               style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.20)', color: '#fff' }}>
               <Download className="w-4 h-4" /> Export
             </button>
+            <label className="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg transition cursor-pointer"
+              style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.20)', color: '#fff' }}
+              title="Upload Excel with MRS No & Date columns to bulk-update raised dates">
+              <Upload className="w-4 h-4" /> Update Dates
+              <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleDateImport} />
+            </label>
             <button onClick={() => setShowForm(true)}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition shadow-sm"
               style={{ background: '#fff', color: Theme.navyDark, border: '1px solid rgba(255,255,255,0.4)' }}>

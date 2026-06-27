@@ -1219,6 +1219,7 @@ export const mrsAPI = {
   saveNumbering:     (projectId, data) => api.put(`/stores/mrs/numbering-config/${projectId}`, data),
   renumber:          (id, serial)    => api.patch(`/stores/mrs/${id}/renumber`, { serial }),
   resendNotify:      (id)            => api.post(`/stores/mrs/${id}/resend-notify`),
+  bulkUpdateDates:   (rows)          => api.post('/stores/mrs/bulk-update-dates', { rows }),
 };
 
 export const minAPI = {

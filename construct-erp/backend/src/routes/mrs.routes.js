@@ -1416,4 +1416,43 @@ router.post('/:id/resend-notify', async (req, res) => {
   }
 });
 
+// POST /stores/mrs/bulk-update-dates
+// Body: { rows: [{ mrs_number: 'BCIM-TQS-BLR-MR-008', request_date: '2026-01-10' }] }
+router.post('/bulk-update-dates', async (req, res) => {
+  try {
+    const { rows } = req.body;
+    if (!Array.isArray(rows) || !rows.length) {
+      return res.status(400).json({ error: 'rows array required' });
+    }
+    const cid = req.user.company_id;
+    let updated = 0, skipped = 0;
+    for (const row of rows) {
+      const num = (row.mrs_number || row.serial_no || '').trim();
+      const dt  = row.request_date;
+      if (!num || !dt) { skipped++; continue; }
+      // Parse DD-MM-YYYY or YYYY-MM-DD
+      let iso;
+      if (/^\d{2}-\d{2}-\d{4}$/.test(dt)) {
+        const [dd, mm, yyyy] = dt.split('-');
+        iso = `${yyyy}-${mm}-${dd}`;
+      } else {
+        iso = dt; // assume already YYYY-MM-DD
+      }
+      const r = await query(
+        `UPDATE material_requisitions mr
+         SET request_date = $1, updated_at = NOW()
+         FROM projects p
+         WHERE mr.project_id = p.id
+           AND p.company_id = $2
+           AND (mr.serial_no_formatted = $3 OR mr.mrs_number = $3)`,
+        [iso, cid, num]
+      );
+      if (r.rowCount > 0) updated++; else skipped++;
+    }
+    res.json({ message: `Updated ${updated} MRS, skipped ${skipped}`, updated, skipped });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
