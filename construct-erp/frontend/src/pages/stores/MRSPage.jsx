@@ -703,7 +703,7 @@ export default function MRSPage() {
     const rows = sorted.map(m => [
       m.serial_no_formatted || m.mrs_number, m.project_name, m.department,
       dayjs(m.required_by).format('DD-MM-YYYY'), m.status,
-      dayjs(m.created_at).format('DD-MM-YYYY'), m.raised_by_name,
+      dayjs(m.request_date || m.created_at).format('DD-MM-YYYY'), m.raised_by_name,
     ]);
     const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
@@ -928,7 +928,7 @@ export default function MRSPage() {
                   </button>
                 )}
               </div>
-              <p className="text-xs text-slate-500 font-medium">Material Requisition • {dayjs(selectedMRS.created_at).format('DD-MM-YYYY HH:mm')}</p>
+              <p className="text-xs text-slate-500 font-medium">Material Requisition • {dayjs(selectedMRS.request_date || selectedMRS.created_at).format('DD-MM-YYYY')}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -1417,11 +1417,7 @@ export default function MRSPage() {
                         <div className="text-xs font-bold font-mono text-indigo-700 group-hover:underline">
                           {mrs.serial_no_formatted || mrs.mrs_number}
                         </div>
-                        <div className="text-[11px] text-slate-500 mt-1">
-                          {mrs.required_by
-                            ? <span><span className="text-slate-400">Req By:</span> {dayjs(mrs.required_by).format('DD-MM-YYYY')}</span>
-                            : dayjs(mrs.created_at).format('DD-MM-YYYY')}
-                        </div>
+                        <div className="text-[11px] text-slate-500 mt-1">{dayjs(mrs.request_date || mrs.created_at).format('DD-MM-YYYY')}</div>
                       </td>
                       <td className="px-4 py-4 align-top min-w-[260px]">
                         <div className="text-sm font-semibold text-slate-950 truncate max-w-[280px]">{mrs.project_name || 'No project'}</div>
@@ -2076,7 +2072,7 @@ export default function MRSPage() {
                           <div key={m.id} className="flex items-center justify-between gap-2">
                             <div className="min-w-0">
                               <p className="text-xs font-semibold text-slate-900 font-mono truncate">{m.serial_no_formatted || m.mrs_number}</p>
-                              <p className="text-[11px] text-slate-400 mt-0.5">{dayjs(m.required_by || m.created_at).format('DD-MM-YYYY')} · {m.item_count ?? '—'} items</p>
+                              <p className="text-[11px] text-slate-400 mt-0.5">{dayjs(m.request_date || m.created_at).format('DD-MM-YYYY')} · {m.item_count ?? '—'} items</p>
                             </div>
                             <StatusBadge status={m.status} />
                           </div>

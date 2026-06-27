@@ -459,6 +459,10 @@ router.use(loadProjectScope);
   await safe(`UPDATE material_requisitions SET priority = 'medium'
               WHERE priority IS NULL OR priority NOT IN ('low','medium','high','urgent')`);
   await safe(`ALTER TABLE material_requisitions ALTER COLUMN priority SET DEFAULT 'medium'`);
+  // request_date: the date the MRS was raised (user-entered, reliable vs auto created_at)
+  await safe(`ALTER TABLE material_requisitions ADD COLUMN IF NOT EXISTS request_date DATE DEFAULT CURRENT_DATE`);
+  // Back-fill: for old rows with no request_date, use created_at date
+  await safe(`UPDATE material_requisitions SET request_date = created_at::date WHERE request_date IS NULL`);
   // Re-add with explicit logging so a failure is visible in deploy logs (not swallowed).
   try {
     await query(`ALTER TABLE material_requisitions
@@ -794,6 +798,7 @@ router.post('/', async (req, res) => {
       mr_type, cost_center, wo_boq_reference, delivery_location,
       requester_employee_id, requester_contact, requester_email,
       justification, linked_activity, planned_usage_date, special_handling,
+      request_date,
     } = req.body;
     if (!project_id || !items?.length) {
       return res.status(400).json({ error: 'project_id and at least one item are required' });
@@ -873,9 +878,10 @@ router.post('/', async (req, res) => {
                priority, remarks, raised_by, status,
                mr_type, cost_center, wo_boq_reference, delivery_location,
                requester_employee_id, requester_contact, requester_email,
-               justification, linked_activity, planned_usage_date, special_handling
+               justification, linked_activity, planned_usage_date, special_handling,
+               request_date
              )
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING *`,
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING *`,
             [
               project_id, mrs_number, serial_no_formatted, department,
               head_office_project_name || proj.rows[0].name,
@@ -883,6 +889,7 @@ router.post('/', async (req, res) => {
               mr_type || null, cost_center || null, wo_boq_reference || null, delivery_location || null,
               requester_employee_id || null, requester_contact || null, requester_email || null,
               justification || null, linked_activity || null, planned_usage_date || null, special_handling || null,
+              request_date || null,
             ]
           );
 
