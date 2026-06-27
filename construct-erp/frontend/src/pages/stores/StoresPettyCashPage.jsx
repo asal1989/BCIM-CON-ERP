@@ -1041,12 +1041,7 @@ function AttachOnlyModal({ entry, onClose, onSaved }) {
     if (!file) return;
     setUploading(u => ({ ...u, [kind]: true }));
     try {
-      const token = localStorage.getItem('erp-token') || sessionStorage.getItem('erp-token') || '';
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await fetch('/api/upload', { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {}, body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      const { data } = await uploadAPI.uploadSingle(file);
       if (kind === 'voucher') { setVoucherUrl(data.url); setVoucherName(file.name); }
       else                   { setBillUrl(data.url);     setBillName(file.name); }
       toast.success(`${kind === 'voucher' ? 'Voucher' : 'Bill'} uploaded`);
