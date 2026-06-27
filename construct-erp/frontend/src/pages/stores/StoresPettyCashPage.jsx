@@ -1923,6 +1923,28 @@ export default function StoresPettyCashPage() {
                 <Trash2 className="w-3.5 h-3.5" /> Clear Attachments
               </button>
             )}
+            {isAdmin && (
+              <button
+                onClick={async () => {
+                  if (!window.confirm('Assign PC voucher numbers to all existing entries that are missing them?\n\nThis runs once — entries that already have a number will not be changed.')) return;
+                  const tid = toast.loading('Assigning voucher numbers…');
+                  try {
+                    const r = await storesPettyCashAPI.backfillVouchers();
+                    toast.dismiss(tid);
+                    toast.success(r.data?.message || `${r.data?.updated ?? 0} voucher(s) updated`);
+                    qc.invalidateQueries({ queryKey: ['spc-entries'] });
+                  } catch (e) {
+                    toast.dismiss(tid);
+                    toast.error(e?.response?.data?.error || 'Backfill failed');
+                  }
+                }}
+                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg"
+                style={{ background: 'rgba(234,179,8,0.2)', border: '1px solid rgba(234,179,8,0.4)', color: '#fde047' }}
+                title="Assign voucher numbers to existing entries (admin only)"
+              >
+                <Hash className="w-3.5 h-3.5" /> Fill Voucher Nos
+              </button>
+            )}
           </div>
         }
       />

@@ -629,6 +629,8 @@ export const storesPettyCashAPI = {
   summary:       (params)      => api.get('/stores-petty-cash/summary', { params }),
   // Weekly report email
   emailWeeklyReport: (params)  => api.post('/stores-petty-cash/email-weekly-report', params),
+  // Backfill voucher numbers for entries created before auto-numbering
+  backfillVouchers: ()         => api.post('/stores-petty-cash/backfill-vouchers'),
 };
 
 export const debitNoteAPI = {

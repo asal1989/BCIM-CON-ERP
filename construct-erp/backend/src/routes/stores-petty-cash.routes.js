@@ -880,6 +880,66 @@ router.delete('/sc-advances/:id', authenticate, async (req, res) => {
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+/* ── Backfill voucher numbers for existing entries that have none ── */
+router.post('/backfill-vouchers', authenticate, async (req, res) => {
+  try {
+    const companyId = req.user.company_id;
+
+    // Fetch all entries without a voucher number, ordered chronologically so
+    // sequence numbers reflect entry order
+    const untagged = await query(
+      `SELECT e.id, e.entry_date, e.project_id, p.project_code
+       FROM stores_petty_cash_entries e
+       LEFT JOIN projects p ON p.id = e.project_id
+       WHERE e.company_id = $1 AND (e.pc_voucher_no IS NULL OR e.pc_voucher_no = '')
+       ORDER BY e.entry_date ASC, e.sl_no ASC, e.id ASC`,
+      [companyId]
+    );
+
+    if (!untagged.rows.length) {
+      return res.json({ updated: 0, message: 'All entries already have voucher numbers.' });
+    }
+
+    const fy = currentFY();
+    let updated = 0;
+
+    await withTransaction(async (client) => {
+      for (const row of untagged.rows) {
+        const proj = row.project_code
+          ? row.project_code.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 8)
+          : 'SITE';
+        const prefix = `PC/${fy}/${proj}/`;
+
+        // Get the current max seq for this company+proj prefix inside the transaction
+        const r = await client.query(
+          `SELECT COALESCE(MAX(
+             CASE WHEN pc_voucher_no ~ $2 THEN
+               CAST(SPLIT_PART(pc_voucher_no, '/', 4) AS INTEGER)
+             ELSE 0 END
+           ), 0) AS last
+           FROM stores_petty_cash_entries
+           WHERE company_id = $1`,
+          [companyId, `^PC/${fy}/${proj}/\\d+$`]
+        );
+        const seq = parseInt(r.rows[0].last) + 1;
+        const voucherNo = `${prefix}${String(seq).padStart(3, '0')}`;
+
+        await client.query(
+          `UPDATE stores_petty_cash_entries SET pc_voucher_no = $1 WHERE id = $2`,
+          [voucherNo, row.id]
+        );
+        updated++;
+      }
+    });
+
+    res.json({ updated, message: `${updated} voucher number(s) assigned successfully.` });
+  } catch (err) {
+    console.error('[SPC] backfill-vouchers error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /* ═══════════════════════════════════════════════════════════════════════════
    WEEKLY REPORT — same style as Daily Activity Digest
 ═══════════════════════════════════════════════════════════════════════════ */
