@@ -23,7 +23,7 @@ export const CONSTRUCTION_UNITS = [
   'Sack', 'Can', 'Tube',
 
   // Time-based
-  'Day', 'Week', 'Month',
+  'Hours', 'Day', 'Week', 'Month',
 
   // Site / Work-specific
   'Point', 'Trip', 'Load', 'Joint',
@@ -45,6 +45,7 @@ const UNIT_ALIASES = {
   mt: 'MT', tonne: 'MT', tonnes: 'MT', metricton: 'MT',
   ton: 'Ton', tons: 'Ton',
   qtl: 'QTL', quintal: 'QTL',
+  hours: 'Hours', hour: 'Hours', hrs: 'Hours', hr: 'Hours',
   nos: 'Nos', no: 'Nos', number: 'Nos', unit: 'Nos', units: 'Nos',
   pcs: 'Pcs', pc: 'Pcs', piece: 'Pcs', pieces: 'Pcs',
   each: 'Each', ea: 'Each',

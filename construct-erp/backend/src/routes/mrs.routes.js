@@ -573,6 +573,19 @@ router.use(loadProjectScope);
     console.error('[mrs] LH10 serial repair failed:', e.message);
   }
 
+  // ── One-time: fix MR-LANCHO-HYD-LH10-013 — change all item units from 'Nos'/'nos' to 'Hours'
+  // (labour/hire items on this MR are time-based, not piece-count)
+  await safe(`
+    UPDATE mrs_items
+       SET unit = 'Hours'
+     WHERE mrs_id = (
+             SELECT id FROM material_requisitions
+              WHERE mrs_number = 'MR-LANCHO-HYD-LH10-013'
+              LIMIT 1
+           )
+       AND LOWER(unit) = 'nos'
+  `);
+
   console.log('[mrs] schema OK');
 })();
 
