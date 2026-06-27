@@ -461,8 +461,12 @@ router.use(loadProjectScope);
   await safe(`ALTER TABLE material_requisitions ALTER COLUMN priority SET DEFAULT 'medium'`);
   // request_date: the date the MRS was raised (user-entered, reliable vs auto created_at)
   await safe(`ALTER TABLE material_requisitions ADD COLUMN IF NOT EXISTS request_date DATE DEFAULT CURRENT_DATE`);
-  // Back-fill: for old rows with no request_date, use created_at date
-  await safe(`UPDATE material_requisitions SET request_date = created_at::date WHERE request_date IS NULL`);
+  // Back-fill: rows that got DEFAULT CURRENT_DATE but were actually created on a different date.
+  // Condition: request_date = today AND created_at::date != today → old record that got the default, overwrite it.
+  await safe(`UPDATE material_requisitions
+              SET request_date = created_at::date
+              WHERE request_date = CURRENT_DATE
+                AND (created_at AT TIME ZONE 'Asia/Kolkata')::date != CURRENT_DATE`);
   // Re-add with explicit logging so a failure is visible in deploy logs (not swallowed).
   try {
     await query(`ALTER TABLE material_requisitions
