@@ -1,4 +1,4 @@
-// src/routes/stores-petty-cash.routes.js
+﻿// src/routes/stores-petty-cash.routes.js
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
@@ -880,9 +880,8 @@ router.delete('/sc-advances/:id', authenticate, async (req, res) => {
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
-
 /* ═══════════════════════════════════════════════════════════════════════════
-   WEEKLY REPORT — generate HTML report and email it
+   WEEKLY REPORT — same style as Daily Activity Digest
 ═══════════════════════════════════════════════════════════════════════════ */
 
 router.post('/email-weekly-report', authenticate, async (req, res) => {
@@ -890,63 +889,88 @@ router.post('/email-weekly-report', authenticate, async (req, res) => {
     const { sendMail } = require('../services/mail.service');
     const companyId = req.user.company_id;
 
-    // Week window: Monday–Sunday of the most recently completed week
     const { from: reqFrom, to: reqTo, recipient = 'it@bcim.in' } = req.body || {};
     let weekFrom, weekTo;
     if (reqFrom && reqTo) {
       weekFrom = reqFrom;
       weekTo   = reqTo;
     } else {
-      // Last completed week (Mon–Sun)
       const now = new Date();
-      const dow = now.getDay(); // 0=Sun
-      const lastSun  = new Date(now); lastSun.setDate(now.getDate() - dow);
-      const lastMon  = new Date(lastSun); lastMon.setDate(lastSun.getDate() - 6);
-      const pad = (n) => String(n).padStart(2, '0');
+      const dow = now.getDay();
+      const lastSun = new Date(now); lastSun.setDate(now.getDate() - dow);
+      const lastMon = new Date(lastSun); lastMon.setDate(lastSun.getDate() - 6);
+      const pad = (x) => String(x).padStart(2, '0');
       const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
       weekFrom = ymd(lastMon);
       weekTo   = ymd(lastSun);
     }
 
-    const fmtDate = (d) => {
-      if (!d) return '—';
-      const dt = new Date(d);
-      return `${String(dt.getDate()).padStart(2,'0')}-${String(dt.getMonth()+1).padStart(2,'0')}-${dt.getFullYear()}`;
-    };
-    const inr = (v) => '₹ ' + Number(v||0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const esc = (s) => String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const esc  = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const inrF = (v) => 'Rs ' + Number(v||0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmtD = (v) => v ? new Date(v).toLocaleDateString('en-IN') : '-';
 
-    // Fetch all data for the week
+    const th = 'padding:8px;border:1px solid #dbe4f0;background:#0f2a52;color:#fff;font-size:11px;text-align:left;white-space:nowrap';
+    const td = 'padding:7px 8px;border:1px solid #dbe4f0;font-size:11px;vertical-align:top;color:#10233f';
+    const tdr = `${td};text-align:right;font-family:monospace`;
+
+    const section = (title, rows, cols, renderRow) => {
+      if (!rows.length) return '';
+      const cap = 50;
+      const shown = rows.slice(0, cap).map(renderRow).join('');
+      const more = rows.length > cap
+        ? `<tr><td colspan="${cols.length}" style="${td};text-align:center;font-style:italic;color:#64748b">...and ${rows.length - cap} more</td></tr>`
+        : '';
+      return `
+        <p style="margin:18px 0 6px;font-size:13px;font-weight:800;color:#0f2a52;text-transform:uppercase;letter-spacing:0.04em">
+          ${title} &mdash; ${rows.length}
+        </p>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr>${cols.map(c => `<th style="${th}">${c}</th>`).join('')}</tr></thead>
+          <tbody>${shown}${more}</tbody>
+        </table>`;
+    };
+
     const [entriesR, advancesR, receiptsR, scAdvR] = await Promise.all([
       query(
-        `SELECT e.*, p.name AS project_name,
-                COALESCE(json_agg(json_build_object('material_name', i.material_name) ORDER BY i.sort_order)
-                  FILTER (WHERE i.id IS NOT NULL), '[]') AS items
+        `SELECT e.id, e.entry_date, e.sl_no, e.supplier, e.invoice_no, e.amount,
+                e.basic_amount, e.gst_pct, e.gst_amount, e.total_amount,
+                e.status, e.pc_voucher_no, e.remarks,
+                p.name AS project_name,
+                COALESCE(
+                  json_agg(json_build_object('material_name', i.material_name) ORDER BY i.sort_order)
+                  FILTER (WHERE i.id IS NOT NULL), '[]'
+                ) AS items
          FROM stores_petty_cash_entries e
          LEFT JOIN projects p ON p.id = e.project_id
          LEFT JOIN stores_petty_cash_items i ON i.entry_id = e.id
-         WHERE e.company_id=$1 AND e.entry_date BETWEEN $2 AND $3 AND e.status='Approved'
+         WHERE e.company_id = $1 AND e.entry_date BETWEEN $2 AND $3
          GROUP BY e.id, p.name ORDER BY e.entry_date, e.sl_no`,
         [companyId, weekFrom, weekTo]
       ),
       query(
-        `SELECT a.*, p.name AS project_name FROM stores_petty_cash_advances a
+        `SELECT a.id, a.advance_date, a.payee_name, a.amount, a.description,
+                p.name AS project_name
+         FROM stores_petty_cash_advances a
          LEFT JOIN projects p ON p.id = a.project_id
-         WHERE a.company_id=$1 AND a.advance_date BETWEEN $2 AND $3
+         WHERE a.company_id = $1 AND a.advance_date BETWEEN $2 AND $3
          ORDER BY a.advance_date`,
         [companyId, weekFrom, weekTo]
       ),
       query(
-        `SELECT r.*, p.name AS project_name FROM stores_petty_cash_receipts r
+        `SELECT r.id, r.receipt_date, r.amount, r.voucher_no, r.received_by, r.remarks,
+                p.name AS project_name
+         FROM stores_petty_cash_receipts r
          LEFT JOIN projects p ON p.id = r.project_id
-         WHERE r.company_id=$1 AND r.receipt_date BETWEEN $2 AND $3
+         WHERE r.company_id = $1 AND r.receipt_date BETWEEN $2 AND $3
          ORDER BY r.receipt_date`,
         [companyId, weekFrom, weekTo]
       ),
       query(
-        `SELECT s.*, p.name AS project_name FROM stores_pc_sc_advances s
+        `SELECT s.id, s.advance_date, s.vendor_name, s.amount, s.wo_number, s.description,
+                p.name AS project_name
+         FROM stores_pc_sc_advances s
          LEFT JOIN projects p ON p.id = s.project_id
-         WHERE s.company_id=$1 AND s.advance_date BETWEEN $2 AND $3
+         WHERE s.company_id = $1 AND s.advance_date BETWEEN $2 AND $3
          ORDER BY s.advance_date`,
         [companyId, weekFrom, weekTo]
       ),
@@ -957,184 +981,159 @@ router.post('/email-weekly-report', authenticate, async (req, res) => {
     const receipts = receiptsR.rows;
     const scAdvs   = scAdvR.rows;
 
-    const totalRec  = receipts.reduce((s, r) => s + n(r.amount), 0);
-    const totalLP   = entries.reduce((s, r) => s + n(r.amount), 0);
-    const totalAdv  = advances.reduce((s, r) => s + n(r.amount), 0);
-    const totalSC   = scAdvs.reduce((s, r) => s + n(r.amount), 0);
+    const approvedEntries = entries.filter(e => e.status === 'Approved');
+    const pendingEntries  = entries.filter(e => e.status === 'Pending');
+
+    const totalRec   = receipts.reduce((s, r) => s + n(r.amount), 0);
+    const totalLP    = approvedEntries.reduce((s, r) => s + n(r.amount), 0);
+    const totalAdv   = advances.reduce((s, r) => s + n(r.amount), 0);
+    const totalSC    = scAdvs.reduce((s, r) => s + n(r.amount), 0);
     const totalSpent = totalLP + totalAdv + totalSC;
-    const balance   = totalRec - totalSpent;
+    const balance    = totalRec - totalSpent;
 
-    const TH = `border:1px solid #cbd5e1;padding:7px 10px;background:#1e293b;color:#f8fafc;text-align:left;font-size:12px;white-space:nowrap;`;
-    const TD = `border:1px solid #e2e8f0;padding:6px 10px;font-size:12px;color:#1e293b;`;
-    const TD_R = `${TD}text-align:right;font-family:monospace;`;
+    const recSection = section(
+      'A. Cash Received from HO',
+      receipts,
+      ['#', 'Date', 'Project', 'Voucher No', 'Received By', 'Remarks', 'Amount (Rs)'],
+      (r, i) => `<tr>
+        <td style="${td}">${i+1}</td>
+        <td style="${td}">${fmtD(r.receipt_date)}</td>
+        <td style="${td}">${esc(r.project_name||'-')}</td>
+        <td style="${td};font-family:monospace;font-weight:700">${esc(r.voucher_no||'-')}</td>
+        <td style="${td}">${esc(r.received_by||'-')}</td>
+        <td style="${td}">${esc(r.remarks||'-')}</td>
+        <td style="${tdr};font-weight:700">${inrF(r.amount)}</td>
+      </tr>`
+    );
 
-    const sectionHead = (label, color) =>
-      `<tr><td colspan="10" style="background:${color};color:#fff;padding:8px 12px;font-weight:700;font-size:13px;letter-spacing:0.03em;">${esc(label)}</td></tr>`;
+    const lpSection = section(
+      'B. Local Purchases — All Entries',
+      entries,
+      ['#', 'Date', 'Voucher No', 'Project', 'Supplier', 'Materials', 'Invoice No', 'Basic', 'GST%', 'Total', 'Status'],
+      (r, i) => {
+        const sc = r.status === 'Approved' ? '#15803d' : r.status === 'Rejected' ? '#b91c1c' : '#b45309';
+        const mats = (r.items || []).map(it => it.material_name).filter(Boolean).join(', ') || '-';
+        return `<tr>
+          <td style="${td}">${i+1}</td>
+          <td style="${td}">${fmtD(r.entry_date)}</td>
+          <td style="${td};font-family:monospace;font-weight:700">${esc(r.pc_voucher_no||'-')}</td>
+          <td style="${td}">${esc(r.project_name||'-')}</td>
+          <td style="${td}">${esc(r.supplier||'-')}</td>
+          <td style="${td}">${esc(mats)}</td>
+          <td style="${td}">${esc(r.invoice_no||'-')}</td>
+          <td style="${tdr}">${inrF(r.basic_amount||r.amount)}</td>
+          <td style="${td};text-align:center">${r.gst_pct ? r.gst_pct+'%' : '-'}</td>
+          <td style="${tdr};font-weight:700">${inrF(r.total_amount||r.amount)}</td>
+          <td style="${td};font-weight:700;color:${sc}">${esc(r.status||'-')}</td>
+        </tr>`;
+      }
+    );
 
-    const noData = (cols) =>
-      `<tr><td colspan="${cols}" style="${TD}color:#94a3b8;font-style:italic;text-align:center;padding:10px;">No records this week</td></tr>`;
+    const advSection = section(
+      'C. Salary Advances',
+      advances,
+      ['#', 'Date', 'Project', 'Employee Name', 'Description', 'Amount (Rs)'],
+      (r, i) => `<tr>
+        <td style="${td}">${i+1}</td>
+        <td style="${td}">${fmtD(r.advance_date)}</td>
+        <td style="${td}">${esc(r.project_name||'-')}</td>
+        <td style="${td};font-weight:700">${esc(r.payee_name||'-')}</td>
+        <td style="${td}">${esc(r.description||'-')}</td>
+        <td style="${tdr};font-weight:700">${inrF(r.amount)}</td>
+      </tr>`
+    );
 
-    const totalRow = (label, amount, cols) =>
-      `<tr style="background:#f1f5f9;">
-        <td colspan="${cols-1}" style="${TD}font-weight:700;text-align:right;">${esc(label)}</td>
-        <td style="${TD_R}font-weight:700;font-size:13px;">${inr(amount)}</td>
-      </tr>`;
+    const scSection = section(
+      'D. Sub Contractor Advances',
+      scAdvs,
+      ['#', 'Date', 'Project', 'Sub-Contractor', 'WO No', 'Description', 'Amount (Rs)'],
+      (r, i) => `<tr>
+        <td style="${td}">${i+1}</td>
+        <td style="${td}">${fmtD(r.advance_date)}</td>
+        <td style="${td}">${esc(r.project_name||'-')}</td>
+        <td style="${td};font-weight:700">${esc(r.vendor_name||'-')}</td>
+        <td style="${td};font-family:monospace">${esc(r.wo_number||'-')}</td>
+        <td style="${td}">${esc(r.description||'-')}</td>
+        <td style="${tdr};font-weight:700">${inrF(r.amount)}</td>
+      </tr>`
+    );
 
-    const recRows = receipts.length
-      ? receipts.map((r, i) => `<tr style="background:${i%2?'#f8fafc':'#fff'}">
-          <td style="${TD}">${fmtDate(r.receipt_date)}</td>
-          <td style="${TD}">${esc(r.project_name||'—')}</td>
-          <td style="${TD}">${esc(r.voucher_no||'—')}</td>
-          <td style="${TD}">${esc(r.received_by||'—')}</td>
-          <td style="${TD_R}">${inr(r.amount)}</td>
-        </tr>`).join('') + totalRow('TOTAL RECEIVED', totalRec, 5)
-      : noData(5);
+    const summarySection = `
+      <p style="margin:18px 0 6px;font-size:13px;font-weight:800;color:#0f2a52;text-transform:uppercase;letter-spacing:0.04em">
+        E. Week Summary
+      </p>
+      <table style="width:340px;border-collapse:collapse">
+        <thead><tr><th style="${th}">Item</th><th style="${th};text-align:right">Amount</th></tr></thead>
+        <tbody>
+          <tr style="background:#f0f6ff"><td style="${td};font-weight:700">Total Cash Received from HO</td><td style="${tdr};font-weight:700;color:#15803d">${inrF(totalRec)}</td></tr>
+          <tr><td style="${td}">Less: Local Purchases (Approved)</td><td style="${tdr}">${inrF(totalLP)}</td></tr>
+          <tr><td style="${td}">Less: Salary Advances</td><td style="${tdr}">${inrF(totalAdv)}</td></tr>
+          <tr><td style="${td}">Less: Sub Contractor Advances</td><td style="${tdr}">${inrF(totalSC)}</td></tr>
+          <tr style="border-top:2px solid #0f2a52;background:#eaf0fb">
+            <td style="${td};font-weight:800;font-size:12px">Net Cash Balance This Week</td>
+            <td style="${tdr};font-weight:800;font-size:12px;color:${balance<0?'#b91c1c':'#15803d'}">${inrF(Math.abs(balance))}${balance<0?' Dr':''}</td>
+          </tr>
+          ${pendingEntries.length ? `<tr><td style="${td};color:#b45309">Pending approval</td><td style="${td};color:#b45309;text-align:right">${pendingEntries.length} entr${pendingEntries.length===1?'y':'ies'}</td></tr>` : ''}
+        </tbody>
+      </table>`;
 
-    const lpRows = entries.length
-      ? entries.map((r, i) => `<tr style="background:${i%2?'#f8fafc':'#fff'}">
-          <td style="${TD}">${fmtDate(r.entry_date)}</td>
-          <td style="${TD}">${esc(r.pc_voucher_no||'—')}</td>
-          <td style="${TD}">${esc(r.project_name||'—')}</td>
-          <td style="${TD}">${esc(r.supplier||'—')}</td>
-          <td style="${TD}">${esc((r.items||[]).map(it=>it.material_name).filter(Boolean).join(', ')||'—')}</td>
-          <td style="${TD}">${esc(r.invoice_no||'—')}</td>
-          <td style="${TD_R}">${inr(r.amount)}</td>
-        </tr>`).join('') + totalRow('TOTAL LOCAL PURCHASE', totalLP, 7)
-      : noData(7);
+    const cards = [
+      { label: 'HO Receipts',     count: receipts.length },
+      { label: 'Local Purchases', count: entries.length },
+      { label: 'Approved',        count: approvedEntries.length },
+      { label: 'Pending',         count: pendingEntries.length },
+      { label: 'Salary Advances', count: advances.length },
+      { label: 'SC Advances',     count: scAdvs.length },
+    ];
+    const totalItems = receipts.length + entries.length + advances.length + scAdvs.length;
 
-    const advRows = advances.length
-      ? advances.map((r, i) => `<tr style="background:${i%2?'#f8fafc':'#fff'}">
-          <td style="${TD}">${fmtDate(r.advance_date)}</td>
-          <td style="${TD}">${esc(r.project_name||'—')}</td>
-          <td style="${TD}">${esc(r.payee_name||'—')}</td>
-          <td style="${TD}">${esc(r.description||'—')}</td>
-          <td style="${TD_R}">${inr(r.amount)}</td>
-        </tr>`).join('') + totalRow('TOTAL SALARY ADVANCES', totalAdv, 5)
-      : noData(5);
+    const cardCell = (d) => `
+      <td style="padding:10px;border:1px solid #dbe4f0;background:${d.count>0?'#f6f9fc':'#fafafa'};text-align:center">
+        <div style="font-size:20px;font-weight:800;color:${d.count>0?'#0f2a52':'#94a3b8'}">${d.count}</div>
+        <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.03em;margin-top:2px">${d.label}</div>
+      </td>`;
+    const cardRowsHtml = `<tr>${cards.map(cardCell).join('')}</tr>`;
 
-    const scRows = scAdvs.length
-      ? scAdvs.map((r, i) => `<tr style="background:${i%2?'#f8fafc':'#fff'}">
-          <td style="${TD}">${fmtDate(r.advance_date)}</td>
-          <td style="${TD}">${esc(r.project_name||'—')}</td>
-          <td style="${TD}">${esc(r.vendor_name||'—')}</td>
-          <td style="${TD}">${esc(r.wo_number||'—')}</td>
-          <td style="${TD_R}">${inr(r.amount)}</td>
-        </tr>`).join('') + totalRow('TOTAL SC ADVANCES', totalSC, 5)
-      : noData(5);
+    const weekLabel = `${fmtD(weekFrom)} to ${fmtD(weekTo)}`;
+    const subject = `Stores Petty Cash Weekly Report — ${weekLabel} — ${totalItems} transaction(s)`;
 
     const html = `
-<div style="font-family:'Times New Roman',Times,serif;max-width:900px;margin:0 auto;color:#0f172a;">
-
-  <!-- Header -->
-  <table style="width:100%;border-collapse:collapse;margin-bottom:0;">
-    <tr>
-      <td style="padding:16px 24px;background:#1e293b;border-radius:8px 8px 0 0;">
-        <table style="width:100%;">
-          <tr>
-            <td>
-              <div style="font-size:20px;font-weight:700;color:#f8fafc;letter-spacing:0.5px;">STORES PETTY CASH — WEEKLY REPORT</div>
-              <div style="font-size:13px;color:#94a3b8;margin-top:3px;">BCIM ENGINEERING PRIVATE LIMITED</div>
-            </td>
-            <td style="text-align:right;vertical-align:top;">
-              <div style="font-size:12px;color:#cbd5e1;">Period</div>
-              <div style="font-size:14px;font-weight:700;color:#f8fafc;">${fmtDate(weekFrom)} — ${fmtDate(weekTo)}</div>
-              <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Generated ${fmtDate(new Date().toISOString())} by ${esc(req.user.name||req.user.email)}</div>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-
-  <!-- Summary KPIs -->
-  <table style="width:100%;border-collapse:collapse;margin-bottom:20px;border:1px solid #e2e8f0;">
-    <tr>
-      <td style="padding:14px 16px;border:1px solid #e2e8f0;background:#f0fdf4;">
-        <div style="font-size:10px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;">Cash Received</div>
-        <div style="font-size:20px;font-weight:700;color:#15803d;font-family:monospace;">${inr(totalRec)}</div>
-        <div style="font-size:11px;color:#4ade80;">${receipts.length} receipts</div>
-      </td>
-      <td style="padding:14px 16px;border:1px solid #e2e8f0;background:#eff6ff;">
-        <div style="font-size:10px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;">Local Purchases</div>
-        <div style="font-size:20px;font-weight:700;color:#1d4ed8;font-family:monospace;">${inr(totalLP)}</div>
-        <div style="font-size:11px;color:#93c5fd;">${entries.length} approved entries</div>
-      </td>
-      <td style="padding:14px 16px;border:1px solid #e2e8f0;background:#fffbeb;">
-        <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;">Salary Advances</div>
-        <div style="font-size:20px;font-weight:700;color:#b45309;font-family:monospace;">${inr(totalAdv)}</div>
-        <div style="font-size:11px;color:#fcd34d;">${advances.length} advances</div>
-      </td>
-      <td style="padding:14px 16px;border:1px solid #e2e8f0;background:#fff7ed;">
-        <div style="font-size:10px;font-weight:700;color:#9a3412;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;">SC Advances</div>
-        <div style="font-size:20px;font-weight:700;color:#c2410c;font-family:monospace;">${inr(totalSC)}</div>
-        <div style="font-size:11px;color:#fdba74;">${scAdvs.length} payments</div>
-      </td>
-      <td style="padding:14px 16px;border:1px solid #e2e8f0;background:${balance<0?'#fef2f2':balance<5000?'#fffbeb':'#f0fdf4'};">
-        <div style="font-size:10px;font-weight:700;color:${balance<0?'#991b1b':balance<5000?'#92400e':'#166534'};text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;">Net This Week</div>
-        <div style="font-size:20px;font-weight:700;color:${balance<0?'#dc2626':balance<5000?'#d97706':'#16a34a'};font-family:monospace;">${inr(Math.abs(balance))}${balance<0?' Dr':''}</div>
-        <div style="font-size:11px;color:#94a3b8;">Received − Spent</div>
-      </td>
-    </tr>
-  </table>
-
-  <!-- A. Receipts -->
-  <table style="width:100%;border-collapse:collapse;margin-bottom:18px;">
-    ${sectionHead('A. Cash Received from HO', '#15803d')}
-    <tr>${['Date','Project','Voucher No','Received By','Amount (₹)'].map(h=>`<th style="${TH}">${h}</th>`).join('')}</tr>
-    ${recRows}
-  </table>
-
-  <!-- B. Local Purchases -->
-  <table style="width:100%;border-collapse:collapse;margin-bottom:18px;">
-    ${sectionHead('B. Local Purchases (Approved)', '#1e40af')}
-    <tr>${['Date','Voucher No','Project','Supplier','Materials','Invoice No','Amount (₹)'].map(h=>`<th style="${TH}">${h}</th>`).join('')}</tr>
-    ${lpRows}
-  </table>
-
-  <!-- C. Salary Advances -->
-  <table style="width:100%;border-collapse:collapse;margin-bottom:18px;">
-    ${sectionHead('C. Salary Advances', '#b45309')}
-    <tr>${['Date','Project','Employee Name','Description','Amount (₹)'].map(h=>`<th style="${TH}">${h}</th>`).join('')}</tr>
-    ${advRows}
-  </table>
-
-  <!-- D. SC Advances -->
-  <table style="width:100%;border-collapse:collapse;margin-bottom:18px;">
-    ${sectionHead('D. Sub Contractor Advances', '#c2410c')}
-    <tr>${['Date','Project','Sub-Contractor','WO No','Amount (₹)'].map(h=>`<th style="${TH}">${h}</th>`).join('')}</tr>
-    ${scRows}
-  </table>
-
-  <!-- E. Summary -->
-  <table style="width:50%;border-collapse:collapse;margin-bottom:24px;">
-    <tr style="background:#1e293b;"><td colspan="2" style="padding:8px 12px;color:#f8fafc;font-weight:700;font-size:13px;">E. Week Summary</td></tr>
-    <tr><td style="${TD}font-weight:600;">Total Cash Received</td><td style="${TD_R}">${inr(totalRec)}</td></tr>
-    <tr style="background:#f8fafc;"><td style="${TD}">Less: Local Purchases</td><td style="${TD_R}">(${inr(totalLP)})</td></tr>
-    <tr><td style="${TD}">Less: Salary Advances</td><td style="${TD_R}">(${inr(totalAdv)})</td></tr>
-    <tr style="background:#f8fafc;"><td style="${TD}">Less: SC Advances</td><td style="${TD_R}">(${inr(totalSC)})</td></tr>
-    <tr style="background:${balance<0?'#fef2f2':'#f0fdf4'};border-top:2px solid ${balance<0?'#fca5a5':'#86efac'};">
-      <td style="${TD}font-weight:700;font-size:14px;">Net This Week</td>
-      <td style="${TD_R}font-weight:700;font-size:14px;color:${balance<0?'#dc2626':'#15803d'};">${inr(Math.abs(balance))}${balance<0?' Dr':''}</td>
-    </tr>
-  </table>
-
-  <!-- Footer -->
-  <div style="border-top:1px solid #e2e8f0;padding-top:12px;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;">
-    <strong>BCIM ENGINEERING PRIVATE LIMITED</strong> &nbsp;·&nbsp; "B" Wing, DivyaSree Chambers, No. 11, O'Shaugnessy Road, Bangalore-560 025.
-    &nbsp;·&nbsp; GSTIN: 29AAHCB6485A1ZL
-    <br>This is an automated report from BCIM ConstructERP. Do not reply to this email.
+<div style="font-family:Arial,sans-serif;max-width:1180px;margin:0 auto;color:#10233f">
+  <div style="background:linear-gradient(135deg,#0f2a52,#16386b);padding:18px 22px;border-radius:8px 8px 0 0">
+    <h2 style="margin:0;color:#fff;font-size:18px">Stores Petty Cash &mdash; Weekly Report</h2>
+    <p style="margin:6px 0 0;color:#cfe0ff;font-size:12px">BCIM Engineering Private Limited &bull; ${weekLabel} &bull; Generated by ${esc(req.user.name||req.user.email)}</p>
+  </div>
+  <div style="padding:20px 22px;border:1px solid #dbe4f0;border-top:none;border-radius:0 0 8px 8px;background:#fff">
+    <p style="margin:0 0 14px;font-size:13px">
+      ${totalItems
+        ? `A total of <strong>${totalItems}</strong> petty cash transaction(s) recorded this week &mdash; <strong>${approvedEntries.length}</strong> purchases approved, <strong>${pendingEntries.length}</strong> pending.`
+        : `No petty cash transactions were recorded this week.`}
+    </p>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:4px">${cardRowsHtml}</table>
+    ${recSection}
+    ${lpSection}
+    ${advSection}
+    ${scSection}
+    ${summarySection}
+    <p style="margin:20px 0 0;font-size:12px">
+      <a href="https://erp.bcim.in" style="display:inline-block;background:#0f2a52;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:700">
+        Open BCIM ERP
+      </a>
+    </p>
+    <p style="margin:16px 0 0;font-size:10px;color:#8aa0bf">
+      Automated weekly petty cash digest from BCIM ERP. Period: ${weekLabel}. Approved totals only used in cash balance.
+    </p>
   </div>
 </div>`;
 
-    const weekLabel = `${fmtDate(weekFrom)} to ${fmtDate(weekTo)}`;
     const result = await sendMail({
       to: recipient,
-      subject: `Stores Petty Cash — Weekly Report (${weekLabel})`,
+      subject,
       html,
-      text: `Stores Petty Cash Weekly Report — ${weekLabel}\n\nTotal Received: ${inr(totalRec)}\nTotal Spent: ${inr(totalSpent)}\nNet: ${inr(Math.abs(balance))}${balance<0?' Dr':''}\n\nSee HTML version for full tables.`,
+      text: `Stores Petty Cash Weekly Report — ${weekLabel}\n\nTotal Received: ${inrF(totalRec)}\nApproved Purchases: ${inrF(totalLP)}\nSalary Advances: ${inrF(totalAdv)}\nSC Advances: ${inrF(totalSC)}\nNet: ${inrF(Math.abs(balance))}${balance<0?' Dr':''}\n\nView at: https://erp.bcim.in`,
     });
 
-    res.json({ sent: result.sent, recipient, period: { from: weekFrom, to: weekTo }, summary: { totalRec, totalLP, totalAdv, totalSC, balance } });
+    res.json({ sent: result.sent, recipient, period: { from: weekFrom, to: weekTo }, summary: { totalRec, totalLP, totalAdv, totalSC, balance, entries: entries.length, pending: pendingEntries.length } });
   } catch (err) {
     console.error('[SPC] email-weekly-report error:', err);
     res.status(500).json({ error: err.message });
