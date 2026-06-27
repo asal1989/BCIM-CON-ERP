@@ -1378,6 +1378,24 @@ router.patch('/:id/:stage', async (req, res) => {
     const cfg = PO_STAGES[stage];
     if (!cfg) return res.status(400).json({ error: 'Invalid approval stage' });
 
+    // ── Authorisation: who may action each approval stage ──────────────────────
+    // procurement-approve → procurement staff, super admin, designated approvers
+    // md-approve          → MD/CEO, super admin, designated approvers
+    const PO_APPROVER_EMAILS = ['stephen@bcim.in', 'it@bcim.in'];
+    const uRole  = String(req.user.role  || '').toLowerCase();
+    const uEmail = String(req.user.email || '').toLowerCase();
+    const isSuperOrNamed = uRole === 'super_admin' || PO_APPROVER_EMAILS.includes(uEmail);
+    let stageAllowed = isSuperOrNamed;
+    if (!stageAllowed && stage === 'procurement-approve') {
+      stageAllowed = uRole.includes('procurement');
+    }
+    if (!stageAllowed && stage === 'md-approve') {
+      stageAllowed = ['md', 'ceo', 'managing_director'].includes(uRole);
+    }
+    if (!stageAllowed) {
+      return res.status(403).json({ error: `Access denied. You are not authorised to perform ${stage}.` });
+    }
+
     const { signature_img } = req.body;
     await getAccessiblePo(req, req.params.id);
 

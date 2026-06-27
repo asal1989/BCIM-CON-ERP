@@ -17,7 +17,7 @@ import { FIELD_HL } from '../../constants/fieldStyles';
 import { Z_INP, Z_CARD, Z_HEAD } from '../../constants/zohoStyles';
 import toast from 'react-hot-toast';
 import { PageHeader, Theme } from '../../theme';
-import { CONSTRUCTION_UNITS as UNITS } from '../../constants/units';
+import { CONSTRUCTION_UNITS as UNITS, normalizeUnit } from '../../constants/units';
 import IGNPrintTemplate from './IGNPrintTemplate';
 import MaterialCombobox from '../../components/shared/MaterialCombobox';
 import SearchableSelect from '../../components/shared/SearchableSelect';
@@ -730,7 +730,7 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
         return {
           ...it,
           rate: it.rate || (match.rate != null ? String(match.rate) : ''),
-          unit: it.unit || match.unit || 'Nos',
+          unit: normalizeUnit(it.unit || match.unit) || 'Nos',
           po_item_id: it.po_item_id || match.id || null,
         };
       }));
@@ -741,7 +741,7 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
     setItems(poItems.map(it => ({
       ...emptyItem(),
       material_name: it.material_name || '',
-      unit: it.unit || 'Nos',
+      unit: normalizeUnit(it.unit) || 'Nos',
       rate: it.rate ? String(it.rate) : '',
       po_item_id: it.id || null,
     })));
@@ -771,7 +771,7 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
         return {
           ...it,
           rate: it.rate || (m.rate != null ? String(m.rate) : ''),
-          unit: it.unit || m.unit || '',
+          unit: normalizeUnit(it.unit || m.unit),
           po_item_id: it.po_item_id || m.id || null,
         };
       });
@@ -849,7 +849,7 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
       let grsItems = (detail.items || []).filter(it => it.particulars?.trim()).map(it => ({
         ...emptyItem(),
         material_name: it.particulars || '',
-        unit: it.unit || '',
+        unit: normalizeUnit(it.unit),
         qty_as_per_dc: it.quantity ? String(it.quantity) : '',
       }));
       if (grsItems.length > 0) {
@@ -1130,6 +1130,7 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
                         <select value={it.unit} onChange={e => updateItem(idx, 'unit', e.target.value)}
                           className="w-20 h-8 rounded-md border border-slate-300 bg-white px-1 text-xs outline-none focus:border-blue-500">
                           <option value="">—</option>
+                          {it.unit && !UNITS.includes(it.unit) && <option value={it.unit}>{it.unit}</option>}
                           {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                         </select>
                       </td>

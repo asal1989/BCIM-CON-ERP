@@ -1010,20 +1010,31 @@ const STAGE_LABELS = {
   'md-approve':          'MD Authorization',
 };
 
-// Which roles / departments can action each stage
+// Designated users who may action PO approvals regardless of role/department.
+const PO_APPROVER_EMAILS = ['stephen@bcim.in', 'it@bcim.in'];
+
+// Which roles / departments can action each stage. Roles are matched EXACTLY
+// (no substring) so broad roles like "site_manager" no longer leak into the
+// procurement-approve stage. Procurement is additionally matched as a keyword
+// so any procurement_* role / department qualifies.
 const STAGE_ROLES = {
-  'procurement-approve': { roles: ['procurement_manager','project_manager','manager','admin','super_admin','md','ceo','managing_director'], depts: ['procurement','purchase'] },
-  'md-approve':          { roles: ['md','ceo','managing_director','admin','super_admin'],                                                          depts: ['md','managing director','ceo'] },
+  'procurement-approve': { roles: ['procurement_manager'],              depts: ['procurement','purchase'], keyword: 'procurement' },
+  'md-approve':          { roles: ['md','ceo','managing_director'],     depts: ['md','managing director','ceo'] },
 };
 
 function canApproveStage(stageId, user) {
   if (!user) return false;
-  if (['admin','super_admin'].includes(user.role)) return true;
+  const role  = (user.role || '').toLowerCase();
+  const dept  = (user.department || '').toLowerCase();
+  const email = (user.email || '').toLowerCase();
+  // Super admin and designated approvers can action any stage.
+  if (role === 'super_admin' || PO_APPROVER_EMAILS.includes(email)) return true;
   const allowed = STAGE_ROLES[stageId];
   if (!allowed) return false;
-  const role = (user.role || '').toLowerCase();
-  const dept = (user.department || '').toLowerCase();
-  return allowed.roles.some(r => role.includes(r)) || allowed.depts.some(d => dept.includes(d));
+  if (allowed.roles.some(r => role === r)) return true;
+  if (allowed.depts.some(d => dept.includes(d))) return true;
+  if (allowed.keyword && (role.includes(allowed.keyword) || dept.includes(allowed.keyword))) return true;
+  return false;
 }
 
 /* ─── PO Reject Reason Modal ─── */
