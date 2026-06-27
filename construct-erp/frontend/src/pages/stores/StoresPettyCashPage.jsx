@@ -170,48 +170,50 @@ function printStatement({ entries, advances, scAdvances, receipts, projectName, 
   const totalScAdv = sc.reduce((s, r) => s + Number(r.amount), 0);
   const balance    = totalRec - totalLP - totalAdv - totalScAdv;
 
-  const TD = 'border:1px solid #000;padding:3px 5px;vertical-align:top;';
-  const TH = 'border:1px solid #000;padding:4px 5px;font-weight:700;background:#f0f0f0;text-align:center;';
+  const TD  = 'border:1px solid #000;padding:3px 5px;vertical-align:top;';
+  const TH  = 'border:1px solid #000;padding:4px 5px;font-weight:700;background:#f0f0f0;text-align:center;';
+  const TDR = `${TD}text-align:right;font-weight:600;white-space:nowrap;`;
+  const cleanInv = (v) => { const s = (v || '').trim(); return (s && s !== '0' && s !== '–' && s !== '-') ? s : '–'; };
 
   const recRows = receipts.length
     ? receipts.map((r, i) => `<tr>
-        <td style="${TD}text-align:center;">${i + 1}</td>
-        <td style="${TD}">${dayjs(r.receipt_date).format('DD-MM-YYYY')}</td>
+        <td style="${TD}text-align:center;width:28px;">${i + 1}</td>
+        <td style="${TD}white-space:nowrap;width:76px;">${dayjs(r.receipt_date).format('DD-MM-YYYY')}</td>
         <td style="${TD}">${r.voucher_no || '–'}</td>
         <td style="${TD}">${r.received_by || '–'}</td>
-        <td style="${TD}text-align:right;font-weight:600;">${fmt(r.amount)}</td>
+        <td style="${TDR}">${fmt(r.amount)}</td>
       </tr>`).join('')
     : `<tr><td colspan="5" style="${TD}text-align:center;color:#666;font-style:italic;padding:8px;">No receipts recorded</td></tr>`;
 
   const lpRows = entries.length
     ? entries.map((r, i) => `<tr>
-        <td style="${TD}text-align:center;">${i + 1}</td>
-        <td style="${TD}">${dayjs(r.entry_date).format('DD-MM-YYYY')}</td>
-        <td style="${TD}font-family:monospace;font-size:10px;">${r.pc_voucher_no || '–'}</td>
+        <td style="${TD}text-align:center;width:28px;">${i + 1}</td>
+        <td style="${TD}white-space:nowrap;width:76px;">${dayjs(r.entry_date).format('DD-MM-YYYY')}</td>
+        <td style="${TD}font-family:monospace;font-size:10px;white-space:nowrap;">${r.pc_voucher_no || '–'}</td>
         <td style="${TD}">${r.supplier || '–'}</td>
         <td style="${TD}">${(r.items || []).map(it => it.material_name).filter(Boolean).join(', ') || '–'}</td>
-        <td style="${TD}">${r.invoice_no || '–'}</td>
-        <td style="${TD}text-align:right;font-weight:600;">${fmt(r.amount)}</td>
+        <td style="${TD}white-space:nowrap;">${cleanInv(r.invoice_no)}</td>
+        <td style="${TDR}">${fmt(r.amount)}</td>
       </tr>`).join('')
     : `<tr><td colspan="7" style="${TD}text-align:center;color:#666;font-style:italic;padding:8px;">No approved local purchases</td></tr>`;
 
   const advRows = advances.length
     ? advances.map((r, i) => `<tr>
-        <td style="${TD}text-align:center;">${i + 1}</td>
-        <td style="${TD}">${dayjs(r.advance_date).format('DD-MM-YYYY')}</td>
+        <td style="${TD}text-align:center;width:28px;">${i + 1}</td>
+        <td style="${TD}white-space:nowrap;width:76px;">${dayjs(r.advance_date).format('DD-MM-YYYY')}</td>
         <td style="${TD}">${r.payee_name || '–'}</td>
         <td style="${TD}">${r.description || '–'}</td>
-        <td style="${TD}text-align:right;font-weight:600;">${fmt(r.amount)}</td>
+        <td style="${TDR}">${fmt(r.amount)}</td>
       </tr>`).join('')
     : `<tr><td colspan="5" style="${TD}text-align:center;color:#666;font-style:italic;padding:8px;">No salary advances recorded</td></tr>`;
 
   const scRows = sc.length
     ? sc.map((r, i) => `<tr>
-        <td style="${TD}text-align:center;">${i + 1}</td>
-        <td style="${TD}">${dayjs(r.advance_date).format('DD-MM-YYYY')}</td>
+        <td style="${TD}text-align:center;width:28px;">${i + 1}</td>
+        <td style="${TD}white-space:nowrap;width:76px;">${dayjs(r.advance_date).format('DD-MM-YYYY')}</td>
         <td style="${TD}">${r.vendor_name || '–'}</td>
         <td style="${TD}">${r.wo_number || '–'}</td>
-        <td style="${TD}text-align:right;font-weight:600;">${fmt(r.amount)}</td>
+        <td style="${TDR}">${fmt(r.amount)}</td>
       </tr>`).join('')
     : `<tr><td colspan="5" style="${TD}text-align:center;color:#666;font-style:italic;padding:8px;">No SC advances recorded</td></tr>`;
 
@@ -304,7 +306,7 @@ function printStatement({ entries, advances, scAdvances, receipts, projectName, 
         <tfoot>
           <tr>
             <td colspan="4" style="${TD}text-align:right;font-weight:700;background:#f0f0f0;">TOTAL RECEIVED</td>
-            <td style="${TD}text-align:right;font-weight:700;font-size:12px;background:#f0f0f0;">${fmt(totalRec)}</td>
+            <td style="${TDR}font-size:12px;background:#f0f0f0;">${fmt(totalRec)}</td>
           </tr>
         </tfoot>
       </table>
@@ -314,20 +316,20 @@ function printStatement({ entries, advances, scAdvances, receipts, projectName, 
       <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
         <thead>
           <tr>
-            <th style="${TH}width:34px;">Sl No</th>
-            <th style="${TH}width:88px;">Date</th>
-            <th style="${TH}width:110px;">Voucher No</th>
-            <th style="${TH}width:130px;">Supplier</th>
+            <th style="${TH}width:28px;">Sl No</th>
+            <th style="${TH}width:80px;">Date</th>
+            <th style="${TH}width:108px;">Voucher No</th>
+            <th style="${TH}width:120px;">Supplier</th>
             <th style="${TH}text-align:left;">Materials</th>
-            <th style="${TH}width:80px;">Invoice No</th>
-            <th style="${TH}width:110px;text-align:right;">Amount (&#8377;)</th>
+            <th style="${TH}width:70px;">Invoice No</th>
+            <th style="${TH}width:100px;text-align:right;white-space:nowrap;">Amount (&#8377;)</th>
           </tr>
         </thead>
         <tbody>${lpRows}</tbody>
         <tfoot>
           <tr>
             <td colspan="6" style="${TD}text-align:right;font-weight:700;background:#f0f0f0;">TOTAL LOCAL PURCHASE</td>
-            <td style="${TD}text-align:right;font-weight:700;font-size:12px;background:#f0f0f0;">${fmt(totalLP)}</td>
+            <td style="${TDR}font-size:12px;background:#f0f0f0;">${fmt(totalLP)}</td>
           </tr>
         </tfoot>
       </table>
@@ -337,18 +339,18 @@ function printStatement({ entries, advances, scAdvances, receipts, projectName, 
       <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
         <thead>
           <tr>
-            <th style="${TH}width:34px;">Sl No</th>
-            <th style="${TH}width:88px;">Date</th>
+            <th style="${TH}width:28px;">Sl No</th>
+            <th style="${TH}width:80px;">Date</th>
             <th style="${TH}width:160px;">Name</th>
             <th style="${TH}text-align:left;">Description</th>
-            <th style="${TH}width:120px;text-align:right;">Amount (&#8377;)</th>
+            <th style="${TH}width:110px;text-align:right;white-space:nowrap;">Amount (&#8377;)</th>
           </tr>
         </thead>
         <tbody>${advRows}</tbody>
         <tfoot>
           <tr>
             <td colspan="4" style="${TD}text-align:right;font-weight:700;background:#f0f0f0;">TOTAL SALARY ADVANCES</td>
-            <td style="${TD}text-align:right;font-weight:700;font-size:12px;background:#f0f0f0;">${fmt(totalAdv)}</td>
+            <td style="${TDR}font-size:12px;background:#f0f0f0;">${fmt(totalAdv)}</td>
           </tr>
         </tfoot>
       </table>
@@ -358,18 +360,18 @@ function printStatement({ entries, advances, scAdvances, receipts, projectName, 
       <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
         <thead>
           <tr>
-            <th style="${TH}width:34px;">Sl No</th>
-            <th style="${TH}width:88px;">Date</th>
+            <th style="${TH}width:28px;">Sl No</th>
+            <th style="${TH}width:80px;">Date</th>
             <th style="${TH}width:200px;">Sub-Contractor</th>
             <th style="${TH}text-align:left;">WO No</th>
-            <th style="${TH}width:120px;text-align:right;">Amount (&#8377;)</th>
+            <th style="${TH}width:110px;text-align:right;white-space:nowrap;">Amount (&#8377;)</th>
           </tr>
         </thead>
         <tbody>${scRows}</tbody>
         <tfoot>
           <tr>
             <td colspan="4" style="${TD}text-align:right;font-weight:700;background:#f0f0f0;">TOTAL SC ADVANCES</td>
-            <td style="${TD}text-align:right;font-weight:700;font-size:12px;background:#f0f0f0;">${fmt(totalScAdv)}</td>
+            <td style="${TDR}font-size:12px;background:#f0f0f0;">${fmt(totalScAdv)}</td>
           </tr>
         </tfoot>
       </table>
@@ -379,23 +381,23 @@ function printStatement({ entries, advances, scAdvances, receipts, projectName, 
       <table style="width:50%;border-collapse:collapse;margin-bottom:14px;">
         <tr>
           <td style="${TD}font-weight:700;">Total Cash Received from HO</td>
-          <td style="${TD}text-align:right;">${fmt(totalRec)}</td>
+          <td style="${TDR}">${fmt(totalRec)}</td>
         </tr>
         <tr>
           <td style="${TD}">Less: Local Purchases</td>
-          <td style="${TD}text-align:right;">(${fmt(totalLP)})</td>
+          <td style="${TDR}">(${fmt(totalLP)})</td>
         </tr>
         <tr>
           <td style="${TD}">Less: Salary Advances</td>
-          <td style="${TD}text-align:right;">(${fmt(totalAdv)})</td>
+          <td style="${TDR}">(${fmt(totalAdv)})</td>
         </tr>
         <tr>
           <td style="${TD}">Less: Sub Contractor Advances</td>
-          <td style="${TD}text-align:right;">(${fmt(totalScAdv)})</td>
+          <td style="${TDR}">(${fmt(totalScAdv)})</td>
         </tr>
         <tr style="background:#f0f0f0;">
           <td style="border:1.5px solid #000;padding:5px 6px;font-weight:700;font-size:13px;">Cash in Hand (Closing Balance)</td>
-          <td style="border:1.5px solid #000;padding:5px 6px;text-align:right;font-weight:700;font-size:13px;${balance < 0 ? 'color:#cc0000;' : ''}">
+          <td style="border:1.5px solid #000;padding:5px 6px;text-align:right;font-weight:700;font-size:13px;white-space:nowrap;${balance < 0 ? 'color:#cc0000;' : ''}">
             ${balance < 0 ? '(' + fmt(Math.abs(balance)) + ') OVERDRAWN' : fmt(balance)}
           </td>
         </tr>
