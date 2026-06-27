@@ -374,6 +374,8 @@ app.use(`${API}/analytics`, analyticsRoutes);
 
 // File upload
 app.use(`${API}/upload`, uploadRoutes);
+// Backward-compatible upload endpoint used by older built pages/modules.
+app.use('/api/upload', uploadRoutes);
 
 // Documents (cross-module, OneDrive-backed)
 app.use(`${API}/documents`, documentsRoutes);
