@@ -345,28 +345,24 @@ function PaymentCertificate({ cert }) {
   const invDates   = (cert.bills || []).map(b => fmtSh(b.inv_date)).filter(Boolean).join(', ');
   const raBillNo   = cert.ra_bill_number || `RA-${cert.ra_sequence || '01'}`;
 
-  // ── Contract value: use actual PO/WO value from backend; fall back to gross+tax if missing
   const orderValue     = n(cert.order_total_value);
   const grossPlusTax   = n(cert.gross_amount) + n(cert.tax_amount);
-  // If order_total_value is missing/zero, derive it from gross+tax (cert itself is the reference)
   const finalContract  = orderValue > 0 ? orderValue : grossPlusTax;
 
-  const prev           = n(cert.previous_certified_amount);
-  const grossTillDate  = grossPlusTax + prev; // Cumulative incl. tax
-  const advance        = n(cert.advance_recovered);
-  const retention      = n(cert.retention_amount);
-  const tds            = n(cert.tds_amount);
-  const other          = n(cert.other_deductions);
+  const prev             = n(cert.previous_certified_amount);
+  const grossTillDate    = grossPlusTax + prev;
+  const advance          = n(cert.advance_recovered);
+  const retention        = n(cert.retention_amount);
+  const tds              = n(cert.tds_amount);
+  const other            = n(cert.other_deductions);
   const totalNetTillDate = grossTillDate - advance - retention - tds - other;
-  // Balance to Finish = Contract Value − Gross Certified Till Date (both incl. tax, cumulative)
-  // Positive = remaining work; near-zero or small negative = fully certified
-  const balanceToFinish = finalContract - grossTillDate;
-  const currentDue     = n(cert.net_payable);
+  const balanceToFinish  = finalContract - grossTillDate;
+  const currentDue       = n(cert.net_payable);
 
   const payTdsRate  = n(cert.tds_rate);
   const payTdsLabel = payTdsRate > 0
-    ? `Deduction — TDS @ ${payTdsRate}% (Sec 194C)`
-    : 'Deduction — TDS';
+    ? `Deduction of TDS @ ${payTdsRate}% (Sec 194C)`
+    : 'Deduction of TDS';
 
   const claimRows = [
     { no:  1, label: 'Original Contract Value',                   value: finalContract,       isDed: false },
@@ -374,21 +370,18 @@ function PaymentCertificate({ cert }) {
     { no:  3, label: 'Final Contract Value to Date',              value: finalContract,       isDed: false },
     { no:  4, label: 'Advance Certified',                         value: advance || null,     isDed: false },
     { no:  5, label: 'Gross Certified Till Date',                 value: grossTillDate,       isDed: false },
-    { no:  6, label: 'Deduction — Mobilisation Advance',         value: advance,             isDed: true },
-    { no:  7, label: 'Deduction — Retention Amount',             value: retention,           isDed: true },
-    { no:  8, label: payTdsLabel,                                 value: tds,                 isDed: true },
-    { no:  9, label: 'Deduction — Any Other',                    value: other,               isDed: true },
-    { no: 10, label: 'Total Net Certified Till Date',            value: totalNetTillDate,    bold: true },
-    { no: 11, label: 'Less: Previous Certificates for Payment',  value: prev,                isDed: false },
+    { no:  6, label: 'Deduction of Mobilisation Advance',        value: advance,             isDed: true  },
+    { no:  7, label: 'Deduction of Retention Amount',            value: retention,           isDed: true  },
+    { no:  8, label: payTdsLabel,                                 value: tds,                 isDed: true  },
+    { no:  9, label: 'Any Other Deductions',                     value: other,               isDed: true  },
+    { no: 10, label: 'Total Net Certified Till Date',            value: totalNetTillDate,    bold: true   },
+    { no: 11, label: 'Less Previous Certificates for Payments',  value: prev,                isDed: false },
     { no: 12, label: 'Balance to Finish',                        value: balanceToFinish,     isDed: false },
     { no: 13, label: 'Current Net Payment Due',                  value: currentDue,          highlight: true },
   ];
 
-  const pcSignatories = [
-    { role: 'Recommended for Payment', name: 'Prepared By (QS)' },
-    { role: 'Approved for Payment',    name: 'Director' },
-    { role: 'Approved for Payment',    name: 'Managing Director' },
-  ];
+  // Package description: use cert remarks as the work package label (same as AbstractSheet)
+  const packageDesc = cert.remarks || `${cert.order_type?.toUpperCase() || 'WO'} Certification`;
 
   return (
     <section className="print-sheet print-payment" style={{ ...T.page, ...T.sheet, padding: '2mm 8mm 10mm 8mm' }}>
@@ -398,18 +391,52 @@ function PaymentCertificate({ cert }) {
         dateLabel={`Recommendation Date: ${fmt(cert.created_at)}`}
       />
 
+      {/* ── Info panel — two-column layout matching Excel template ── */}
       <div style={T.secHead}>Contract &amp; Invoice Details</div>
-      <div style={T.infoPanel}>
-        <InfoRow label="Company Name"        value="BCIM Engineering Private Limited" />
-        <InfoRow label="Vendor / Contractor" value={cert.vendor_name} />
-        <InfoRow label="Project / Site"      value={cert.project_name} />
-        <InfoRow label="RA Bill No."         value={raBillNo} />
-        <InfoRow label="Work / Purchase Order" value={cert.order_number} />
-        <InfoRow label="Date of Invoice"     value={invDates || '—'} />
-        <InfoRow label="Order Value"         value={INR(cert.order_total_value ?? cert.gross_amount)} />
-        <InfoRow label="Invoice Numbers"     value={invoiceNos || '—'} />
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '0',
+        marginBottom: '10px',
+        border: '1px solid #C8D8EE',
+        fontSize: '10.5px',
+        background: lightBg,
+      }}>
+        {/* Left column */}
+        <div style={{ padding: '6px 10px', borderRight: '1px solid #C8D8EE' }}>
+          {[
+            ['Company Name',         'BCIM Engineering Private Limited'],
+            ['Package Description',  packageDesc],
+            ['Purchase / Work Order', cert.order_number || '—'],
+            ['PO / WO Value (₹)',    INR(cert.order_total_value ?? cert.gross_amount)],
+            ['Payment Terms',        cert.payment_terms || '30 Days from the date of supply'],
+          ].map(([lbl, val]) => (
+            <div key={lbl} style={{...T.infoRow, borderBottom:'1px dotted #D0DCF0', paddingBottom:'3px', marginBottom:'3px'}}>
+              <span style={T.infoLbl}>{lbl}</span>
+              <span style={{color:'#444', marginRight:'4px', fontWeight:'bold'}}>:</span>
+              <span style={T.infoVal}>{val}</span>
+            </div>
+          ))}
+        </div>
+        {/* Right column */}
+        <div style={{ padding: '6px 10px' }}>
+          {[
+            ['Vendor Name',        cert.vendor_name],
+            ['RA Bill No.',        raBillNo],
+            ['Date of Invoice',    invDates || '—'],
+            ['Invoice Number(s)',  invoiceNos || '—'],
+            ['MR / GRS Ref.',      cert.mr_ref || '—'],
+          ].map(([lbl, val]) => (
+            <div key={lbl} style={{...T.infoRow, borderBottom:'1px dotted #D0DCF0', paddingBottom:'3px', marginBottom:'3px'}}>
+              <span style={T.infoLbl}>{lbl}</span>
+              <span style={{color:'#444', marginRight:'4px', fontWeight:'bold'}}>:</span>
+              <span style={T.infoVal}>{val}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
+      {/* ── Claim Summary ── */}
       <div style={T.secHead}>Claim Summary</div>
       <table style={{ ...T.claimTbl }}>
         <colgroup>
@@ -446,33 +473,41 @@ function PaymentCertificate({ cert }) {
         </tbody>
       </table>
 
+      {/* ── Amount in words ── */}
       <div style={{...T.amtBox, width:'100%', boxSizing:'border-box'}}>
-        <div style={{fontSize:'10px', color:'#111', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'3px', fontWeight:'bold'}}>Amount Certified in Words</div>
-        <div style={{fontWeight:'bold', color: navy, fontSize:'12px'}}>Rupees {numberToWords(currentDue)}</div>
-        <div style={{fontSize:'10px', color:'#111', marginTop:'2px', fontWeight:'600'}}>( ₹ {inr(currentDue)}.00 )</div>
+        <div style={{fontSize:'10px', color:'#111', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'3px', fontWeight:'bold'}}>Amount Certified in Words Rupees :</div>
+        <div style={{fontWeight:'bold', color: navy, fontSize:'12px'}}>{numberToWords(currentDue)} Only</div>
+        <div style={{fontSize:'10px', color:'#111', marginTop:'2px', fontWeight:'600'}}>( ₹ {inr(currentDue)} )</div>
       </div>
 
-      <div style={{...T.remarks, marginTop:'14px'}}>
-        <div style={{fontWeight:'bold', color: navy, marginBottom:'4px', fontSize:'10px', textTransform:'uppercase', letterSpacing:'0.5px'}}>Remarks &amp; Conditions</div>
+      {/* ── Remarks & Conditions ── */}
+      <div style={{...T.remarks, marginTop:'10px'}}>
+        <div style={{fontWeight:'bold', color: navy, marginBottom:'4px', fontSize:'10px', textTransform:'uppercase', letterSpacing:'0.5px'}}>Remarks</div>
         <ol style={{margin:'0 0 0 18px', padding:0, lineHeight:'1.7'}}>
-          <li>Any statutory deductions not listed above shall be effected by the Accounts Department at the time of payment processing.</li>
-          <li>All payments made are subject to verification for correctness and completeness of supporting documentation.</li>
-          <li>All transactions are denominated exclusively in Indian Rupees (INR).</li>
+          <li>Any Statutory deductions required to be made apart from the above shall be made at Accounts Department.</li>
+          <li>Payments made to be verified for correctness.</li>
+          <li>All transactions in Indian Rupees.</li>
         </ol>
-        {cert.remarks && (
-          <div style={{marginTop:'6px', borderTop:'1px dotted #BCC8DC', paddingTop:'4px'}}>
-            <strong>Remarks:</strong> {cert.remarks}
-          </div>
-        )}
       </div>
 
-      <div style={T.sigGrid}>
-        {pcSignatories.map((s, i) => (
+      {/* ── Notes for Accounts ── */}
+      <div style={{marginTop:'8px', border:'1px solid #C8D8EE', borderRadius:'2px', padding:'6px 10px', background:'#FAFCFF', fontSize:'10px'}}>
+        <div style={{fontWeight:'bold', color: navy, marginBottom:'4px', textTransform:'uppercase', fontSize:'9.5px', letterSpacing:'0.4px'}}>Notes for Accounts — If any</div>
+        <div style={{minHeight:'20px', color:'#333', fontWeight:'500'}}>{cert.notes_for_accounts || ''}</div>
+      </div>
+
+      {/* ── Signature block ── */}
+      <div style={{...T.sigGrid, marginTop:'20px'}}>
+        {[
+          { role: 'Recommended For Payment', title: 'Prepared By' },
+          { role: 'Approved For Payment',    title: 'Director' },
+          { role: 'Approved For Payment',    title: 'Managing Director' },
+        ].map((s, i) => (
           <div key={i} style={{...T.sigBox, flex: 1}}>
             <div style={T.stamp}>STAMP</div>
             <div style={T.sigRole}>{s.role}</div>
             <div style={T.sigDate}>Signature: ___________</div>
-            <div style={{...T.sigRole, marginTop:'8px', fontWeight:'normal', fontSize:'8.5px'}}>{s.name}</div>
+            <div style={{...T.sigRole, marginTop:'6px', fontWeight:'600', fontSize:'9px', color:'#222'}}>{s.title}</div>
             <div style={T.sigDate}>Date: ___________</div>
           </div>
         ))}
