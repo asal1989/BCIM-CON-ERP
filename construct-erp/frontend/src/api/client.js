@@ -31,7 +31,7 @@ function shouldInjectProject(url) {
 
 api.interceptors.request.use(
   (config) => {
-    const token = sessionStorage.getItem('accessToken');
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
     if (token) config.headers.Authorization = `Bearer ${token}`;
 
     // Auto-inject project_id for scoped users
@@ -114,7 +114,7 @@ api.interceptors.response.use(
       original._retry = true;
       isRefreshing = true;
 
-      const refreshToken = sessionStorage.getItem('refreshToken');
+      const refreshToken = localStorage.getItem('refreshToken') || sessionStorage.getItem('refreshToken');
       if (!refreshToken) {
         forceLogin('session_expired');
         return Promise.reject(error);
@@ -122,11 +122,10 @@ api.interceptors.response.use(
 
       try {
         const { data } = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken });
-        sessionStorage.setItem('accessToken', data.accessToken);
-        sessionStorage.setItem('refreshToken', data.refreshToken);
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem('construct-erp-auth-v2');
+        localStorage.setItem('accessToken', data.accessToken);
+        localStorage.setItem('refreshToken', data.refreshToken);
+        sessionStorage.removeItem('accessToken');
+        sessionStorage.removeItem('refreshToken');
         window.dispatchEvent(new CustomEvent('auth:token-refreshed', {
           detail: { accessToken: data.accessToken, refreshToken: data.refreshToken },
         }));

@@ -11,7 +11,7 @@ const { canonicalizeRole } = require('../middleware/auth');
 const generateTokens = (user) => {
   const payload = { id: user.id, role: user.role, company_id: user.company_id };
   const accessToken = jwt.sign(payload, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '15m'
+    expiresIn: process.env.JWT_EXPIRES_IN || '8h'
   });
   const refreshToken = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
     expiresIn: '8h'

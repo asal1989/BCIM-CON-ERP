@@ -54,12 +54,12 @@ const useAuthStore = create(
         set({ selectedProjectId: null, selectedProjectName: null, selectedProjectCode: null });
       },
 
-      // Startup token check. Auth lives in sessionStorage only, so browser
-      // close/reopen requires login again while normal refresh keeps the session.
+      // Startup token check. Auth lives in localStorage so sessions survive
+      // browser close/reopen (server enforces 8-hour absolute limit).
       initialize: async () => {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem(AUTH_KEY);
+        sessionStorage.removeItem('accessToken');
+        sessionStorage.removeItem('refreshToken');
+        sessionStorage.removeItem(AUTH_KEY);
 
         const { accessToken, user, logout } = get();
         if (!accessToken) {
@@ -87,8 +87,8 @@ const useAuthStore = create(
         try {
           clearAuthStorage();
           const { data } = await authAPI.login({ email, password });
-          sessionStorage.setItem('accessToken', data.accessToken);
-          sessionStorage.setItem('refreshToken', data.refreshToken);
+          localStorage.setItem('accessToken', data.accessToken);
+          localStorage.setItem('refreshToken', data.refreshToken);
           set({
             user: data.user,
             accessToken: data.accessToken,
@@ -150,7 +150,7 @@ const useAuthStore = create(
     }),
     {
       name: AUTH_KEY,
-      storage: createJSONStorage(() => sessionStorage),
+      storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         user: state.user,
         accessToken: state.accessToken,
@@ -166,11 +166,10 @@ const useAuthStore = create(
 
 if (typeof window !== 'undefined') {
   window.addEventListener('auth:token-refreshed', ({ detail }) => {
-    sessionStorage.setItem('accessToken', detail.accessToken);
-    sessionStorage.setItem('refreshToken', detail.refreshToken);
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem(AUTH_KEY);
+    localStorage.setItem('accessToken', detail.accessToken);
+    localStorage.setItem('refreshToken', detail.refreshToken);
+    sessionStorage.removeItem('accessToken');
+    sessionStorage.removeItem('refreshToken');
     useAuthStore.setState({
       accessToken: detail.accessToken,
       refreshToken: detail.refreshToken,
