@@ -1026,7 +1026,7 @@ router.post('/email-weekly-report', authenticate, async (req, res) => {
         [companyId, weekFrom, weekTo]
       ),
       query(
-        `SELECT s.id, s.advance_date, s.vendor_name, s.amount, s.wo_number, s.description,
+        `SELECT s.id, s.advance_date, s.vendor_name, s.amount, s.wo_number, s.remarks AS description,
                 p.name AS project_name
          FROM stores_pc_sc_advances s
          LEFT JOIN projects p ON p.id = s.project_id
