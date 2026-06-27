@@ -1778,6 +1778,7 @@ export default function StoresPettyCashPage() {
   const [catFilter,       setCatFilter]       = useState('All');
   const [printModal,      setPrintModal]      = useState(null); // null | { from: '', to: '' }
   const [weeklyModal,     setWeeklyModal]     = useState(null); // null | { from: '', to: '' }
+  const [mdModal,         setMdModal]         = useState(null); // null | { from: '', to: '' }
   const setFilter = (k, v) => setFilters(f => ({ ...f, [k]: v }));
 
   useEffect(() => {
@@ -2044,6 +2045,16 @@ export default function StoresPettyCashPage() {
             >
               <Mail className="w-3.5 h-3.5" /> Email Report
             </button>
+            {user?.role === 'super_admin' && (
+              <button
+                onClick={() => setMdModal({ from: dayjs().startOf('month').format('YYYY-MM-DD'), to: dayjs().format('YYYY-MM-DD') })}
+                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg"
+                style={{ background: 'rgba(168,85,247,0.25)', border: '1px solid rgba(168,85,247,0.5)', color: '#d8b4fe' }}
+                title="Send petty cash statement to Managing Director"
+              >
+                <Mail className="w-3.5 h-3.5" /> Send to MD
+              </button>
+            )}
             {isAdmin && (
               <button
                 onClick={async () => {
@@ -3152,6 +3163,86 @@ export default function StoresPettyCashPage() {
                 }}
                 className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2">
                 <Mail className="w-4 h-4" /> Send Report
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Send to MD Modal (super_admin only) ── */}
+      {mdModal && (
+        <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-purple-50 border border-purple-200 flex items-center justify-center">
+                  <Mail className="w-4 h-4 text-purple-600" />
+                </div>
+                <div>
+                  <p className="font-semibold text-slate-900">Send Statement to MD</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Sends to dheenadayalan@bcim.in</p>
+                </div>
+              </div>
+              <button onClick={() => setMdModal(null)} className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-700">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  <CalendarRange className="w-3.5 h-3.5" /> Statement Period
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">From</label>
+                    <input type="date" value={mdModal.from}
+                      onChange={e => setMdModal(m => ({ ...m, from: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">To</label>
+                    <input type="date" value={mdModal.to}
+                      onChange={e => setMdModal(m => ({ ...m, to: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white" />
+                  </div>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  {[
+                    { label: 'This Month', from: dayjs().startOf('month').format('YYYY-MM-DD'), to: dayjs().format('YYYY-MM-DD') },
+                    { label: 'Last Month', from: dayjs().subtract(1,'month').startOf('month').format('YYYY-MM-DD'), to: dayjs().subtract(1,'month').endOf('month').format('YYYY-MM-DD') },
+                    { label: 'This Week',  from: dayjs().startOf('week').add(1,'day').format('YYYY-MM-DD'), to: dayjs().format('YYYY-MM-DD') },
+                  ].map(({ label, from, to }) => (
+                    <button key={label} onClick={() => setMdModal({ from, to })}
+                      className="text-xs px-2.5 py-1 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 font-medium">
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-xl px-4 py-3">
+                <Mail className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                <span className="text-xs text-purple-800 font-medium">Recipient: dheenadayalan@bcim.in</span>
+              </div>
+            </div>
+            <div className="flex gap-2 px-6 pb-5 justify-end">
+              <button onClick={() => setMdModal(null)} className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
+              <button
+                disabled={!mdModal.from || !mdModal.to}
+                onClick={async () => {
+                  const { from, to } = mdModal;
+                  setMdModal(null);
+                  const tid = toast.loading('Sending to MD…');
+                  try {
+                    await storesPettyCashAPI.emailWeeklyReport({ from, to, recipient: 'dheenadayalan@bcim.in' });
+                    toast.dismiss(tid);
+                    toast.success(`Statement sent to dheenadayalan@bcim.in (${dayjs(from).format('DD-MM-YYYY')} – ${dayjs(to).format('DD-MM-YYYY')})`);
+                  } catch (e) {
+                    toast.dismiss(tid);
+                    toast.error(e?.response?.data?.error || 'Failed to send');
+                  }
+                }}
+                className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2">
+                <Mail className="w-4 h-4" /> Send to MD
               </button>
             </div>
           </div>
