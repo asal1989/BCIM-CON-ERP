@@ -1777,6 +1777,7 @@ export default function StoresPettyCashPage() {
   const [statusFilter,    setStatusFilter]    = useState(highlightId ? 'All' : 'All');
   const [catFilter,       setCatFilter]       = useState('All');
   const [printModal,      setPrintModal]      = useState(null); // null | { from: '', to: '' }
+  const [weeklyModal,     setWeeklyModal]     = useState(null); // null | { from: '', to: '' }
   const setFilter = (k, v) => setFilters(f => ({ ...f, [k]: v }));
 
   useEffect(() => {
@@ -2027,22 +2028,15 @@ export default function StoresPettyCashPage() {
               <Printer className="w-3.5 h-3.5" /> Print
             </button>
             <button
-              onClick={async () => {
-                const tid = toast.loading('Sending weekly report…');
-                try {
-                  const r = await storesPettyCashAPI.emailWeeklyReport({});
-                  toast.dismiss(tid);
-                  toast.success(`Weekly report sent to it@bcim.in (${r.data?.period?.from} – ${r.data?.period?.to})`);
-                } catch (e) {
-                  toast.dismiss(tid);
-                  toast.error(e?.response?.data?.error || 'Failed to send report');
-                }
+              onClick={() => {
+                const mon = dayjs().startOf('week').add(1, 'day'); // Monday
+                setWeeklyModal({ from: mon.format('YYYY-MM-DD'), to: dayjs().format('YYYY-MM-DD') });
               }}
               className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg"
               style={{ background: 'rgba(59,130,246,0.25)', border: '1px solid rgba(59,130,246,0.5)', color: '#93c5fd' }}
-              title="Email last-week petty cash report to it@bcim.in"
+              title="Email petty cash report to it@bcim.in"
             >
-              <Mail className="w-3.5 h-3.5" /> Weekly Report
+              <Mail className="w-3.5 h-3.5" /> Email Report
             </button>
             {isAdmin && (
               <button
@@ -3079,6 +3073,83 @@ export default function StoresPettyCashPage() {
             });
           }}
         />
+      )}
+
+      {/* ── Weekly Email Report Modal ── */}
+      {weeklyModal && (
+        <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center">
+                  <Mail className="w-4 h-4 text-blue-600" />
+                </div>
+                <div>
+                  <p className="font-semibold text-slate-900">Email Petty Cash Report</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Sends to it@bcim.in</p>
+                </div>
+              </div>
+              <button onClick={() => setWeeklyModal(null)} className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-700">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                  <CalendarRange className="w-3.5 h-3.5" /> Report Period
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">From</label>
+                    <input type="date" value={weeklyModal.from}
+                      onChange={e => setWeeklyModal(m => ({ ...m, from: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">To</label>
+                    <input type="date" value={weeklyModal.to}
+                      onChange={e => setWeeklyModal(m => ({ ...m, to: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                  </div>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  {[
+                    { label: 'This Week',  from: dayjs().startOf('week').add(1,'day').format('YYYY-MM-DD'), to: dayjs().format('YYYY-MM-DD') },
+                    { label: 'Last Week',  from: dayjs().startOf('week').add(1,'day').subtract(7,'day').format('YYYY-MM-DD'), to: dayjs().startOf('week').format('YYYY-MM-DD') },
+                    { label: 'This Month', from: dayjs().startOf('month').format('YYYY-MM-DD'), to: dayjs().format('YYYY-MM-DD') },
+                    { label: 'Last Month', from: dayjs().subtract(1,'month').startOf('month').format('YYYY-MM-DD'), to: dayjs().subtract(1,'month').endOf('month').format('YYYY-MM-DD') },
+                  ].map(({ label, from, to }) => (
+                    <button key={label} onClick={() => setWeeklyModal({ from, to })}
+                      className="text-xs px-2.5 py-1 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 font-medium">
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2 px-6 pb-5 justify-end">
+              <button onClick={() => setWeeklyModal(null)} className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
+              <button
+                disabled={!weeklyModal.from || !weeklyModal.to}
+                onClick={async () => {
+                  const { from, to } = weeklyModal;
+                  setWeeklyModal(null);
+                  const tid = toast.loading('Sending report…');
+                  try {
+                    const r = await storesPettyCashAPI.emailWeeklyReport({ from, to });
+                    toast.dismiss(tid);
+                    toast.success(`Report sent to it@bcim.in (${dayjs(from).format('DD-MM-YYYY')} – ${dayjs(to).format('DD-MM-YYYY')})`);
+                  } catch (e) {
+                    toast.dismiss(tid);
+                    toast.error(e?.response?.data?.error || 'Failed to send report');
+                  }
+                }}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg flex items-center gap-2">
+                <Mail className="w-4 h-4" /> Send Report
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Print Date-Range Modal ── */}
