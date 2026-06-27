@@ -18,6 +18,12 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
+// Show date only if it's today or in the past (guards against wrong DB timestamps)
+const fmtMRSDate = (d) => {
+  if (!d) return '—';
+  const dt = dayjs(d);
+  return dt.isAfter(dayjs(), 'day') ? '—' : dt.format('DD-MM-YYYY');
+};
 import { mrsAPI, projectAPI, inventoryAPI, vendorAPI, budgetAPI } from '../../api/client';
 import VendorSelect from '../../components/shared/VendorSelect';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
@@ -928,7 +934,7 @@ export default function MRSPage() {
                   </button>
                 )}
               </div>
-              <p className="text-xs text-slate-500 font-medium">Material Requisition • {dayjs(selectedMRS.request_date || selectedMRS.created_at).format('DD-MM-YYYY')}</p>
+              <p className="text-xs text-slate-500 font-medium">Material Requisition • {fmtMRSDate(selectedMRS.request_date || selectedMRS.created_at)}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -1417,7 +1423,7 @@ export default function MRSPage() {
                         <div className="text-xs font-bold font-mono text-indigo-700 group-hover:underline">
                           {mrs.serial_no_formatted || mrs.mrs_number}
                         </div>
-                        <div className="text-[11px] text-slate-500 mt-1">{dayjs(mrs.request_date || mrs.created_at).format('DD-MM-YYYY')}</div>
+                        <div className="text-[11px] text-slate-500 mt-1">{fmtMRSDate(mrs.request_date || mrs.created_at)}</div>
                       </td>
                       <td className="px-4 py-4 align-top min-w-[260px]">
                         <div className="text-sm font-semibold text-slate-950 truncate max-w-[280px]">{mrs.project_name || 'No project'}</div>
@@ -2072,7 +2078,7 @@ export default function MRSPage() {
                           <div key={m.id} className="flex items-center justify-between gap-2">
                             <div className="min-w-0">
                               <p className="text-xs font-semibold text-slate-900 font-mono truncate">{m.serial_no_formatted || m.mrs_number}</p>
-                              <p className="text-[11px] text-slate-400 mt-0.5">{dayjs(m.request_date || m.created_at).format('DD-MM-YYYY')} · {m.item_count ?? '—'} items</p>
+                              <p className="text-[11px] text-slate-400 mt-0.5">{fmtMRSDate(m.request_date || m.created_at)} · {m.item_count ?? '—'} items</p>
                             </div>
                             <StatusBadge status={m.status} />
                           </div>
