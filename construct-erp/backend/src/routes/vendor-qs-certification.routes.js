@@ -341,6 +341,48 @@ router.get('/pending-invoices', async (req, res) => {
   }
 });
 
+// GET /pending-sc-advances?vendor_name=X&project_id=Y
+// Returns stores_petty_cash_advances rows whose description/remarks contain subcon keywords
+// and whose payee_name resembles the vendor, so the QS can see outstanding advances.
+router.get('/pending-sc-advances', async (req, res) => {
+  try {
+    const { vendor_name, project_id } = req.query;
+    if (!vendor_name?.trim()) return res.json({ data: [], total: 0 });
+
+    const params = [req.user.company_id];
+    const where = [
+      `a.company_id = $1`,
+      `(LOWER(COALESCE(a.description,'')) LIKE '%subcon%'
+        OR LOWER(COALESCE(a.description,'')) LIKE '%sub-con%'
+        OR LOWER(COALESCE(a.remarks,''))    LIKE '%subcon%'
+        OR LOWER(COALESCE(a.remarks,''))    LIKE '%sub-con%')`,
+    ];
+
+    // Match payee_name against the full vendor name OR the first word of it
+    const nameFull  = vendor_name.trim().toLowerCase();
+    const nameFirst = nameFull.split(/\s+/).find(w => w.length >= 3) || nameFull;
+    where.push(`(LOWER(a.payee_name) ILIKE $${params.length + 1} OR LOWER(a.payee_name) ILIKE $${params.length + 2})`);
+    params.push(`%${nameFull}%`, `%${nameFirst}%`);
+
+    if (project_id) {
+      where.push(`(a.project_id = $${params.length + 1} OR a.project_id IS NULL)`);
+      params.push(project_id);
+    }
+
+    const { rows } = await query(`
+      SELECT a.id, a.payee_name, a.description, a.remarks, a.amount, a.advance_date, a.status
+      FROM stores_petty_cash_advances a
+      WHERE ${where.join(' AND ')}
+      ORDER BY a.advance_date DESC
+    `, params);
+
+    const total = rows.reduce((sum, r) => sum + parseFloat(r.amount || 0), 0);
+    res.json({ data: rows, total });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/summary-items', async (req, res) => {
   try {
     const { bill_ids = [] } = req.body;

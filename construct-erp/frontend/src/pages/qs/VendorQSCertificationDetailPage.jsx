@@ -492,6 +492,13 @@ function AmountCorrectionModal({ cert, onClose }) {
     other_deductions:  cert.other_deductions  || 0,
     remarks:           cert.remarks           || '',
   });
+  // Fetch pending subcon advances from Stores matching this vendor
+  const { data: scAdv } = useQuery({
+    queryKey: ['pending-sc-advances', cert.vendor_name, cert.project_id],
+    queryFn:  () => vendorQSCertificationAPI.pendingScAdvances({ vendor_name: cert.vendor_name, project_id: cert.project_id }).then(r => r.data),
+    enabled:  !!cert.vendor_name,
+    staleTime: 30000,
+  });
   useEffect(() => {
     setForm({
       tds_rate:          cert.tds_rate          || 0,
@@ -554,10 +561,28 @@ function AmountCorrectionModal({ cert, onClose }) {
             <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
               value={form.tds_amount} onChange={e => set('tds_amount', e.target.value)} />
           </div>
+          {/* Advance Recovery — with pending subcon advance hint from Stores */}
+          <div className="col-span-2">
+            {scAdv?.total > 0 && (
+              <div className="mb-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center justify-between">
+                <span className="text-[11px] text-amber-800">
+                  Pending subcon advance in Stores ({scAdv.data?.length} entr{scAdv.data?.length === 1 ? 'y' : 'ies'}):
+                  {' '}<strong>₹{inr(scAdv.total)}</strong>
+                  {scAdv.data?.[0] && <span className="text-amber-600 ml-1">— {scAdv.data[0].payee_name} / {scAdv.data[0].description}</span>}
+                </span>
+                <button type="button" onClick={() => set('advance_recovered', scAdv.total)}
+                  className="ml-3 text-[11px] font-semibold text-amber-700 border border-amber-300 rounded px-2 py-0.5 hover:bg-amber-100 whitespace-nowrap">
+                  Apply ₹{inr(scAdv.total)}
+                </button>
+              </div>
+            )}
+            <label className="text-[11px] font-medium text-slate-900 uppercase">Advance Recovery</label>
+            <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+              value={form.advance_recovered} onChange={e => set('advance_recovered', e.target.value)} />
+          </div>
           {[
-            ['advance_recovered', 'Advance Recovery'],
-            ['retention_amount',  'Retention'],
-            ['other_deductions',  'Other Deductions'],
+            ['retention_amount', 'Retention'],
+            ['other_deductions', 'Other Deductions'],
           ].map(([key, label]) => (
             <div key={key}>
               <label className="text-[11px] font-medium text-slate-900 font-medium uppercase">{label}</label>
