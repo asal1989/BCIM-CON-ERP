@@ -950,7 +950,7 @@ function ProcurementQuickAccessBar() {
   const isActive = (to) => location.pathname === to || location.pathname.startsWith(to + '/');
   return (
     <div
-      className="print:hidden"
+      className="print:hidden h-scroll-bar"
       style={{
         flexShrink: 0,
         height: 36,
@@ -962,6 +962,7 @@ function ProcurementQuickAccessBar() {
         padding: '0 14px',
         overflowX: 'auto',
         scrollbarWidth: 'none',
+        WebkitOverflowScrolling: 'touch',
       }}
     >
       <span style={{ fontSize: 9, fontWeight: 800, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap', marginRight: 6 }}>
@@ -1012,7 +1013,7 @@ function MDQuickAccessBar() {
   const isActive = (to) => location.pathname === to || location.pathname.startsWith(to + '/');
   return (
     <div
-      className="print:hidden"
+      className="print:hidden h-scroll-bar"
       style={{
         flexShrink: 0,
         height: 36,
@@ -1024,6 +1025,7 @@ function MDQuickAccessBar() {
         padding: '0 14px',
         overflowX: 'auto',
         scrollbarWidth: 'none',
+        WebkitOverflowScrolling: 'touch',
       }}
     >
       <span style={{ fontSize: 9, fontWeight: 800, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap', marginRight: 6 }}>
@@ -2429,6 +2431,20 @@ export default function Layout() {
         /* ── Global table scroll: every page table overflows horizontally ── */
         main table {
           min-width: max-content;
+        }
+        /* ── Touch-friendly horizontal scrolling on mobile ──────────────────── */
+        /* Capacitor WebView on Android needs this for horizontal swipe to work  */
+        /* in overflow-x: auto containers (otherwise vertical scroll steals the  */
+        /* touch event and horizontal scrolling feels broken or impossible).      */
+        .overflow-x-auto,
+        .h-scroll-bar {
+          -webkit-overflow-scrolling: touch;
+        }
+        .h-scroll-bar::-webkit-scrollbar { display: none; }
+        .overflow-x-auto::-webkit-scrollbar { height: 0; }
+        @media (max-width: 1023px) {
+          .overflow-x-auto { touch-action: pan-x pan-y; }
+          .h-scroll-bar    { touch-action: pan-x; }
         }
         /* Scrollbar styling — thin, consistent across all pages */
         main::-webkit-scrollbar,

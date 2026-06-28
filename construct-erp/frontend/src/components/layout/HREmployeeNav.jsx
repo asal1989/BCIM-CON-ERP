@@ -88,7 +88,10 @@ export default function HREmployeeNav() {
       style={{ boxShadow: '0 1px 4px rgba(10,31,92,0.06)' }}
       onClick={handleItemClick}
     >
-      <div className="flex items-center gap-1 px-4" style={{ height: 40 }}>
+      <div
+        className="flex items-center gap-1 px-4 h-scroll-bar"
+        style={{ height: 40, overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+      >
         {/* Employee label pill */}
         <button
           onClick={() => navigate('/hr-admin/employees')}
