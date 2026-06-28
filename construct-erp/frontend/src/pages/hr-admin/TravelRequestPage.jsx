@@ -115,7 +115,7 @@ export default function TravelRequestPage() {
   const { data: list=[] } = useQuery({ queryKey:['hr-travel',filterStatus], queryFn:()=>hrTravelAPI.list({status:filterStatus||undefined}).then(r=>r.data?.data||[]) });
   const { data: employees=[] } = useQuery({ queryKey:['hr-employees-active'], queryFn:()=>hrEmployeesAPI.list({ is_active:true, limit:500 }).then(r=>r.data?.data||[]) });
 
-  const reject = useMutation({ mutationFn:id=>hrTravelAPI.reject(id,{}), onSuccess:()=>{ toast.success('Rejected'); qc.invalidateQueries({queryKey:['hr-travel']}); } });
+  const reject = useMutation({ mutationFn:id=>hrTravelAPI.reject(id,{}), onSuccess:()=>{ toast.success('Rejected'); qc.invalidateQueries({queryKey:['hr-travel']}); }, onError:e=>toast.error(e?.response?.data?.error||'Reject failed') });
 
   const refresh = () => qc.invalidateQueries({queryKey:['hr-travel']});
 

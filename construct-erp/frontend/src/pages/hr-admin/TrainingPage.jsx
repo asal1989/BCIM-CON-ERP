@@ -87,6 +87,7 @@ function ProgramDetail({ progId, onClose }) {
   const updateP = useMutation({
     mutationFn: ({pid,d})=>hrTrainingAPI.updateParticipant(progId,pid,d),
     onSuccess:()=>qc.invalidateQueries({queryKey:['hr-training',progId]}),
+    onError:e=>toast.error(e?.response?.data?.error||'Update failed'),
   });
   if (!data) return null;
   const participants = data.participants||[];

@@ -132,14 +132,16 @@ export default function ShiftManagementPage() {
   const { data: compoff=[] } = useQuery({ queryKey:['hr-compoff'], queryFn:()=>hrShiftsAPI.compOff().then(r=>r.data?.data||[]) });
   const { data: empShifts=[] } = useQuery({ queryKey:['hr-emp-shifts'], queryFn:()=>hrShiftsAPI.empShifts().then(r=>r.data?.data||[]) });
 
+  const err = e => toast.error(e?.response?.data?.error||'Action failed');
   const deleteMut = useMutation({
     mutationFn: id => hrShiftsAPI.deleteShift(id),
     onSuccess: ()=>{ toast.success('Deleted'); qc.invalidateQueries({queryKey:['hr-shifts']}); },
+    onError: err,
   });
-  const approveOT  = useMutation({ mutationFn:id=>hrShiftsAPI.approveOT(id), onSuccess:()=>{ toast.success('OT Approved'); qc.invalidateQueries({queryKey:['hr-ot']}); } });
-  const rejectOT   = useMutation({ mutationFn:id=>hrShiftsAPI.rejectOT(id),  onSuccess:()=>{ toast.success('OT Rejected'); qc.invalidateQueries({queryKey:['hr-ot']}); } });
-  const approveComp   = useMutation({ mutationFn:id=>hrShiftsAPI.approveCompOff(id), onSuccess:()=>{ toast.success('Comp-off Approved'); qc.invalidateQueries({queryKey:['hr-compoff']}); } });
-  const removeShiftMut = useMutation({ mutationFn:id=>hrShiftsAPI.removeShift(id), onSuccess:()=>{ toast.success('Assignment removed'); qc.invalidateQueries({queryKey:['hr-emp-shifts']}); } });
+  const approveOT  = useMutation({ mutationFn:id=>hrShiftsAPI.approveOT(id),      onSuccess:()=>{ toast.success('OT Approved');         qc.invalidateQueries({queryKey:['hr-ot']}); },       onError:err });
+  const rejectOT   = useMutation({ mutationFn:id=>hrShiftsAPI.rejectOT(id),        onSuccess:()=>{ toast.success('OT Rejected');          qc.invalidateQueries({queryKey:['hr-ot']}); },       onError:err });
+  const approveComp   = useMutation({ mutationFn:id=>hrShiftsAPI.approveCompOff(id), onSuccess:()=>{ toast.success('Comp-off Approved'); qc.invalidateQueries({queryKey:['hr-compoff']}); }, onError:err });
+  const removeShiftMut = useMutation({ mutationFn:id=>hrShiftsAPI.removeShift(id),  onSuccess:()=>{ toast.success('Assignment removed'); qc.invalidateQueries({queryKey:['hr-emp-shifts']}); }, onError:err });
 
   const refresh = () => { qc.invalidateQueries({queryKey:['hr-shifts']}); };
 

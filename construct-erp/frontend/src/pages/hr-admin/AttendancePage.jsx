@@ -64,7 +64,10 @@ export default function AttendancePage() {
 
   const upsertMut = useMutation({
     mutationFn:(data)=>hrAttendanceAPI.upsert(data),
-    onSuccess:()=>qc.invalidateQueries({ queryKey:['hr-attendance-grid'] }),
+    onSuccess:()=>{
+      qc.invalidateQueries({ queryKey:['hr-attendance-grid'] });
+      qc.invalidateQueries({ queryKey:['hr-attendance-summary'] });
+    },
     onError:e=>toast.error(e.response?.data?.error||'Error'),
   });
   const baselineMut = useMutation({
