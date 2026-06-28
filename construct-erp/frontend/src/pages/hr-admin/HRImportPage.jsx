@@ -2,7 +2,7 @@
 import React, { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
-import { Upload, FileText, Users, Clock, CheckCircle, XCircle, AlertTriangle, ChevronDown, ChevronUp, Download, RefreshCw } from 'lucide-react';
+import { Upload, FileText, Users, Clock, CheckCircle, XCircle, AlertTriangle, ChevronDown, ChevronUp, Download, RefreshCw, Trash2, Search } from 'lucide-react';
 import { hrImportAPI } from '../../api/client';
 import toast from 'react-hot-toast';
 
@@ -342,6 +342,97 @@ function AttendanceImportTab() {
   );
 }
 
+function DedupPanel() {
+  const [dupes, setDupes]   = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [done, setDone]     = useState(null);
+
+  const preview = async () => {
+    setLoading(true);
+    try {
+      const r = await hrImportAPI.dedupPreview();
+      setDupes(r.data.duplicates);
+      setDone(null);
+    } catch(e) { toast.error(e.response?.data?.error || 'Failed'); }
+    finally { setLoading(false); }
+  };
+
+  const execute = async () => {
+    setLoading(true);
+    try {
+      const r = await hrImportAPI.dedupExecute();
+      setDone(r.data);
+      setDupes(null);
+      toast.success(`Removed ${r.data.count} duplicate(s)`);
+    } catch(e) { toast.error(e.response?.data?.error || 'Failed'); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-orange-100 p-6 space-y-4" style={{boxShadow:'0 2px 12px rgba(10,31,92,0.06)'}}>
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center">
+          <Trash2 className="w-5 h-5 text-orange-600"/>
+        </div>
+        <div>
+          <h2 className="text-base font-black text-gray-900">Remove Duplicate Employees</h2>
+          <p className="text-xs text-gray-500">Finds employees with the same name and removes the duplicate (keeps the record with more data)</p>
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        <button onClick={preview} disabled={loading}
+          className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 disabled:opacity-40 text-gray-700 rounded-xl text-sm font-bold">
+          {loading ? <RefreshCw className="w-4 h-4 animate-spin"/> : <Search className="w-4 h-4"/>} Find Duplicates
+        </button>
+        {dupes?.length > 0 && (
+          <button onClick={execute} disabled={loading}
+            className="flex items-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white rounded-xl text-sm font-bold">
+            <Trash2 className="w-4 h-4"/> Remove {dupes.reduce((s,g)=>s+g.length-1,0)} Duplicate(s)
+          </button>
+        )}
+      </div>
+
+      {dupes !== null && dupes.length === 0 && (
+        <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm font-bold">
+          <CheckCircle className="w-4 h-4"/> No duplicate employees found
+        </div>
+      )}
+
+      {dupes?.length > 0 && (
+        <div className="border border-orange-200 rounded-xl overflow-hidden">
+          <div className="px-4 py-2.5 bg-orange-50 border-b border-orange-200 text-xs font-black text-orange-800 uppercase tracking-wide">
+            {dupes.length} duplicate group(s) found — will keep first row of each group
+          </div>
+          <div className="divide-y divide-gray-100">
+            {dupes.map((group, gi) => (
+              <div key={gi} className="px-4 py-3">
+                <div className="text-xs font-black text-gray-700 mb-1">{group[0].name}</div>
+                <div className="flex flex-wrap gap-2">
+                  {group.map((emp, i) => (
+                    <span key={emp.id} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border ${
+                      i===0 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'
+                    }`}>
+                      {i===0 ? '✓ Keep' : '✗ Delete'} · code: {emp.employee_code||'—'} · {emp.designation||'no title'} · {emp.department||'no dept'}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {done && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm font-bold text-emerald-700">
+          <CheckCircle className="w-4 h-4 inline mr-2"/>
+          Removed {done.count} duplicate(s): {done.deleted.map(d=>d.name).join(', ')}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function HRImportPage() {
   const [activeTab, setActiveTab] = useState('employees');
 
@@ -382,6 +473,11 @@ export default function HRImportPage() {
         style={{boxShadow:'0 2px 12px rgba(10,31,92,0.06)'}}>
         {activeTab==='employees'  && <EmployeeImportTab/>}
         {activeTab==='attendance' && <AttendanceImportTab/>}
+      </motion.div>
+
+      {/* Dedup Panel */}
+      <motion.div {...fade(0.16)}>
+        <DedupPanel/>
       </motion.div>
     </div>
   );

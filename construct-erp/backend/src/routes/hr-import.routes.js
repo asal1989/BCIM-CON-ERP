@@ -547,4 +547,78 @@ router.post('/attendance', upload.single('file'), async (req, res) => {
   }
 });
 
+// ─── GET /dedup-preview  — show duplicate employees (same name, different code) ─
+router.get('/dedup-preview', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        u.id, u.name, u.email, u.designation, u.department,
+        ep.employee_code,
+        (CASE WHEN u.email    IS NOT NULL AND u.email    <> '' THEN 1 ELSE 0 END +
+         CASE WHEN ep.employee_code IS NOT NULL               THEN 1 ELSE 0 END +
+         CASE WHEN u.designation IS NOT NULL AND u.designation <> '' THEN 1 ELSE 0 END +
+         CASE WHEN u.department  IS NOT NULL AND u.department  <> '' THEN 1 ELSE 0 END) AS score
+      FROM users u
+      LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+      WHERE u.role = 'employee'
+      ORDER BY LOWER(TRIM(u.name)), score DESC
+    `);
+
+    // Group by normalised name
+    const groups = {};
+    for (const r of rows) {
+      const key = (r.name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(r);
+    }
+
+    const duplicates = Object.values(groups).filter(g => g.length > 1);
+    res.json({ duplicates });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── POST /dedup-execute — delete lower-scored duplicates, keep best record ────
+router.post('/dedup-execute', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        u.id, u.name, u.email, u.designation, u.department,
+        ep.employee_code,
+        (CASE WHEN u.email    IS NOT NULL AND u.email    <> '' THEN 1 ELSE 0 END +
+         CASE WHEN ep.employee_code IS NOT NULL               THEN 1 ELSE 0 END +
+         CASE WHEN u.designation IS NOT NULL AND u.designation <> '' THEN 1 ELSE 0 END +
+         CASE WHEN u.department  IS NOT NULL AND u.department  <> '' THEN 1 ELSE 0 END) AS score
+      FROM users u
+      LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+      WHERE u.role = 'employee'
+      ORDER BY LOWER(TRIM(u.name)), score DESC
+    `);
+
+    const groups = {};
+    for (const r of rows) {
+      const key = (r.name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(r);
+    }
+
+    const deleted = [];
+    for (const group of Object.values(groups)) {
+      if (group.length < 2) continue;
+      // First entry has highest score (keep it), delete the rest
+      const toDelete = group.slice(1);
+      for (const emp of toDelete) {
+        await pool.query('DELETE FROM employee_profiles WHERE user_id = $1', [emp.id]);
+        await pool.query('DELETE FROM users WHERE id = $1', [emp.id]);
+        deleted.push({ id: emp.id, name: emp.name, employee_code: emp.employee_code });
+      }
+    }
+
+    res.json({ success: true, deleted, count: deleted.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

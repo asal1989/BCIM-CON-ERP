@@ -1934,6 +1934,8 @@ export const hrImportAPI = {
   previewAttendance:(file)       => { const fd = new FormData(); fd.append('file', file); return api.post('/hr-admin/import/preview-attendance', fd, multipart); },
   importEmployees:  (file, mode) => { const fd = new FormData(); fd.append('file', file); fd.append('mode', mode); return api.post('/hr-admin/import/employees', fd, multipart); },
   importAttendance: (file, month, year) => { const fd = new FormData(); fd.append('file', file); fd.append('month', month); fd.append('year', year); return api.post('/hr-admin/import/attendance', fd, multipart); },
+  dedupPreview:     ()           => api.get('/hr-admin/import/dedup-preview'),
+  dedupExecute:     ()           => api.post('/hr-admin/import/dedup-execute'),
 };
 
 export const hrAdvancedAPI = {
