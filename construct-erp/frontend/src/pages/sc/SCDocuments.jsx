@@ -12,22 +12,23 @@ import dayjs from 'dayjs';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DOC_TYPES = [
-  { key: '', label: 'All' },
-  { key: 'certificate',       label: 'Certificate' },
-  { key: 'method_statement',  label: 'Method Statement' },
-  { key: 'inspection_report', label: 'Inspection Report' },
-  { key: 'quality_plan',      label: 'Quality Plan' },
-  { key: 'correspondence',    label: 'Correspondence' },
-  { key: 'general',           label: 'General' },
+  { key: '',          label: 'All' },
+  { key: 'kyc',       label: 'Onboarding / KYC',     hint: 'PAN, GST, firm registration, cancelled cheque, MSME, labour license, PF/ESIC' },
+  { key: 'contract',  label: 'Contract / Commercial', hint: 'Work order, LOI, subcontract agreement, BOQ, security deposit, bank guarantee, insurance' },
+  { key: 'execution', label: 'Execution / Site',      hint: 'MB entries, DPR, site instruction, material issued register, variation order, material reconciliation' },
+  { key: 'billing',   label: 'Billing',               hint: 'RA bill, GST invoice, debit/credit note, TDS certificate (Form 16A), retention statement' },
+  { key: 'payment',   label: 'Payment',               hint: 'Payment voucher, bank transfer/UTR proof, GST 2A/2B reconciliation, advance recovery statement' },
+  { key: 'closure',   label: 'Closure',               hint: 'Final bill, completion certificate, no-due certificate, retention release, NOC' },
 ];
 
 const TYPE_COLOR = {
-  method_statement:  'bg-emerald-100 text-emerald-700',
-  inspection_report: 'bg-blue-100 text-blue-700',
-  quality_plan:      'bg-purple-100 text-purple-700',
-  certificate:       'bg-amber-100 text-amber-700',
-  general:           'bg-slate-100 text-slate-600',
-  correspondence:    'bg-indigo-100 text-indigo-700',
+  kyc:       'bg-cyan-100 text-cyan-700',
+  contract:  'bg-indigo-100 text-indigo-700',
+  execution: 'bg-emerald-100 text-emerald-700',
+  billing:   'bg-amber-100 text-amber-700',
+  payment:   'bg-green-100 text-green-700',
+  closure:   'bg-rose-100 text-rose-700',
+  general:   'bg-slate-100 text-slate-600',
 };
 
 const EXT_COLOR = {
@@ -110,6 +111,9 @@ function UploadModal({ subs, onClose }) {
             <select className={inp} value={form.doc_type} onChange={e => set('doc_type', e.target.value)}>
               {DOC_TYPES.filter(t => t.key).map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
             </select>
+            {form.doc_type && (() => { const t = DOC_TYPES.find(d => d.key === form.doc_type); return t?.hint ? (
+              <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">{t.hint}</p>
+            ) : null; })()}
           </div>
 
           <div>
