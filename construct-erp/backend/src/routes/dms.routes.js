@@ -237,6 +237,26 @@ async function ensureDmsSchema() {
   }
 }
 
+// ── OneDrive connectivity test (admin only) ──────────────────────────────────
+router.get('/test-onedrive', authorize(...ADMINS), async (req, res) => {
+  const cfg = {
+    tenant_id:  process.env.ONEDRIVE_TENANT_ID   ? '✓ set' : '✗ MISSING',
+    client_id:  process.env.ONEDRIVE_CLIENT_ID   ? '✓ set' : '✗ MISSING',
+    client_secret: process.env.ONEDRIVE_CLIENT_SECRET ? '✓ set' : '✗ MISSING',
+    user_email: process.env.ONEDRIVE_USER_EMAIL  || '✗ MISSING',
+    root_folder: process.env.ONEDRIVE_FOLDER     || '(none — files go to root)',
+  };
+  try {
+    const { uploadToSharePoint } = require('../services/azureService');
+    // Tiny 1-byte test upload to ConstructERP/test/
+    const testBuf = Buffer.from('ok');
+    const result  = await uploadToSharePoint('_connectivity_test.txt', testBuf, 'ConstructERP/test');
+    res.json({ ok: true, config: cfg, test_file: result.webUrl });
+  } catch (e) {
+    res.status(500).json({ ok: false, config: cfg, error: e.message });
+  }
+});
+
 router.use(async (req, res, next) => {
   try {
     await ensureDmsSchema();
@@ -369,8 +389,9 @@ router.post('/upload', upload.any(), async (req, res) => {
 
       // Upload to OneDrive via Microsoft Graph API
       // Folder path is derived from module + doc_type so files land in the right place.
-      let oneDriveUrl = null;
-      let oneDriveId  = null;
+      let oneDriveUrl  = null;
+      let oneDriveId   = null;
+      let oneDriveWarn = null;
       try {
         const fileBuffer = fs.readFileSync(file.path);
         const folderPath = resolveOneDriveFolder(module, doc_type, vendorName);
@@ -379,8 +400,8 @@ router.post('/upload', upload.any(), async (req, res) => {
         oneDriveId  = uploadResult.id || null;
         console.log(`[DMS] OneDrive upload OK → ${folderPath}/${file.originalname}`);
       } catch (e) {
+        oneDriveWarn = e.message;
         console.error(`[DMS] OneDrive upload FAILED for ${file.originalname}: ${e.message}`);
-        // File still saved locally as fallback, but log clearly so it can be investigated
       }
 
       const r = await db().query(`
@@ -398,7 +419,7 @@ router.post('/upload', upload.any(), async (req, res) => {
          tagArr, expiry_date||null, access_level||'internal', req.user.id]);
       await db().query(`INSERT INTO document_access_logs (document_id,user_id,action,ip_address) VALUES ($1,$2,'upload',$3)`,
         [r.rows[0].id, req.user.id, req.ip]);
-      created.push(r.rows[0]);
+      created.push({ ...r.rows[0], _onedrive_warn: oneDriveWarn || undefined });
     }
     res.status(201).json({ data: created, count: created.length });
   } catch (e) {

@@ -20,7 +20,7 @@ async function getAccessToken() {
     const credential = new ClientSecretCredential(TENANT_ID, CLIENT_ID, CLIENT_SECRET);
     const token = await credential.getToken('https://graph.microsoft.com/.default');
     cachedToken = token.token;
-    tokenExpiry = token.expiresOnTimestamp * 1000 - 60000; // Refresh 1 min before expiry
+    tokenExpiry = token.expiresOnTimestamp - 60_000; // expiresOnTimestamp is already in ms
     return cachedToken;
   } catch (e) {
     console.error('Azure token error:', e.message);
