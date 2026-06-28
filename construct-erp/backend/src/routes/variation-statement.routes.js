@@ -3,6 +3,7 @@ const express = require('express');
 const router  = express.Router();
 const { query } = require('../config/database');
 const { authenticate } = require('../middleware/auth');
+const { sendMail } = require('../services/mail.service');
 
 router.use(authenticate);
 
@@ -236,7 +237,14 @@ router.patch('/:id/submit', async (req, res) => {
       [req.params.id, req.user.company_id]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
-    res.json({ data: r.rows[0] });
+    const vs = r.rows[0];
+    const gstAmt = (parseFloat(vs.wo_value_excl_gst) || 0) * (parseFloat(vs.gst_rate) || 18) / 100;
+    const totalWithGst = (parseFloat(vs.wo_value_excl_gst) || 0) + gstAmt;
+    notifyAccountsDept(req.user.company_id,
+      `Variation Statement Submitted — ${vs.vendor_name || 'Vendor'}`,
+      `Variation statement for ${vs.vendor_name || 'Vendor'} submitted. WO: ${vs.wo_number || 'N/A'}. Value (excl. GST): ₹${Math.round(parseFloat(vs.wo_value_excl_gst) || 0).toLocaleString('en-IN')}. Total (incl. ${vs.gst_rate}% GST): ₹${Math.round(totalWithGst).toLocaleString('en-IN')}.`,
+      '/accounts/journal-entries').catch(() => {});
+    res.json({ data: vs });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -251,5 +259,22 @@ router.delete('/:id', async (req, res) => {
     res.json({ message: 'Deleted' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+async function notifyAccountsDept(companyId, subject, body, link = '/accounts') {
+  try {
+    const { rows } = await query(
+      `SELECT email FROM users WHERE company_id=$1 AND role IN ('accountant','accounts','super_admin','admin') AND is_active=true AND email IS NOT NULL`,
+      [companyId]
+    );
+    const emails = rows.map(r => r.email).filter(Boolean);
+    if (!emails.length) return;
+    await sendMail({
+      to: emails,
+      subject: `[Accounts] ${subject}`,
+      html: `<p style="font-family:Arial,sans-serif;font-size:13px">${body}</p><p style="font-size:11px;color:#64748b">View in ERP: <a href="${link}">${link}</a></p>`,
+      text: body,
+    });
+  } catch (_) {}
+}
 
 module.exports = router;

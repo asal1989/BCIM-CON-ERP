@@ -680,9 +680,31 @@ router.post('/disposals', async (req, res) => {
       return r.rows[0];
     });
     const bv = n(book_value); const sv = n(sale_value);
+    if (bv > 0 || sv > 0) {
+      const disposalDate = (disposal_date ? new Date(disposal_date) : new Date()).toISOString().slice(0, 10);
+      const lines = [];
+      if (sv > 0) lines.push({ code: '1010', debit: sv, description: `Disposal proceeds — ${disposal_type || 'sale'}` });
+      if (bv > 0) lines.push({ code: '1500', credit: bv, description: `Plant & Machinery removed from books` });
+      const gain = sv - bv;
+      if (gain > 0)       lines.push({ code: '4100', credit: gain,          description: `Gain on equipment disposal` });
+      else if (gain < 0)  lines.push({ code: '6100', debit: Math.abs(gain), description: `Loss on equipment disposal` });
+
+      postAutoJournalStandalone({
+        companyId: CID(req), userId: req.user.id,
+        entryDate: disposalDate,
+        reference: `DISP-${result.id.slice(0, 8)}`,
+        narration: `Equipment disposal — ${disposal_type || 'sale'}`,
+        source: 'auto_plant_disposal',
+        lines,
+      }).catch(() => {});
+    }
+    const gainLoss = sv - bv;
+    const gainLossText = gainLoss > 0
+      ? `Gain: ₹${Math.round(gainLoss).toLocaleString('en-IN')}`
+      : gainLoss < 0 ? `Loss: ₹${Math.round(Math.abs(gainLoss)).toLocaleString('en-IN')}` : `No gain/loss`;
     notifyAccountsDept(CID(req),
-      `Equipment Disposed — ${disposal_type || 'sale'} ₹${Math.round(sv).toLocaleString('en-IN')}`,
-      `Equipment disposal recorded. Type: ${disposal_type || 'sale'}. Book value: ₹${Math.round(bv).toLocaleString('en-IN')}, Sale value: ₹${Math.round(sv).toLocaleString('en-IN')}. GL adjustment required.`,
+      `Equipment Disposed — ${disposal_type || 'sale'} (${gainLossText})`,
+      `Equipment disposal posted. Type: ${disposal_type || 'sale'}. Book value: ₹${Math.round(bv).toLocaleString('en-IN')}, Proceeds: ₹${Math.round(sv).toLocaleString('en-IN')}. ${gainLossText}. Dr Bank / Cr Asset posted to ledger.`,
       '/accounts/journal-entries').catch(() => {});
     res.status(201).json({ data: result });
   } catch (e) { res.status(500).json({ error: e.message }); }
