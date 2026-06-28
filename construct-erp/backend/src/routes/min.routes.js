@@ -3,6 +3,8 @@ const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
 const { loadProjectScope, userCanAccessProject, appendProjectScope } = require('../middleware/projectScope');
 const { query, withTransaction } = require('../config/database');
+const { postAutoJournalStandalone } = require('../services/journalAutoPost');
+const { sendMail } = require('../services/mail.service');
 const router = express.Router();
 router.use(authenticate);
 router.use(loadProjectScope);
@@ -208,9 +210,34 @@ router.patch('/:id/authorize', async (req, res) => {
          await client.query(`UPDATE material_requisitions SET status='issued' WHERE id=$1`, [min.mrs_id]);
       }
 
-      return { success: true };
+      // 5. Sum total issue value for journal posting
+      const totalValue = items.reduce((sum, it) => sum + (parseFloat(it.amount) || 0), 0);
+
+      return { success: true, min, totalValue };
     });
-    res.json(result);
+
+    // Journal: Dr Material Cost (5000) / Cr Inventory (1200)
+    if (result.totalValue > 0) {
+      const minRow = result.min;
+      postAutoJournalStandalone({
+        companyId: req.user.company_id, userId: req.user.id,
+        entryDate: minRow.issue_date ? new Date(minRow.issue_date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+        projectId: minRow.project_id || null,
+        reference: minRow.min_number,
+        narration: `Material issued — ${minRow.min_number}`,
+        source: 'auto_min',
+        lines: [
+          { code: '5000', debit: result.totalValue, description: `Material cost — ${minRow.min_number}` },
+          { code: '1200', credit: result.totalValue, description: `Inventory issued` },
+        ],
+      }).catch(() => {});
+      notifyAccountsDept(req.user.company_id,
+        `Material Issued ₹${Math.round(result.totalValue).toLocaleString('en-IN')} (${minRow.min_number})`,
+        `Material Issue Note ${minRow.min_number} authorized. Total issue value: ₹${Math.round(result.totalValue).toLocaleString('en-IN')}. Inventory debited to project cost.`,
+        '/accounts/journal-entries').catch(() => {});
+    }
+
+    res.json({ success: result.success });
   } catch (err) {
     res.status(err.status || 400).json({ error: err.message });
   }
@@ -290,5 +317,22 @@ router.delete('/:id', authorize('super_admin'), async (req, res) => {
     res.status(err.status || 500).json({ error: err.message });
   }
 });
+
+async function notifyAccountsDept(companyId, subject, body, link = '/accounts') {
+  try {
+    const { rows } = await query(
+      `SELECT email FROM users WHERE company_id=$1 AND role IN ('accountant','accounts','super_admin','admin') AND is_active=true AND email IS NOT NULL`,
+      [companyId]
+    );
+    const emails = rows.map(r => r.email).filter(Boolean);
+    if (!emails.length) return;
+    await sendMail({
+      to: emails,
+      subject: `[Accounts] ${subject}`,
+      html: `<p style="font-family:Arial,sans-serif;font-size:13px">${body}</p><p style="font-size:11px;color:#64748b">View in ERP: <a href="${link}">${link}</a></p>`,
+      text: body,
+    });
+  } catch (_) {}
+}
 
 module.exports = router;

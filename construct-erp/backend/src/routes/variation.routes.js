@@ -4,6 +4,7 @@ const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const { loadProjectScope, userCanAccessProject, appendProjectScope } = require('../middleware/projectScope');
 const { query, withTransaction } = require('../config/database');
+const { sendMail } = require('../services/mail.service');
 
 router.use(authenticate);
 router.use(loadProjectScope);
@@ -211,6 +212,12 @@ router.patch('/:id/approve', authorize('super_admin','admin','project_manager'),
       return { ...vo.rows[0], amendment_ref: amendmentRef, amendment_number: amendmentNumber };
     });
 
+    const voAmt = parseFloat(result.total_variation_amount || 0);
+    notifyAccountsDept(result.company_id || req.user.company_id,
+      `Variation Order Approved — ${result.vo_number} ₹${Math.round(voAmt).toLocaleString('en-IN')}`,
+      `Variation Order ${result.vo_number} approved (Amendment ${result.amendment_ref}). Total variation: ₹${Math.round(voAmt).toLocaleString('en-IN')}. Contract value updated — revenue recognition adjustment may be required.`,
+      '/accounts/journal-entries').catch(() => {});
+
     res.json({ data: result });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -255,5 +262,22 @@ router.get('/amendments/:id/items', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+async function notifyAccountsDept(companyId, subject, body, link = '/accounts') {
+  try {
+    const { rows } = await query(
+      `SELECT email FROM users WHERE company_id=$1 AND role IN ('accountant','accounts','super_admin','admin') AND is_active=true AND email IS NOT NULL`,
+      [companyId]
+    );
+    const emails = rows.map(r => r.email).filter(Boolean);
+    if (!emails.length) return;
+    await sendMail({
+      to: emails,
+      subject: `[Accounts] ${subject}`,
+      html: `<p style="font-family:Arial,sans-serif;font-size:13px">${body}</p><p style="font-size:11px;color:#64748b">View in ERP: <a href="${link}">${link}</a></p>`,
+      text: body,
+    });
+  } catch (_) {}
+}
 
 module.exports = router;

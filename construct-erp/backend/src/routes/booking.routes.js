@@ -3,6 +3,8 @@ const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { query } = require('../config/database');
+const { postAutoJournalStandalone } = require('../services/journalAutoPost');
+const { sendMail } = require('../services/mail.service');
 
 router.use(authenticate);
 
@@ -46,6 +48,30 @@ router.post('/', async (req, res) => {
        client_name, client_phone, client_email, client_pan,
        agreement_value, booking_date]
     );
+    const agreeAmt = parseFloat(agreement_value || 0);
+    if (agreeAmt > 0) {
+      // Get company_id via project
+      const projRes = await query(`SELECT company_id FROM projects WHERE id=$1`, [project_id]);
+      const companyId = projRes.rows[0]?.company_id;
+      if (companyId) {
+        postAutoJournalStandalone({
+          companyId, userId: req.user.id,
+          entryDate: booking_date || new Date().toISOString().slice(0, 10),
+          projectId: project_id,
+          reference: `BKG-${r.rows[0].id.slice(0, 8)}`,
+          narration: `Unit booking — ${client_name} (Unit ${unit_number || ''})`,
+          source: 'auto_booking',
+          lines: [
+            { code: '1100', debit: agreeAmt, description: `Receivable — ${client_name}` },
+            { code: '2050', credit: agreeAmt, description: `Client advance / deferred revenue` },
+          ],
+        }).catch(() => {});
+        notifyAccountsDept(companyId,
+          `Unit Booking — ${client_name} ₹${Math.round(agreeAmt).toLocaleString('en-IN')}`,
+          `Unit booked. Client: ${client_name}. Unit: ${unit_number || 'N/A'}. Agreement value: ₹${Math.round(agreeAmt).toLocaleString('en-IN')}. AR and Client Advance accounts updated.`,
+          '/accounts/journal-entries').catch(() => {});
+      }
+    }
     res.status(201).json({ data: r.rows[0] });
   } catch (err) {
     console.error('booking POST /:', err.message);
@@ -84,5 +110,22 @@ router.post('/payment-schedule', async (req, res) => {
     res.status(500).json({ error: 'Failed to create payment schedule' });
   }
 });
+
+async function notifyAccountsDept(companyId, subject, body, link = '/accounts') {
+  try {
+    const { rows } = await query(
+      `SELECT email FROM users WHERE company_id=$1 AND role IN ('accountant','accounts','super_admin','admin') AND is_active=true AND email IS NOT NULL`,
+      [companyId]
+    );
+    const emails = rows.map(r => r.email).filter(Boolean);
+    if (!emails.length) return;
+    await sendMail({
+      to: emails,
+      subject: `[Accounts] ${subject}`,
+      html: `<p style="font-family:Arial,sans-serif;font-size:13px">${body}</p><p style="font-size:11px;color:#64748b">View in ERP: <a href="${link}">${link}</a></p>`,
+      text: body,
+    });
+  } catch (_) {}
+}
 
 module.exports = router;

@@ -10,6 +10,8 @@ const router  = express.Router();
 const dayjs   = require('dayjs');
 const { query, withTransaction, pool } = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
+const { postAutoJournalStandalone } = require('../services/journalAutoPost');
+const { sendMail } = require('../services/mail.service');
 
 router.use(authenticate);
 
@@ -677,6 +679,11 @@ router.post('/disposals', async (req, res) => {
         [equipment_id, CID(req)]);
       return r.rows[0];
     });
+    const bv = n(book_value); const sv = n(sale_value);
+    notifyAccountsDept(CID(req),
+      `Equipment Disposed — ${disposal_type || 'sale'} ₹${Math.round(sv).toLocaleString('en-IN')}`,
+      `Equipment disposal recorded. Type: ${disposal_type || 'sale'}. Book value: ₹${Math.round(bv).toLocaleString('en-IN')}, Sale value: ₹${Math.round(sv).toLocaleString('en-IN')}. GL adjustment required.`,
+      '/accounts/journal-entries').catch(() => {});
     res.status(201).json({ data: result });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -873,6 +880,24 @@ router.post('/fuel', async (req, res) => {
        b.fuel_type_id || null, n(b.quantity), n(b.rate), amount,
        b.current_reading != null && b.current_reading !== '' ? n(b.current_reading) : null,
        b.issued_by || req.user.name, b.remarks || null]);
+    if (amount > 0) {
+      const issueDate = (b.issue_date ? new Date(b.issue_date) : new Date()).toISOString().slice(0, 10);
+      postAutoJournalStandalone({
+        companyId: CID(req), userId: req.user.id,
+        entryDate: issueDate,
+        projectId: b.project_id || null,
+        reference: `FUEL-${r.rows[0].id.slice(0, 8)}`,
+        narration: `Fuel issue — Plant & Machinery`,
+        source: 'auto_plant_fuel',
+        lines: [
+          { code: '6030', debit: amount, description: `Fuel expense — equipment` },
+          { code: '1000', credit: amount, description: `Cash payment — fuel` },
+        ],
+      }).catch(() => {});
+      notifyAccountsDept(CID(req), `Fuel Issue ₹${Math.round(amount).toLocaleString('en-IN')}`,
+        `Fuel issued to Plant & Machinery. Qty: ${n(b.quantity)}, Amount: ₹${Math.round(amount).toLocaleString('en-IN')}.`,
+        '/accounts/journal-entries').catch(() => {});
+    }
     res.status(201).json({ data: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1173,6 +1198,23 @@ router.patch('/work-orders/:id([0-9a-fA-F-]{36})/complete', async (req, res) => 
       return wo;
     });
     if (!result) return res.status(404).json({ error: 'Not found' });
+    const actualCost = n(req.body.actual_cost);
+    if (actualCost > 0) {
+      postAutoJournalStandalone({
+        companyId: CID(req), userId: req.user.id,
+        entryDate: (req.body.completion_date ? new Date(req.body.completion_date) : new Date()).toISOString().slice(0, 10),
+        reference: `WO-${req.params.id.slice(0, 8)}`,
+        narration: `Equipment maintenance — work order completed`,
+        source: 'auto_plant_maintenance',
+        lines: [
+          { code: '5200', debit: actualCost, description: `Equipment maintenance cost` },
+          { code: '1010', credit: actualCost, description: `Bank payment — maintenance` },
+        ],
+      }).catch(() => {});
+      notifyAccountsDept(CID(req), `Maintenance Completed ₹${Math.round(actualCost).toLocaleString('en-IN')}`,
+        `Equipment work order completed. Actual cost: ₹${Math.round(actualCost).toLocaleString('en-IN')}.`,
+        '/accounts/journal-entries').catch(() => {});
+    }
     res.json({ data: result });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1385,5 +1427,22 @@ router.get('/maintenance-due', async (req, res) => {
     res.json({ data: r.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+async function notifyAccountsDept(companyId, subject, body, link = '/accounts') {
+  try {
+    const { rows } = await query(
+      `SELECT email FROM users WHERE company_id=$1 AND role IN ('accountant','accounts','super_admin','admin') AND is_active=true AND email IS NOT NULL`,
+      [companyId]
+    );
+    const emails = rows.map(r => r.email).filter(Boolean);
+    if (!emails.length) return;
+    await sendMail({
+      to: emails,
+      subject: `[Accounts] ${subject}`,
+      html: `<p style="font-family:Arial,sans-serif;font-size:13px">${body}</p><p style="font-size:11px;color:#64748b">View in ERP: <a href="${link}">${link}</a></p>`,
+      text: body,
+    });
+  } catch (_) {}
+}
 
 module.exports = router;

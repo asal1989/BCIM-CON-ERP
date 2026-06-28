@@ -3,6 +3,8 @@ const express = require('express');
 const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
+const { postAutoJournalStandalone } = require('../services/journalAutoPost');
+const { sendMail } = require('../services/mail.service');
 router.use(authenticate);
 
 function normalizeAssetCode(value) {
@@ -452,6 +454,24 @@ router.patch('/maintenance/:id/close', async (req, res) => {
       );
       return log.rows[0];
     });
+    const maintenanceCost = parseFloat(result.total_cost || 0);
+    if (maintenanceCost > 0) {
+      postAutoJournalStandalone({
+        companyId: req.user.company_id, userId: req.user.id,
+        entryDate: (result.resolved_date || new Date().toISOString().slice(0, 10)),
+        reference: `MAINT-${req.params.id.slice(0, 8)}`,
+        narration: `Asset maintenance closed — ${result.maintenance_type}`,
+        source: 'auto_asset_maintenance',
+        lines: [
+          { code: '5200', debit: maintenanceCost, description: `Asset maintenance cost` },
+          { code: '1010', credit: maintenanceCost, description: `Bank payment — maintenance` },
+        ],
+      }).catch(() => {});
+      notifyAccountsDept(req.user.company_id,
+        `Asset Maintenance Closed ₹${Math.round(maintenanceCost).toLocaleString('en-IN')}`,
+        `Asset maintenance log closed. Type: ${result.maintenance_type}. Cost: ₹${Math.round(maintenanceCost).toLocaleString('en-IN')}.`,
+        '/accounts/journal-entries').catch(() => {});
+    }
     res.json({ data: result });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -667,5 +687,22 @@ router.get('/:id/depreciation', async (req, res) => {
     res.json({ data: { method, cost, salvage, life, current_book_value: currentBV, schedule } });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+async function notifyAccountsDept(companyId, subject, body, link = '/accounts') {
+  try {
+    const { rows } = await query(
+      `SELECT email FROM users WHERE company_id=$1 AND role IN ('accountant','accounts','super_admin','admin') AND is_active=true AND email IS NOT NULL`,
+      [companyId]
+    );
+    const emails = rows.map(r => r.email).filter(Boolean);
+    if (!emails.length) return;
+    await sendMail({
+      to: emails,
+      subject: `[Accounts] ${subject}`,
+      html: `<p style="font-family:Arial,sans-serif;font-size:13px">${body}</p><p style="font-size:11px;color:#64748b">View in ERP: <a href="${link}">${link}</a></p>`,
+      text: body,
+    });
+  } catch (_) {}
+}
 
 module.exports = router;

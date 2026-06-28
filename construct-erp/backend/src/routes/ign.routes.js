@@ -4,6 +4,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { loadProjectScope, userCanAccessProject, appendProjectScope } = require('../middleware/projectScope');
 const { query, withTransaction } = require('../config/database');
 const { notifyGrnSubmitted, notifyGrnApproved } = require('../services/notif.helper');
+const { sendMail } = require('../services/mail.service');
 const router = express.Router();
 
 const STORES_WRITE = ['store_keeper','stores_manager','stores_officer','admin','super_admin'];
@@ -630,10 +631,16 @@ router.patch('/:id/approve', async (req, res) => {
         [req.params.id]
       );
       if (ignFull.rows.length) {
+        const ignData = ignFull.rows[0];
         notifyGrnApproved(req.user.company_id, {
-          ...ignFull.rows[0],
-          grn_number: ignFull.rows[0].ign_number,
+          ...ignData,
+          grn_number: ignData.ign_number,
         }, req.user.name);
+        const itemCount = items.rows.length;
+        notifyAccountsDept(req.user.company_id,
+          `IGN Approved — Materials Received (${ignData.ign_number})`,
+          `Inward Goods Note ${ignData.ign_number} approved. ${itemCount} item(s) received from ${ignData.supplier_name || ignData.vendor_name || 'Supplier'}. Linked bills pending for payment processing.`,
+          '/accounts/journal-entries').catch(() => {});
       }
 
       return { status: 'approved' };
@@ -764,5 +771,22 @@ router.delete('/:id', authorize('super_admin'), async (req, res) => {
     res.status(err.status || 500).json({ error: err.message });
   }
 });
+
+async function notifyAccountsDept(companyId, subject, body, link = '/accounts') {
+  try {
+    const { rows } = await query(
+      `SELECT email FROM users WHERE company_id=$1 AND role IN ('accountant','accounts','super_admin','admin') AND is_active=true AND email IS NOT NULL`,
+      [companyId]
+    );
+    const emails = rows.map(r => r.email).filter(Boolean);
+    if (!emails.length) return;
+    await sendMail({
+      to: emails,
+      subject: `[Accounts] ${subject}`,
+      html: `<p style="font-family:Arial,sans-serif;font-size:13px">${body}</p><p style="font-size:11px;color:#64748b">View in ERP: <a href="${link}">${link}</a></p>`,
+      text: body,
+    });
+  } catch (_) {}
+}
 
 module.exports = router;
