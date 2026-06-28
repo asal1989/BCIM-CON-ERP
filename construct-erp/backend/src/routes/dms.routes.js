@@ -289,7 +289,7 @@ function resolveOneDriveFolder(module, docType, vendorName) {
   }
 }
 
-router.post('/upload', upload.array('files', 20), async (req, res) => {
+router.post('/upload', upload.any(), async (req, res) => {
   try {
     if (!req.files || !req.files.length) return res.status(400).json({ error: 'No files provided' });
     if (!req.user || !req.user.id) return res.status(401).json({ error: 'User not authenticated' });
