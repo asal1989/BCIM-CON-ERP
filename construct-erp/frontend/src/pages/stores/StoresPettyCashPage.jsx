@@ -792,7 +792,22 @@ async function openAttachment(url) {
 }
 
 // ── Entry Form (Local Purchase) ───────────────────────────────────────────────
-const EMPTY_ITEM  = { material_name: '', unit: "NO'S", quantity: '', rate: '', gst_pct: '18', gst_amount: '', total: '' };
+const EMPTY_ITEM  = { material_name: '', unit: "NO'S", quantity: '', rate: '', gst_pct: '18', gst_amount: '', total: '', cost_head: '' };
+const SPC_COST_HEADS = ['Cement','Sand','Concrete Material','Steel','Blocks','Materials / Consumables','Safety Items','Equipment & Rentals','Power & Water','Overhead'];
+const KW_COST_HEAD = [
+  [/cement/i, 'Cement'],
+  [/\bm[\s-]?sand\b|river.?sand/i, 'Sand'], [/sand/i, 'Sand'],
+  [/aggre|jelly|grit|gravel|crush|stone.chip/i, 'Concrete Material'],
+  [/steel|rod|tmt|iron|rebar|ms.?bar/i, 'Steel'],
+  [/block|brick|fly.?ash/i, 'Blocks'],
+  [/safety|ppe|helmet|glove|shoe/i, 'Safety Items'],
+  [/petrol|fuel|diesel/i, 'Overhead'],
+  [/electric|power|water|utility/i, 'Power & Water'],
+];
+function deriveCostHead(name = '') {
+  for (const [re, h] of KW_COST_HEAD) if (re.test(name)) return h;
+  return 'Materials / Consumables';
+}
 const EMPTY_ENTRY = { project_id: '', entry_date: dayjs().format('YYYY-MM-DD'), supplier: '', invoice_no: '', remarks: '', bill_file_url: '', bill_file_name: '', voucher_file_url: '', voucher_file_name: '' };
 const GST_RATES = [0, 5, 12, 18, 28];
 
@@ -859,6 +874,7 @@ function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, exi
           material_name: it.material_name, unit: it.unit, quantity: it.quantity,
           rate: it.rate || '', gst_pct: it.gst_pct ?? '18',
           gst_amount: it.gst_amount || '', total: it.total_amount || '',
+          cost_head: it.cost_head || deriveCostHead(it.material_name || ''),
         }))
       : [{ ...EMPTY_ITEM }]
   );
@@ -884,6 +900,10 @@ function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, exi
     const gstAmt  = +(basic * pct / 100).toFixed(2);
     item.gst_amount = gstAmt || '';
     item.total      = +(basic + gstAmt).toFixed(2) || '';
+    // Auto-derive cost head when material name is typed (only if user hasn't manually set it)
+    if (key === 'material_name' && val && !item.cost_head) {
+      item.cost_head = deriveCostHead(val);
+    }
     next[idx] = item;
     return next;
   });
@@ -1097,6 +1117,7 @@ function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, exi
                     <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider w-20">Unit</th>
                     <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider w-20">Qty</th>
                     <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider w-28">Rate (₹)</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider w-36">Cost Head</th>
                     <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider w-24">GST %</th>
                     <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider w-28">GST Amt (₹)</th>
                     <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider w-32">Total (₹)</th>
@@ -1118,6 +1139,12 @@ function EntryForm({ initial, projects, defaultProjectId, budgets, catSpend, exi
                       </td>
                       <td className="px-2 py-1.5">
                         <input type="number" step="0.01" min="0" className={F} placeholder="0.00" value={it.rate} onChange={e => updateItem(idx, 'rate', e.target.value)} />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <select className={F} value={it.cost_head || ''} onChange={e => updateItem(idx, 'cost_head', e.target.value)}>
+                          <option value="">Auto</option>
+                          {SPC_COST_HEADS.map(h => <option key={h} value={h}>{h}</option>)}
+                        </select>
                       </td>
                       <td className="px-2 py-1.5">
                         <input type="number" step="0.01" min="0" max="100" className={F} placeholder="18" value={it.gst_pct} onChange={e => updateItem(idx, 'gst_pct', e.target.value)} />

@@ -138,6 +138,15 @@ router.get('/:project_id', async (req, res) => {
       GROUP BY li.boq_item_id, li.cost_head
     `, [project_id]);
 
+    // Stores petty cash approved purchases — rolled up by cost_head at project level
+    const spcActuals = await query(`
+      SELECT si.cost_head, NULL::uuid AS boq_item_id, SUM(si.total_amount) AS actual
+      FROM stores_petty_cash_items si
+      JOIN stores_petty_cash_entries se ON se.id = si.entry_id
+      WHERE se.project_id = $1 AND se.status = 'Approved' AND si.cost_head IS NOT NULL
+      GROUP BY si.cost_head
+    `, [project_id]);
+
     const byItem = {};
     for (const row of breakdown.rows) {
       if (!byItem[row.boq_item_id]) byItem[row.boq_item_id] = {};
@@ -175,6 +184,7 @@ router.get('/:project_id', async (req, res) => {
     addActual(raActuals.rows, false);
     addActual(scActuals.rows, false);
     addActual(tqsActuals.rows, false);
+    addActual(spcActuals.rows, false);
     addActual(advanceActuals.rows, true);
 
     const data = items.rows.map(item => ({

@@ -3,6 +3,7 @@ const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const { postAutoJournalStandalone } = require('../services/journalAutoPost');
+const { sendMail } = require('../services/mail.service');
 const router = express.Router();
 
 // Mirrors frontend categoryOf() in StoresPettyCashPage.jsx — keep the two in sync.
@@ -19,6 +20,30 @@ function categoryOf(text = '') {
   if (/transport|bus|ticket|charges|auto|cab|uber|ola/.test(d))              return 'Transport';
   if (/electric|bill|power|utility|mobile|recharge|internet/.test(d))        return 'Utilities';
   return 'Materials';
+}
+
+// BOQ cost-head derivation — maps material name keywords → BOQ_COST_HEADS
+const SPC_CAT_TO_COST_HEAD = {
+  Fuel: 'Overhead', Safety: 'Safety Items', Stationery: 'Overhead',
+  Pantry: 'Overhead', Transport: 'Overhead', Utilities: 'Power & Water',
+  Materials: null, // resolved per item below
+};
+const MATERIAL_KW_COST_HEAD = [
+  [/cement/i,                                    'Cement'],
+  [/\bm[\s-]?sand\b|river.?sand|fine.?aggre/i,  'Sand'],
+  [/sand/i,                                      'Sand'],
+  [/aggre|jelly|grit|gravel|crush|stone chip/i,  'Concrete Material'],
+  [/steel|rod|tmt|iron|rebar|ms.?bar/i,          'Steel'],
+  [/block|brick|fly.?ash/i,                      'Blocks'],
+];
+function itemCostHead(materialName = '') {
+  const cat = categoryOf(materialName);
+  const mapped = SPC_CAT_TO_COST_HEAD[cat];
+  if (mapped != null) return mapped;
+  for (const [re, head] of MATERIAL_KW_COST_HEAD) {
+    if (re.test(materialName)) return head;
+  }
+  return 'Materials / Consumables';
 }
 
 // ── Auto-migrate ─────────────────────────────────────────────────────────────
@@ -73,6 +98,7 @@ function categoryOf(text = '') {
   await safe(`ALTER TABLE stores_petty_cash_items ADD COLUMN IF NOT EXISTS gst_pct     NUMERIC(5,2)  DEFAULT 0`);
   await safe(`ALTER TABLE stores_petty_cash_items ADD COLUMN IF NOT EXISTS gst_amount  NUMERIC(14,2) DEFAULT 0`);
   await safe(`ALTER TABLE stores_petty_cash_items ADD COLUMN IF NOT EXISTS total_amount NUMERIC(14,2) DEFAULT 0`);
+  await safe(`ALTER TABLE stores_petty_cash_items ADD COLUMN IF NOT EXISTS cost_head   TEXT`);
 
   await safe(`
     CREATE TABLE IF NOT EXISTS stores_petty_cash_advances (
@@ -220,6 +246,83 @@ async function getEntry(id, companyId) {
   return { ...r.rows[0], items: items.rows };
 }
 
+async function notifyProcurementTeam(companyId, submittedBy, entry) {
+  const { rows: procUsers } = await query(
+    `SELECT email, name FROM users
+     WHERE company_id=$1 AND role IN ('procurement_manager','procurement','admin','super_admin')
+       AND is_active=true AND email IS NOT NULL`,
+    [companyId]
+  );
+  const emails = procUsers.map(u => u.email).filter(Boolean);
+  if (!emails.length) return;
+
+  const proj    = entry.project_name || 'General';
+  const total   = parseFloat(entry.total_amount || entry.amount || 0);
+  const fmtINR  = v => Math.round(parseFloat(v||0)).toLocaleString('en-IN');
+
+  const itemRows = (entry.items || []).map(it => `
+    <tr>
+      <td style="padding:7px 12px;border-bottom:1px solid #f0f0f0">${it.material_name}</td>
+      <td style="padding:7px 12px;border-bottom:1px solid #f0f0f0;text-align:center">${parseFloat(it.quantity||0)} ${it.unit||''}</td>
+      <td style="padding:7px 12px;border-bottom:1px solid #f0f0f0;text-align:right">₹${fmtINR(it.rate)}</td>
+      <td style="padding:7px 12px;border-bottom:1px solid #f0f0f0;text-align:center;color:#6366f1;font-size:11px">${it.cost_head||'—'}</td>
+      <td style="padding:7px 12px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600">₹${fmtINR(it.total_amount)}</td>
+    </tr>`).join('');
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto">
+      <div style="background:#0A1F5C;padding:18px 24px;border-radius:10px 10px 0 0">
+        <h2 style="margin:0;color:#fff;font-size:16px">📦 New Stores Petty Cash Purchase</h2>
+        <p style="margin:4px 0 0;color:#b0c4f0;font-size:12px">${proj} &bull; Submitted by ${submittedBy}</p>
+      </div>
+      <div style="background:#f8fafc;padding:20px 24px">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
+          <tr>
+            <td style="color:#64748b;width:130px;padding:5px 0">Supplier</td>
+            <td style="font-weight:600">${entry.supplier}</td>
+            <td style="color:#64748b;width:130px;padding:5px 0">Invoice No</td>
+            <td style="font-weight:600">${entry.invoice_no||'—'}</td>
+          </tr>
+          <tr>
+            <td style="color:#64748b;padding:5px 0">Entry Date</td>
+            <td>${entry.entry_date}</td>
+            <td style="color:#64748b;padding:5px 0">Total Amount</td>
+            <td style="font-weight:700;color:#0A1F5C">₹${fmtINR(total)}</td>
+          </tr>
+        </table>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr style="background:#e8edf7">
+              <th style="padding:8px 12px;text-align:left">Material</th>
+              <th style="padding:8px 12px;text-align:center">Qty</th>
+              <th style="padding:8px 12px;text-align:right">Rate</th>
+              <th style="padding:8px 12px;text-align:center">Cost Head</th>
+              <th style="padding:8px 12px;text-align:right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>${itemRows}</tbody>
+          <tfoot>
+            <tr style="background:#f1f5f9">
+              <td colspan="4" style="padding:8px 12px;font-weight:700;text-align:right">Total</td>
+              <td style="padding:8px 12px;font-weight:700;color:#0A1F5C;text-align:right">₹${fmtINR(total)}</td>
+            </tr>
+          </tfoot>
+        </table>
+        ${entry.remarks ? `<p style="margin-top:12px;font-size:12px;color:#64748b">Remarks: ${entry.remarks}</p>` : ''}
+      </div>
+      <div style="background:#e8edf7;padding:10px 24px;border-radius:0 0 10px 10px;font-size:11px;color:#64748b">
+        This is an automated notification from BCIM Construct ERP. These items are now tracked in BOQ Cost Control.
+      </div>
+    </div>`;
+
+  await sendMail({
+    to: emails,
+    subject: `[SPC] New Purchase: ${entry.supplier} | ₹${fmtINR(total)} | ${proj}`,
+    html,
+    text: `New stores petty cash purchase submitted by ${submittedBy}.\nProject: ${proj}\nSupplier: ${entry.supplier}\nAmount: ₹${fmtINR(total)}\nItems: ${(entry.items||[]).map(i=>`${i.material_name} ${i.quantity}${i.unit||''}`).join(', ')}`,
+  });
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    LOCAL PURCHASE ENTRIES (header + line items)
 ═══════════════════════════════════════════════════════════════════════════ */
@@ -248,7 +351,8 @@ router.get('/entries', authenticate, async (req, res) => {
               ph.name AS ph_approved_by_name,
               COALESCE(json_agg(json_build_object(
                 'id', i.id, 'material_name', i.material_name, 'unit', i.unit, 'quantity', i.quantity,
-                'rate', i.rate, 'gst_pct', i.gst_pct, 'gst_amount', i.gst_amount, 'total_amount', i.total_amount
+                'rate', i.rate, 'gst_pct', i.gst_pct, 'gst_amount', i.gst_amount, 'total_amount', i.total_amount,
+                'cost_head', i.cost_head
               ) ORDER BY i.sort_order) FILTER (WHERE i.id IS NOT NULL), '[]') AS items
        FROM stores_petty_cash_entries e
        LEFT JOIN projects p ON p.id = e.project_id
@@ -335,16 +439,21 @@ router.post('/entries', authenticate, async (req, res) => {
         const basic = qty * rate;
         const gstAmt = +(basic * pct / 100).toFixed(2);
         const tot    = +(basic + gstAmt).toFixed(2);
+        const costHead = it.cost_head || itemCostHead(it.material_name.trim());
         await client.query(
-          `INSERT INTO stores_petty_cash_items (entry_id, material_name, unit, quantity, rate, gst_pct, gst_amount, total_amount, sort_order)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          [entryId, it.material_name.trim(), it.unit || "NO'S", qty, rate, pct, gstAmt, tot, i + 1]
+          `INSERT INTO stores_petty_cash_items (entry_id, material_name, unit, quantity, rate, gst_pct, gst_amount, total_amount, sort_order, cost_head)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          [entryId, it.material_name.trim(), it.unit || "NO'S", qty, rate, pct, gstAmt, tot, i + 1, costHead]
         );
       }
       return r.rows[0];
     });
 
     const full = await getEntry(result.id, req.user.company_id);
+
+    // Notify procurement team (fire-and-forget)
+    notifyProcurementTeam(req.user.company_id, req.user.name, full).catch(() => {});
+
     res.status(201).json({ data: full });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -414,10 +523,11 @@ router.put('/entries/:id', authenticate, async (req, res) => {
         const basic = qty * rate;
         const gstAmt = +(basic * pct / 100).toFixed(2);
         const tot    = +(basic + gstAmt).toFixed(2);
+        const costHead = it.cost_head || itemCostHead(it.material_name.trim());
         await client.query(
-          `INSERT INTO stores_petty_cash_items (entry_id, material_name, unit, quantity, rate, gst_pct, gst_amount, total_amount, sort_order)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          [req.params.id, it.material_name.trim(), it.unit || "NO'S", qty, rate, pct, gstAmt, tot, i + 1]
+          `INSERT INTO stores_petty_cash_items (entry_id, material_name, unit, quantity, rate, gst_pct, gst_amount, total_amount, sort_order, cost_head)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          [req.params.id, it.material_name.trim(), it.unit || "NO'S", qty, rate, pct, gstAmt, tot, i + 1, costHead]
         );
       }
     });
