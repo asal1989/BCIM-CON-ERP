@@ -192,9 +192,10 @@ router.post('/employees', upload.single('file'), async (req, res) => {
     // Debug: capture what the first row looks like after parsing
     const debugFirstRow = records[0] ? {
       keys: Object.keys(records[0]),
-      empCode: pick(records[0], 'Employee Code', 'EmployeeCode', 'Emp Code', 'EmpCode', 'employee_code'),
-      name: pick(records[0], 'Employee Name', 'EmployeeName', 'Name', 'Full Name'),
-      dept: pick(records[0], 'Department', 'department_name'),
+      empCode: pick(records[0], 'Employee Code', 'EmployeeCode', 'Emp Code', 'EmpCode', 'employee_code', 'Emp. Code', 'Staff Code'),
+      name: pick(records[0], 'Employee Name', 'EmployeeName', 'Name', 'Full Name',
+                 'Full Name (as per Aadhaar)', 'Full Name (As per Aadhaar)', 'Staff Name', 'Employee Full Name'),
+      dept: pick(records[0], 'Department', 'department_name', 'Department / Function', 'Department/Function', 'Dept'),
     } : null;
 
     for (let i = 0; i < records.length; i++) {
@@ -203,20 +204,26 @@ router.post('/employees', upload.single('file'), async (req, res) => {
 
       try {
         // ── Map columns (handles various column name formats) ──
-        const empCode  = pick(row, 'Employee Code', 'EmployeeCode', 'Emp Code', 'EmpCode', 'employee_code');
-        const name     = pick(row, 'Employee Name', 'EmployeeName', 'Name', 'Full Name');
-        const email    = pick(row, 'Email', 'Email ID', 'Official Email', 'Work Email', 'email');
-        const phone    = pick(row, 'Mobile', 'Mobile No', 'Phone', 'Contact No', 'mobile_number');
-        const dept     = pick(row, 'Department', 'department_name');
-        const desig    = pick(row, 'Designation', 'designation_name');
-        const doj      = normaliseDate(pick(row, 'Date of Joining', 'DOJ', 'Joining Date', 'date_of_joining'));
-        const dob      = normaliseDate(pick(row, 'Date of Birth', 'DOB', 'Birth Date', 'date_of_birth'));
+        const empCode  = pick(row, 'Employee Code', 'EmployeeCode', 'Emp Code', 'EmpCode', 'employee_code', 'Emp. Code', 'Staff Code');
+        const name     = pick(row, 'Employee Name', 'EmployeeName', 'Name', 'Full Name',
+                               'Full Name (as per Aadhaar)', 'Full Name (As per Aadhaar)', 'Staff Name', 'Employee Full Name');
+        const email    = pick(row, 'Email', 'Email ID', 'Official Email', 'Work Email', 'email',
+                               'Official Email ID', 'Official Email Id', 'Personal Email Details', 'Email Address');
+        const phone    = pick(row, 'Mobile', 'Mobile No', 'Phone', 'Contact No', 'mobile_number',
+                               'Personal Mobile Number', 'Mobile Number', 'Contact Number');
+        const dept     = pick(row, 'Department', 'department_name', 'Department / Function', 'Department/Function',
+                               'Dept', 'Function - Current', 'Department - Current');
+        const desig    = pick(row, 'Designation', 'designation_name', 'Designation - Current',
+                               'Designation HR Record', 'Designation As per KYE', 'Job Title', 'Position');
+        const doj      = normaliseDate(pick(row, 'Date of Joining', 'DOJ', 'Joining Date', 'date_of_joining', 'Date Of Joining'));
+        const dob      = normaliseDate(pick(row, 'Date of Birth', 'DOB', 'Birth Date', 'date_of_birth',
+                                            'Date of Birth (as per Aadhaar)', 'Date of Birth (As per Aadhaar)'));
         const gender   = pick(row, 'Gender', 'Sex').toLowerCase();
-        const fatherName  = pick(row, "Father's Name", 'Father Name');
+        const fatherName  = pick(row, "Father's Name", 'Father Name', "Father's Name");
         const marital  = pick(row, 'Marital Status').toLowerCase();
         const blood    = pick(row, 'Blood Group');
-        const pan      = pick(row, 'PAN', 'PAN Number', 'PAN No');
-        const aadhaar  = pick(row, 'Aadhaar', 'Aadhaar Number', 'Aadhaar No', 'Aadhar');
+        const pan      = pick(row, 'PAN', 'PAN Number', 'PAN No', 'Pan Number');
+        const aadhaar  = pick(row, 'Aadhaar', 'Aadhaar Number', 'Aadhaar No', 'Aadhar', 'Aadhaar Card Number');
         const uan      = pick(row, 'UAN', 'UAN Number', 'UAN No');
         const pf       = pick(row, 'PF Account No', 'PF Number', 'PF Account Number');
         const esi      = pick(row, 'ESI Number', 'ESIC No', 'ESI No');
@@ -226,10 +233,11 @@ router.post('/employees', upload.single('file'), async (req, res) => {
         const empType  = pick(row, 'Employment Type', 'Employee Type').toLowerCase() || 'permanent';
         const statusRaw = pick(row, 'Status', 'Employment Status').toLowerCase();
         const empStatus = ['active','resigned','terminated'].includes(statusRaw) ? statusRaw : 'active';
-        const address  = pick(row, 'Permanent Address', 'Address');
+        const address  = pick(row, 'Permanent Address', 'Address', 'Current Address');
         const noticeDays = parseInt(pick(row, 'Notice Period', 'Notice Period (Days)')) || 30;
-        const ctc      = parseFloat(pick(row, 'CTC', 'Annual CTC', 'CTC Annual')) || null;
-        const categoryRaw = pick(row, 'Employee Category', 'Category', 'Staff Type').toLowerCase();
+        const ctcRaw   = pick(row, 'CTC', 'Annual CTC', 'CTC Annual', 'CTC Current_PA', 'CTC-p.m.', 'CTC Before Last Appraisal');
+        const ctc      = parseFloat(ctcRaw.replace(/[^0-9.]/g, '')) || null;
+        const categoryRaw = pick(row, 'Employee Category', 'Category', 'Staff Type', 'Category-Proposed').toLowerCase();
         const empCategory = categoryRaw.includes('work') ? 'workman' : 'staff';
         const workLocation = pick(row, 'Project', 'Project Location', 'Site', 'Location', 'work_location');
 
