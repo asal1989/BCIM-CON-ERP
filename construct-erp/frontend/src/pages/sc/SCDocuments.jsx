@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { scAPI, dmsAPI } from '../../api/client';
 import {
   FolderOpen, FileText, RefreshCw, Search, Upload, X,
-  AlertTriangle, Clock, CheckCircle2, Filter, ChevronDown,
+  AlertTriangle, Clock, CheckCircle2, Filter, ChevronDown, Trash2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
@@ -204,6 +204,23 @@ export default function SCDocuments() {
     }
   };
 
+  const deleteMut = useMutation({
+    mutationFn: (id) => dmsAPI.delete(id),
+    onSuccess: (res) => {
+      const warn = res?.data?.onedrive_warn;
+      if (warn) toast.error(`Deleted locally. OneDrive: ${warn}`, { duration: 6000 });
+      else toast.success('Document deleted from OneDrive');
+      qc.invalidateQueries({ queryKey: ['sc-dms-docs'] });
+    },
+    onError: e => toast.error(e?.response?.data?.error || 'Delete failed'),
+  });
+
+  const handleDelete = (e, doc) => {
+    e.stopPropagation();
+    if (!window.confirm(`Delete "${doc.doc_title || doc.file_name}"?\nThis will remove it from OneDrive too.`)) return;
+    deleteMut.mutate(doc.id);
+  };
+
   return (
     <div className="p-5 md:p-6 min-h-screen bg-slate-50">
       {/* Header */}
@@ -298,13 +315,13 @@ export default function SCDocuments() {
             const expiry = expiryStatus(d.expiry_date);
             const sc = subs.find(s => s.id === d.module_record_id);
             return (
-              <div key={d.id} onClick={() => handleOpen(d)}
-                className="bg-white rounded-2xl border border-slate-100 p-4 hover:border-indigo-200 hover:shadow-sm transition-all cursor-pointer group">
-                <div className="flex items-start gap-3">
+              <div key={d.id}
+                className="bg-white rounded-2xl border border-slate-100 p-4 hover:border-indigo-200 hover:shadow-sm transition-all group relative">
+                <div className="flex items-start gap-3" onClick={() => handleOpen(d)} style={{ cursor: 'pointer' }}>
                   <div className={`w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center flex-shrink-0 ${EXT_COLOR[ext] || 'text-slate-400'}`}>
                     <FileText className="w-5 h-5" />
                   </div>
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 pr-7">
                     <p className="font-semibold text-slate-800 text-sm truncate group-hover:text-indigo-700">
                       {d.doc_title || d.file_name}
                     </p>
@@ -325,7 +342,6 @@ export default function SCDocuments() {
                       )}
                     </div>
 
-                    {/* Expiry badge */}
                     {expiry && (
                       <div className={`flex items-center gap-1 mt-2 text-[10px] font-semibold px-2 py-1 rounded-lg w-fit ${expiry.color}`}>
                         {expiry.icon === 'red'   && <AlertTriangle className="w-3 h-3" />}
@@ -335,6 +351,13 @@ export default function SCDocuments() {
                     )}
                   </div>
                 </div>
+                <button
+                  onClick={(e) => handleDelete(e, d)}
+                  disabled={deleteMut.isPending}
+                  title="Delete document"
+                  className="absolute top-3 right-3 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 hover:bg-red-50 transition">
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             );
           })}

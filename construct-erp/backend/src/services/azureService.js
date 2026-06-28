@@ -73,6 +73,22 @@ async function uploadToSharePoint(fileName, fileBuffer, folderPath = 'Vendor Inv
   }
 }
 
+async function deleteFromOneDrive(itemId) {
+  if (!itemId) throw new Error('No OneDrive item ID provided');
+  const token = await getAccessToken();
+  const url = `https://graph.microsoft.com/v1.0/users/${USER_EMAIL}/drive/items/${itemId}`;
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+  if (!res.ok && res.status !== 404) {
+    const err = await res.text();
+    throw new Error(`OneDrive delete failed: ${res.status} ${err.slice(0, 120)}`);
+  }
+  console.log(`[OneDrive] Deleted item ${itemId}`);
+}
+
 module.exports = {
   uploadToSharePoint,
+  deleteFromOneDrive,
 };

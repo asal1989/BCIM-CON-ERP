@@ -11,7 +11,7 @@ const { loadProjectScope, userCanAccessProject } = require('../middleware/projec
 const db = () => require('../config/database').pool;
 const xlsx    = require('xlsx');
 const mammoth = require('mammoth');
-const { uploadToSharePoint } = require('../services/azureService');
+const { uploadToSharePoint, deleteFromOneDrive } = require('../services/azureService');
 
 router.use(authenticate);
 router.use(loadProjectScope);
@@ -1171,12 +1171,38 @@ router.get('/:id([0-9a-fA-F-]{36})/download', async (req, res) => {
 // ══════════════════════════════════════════════════════════════════
 // DELETE
 // ══════════════════════════════════════════════════════════════════
-router.delete('/:id([0-9a-fA-F-]{36})', authorize(...ADMINS), async (req, res) => {
+router.delete('/:id([0-9a-fA-F-]{36})', async (req, res) => {
   try {
-    await getAccessibleDocument(req, req.params.id);
-    await db().query(`INSERT INTO document_access_logs (document_id,user_id,action) VALUES ($1,$2,'delete')`, [req.params.id, req.user.id]);
-    await db().query(`UPDATE documents SET status='archived', updated_at=NOW() WHERE id=$1 AND company_id=$2`, [req.params.id, CID(req)]);
-    res.json({ message: 'Archived' });
+    const doc = await getAccessibleDocument(req, req.params.id);
+    // Fetch onedrive_id and local_url before deleting
+    const { rows } = await db().query(
+      `SELECT onedrive_id, local_url FROM documents WHERE id=$1`, [req.params.id]
+    );
+    const { onedrive_id, local_url } = rows[0] || {};
+
+    // 1. Delete from OneDrive
+    let onedrive_warn = null;
+    if (onedrive_id) {
+      try {
+        await deleteFromOneDrive(onedrive_id);
+      } catch (e) {
+        onedrive_warn = e.message;
+        console.error(`[DMS] OneDrive delete failed for ${req.params.id}: ${e.message}`);
+      }
+    }
+
+    // 2. Delete local file
+    if (local_url) {
+      const localPath = resolveLocalDocumentPath(local_url);
+      if (localPath && fs.existsSync(localPath)) {
+        try { fs.unlinkSync(localPath); } catch (e) { /* ignore */ }
+      }
+    }
+
+    // 3. Hard-delete from DB (cascades to logs, versions, approvals)
+    await db().query(`DELETE FROM documents WHERE id=$1 AND company_id=$2`, [req.params.id, CID(req)]);
+
+    res.json({ message: 'Deleted', onedrive_warn });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

@@ -10,7 +10,7 @@ import {
   User, Briefcase, FileText, CreditCard, Users, FolderOpen,
   ArrowLeft, Upload, X, AlertTriangle, Clock, CheckCircle2,
   Building2, Phone, Mail, MapPin, Hash, Landmark, ChevronDown,
-  IndianRupee, TrendingUp, Package,
+  IndianRupee, TrendingUp, Package, Trash2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
@@ -149,6 +149,23 @@ function DocumentsTab({ scId }) {
   const catDocs = docs.filter(d => d.doc_type === activeCat);
   const expiringCount = docs.filter(d => d.expiry_date && dayjs(d.expiry_date).diff(dayjs(), 'day') <= 30).length;
 
+  const deleteMut = useMutation({
+    mutationFn: (id) => dmsAPI.delete(id),
+    onSuccess: (res) => {
+      const warn = res?.data?.onedrive_warn;
+      if (warn) toast.error(`File deleted locally. OneDrive: ${warn}`, { duration: 6000 });
+      else toast.success('Document deleted from OneDrive');
+      qc.invalidateQueries({ queryKey: ['sc-profile-docs', scId] });
+    },
+    onError: e => toast.error(e?.response?.data?.error || 'Delete failed'),
+  });
+
+  const handleDelete = (e, doc) => {
+    e.stopPropagation();
+    if (!window.confirm(`Delete "${doc.doc_title || doc.file_name}"? This will also remove it from OneDrive.`)) return;
+    deleteMut.mutate(doc.id);
+  };
+
   const handleOpen = (doc) => {
     const ext = (doc.file_name || '').split('.').pop().toLowerCase();
     const url = `/api/v1/dms/${doc.id}/file?token=${token}`;
@@ -209,13 +226,13 @@ function DocumentsTab({ scId }) {
             const expiry = expiryBadge(doc.expiry_date);
             const extColor = { pdf:'text-red-500', xlsx:'text-emerald-500', xls:'text-emerald-500', docx:'text-blue-500', doc:'text-blue-500' }[ext] || 'text-slate-400';
             return (
-              <div key={doc.id} onClick={() => handleOpen(doc)}
-                className="bg-white rounded-xl border border-slate-100 p-3 hover:border-blue-200 hover:shadow-sm transition cursor-pointer group">
-                <div className="flex items-start gap-2.5">
+              <div key={doc.id}
+                className="bg-white rounded-xl border border-slate-100 p-3 hover:border-blue-200 hover:shadow-sm transition group relative">
+                <div className="flex items-start gap-2.5" onClick={() => handleOpen(doc)} style={{ cursor: 'pointer' }}>
                   <div className={`w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center flex-shrink-0 ${extColor}`}>
                     <FileText className="w-4 h-4" />
                   </div>
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 pr-6">
                     <p className="text-xs font-semibold text-slate-800 truncate group-hover:text-blue-700">{doc.doc_title || doc.file_name}</p>
                     <p className="text-[10px] text-slate-400 truncate">{doc.file_name}</p>
                     <div className="flex items-center gap-1.5 mt-1.5">
@@ -232,6 +249,13 @@ function DocumentsTab({ scId }) {
                     )}
                   </div>
                 </div>
+                <button
+                  onClick={(e) => handleDelete(e, doc)}
+                  disabled={deleteMut.isPending}
+                  title="Delete document"
+                  className="absolute top-2.5 right-2.5 p-1 rounded-md opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 hover:bg-red-50 transition">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
               </div>
             );
           })}
