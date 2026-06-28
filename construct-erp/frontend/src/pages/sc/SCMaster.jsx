@@ -322,6 +322,11 @@ function ProfileDrawer({ scId, onClose, onEdit }) {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Link to={`/sc/profile/${sc.id}`} onClick={onClose}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition"
+              style={{ background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.22)' }}>
+              <ChevronRight className="w-3 h-3" /> Full Profile
+            </Link>
             <button onClick={() => { onClose(); onEdit(sc); }}
               className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition"
               style={{ background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.22)' }}>

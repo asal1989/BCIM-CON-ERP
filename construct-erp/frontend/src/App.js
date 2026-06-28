@@ -248,6 +248,7 @@ const SCDeductions       = lazy(() => import('./pages/sc/SCDeductions'));
 const SCDocuments        = lazy(() => import('./pages/sc/SCDocuments'));
 const SCReports          = lazy(() => import('./pages/sc/SCReports'));
 const SCSettings         = lazy(() => import('./pages/sc/SCSettings'));
+const SCProfile          = lazy(() => import('./pages/sc/SCProfile'));
 const QSReportsPage        = lazy(() => import('./pages/qs/ReportsPage'));
 const BillingReportsPage    = lazy(() => import('./pages/billing/BillingReportsPage'));
 const DocumentsPage             = lazy(() => import('./pages/documents/DocumentsPage'));
@@ -760,6 +761,7 @@ export default function App() {
                 <Route path="sc/documents"        element={<RequireModule module="Subcontractors"><SCDocuments /></RequireModule>} />
                 <Route path="sc/reports"          element={<RequireModule module="Subcontractors"><SCReports /></RequireModule>} />
                 <Route path="sc/settings"         element={<RequireModule module="Subcontractors"><SCSettings /></RequireModule>} />
+                <Route path="sc/profile/:id"      element={<RequireModule module="Subcontractors"><SCProfile /></RequireModule>} />
                 <Route path="subcontractor/*" element={<Navigate to="/dashboard" replace />} />
 
                 {/* HR */}
