@@ -150,15 +150,10 @@ export default function SCDocuments() {
   const [showExpiring, setShowExpiring] = useState(false);
   const [showUpload, setShowUpload]     = useState(false);
 
-  // Fetch docs — module:'sc' for new docs + module:'qaqc' for legacy docs
-  const { data: scDocs   = [], isLoading: l1, refetch: r1 } = useQuery({
-    queryKey: ['sc-dms-docs', 'sc'],
+  // Only fetch SC-specific documents (module:'sc')
+  const { data: allDocs = [], isLoading, refetch } = useQuery({
+    queryKey: ['sc-dms-docs'],
     queryFn: () => dmsAPI.list({ module: 'sc' }).then(r => r.data?.data || []),
-    staleTime: 0,
-  });
-  const { data: qaqcDocs = [], isLoading: l2, refetch: r2 } = useQuery({
-    queryKey: ['sc-dms-docs', 'qaqc'],
-    queryFn: () => dmsAPI.list({ module: 'qaqc' }).then(r => r.data?.data || []),
     staleTime: 0,
   });
 
@@ -167,15 +162,6 @@ export default function SCDocuments() {
     queryFn: () => scAPI.listSC().then(r => r.data?.data || []),
     staleTime: 60_000,
   });
-
-  const isLoading = l1 || l2;
-  const refetch   = () => { r1(); r2(); };
-
-  // Merge and deduplicate by id
-  const allDocs = React.useMemo(() => {
-    const seen = new Set();
-    return [...scDocs, ...qaqcDocs].filter(d => { if (seen.has(d.id)) return false; seen.add(d.id); return true; });
-  }, [scDocs, qaqcDocs]);
 
   // Filter
   const filtered = React.useMemo(() => {
