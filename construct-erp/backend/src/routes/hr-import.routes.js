@@ -219,6 +219,11 @@ router.post('/employees', upload.single('file'), async (req, res) => {
         );
 
         if (existing.rows.length > 0) {
+          // ── SKIP if create_only mode ──
+          if (mode === 'create_only') {
+            results.skipped++;
+            continue;
+          }
           // ── UPDATE mode: refresh profile fields ──
           const userId = existing.rows[0].id;
           await query(
@@ -267,7 +272,7 @@ router.post('/employees', upload.single('file'), async (req, res) => {
             results.skipped++;
             continue;
           }
-          // ── CREATE mode: new user + profile ──
+          // ── CREATE / CREATE_ONLY mode: new user + profile ──
           const client = await pool.connect();
           try {
             await client.query('BEGIN');

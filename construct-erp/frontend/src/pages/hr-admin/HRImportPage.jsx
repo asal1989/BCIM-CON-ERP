@@ -140,7 +140,7 @@ function EmployeeImportTab() {
   const [file,    setFile]    = useState(null);
   const [preview, setPreview] = useState(null);
   const [result,  setResult]  = useState(null);
-  const [mode,    setMode]    = useState('create');
+  const [mode,    setMode]    = useState('create_only');
   const [loading, setLoading] = useState(false);
   const [step,    setStep]    = useState('upload');
 
@@ -181,9 +181,13 @@ function EmployeeImportTab() {
 
       <FileDropzone file={file} onFile={f=>{ setFile(f); setPreview(null); setResult(null); setStep('upload'); }}/>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-wrap">
         <span className="text-gray-600 text-sm font-bold">Import mode:</span>
-        {[['create','Create new + update existing'],['update','Update existing only']].map(([v,label])=>(
+        {[
+          ['create_only', 'Create new only (skip duplicates)'],
+          ['create',      'Create new + update existing'],
+          ['update',      'Update existing only'],
+        ].map(([v, label]) => (
           <label key={v} className="flex items-center gap-2 cursor-pointer">
             <input type="radio" name="emp-mode" value={v} checked={mode===v} onChange={()=>setMode(v)} className="accent-blue-600"/>
             <span className="text-sm text-gray-700 font-medium">{label}</span>
