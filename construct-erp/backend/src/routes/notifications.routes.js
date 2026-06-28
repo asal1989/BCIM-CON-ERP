@@ -6,6 +6,7 @@ const { query } = require('../config/database');
 const persistedCtrl = require('../controllers/notification.controller');
 const { getVendorLiabilitySummary } = require('../services/tqsLiability.service');
 const { runSchemaInit } = require('../utils/schemaInit');
+const { sendPushToUser } = require('../services/fcm.service');
 const router = express.Router();
 router.use(authenticate);
 
@@ -43,6 +44,58 @@ router.post('/devices', async (req, res) => {
       [req.user.company_id, req.user.id, platform, token, Boolean(enabled)]
     );
     res.status(201).json({ data: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Test push — sends a real FCM notification to the calling user's devices ──
+// GET /notifications/test-push  → diagnostic (shows config status + token count)
+// POST /notifications/test-push → actually sends a test notification
+router.get('/test-push', async (req, res) => {
+  try {
+    const fcmConfigured = !!process.env.FIREBASE_SERVICE_ACCOUNT;
+    const { rows } = await query(
+      `SELECT id, platform, LEFT(token,20)||'…' AS token_preview, enabled, last_seen_at
+       FROM notification_device_tokens WHERE user_id=$1`,
+      [req.user.id]
+    );
+    res.json({
+      fcm_configured: fcmConfigured,
+      registered_devices: rows.length,
+      devices: rows,
+      hint: fcmConfigured
+        ? 'FCM is configured. POST to this endpoint to send a test push.'
+        : 'FIREBASE_SERVICE_ACCOUNT env var is NOT set — pushes are disabled. Add it in Railway → Variables.',
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/test-push', async (req, res) => {
+  try {
+    if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+      return res.status(503).json({
+        error: 'FIREBASE_SERVICE_ACCOUNT env var is not set on the server. Add your Firebase service account JSON as this variable in Railway → Variables, then redeploy.',
+      });
+    }
+    const { rows } = await query(
+      'SELECT COUNT(*) FROM notification_device_tokens WHERE user_id=$1 AND enabled=TRUE',
+      [req.user.id]
+    );
+    const deviceCount = parseInt(rows[0].count);
+    if (deviceCount === 0) {
+      return res.status(404).json({
+        error: 'No registered devices for your account. Open the ERP app on your phone — the device registers automatically on login.',
+      });
+    }
+    await sendPushToUser(req.user.id, {
+      title: '🔔 BCIM ERP — Test Notification',
+      body: `Push notifications are working! Sent at ${new Date().toLocaleTimeString('en-IN')}.`,
+      data: { link: '/dashboard' },
+    });
+    res.json({ sent: true, device_count: deviceCount });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

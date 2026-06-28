@@ -44,18 +44,30 @@ export async function initPushNotifications(apiClient) {
       console.error('[Push] Registration error:', err);
     });
 
-    // 5. Foreground notification — show as toast (notification arrives while app is open)
+    // 5. Create the Android notification channel (required for Android 8+).
+    // Without this channel, FCM messages are silently dropped on modern Android.
+    await PushNotifications.createChannel({
+      id:          'erp-alerts',
+      name:        'ERP Alerts',
+      description: 'BCIM ERP workflow notifications',
+      importance:  5,   // IMPORTANCE_HIGH — shows heads-up banner + sound
+      visibility:  1,   // VISIBILITY_PUBLIC
+      sound:       'default',
+      lights:      true,
+      vibration:   true,
+    }).catch(() => {}); // no-op on iOS / older Android
+
+    // 6. Foreground notification — bell already shows live data, no extra action needed
     await PushNotifications.addListener('pushNotificationReceived', (notification) => {
       console.log('[Push] Foreground notification:', notification.title);
-      // The in-app notification bell already shows live data — no extra action needed
     });
 
-    // 6. Tap on notification — navigate to the linked page
+    // 7. Tap on notification — navigate to the linked page
     await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
       const link = action.notification.data?.link;
       if (link) {
-        // Use hash navigation to avoid full page reload inside WebView
-        window.location.hash = link.startsWith('/') ? `#${link}` : link;
+        // HTML5 history navigation — correct for Capacitor WebView (not hash routing)
+        window.location.href = link.startsWith('/') ? link : `/${link}`;
       }
     });
   } catch (err) {
