@@ -1059,6 +1059,65 @@ function MDQuickAccessBar() {
 }
 
 // ── Mobile slide-in sidebar ──────────────────────────────────────────────────
+// ── Mobile Bottom Navigation Bar ─────────────────────────────────────────────
+function MobileBottomNav({ onMenuOpen }) {
+  const location = useLocation();
+  const isActive = (prefix) =>
+    location.pathname === prefix || location.pathname.startsWith(prefix + '/');
+
+  const tabs = [
+    { to: '/dashboard',       icon: LayoutDashboard, label: 'Home' },
+    { to: '/procurement/po',  icon: ShoppingCart,    label: 'PO/WO' },
+    { to: '/stores',          icon: Warehouse,       label: 'Stores' },
+    { to: '/hr-admin',        icon: Users,           label: 'HR' },
+  ];
+
+  return (
+    <nav className="lg-hide print:hidden" style={{
+      position: 'fixed', bottom: 0, left: 0, right: 0,
+      background: '#ffffff',
+      borderTop: '1px solid #E2E8F0',
+      boxShadow: '0 -4px 16px rgba(0,0,0,0.10)',
+      display: 'flex',
+      zIndex: 80,
+      paddingBottom: 'env(safe-area-inset-bottom)',
+    }}>
+      {tabs.map(tab => {
+        const Icon = tab.icon;
+        const active = isActive(tab.to.split('/').slice(0, 2).join('/'));
+        return (
+          <NavLink key={tab.to} to={tab.to} style={{
+            flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', padding: '8px 4px 6px', textDecoration: 'none',
+            color: active ? '#2563EB' : '#94A3B8', minHeight: 56,
+          }}>
+            <div style={{
+              width: 36, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: 10,
+              background: active ? '#EFF6FF' : 'transparent',
+              transition: 'background 0.15s',
+            }}>
+              <Icon size={19} strokeWidth={active ? 2.2 : 1.8} />
+            </div>
+            <span style={{ fontSize: 10, marginTop: 2, fontWeight: active ? 600 : 400, letterSpacing: '-0.01em' }}>{tab.label}</span>
+          </NavLink>
+        );
+      })}
+      {/* More tab — opens sidebar drawer */}
+      <button onClick={onMenuOpen} style={{
+        flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'center', padding: '8px 4px 6px', border: 'none',
+        background: 'transparent', color: '#94A3B8', cursor: 'pointer', minHeight: 56,
+      }}>
+        <div style={{ width: 36, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10 }}>
+          <Menu size={19} strokeWidth={1.8} />
+        </div>
+        <span style={{ fontSize: 10, marginTop: 2, fontWeight: 400 }}>More</span>
+      </button>
+    </nav>
+  );
+}
+
 function MobileSidebar({ open, onClose, navGroups, user, matchesPath, recentPages = [] }) {
   const [expandedGroup, setExpandedGroup] = useState(null);
   const [expandedSection, setExpandedSection] = useState(null);
@@ -1068,7 +1127,7 @@ function MobileSidebar({ open, onClose, navGroups, user, matchesPath, recentPage
     <>
       {open && <div className="fixed inset-0 z-[90] bg-black/50 backdrop-blur-sm" onClick={onClose} />}
       <div style={{
-        position: 'fixed', left: 0, top: 0, bottom: 0, width: 280,
+        position: 'fixed', left: 0, top: 0, bottom: 0, width: 'min(280px, 85vw)',
         background: 'linear-gradient(180deg,#1E40AF 0%,#172554 100%)',
         zIndex: 100, transform: open ? 'translateX(0)' : 'translateX(-100%)',
         transition: 'transform 0.25s ease', overflowY: 'auto',
@@ -2106,8 +2165,8 @@ export default function Layout() {
             }}
           >
             <Search size={13} />
-            <span style={{ fontSize: 12 }}>Search</span>
-            <kbd style={{ fontSize: 9, background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.85)', padding: '1px 5px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.15)' }}>⌘K</kbd>
+            <span className="sm-show" style={{ fontSize: 12, display: 'none' }}>Search</span>
+            <kbd className="sm-show" style={{ display: 'none', fontSize: 9, background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.85)', padding: '1px 5px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.15)' }}>⌘K</kbd>
           </button>
 
           {/* Language */}
@@ -2297,6 +2356,9 @@ export default function Layout() {
         recentPages={recentPages}
       />
 
+      {/* Mobile bottom navigation bar */}
+      <MobileBottomNav onMenuOpen={() => setMobileOpen(true)} />
+
       <CommandPalette
         isOpen={paletteOpen}
         onClose={() => setPaletteOpen(false)}
@@ -2329,6 +2391,8 @@ export default function Layout() {
         @media (max-width: 1180px) { .erp-clock-pill { display: none !important; } }
         /* Desktop sidebar hidden on mobile — MobileSidebar used instead */
         @media (max-width: 1023px) { .desktop-sidebar { display: none !important; } }
+        /* Bottom nav bar — pad main content so it isn't hidden behind the bar */
+        @media (max-width: 1023px) { main { padding-bottom: calc(60px + env(safe-area-inset-bottom)) !important; } }
 
         /* ── Layout entry (login → ERP) ── */
         @keyframes erp-layout-in {
