@@ -74,7 +74,9 @@ function parseXLSX(buffer) {
   return rows.map(row => {
     const clean = {};
     for (const [k, v] of Object.entries(row)) {
-      clean[k.trim()] = typeof v === 'string' ? v.trim() : String(v === null || v === undefined ? '' : v).trim();
+      // Normalise key: trim + collapse internal whitespace (handles "Date of Birth  (as per Aadhaar)" etc.)
+      const normKey = k.trim().replace(/\s+/g, ' ');
+      clean[normKey] = typeof v === 'string' ? v.trim() : String(v === null || v === undefined ? '' : v).trim();
     }
     return clean;
   });
@@ -212,7 +214,7 @@ router.post('/employees', upload.single('file'), async (req, res) => {
         const phone    = pick(row, 'Mobile', 'Mobile No', 'Phone', 'Contact No', 'mobile_number',
                                'Personal Mobile Number', 'Mobile Number', 'Contact Number');
         const dept     = pick(row, 'Department', 'department_name', 'Department / Function', 'Department/Function',
-                               'Dept', 'Function - Current', 'Department - Current');
+                               'Dept', 'Function - Current', 'Department - Current', 'Department');
         const desig    = pick(row, 'Designation', 'designation_name', 'Designation - Current',
                                'Designation HR Record', 'Designation As per KYE', 'Job Title', 'Position');
         const doj      = normaliseDate(pick(row, 'Date of Joining', 'DOJ', 'Joining Date', 'date_of_joining', 'Date Of Joining'));
