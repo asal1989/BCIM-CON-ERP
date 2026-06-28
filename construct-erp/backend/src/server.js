@@ -143,6 +143,7 @@ const pettyCashRoutes             = require('./routes/petty-cash.routes');
 const automationIdeasRoutes       = require('./routes/automation-ideas.routes');
 const approvalEngineRoutes        = require('./routes/approval-engine.routes');
 const ewayBillRoutes              = require('./routes/ewayBill.routes');
+const searchRoutes                = require('./routes/search.routes');
 
 const http   = require('http');
 const { Server: SocketIO } = require('socket.io');
@@ -474,6 +475,7 @@ app.use(`${API}/ocr`,        ocrRoutes);
 app.use(`${API}/petty-cash`, pettyCashRoutes);
 app.use(`${API}/automation-ideas`, automationIdeasRoutes);
 app.use(`${API}/approval-engine`, approvalEngineRoutes);
+app.use(`${API}/search`, searchRoutes);
 
 // ============================================
 // SOCKET.IO — Real-time Chat
