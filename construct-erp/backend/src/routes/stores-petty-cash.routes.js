@@ -957,7 +957,7 @@ router.post('/email-weekly-report', authenticate, async (req, res) => {
     const { sendMail } = require('../services/mail.service');
     const companyId = req.user.company_id;
 
-    const { from: reqFrom, to: reqTo, recipient = 'it@bcim.in,stephen@bcim.in', pdfBase64, pdfFileName } = req.body || {};
+    const { from: reqFrom, to: reqTo, recipient = 'stephen@bcim.in', pdfBase64, pdfFileName } = req.body || {};
     let weekFrom, weekTo;
     if (reqFrom && reqTo) {
       weekFrom = reqFrom;
