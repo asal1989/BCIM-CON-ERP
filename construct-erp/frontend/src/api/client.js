@@ -1919,6 +1919,22 @@ export const hrComplianceAPI = {
   documentExpiry:      (p)        => api.get('/hr-admin/compliance/document-expiry', { params: p }),
   updateDocExpiry:     (id, d)    => api.put(`/hr-admin/compliance/document-expiry/${id}`, d),
   complianceCalendar:  (p)        => api.get('/hr-admin/compliance/compliance-calendar', { params: p }),
+  // New
+  bocwRegister:        (p)        => api.get('/hr-admin/compliance/bocw-register',   { params: p }),
+  bocwCess:            (p)        => api.get('/hr-admin/compliance/bocw-cess',       { params: p }),
+  createBocwCess:      (d)        => api.post('/hr-admin/compliance/bocw-cess', d),
+  updateBocwCess:      (id, d)    => api.put(`/hr-admin/compliance/bocw-cess/${id}`, d),
+  deleteBocwCess:      (id)       => api.delete(`/hr-admin/compliance/bocw-cess/${id}`),
+  gratuity:            (p)        => api.get('/hr-admin/compliance/gratuity',        { params: p }),
+  bonus:               (p)        => api.get('/hr-admin/compliance/bonus',           { params: p }),
+  lwfRegister:         (p)        => api.get('/hr-admin/compliance/lwf-register',   { params: p }),
+  minWages:            (p)        => api.get('/hr-admin/compliance/min-wages',       { params: p }),
+  ecrFile:             (p)        => api.get('/hr-admin/compliance/ecr-file',        { params: p, responseType: 'blob' }),
+  challanFilings:      (p)        => api.get('/hr-admin/compliance/challan-filings', { params: p }),
+  createChallan:       (d)        => api.post('/hr-admin/compliance/challan-filings', d),
+  updateChallan:       (id, d)    => api.put(`/hr-admin/compliance/challan-filings/${id}`, d),
+  deleteChallan:       (id)       => api.delete(`/hr-admin/compliance/challan-filings/${id}`),
+  clraRegister:        (p)        => api.get('/hr-admin/compliance/clra-register',  { params: p }),
 };
 
 export const mailAPI = {

@@ -665,4 +665,422 @@ router.get('/departments', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+/* ═══════════════════════════════════════════════════════
+   GET /compliance/bocw-register
+   BOCW (Building & Other Construction Workers) Register
+══════════════════════════════════════════════════════ */
+router.get('/bocw-register', async (req, res) => {
+  const { project_id } = req.query;
+  try {
+    let sql = `
+      SELECT w.id, w.worker_code, w.name, w.skill_type, w.bocw_number,
+             w.state_of_origin, w.daily_rate, w.joined_date, w.is_active,
+             w.aadhaar_last4, w.gang_name,
+             COALESCE(v.name,'Direct / Own') AS contractor_name,
+             COALESCE(p.name,'—') AS project_name
+      FROM workers w
+      LEFT JOIN vendors v ON v.id = w.contractor_id
+      LEFT JOIN projects p ON p.id = w.project_id
+      WHERE 1=1
+    `;
+    const params = [];
+    if (project_id) { sql += ` AND w.project_id = $${params.length+1}`; params.push(project_id); }
+    sql += ' ORDER BY w.name';
+    const { rows } = await query(sql, params);
+    const registered   = rows.filter(r => r.bocw_number).length;
+    const unregistered = rows.length - registered;
+    res.json({ data: rows, total: rows.length, registered, unregistered });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════
+   GET /compliance/bocw-cess?year=
+   BOCW Welfare Cess records (1% of construction cost)
+   + CRUD for cess payment tracking
+══════════════════════════════════════════════════════ */
+router.get('/bocw-cess', async (req, res) => {
+  try {
+    await query(`CREATE TABLE IF NOT EXISTS bocw_cess_records (
+      id SERIAL PRIMARY KEY,
+      company_id INT,
+      year INT,
+      project_name TEXT,
+      construction_cost NUMERIC(15,2) DEFAULT 0,
+      cess_rate NUMERIC(5,3) DEFAULT 1.0,
+      cess_amount NUMERIC(15,2) DEFAULT 0,
+      paid_amount NUMERIC(15,2) DEFAULT 0,
+      payment_date DATE,
+      challan_number TEXT,
+      notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    const { year = new Date().getFullYear() } = req.query;
+    const { rows } = await query(
+      `SELECT * FROM bocw_cess_records WHERE company_id=$1 AND year=$2 ORDER BY project_name`,
+      [req.user.company_id, year]
+    );
+    const totals = rows.reduce((a,r) => ({
+      construction_cost: a.construction_cost + parseFloat(r.construction_cost||0),
+      cess_amount: a.cess_amount + parseFloat(r.cess_amount||0),
+      paid_amount: a.paid_amount + parseFloat(r.paid_amount||0),
+    }), { construction_cost:0, cess_amount:0, paid_amount:0 });
+    res.json({ data: rows, totals, year });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/bocw-cess', async (req, res) => {
+  const { year, project_name, construction_cost, cess_rate=1.0, paid_amount=0, payment_date, challan_number, notes } = req.body;
+  const cess = parseFloat(construction_cost||0) * parseFloat(cess_rate) / 100;
+  try {
+    const { rows } = await query(
+      `INSERT INTO bocw_cess_records (company_id,year,project_name,construction_cost,cess_rate,cess_amount,paid_amount,payment_date,challan_number,notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [req.user.company_id, year, project_name, construction_cost, cess_rate, cess, paid_amount, payment_date||null, challan_number||null, notes||null]
+    );
+    res.status(201).json({ data: rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/bocw-cess/:id', async (req, res) => {
+  const { project_name, construction_cost, cess_rate=1.0, paid_amount, payment_date, challan_number, notes } = req.body;
+  const cess = parseFloat(construction_cost||0) * parseFloat(cess_rate) / 100;
+  try {
+    const { rows } = await query(
+      `UPDATE bocw_cess_records SET project_name=$1,construction_cost=$2,cess_rate=$3,cess_amount=$4,paid_amount=$5,payment_date=$6,challan_number=$7,notes=$8 WHERE id=$9 RETURNING *`,
+      [project_name, construction_cost, cess_rate, cess, paid_amount, payment_date||null, challan_number||null, notes||null, req.params.id]
+    );
+    res.json({ data: rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/bocw-cess/:id', async (req, res) => {
+  try {
+    await query('DELETE FROM bocw_cess_records WHERE id=$1', [req.params.id]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════
+   GET /compliance/gratuity?dept=
+   Gratuity Liability — employees with ≥5 years service
+   Formula: (Last Basic / 26) × 15 × completed years
+══════════════════════════════════════════════════════ */
+router.get('/gratuity', async (req, res) => {
+  const { dept, min_years = 1 } = req.query;
+  try {
+    let sql = EMP_SALARY_SQL;
+    const params = [req.user.company_id];
+    if (dept) { sql += ` AND dep.id = $${params.length+1}`; params.push(dept); }
+    sql += ' ORDER BY ep.date_of_joining, u.name';
+    const { rows } = await query(sql, params);
+
+    const today = new Date();
+    const data = rows
+      .map(r => {
+        const doj = r.date_of_joining ? new Date(r.date_of_joining) : null;
+        if (!doj) return null;
+        const yearsDecimal = (today - doj) / (1000 * 60 * 60 * 24 * 365.25);
+        const completedYears = Math.floor(yearsDecimal);
+        const basic = parseFloat(r.basic) || 0;
+        // Gratuity = (Basic / 26) × 15 × completed years (capped at 20L)
+        const gratuity = Math.min(Math.round((basic / 26) * 15 * completedYears), 2000000);
+        const eligible = completedYears >= 5;
+        if (parseFloat(min_years) > 0 && yearsDecimal < parseFloat(min_years)) return null;
+        return {
+          employee_code:   r.employee_code,
+          name:            r.name,
+          department:      r.department,
+          designation:     r.designation,
+          date_of_joining: r.date_of_joining,
+          years_decimal:   Math.round(yearsDecimal * 10) / 10,
+          completed_years: completedYears,
+          basic,
+          gratuity_liability: gratuity,
+          eligible,
+        };
+      })
+      .filter(Boolean)
+      .sort((a,b) => b.years_decimal - a.years_decimal);
+
+    const totals = {
+      total: data.length,
+      eligible: data.filter(r => r.eligible).length,
+      total_liability: data.filter(r => r.eligible).reduce((s,r) => s + r.gratuity_liability, 0),
+      potential_liability: data.reduce((s,r) => s + r.gratuity_liability, 0),
+    };
+    res.json({ data, totals });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════
+   GET /compliance/bonus?year=
+   Bonus Register — Payment of Bonus Act
+   8.33% min to 20% max of annual wages (or ₹7,000/month floor)
+   Eligible: employees with ≥1 year service earning ≤₹21,000/month
+══════════════════════════════════════════════════════ */
+router.get('/bonus', async (req, res) => {
+  const { year = new Date().getFullYear(), bonus_pct = 8.33, dept } = req.query;
+  try {
+    let sql = EMP_SALARY_SQL;
+    const params = [req.user.company_id];
+    if (dept) { sql += ` AND dep.id = $${params.length+1}`; params.push(dept); }
+    sql += ' ORDER BY dep.name, u.name';
+    const { rows } = await query(sql, params);
+
+    const today = new Date();
+    const pct = Math.max(8.33, Math.min(20, parseFloat(bonus_pct)));
+    const data = rows.map(r => {
+      const doj = r.date_of_joining ? new Date(r.date_of_joining) : null;
+      const yearsService = doj ? (today - doj) / (1000 * 60 * 60 * 24 * 365.25) : 0;
+      const eligible = yearsService >= 1 && parseFloat(r.gross_monthly||0) <= 21000;
+      const basicMonthly = parseFloat(r.basic) || 0;
+      // Bonus basis: basic+DA or ₹7,000 whichever higher, annual
+      const bonusBasis = Math.max(basicMonthly, 7000) * 12;
+      const bonusAmount = eligible ? Math.round(bonusBasis * pct / 100) : 0;
+      return {
+        employee_code:   r.employee_code,
+        name:            r.name,
+        department:      r.department,
+        designation:     r.designation,
+        date_of_joining: r.date_of_joining,
+        years_service:   Math.round(yearsService * 10) / 10,
+        gross_monthly:   parseFloat(r.gross_monthly||0),
+        basic_monthly:   basicMonthly,
+        bonus_basis:     eligible ? bonusBasis : 0,
+        bonus_pct:       eligible ? pct : 0,
+        bonus_amount:    bonusAmount,
+        eligible,
+        ineligible_reason: !eligible ? (yearsService < 1 ? 'Service < 1 year' : 'Gross > ₹21,000') : null,
+      };
+    });
+
+    const totals = {
+      total: data.length,
+      eligible: data.filter(r => r.eligible).length,
+      total_bonus: data.reduce((s,r) => s + r.bonus_amount, 0),
+    };
+    res.json({ data, totals, bonus_pct: pct, year });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════
+   GET /compliance/lwf-register?year=
+   Labour Welfare Fund Register — Karnataka
+   Employee: ₹20 | Employer: ₹40 | Due: January (annual)
+══════════════════════════════════════════════════════ */
+router.get('/lwf-register', async (req, res) => {
+  const { year = new Date().getFullYear() } = req.query;
+  try {
+    const { rows } = await query(EMP_SALARY_SQL + ' ORDER BY u.name', [req.user.company_id]);
+    let sno = 1;
+    const data = rows.map(r => ({
+      sno: sno++,
+      employee_code: r.employee_code,
+      name:          r.name,
+      department:    r.department,
+      designation:   r.designation,
+      gross_monthly: parseFloat(r.gross_monthly||0),
+      emp_lwf:       20,
+      employer_lwf:  40,
+      total_lwf:     60,
+    }));
+    const totals = {
+      total: data.length,
+      emp_lwf:      data.length * 20,
+      employer_lwf: data.length * 40,
+      total_lwf:    data.length * 60,
+    };
+    res.json({ data, totals, year, due_month: 'January', state: 'Karnataka' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════
+   GET /compliance/min-wages?state=KA&category=skilled
+   Minimum Wages Compliance Check
+══════════════════════════════════════════════════════ */
+const MIN_WAGES = {
+  KA: { unskilled: 12000, semi_skilled: 14000, skilled: 16000, highly_skilled: 20000 },
+  MH: { unskilled: 13000, semi_skilled: 15000, skilled: 17500, highly_skilled: 22000 },
+  DL: { unskilled: 16064, semi_skilled: 17693, skilled: 19473, highly_skilled: 21443 },
+  TN: { unskilled: 11000, semi_skilled: 13000, skilled: 15000, highly_skilled: 18000 },
+};
+
+router.get('/min-wages', async (req, res) => {
+  const { state = 'KA', dept } = req.query;
+  try {
+    let sql = EMP_SALARY_SQL;
+    const params = [req.user.company_id];
+    if (dept) { sql += ` AND dep.id = $${params.length+1}`; params.push(dept); }
+    sql += ' ORDER BY dep.name, u.name';
+    const { rows } = await query(sql, params);
+
+    const wages = MIN_WAGES[state] || MIN_WAGES.KA;
+    let sno = 1;
+    const data = rows.map(r => {
+      const basic = parseFloat(r.basic||0);
+      // Simple heuristic: map designation to category
+      const desig = (r.designation||'').toLowerCase();
+      let category = 'skilled';
+      if (/helper|office boy|peon|sweeper/i.test(desig)) category = 'unskilled';
+      else if (/junior|trainee|assistant|jr\./i.test(desig)) category = 'semi_skilled';
+      else if (/senior|manager|director|head|chief|gm|vp/i.test(desig)) category = 'highly_skilled';
+      const minWage = wages[category];
+      const compliant = basic >= minWage;
+      const shortfall = compliant ? 0 : minWage - basic;
+      return {
+        sno: sno++,
+        employee_code: r.employee_code,
+        name:          r.name,
+        department:    r.department,
+        designation:   r.designation,
+        category,
+        basic,
+        min_wage:      minWage,
+        compliant,
+        shortfall,
+      };
+    });
+
+    const violations = data.filter(r => !r.compliant);
+    res.json({ data, violations_count: violations.length, total: data.length, state, wages });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════
+   GET /compliance/ecr-file?month=&year=
+   PF ECR (Electronic Challan-cum-Return) file generator
+   Returns text content in EPFO ECR v2 format
+══════════════════════════════════════════════════════ */
+router.get('/ecr-file', async (req, res) => {
+  const { month = new Date().getMonth() + 1, year = new Date().getFullYear() } = req.query;
+  try {
+    const { rows } = await query(
+      EMP_SALARY_SQL + ' AND COALESCE(es.pf_applicable,true) = TRUE ORDER BY u.name',
+      [req.user.company_id]
+    );
+    // ECR v2 format: UAN#MEMBER_NAME#GROSS_WAGES#EPF_WAGES#EPS_WAGES#EE_SHARE#ER_SHARE#NCP_DAYS#REFUND_OF_ADVANCES
+    const lines = ['#~#'];
+    rows.forEach(r => {
+      const pf = pfCalc(r.basic, true);
+      const uan = r.uan_number || '0';
+      const name = (r.name || '').toUpperCase().replace(/[^A-Z ]/g,'').trim();
+      const gross = Math.round(parseFloat(r.gross_monthly)||0);
+      const pfWage = Math.min(Math.round(parseFloat(r.basic)||0), PF_WAGE_CEILING);
+      lines.push([uan, name, gross, pfWage, pfWage, pf.emp, pf.epf, 0, 0].join('#~#'));
+    });
+    lines.push('#~#');
+    const content = lines.join('\n');
+    res.setHeader('Content-Type', 'text/plain');
+    res.setHeader('Content-Disposition', `attachment; filename="ECR_${String(month).padStart(2,'0')}_${year}.txt"`);
+    res.send(content);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════
+   Challan Filing Tracker — CRUD
+   Track PF ECR, ESI, PT, TDS, Bonus, BOCW cess filings
+══════════════════════════════════════════════════════ */
+const ensureChallanTable = () => query(`
+  CREATE TABLE IF NOT EXISTS compliance_challan_filings (
+    id SERIAL PRIMARY KEY,
+    company_id INT,
+    challan_type TEXT NOT NULL,
+    period_month INT,
+    period_year INT NOT NULL,
+    amount NUMERIC(15,2) DEFAULT 0,
+    filed_on DATE,
+    reference_number TEXT,
+    mode TEXT DEFAULT 'online',
+    bank TEXT,
+    notes TEXT,
+    filed_by TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  )
+`);
+
+router.get('/challan-filings', async (req, res) => {
+  const { year = new Date().getFullYear(), type } = req.query;
+  try {
+    await ensureChallanTable();
+    let sql = `SELECT * FROM compliance_challan_filings WHERE company_id=$1 AND period_year=$2`;
+    const params = [req.user.company_id, year];
+    if (type) { sql += ` AND challan_type=$${params.length+1}`; params.push(type); }
+    sql += ' ORDER BY period_year DESC, period_month DESC, challan_type';
+    const { rows } = await query(sql, params);
+    res.json({ data: rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/challan-filings', async (req, res) => {
+  const { challan_type, period_month, period_year, amount, filed_on, reference_number, mode, bank, notes } = req.body;
+  try {
+    await ensureChallanTable();
+    const { rows } = await query(
+      `INSERT INTO compliance_challan_filings (company_id,challan_type,period_month,period_year,amount,filed_on,reference_number,mode,bank,notes,filed_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [req.user.company_id, challan_type, period_month||null, period_year, amount||0, filed_on||null, reference_number||null, mode||'online', bank||null, notes||null, req.user.name||null]
+    );
+    res.status(201).json({ data: rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/challan-filings/:id', async (req, res) => {
+  const { amount, filed_on, reference_number, mode, bank, notes } = req.body;
+  try {
+    const { rows } = await query(
+      `UPDATE compliance_challan_filings SET amount=$1,filed_on=$2,reference_number=$3,mode=$4,bank=$5,notes=$6,updated_at=NOW() WHERE id=$7 RETURNING *`,
+      [amount||0, filed_on||null, reference_number||null, mode||'online', bank||null, notes||null, req.params.id]
+    );
+    res.json({ data: rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/challan-filings/:id', async (req, res) => {
+  try {
+    await query('DELETE FROM compliance_challan_filings WHERE id=$1', [req.params.id]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════
+   GET /compliance/clra-register
+   Contract Labour (Regulation & Abolition) Register
+   — workers grouped by contractor
+══════════════════════════════════════════════════════ */
+router.get('/clra-register', async (req, res) => {
+  const { project_id } = req.query;
+  try {
+    let sql = `
+      SELECT w.id, w.worker_code, w.name, w.skill_type, w.bocw_number,
+             w.daily_rate, w.joined_date, w.is_active, w.state_of_origin,
+             w.gang_name, w.aadhaar_last4,
+             COALESCE(v.name,'—') AS contractor_name,
+             COALESCE(p.name,'—') AS project_name
+      FROM workers w
+      LEFT JOIN vendors v ON v.id = w.contractor_id
+      LEFT JOIN projects p ON p.id = w.project_id
+      WHERE w.is_active = true
+    `;
+    const params = [];
+    if (project_id) { sql += ` AND w.project_id = $${params.length+1}`; params.push(project_id); }
+    sql += ' ORDER BY v.name NULLS LAST, w.name';
+    const { rows } = await query(sql, params);
+
+    // Group by contractor
+    const grouped = {};
+    rows.forEach(r => {
+      const key = r.contractor_name;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(r);
+    });
+    const contractors = Object.entries(grouped).map(([name, workers]) => ({
+      contractor_name: name,
+      worker_count: workers.length,
+      workers,
+    }));
+    res.json({ data: rows, contractors, total: rows.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

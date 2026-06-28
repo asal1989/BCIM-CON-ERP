@@ -5,7 +5,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ShieldCheck, Download, RefreshCw, ChevronDown, Users,
   FileText, Calendar, CalendarDays, Building2, IndianRupee, Fingerprint,
-  BookOpen, Calculator, AlertTriangle, Plus, Edit2, Trash2, X, Clock, BadgeCheck
+  BookOpen, Calculator, AlertTriangle, Plus, Edit2, Trash2, X, Clock, BadgeCheck,
+  HardHat, Gift, Star, Heart, TrendingUp, CheckCircle, XCircle, Send, Layers
 } from 'lucide-react';
 import { hrComplianceAPI } from '../../api/client';
 import toast from 'react-hot-toast';
@@ -26,9 +27,18 @@ const TABS = [
   { key: 'muster',     label: 'Muster Roll',           icon: Calendar,       color: 'rose'   },
   { key: 'employment', label: 'Employment Register',   icon: Users,          color: 'teal'   },
   { key: 'it',         label: 'Income Tax',            icon: FileText,       color: 'orange' },
-  { key: 'licenses',   label: 'Labour Licences',        icon: BadgeCheck,     color: 'indigo' },
-  { key: 'docexpiry',  label: 'Doc Expiry',             icon: AlertTriangle,  color: 'red'    },
-  { key: 'calendar',   label: 'Compliance Calendar',    icon: CalendarDays,   color: 'sky'    },
+  { key: 'licenses',   label: 'Labour Licences',       icon: BadgeCheck,     color: 'indigo' },
+  { key: 'docexpiry',  label: 'Doc Expiry',            icon: AlertTriangle,  color: 'red'    },
+  { key: 'calendar',   label: 'Compliance Calendar',   icon: CalendarDays,   color: 'sky'    },
+  // New
+  { key: 'bocw',       label: 'BOCW Register',         icon: HardHat,        color: 'amber'  },
+  { key: 'gratuity',   label: 'Gratuity',              icon: Gift,           color: 'emerald'},
+  { key: 'bonus',      label: 'Bonus Register',        icon: Star,           color: 'yellow' },
+  { key: 'lwf',        label: 'LWF Register',          icon: Heart,          color: 'rose'   },
+  { key: 'minwages',   label: 'Min. Wages Check',      icon: TrendingUp,     color: 'teal'   },
+  { key: 'clra',       label: 'Contract Labour',       icon: Layers,         color: 'indigo' },
+  { key: 'challan',    label: 'Challan Tracker',       icon: Send,           color: 'blue'   },
+  { key: 'ecr',        label: 'PF ECR File',           icon: Download,       color: 'violet' },
 ];
 
 const COLOR = {
@@ -36,12 +46,13 @@ const COLOR = {
   emerald: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', active: 'bg-emerald-600' },
   violet:  { bg: 'bg-violet-50',  text: 'text-violet-700',  border: 'border-violet-200',  active: 'bg-violet-600'  },
   amber:   { bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200',   active: 'bg-amber-600'   },
-  rose:    { bg: 'bg-rose-50',    text: 'text-rose-700',    border: 'border-rose-200',     active: 'bg-rose-600'    },
+  rose:    { bg: 'bg-rose-50',    text: 'text-rose-700',    border: 'border-rose-200',    active: 'bg-rose-600'    },
   teal:    { bg: 'bg-teal-50',    text: 'text-teal-700',    border: 'border-teal-200',    active: 'bg-teal-600'    },
   orange:  { bg: 'bg-orange-50',  text: 'text-orange-700',  border: 'border-orange-200',  active: 'bg-orange-600'  },
   indigo:  { bg: 'bg-indigo-50',  text: 'text-indigo-700',  border: 'border-indigo-200',  active: 'bg-indigo-600'  },
   red:     { bg: 'bg-red-50',     text: 'text-red-700',     border: 'border-red-200',     active: 'bg-red-600'     },
   sky:     { bg: 'bg-sky-50',     text: 'text-sky-700',     border: 'border-sky-200',     active: 'bg-sky-600'     },
+  yellow:  { bg: 'bg-yellow-50',  text: 'text-yellow-700',  border: 'border-yellow-200',  active: 'bg-yellow-600'  },
 };
 
 // ── Shared Controls ────────────────────────────────────────────────────────────
@@ -1113,6 +1124,811 @@ function ComplianceCalendar() {
   );
 }
 
+// ── BOCW Register ─────────────────────────────────────────────────────────────
+function BOCWRegister() {
+  const qc = useQueryClient();
+  const [year, setYear] = useState(CURRENT_YEAR);
+  const [cessModal, setCessModal] = useState(null);
+  const [cessForm, setCessForm] = useState({ year: CURRENT_YEAR, project_name:'', construction_cost:'', cess_rate:1.0, paid_amount:'', payment_date:'', challan_number:'', notes:'' });
+
+  const { data: wRes, isLoading: wLoading, refetch: wRefetch } = useQuery({
+    queryKey: ['bocw-workers'],
+    queryFn: () => hrComplianceAPI.bocwRegister().then(r => r.data),
+  });
+  const { data: cRes, isLoading: cLoading, refetch: cRefetch } = useQuery({
+    queryKey: ['bocw-cess', year],
+    queryFn: () => hrComplianceAPI.bocwCess({ year }).then(r => r.data),
+  });
+
+  const workers = wRes?.data || [];
+  const cessRows = cRes?.data || [];
+  const cessTotals = cRes?.totals || {};
+
+  const saveCess = useMutation({
+    mutationFn: d => cessModal?.id ? hrComplianceAPI.updateBocwCess(cessModal.id, d) : hrComplianceAPI.createBocwCess(d),
+    onSuccess: () => { qc.invalidateQueries(['bocw-cess']); setCessModal(null); toast.success('Saved'); },
+    onError: e => toast.error(e.response?.data?.error || 'Failed'),
+  });
+  const delCess = useMutation({
+    mutationFn: id => hrComplianceAPI.deleteBocwCess(id),
+    onSuccess: () => { qc.invalidateQueries(['bocw-cess']); toast.success('Deleted'); },
+  });
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800">
+        <strong>BOCW Act 1996:</strong> Mandatory registration of all construction workers. Employer must pay <strong>1% Welfare Cess</strong> on total construction cost. Worker registration in Form-I; cess payment in Form-II.
+      </div>
+
+      {/* Worker Registry */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="font-black text-gray-900 text-sm">Site Worker Registry</h3>
+          <div className="flex gap-2">
+            <button onClick={wRefetch} className="p-2 rounded-xl hover:bg-gray-100"><RefreshCw size={15} className="text-gray-500"/></button>
+            <ExportBtn color="amber" data={workers} filename={`BOCW_Register_${CURRENT_YEAR}`}/>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <StatCard label="Total Workers" value={wRes?.total || 0}/>
+          <StatCard label="BOCW Registered" value={wRes?.registered || 0} sub="Has BOCW number"/>
+          <StatCard label="Not Registered" value={wRes?.unregistered || 0} sub="Needs BOCW card"/>
+          <StatCard label="Registration %" value={wRes?.total ? `${Math.round((wRes.registered/wRes.total)*100)}%` : '—'}/>
+        </div>
+        {wLoading ? <LoadingTable/> : (
+          <div className="overflow-x-auto rounded-2xl border border-gray-100" style={{boxShadow:'0 2px 10px rgba(10,31,92,0.06)'}}>
+            <table className="w-full text-xs">
+              <thead><tr className="bg-amber-700 text-white">
+                {['#','Worker Code','Name','Trade','BOCW No.','Aadhaar (Last 4)','Daily Rate','Project','Contractor','Status'].map(h => (
+                  <th key={h} className="px-3 py-3 text-left font-bold text-[11px] whitespace-nowrap">{h}</th>
+                ))}
+              </tr></thead>
+              <tbody className="divide-y divide-gray-100">
+                {workers.map((w,i) => (
+                  <tr key={w.id} className={`hover:bg-amber-50/30 ${!w.bocw_number ? 'bg-red-50/10' : ''}`}>
+                    <td className="px-3 py-2 text-gray-400">{i+1}</td>
+                    <td className="px-3 py-2 font-mono text-gray-700">{w.worker_code}</td>
+                    <td className="px-3 py-2 font-semibold text-gray-900">{w.name}</td>
+                    <td className="px-3 py-2 capitalize text-gray-600">{(w.skill_type||'').replace(/_/g,' ')}</td>
+                    <td className="px-3 py-2 font-mono text-amber-700">{w.bocw_number || <span className="text-red-500 font-bold">Not Registered</span>}</td>
+                    <td className="px-3 py-2 font-mono text-gray-500">{w.aadhaar_last4 ? `XXXX-XXXX-${w.aadhaar_last4}` : '—'}</td>
+                    <td className="px-3 py-2 text-right font-mono">₹{inr(w.daily_rate)}</td>
+                    <td className="px-3 py-2 text-gray-600">{w.project_name}</td>
+                    <td className="px-3 py-2 text-gray-600">{w.contractor_name}</td>
+                    <td className="px-3 py-2"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${w.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{w.is_active ? 'Active' : 'Inactive'}</span></td>
+                  </tr>
+                ))}
+                {!workers.length && <tr><td colSpan={10} className="px-3 py-10 text-center text-gray-400">No site workers found</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Welfare Cess Tracker */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h3 className="font-black text-gray-900 text-sm">Welfare Cess Tracker (1% of Construction Cost)</h3>
+          <div className="flex gap-2 items-center">
+            <select value={year} onChange={e => setYear(+e.target.value)} className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none">
+              {[2023,2024,2025,2026,2027].map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+            <button onClick={cRefetch} className="p-2 rounded-xl hover:bg-gray-100"><RefreshCw size={15} className="text-gray-500"/></button>
+            <button onClick={() => { setCessForm({year, project_name:'', construction_cost:'', cess_rate:1.0, paid_amount:'', payment_date:'', challan_number:'', notes:''}); setCessModal({}); }}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-xl bg-amber-600 text-white hover:bg-amber-700">
+              <Plus size={14}/> Add Cess Entry
+            </button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <StatCard label="Construction Cost" value={`₹${inr(cessTotals.construction_cost)}`}/>
+          <StatCard label="Total Cess Due (1%)" value={`₹${inr(cessTotals.cess_amount)}`}/>
+          <StatCard label="Total Paid" value={`₹${inr(cessTotals.paid_amount)}`} sub={cessTotals.cess_amount > cessTotals.paid_amount ? `₹${inr(cessTotals.cess_amount - cessTotals.paid_amount)} outstanding` : 'Fully paid'}/>
+        </div>
+        {cLoading ? <LoadingTable/> : (
+          <div className="overflow-x-auto rounded-2xl border border-gray-100" style={{boxShadow:'0 2px 10px rgba(10,31,92,0.06)'}}>
+            <table className="w-full text-xs">
+              <thead><tr className="bg-amber-700 text-white">
+                {['Project','Construction Cost','Cess Rate','Cess Due','Paid','Challan No.','Paid On','Balance','Actions'].map(h => (
+                  <th key={h} className="px-3 py-3 text-left font-bold text-[11px] whitespace-nowrap">{h}</th>
+                ))}
+              </tr></thead>
+              <tbody className="divide-y divide-gray-100">
+                {cessRows.map(r => {
+                  const balance = parseFloat(r.cess_amount||0) - parseFloat(r.paid_amount||0);
+                  return (
+                    <tr key={r.id} className={`hover:bg-amber-50/30 ${balance > 0 ? 'bg-red-50/10' : ''}`}>
+                      <td className="px-3 py-2 font-semibold text-gray-900">{r.project_name}</td>
+                      <td className="px-3 py-2 text-right font-mono">₹{inr(r.construction_cost)}</td>
+                      <td className="px-3 py-2 text-center">{r.cess_rate}%</td>
+                      <td className="px-3 py-2 text-right font-mono font-bold text-amber-700">₹{inr(r.cess_amount)}</td>
+                      <td className="px-3 py-2 text-right font-mono text-emerald-700">₹{inr(r.paid_amount)}</td>
+                      <td className="px-3 py-2 font-mono text-gray-500">{r.challan_number || '—'}</td>
+                      <td className="px-3 py-2">{r.payment_date ? new Date(r.payment_date).toLocaleDateString('en-IN') : '—'}</td>
+                      <td className="px-3 py-2 text-right font-mono font-black">{balance > 0 ? <span className="text-red-600">₹{inr(balance)}</span> : <span className="text-emerald-600">Nil</span>}</td>
+                      <td className="px-3 py-2 flex gap-1">
+                        <button onClick={() => { setCessForm({...r, payment_date: r.payment_date?.slice(0,10)||''}); setCessModal(r); }} className="p-1.5 rounded-lg hover:bg-amber-100 text-amber-700"><Edit2 size={12}/></button>
+                        <button onClick={() => delCess.mutate(r.id)} className="p-1.5 rounded-lg hover:bg-red-100 text-red-500"><Trash2 size={12}/></button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!cessRows.length && <tr><td colSpan={9} className="px-3 py-8 text-center text-gray-400">No cess records. Click "Add Cess Entry" to track BOCW welfare cess payments.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {cessModal !== null && (
+        <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h3 className="font-black text-gray-900">{cessModal?.id ? 'Edit Cess Entry' : 'Add Cess Entry'}</h3>
+              <button onClick={() => setCessModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100"><X size={16}/></button>
+            </div>
+            <div className="px-6 py-5 grid grid-cols-2 gap-4">
+              {[
+                ['Year','year','number'],['Project Name','project_name','text'],
+                ['Construction Cost (₹)','construction_cost','number'],['Cess Rate (%)','cess_rate','number'],
+                ['Amount Paid (₹)','paid_amount','number'],['Payment Date','payment_date','date'],
+                ['Challan Number','challan_number','text'],['Notes','notes','text'],
+              ].map(([label, key, type]) => (
+                <div key={key} className={key === 'project_name' || key === 'notes' ? 'col-span-2' : ''}>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
+                  <input type={type} value={cessForm[key]||''} onChange={e => setCessForm(f => ({...f, [key]: e.target.value}))}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20"/>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-3 justify-end px-6 pb-5">
+              <button onClick={() => setCessModal(null)} className="px-4 py-2 text-sm font-semibold rounded-xl text-gray-600 hover:bg-gray-100">Cancel</button>
+              <button onClick={() => saveCess.mutate(cessForm)} disabled={saveCess.isPending}
+                className="px-5 py-2 text-sm font-bold rounded-xl bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-60">
+                {saveCess.isPending ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Gratuity Liability ─────────────────────────────────────────────────────────
+function GratuityRegister({ depts }) {
+  const [dept, setDept] = useState('');
+  const [minYears, setMinYears] = useState(1);
+
+  const { data: res, isLoading, refetch } = useQuery({
+    queryKey: ['gratuity', dept, minYears],
+    queryFn: () => hrComplianceAPI.gratuity({ dept: dept||undefined, min_years: minYears }).then(r => r.data),
+  });
+  const rows   = res?.data   || [];
+  const totals = res?.totals || {};
+  const eligible = rows.filter(r => r.eligible);
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-xs text-emerald-800">
+        <strong>Payment of Gratuity Act 1972:</strong> Employee eligible after completing <strong>5 years</strong> continuous service.
+        Formula: <strong>(Last Basic ÷ 26) × 15 × Completed Years</strong>. Maximum ₹20 lakhs. Payable within 30 days of separation.
+      </div>
+      <div className="flex flex-wrap gap-3 items-center justify-between">
+        <div className="flex gap-3 items-center flex-wrap">
+          <select value={dept} onChange={e => setDept(e.target.value)} className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none">
+            <option value="">All Departments</option>
+            {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+          <select value={minYears} onChange={e => setMinYears(+e.target.value)} className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none">
+            <option value={1}>All (1+ year)</option>
+            <option value={3}>3+ years</option>
+            <option value={5}>5+ years (eligible)</option>
+          </select>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={refetch} className="p-2 rounded-xl hover:bg-gray-100"><RefreshCw size={15} className="text-gray-500"/></button>
+          <ExportBtn color="emerald" data={rows} filename="Gratuity_Liability"/>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard label="Total Employees" value={totals.total||0} sub={`Showing ${minYears}+ years`}/>
+        <StatCard label="Eligible (5+ yrs)" value={totals.eligible||0} sub="Entitled to gratuity"/>
+        <StatCard label="Payable Liability" value={`₹${inr(totals.total_liability)}`} sub="For 5+ yr employees"/>
+        <StatCard label="Potential Liability" value={`₹${inr(totals.potential_liability)}`} sub="All employees (future)"/>
+      </div>
+      {isLoading ? <LoadingTable/> : (
+        <div className="overflow-x-auto rounded-2xl border border-gray-100" style={{boxShadow:'0 2px 10px rgba(10,31,92,0.06)'}}>
+          <table className="w-full text-xs">
+            <thead><tr className="bg-emerald-700 text-white">
+              {['#','Code','Name','Dept','Designation','DOJ','Years','Basic (₹)','Gratuity (₹)','Status'].map(h => (
+                <th key={h} className="px-3 py-3 text-left font-bold text-[11px] whitespace-nowrap">{h}</th>
+              ))}
+            </tr></thead>
+            <tbody className="divide-y divide-gray-100">
+              {rows.map((r,i) => (
+                <tr key={r.employee_code} className={`hover:bg-emerald-50/30 ${r.eligible ? 'bg-emerald-50/20' : ''}`}>
+                  <td className="px-3 py-2 text-gray-400">{i+1}</td>
+                  <td className="px-3 py-2 font-mono text-gray-700">{r.employee_code}</td>
+                  <td className="px-3 py-2 font-semibold text-gray-900">{r.name}</td>
+                  <td className="px-3 py-2 text-gray-600">{r.department}</td>
+                  <td className="px-3 py-2 text-gray-600">{r.designation}</td>
+                  <td className="px-3 py-2">{r.date_of_joining ? new Date(r.date_of_joining).toLocaleDateString('en-IN') : '—'}</td>
+                  <td className="px-3 py-2 font-bold text-gray-800">{r.years_decimal} yrs</td>
+                  <td className="px-3 py-2 text-right font-mono">{inr(r.basic)}</td>
+                  <td className="px-3 py-2 text-right font-mono font-black text-emerald-700">{r.eligible ? `₹${inr(r.gratuity_liability)}` : '—'}</td>
+                  <td className="px-3 py-2">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.eligible ? 'bg-emerald-50 text-emerald-700' : r.completed_years >= 3 ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
+                      {r.eligible ? 'Eligible' : `${r.completed_years} yr${r.completed_years !== 1 ? 's' : ''}`}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {rows.length > 0 && (
+                <tr className="bg-emerald-50 font-black">
+                  <td colSpan={8} className="px-3 py-2 text-emerald-800 font-black">PAYABLE TOTAL (eligible only)</td>
+                  <td className="px-3 py-2 text-right font-mono font-black text-emerald-700">₹{inr(totals.total_liability)}</td>
+                  <td/>
+                </tr>
+              )}
+              {!rows.length && <tr><td colSpan={10} className="px-3 py-10 text-center text-gray-400">No employees found for selected filter</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Bonus Register ─────────────────────────────────────────────────────────────
+function BonusRegister({ depts }) {
+  const [year, setYear]       = useState(CURRENT_YEAR);
+  const [bonusPct, setBonusPct] = useState(8.33);
+  const [dept, setDept]       = useState('');
+
+  const { data: res, isLoading, refetch } = useQuery({
+    queryKey: ['bonus', year, bonusPct, dept],
+    queryFn: () => hrComplianceAPI.bonus({ year, bonus_pct: bonusPct, dept: dept||undefined }).then(r => r.data),
+  });
+  const rows   = res?.data   || [];
+  const totals = res?.totals || {};
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 text-xs text-yellow-800">
+        <strong>Payment of Bonus Act 1965:</strong> Employees earning ≤₹21,000/month with ≥1 year service.
+        Minimum <strong>8.33%</strong> of annual wages (or ₹7,000/month floor, whichever higher). Max 20%. Due before <strong>30th November</strong> each year.
+      </div>
+      <div className="flex flex-wrap gap-3 items-center justify-between">
+        <div className="flex gap-3 items-center flex-wrap">
+          <select value={year} onChange={e => setYear(+e.target.value)} className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none">
+            {[2023,2024,2025,2026].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+          <select value={dept} onChange={e => setDept(e.target.value)} className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none">
+            <option value="">All Departments</option>
+            {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-semibold text-gray-600">Bonus %:</label>
+            <input type="number" min={8.33} max={20} step={0.01} value={bonusPct}
+              onChange={e => setBonusPct(parseFloat(e.target.value)||8.33)}
+              className="w-20 px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none"/>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={refetch} className="p-2 rounded-xl hover:bg-gray-100"><RefreshCw size={15} className="text-gray-500"/></button>
+          <ExportBtn color="amber" data={rows} filename={`Bonus_Register_${year}`}/>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <StatCard label="Total Employees" value={rows.length}/>
+        <StatCard label="Eligible for Bonus" value={totals.eligible||0} sub="≥1 yr + gross ≤₹21,000"/>
+        <StatCard label={`Total Bonus (${bonusPct}%)`} value={`₹${inr(totals.total_bonus)}`}/>
+      </div>
+      {isLoading ? <LoadingTable/> : (
+        <div className="overflow-x-auto rounded-2xl border border-gray-100" style={{boxShadow:'0 2px 10px rgba(10,31,92,0.06)'}}>
+          <table className="w-full text-xs">
+            <thead><tr className="bg-yellow-600 text-white">
+              {['#','Code','Name','Dept','DOJ','Yrs','Gross (₹)','Bonus Basis (Annual)','Bonus %','Bonus Amount','Eligibility'].map(h => (
+                <th key={h} className="px-3 py-3 text-left font-bold text-[11px] whitespace-nowrap">{h}</th>
+              ))}
+            </tr></thead>
+            <tbody className="divide-y divide-gray-100">
+              {rows.map((r,i) => (
+                <tr key={r.employee_code} className={`hover:bg-yellow-50/30 ${r.eligible ? '' : 'opacity-60'}`}>
+                  <td className="px-3 py-2 text-gray-400">{i+1}</td>
+                  <td className="px-3 py-2 font-mono text-gray-700">{r.employee_code}</td>
+                  <td className="px-3 py-2 font-semibold text-gray-900">{r.name}</td>
+                  <td className="px-3 py-2 text-gray-600">{r.department}</td>
+                  <td className="px-3 py-2">{r.date_of_joining ? new Date(r.date_of_joining).toLocaleDateString('en-IN') : '—'}</td>
+                  <td className="px-3 py-2 text-gray-700">{r.years_service}</td>
+                  <td className="px-3 py-2 text-right font-mono">{inr(r.gross_monthly)}</td>
+                  <td className="px-3 py-2 text-right font-mono">{r.eligible ? inr(r.bonus_basis) : '—'}</td>
+                  <td className="px-3 py-2 text-center">{r.eligible ? `${r.bonus_pct}%` : '—'}</td>
+                  <td className="px-3 py-2 text-right font-mono font-black text-yellow-700">{r.eligible ? `₹${inr(r.bonus_amount)}` : '—'}</td>
+                  <td className="px-3 py-2">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.eligible ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+                      {r.eligible ? 'Eligible' : r.ineligible_reason}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {rows.filter(r=>r.eligible).length > 0 && (
+                <tr className="bg-yellow-50 font-black">
+                  <td colSpan={9} className="px-3 py-2 text-yellow-800 font-black">TOTAL BONUS PAYABLE</td>
+                  <td className="px-3 py-2 text-right font-mono font-black text-yellow-700">₹{inr(totals.total_bonus)}</td>
+                  <td/>
+                </tr>
+              )}
+              {!rows.length && <tr><td colSpan={11} className="px-3 py-10 text-center text-gray-400">No employees found</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── LWF Register ───────────────────────────────────────────────────────────────
+function LWFRegister() {
+  const [year, setYear] = useState(CURRENT_YEAR);
+
+  const { data: res, isLoading, refetch } = useQuery({
+    queryKey: ['lwf', year],
+    queryFn: () => hrComplianceAPI.lwfRegister({ year }).then(r => r.data),
+  });
+  const rows   = res?.data   || [];
+  const totals = res?.totals || {};
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 text-xs text-rose-800">
+        <strong>Karnataka Labour Welfare Fund Act:</strong> Employee contribution <strong>₹20</strong> + Employer contribution <strong>₹40</strong> per employee per year.
+        Payable in <strong>January</strong> via online portal to Karnataka Labour Welfare Board. Not applicable to employees earning above prescribed limit.
+      </div>
+      <div className="flex flex-wrap gap-3 items-center justify-between">
+        <select value={year} onChange={e => setYear(+e.target.value)} className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none">
+          {[2023,2024,2025,2026,2027].map(y => <option key={y} value={y}>{y}</option>)}
+        </select>
+        <div className="flex gap-2">
+          <button onClick={refetch} className="p-2 rounded-xl hover:bg-gray-100"><RefreshCw size={15} className="text-gray-500"/></button>
+          <ExportBtn color="rose" data={rows} filename={`LWF_Register_${year}`}/>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard label="Employees" value={totals.total||0}/>
+        <StatCard label="Employee LWF" value={`₹${inr(totals.emp_lwf)}`} sub="₹20 × headcount"/>
+        <StatCard label="Employer LWF" value={`₹${inr(totals.employer_lwf)}`} sub="₹40 × headcount"/>
+        <StatCard label="Total LWF" value={`₹${inr(totals.total_lwf)}`} sub={`Due: January ${year}`}/>
+      </div>
+      {isLoading ? <LoadingTable/> : (
+        <div className="overflow-x-auto rounded-2xl border border-gray-100" style={{boxShadow:'0 2px 10px rgba(10,31,92,0.06)'}}>
+          <table className="w-full text-xs">
+            <thead><tr className="bg-rose-700 text-white">
+              {['#','Code','Name','Dept','Designation','Gross (₹)','Emp LWF','Employer LWF','Total'].map(h => (
+                <th key={h} className="px-3 py-3 text-left font-bold text-[11px] whitespace-nowrap">{h}</th>
+              ))}
+            </tr></thead>
+            <tbody className="divide-y divide-gray-100">
+              {rows.map(r => (
+                <tr key={r.employee_code} className="hover:bg-rose-50/30">
+                  <td className="px-3 py-2 text-gray-400">{r.sno}</td>
+                  <td className="px-3 py-2 font-mono text-gray-700">{r.employee_code}</td>
+                  <td className="px-3 py-2 font-semibold text-gray-900">{r.name}</td>
+                  <td className="px-3 py-2 text-gray-600">{r.department}</td>
+                  <td className="px-3 py-2 text-gray-600">{r.designation}</td>
+                  <td className="px-3 py-2 text-right font-mono">{inr(r.gross_monthly)}</td>
+                  <td className="px-3 py-2 text-right font-mono font-bold text-rose-700">₹20</td>
+                  <td className="px-3 py-2 text-right font-mono font-bold text-blue-700">₹40</td>
+                  <td className="px-3 py-2 text-right font-mono font-black">₹60</td>
+                </tr>
+              ))}
+              {rows.length > 0 && (
+                <tr className="bg-rose-50 font-black">
+                  <td colSpan={6} className="px-3 py-2 text-rose-800 font-black">TOTAL</td>
+                  <td className="px-3 py-2 text-right font-mono font-black text-rose-700">₹{inr(totals.emp_lwf)}</td>
+                  <td className="px-3 py-2 text-right font-mono font-black text-blue-700">₹{inr(totals.employer_lwf)}</td>
+                  <td className="px-3 py-2 text-right font-mono font-black">₹{inr(totals.total_lwf)}</td>
+                </tr>
+              )}
+              {!rows.length && <tr><td colSpan={9} className="px-3 py-10 text-center text-gray-400">No employees found</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Minimum Wages Check ────────────────────────────────────────────────────────
+function MinWagesCheck({ depts }) {
+  const [state, setState] = useState('KA');
+  const [dept, setDept]   = useState('');
+
+  const { data: res, isLoading, refetch } = useQuery({
+    queryKey: ['min-wages', state, dept],
+    queryFn: () => hrComplianceAPI.minWages({ state, dept: dept||undefined }).then(r => r.data),
+  });
+  const rows       = res?.data || [];
+  const violations = rows.filter(r => !r.compliant);
+  const wages      = res?.wages || {};
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-teal-50 border border-teal-200 rounded-xl px-4 py-3 text-xs text-teal-800">
+        <strong>Minimum Wages Act 1948:</strong> State government revises minimum wages periodically. Employees below the scheduled minimum wage for their category are flagged.
+        Rates shown are approximate — verify with state gazette notifications. <strong className="text-red-600">{violations.length} violation(s)</strong> found.
+      </div>
+      <div className="flex flex-wrap gap-3 items-center justify-between">
+        <div className="flex gap-3 items-center flex-wrap">
+          <select value={state} onChange={e => setState(e.target.value)} className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none">
+            <option value="KA">Karnataka</option>
+            <option value="MH">Maharashtra</option>
+            <option value="DL">Delhi</option>
+            <option value="TN">Tamil Nadu</option>
+          </select>
+          <select value={dept} onChange={e => setDept(e.target.value)} className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none">
+            <option value="">All Departments</option>
+            {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={refetch} className="p-2 rounded-xl hover:bg-gray-100"><RefreshCw size={15} className="text-gray-500"/></button>
+          <ExportBtn color="teal" data={violations} filename={`Min_Wages_Violations_${state}`}/>
+        </div>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+        {Object.entries(wages).map(([cat, val]) => (
+          <div key={cat} className="text-center">
+            <div className="text-gray-500 capitalize">{cat.replace('_', ' ')}</div>
+            <div className="font-black text-gray-900">₹{inr(val)}/mo</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <StatCard label="Total Employees" value={rows.length}/>
+        <StatCard label="Compliant" value={rows.length - violations.length} sub="Basic ≥ min wage"/>
+        <StatCard label="Violations" value={violations.length} sub="Basic below min wage"/>
+      </div>
+
+      {isLoading ? <LoadingTable/> : (
+        <div className="overflow-x-auto rounded-2xl border border-gray-100" style={{boxShadow:'0 2px 10px rgba(10,31,92,0.06)'}}>
+          <table className="w-full text-xs">
+            <thead><tr className="bg-teal-700 text-white">
+              {['#','Code','Name','Dept','Designation','Category','Basic (₹)','Min Wage (₹)','Shortfall (₹)','Status'].map(h => (
+                <th key={h} className="px-3 py-3 text-left font-bold text-[11px] whitespace-nowrap">{h}</th>
+              ))}
+            </tr></thead>
+            <tbody className="divide-y divide-gray-100">
+              {rows.map(r => (
+                <tr key={r.employee_code} className={`hover:bg-teal-50/30 ${!r.compliant ? 'bg-red-50/20' : ''}`}>
+                  <td className="px-3 py-2 text-gray-400">{r.sno}</td>
+                  <td className="px-3 py-2 font-mono text-gray-700">{r.employee_code}</td>
+                  <td className="px-3 py-2 font-semibold text-gray-900">{r.name}</td>
+                  <td className="px-3 py-2 text-gray-600">{r.department}</td>
+                  <td className="px-3 py-2 text-gray-600">{r.designation}</td>
+                  <td className="px-3 py-2 capitalize text-gray-600">{r.category.replace('_',' ')}</td>
+                  <td className="px-3 py-2 text-right font-mono">{inr(r.basic)}</td>
+                  <td className="px-3 py-2 text-right font-mono font-bold">{inr(r.min_wage)}</td>
+                  <td className="px-3 py-2 text-right font-mono font-black text-red-600">{r.shortfall > 0 ? `₹${inr(r.shortfall)}` : '—'}</td>
+                  <td className="px-3 py-2">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 w-fit ${r.compliant ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                      {r.compliant ? <><CheckCircle size={10}/> OK</> : <><XCircle size={10}/> Below</>}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {!rows.length && <tr><td colSpan={10} className="px-3 py-10 text-center text-gray-400">No employees found</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Contract Labour (CLRA) Register ───────────────────────────────────────────
+function CLRARegister() {
+  const { data: res, isLoading, refetch } = useQuery({
+    queryKey: ['clra'],
+    queryFn: () => hrComplianceAPI.clraRegister().then(r => r.data),
+  });
+  const contractors = res?.contractors || [];
+  const allWorkers  = res?.data || [];
+  const [expanded, setExpanded] = useState({});
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 text-xs text-indigo-800">
+        <strong>Contract Labour (Regulation & Abolition) Act 1970:</strong> Every principal employer must maintain Form-XIII (Register of Contractors), Form-XIV (Employment Card), Form-XV (Service Certificate), Form-XVI (Muster Roll for Contract Labour). Mandatory if using 20+ contract workers.
+      </div>
+      <div className="flex items-center justify-between">
+        <div className="flex gap-3">
+          <StatCard label="Total Contract Workers" value={allWorkers.length}/>
+          <StatCard label="Contractors" value={contractors.length}/>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={refetch} className="p-2 rounded-xl hover:bg-gray-100"><RefreshCw size={15} className="text-gray-500"/></button>
+          <ExportBtn color="indigo" data={allWorkers} filename="CLRA_Register_Form_XIII"/>
+        </div>
+      </div>
+      {isLoading ? <LoadingTable/> : (
+        <div className="space-y-3">
+          {contractors.map(c => (
+            <div key={c.contractor_name} className="border border-indigo-100 rounded-2xl overflow-hidden" style={{boxShadow:'0 1px 6px rgba(10,31,92,0.05)'}}>
+              <button
+                onClick={() => setExpanded(p => ({...p, [c.contractor_name]: !p[c.contractor_name]}))}
+                className="w-full flex items-center justify-between px-5 py-3 bg-indigo-50 hover:bg-indigo-100 transition-colors">
+                <div className="flex items-center gap-3">
+                  <Building2 size={16} className="text-indigo-600"/>
+                  <span className="font-black text-indigo-900 text-sm">{c.contractor_name}</span>
+                  <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full text-xs font-bold">{c.worker_count} workers</span>
+                </div>
+                <ChevronDown size={16} className={`text-indigo-500 transition-transform ${expanded[c.contractor_name] ? 'rotate-180' : ''}`}/>
+              </button>
+              {expanded[c.contractor_name] && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead><tr className="bg-indigo-700/10 border-b border-indigo-100">
+                      {['#','Worker Code','Name','Trade','BOCW No.','Aadhaar','Daily Rate','Project','Join Date'].map(h => (
+                        <th key={h} className="px-3 py-2 text-left font-bold text-[11px] text-indigo-700 whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr></thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {c.workers.map((w,i) => (
+                        <tr key={w.id} className="hover:bg-indigo-50/20">
+                          <td className="px-3 py-2 text-gray-400">{i+1}</td>
+                          <td className="px-3 py-2 font-mono text-gray-700">{w.worker_code}</td>
+                          <td className="px-3 py-2 font-semibold text-gray-900">{w.name}</td>
+                          <td className="px-3 py-2 capitalize text-gray-600">{(w.skill_type||'').replace(/_/g,' ')}</td>
+                          <td className="px-3 py-2 font-mono text-indigo-700">{w.bocw_number || '—'}</td>
+                          <td className="px-3 py-2 font-mono text-gray-500">{w.aadhaar_last4 ? `XXXX-${w.aadhaar_last4}` : '—'}</td>
+                          <td className="px-3 py-2 text-right font-mono">₹{inr(w.daily_rate)}</td>
+                          <td className="px-3 py-2 text-gray-600">{w.project_name}</td>
+                          <td className="px-3 py-2">{w.joined_date ? new Date(w.joined_date).toLocaleDateString('en-IN') : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ))}
+          {!contractors.length && <div className="text-center py-10 text-gray-400 text-sm">No contract workers found in the system</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Challan Filing Tracker ─────────────────────────────────────────────────────
+const CHALLAN_TYPES = ['PF ECR','ESI','PT','TDS','LWF','Bonus','BOCW Cess','Other'];
+
+function ChallanTracker() {
+  const qc = useQueryClient();
+  const [year, setYear]   = useState(CURRENT_YEAR);
+  const [modal, setModal] = useState(null);
+  const [form,  setForm]  = useState({ challan_type:'PF ECR', period_month: CURRENT_MONTH, period_year: CURRENT_YEAR, amount:'', filed_on:'', reference_number:'', mode:'online', bank:'', notes:'' });
+
+  const { data: res, isLoading, refetch } = useQuery({
+    queryKey: ['challan-filings', year],
+    queryFn: () => hrComplianceAPI.challanFilings({ year }).then(r => r.data),
+  });
+  const rows = res?.data || [];
+
+  const saveMut = useMutation({
+    mutationFn: d => modal?.id ? hrComplianceAPI.updateChallan(modal.id, d) : hrComplianceAPI.createChallan(d),
+    onSuccess: () => { qc.invalidateQueries(['challan-filings']); setModal(null); toast.success('Saved'); },
+    onError: e => toast.error(e.response?.data?.error || 'Failed'),
+  });
+  const delMut = useMutation({
+    mutationFn: id => hrComplianceAPI.deleteChallan(id),
+    onSuccess: () => { qc.invalidateQueries(['challan-filings']); toast.success('Deleted'); },
+  });
+
+  const openAdd  = () => { setForm({ challan_type:'PF ECR', period_month: CURRENT_MONTH, period_year: year, amount:'', filed_on: new Date().toISOString().slice(0,10), reference_number:'', mode:'online', bank:'', notes:'' }); setModal({}); };
+  const openEdit = (r) => { setForm({...r, filed_on: r.filed_on?.slice(0,10)||''}); setModal(r); };
+
+  const totalFiled = rows.reduce((s,r) => s + parseFloat(r.amount||0), 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-800">
+        Track every challan filing — PF ECR, ESI, Professional Tax, TDS, BOCW Cess, LWF, Bonus. Record the reference number, bank, and payment date so you have a complete compliance audit trail.
+      </div>
+      <div className="flex flex-wrap gap-3 items-center justify-between">
+        <div className="flex gap-3 items-center">
+          <select value={year} onChange={e => setYear(+e.target.value)} className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none">
+            {[2023,2024,2025,2026,2027].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={refetch} className="p-2 rounded-xl hover:bg-gray-100"><RefreshCw size={15} className="text-gray-500"/></button>
+          <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-xl bg-blue-600 text-white hover:bg-blue-700">
+            <Plus size={14}/> Mark Filed
+          </button>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <StatCard label="Filings This Year" value={rows.length}/>
+        <StatCard label="Total Amount Paid" value={`₹${inr(totalFiled)}`}/>
+        <StatCard label="Types Covered" value={[...new Set(rows.map(r=>r.challan_type))].length} sub="of 7 types"/>
+      </div>
+
+      {isLoading ? <LoadingTable/> : (
+        <div className="overflow-x-auto rounded-2xl border border-gray-100" style={{boxShadow:'0 2px 10px rgba(10,31,92,0.06)'}}>
+          <table className="w-full text-xs">
+            <thead><tr className="bg-blue-700 text-white">
+              {['#','Type','Period','Amount','Filed On','Reference No.','Mode','Bank','Filed By','Actions'].map(h => (
+                <th key={h} className="px-3 py-3 text-left font-bold text-[11px] whitespace-nowrap">{h}</th>
+              ))}
+            </tr></thead>
+            <tbody className="divide-y divide-gray-100">
+              {rows.map((r,i) => (
+                <tr key={r.id} className="hover:bg-blue-50/30">
+                  <td className="px-3 py-2 text-gray-400">{i+1}</td>
+                  <td className="px-3 py-2">
+                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-black">{r.challan_type}</span>
+                  </td>
+                  <td className="px-3 py-2 font-medium text-gray-800">
+                    {r.period_month ? `${MONTHS[r.period_month-1].slice(0,3)} ` : ''}{r.period_year}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono font-bold text-blue-700">₹{inr(r.amount)}</td>
+                  <td className="px-3 py-2 text-gray-700">{r.filed_on ? new Date(r.filed_on).toLocaleDateString('en-IN') : '—'}</td>
+                  <td className="px-3 py-2 font-mono text-gray-600">{r.reference_number || '—'}</td>
+                  <td className="px-3 py-2 capitalize text-gray-500">{r.mode||'—'}</td>
+                  <td className="px-3 py-2 text-gray-500">{r.bank||'—'}</td>
+                  <td className="px-3 py-2 text-gray-500">{r.filed_by||'—'}</td>
+                  <td className="px-3 py-2 flex gap-1">
+                    <button onClick={() => openEdit(r)} className="p-1.5 rounded-lg hover:bg-blue-100 text-blue-600"><Edit2 size={12}/></button>
+                    <button onClick={() => delMut.mutate(r.id)} className="p-1.5 rounded-lg hover:bg-red-100 text-red-500"><Trash2 size={12}/></button>
+                  </td>
+                </tr>
+              ))}
+              {!rows.length && <tr><td colSpan={10} className="px-3 py-10 text-center text-gray-400">No challan filings recorded. Click "Mark Filed" after each payment.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {modal !== null && (
+        <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h3 className="font-black text-gray-900">{modal?.id ? 'Edit Filing' : 'Mark Challan Filed'}</h3>
+              <button onClick={() => setModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100"><X size={16}/></button>
+            </div>
+            <div className="px-6 py-5 grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Challan Type *</label>
+                <select value={form.challan_type} onChange={e => setForm(f=>({...f, challan_type:e.target.value}))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20">
+                  {CHALLAN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Period Month</label>
+                <select value={form.period_month||''} onChange={e => setForm(f=>({...f, period_month:+e.target.value}))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none">
+                  {MONTHS.map((m,i) => <option key={m} value={i+1}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Period Year *</label>
+                <input type="number" value={form.period_year} onChange={e => setForm(f=>({...f, period_year:+e.target.value}))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none"/>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Amount Paid (₹)</label>
+                <input type="number" value={form.amount} onChange={e => setForm(f=>({...f, amount:e.target.value}))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none"/>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Filed On</label>
+                <input type="date" value={form.filed_on} onChange={e => setForm(f=>({...f, filed_on:e.target.value}))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none"/>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Reference / Challan No.</label>
+                <input value={form.reference_number||''} onChange={e => setForm(f=>({...f, reference_number:e.target.value}))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none"/>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Payment Mode</label>
+                <select value={form.mode||'online'} onChange={e => setForm(f=>({...f, mode:e.target.value}))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none">
+                  {['online','NEFT','RTGS','Cheque','Cash','Portal'].map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Bank</label>
+                <input value={form.bank||''} onChange={e => setForm(f=>({...f, bank:e.target.value}))} placeholder="e.g. SBI, HDFC"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none"/>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Notes</label>
+                <textarea value={form.notes||''} onChange={e => setForm(f=>({...f, notes:e.target.value}))} rows={2}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none resize-none"/>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end px-6 pb-5">
+              <button onClick={() => setModal(null)} className="px-4 py-2 text-sm font-semibold rounded-xl text-gray-600 hover:bg-gray-100">Cancel</button>
+              <button onClick={() => saveMut.mutate(form)} disabled={saveMut.isPending}
+                className="px-5 py-2 text-sm font-bold rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60">
+                {saveMut.isPending ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── PF ECR File Generator ─────────────────────────────────────────────────────
+function ECRGenerator() {
+  const [month, setMonth] = useState(CURRENT_MONTH);
+  const [year,  setYear]  = useState(CURRENT_YEAR);
+  const [loading, setLoading] = useState(false);
+
+  const downloadECR = async () => {
+    setLoading(true);
+    try {
+      const res = await hrComplianceAPI.ecrFile({ month, year });
+      const blob = new Blob([res.data], { type: 'text/plain' });
+      const url  = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ECR_${String(month).padStart(2,'0')}_${year}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('ECR file downloaded');
+    } catch (e) {
+      toast.error('Failed to generate ECR file');
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-violet-50 border border-violet-200 rounded-xl px-4 py-3 text-xs text-violet-800">
+        <strong>EPFO ECR v2 Format:</strong> The Electronic Challan-cum-Return (.txt) file is uploaded to the EPFO Unified Portal each month to file PF returns.
+        Generated from your PF Register data. Upload at <strong>unifiedportal-emp.epfindia.gov.in</strong> → Payments → ECR Upload.
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-2xl p-8 flex flex-col items-center gap-6 text-center" style={{boxShadow:'0 2px 12px rgba(10,31,92,0.06)'}}>
+        <div className="w-16 h-16 rounded-2xl bg-violet-100 flex items-center justify-center">
+          <FileText className="w-8 h-8 text-violet-600"/>
+        </div>
+        <div>
+          <h3 className="text-lg font-black text-gray-900">Generate PF ECR File</h3>
+          <p className="text-gray-500 text-sm mt-1">Creates the .txt file in EPFO ECR v2 format with UAN, wages, and contribution details</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <select value={month} onChange={e => setMonth(+e.target.value)}
+            className="px-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/20">
+            {MONTHS.map((m,i) => <option key={m} value={i+1}>{m}</option>)}
+          </select>
+          <select value={year} onChange={e => setYear(+e.target.value)}
+            className="px-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/20">
+            {[2023,2024,2025,2026,2027].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <button onClick={downloadECR} disabled={loading}
+          className="flex items-center gap-3 px-8 py-3 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-black rounded-2xl text-sm shadow-lg shadow-violet-600/25 transition-all">
+          {loading ? <RefreshCw className="w-5 h-5 animate-spin"/> : <Download className="w-5 h-5"/>}
+          Download ECR_{String(month).padStart(2,'0')}_{year}.txt
+        </button>
+        <div className="text-xs text-gray-400 space-y-1">
+          <p>Format: <code className="bg-gray-100 px-1 rounded">UAN#~#Name#~#Gross#~#PF Wage#~#EPS Wage#~#EE Share#~#ER Share#~#NCP Days#~#Refund</code></p>
+          <p>After download: Upload at EPFO portal → Payments → Upload ECR → Generate Challan → Pay</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function HRCompliancePage({ embedded = false }) {
   const [activeTab, setActiveTab] = useState('pf');
@@ -1178,6 +1994,14 @@ export default function HRCompliancePage({ embedded = false }) {
         {activeTab === 'licenses'   && <LabourLicenses/>}
         {activeTab === 'docexpiry'  && <DocumentExpiry/>}
         {activeTab === 'calendar'   && <ComplianceCalendar/>}
+        {activeTab === 'bocw'       && <BOCWRegister/>}
+        {activeTab === 'gratuity'   && <GratuityRegister depts={depts}/>}
+        {activeTab === 'bonus'      && <BonusRegister depts={depts}/>}
+        {activeTab === 'lwf'        && <LWFRegister/>}
+        {activeTab === 'minwages'   && <MinWagesCheck depts={depts}/>}
+        {activeTab === 'clra'       && <CLRARegister/>}
+        {activeTab === 'challan'    && <ChallanTracker/>}
+        {activeTab === 'ecr'        && <ECRGenerator/>}
       </motion.div>
     </div>
   );
