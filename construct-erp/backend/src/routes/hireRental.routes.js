@@ -13,6 +13,8 @@ const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
+const { postAutoJournalStandalone } = require('../services/journalAutoPost');
+const { sendMail } = require('../services/mail.service');
 
 router.use(authenticate);
 const CID = req => req.user.company_id;
@@ -316,9 +318,49 @@ router.patch('/invoices/:id([0-9a-fA-F-]{36})/pay', authorize(...PAY), async (re
        WHERE id=$5 AND company_id=$6 AND status='approved' RETURNING *`,
       [payment_date, payment_mode, payment_ref || null, n(amount_paid), req.params.id, CID(req)]);
     if (!r.rows.length) return res.status(400).json({ error: 'Invoice not found or not in approved status' });
-    res.json({ data: r.rows[0] });
+    const inv = r.rows[0];
+
+    // Journal: Dr Equipment Hire (5200) / Cr Bank (1010)
+    const amt = n(amount_paid) || parseFloat(inv.total_amount || 0);
+    if (amt > 0) {
+      postAutoJournalStandalone({
+        companyId: CID(req), userId: req.user.id,
+        entryDate: payment_date,
+        projectId: inv.project_id || null,
+        reference: inv.invoice_number || `HIRE-${inv.id.slice(0, 8)}`,
+        narration: `Equipment hire payment — ${inv.vendor_name || ''}`,
+        source: 'auto_hire_rental',
+        lines: [
+          { code: '5200', debit:  amt, description: `Hire/rental — ${inv.vendor_name || ''}` },
+          { code: '1010', credit: amt, description: `Bank payment — ${payment_mode}` },
+        ],
+      }).catch(() => {});
+
+      notifyAccountsDept(CID(req), `Hire Rental Paid ₹${Math.round(amt).toLocaleString('en-IN')}`,
+        `Equipment hire invoice paid. Vendor: ${inv.vendor_name||''}. Invoice: ${inv.invoice_number||''}. Amount: ₹${Math.round(amt).toLocaleString('en-IN')}.`,
+        '/accounts/journal-entries').catch(() => {});
+    }
+
+    res.json({ data: inv });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+async function notifyAccountsDept(companyId, subject, body, link = '/accounts') {
+  try {
+    const { rows } = await query(
+      `SELECT email FROM users WHERE company_id=$1 AND role IN ('accountant','accounts','super_admin','admin') AND is_active=true AND email IS NOT NULL`,
+      [companyId]
+    );
+    const emails = rows.map(r => r.email).filter(Boolean);
+    if (!emails.length) return;
+    await sendMail({
+      to: emails,
+      subject: `[Accounts] ${subject}`,
+      html: `<p style="font-family:Arial,sans-serif;font-size:13px">${body}</p><p style="font-size:11px;color:#64748b">View in ERP: <a href="${link}">${link}</a></p>`,
+      text: body,
+    });
+  } catch (_) {}
+}
 
 // ── Delete (draft/rejected only) ─────────────────────────────────────────────
 router.delete('/invoices/:id([0-9a-fA-F-]{36})', authorize(...ENTRY), async (req, res) => {

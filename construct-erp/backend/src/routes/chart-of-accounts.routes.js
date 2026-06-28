@@ -53,6 +53,7 @@ const STANDARD_COA = [
   { code: '1100', name: 'Accounts Receivable',     account_type: 'asset',     sub_type: 'Current Asset' },
   { code: '1150', name: 'Advance to Vendors/Subcontractors', account_type: 'asset', sub_type: 'Current Asset' },
   { code: '1200', name: 'Inventory / Stores',      account_type: 'asset',     sub_type: 'Current Asset' },
+  { code: '1250', name: 'Employee Loans & Advances', account_type: 'asset',   sub_type: 'Current Asset' },
   { code: '1300', name: 'Input GST / ITC',         account_type: 'asset',     sub_type: 'Current Asset' },
   { code: '1500', name: 'Plant & Machinery',       account_type: 'asset',     sub_type: 'Fixed Asset' },
   { code: '1510', name: 'Office Equipment',        account_type: 'asset',     sub_type: 'Fixed Asset' },

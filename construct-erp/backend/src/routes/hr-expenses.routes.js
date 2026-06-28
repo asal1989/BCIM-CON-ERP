@@ -9,6 +9,8 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
 const { notifyExpenseSubmitted, notifyExpenseApproved, notifyExpenseRejected, notifyExpensePaid } = require('../services/notif.helper');
+const { postAutoJournalStandalone } = require('../services/journalAutoPost');
+const { sendMail } = require('../services/mail.service');
 
 router.use(authenticate);
 router.use(authorize('super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager', 'manager'));
@@ -117,10 +119,50 @@ router.patch('/:id/pay', async (req, res) => {
       [paid_date || new Date().toISOString().split('T')[0], req.params.id, req.user.company_id]
     );
     if (!rows.length) return res.status(400).json({ error: 'Not found or not approved' });
-    notifyExpensePaid(req.user.company_id, rows[0], rows[0].user_id);
-    res.json({ data: rows[0] });
+    const claim = rows[0];
+    notifyExpensePaid(req.user.company_id, claim, claim.user_id);
+
+    // Journal: Dr Office & Admin Expenses (6100) / Cr Bank (1010)
+    const amt = parseFloat(claim.total_amount || claim.amount || 0);
+    if (amt > 0) {
+      postAutoJournalStandalone({
+        companyId: req.user.company_id, userId: req.user.id,
+        entryDate: paid_date || new Date().toISOString().slice(0, 10),
+        projectId: claim.project_id || null,
+        reference: `EXP-${claim.id.slice(0, 8)}`,
+        narration: `Employee expense reimbursed — ${claim.description || claim.claim_type || 'claim'}`,
+        source: 'auto_hr_expense',
+        lines: [
+          { code: '6100', debit:  amt, description: `Expense claim — ${claim.claim_type || ''}` },
+          { code: '1010', credit: amt, description: `Bank payment — expense reimbursement` },
+        ],
+      }).catch(() => {});
+
+      notifyAccountsDept(req.user.company_id, `Expense Paid ₹${Math.round(amt).toLocaleString('en-IN')}`,
+        `Employee expense claim approved and paid. Amount: ₹${Math.round(amt).toLocaleString('en-IN')}.`,
+        '/accounts/journal-entries').catch(() => {});
+    }
+
+    res.json({ data: claim });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+async function notifyAccountsDept(companyId, subject, body, link = '/accounts') {
+  try {
+    const { rows } = await query(
+      `SELECT email FROM users WHERE company_id=$1 AND role IN ('accountant','accounts','super_admin','admin') AND is_active=true AND email IS NOT NULL`,
+      [companyId]
+    );
+    const emails = rows.map(r => r.email).filter(Boolean);
+    if (!emails.length) return;
+    await sendMail({
+      to: emails,
+      subject: `[Accounts] ${subject}`,
+      html: `<p style="font-family:Arial,sans-serif;font-size:13px">${body}</p><p style="font-size:11px;color:#64748b">View in ERP: <a href="${link}">${link}</a></p>`,
+      text: body,
+    });
+  } catch (_) {}
+}
 
 module.exports = router;
 

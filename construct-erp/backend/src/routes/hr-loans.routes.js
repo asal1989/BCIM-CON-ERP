@@ -6,6 +6,8 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
 const { notifyLoanRequested, notifyLoanApproved, notifyLoanRejected } = require('../services/notif.helper');
+const { postAutoJournalStandalone } = require('../services/journalAutoPost');
+const { sendMail } = require('../services/mail.service');
 
 router.use(authenticate);
 router.use(authorize('super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager'));
@@ -82,8 +84,31 @@ router.patch('/:id/approve', async (req, res) => {
        req.params.id, req.user.company_id]
     );
     if (!rows.length) return res.status(400).json({ error: 'Not found or already actioned' });
-    notifyLoanApproved(req.user.company_id, rows[0], rows[0].user_id, req.user.name);
-    res.json({ data: rows[0] });
+    const loan = rows[0];
+    notifyLoanApproved(req.user.company_id, loan, loan.user_id, req.user.name);
+
+    // Journal: Dr Employee Loans & Advances (1250) / Cr Bank (1010)
+    const amt = parseFloat(loan.amount || 0);
+    if (amt > 0) {
+      postAutoJournalStandalone({
+        companyId: req.user.company_id, userId: req.user.id,
+        entryDate: loan.disbursed_date || new Date().toISOString().slice(0, 10),
+        reference: `LOAN-${loan.id.slice(0, 8)}`,
+        narration: `Loan disbursed — ${loan.loan_type} (${loan.reason || 'advance'})`,
+        source: 'auto_hr_loan',
+        lines: [
+          { code: '1250', debit:  amt, description: `Employee loan disbursed` },
+          { code: '1010', credit: amt, description: `Bank payment — loan` },
+        ],
+      }).catch(() => {});
+
+      // Notify accounts team
+      notifyAccountsDept(req.user.company_id, `Loan Disbursed ₹${Math.round(amt).toLocaleString('en-IN')}`,
+        `Employee loan approved and disbursed. Type: ${loan.loan_type}. EMI: ₹${emi_amount||0} × ${emi_months||0} months.`,
+        '/accounts/journal-entries').catch(() => {});
+    }
+
+    res.json({ data: loan });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -110,9 +135,45 @@ router.patch('/:id/repay', async (req, res) => {
        WHERE id=$2 AND company_id=$3 RETURNING *`,
       [amount, req.params.id, req.user.company_id]
     );
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+
+    // Journal: Dr Bank (1010) / Cr Employee Loans & Advances (1250) — loan recovered
+    const repaid = parseFloat(amount || 0);
+    if (repaid > 0) {
+      postAutoJournalStandalone({
+        companyId: req.user.company_id, userId: req.user.id,
+        entryDate: new Date().toISOString().slice(0, 10),
+        reference: `LOAN-REP-${req.params.id.slice(0, 8)}`,
+        narration: `EMI repayment — loan recovery`,
+        source: 'auto_hr_loan',
+        lines: [
+          { code: '1010', debit:  repaid, description: `EMI received` },
+          { code: '1250', credit: repaid, description: `Employee loan reduced` },
+        ],
+      }).catch(() => {});
+    }
+
     res.json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// ── Accounts-team push notification helper ─────────────────────────────────────
+async function notifyAccountsDept(companyId, subject, body, link = '/accounts') {
+  try {
+    const { rows } = await query(
+      `SELECT email FROM users WHERE company_id=$1 AND role IN ('accountant','accounts','super_admin','admin') AND is_active=true AND email IS NOT NULL`,
+      [companyId]
+    );
+    const emails = rows.map(r => r.email).filter(Boolean);
+    if (!emails.length) return;
+    await sendMail({
+      to: emails,
+      subject: `[Accounts] ${subject}`,
+      html: `<p style="font-family:Arial,sans-serif;font-size:13px">${body}</p><p style="font-size:11px;color:#64748b">View in ERP: <a href="${link}">${link}</a></p>`,
+      text: body,
+    });
+  } catch (_) {}
+}
 
 module.exports = router;
 

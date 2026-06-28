@@ -3,6 +3,8 @@ const express = require('express');
 const router  = express.Router();
 const { query } = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
+const { postAutoJournalStandalone } = require('../services/journalAutoPost');
+const { sendMail } = require('../services/mail.service');
 
 const HR_ROLES = ['super_admin','admin','hr_admin','hr_manager'];
 const HR_ALL   = [...HR_ROLES, 'hr', 'manager'];
@@ -185,8 +187,56 @@ router.patch('/:id/pay', authorize(...HR_ROLES), async (req, res) => {
      WHERE id=$4 AND company_id=$5 AND status='approved' RETURNING *`,
     [payment_date, payment_mode, payment_reference, req.params.id, req.user.company_id]
   );
-  res.json({ data: rows[0] });
+  if (!rows.length) return res.status(400).json({ error: 'Not found or not in approved status' });
+  const fnf = rows[0];
+
+  // Journal: Dr Salaries & Wages (6000) / Cr Bank (1010) — net amount paid
+  const net = parseFloat(fnf.net_payable || 0);
+  if (net > 0) {
+    const lines = [
+      { code: '6000', debit: net, description: `FnF settlement — ${fnf.exit_reason}` },
+      { code: '1010', credit: net, description: `Bank payment — FnF` },
+    ];
+    // Extra gratuity expense line if applicable
+    const gratuity = parseFloat(fnf.gratuity_amount || 0);
+    if (gratuity > 0 && fnf.gratuity_eligible) {
+      lines[0].debit = net - gratuity; // Salaries portion
+      lines.splice(1, 0, { code: '6000', debit: gratuity, description: 'Gratuity expense' });
+    }
+    postAutoJournalStandalone({
+      companyId: req.user.company_id, userId: req.user.id,
+      entryDate: payment_date || new Date().toISOString().slice(0, 10),
+      reference: `FNF-${fnf.id.slice(0, 8)}`,
+      narration: `Full & Final settlement payment — ${fnf.exit_reason}`,
+      source: 'auto_hr_fnf',
+      lines,
+    }).catch(() => {});
+
+    notifyAccountsDept(req.user.company_id,
+      `FnF Settlement Paid ₹${Math.round(net).toLocaleString('en-IN')}`,
+      `Full & Final settlement paid. Exit reason: ${fnf.exit_reason}. Net payable: ₹${Math.round(net).toLocaleString('en-IN')}.`,
+      '/accounts/journal-entries').catch(() => {});
+  }
+
+  res.json({ data: fnf });
 });
+
+async function notifyAccountsDept(companyId, subject, body, link = '/accounts') {
+  try {
+    const { rows } = await query(
+      `SELECT email FROM users WHERE company_id=$1 AND role IN ('accountant','accounts','super_admin','admin') AND is_active=true AND email IS NOT NULL`,
+      [companyId]
+    );
+    const emails = rows.map(r => r.email).filter(Boolean);
+    if (!emails.length) return;
+    await sendMail({
+      to: emails,
+      subject: `[Accounts] ${subject}`,
+      html: `<p style="font-family:Arial,sans-serif;font-size:13px">${body}</p><p style="font-size:11px;color:#64748b">View in ERP: <a href="${link}">${link}</a></p>`,
+      text: body,
+    });
+  } catch (_) {}
+}
 
 // Gratuity calculator helper
 router.get('/calculate-gratuity', authorize(...HR_ALL), async (req, res) => {
