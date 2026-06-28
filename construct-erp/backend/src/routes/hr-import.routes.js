@@ -189,6 +189,13 @@ router.post('/employees', upload.single('file'), async (req, res) => {
     const desigMap = Object.fromEntries(desigRows.rows.map(r => [r.name, r.id]));
 
     const results = { created: 0, updated: 0, skipped: 0, errors: [] };
+    // Debug: capture what the first row looks like after parsing
+    const debugFirstRow = records[0] ? {
+      keys: Object.keys(records[0]),
+      empCode: pick(records[0], 'Employee Code', 'EmployeeCode', 'Emp Code', 'EmpCode', 'employee_code'),
+      name: pick(records[0], 'Employee Name', 'EmployeeName', 'Name', 'Full Name'),
+      dept: pick(records[0], 'Department', 'department_name'),
+    } : null;
 
     for (let i = 0; i < records.length; i++) {
       const row = records[i];
@@ -381,7 +388,7 @@ router.post('/employees', upload.single('file'), async (req, res) => {
       }
     }
 
-    res.json({ success: true, total: records.length, ...results });
+    res.json({ success: true, total: records.length, ...results, debug: debugFirstRow });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

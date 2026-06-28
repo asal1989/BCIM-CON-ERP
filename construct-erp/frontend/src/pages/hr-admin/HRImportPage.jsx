@@ -224,6 +224,15 @@ function EmployeeImportTab() {
         <div className="space-y-3">
           <div className="flex items-center gap-2 text-emerald-700 font-black"><CheckCircle className="w-5 h-5"/> Import Complete</div>
           <ResultSummary result={result}/>
+          {result.debug && (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs font-mono text-gray-700 space-y-1">
+              <div className="font-bold text-gray-900">Debug (row 1 parsed on server):</div>
+              <div>Code: <span className="text-blue-700 font-bold">{result.debug.empCode || '(empty)'}</span></div>
+              <div>Name: <span className="text-blue-700 font-bold">{result.debug.name || '(empty)'}</span></div>
+              <div>Dept: <span className="text-blue-700 font-bold">{result.debug.dept || '(empty)'}</span></div>
+              <div className="text-gray-400">Keys: {result.debug.keys?.join(', ')}</div>
+            </div>
+          )}
         </div>
       )}
     </div>
