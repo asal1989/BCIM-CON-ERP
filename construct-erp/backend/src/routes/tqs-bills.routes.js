@@ -16,7 +16,7 @@ const { sendMail } = require('../services/mail.service');
 const logger = require('../utils/logger');
 const { runSchemaInit } = require('../utils/schemaInit');
 const { postAutoJournalStandalone } = require('../services/journalAutoPost');
-const { BOQ_COST_HEADS } = require('../constants/boqCostHeads');
+const { BOQ_COST_HEADS, classifyItemCostHead } = require('../constants/boqCostHeads');
 
 
 const router = express.Router();
@@ -2120,7 +2120,9 @@ router.post('/', async (req, res) => {
         if (mode === 'interstate') { igP = gstPct; igA = basic * igP / 100; }
         else { cgP = gstPct / 2; sgP = gstPct / 2; cgA = basic * cgP / 100; sgA = basic * sgP / 100; }
         const gst_a = cgA + sgA + igA;
-        const costHead = BOQ_COST_HEADS.includes(it.cost_head) ? it.cost_head : poDefaultCostHead;
+        const costHead = BOQ_COST_HEADS.includes(it.cost_head)
+          ? it.cost_head
+          : (poDefaultCostHead || classifyItemCostHead(it.item_name));
         await client.query(`
           INSERT INTO tqs_bill_line_items
             (bill_id, category, item_code, item_name, unit, quantity, rate,
