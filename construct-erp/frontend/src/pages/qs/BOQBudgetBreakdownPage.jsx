@@ -59,6 +59,47 @@ function EditableBudget({ value, onSave, mode, itemAmount }) {
   );
 }
 
+// ─── Editable chapter-level budget cell in the BOQ Summary tab ───────────────
+function ChapterBudgetCell({ value, onSave, saving }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState('');
+
+  const commit = () => {
+    setEditing(false);
+    const n = parseFloat(val);
+    if (!isNaN(n) && n >= 0) onSave(n);
+  };
+
+  if (editing) return (
+    <div className="flex items-center gap-1">
+      <input
+        autoFocus type="number" value={val}
+        onChange={e => setVal(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
+        placeholder="Enter budget amount"
+        className="flex-1 border border-indigo-400 rounded-lg px-2 py-1 text-xs text-right focus:outline-none focus:ring-2 focus:ring-indigo-200"
+      />
+    </div>
+  );
+
+  return (
+    <button
+      disabled={saving}
+      onClick={() => { setVal(value ? Math.round(value).toString() : ''); setEditing(true); }}
+      className={clsx(
+        'w-full text-right text-sm font-semibold px-3 py-1.5 rounded-lg transition border',
+        value > 0
+          ? 'text-slate-800 hover:bg-indigo-50 border-transparent hover:border-indigo-200'
+          : 'text-indigo-400 italic font-normal hover:bg-indigo-50 border-dashed border-indigo-200',
+        saving && 'opacity-50 cursor-wait'
+      )}
+    >
+      {value > 0 ? `₹${Math.round(value).toLocaleString('en-IN')}` : '+ Set budget'}
+    </button>
+  );
+}
+
 // ─── Cost-head detail table (shown when a BOQ item is expanded) ────────────────
 function CostHeadDetail({ item, costHeads, mode, onSave }) {
   const itemAmount = num(item.amount);
@@ -319,6 +360,21 @@ export default function BOQBudgetBreakdownPage() {
   const handlePrint = useReactToPrint({ contentRef: printRef, documentTitle: `BOQ_${selectedProject?.name || 'Summary'}` });
   const [view, setView] = useState('breakdown'); // 'breakdown' | 'summary'
 
+  const chapterBudgetMutation = useMutation({
+    mutationFn: ({ chapterName, chapterNo, totalBudget }) =>
+      boqBudgetAPI.setChapterBudget(projectId, {
+        chapter_name: chapterName,
+        chapter_no: chapterNo,
+        total_budget: totalBudget,
+        cost_head: 'Sub Con',
+      }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['boq-budget', projectId] });
+      toast.success(`Budget set for ${vars.chapterName || vars.chapterNo}`);
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to set budget'),
+  });
+
   return (
     <div style={{ background: Theme.pageBg, minHeight: '100vh' }}>
       <PageHeader
@@ -400,9 +456,11 @@ export default function BOQBudgetBreakdownPage() {
             {/* ── BOQ SUMMARY VIEW (chapter rollup — same data as print) ── */}
             {view === 'summary' && (
               <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-                <div className="px-5 py-3 bg-slate-100 border-b border-slate-200">
-                  <h3 className="text-sm font-bold text-slate-700">{selectedProject?.name} — BOQ Summary</h3>
-                  <p className="text-[11px] text-slate-400">Bill Value vs Budgeted value, by chapter</p>
+                <div className="px-5 py-3 bg-slate-100 border-b border-slate-200 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-700">{selectedProject?.name} — BOQ Summary</h3>
+                    <p className="text-[11px] text-slate-400">Click any Budgeted value cell to enter chapter budget — distributed proportionally across items</p>
+                  </div>
                 </div>
                 <table className="w-full text-sm">
                   <thead>
@@ -410,7 +468,7 @@ export default function BOQBudgetBreakdownPage() {
                       <th className="px-3 py-2.5 text-center w-14 font-bold border border-slate-300">S.No</th>
                       <th className="px-3 py-2.5 text-left font-bold border border-slate-300">Description of Works</th>
                       <th className="px-3 py-2.5 text-right font-bold border border-slate-300">Bill Value</th>
-                      <th className="px-3 py-2.5 text-right font-bold border border-slate-300">Budgeted value</th>
+                      <th className="px-3 py-2.5 text-right font-bold border border-slate-300 w-52">Budgeted value <span className="font-normal text-[10px] opacity-75">(click to edit)</span></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -419,7 +477,17 @@ export default function BOQBudgetBreakdownPage() {
                         <td className="px-3 py-2 text-center font-bold border border-slate-200">{i + 1}</td>
                         <td className="px-3 py-2 font-semibold text-slate-700 border border-slate-200">{c.name}</td>
                         <td className="px-3 py-2 text-right border border-slate-200">{inr2(c.bill)}</td>
-                        <td className="px-3 py-2 text-right border border-slate-200">{inr2(c.budget)}</td>
+                        <td className="px-3 py-1 border border-slate-200">
+                          <ChapterBudgetCell
+                            value={c.budget}
+                            saving={chapterBudgetMutation.isPending}
+                            onSave={(v) => chapterBudgetMutation.mutate({
+                              chapterName: useNameGrouping ? c.name : undefined,
+                              chapterNo: !useNameGrouping ? c.chapter_no : undefined,
+                              totalBudget: v,
+                            })}
+                          />
+                        </td>
                       </tr>
                     ))}
                     <tr className="bg-[#E4EFDC] font-bold">

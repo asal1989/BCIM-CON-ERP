@@ -282,4 +282,79 @@ router.put('/item/:boq_item_id', async (req, res) => {
   }
 });
 
+// POST /boq-budget/:project_id/chapter-budget
+// Set a total budget for a whole chapter at once.
+// Distributes the amount proportionally across all items in the chapter
+// by their BOQ value, saving to the specified cost_head (default: 'Sub Con').
+router.post('/:project_id/chapter-budget', async (req, res) => {
+  try {
+    const { project_id } = req.params;
+    const { chapter_name, chapter_no, total_budget, cost_head = 'Sub Con' } = req.body;
+
+    if (!BOQ_COST_HEADS.includes(cost_head)) {
+      return res.status(400).json({ error: `Invalid cost_head. Must be one of: ${BOQ_COST_HEADS.join(', ')}` });
+    }
+    if (total_budget == null || isNaN(parseFloat(total_budget))) {
+      return res.status(400).json({ error: 'total_budget is required' });
+    }
+
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) {
+      return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
+
+    // Fetch all items in this chapter
+    let itemsQ;
+    if (chapter_name) {
+      itemsQ = await query(
+        `SELECT id, ROUND((quantity*rate)::numeric,2) AS amount
+         FROM boq_items WHERE project_id=$1 AND is_active=true
+         AND LOWER(TRIM(chapter_name)) = LOWER(TRIM($2))`,
+        [project_id, chapter_name]
+      );
+    } else {
+      itemsQ = await query(
+        `SELECT id, ROUND((quantity*rate)::numeric,2) AS amount
+         FROM boq_items WHERE project_id=$1 AND is_active=true AND chapter_no=$2`,
+        [project_id, chapter_no]
+      );
+    }
+
+    const chapterItems = itemsQ.rows;
+    if (!chapterItems.length) return res.status(404).json({ error: 'No items found for this chapter' });
+
+    const chapterTotal = chapterItems.reduce((s, i) => s + parseFloat(i.amount || 0), 0);
+    const budget = parseFloat(total_budget);
+
+    const saved = await withTransaction(async (client) => {
+      const results = [];
+      for (const item of chapterItems) {
+        const itemAmt = parseFloat(item.amount || 0);
+        // Proportional share; if chapterTotal is 0 split evenly
+        const share = chapterTotal > 0
+          ? (itemAmt / chapterTotal) * budget
+          : budget / chapterItems.length;
+        const pct = itemAmt > 0 ? (share / itemAmt) * 100 : 0;
+
+        const r = await client.query(`
+          INSERT INTO boq_item_budget_breakdown
+            (boq_item_id, project_id, cost_head, budgeted_pct, budgeted_amount, created_by)
+          VALUES ($1,$2,$3,$4,$5,$6)
+          ON CONFLICT (boq_item_id, cost_head)
+          DO UPDATE SET budgeted_pct=$4, budgeted_amount=$5, updated_at=NOW()
+          RETURNING *`,
+          [item.id, project_id, cost_head, pct, share, req.user.id]
+        );
+        results.push(r.rows[0]);
+      }
+      return results;
+    });
+
+    res.json({ data: saved, items_updated: saved.length, total_budget: budget, cost_head });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
