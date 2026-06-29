@@ -339,11 +339,19 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
       WHERE tb.project_id=$1 AND tb.workflow_status='paid' AND li.cost_head IS NOT NULL
       GROUP BY li.cost_head`, [project_id]);
 
-    // SC advances — mapped to "Sub Con"
+    // SC advances (dedicated SC module) — mapped to "Sub Con"
     const advActuals = await query(`
       SELECT 'Sub Con' AS cost_head, SUM(amount) AS actual
       FROM sc_advances
       WHERE project_id=$1 AND status NOT IN ('cancelled')`, [project_id]);
+
+    // Subcontractor advances recorded via the Advance Tracker (TQS advance vouchers) — mapped to "Sub Con".
+    // Only count amounts actually paid out (paid_amount), excluding pending/cancelled vouchers.
+    const advTrackerActuals = await query(`
+      SELECT 'Sub Con' AS cost_head, SUM(paid_amount) AS actual
+      FROM tqs_advance_vouchers
+      WHERE project_id=$1 AND is_deleted=false
+        AND status IN ('issued','partial','recovered') AND paid_amount > 0`, [project_id]);
 
     // Petty cash — sum of entry-level amount (more reliable than total_amount which was added later)
     const spcActuals = await query(`
@@ -353,7 +361,7 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
 
     // Merge actuals by cost head
     const actualMap = {};
-    for (const rows of [raActuals.rows, scActuals.rows, scPayActuals.rows, tqsActuals.rows, advActuals.rows, spcActuals.rows]) {
+    for (const rows of [raActuals.rows, scActuals.rows, scPayActuals.rows, tqsActuals.rows, advActuals.rows, advTrackerActuals.rows, spcActuals.rows]) {
       for (const r of rows) {
         if (!r.cost_head) continue;
         actualMap[r.cost_head] = (actualMap[r.cost_head] || 0) + parseFloat(r.actual || 0);
