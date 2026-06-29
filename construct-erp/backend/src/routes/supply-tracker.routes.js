@@ -1,7 +1,5 @@
 // src/routes/supply-tracker.routes.js
 // Material Supply Tracker — end-to-end MR → PO → IGN/GRN → Issue lifecycle
-// Single source of truth joining: material_requisitions + mrs_items + po_items
-// + purchase_orders + vendors + ign + ign_items + inventory + projects
 const express = require('express');
 const router  = express.Router();
 const { authenticate } = require('../middleware/auth');
@@ -10,54 +8,61 @@ router.use(authenticate);
 
 const CID = req => req.user.company_id;
 
+// Received qty from an ign_items row = qty_inspected - rejected (or qty_as_per_dc fallback)
+const IGN_QTY = `(COALESCE(ii.qty_inspected, ii.qty_as_per_dc, 0) - COALESCE(ii.qty_rejected, 0))`;
+
+// MRS approval-in-progress statuses (all non-final non-cancelled)
+const PENDING_STATUSES = `'pending','stores_verified','approved_pm','approved_sr_pm','approved_mgmt'`;
+
 // ── Dashboard KPIs ─────────────────────────────────────────────────────────
 router.get('/dashboard', async (req, res) => {
   try {
     const { project_id } = req.query;
     const cid = CID(req);
-
-    const pFilter  = project_id ? `AND mr.project_id = '${project_id}'` : '';
+    const params = [cid];
+    let pFilter = '';
+    if (project_id) { pFilter = `AND mr.project_id = $2`; params.push(project_id); }
 
     const r = await query(`
       WITH base AS (
         SELECT
           mr.id,
-          mr.status          AS mr_status,
-          po.status          AS po_status,
+          mr.status                AS mr_status,
+          po.id                    AS po_id,
+          po.status                AS po_status,
           po.delivery_date,
           mr.required_by,
-          COALESCE(SUM(ii.quantity_received), 0)   AS received_qty,
-          COALESCE(mi_agg.total_requested, 0)       AS requested_qty,
-          ign.status                                AS ign_status
+          COALESCE(SUM(${IGN_QTY}), 0)               AS received_qty,
+          COALESCE(SUM(mi.quantity), 0)               AS requested_qty,
+          MAX(ign.status)                             AS ign_status
         FROM material_requisitions mr
         JOIN projects p ON p.id = mr.project_id
         LEFT JOIN mrs_items mi ON mi.mrs_id = mr.id
-        LEFT JOIN (
-          SELECT mrs_id, SUM(quantity) AS total_requested FROM mrs_items GROUP BY mrs_id
-        ) mi_agg ON mi_agg.mrs_id = mr.id
         LEFT JOIN po_items pi ON pi.mrs_item_id = mi.id
         LEFT JOIN purchase_orders po ON po.id = pi.po_id AND po.status NOT IN ('rejected','cancelled')
-        LEFT JOIN vendors v ON v.id = po.vendor_id
         LEFT JOIN ign_items ii ON ii.po_item_id = pi.id
         LEFT JOIN ign ON ign.id = ii.ign_id AND ign.status = 'approved'
         WHERE p.company_id = $1 ${pFilter} AND mr.status != 'cancelled'
-        GROUP BY mr.id, mr.status, po.id, po.status, po.delivery_date, mr.required_by, ign.status
+        GROUP BY mr.id, mr.status, po.id, po.status, po.delivery_date, mr.required_by
       )
       SELECT
-        COUNT(DISTINCT id)                                                      AS total_mrs,
-        COUNT(*) FILTER (WHERE mr_status IN ('pending','submitted'))            AS pending_approvals,
-        COUNT(*) FILTER (WHERE mr_status = 'approved' AND po_status IS NULL)   AS pending_po,
-        COUNT(*) FILTER (WHERE po_status IN ('pending','approved','sent'))      AS open_pos,
-        COUNT(*) FILTER (WHERE po_status IN ('sent','approved') AND received_qty = 0) AS in_transit,
-        COUNT(*) FILTER (WHERE received_qty > 0 AND received_qty < requested_qty AND mr_status != 'closed') AS partial_delivery,
-        COUNT(*) FILTER (WHERE ign_status IS NULL AND received_qty = 0 AND po_status IN ('sent','approved')) AS pending_grn,
-        COUNT(*) FILTER (WHERE delivery_date < CURRENT_DATE AND received_qty < requested_qty AND mr_status != 'closed') AS overdue,
-        COUNT(*) FILTER (WHERE mr_status = 'closed')                           AS closed
+        COUNT(DISTINCT id)                                                             AS total_mrs,
+        COUNT(DISTINCT id) FILTER (WHERE mr_status IN (${PENDING_STATUSES}))          AS pending_approvals,
+        COUNT(DISTINCT id) FILTER (WHERE mr_status = 'approved_md' AND po_id IS NULL) AS pending_po,
+        COUNT(DISTINCT po_id) FILTER (WHERE po_status IN ('pending','approved','sent')) AS open_pos,
+        COUNT(DISTINCT id) FILTER (WHERE po_status IN ('sent','approved') AND received_qty = 0) AS in_transit,
+        COUNT(DISTINCT id) FILTER (WHERE received_qty > 0 AND received_qty < requested_qty AND mr_status != 'closed') AS partial_delivery,
+        COUNT(DISTINCT id) FILTER (WHERE ign_status IS NULL AND received_qty = 0 AND po_status IN ('sent','approved')) AS pending_grn,
+        COUNT(DISTINCT id) FILTER (WHERE delivery_date < CURRENT_DATE AND received_qty < requested_qty AND mr_status != 'closed') AS overdue,
+        COUNT(DISTINCT id) FILTER (WHERE mr_status = 'closed')                        AS closed
       FROM base
-    `, [cid]);
+    `, params);
 
     res.json({ data: r.rows[0] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    console.error('[supply-tracker] dashboard error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Main Tracker Grid ───────────────────────────────────────────────────────
@@ -72,7 +77,7 @@ router.get('/', async (req, res) => {
     const cid = CID(req);
     const params = [cid];
     let i = 2;
-    const conditions = ['p.company_id = $1'];
+    const conditions = ['p.company_id = $1', "mr.status != 'cancelled'"];
 
     if (project_id) { conditions.push(`mr.project_id = $${i++}`);  params.push(project_id); }
     if (vendor_id)  { conditions.push(`v.id = $${i++}`);            params.push(vendor_id); }
@@ -85,12 +90,23 @@ router.get('/', async (req, res) => {
       conditions.push(`(mr.mrs_number ILIKE $${i} OR mr.serial_no_formatted ILIKE $${i} OR mi.material_name ILIKE $${i} OR po.po_number ILIKE $${i} OR v.name ILIKE $${i})`);
       params.push(`%${search}%`); i++;
     }
+
+    // Status filter mapped to MRS status OR derived status label
     if (status) {
-      const ss = status.split(',').map(s => `'${s}'`).join(',');
-      conditions.push(`mr.status IN (${ss})`);
+      const statusMap = {
+        'Pending Approval': `mr.status IN (${PENDING_STATUSES})`,
+        'PO Pending':       `mr.status = 'approved_md' AND po.id IS NULL`,
+        'Closed':           `mr.status = 'closed'`,
+      };
+      const mapped = statusMap[status];
+      if (mapped) {
+        conditions.push(mapped);
+      }
+      // For PO-based statuses, we handle in JS via deriveStatus post-query
     }
+
     if (po_status) {
-      const ps = po_status.split(',').map(s => `'${s}'`).join(',');
+      const ps = po_status.split(',').map(s => `'${s.replace(/'/g,"''")}'`).join(',');
       conditions.push(`po.status IN (${ps})`);
     }
 
@@ -108,7 +124,6 @@ router.get('/', async (req, res) => {
         mr.department,
         mr.cost_center,
         mr.remarks                      AS mr_remarks,
-        mr.delivery_location,
         -- Project
         p.id                            AS project_id,
         p.name                          AS project_name,
@@ -121,8 +136,7 @@ router.get('/', async (req, res) => {
         mi.category                     AS material_category,
         mi.quantity                     AS requested_qty,
         mi.unit,
-        COALESCE(mi.md_approved_qty, mi.quantity)  AS approved_qty,
-        mi.est_rate,
+        COALESCE(mi.md_approved_qty, mi.quantity) AS approved_qty,
         -- PO
         po.id                           AS po_id,
         COALESCE(po.serial_no_formatted, po.po_number) AS po_number,
@@ -133,18 +147,15 @@ router.get('/', async (req, res) => {
         v.id                            AS vendor_id,
         v.name                          AS vendor_name,
         v.phone                         AS vendor_phone,
-        v.email                         AS vendor_email,
         -- PO Item
         pi.quantity                     AS ordered_qty,
         pi.rate                         AS unit_rate,
-        -- Received (via IGN)
-        COALESCE(SUM(CASE WHEN ign.status='approved' THEN ii.quantity_received ELSE 0 END), 0) AS received_qty,
-        MAX(CASE WHEN ign.status='approved' THEN ign.approved_at END)                          AS actual_delivery_date,
-        COUNT(DISTINCT CASE WHEN ign.status='approved' THEN ign.id END)                        AS grn_count,
-        -- Stock
-        COALESCE(inv.closing_stock, 0)  AS stock_qty,
-        -- Issued from inventory against this project
-        COALESCE(inv_issue.issued_qty, 0) AS issued_qty
+        -- Received (via IGN — use qty_inspected minus rejected)
+        COALESCE(SUM(CASE WHEN ign.status='approved'
+          THEN (COALESCE(ii.qty_inspected, ii.qty_as_per_dc, 0) - COALESCE(ii.qty_rejected, 0))
+          ELSE 0 END), 0)                                                               AS received_qty,
+        MAX(CASE WHEN ign.status='approved' THEN ign.approved_at END)                  AS actual_delivery_date,
+        COUNT(DISTINCT CASE WHEN ign.status='approved' THEN ign.id END)                AS grn_count
       FROM material_requisitions mr
       JOIN projects p ON p.id = mr.project_id
       LEFT JOIN users u ON u.id = mr.raised_by
@@ -154,26 +165,16 @@ router.get('/', async (req, res) => {
       LEFT JOIN vendors v ON v.id = po.vendor_id
       LEFT JOIN ign_items ii ON ii.po_item_id = pi.id
       LEFT JOIN ign ON ign.id = ii.ign_id
-      LEFT JOIN inventory inv ON inv.project_id = mr.project_id
-            AND LOWER(TRIM(inv.material_name)) = LOWER(TRIM(mi.material_name))
-      LEFT JOIN (
-        SELECT project_id, material_name, SUM(quantity) AS issued_qty
-        FROM inventory_transactions
-        WHERE transaction_type = 'issue'
-        GROUP BY project_id, material_name
-      ) inv_issue ON inv_issue.project_id = mr.project_id
-            AND LOWER(TRIM(inv_issue.material_name)) = LOWER(TRIM(mi.material_name))
-      WHERE ${where} AND mr.status != 'cancelled'
+      WHERE ${where}
       GROUP BY
         mr.id, mr.serial_no_formatted, mr.mrs_number, mr.created_at, mr.required_by,
-        mr.status, mr.priority, mr.department, mr.cost_center, mr.remarks, mr.delivery_location,
+        mr.status, mr.priority, mr.department, mr.cost_center, mr.remarks,
         p.id, p.name, u.name,
         mi.id, mi.material_name, mi.item_code, mi.category, mi.quantity, mi.unit,
-        mi.md_approved_qty, mi.est_rate,
+        mi.md_approved_qty,
         po.id, po.serial_no_formatted, po.po_number, po.po_date, po.delivery_date, po.status,
-        v.id, v.name, v.phone, v.email,
-        pi.quantity, pi.rate,
-        inv.closing_stock, inv_issue.issued_qty
+        v.id, v.name, v.phone,
+        pi.quantity, pi.rate
       ORDER BY mr.created_at DESC
       LIMIT $${i++} OFFSET $${i++}
     `;
@@ -181,13 +182,16 @@ router.get('/', async (req, res) => {
 
     const { rows } = await query(sql, params);
 
-    // Compute derived status for each row
     const enriched = rows.map(r => ({
       ...r,
-      balance_qty:   Math.max(0, parseFloat(r.ordered_qty || r.requested_qty || 0) - parseFloat(r.received_qty || 0)),
-      supply_pct:    r.ordered_qty > 0 ? Math.min(100, Math.round((parseFloat(r.received_qty) / parseFloat(r.ordered_qty)) * 100)) : 0,
+      balance_qty:    Math.max(0, parseFloat(r.ordered_qty || r.requested_qty || 0) - parseFloat(r.received_qty || 0)),
+      supply_pct:     r.ordered_qty > 0
+        ? Math.min(100, Math.round((parseFloat(r.received_qty) / parseFloat(r.ordered_qty)) * 100))
+        : 0,
       overall_status: deriveStatus(r),
-      is_overdue:    r.expected_delivery_date && new Date(r.expected_delivery_date) < new Date() && parseFloat(r.received_qty) < parseFloat(r.ordered_qty || r.requested_qty),
+      is_overdue:     r.expected_delivery_date
+        && new Date(r.expected_delivery_date) < new Date()
+        && parseFloat(r.received_qty) < parseFloat(r.ordered_qty || r.requested_qty),
     }));
 
     res.json({ data: enriched, count: enriched.length });
@@ -214,9 +218,8 @@ router.get('/item/:mrId/:itemId', async (req, res) => {
     if (!mrRes.rows.length) return res.status(404).json({ error: 'MR not found' });
 
     const itemRes = await query(`
-      SELECT mi.*, pv.name AS preferred_vendor_name
+      SELECT mi.*
       FROM mrs_items mi
-      LEFT JOIN vendors pv ON pv.id = mi.preferred_vendor_id
       WHERE mi.id = $1 AND mi.mrs_id = $2
     `, [itemId, mrId]);
     if (!itemRes.rows.length) return res.status(404).json({ error: 'MR item not found' });
@@ -232,40 +235,62 @@ router.get('/item/:mrId/:itemId', async (req, res) => {
       ORDER BY po.po_date
     `, [itemId]);
 
-    const ignRes = await query(`
-      SELECT ii.*, ign.ign_number, ign.status AS ign_status, ign.created_at AS ign_created,
-             ign.approved_at, ign.vehicle_no, ign.driver_name, ign.gate_pass_no
+    const poItemIds = posRes.rows.map(r => r.id).filter(Boolean);
+
+    const ignRes = poItemIds.length ? await query(`
+      SELECT ii.*,
+             ii.qty_inspected, ii.qty_as_per_dc, ii.qty_rejected,
+             ign.ign_number, ign.status AS ign_status, ign.created_at AS ign_created,
+             ign.approved_at, ign.vehicle_no
       FROM ign_items ii
       JOIN ign ON ign.id = ii.ign_id
       WHERE ii.po_item_id = ANY($1::uuid[])
       ORDER BY ign.created_at
-    `, [posRes.rows.map(r => r.id).filter(Boolean)]);
+    `, [poItemIds]) : { rows: [] };
+
+    // Normalise received qty for each IGN row
+    const grns = ignRes.rows.map(g => ({
+      ...g,
+      quantity_received: parseFloat(g.qty_inspected || g.qty_as_per_dc || 0) - parseFloat(g.qty_rejected || 0),
+    }));
 
     // Build timeline
-    const timeline = [];
     const mr = mrRes.rows[0];
+    const timeline = [];
+    timeline.push({ event: 'MR Raised', date: mr.created_at, status: 'done', ref: mr.serial_no_formatted || mr.mrs_number });
 
-    timeline.push({ event: 'MR Raised',    date: mr.created_at,    status: 'done', ref: mr.mrs_number || mr.serial_no_formatted });
-    if (mr.approval_remarks || mr.status === 'approved') {
-      timeline.push({ event: 'MR Approved', date: mr.updated_at,   status: 'done', ref: mr.approved_by ? `By ${mr.approved_by}` : '' });
-    }
+    const approvalStages = [
+      { label: 'Stores Approved',   dateField: 'stores_approved_at' },
+      { label: 'PM Approved',        dateField: 'approved_pm_at' },
+      { label: 'Management Approved',dateField: 'approved_mgmt_at' },
+      { label: 'MD Approved',        dateField: 'approved_md_at' },
+    ];
+    approvalStages.forEach(s => {
+      if (mr[s.dateField]) timeline.push({ event: s.label, date: mr[s.dateField], status: 'done' });
+    });
+
     posRes.rows.forEach(po => {
-      timeline.push({ event: 'PO Created',       date: po.po_date,       status: 'done', ref: po.po_number || po.serial_no_formatted });
+      timeline.push({ event: 'PO Created', date: po.po_date, status: 'done', ref: po.po_number || po.serial_no_formatted });
       if (po.po_status === 'sent' || po.po_status === 'approved') {
-        timeline.push({ event: 'PO Sent to Vendor', date: po.po_date,    status: 'done', ref: po.vendor_name });
+        timeline.push({ event: 'PO Sent to Vendor', date: po.po_date, status: 'done', ref: po.vendor_name });
       }
     });
-    ignRes.rows.forEach(ig => {
-      timeline.push({ event: ig.ign_status === 'approved' ? 'GRN Completed' : 'GRN Pending', date: ig.ign_created, status: ig.ign_status === 'approved' ? 'done' : 'pending', ref: ig.ign_number });
+    grns.forEach(g => {
+      timeline.push({
+        event:  g.ign_status === 'approved' ? 'GRN Completed' : 'GRN Pending',
+        date:   g.ign_created,
+        status: g.ign_status === 'approved' ? 'done' : 'pending',
+        ref:    g.ign_number,
+      });
     });
 
     res.json({
       data: {
-        mr: mr,
+        mr,
         item: itemRes.rows[0],
         purchase_orders: posRes.rows,
-        grns: ignRes.rows,
-        timeline: timeline.sort((a, b) => new Date(a.date) - new Date(b.date)),
+        grns,
+        timeline: timeline.filter(t => t.date).sort((a, b) => new Date(a.date) - new Date(b.date)),
       }
     });
   } catch (e) {
@@ -300,7 +325,9 @@ router.get('/summary', async (req, res) => {
         COUNT(DISTINCT mi.id)                                   AS item_count,
         COALESCE(SUM(mi.quantity), 0)                           AS requested_qty,
         COALESCE(SUM(pi.quantity), 0)                           AS ordered_qty,
-        COALESCE(SUM(CASE WHEN ign.status='approved' THEN ii.quantity_received ELSE 0 END), 0) AS received_qty,
+        COALESCE(SUM(CASE WHEN ign.status='approved'
+          THEN (COALESCE(ii.qty_inspected, ii.qty_as_per_dc, 0) - COALESCE(ii.qty_rejected, 0))
+          ELSE 0 END), 0)                                       AS received_qty,
         COUNT(DISTINCT po.id)                                   AS po_count,
         COUNT(DISTINCT CASE WHEN ign.status='approved' THEN ign.id END) AS grn_count
       FROM material_requisitions mr
@@ -317,24 +344,26 @@ router.get('/summary', async (req, res) => {
     `;
     const { rows } = await query(sql, params);
     res.json({ data: rows });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    console.error('[supply-tracker] summary error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 function deriveStatus(r) {
-  const mrStatus = r.mr_status;
-  if (mrStatus === 'closed')    return 'Closed';
-  if (mrStatus === 'cancelled') return 'Cancelled';
+  const mrStatus = String(r.mr_status || '');
+  if (mrStatus === 'closed')     return 'Closed';
+  if (mrStatus === 'cancelled')  return 'Cancelled';
+  const pendingStages = ['pending','stores_verified','approved_pm','approved_sr_pm','approved_mgmt'];
   if (!r.po_id) {
-    if (mrStatus === 'pending' || mrStatus === 'submitted') return 'Pending Approval';
-    if (mrStatus === 'approved') return 'PO Pending';
+    if (pendingStages.includes(mrStatus)) return 'Pending Approval';
+    if (mrStatus === 'approved_md') return 'PO Pending';
     return 'Draft';
   }
-  const poStatus = r.po_status;
+  const poStatus = String(r.po_status || '');
   const ordered  = parseFloat(r.ordered_qty || 0);
   const received = parseFloat(r.received_qty || 0);
-  if (received >= ordered && ordered > 0) {
-    return r.issued_qty > 0 ? 'Issued to Site' : 'GRN Completed';
-  }
+  if (received >= ordered && ordered > 0) return 'GRN Completed';
   if (received > 0) return 'Partial Delivery';
   if (poStatus === 'sent' || poStatus === 'approved') return 'In Transit';
   if (poStatus === 'pending') return 'PO Created';
