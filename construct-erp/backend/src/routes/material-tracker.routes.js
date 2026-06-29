@@ -668,6 +668,18 @@ router.post('/auto-import/run', authorize(...WRITE_ROLES), async (req, res) => {
     const importedGrnSet  = new Set(imported.rows.map(r => r.source_grn_id).filter(Boolean));
     const importedBillSet = new Set(imported.rows.map(r => r.source_bill_id).filter(Boolean));
 
+    // Content-based dedup: entry_id|invoice_no pairs already in the DB.
+    // Prevents re-import when source UUIDs differ (GRN→IGN migration)
+    // and prevents IGN + bill double-import in the same sync run.
+    const entryIds = Array.from(entryByPo.values());
+    const existingInv = entryIds.length ? await query(`
+      SELECT entry_id, LOWER(TRIM(invoice_no)) AS inv_key
+      FROM material_tracker_loads
+      WHERE entry_id = ANY($1::uuid[])
+        AND invoice_no IS NOT NULL AND invoice_no <> ''
+    `, [entryIds]) : { rows: [] };
+    const importedInvKeys = new Set(existingInv.rows.map(r => `${r.entry_id}|${r.inv_key}`));
+
     // ── Bulk fetch ALL matching IGN receipts for these POs in one query ──
     const mcGi = matCond(material_type, 'ii', 'material_name', 2);
     const grns = await query(`
@@ -707,7 +719,7 @@ router.post('/auto-import/run', authorize(...WRITE_ROLES), async (req, res) => {
       if (b.inv_key) billByPoInv.set(`${b.po_id}|${b.inv_key}`, b);
     }
 
-    // Build GRN load rows
+    // Build IGN load rows
     const grnCols = ['entry_id','received_date','invoice_no','ign_no','grs_no','vehicle_no',
                      'invoice_qty','rate','gst_rate','gst_amount','grand_total','created_by','source_grn_id'];
     const grnRows = [];
@@ -715,10 +727,13 @@ router.post('/auto-import/run', authorize(...WRITE_ROLES), async (req, res) => {
       if (importedGrnSet.has(grn.grn_id)) continue;
       const entryId = entryByPo.get(grn.po_id);
       if (!entryId) continue;
+
+      // Content dedup: skip if same entry+invoice already exists in DB or earlier in this run
+      const invKey = grn.invoice_number ? `${entryId}|${grn.invoice_number.trim().toLowerCase()}` : null;
+      if (invKey && importedInvKeys.has(invKey)) continue;
+
       const billRow = billByGrn.get(grn.grn_id)
         || billByPoInv.get(`${grn.po_id}|${(grn.invoice_number || '').trim().toLowerCase()}`);
-      // This delivery may already exist as a no-GRN bill import from a prior run,
-      // before this bill's grn_id was linked. Skip to avoid counting it twice.
       if (billRow?.id && importedBillSet.has(billRow.id)) continue;
       const rate     = parseFloat(grn.rate || 0);
       const qty      = parseFloat(grn.qty  || 0);
@@ -726,6 +741,10 @@ router.post('/auto-import/run', authorize(...WRITE_ROLES), async (req, res) => {
       const gstRate  = parseFloat(billRow?.gst_rate || DEFAULT_GST_RATE[material_type] || 18);
       const gstAmt   = billRow?.gst_amount   != null ? parseFloat(billRow.gst_amount)   : (basic * gstRate / 100);
       const grandTot = billRow?.total_amount != null ? parseFloat(billRow.total_amount) : (basic + gstAmt);
+
+      // Mark this invoice as being imported so the bills path won't re-import it
+      if (invKey) importedInvKeys.add(invKey);
+
       grnRows.push([
         entryId, grn.grn_date || todayStr,
         trunc(grn.invoice_number),
@@ -767,6 +786,11 @@ router.post('/auto-import/run', authorize(...WRITE_ROLES), async (req, res) => {
       if (importedBillSet.has(bill.id)) continue;
       const entryId = entryByPo.get(bill.po_id);
       if (!entryId) continue;
+
+      // Content dedup: skip if same entry+invoice already imported (via IGN or a prior run)
+      const billInvKey = bill.inv_number ? `${entryId}|${bill.inv_number.trim().toLowerCase()}` : null;
+      if (billInvKey && importedInvKeys.has(billInvKey)) continue;
+
       const rate     = parseFloat(bill.rate || 0);
       const qty      = parseFloat(bill.qty  || 0);
       const basic    = qty * rate;
