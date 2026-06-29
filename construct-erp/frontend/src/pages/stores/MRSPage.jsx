@@ -26,7 +26,7 @@ const fmtMRSDate = (d) => {
 };
 import { mrsAPI, projectAPI, inventoryAPI, vendorAPI, budgetAPI } from '../../api/client';
 import VendorSelect from '../../components/shared/VendorSelect';
-import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
+import { PageHeader, Theme } from '../../theme';
 import toast from 'react-hot-toast';
 import MRSPrintTemplate from './MRSPrintTemplate';
 import { useReactToPrint } from 'react-to-print';
@@ -1355,12 +1355,15 @@ export default function MRSPage() {
 
       {/* ── KPI Row ── */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
-        <ThemeKpiCard icon={ClipboardList} label="Total MRS"        value={allMRS.length}       color="slate"   />
-        <ThemeKpiCard icon={CalendarDays}  label="This Month"       value={mrsThisMonth.length} color="indigo"  />
-        <ThemeKpiCard icon={Clock}         label="Pending Approval" value={pendingCount}         color="amber"   />
-        <ThemeKpiCard icon={Activity}      label="In Pipeline"      value={inPipelineCount}      color="blue"    />
-        <ThemeKpiCard icon={Send}          label="Ready for Issue"  value={authorizedCount}      color="emerald" />
-        <ThemeKpiCard icon={AlertCircle}   label="Urgent / Critical" value={urgentCount}         color="red"     />
+        <StatCard icon={ClipboardList} label="Total MRS"         value={allMRS.length}       sub="All requisitions"   color="slate"
+          onClick={() => setStatusFilter('all')}         active={statusFilter === 'all'} />
+        <StatCard icon={CalendarDays}  label="This Month"        value={mrsThisMonth.length} sub={now.format('MMMM YYYY')} color="indigo" />
+        <StatCard icon={Clock}         label="Pending Approval"  value={pendingCount}        sub="Awaiting store mgr" color="amber"
+          onClick={() => setStatusFilter('pending')}     active={statusFilter === 'pending'} />
+        <StatCard icon={Activity}      label="In Pipeline"       value={inPipelineCount}     sub="Mid-approval"       color="blue" />
+        <StatCard icon={Send}          label="Ready for Issue"   value={authorizedCount}     sub="MD authorized"      color="emerald"
+          onClick={() => setStatusFilter('approved_md')} active={statusFilter === 'approved_md'} />
+        <StatCard icon={AlertCircle}   label="Urgent / Critical" value={urgentCount}         sub="High priority"      color="red" />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-5 mb-5">
@@ -2332,6 +2335,37 @@ function Field({ label, children }) {
       <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">{label}</label>
       {children}
     </div>
+  );
+}
+
+/* ── StatCard — modern white KPI tile (icon chip · big value · accent · click-to-filter) ── */
+function StatCard({ icon: Icon, label, value, sub, color = 'slate', onClick, active = false }) {
+  const C = {
+    slate:   { chip: 'bg-slate-100 text-slate-600',     bar: 'bg-slate-400',   ring: 'ring-slate-300' },
+    indigo:  { chip: 'bg-indigo-50 text-indigo-600',    bar: 'bg-indigo-500',  ring: 'ring-indigo-300' },
+    amber:   { chip: 'bg-amber-50 text-amber-600',      bar: 'bg-amber-500',   ring: 'ring-amber-300' },
+    blue:    { chip: 'bg-blue-50 text-blue-600',        bar: 'bg-blue-500',    ring: 'ring-blue-300' },
+    emerald: { chip: 'bg-emerald-50 text-emerald-600',  bar: 'bg-emerald-500', ring: 'ring-emerald-300' },
+    red:     { chip: 'bg-rose-50 text-rose-600',        bar: 'bg-rose-500',    ring: 'ring-rose-300' },
+  }[color] || {};
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={clsx(
+        'group relative bg-white rounded-2xl border p-4 text-left overflow-hidden transition-all',
+        onClick ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5' : 'cursor-default',
+        active ? `border-transparent ring-2 ${C.ring} shadow-md` : 'border-slate-200 shadow-sm'
+      )}
+    >
+      <span className={clsx('absolute left-0 top-0 h-full w-1', C.bar)} />
+      <div className={clsx('w-10 h-10 rounded-xl flex items-center justify-center', C.chip)}>
+        {Icon && <Icon className="w-5 h-5" strokeWidth={2.2} />}
+      </div>
+      <div className="mt-3 text-[28px] leading-none font-bold tabular-nums text-slate-900">{value}</div>
+      <div className="mt-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</div>
+      {sub && <div className="text-[11px] text-slate-400 mt-0.5 truncate">{sub}</div>}
+    </button>
   );
 }
 
