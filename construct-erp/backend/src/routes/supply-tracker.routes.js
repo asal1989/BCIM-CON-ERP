@@ -346,8 +346,10 @@ router.get('/item/:mrId/:itemId', async (req, res) => {
 
     // IGN items linked to the matching PO items
     const ignRes = poItemIds.length ? await query(`
-      SELECT ii.*,
+      SELECT DISTINCT ON (ign.id)
+             ii.*,
              ii.qty_inspected, ii.qty_as_per_dc, ii.qty_rejected,
+             ign.id AS ign_pk,
              ign.ign_number, ign.status AS ign_status,
              ign.created_at AS ign_created, ign.approved_at,
              ign.vehicle_no, ign.dc_number, ign.bill_number,
@@ -356,7 +358,7 @@ router.get('/item/:mrId/:itemId', async (req, res) => {
       JOIN ign ON ign.id = ii.ign_id
       LEFT JOIN vendors v2 ON v2.id = ign.vendor_id
       WHERE ii.po_item_id = ANY($1::uuid[])
-      ORDER BY ign.created_at
+      ORDER BY ign.id, ign.created_at
     `, [poItemIds]) : { rows: [] };
 
     // Also catch IGNs linked at PO-header level (ign.po_id)
@@ -393,13 +395,12 @@ router.get('/item/:mrId/:itemId', async (req, res) => {
     if (mr.approved_md_at)     add('approval', 'MD Approved',         mr.approved_md_at,     'done', null);
 
     // PO events (deduplicated by po_id)
+    // Use po_date (document date) for PO Created — more meaningful than DB timestamp
     const seenPo = new Set();
     posRes.rows.forEach(po => {
       if (seenPo.has(po.po_id)) return;
       seenPo.add(po.po_id);
-      add('po', 'PO Created',        po.po_created_at || po.po_date, 'done', po.po_number, { vendor: po.vendor_name });
-      if (['sent','approved','partial','completed'].includes(po.po_status))
-        add('po', 'PO Sent to Vendor', po.po_date, 'done', po.vendor_name);
+      add('po', 'PO Created', po.po_date || po.po_created_at, 'done', po.po_number, { vendor: po.vendor_name });
       if (po.delivery_date)
         add('po', 'Expected Delivery', po.delivery_date,
           new Date(po.delivery_date) > new Date() ? 'future' : 'due',
@@ -414,8 +415,9 @@ router.get('/item/:mrId/:itemId', async (req, res) => {
     // IGN item-level events
     const seenIgn = new Set();
     grns.forEach(g => {
-      if (seenIgn.has(g.ign_id)) return;
-      seenIgn.add(g.ign_id);
+      const ignKey = g.ign_pk || g.ign_id;
+      if (seenIgn.has(ignKey)) return;
+      seenIgn.add(ignKey);
       add('ign', 'Material Arrived (IGN Created)', g.ign_created, 'done', g.ign_number, {
         vehicle: g.vehicle_no, dc: g.dc_number, qty: g.quantity_received,
       });
@@ -425,10 +427,11 @@ router.get('/item/:mrId/:itemId', async (req, res) => {
         add('ign', 'Awaiting IGN Approval', null, 'pending', g.ign_number);
     });
 
-    // IGN header-level events (fallback, avoid duplicates)
+    // IGN header-level events (fallback for IGNs not linked at item level)
     ignHeaderRes.rows.forEach(ig => {
       if (seenIgn.has(ig.id)) return;
       seenIgn.add(ig.id);
+
       add('ign', 'Material Arrived (IGN)', ig.ign_created, 'done', ig.ign_number, { vendor: ig.ign_vendor_name });
       if (ig.ign_status === 'approved')
         add('ign', 'IGN Approved / GRN Completed', ig.approved_at, 'done', ig.ign_number);
