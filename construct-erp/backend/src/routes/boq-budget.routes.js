@@ -320,30 +320,28 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
       WHERE rb.project_id=$1 AND rb.status IN ('certified','paid')
       GROUP BY rbi.cost_head`, [project_id]);
 
-    // Actuals: SC bills (approved/paid)
+    // Actuals: SC bills — all mapped to "Sub Con" (SC module is exclusively subcontractor)
     const scActuals = await query(`
-      SELECT bi.cost_head, SUM(bi.curr_qty * bi.rate) AS actual
+      SELECT 'Sub Con' AS cost_head, SUM(bi.curr_qty * bi.rate) AS actual
       FROM sc_bill_items bi JOIN sc_bills sb ON sb.id = bi.bill_id
-      WHERE sb.project_id=$1 AND sb.status IN ('approved','paid')
-      GROUP BY bi.cost_head`, [project_id]);
+      WHERE sb.project_id=$1 AND sb.status IN ('approved','paid')`, [project_id]);
 
-    // Actuals: TQS material bills (paid)
+    // Actuals: TQS material bills (paid) — grouped by cost_head on line items
     const tqsActuals = await query(`
       SELECT li.cost_head, SUM(li.basic_amount) AS actual
       FROM tqs_bill_line_items li JOIN tqs_bills tb ON tb.id = li.bill_id
       WHERE tb.project_id=$1 AND tb.workflow_status='paid' AND li.cost_head IS NOT NULL
       GROUP BY li.cost_head`, [project_id]);
 
-    // SC advances (Sub Con)
+    // SC advances — mapped to "Sub Con"
     const advActuals = await query(`
       SELECT 'Sub Con' AS cost_head, SUM(amount) AS actual
       FROM sc_advances
       WHERE project_id=$1 AND status NOT IN ('cancelled')`, [project_id]);
 
-    // Petty cash
-    // Petty cash — total from stores petty cash tracker (all approved entries → "Petty Cash" head)
+    // Petty cash — sum of entry-level amount (more reliable than total_amount which was added later)
     const spcActuals = await query(`
-      SELECT 'Petty Cash' AS cost_head, SUM(COALESCE(total_amount, amount)) AS actual
+      SELECT 'Petty Cash' AS cost_head, SUM(amount) AS actual
       FROM stores_petty_cash_entries
       WHERE project_id=$1 AND status='Approved'`, [project_id]);
 
