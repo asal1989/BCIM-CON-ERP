@@ -168,7 +168,7 @@ router.get('/', async (req, res) => {
     const {
       project_id, vendor_id, status, category, search,
       date_from, date_to, priority, po_status,
-      limit = 200, offset = 0,
+      limit = 500, offset = 0,
     } = req.query;
 
     const cid = CID(req);
@@ -264,7 +264,22 @@ router.get('/', async (req, res) => {
     `;
     params.push(parseInt(limit), parseInt(offset));
 
-    const { rows } = await query(sql, params);
+    // Run count query in parallel with the main query
+    const countParams = params.slice(0, params.length - 2); // remove LIMIT/OFFSET params
+    const countSql = `
+      SELECT COUNT(*) AS total
+      FROM material_requisitions mr
+      JOIN projects p ON p.id = mr.project_id
+      LEFT JOIN users u ON u.id = mr.raised_by
+      JOIN mrs_items mi ON mi.mrs_id = mr.id
+      ${BEST_PO_LATERAL}
+      LEFT JOIN vendors v ON v.id = bp.vendor_id
+      WHERE ${where}
+    `;
+    const [{ rows }, countRes] = await Promise.all([
+      query(sql, params),
+      query(countSql, countParams),
+    ]);
 
     const enriched = rows.map(r => {
       const ordered  = parseFloat(r.ordered_qty  || 0);
@@ -281,7 +296,8 @@ router.get('/', async (req, res) => {
       };
     });
 
-    res.json({ data: enriched, count: enriched.length });
+    const totalCount = parseInt(countRes.rows[0]?.total || 0);
+    res.json({ data: enriched, count: enriched.length, total: totalCount });
   } catch (e) {
     console.error('[supply-tracker] GET / error:', e.message);
     res.status(500).json({ error: e.message });

@@ -725,13 +725,15 @@ export default function MaterialSupplyTrackerPage() {
     return f;
   }, [filters, kpiFilter]);
 
-  const { data: trackerData, isLoading, refetch } = useQuery({
+  const { data: trackerResp, isLoading, refetch } = useQuery({
     queryKey: ['supply-tracker', queryFilters],
-    queryFn: () => supplyTrackerAPI.list(queryFilters).then(r => r.data?.data || []),
+    queryFn: () => supplyTrackerAPI.list(queryFilters).then(r => r.data || {}),
     enabled: tab === 'tracker',
   });
 
-  const rows = trackerData || [];
+  const rows       = trackerResp?.data  || [];
+  const totalCount = trackerResp?.total ?? null;
+  const isTruncated = totalCount !== null && totalCount > rows.length;
 
   const handleKpiClick = useCallback((statusFilter) => {
     setKpiFilter(prev => prev === statusFilter ? null : statusFilter);
@@ -818,7 +820,18 @@ export default function MaterialSupplyTrackerPage() {
 
         {/* Content */}
         {tab === 'tracker' && (
-          <TrackerTable rows={rows} isLoading={isLoading} onRowClick={setDetail} />
+          <>
+            {isTruncated && (
+              <div className="flex items-center gap-2 bg-amber-50 border border-amber-300 rounded-xl px-4 py-2.5 text-xs text-amber-800">
+                <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                <span>
+                  Showing <strong>{rows.length}</strong> of <strong>{totalCount}</strong> records.
+                  Use the <strong>Project</strong> or <strong>Date</strong> filter to narrow results and find a specific MR.
+                </span>
+              </div>
+            )}
+            <TrackerTable rows={rows} isLoading={isLoading} onRowClick={setDetail} />
+          </>
         )}
         {tab === 'summary' && (
           <SummaryTab projectId={filters.project_id} />
