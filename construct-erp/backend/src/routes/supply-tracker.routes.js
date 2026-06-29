@@ -296,10 +296,12 @@ router.get('/item/:mrId/:itemId', async (req, res) => {
 
     const mrRes = await query(`
       SELECT mr.*, p.name AS project_name, p.company_id,
-             u.name AS raised_by_name, u.email AS raised_by_email
+             u.name AS raised_by_name, u.email AS raised_by_email,
+             ub.name AS raised_by_full
       FROM material_requisitions mr
       JOIN projects p ON p.id = mr.project_id
-      LEFT JOIN users u ON u.id = mr.raised_by
+      LEFT JOIN users u  ON u.id = mr.raised_by
+      LEFT JOIN users ub ON ub.id = mr.raised_by
       WHERE mr.id = $1 AND p.company_id = $2
     `, [mrId, cid]);
     if (!mrRes.rows.length) return res.status(404).json({ error: 'MR not found' });
@@ -309,13 +311,19 @@ router.get('/item/:mrId/:itemId', async (req, res) => {
     `, [itemId, mrId]);
     if (!itemRes.rows.length) return res.status(404).json({ error: 'MR item not found' });
 
-    // Find all PO items for this MRS item (direct + fallback)
+    const matName = itemRes.rows[0].material_name;
+
+    // All POs for this item: direct link OR MR-header link + name match
+    // Also pick up any PO header-linked to MR even without name match (for display)
     const posRes = await query(`
-      SELECT pi.id, pi.quantity, pi.rate, pi.material_name AS pi_material,
+      SELECT DISTINCT ON (po.id)
+             pi.id AS pi_id, pi.quantity, pi.rate, pi.material_name AS pi_material,
              po.id AS po_id,
              COALESCE(po.serial_no_formatted, po.po_number) AS po_number,
+             po.created_at AS po_created_at,
              po.po_date, po.delivery_date, po.status AS po_status, po.payment_terms,
-             v.name AS vendor_name, v.phone AS vendor_phone, v.email AS vendor_email
+             v.name AS vendor_name, v.phone AS vendor_phone, v.email AS vendor_email,
+             (pi.mrs_item_id = $1) AS is_direct_link
       FROM po_items pi
       JOIN purchase_orders po ON po.id = pi.po_id
       LEFT JOIN vendors v ON v.id = po.vendor_id
@@ -323,58 +331,120 @@ router.get('/item/:mrId/:itemId', async (req, res) => {
         AND (
           pi.mrs_item_id = $1
           OR (
-            pi.mrs_item_id IS NULL
-            AND (po.mrs_id = $2 OR $2 = ANY(COALESCE(po.mrs_ids, ARRAY[]::uuid[])))
-            AND ${NORM('pi.material_name')} = ${NORM('$3')}
+            (po.mrs_id = $2 OR $2 = ANY(COALESCE(po.mrs_ids, ARRAY[]::uuid[])))
+            AND (
+              pi.mrs_item_id IS NULL
+              OR pi.mrs_item_id = $1
+            )
           )
         )
-      ORDER BY (pi.mrs_item_id IS NOT NULL) DESC, po.po_date
-    `, [itemId, mrId, itemRes.rows[0].material_name]);
+      ORDER BY po.id, (pi.mrs_item_id = $1) DESC, po.po_date
+    `, [itemId, mrId]);
 
-    const poItemIds = posRes.rows.map(r => r.id).filter(Boolean);
+    const poItemIds = posRes.rows.map(r => r.pi_id).filter(Boolean);
+    const poIds     = [...new Set(posRes.rows.map(r => r.po_id).filter(Boolean))];
 
+    // IGN items linked to the matching PO items
     const ignRes = poItemIds.length ? await query(`
       SELECT ii.*,
              ii.qty_inspected, ii.qty_as_per_dc, ii.qty_rejected,
              ign.ign_number, ign.status AS ign_status,
-             ign.created_at AS ign_created, ign.approved_at, ign.vehicle_no
+             ign.created_at AS ign_created, ign.approved_at,
+             ign.vehicle_no, ign.dc_number, ign.bill_number,
+             v2.name AS ign_vendor_name
       FROM ign_items ii
       JOIN ign ON ign.id = ii.ign_id
+      LEFT JOIN vendors v2 ON v2.id = ign.vendor_id
       WHERE ii.po_item_id = ANY($1::uuid[])
       ORDER BY ign.created_at
     `, [poItemIds]) : { rows: [] };
+
+    // Also catch IGNs linked at PO-header level (ign.po_id)
+    const ignHeaderRes = poIds.length ? await query(`
+      SELECT ign.id, ign.ign_number, ign.status AS ign_status,
+             ign.created_at AS ign_created, ign.approved_at,
+             ign.vehicle_no, ign.dc_number, ign.total_quantity,
+             v2.name AS ign_vendor_name
+      FROM ign
+      LEFT JOIN vendors v2 ON v2.id = ign.vendor_id
+      WHERE ign.po_id = ANY($1::uuid[])
+      ORDER BY ign.created_at
+    `, [poIds]) : { rows: [] };
 
     const grns = ignRes.rows.map(g => ({
       ...g,
       quantity_received: parseFloat(g.qty_inspected || g.qty_as_per_dc || 0) - parseFloat(g.qty_rejected || 0),
     }));
 
+    // ── Build rich timeline ──────────────────────────────────────────────────
     const mr = mrRes.rows[0];
-    const timeline = [
-      { event: 'MR Raised', date: mr.created_at, status: 'done', ref: mr.serial_no_formatted || mr.mrs_number },
-    ];
-    const approvalStages = [
-      { label: 'Stores Approved',    dateField: 'stores_approved_at' },
-      { label: 'PM Approved',         dateField: 'approved_pm_at'    },
-      { label: 'Management Approved', dateField: 'approved_mgmt_at'  },
-      { label: 'MD Approved',         dateField: 'approved_md_at'    },
-    ];
-    approvalStages.forEach(s => {
-      if (mr[s.dateField]) timeline.push({ event: s.label, date: mr[s.dateField], status: 'done' });
-    });
+    const timeline = [];
+
+    const add = (type, event, date, status, ref, extra = {}) => {
+      if (date || status === 'pending') timeline.push({ type, event, date: date || null, status, ref: ref || null, ...extra });
+    };
+
+    // MR lifecycle
+    add('mr',       'MR Raised',           mr.created_at,        'done',    mr.serial_no_formatted || mr.mrs_number, { by: mr.raised_by_name });
+    add('approval', 'Submitted for Approval', mr.updated_at,     mr.status !== 'pending' ? 'done' : 'pending', null);
+    if (mr.stores_approved_at) add('approval', 'Stores Approved',    mr.stores_approved_at, 'done', null);
+    if (mr.approved_pm_at)     add('approval', 'PM Approved',         mr.approved_pm_at,     'done', null);
+    if (mr.approved_mgmt_at)   add('approval', 'Management Approved', mr.approved_mgmt_at,   'done', null);
+    if (mr.approved_md_at)     add('approval', 'MD Approved',         mr.approved_md_at,     'done', null);
+
+    // PO events (deduplicated by po_id)
+    const seenPo = new Set();
     posRes.rows.forEach(po => {
-      timeline.push({ event: 'PO Created', date: po.po_date, status: 'done', ref: po.po_number });
-      if (['sent','approved'].includes(po.po_status))
-        timeline.push({ event: 'PO Sent to Vendor', date: po.po_date, status: 'done', ref: po.vendor_name });
+      if (seenPo.has(po.po_id)) return;
+      seenPo.add(po.po_id);
+      add('po', 'PO Created',        po.po_created_at || po.po_date, 'done', po.po_number, { vendor: po.vendor_name });
+      if (['sent','approved','partial','completed'].includes(po.po_status))
+        add('po', 'PO Sent to Vendor', po.po_date, 'done', po.vendor_name);
+      if (po.delivery_date)
+        add('po', 'Expected Delivery', po.delivery_date,
+          new Date(po.delivery_date) > new Date() ? 'future' : 'due',
+          po.po_number, { vendor: po.vendor_name });
     });
+
+    // No PO yet → show as pending
+    if (!posRes.rows.length) {
+      add('po', 'PO Creation Pending', null, 'pending', null);
+    }
+
+    // IGN item-level events
+    const seenIgn = new Set();
     grns.forEach(g => {
-      timeline.push({
-        event:  g.ign_status === 'approved' ? 'GRN Completed' : 'GRN Pending',
-        date:   g.ign_created,
-        status: g.ign_status === 'approved' ? 'done' : 'pending',
-        ref:    g.ign_number,
+      if (seenIgn.has(g.ign_id)) return;
+      seenIgn.add(g.ign_id);
+      add('ign', 'Material Arrived (IGN Created)', g.ign_created, 'done', g.ign_number, {
+        vehicle: g.vehicle_no, dc: g.dc_number, qty: g.quantity_received,
       });
+      if (g.ign_status === 'approved')
+        add('ign', 'IGN Approved / GRN Completed', g.approved_at, 'done', g.ign_number);
+      else
+        add('ign', 'Awaiting IGN Approval', null, 'pending', g.ign_number);
     });
+
+    // IGN header-level events (fallback, avoid duplicates)
+    ignHeaderRes.rows.forEach(ig => {
+      if (seenIgn.has(ig.id)) return;
+      seenIgn.add(ig.id);
+      add('ign', 'Material Arrived (IGN)', ig.ign_created, 'done', ig.ign_number, { vendor: ig.ign_vendor_name });
+      if (ig.ign_status === 'approved')
+        add('ign', 'IGN Approved / GRN Completed', ig.approved_at, 'done', ig.ign_number);
+    });
+
+    // If no GRN yet but PO exists → pending event
+    if (posRes.rows.length && grns.length === 0 && ignHeaderRes.rows.length === 0) {
+      add('ign', 'Awaiting Delivery / GRN', null, 'pending', null);
+    }
+
+    // Sort: done/due events by date first, then pending at end
+    const sorted = [
+      ...timeline.filter(t => t.status !== 'pending' && t.status !== 'future' && t.date).sort((a, b) => new Date(a.date) - new Date(b.date)),
+      ...timeline.filter(t => t.status === 'future' || t.status === 'due').sort((a, b) => new Date(a.date) - new Date(b.date)),
+      ...timeline.filter(t => t.status === 'pending'),
+    ];
 
     res.json({
       data: {
@@ -382,7 +452,7 @@ router.get('/item/:mrId/:itemId', async (req, res) => {
         item: itemRes.rows[0],
         purchase_orders: posRes.rows,
         grns,
-        timeline: timeline.filter(t => t.date).sort((a, b) => new Date(a.date) - new Date(b.date)),
+        timeline: sorted,
       }
     });
   } catch (e) {

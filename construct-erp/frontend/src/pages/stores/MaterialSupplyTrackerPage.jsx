@@ -246,16 +246,17 @@ function DetailPopup({ item, onClose }) {
               {/* GRN Records */}
               {detail?.grns?.length > 0 && (
                 <div>
-                  <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">GRN / Inward Records</h3>
+                  <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">IGN / Inward Records</h3>
                   <div className="space-y-2">
                     {detail.grns.map((g, i) => (
-                      <div key={g.id || i} className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs">
+                      <div key={g.id || i} className="flex items-center justify-between bg-teal-50 border border-teal-200 rounded-lg px-3 py-2 text-xs">
                         <div>
-                          <span className="font-bold text-slate-700">{g.ign_number || '—'}</span>
+                          <span className="font-bold text-teal-700">{g.ign_number || '—'}</span>
                           <span className="text-slate-400 ml-2">{fmtDate(g.ign_created)}</span>
+                          {g.vehicle_no && <span className="text-slate-400 ml-2">· {g.vehicle_no}</span>}
                         </div>
                         <div className="flex items-center gap-3">
-                          <span className="text-slate-500">{n(g.quantity_received, 3)} {item.unit}</span>
+                          <span className="font-semibold text-slate-700">{n(g.quantity_received, 3)} {item.unit}</span>
                           <span className={clsx('px-2 py-0.5 rounded-full text-[9px] font-bold',
                             g.ign_status === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700')}>
                             {g.ign_status}
@@ -267,28 +268,73 @@ function DetailPopup({ item, onClose }) {
                 </div>
               )}
 
-              {/* Timeline */}
+              {/* Activity Timeline */}
               {detail?.timeline?.length > 0 && (
                 <div>
-                  <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">Activity Timeline</h3>
+                  <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">Full Activity Timeline</h3>
                   <div className="relative">
                     <div className="absolute left-3.5 top-0 bottom-0 w-0.5 bg-slate-200" />
-                    <div className="space-y-3">
-                      {detail.timeline.map((t, i) => (
-                        <div key={i} className="flex items-start gap-3 relative">
-                          <div className={clsx('w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 z-10 border-2',
-                            t.status === 'done' ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-slate-300 text-slate-400')}>
-                            {t.status === 'done'
-                              ? <CheckCircle2 className="w-3.5 h-3.5" />
-                              : <Clock className="w-3.5 h-3.5" />
-                            }
+                    <div className="space-y-2">
+                      {detail.timeline.map((t, i) => {
+                        const TYPE_CFG = {
+                          mr:       { dot: 'bg-slate-700 border-slate-700',   text: 'text-slate-700',   sub: 'text-slate-400', tag: 'bg-slate-100 text-slate-600'   },
+                          approval: { dot: 'bg-emerald-500 border-emerald-500', text: 'text-slate-800', sub: 'text-slateald-400', tag: 'bg-emerald-100 text-emerald-700' },
+                          po:       { dot: 'bg-blue-500 border-blue-500',     text: 'text-blue-800',    sub: 'text-blue-400',   tag: 'bg-blue-100 text-blue-700'     },
+                          ign:      { dot: 'bg-teal-500 border-teal-500',     text: 'text-teal-800',    sub: 'text-teal-400',   tag: 'bg-teal-100 text-teal-700'     },
+                          invoice:  { dot: 'bg-purple-500 border-purple-500', text: 'text-purple-800',  sub: 'text-purple-400', tag: 'bg-purple-100 text-purple-700' },
+                        };
+                        const isPending = t.status === 'pending';
+                        const isFuture  = t.status === 'future' || t.status === 'due';
+                        const cfg = isPending || isFuture
+                          ? { dot: 'bg-white border-slate-300', text: 'text-slate-400', sub: 'text-slate-300', tag: 'bg-slate-50 text-slate-400' }
+                          : (TYPE_CFG[t.type] || TYPE_CFG.mr);
+
+                        const ICONS = {
+                          mr:       <FileText className="w-3 h-3" />,
+                          approval: <CheckCircle2 className="w-3 h-3" />,
+                          po:       <ShoppingCart className="w-3 h-3" />,
+                          ign:      <Warehouse className="w-3 h-3" />,
+                          invoice:  <IndianRupee className="w-3 h-3" />,
+                        };
+                        const icon = isPending || isFuture
+                          ? <Clock className="w-3 h-3 text-slate-300" />
+                          : (ICONS[t.type] || <CheckCircle2 className="w-3 h-3" />);
+
+                        return (
+                          <div key={i} className="flex items-start gap-3 relative">
+                            <div className={clsx(
+                              'w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 z-10 border-2 text-white',
+                              cfg.dot,
+                            )}>
+                              {icon}
+                            </div>
+                            <div className="flex-1 pt-0.5 pb-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={clsx('text-xs font-semibold', cfg.text)}>{t.event}</span>
+                                {t.type && !isPending && (
+                                  <span className={clsx('text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide', cfg.tag)}>
+                                    {t.type === 'ign' ? 'GRN' : t.type}
+                                  </span>
+                                )}
+                                {(isFuture || t.status === 'due') && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide bg-amber-100 text-amber-600">
+                                    {t.status === 'due' ? 'Overdue' : 'Upcoming'}
+                                  </span>
+                                )}
+                              </div>
+                              <div className={clsx('text-[10px] mt-0.5', cfg.sub)}>
+                                {t.date ? fmtDate(t.date) : 'Pending'}
+                                {t.ref    && ` · ${t.ref}`}
+                                {t.vendor && ` · ${t.vendor}`}
+                                {t.by     && ` · ${t.by}`}
+                                {t.qty    != null && ` · Qty: ${n(t.qty, 3)}`}
+                                {t.dc     && ` · DC: ${t.dc}`}
+                                {t.vehicle && ` · ${t.vehicle}`}
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex-1 pt-0.5">
-                            <div className="text-xs font-semibold text-slate-700">{t.event}</div>
-                            <div className="text-[10px] text-slate-400">{t.date ? fmtDate(t.date) : 'Pending'}{t.ref ? ` · ${t.ref}` : ''}</div>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
