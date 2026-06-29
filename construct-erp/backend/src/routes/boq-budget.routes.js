@@ -496,6 +496,77 @@ router.get('/:project_id/costhead-drilldown', async (req, res) => {
   }
 });
 
+// GET /boq-budget/:project_id/costhead-monthly
+// Returns monthly expenditure broken down by cost head for project analysis.
+// Response: { months: ['2025-01','2025-02',...], data: [{ month, breakdown: { [cost_head]: amount } }] }
+router.get('/:project_id/costhead-monthly', async (req, res) => {
+  try {
+    const { project_id } = req.params;
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) return res.status(403).json({ error: 'Access denied' });
+
+    const raM = await query(`
+      SELECT TO_CHAR(rb.bill_date, 'YYYY-MM') AS month, rbi.cost_head, SUM(rbi.current_qty * rbi.rate) AS actual
+      FROM ra_bill_items rbi JOIN ra_bills rb ON rb.id = rbi.ra_bill_id
+      WHERE rb.project_id=$1 AND rb.status IN ('certified','paid') AND rbi.cost_head IS NOT NULL
+      GROUP BY 1, 2`, [project_id]);
+
+    const scM = await query(`
+      SELECT TO_CHAR(sb.bill_date, 'YYYY-MM') AS month, 'Sub Con' AS cost_head, SUM(bi.curr_qty * bi.rate) AS actual
+      FROM sc_bill_items bi JOIN sc_bills sb ON sb.id = bi.bill_id
+      WHERE sb.project_id=$1 AND sb.status NOT IN ('draft','rejected','queried')
+      GROUP BY 1`, [project_id]);
+
+    const scPayM = await query(`
+      SELECT TO_CHAR(payment_date, 'YYYY-MM') AS month, 'Sub Con' AS cost_head, SUM(amount) AS actual
+      FROM sc_payments
+      WHERE project_id=$1
+      GROUP BY 1`, [project_id]);
+
+    const tqsM = await query(`
+      SELECT TO_CHAR(tb.bill_date, 'YYYY-MM') AS month, li.cost_head, SUM(li.basic_amount) AS actual
+      FROM tqs_bill_line_items li JOIN tqs_bills tb ON tb.id = li.bill_id
+      WHERE tb.project_id=$1 AND tb.workflow_status='paid' AND li.cost_head IS NOT NULL
+      GROUP BY 1, 2`, [project_id]);
+
+    const advM = await query(`
+      SELECT TO_CHAR(advance_date, 'YYYY-MM') AS month, 'Sub Con' AS cost_head, SUM(amount) AS actual
+      FROM sc_advances
+      WHERE project_id=$1 AND status NOT IN ('cancelled')
+      GROUP BY 1`, [project_id]);
+
+    const advTrkM = await query(`
+      SELECT TO_CHAR(pay_date, 'YYYY-MM') AS month, 'Sub Con' AS cost_head, SUM(paid_amount) AS actual
+      FROM tqs_advance_vouchers
+      WHERE project_id=$1 AND is_deleted=false
+        AND status IN ('issued','partial','recovered') AND paid_amount > 0
+      GROUP BY 1`, [project_id]);
+
+    const spcM = await query(`
+      SELECT TO_CHAR(entry_date, 'YYYY-MM') AS month, 'Petty Cash' AS cost_head, SUM(amount) AS actual
+      FROM stores_petty_cash_entries
+      WHERE project_id=$1 AND status='Approved'
+      GROUP BY 1`, [project_id]);
+
+    // Merge all sources into { [month]: { [cost_head]: amount } }
+    const monthly = {};
+    for (const rows of [raM.rows, scM.rows, scPayM.rows, tqsM.rows, advM.rows, advTrkM.rows, spcM.rows]) {
+      for (const r of rows) {
+        if (!r.month || !r.cost_head) continue;
+        if (!monthly[r.month]) monthly[r.month] = {};
+        monthly[r.month][r.cost_head] = (monthly[r.month][r.cost_head] || 0) + parseFloat(r.actual || 0);
+      }
+    }
+
+    const months = Object.keys(monthly).sort();
+    const data = months.map(month => ({ month, breakdown: monthly[month] }));
+    res.json({ data, months });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PUT /boq-budget/:project_id/costhead-budget
 // Upsert budget amount for a single cost head at project level.
 router.put('/:project_id/costhead-budget', async (req, res) => {

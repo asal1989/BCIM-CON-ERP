@@ -296,6 +296,119 @@ function CostHeadDrilldown({ projectId, costHead }) {
   );
 }
 
+// ─── Monthly Analysis Matrix (cost heads × months) ───────────────────────────
+function CostHeadMonthlyTab({ projectId }) {
+  const { data: resp, isLoading } = useQuery({
+    queryKey: ['costhead-monthly', projectId],
+    queryFn: () => boqBudgetAPI.costheadMonthly(projectId).then(r => r.data),
+    enabled: !!projectId,
+  });
+
+  const months = resp?.months || [];
+  const data   = resp?.data   || [];
+
+  // Collect all cost heads that appear in any month
+  const { BOQ_COST_HEADS_ORDER, headTotals, monthTotals, grandTotal } = useMemo(() => {
+    const headMap = {};
+    const monthTotalsMap = {};
+    for (const { month, breakdown } of data) {
+      for (const [head, amt] of Object.entries(breakdown)) {
+        headMap[head]      = (headMap[head]      || 0) + amt;
+        monthTotalsMap[month] = (monthTotalsMap[month] || 0) + amt;
+      }
+    }
+    // Sort heads: known order first, then extras
+    const BOQ_KNOWN = [
+      'Sub Con','Supervision & Accommodation','EPF, PT & Insurance',
+      'Office Items & Camp Expenses','Travel & Transport','Concrete Material',
+      'Steel','Blocks','Cement','Sand','Materials / Consumables',
+      'Safety Items','Testing','Debris Disposal','Equipment & Rentals',
+      'Power & Water','Overhead','Petty Cash',
+    ];
+    const allHeads = Object.keys(headMap);
+    const sorted = [
+      ...BOQ_KNOWN.filter(h => allHeads.includes(h)),
+      ...allHeads.filter(h => !BOQ_KNOWN.includes(h)).sort(),
+    ];
+    return {
+      BOQ_COST_HEADS_ORDER: sorted,
+      headTotals: headMap,
+      monthTotals: monthTotalsMap,
+      grandTotal: Object.values(headMap).reduce((s, v) => s + v, 0),
+    };
+  }, [data]);
+
+  const byMonthBreakdown = useMemo(() => {
+    const map = {};
+    for (const { month, breakdown } of data) map[month] = breakdown;
+    return map;
+  }, [data]);
+
+  const fmtMonth = (ym) => {
+    const [y, m] = ym.split('-');
+    return new Date(+y, +m - 1).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+  };
+  const fmtAmt = (v) => v > 0 ? `₹${Math.round(v).toLocaleString('en-IN')}` : '—';
+
+  if (isLoading) return <div className="py-16 text-center text-slate-400 text-sm">Loading…</div>;
+  if (!months.length) return (
+    <div className="py-16 text-center text-slate-400 text-sm">No paid expenditure records found for this project.</div>
+  );
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+      <div className="px-5 py-3 bg-slate-100 border-b border-slate-200">
+        <h3 className="text-sm font-bold text-slate-700">Monthly Expenditure — Cost Head × Month</h3>
+        <p className="text-[11px] text-slate-400">All paid transactions grouped by month · Use for project analysis and trend review</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="text-xs w-full min-w-max">
+          <thead>
+            <tr className="bg-[#0B2E59] text-white">
+              <th className="px-4 py-2.5 text-left sticky left-0 bg-[#0B2E59] z-10 min-w-[180px]">Cost Head</th>
+              {months.map(m => (
+                <th key={m} className="px-3 py-2.5 text-right min-w-[110px] font-medium">{fmtMonth(m)}</th>
+              ))}
+              <th className="px-4 py-2.5 text-right min-w-[120px] font-bold bg-[#0D3870]">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {BOQ_COST_HEADS_ORDER.map((head, i) => (
+              <tr key={head} className={clsx('border-b border-slate-100', i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40')}>
+                <td className="px-4 py-2 font-medium text-slate-700 sticky left-0 bg-inherit">{head}</td>
+                {months.map(m => {
+                  const amt = byMonthBreakdown[m]?.[head] || 0;
+                  return (
+                    <td key={m} className={clsx('px-3 py-2 text-right tabular-nums', amt > 0 ? 'text-slate-800 font-semibold' : 'text-slate-300')}>
+                      {fmtAmt(amt)}
+                    </td>
+                  );
+                })}
+                <td className="px-4 py-2 text-right font-bold text-slate-800 bg-slate-50 tabular-nums">
+                  {fmtAmt(headTotals[head] || 0)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="bg-[#E4EFDC] font-bold border-t-2 border-slate-300">
+              <td className="px-4 py-2.5 text-sm font-bold text-slate-800 sticky left-0 bg-[#E4EFDC]">Monthly Total</td>
+              {months.map(m => (
+                <td key={m} className="px-3 py-2.5 text-right text-sm text-emerald-700 tabular-nums">
+                  {fmtAmt(monthTotals[m] || 0)}
+                </td>
+              ))}
+              <td className="px-4 py-2.5 text-right text-sm font-bold text-slate-900 bg-[#d0e6c4] tabular-nums">
+                {fmtAmt(grandTotal)}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── Cost Head Budget Tab ─────────────────────────────────────────────────────
 function CostHeadBudgetTab({ projectId }) {
   const qc = useQueryClient();
@@ -304,6 +417,7 @@ function CostHeadBudgetTab({ projectId }) {
   const [expandedHead, setExpandedHead] = useState(null);
   const [showBulk, setShowBulk] = useState(false);
   const [bulkText, setBulkText] = useState(DEFAULT_BULK_TEXT);
+  const [costheadView, setCostheadView] = useState('summary'); // 'summary' | 'monthly'
 
   const { data, isLoading } = useQuery({
     queryKey: ['costhead-summary', projectId],
@@ -337,9 +451,29 @@ function CostHeadBudgetTab({ projectId }) {
   const totalBudget = rows.reduce((s, r) => s + r.budget, 0);
   const totalActual = rows.reduce((s, r) => s + r.actual, 0);
 
-  if (isLoading) return <div className="py-16 text-center text-slate-400 text-sm">Loading…</div>;
+  if (isLoading && costheadView === 'summary') return <div className="py-16 text-center text-slate-400 text-sm">Loading…</div>;
 
   return (
+    <div className="space-y-3">
+      {/* Sub-tabs: Summary vs Monthly */}
+      <div className="flex gap-2">
+        {[
+          { id: 'summary', label: 'Budget vs Actual' },
+          { id: 'monthly', label: 'Monthly Analysis' },
+        ].map(t => (
+          <button key={t.id} onClick={() => setCostheadView(t.id)}
+            className={clsx('px-4 py-1.5 text-xs font-bold rounded-lg border transition',
+              costheadView === t.id
+                ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50')}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {costheadView === 'monthly' && <CostHeadMonthlyTab projectId={projectId} />}
+
+      {costheadView === 'summary' && (
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
       <div className="px-5 py-3 bg-slate-100 border-b border-slate-200">
         <h3 className="text-sm font-bold text-slate-700">Actual Expenditure — Cost Head Budget vs Actual</h3>
@@ -440,6 +574,8 @@ function CostHeadBudgetTab({ projectId }) {
           </tr>
         </tfoot>
       </table>
+    </div>
+      )}
     </div>
   );
 }
