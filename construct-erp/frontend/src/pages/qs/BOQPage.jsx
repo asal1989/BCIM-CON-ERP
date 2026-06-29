@@ -264,7 +264,7 @@ export default function BOQPage() {
     if (!editItem) return;
     updateMutation.mutate({
       id: editItem.id,
-      data: { description: editItem.description, quantity: editItem.quantity, rate: editItem.rate, remarks: editItem.remarks, sr_no: editItem.sr_no }
+      data: { description: editItem.description, quantity: editItem.quantity, rate: editItem.rate, remarks: editItem.remarks, sr_no: editItem.sr_no, chapter_name: editItem.chapter_name, chapter_no: editItem.chapter_no }
     });
   };
 
@@ -281,7 +281,7 @@ export default function BOQPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
             <thead>
               <tr style={{ background: '#0f2050', color: '#fff' }}>
-                {['CSI Code', 'Chapter', 'Item No', 'Description', 'Unit', 'Qty', 'Rate', 'Amount', 'Exec Qty', '% Done'].map(h => (
+                {['CSI Code', 'Item No', 'Chapter', 'Description', 'Unit', 'Qty', 'Rate', 'Amount', 'Exec Qty', '% Done'].map(h => (
                   <th key={h} style={{ padding: '6px 8px', textAlign: 'left', fontWeight: 'bold' }}>{h}</th>
                 ))}
               </tr>
@@ -523,6 +523,7 @@ export default function BOQPage() {
                                 <tr>
                                   <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest w-36">CSI Code</th>
                                   <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest w-16">Item No</th>
+                                  <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest w-36">Chapter</th>
                                   <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest">Description</th>
                                   <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest text-center w-16">Unit</th>
                                   <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest text-right w-28">Contract Qty</th>
@@ -552,6 +553,25 @@ export default function BOQPage() {
                                       </td>
                                       <td className="px-4 py-3">
                                         <span className="text-[10px] font-medium text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100 font-mono">{it.item_no || '—'}</span>
+                                      </td>
+                                      <td className="px-4 py-3 w-36">
+                                        {isEditing ? (
+                                          <input
+                                            className="w-full bg-white border border-indigo-300 rounded-lg px-2 py-1 text-[11px] outline-none"
+                                            value={editItem.chapter_name || ''}
+                                            placeholder="Chapter name"
+                                            onChange={e => setEditItem(p => ({ ...p, chapter_name: e.target.value }))}
+                                          />
+                                        ) : (
+                                          <span className={clsx(
+                                            'text-[10px] font-medium px-2 py-1 rounded-lg border',
+                                            it.chapter_name && it.chapter_name !== (selectedProject?.name || '')
+                                              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                              : 'bg-slate-100 border-slate-200 text-slate-400'
+                                          )}>
+                                            {it.chapter_name || '—'}
+                                          </span>
+                                        )}
                                       </td>
                                       <td className="px-4 py-3 max-w-[320px]">
                                         {isEditing ? (
@@ -648,7 +668,7 @@ export default function BOQPage() {
                               {/* Chapter subtotal row */}
                               <tfoot>
                                 <tr className="bg-slate-50 border-t border-slate-200">
-                                  <td colSpan={6} className="px-4 py-2.5 text-[10px] font-medium text-slate-900 font-medium uppercase tracking-widest">
+                                  <td colSpan={7} className="px-4 py-2.5 text-[10px] font-medium text-slate-900 font-medium uppercase tracking-widest">
                                     {ch.name} Subtotal — {ch.items.length} items
                                   </td>
                                   <td className="px-4 py-2.5 text-right bg-indigo-50/40">

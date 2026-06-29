@@ -106,10 +106,10 @@ router.post('/', authorize('super_admin','admin','qs_engineer','project_manager'
 });
 
 router.put('/:id', authorize('super_admin','admin','qs_engineer'), async (req, res) => {
-  const { sr_no, description, quantity, rate, remarks } = req.body;
+  const { sr_no, description, quantity, rate, remarks, chapter_name, chapter_no } = req.body;
   const result = await query(
-    'UPDATE boq_items SET sr_no=$1,description=$2,quantity=$3,rate=$4,remarks=$5,updated_at=NOW() WHERE id=$6 RETURNING *',
-    [sr_no, description, quantity, rate, remarks, req.params.id]
+    'UPDATE boq_items SET sr_no=$1,description=$2,quantity=$3,rate=$4,remarks=$5,chapter_name=$6,chapter_no=$7,updated_at=NOW() WHERE id=$8 RETURNING *',
+    [sr_no, description, quantity, rate, remarks, chapter_name || null, chapter_no || null, req.params.id]
   );
   res.json({ data: result.rows[0] });
 });
