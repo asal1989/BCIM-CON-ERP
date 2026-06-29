@@ -396,6 +396,106 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
   }
 });
 
+// GET /boq-budget/:project_id/costhead-drilldown?cost_head=Sub+Con
+// Returns individual transactions that make up a cost head's actual expenditure.
+router.get('/:project_id/costhead-drilldown', async (req, res) => {
+  try {
+    const { project_id } = req.params;
+    const { cost_head } = req.query;
+    if (!cost_head) return res.status(400).json({ error: 'cost_head is required' });
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) return res.status(403).json({ error: 'Access denied' });
+
+    let rows = [];
+
+    if (cost_head === 'Sub Con') {
+      // SC bills (non-draft/rejected)
+      const scBills = await query(`
+        SELECT sb.bill_number AS reference, sb.bill_date AS date,
+               sc.name AS description, sb.net_payable AS amount, 'SC Bill' AS source
+        FROM sc_bills sb
+        JOIN sc_subcontractors sc ON sc.id = sb.sc_id
+        WHERE sb.project_id=$1 AND sb.status NOT IN ('draft','rejected','queried')
+        ORDER BY sb.bill_date`, [project_id]);
+      rows.push(...scBills.rows);
+
+      // SC payments
+      const scPay = await query(`
+        SELECT sp.reference_no AS reference, sp.payment_date AS date,
+               sc.name AS description, sp.amount, 'SC Payment' AS source
+        FROM sc_payments sp
+        JOIN sc_bills sb ON sb.id = sp.bill_id
+        JOIN sc_subcontractors sc ON sc.id = sb.sc_id
+        WHERE sp.project_id=$1
+        ORDER BY sp.payment_date`, [project_id]);
+      rows.push(...scPay.rows);
+
+      // SC advances (dedicated SC module)
+      const scAdv = await query(`
+        SELECT sa.advance_number AS reference, sa.advance_date AS date,
+               sc.name AS description, sa.amount, 'SC Advance' AS source
+        FROM sc_advances sa
+        JOIN sc_subcontractors sc ON sc.id = sa.sc_id
+        WHERE sa.project_id=$1 AND sa.status NOT IN ('cancelled')
+        ORDER BY sa.advance_date`, [project_id]);
+      rows.push(...scAdv.rows);
+
+      // Advance tracker (TQS advance vouchers - paid SC advances)
+      const advTrk = await query(`
+        SELECT voucher_number AS reference, pay_date AS date,
+               vendor_name AS description, paid_amount AS amount, 'Advance Tracker' AS source
+        FROM tqs_advance_vouchers
+        WHERE project_id=$1 AND is_deleted=false
+          AND status IN ('issued','partial','recovered') AND paid_amount > 0
+        ORDER BY pay_date`, [project_id]);
+      rows.push(...advTrk.rows);
+
+    } else if (cost_head === 'Petty Cash') {
+      // Stores petty cash entries
+      const pc = await query(`
+        SELECT COALESCE(je_reference, CAST(sl_no AS TEXT)) AS reference,
+               entry_date AS date, supplier AS description,
+               amount, 'Petty Cash' AS source
+        FROM stores_petty_cash_entries
+        WHERE project_id=$1 AND status='Approved'
+        ORDER BY entry_date`, [project_id]);
+      rows.push(...pc.rows);
+
+    } else {
+      // TQS bill line items for this cost head — only paid bills or accounts-approved
+      const tqs = await query(`
+        SELECT tb.bill_number AS reference, tb.bill_date AS date,
+               li.item_name AS description, li.basic_amount AS amount,
+               'TQS Bill' AS source
+        FROM tqs_bill_line_items li
+        JOIN tqs_bills tb ON tb.id = li.bill_id
+        WHERE tb.project_id=$1 AND li.cost_head=$2
+          AND tb.workflow_status IN ('paid','accounts')
+        ORDER BY tb.bill_date`, [project_id, cost_head]);
+      rows.push(...tqs.rows);
+
+      // RA bill items for this cost head
+      const ra = await query(`
+        SELECT rb.bill_number AS reference, rb.bill_date AS date,
+               rbi.description, rbi.current_qty * rbi.rate AS amount,
+               'RA Bill' AS source
+        FROM ra_bill_items rbi
+        JOIN ra_bills rb ON rb.id = rbi.ra_bill_id
+        WHERE rb.project_id=$1 AND rbi.cost_head=$2
+          AND rb.status IN ('certified','paid')
+        ORDER BY rb.bill_date`, [project_id, cost_head]);
+      rows.push(...ra.rows);
+    }
+
+    // Sort all by date
+    rows.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+    res.json({ data: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PUT /boq-budget/:project_id/costhead-budget
 // Upsert budget amount for a single cost head at project level.
 router.put('/:project_id/costhead-budget', async (req, res) => {

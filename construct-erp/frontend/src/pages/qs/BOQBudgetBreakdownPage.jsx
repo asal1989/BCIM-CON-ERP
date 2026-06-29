@@ -197,11 +197,113 @@ function CostHeadDetail({ item, costHeads, mode, onSave }) {
   );
 }
 
+// Default paste text matching the 20 cost heads — user can edit before importing
+const DEFAULT_BULK_TEXT =
+`Sub Con	48816858.20
+Supervision & Accommodation	12565908.40
+EPF, PT & Insurance	3044138.33
+Office Items & Camp Expenses	1215376.66
+Travel & Transport	913241.50
+Concrete Material	5662042.65
+Steel	1133219.11
+Blocks	15211372.26
+Cement	3341429.86
+Sand	4290542.43
+Materials / Consumables	4789466.48
+Safety Items	3859775.55
+Testing	527414.79
+Debris Disposal	2041341.16
+Equipment & Rentals	3734819.90
+Power & Water	2084985.82
+Overhead	14496254.84
+Petty Cash	954211.41`;
+
+// ─── Drilldown sub-table shown when a cost head row is expanded ───────────────
+function CostHeadDrilldown({ projectId, costHead }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['costhead-drilldown', projectId, costHead],
+    queryFn: () => boqBudgetAPI.costheadDrilldown(projectId, costHead).then(r => r.data?.data || []),
+    enabled: !!projectId && !!costHead,
+  });
+
+  const fmt = (n) => `₹${Math.round(parseFloat(n) || 0).toLocaleString('en-IN')}`;
+  const SOURCE_COLORS = {
+    'SC Bill':        'bg-blue-50 text-blue-700',
+    'SC Payment':     'bg-emerald-50 text-emerald-700',
+    'SC Advance':     'bg-violet-50 text-violet-700',
+    'Advance Tracker':'bg-amber-50 text-amber-700',
+    'TQS Bill':       'bg-sky-50 text-sky-700',
+    'RA Bill':        'bg-teal-50 text-teal-700',
+    'Petty Cash':     'bg-orange-50 text-orange-700',
+  };
+
+  if (isLoading) return (
+    <tr><td colSpan={5} className="bg-slate-50 px-8 py-3 text-xs text-slate-400">Loading…</td></tr>
+  );
+
+  const rows = data || [];
+  const total = rows.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
+
+  if (!rows.length) return (
+    <tr><td colSpan={5} className="bg-slate-50 px-8 py-3 text-xs text-slate-400 italic">
+      No paid transactions yet for this cost head.
+    </td></tr>
+  );
+
+  return (
+    <>
+      <tr>
+        <td colSpan={5} className="p-0">
+          <div className="mx-4 my-2 rounded-xl border border-slate-200 overflow-hidden shadow-inner bg-slate-50">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-slate-200 text-slate-600">
+                  <th className="px-3 py-2 text-left w-36">Date</th>
+                  <th className="px-3 py-2 text-left w-36">Reference</th>
+                  <th className="px-3 py-2 text-left">Description</th>
+                  <th className="px-3 py-2 text-center w-32">Source</th>
+                  <th className="px-3 py-2 text-right w-36">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, idx) => (
+                  <tr key={idx} className="border-t border-slate-100 hover:bg-white">
+                    <td className="px-3 py-1.5 text-slate-500">
+                      {r.date ? new Date(r.date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'}
+                    </td>
+                    <td className="px-3 py-1.5 font-mono text-slate-600">{r.reference || '—'}</td>
+                    <td className="px-3 py-1.5 text-slate-700 max-w-xs truncate" title={r.description}>{r.description || '—'}</td>
+                    <td className="px-3 py-1.5 text-center">
+                      <span className={clsx('px-2 py-0.5 rounded-full text-[10px] font-bold', SOURCE_COLORS[r.source] || 'bg-slate-100 text-slate-500')}>
+                        {r.source}
+                      </span>
+                    </td>
+                    <td className="px-3 py-1.5 text-right font-semibold text-slate-800">{fmt(r.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-slate-100 border-t border-slate-300">
+                  <td colSpan={4} className="px-3 py-1.5 text-right font-bold text-slate-600 text-xs">Total</td>
+                  <td className="px-3 py-1.5 text-right font-bold text-slate-800">{fmt(total)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </td>
+      </tr>
+    </>
+  );
+}
+
 // ─── Cost Head Budget Tab ─────────────────────────────────────────────────────
 function CostHeadBudgetTab({ projectId }) {
   const qc = useQueryClient();
   const [editingHead, setEditingHead] = useState(null);
   const [editVal, setEditVal] = useState('');
+  const [expandedHead, setExpandedHead] = useState(null);
+  const [showBulk, setShowBulk] = useState(false);
+  const [bulkText, setBulkText] = useState(DEFAULT_BULK_TEXT);
 
   const { data, isLoading } = useQuery({
     queryKey: ['costhead-summary', projectId],
@@ -226,6 +328,11 @@ function CostHeadBudgetTab({ projectId }) {
     saveMutation.mutate({ cost_head, budget_amount: n });
   };
 
+  const toggleExpand = (cost_head, hasActual) => {
+    if (!hasActual) return;
+    setExpandedHead(prev => prev === cost_head ? null : cost_head);
+  };
+
   const rows = data || [];
   const totalBudget = rows.reduce((s, r) => s + r.budget, 0);
   const totalActual = rows.reduce((s, r) => s + r.actual, 0);
@@ -236,7 +343,7 @@ function CostHeadBudgetTab({ projectId }) {
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
       <div className="px-5 py-3 bg-slate-100 border-b border-slate-200">
         <h3 className="text-sm font-bold text-slate-700">Actual Expenditure — Cost Head Budget vs Actual</h3>
-        <p className="text-[11px] text-slate-400">Click Budget cell to enter amount · Actual spend populates from bills &amp; POs</p>
+        <p className="text-[11px] text-slate-400">Click Budget cell to enter amount · Click Actual amount to expand transaction details</p>
       </div>
       <table className="w-full text-sm">
         <thead>
@@ -251,47 +358,73 @@ function CostHeadBudgetTab({ projectId }) {
         <tbody>
           {rows.map((r, i) => {
             const isEditing = editingHead === r.cost_head;
+            const isExpanded = expandedHead === r.cost_head;
             const over = r.actual > r.budget && r.budget > 0;
+            const hasActual = r.actual > 0;
             return (
-              <tr key={r.cost_head} className={clsx('border-b border-slate-100', over && 'bg-rose-50/30')}>
-                <td className="px-4 py-2 text-center text-slate-500 font-bold">{i + 1}</td>
-                <td className="px-4 py-2 font-medium text-slate-700">{r.cost_head}</td>
-                <td className="px-2 py-1">
-                  {isEditing ? (
-                    <div className="flex items-center gap-1">
-                      <input autoFocus type="number" value={editVal}
-                        onChange={e => setEditVal(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') commit(r.cost_head); if (e.key === 'Escape') setEditingHead(null); }}
-                        className="flex-1 min-w-0 border border-indigo-400 rounded-lg px-2 py-1 text-xs text-right focus:outline-none"
-                      />
-                      <button onClick={() => commit(r.cost_head)} disabled={saveMutation.isPending}
-                        className="shrink-0 px-2 py-1 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-500 disabled:opacity-50">Save</button>
-                      <button onClick={() => setEditingHead(null)}
-                        className="shrink-0 px-2 py-1 bg-slate-100 text-slate-600 text-[10px] rounded-lg hover:bg-slate-200">✕</button>
+              <React.Fragment key={r.cost_head}>
+                <tr className={clsx('border-b border-slate-100', over && 'bg-rose-50/30', isExpanded && 'bg-indigo-50/40')}>
+                  <td className="px-4 py-2 text-center text-slate-500 font-bold">{i + 1}</td>
+                  <td className="px-4 py-2 font-medium text-slate-700">
+                    <div className="flex items-center gap-1.5">
+                      {hasActual && (
+                        <button onClick={() => toggleExpand(r.cost_head, hasActual)}
+                          className="text-indigo-400 hover:text-indigo-600 transition-colors flex-shrink-0">
+                          <svg xmlns="http://www.w3.org/2000/svg" className={clsx('w-3.5 h-3.5 transition-transform', isExpanded && 'rotate-90')} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                      )}
+                      <span>{r.cost_head}</span>
                     </div>
-                  ) : (
-                    <div className="flex items-center justify-end gap-2 px-2">
-                      <span className={clsx('text-sm font-semibold', r.budget > 0 ? 'text-slate-800' : 'text-slate-300 italic text-xs')}>
-                        {r.budget > 0 ? `₹${Math.round(r.budget).toLocaleString('en-IN')}` : 'Not set'}
-                      </span>
-                      <button onClick={() => { setEditVal(r.budget ? Math.round(r.budget).toString() : ''); setEditingHead(r.cost_head); }}
-                        className="px-2 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-600 text-[10px] font-bold rounded hover:bg-indigo-100">
-                        Edit
+                  </td>
+                  <td className="px-2 py-1">
+                    {isEditing ? (
+                      <div className="flex items-center gap-1">
+                        <input autoFocus type="number" value={editVal}
+                          onChange={e => setEditVal(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') commit(r.cost_head); if (e.key === 'Escape') setEditingHead(null); }}
+                          className="flex-1 min-w-0 border border-indigo-400 rounded-lg px-2 py-1 text-xs text-right focus:outline-none"
+                        />
+                        <button onClick={() => commit(r.cost_head)} disabled={saveMutation.isPending}
+                          className="shrink-0 px-2 py-1 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-500 disabled:opacity-50">Save</button>
+                        <button onClick={() => setEditingHead(null)}
+                          className="shrink-0 px-2 py-1 bg-slate-100 text-slate-600 text-[10px] rounded-lg hover:bg-slate-200">✕</button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-end gap-2 px-2">
+                        <span className={clsx('text-sm font-semibold', r.budget > 0 ? 'text-slate-800' : 'text-slate-300 italic text-xs')}>
+                          {r.budget > 0 ? `₹${Math.round(r.budget).toLocaleString('en-IN')}` : 'Not set'}
+                        </span>
+                        <button onClick={() => { setEditVal(r.budget ? Math.round(r.budget).toString() : ''); setEditingHead(r.cost_head); }}
+                          className="px-2 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-600 text-[10px] font-bold rounded hover:bg-indigo-100">
+                          Edit
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-right font-semibold">
+                    {hasActual ? (
+                      <button onClick={() => toggleExpand(r.cost_head, hasActual)}
+                        className={clsx('font-semibold hover:underline underline-offset-2 transition-colors',
+                          isExpanded ? 'text-indigo-600' : 'text-emerald-700 hover:text-indigo-600')}>
+                        ₹{Math.round(r.actual).toLocaleString('en-IN')}
+                        <span className="ml-1 text-[10px] opacity-60">{isExpanded ? '▲' : '▼'}</span>
                       </button>
-                    </div>
-                  )}
-                </td>
-                <td className="px-4 py-2 text-right font-semibold text-emerald-700">
-                  {r.actual > 0 ? `₹${Math.round(r.actual).toLocaleString('en-IN')}` : <span className="text-slate-300">—</span>}
-                </td>
-                <td className={clsx('px-4 py-2 text-right font-bold',
-                  r.budget === 0 ? 'text-slate-300' : over ? 'text-rose-600' : 'text-emerald-600')}>
-                  {r.budget > 0 || r.actual > 0
-                    ? `₹${Math.round(r.budget - r.actual).toLocaleString('en-IN')}`
-                    : '—'}
-                  {over && <div className="text-[9px] text-rose-500">⚠ Over budget</div>}
-                </td>
-              </tr>
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
+                  </td>
+                  <td className={clsx('px-4 py-2 text-right font-bold',
+                    r.budget === 0 ? 'text-slate-300' : over ? 'text-rose-600' : 'text-emerald-600')}>
+                    {r.budget > 0 || r.actual > 0
+                      ? `₹${Math.round(r.budget - r.actual).toLocaleString('en-IN')}`
+                      : '—'}
+                    {over && <div className="text-[9px] text-rose-500">⚠ Over budget</div>}
+                  </td>
+                </tr>
+                {isExpanded && <CostHeadDrilldown projectId={projectId} costHead={r.cost_head} />}
+              </React.Fragment>
             );
           })}
         </tbody>
