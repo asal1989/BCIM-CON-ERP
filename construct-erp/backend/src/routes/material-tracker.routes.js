@@ -615,7 +615,7 @@ router.get('/auto-import/preview', async (req, res) => {
         grnsNew = grns.rows.filter(r => !importedGrnSet.has(r.id)).length;
       }
 
-      const mcLi = matCond(material_type, 'li', 'item_name', 2);
+      const mcLi = useIGN ? matCond(material_type, 'li', 'item_name', 2) : null;
       const bills = await query(`
         SELECT DISTINCT b.id
         FROM tqs_bills b
@@ -623,8 +623,8 @@ router.get('/auto-import/preview', async (req, res) => {
         WHERE b.po_id = ANY($1::uuid[])
           ${useIGN ? 'AND b.grn_id IS NULL' : ''}
           AND b.is_deleted = FALSE
-          AND (li.item_name IS NULL OR (${mcLi.sql}))
-      `, [poIds, ...mcLi.params]);
+          ${mcLi ? `AND (li.item_name IS NULL OR (${mcLi.sql}))` : ''}
+      `, [poIds, ...(mcLi ? mcLi.params : [])]);
       billsNew = bills.rows.filter(r => !importedBillSet.has(r.id)).length;
     }
 
@@ -824,9 +824,10 @@ router.post('/auto-import/run', authorize(...WRITE_ROLES), async (req, res) => {
     }
 
     // ── Bulk fetch bills for these POs ──────────────────────────────────────────
-    // For cement: restrict to bills with no linked GRN (IGN handles those).
-    // For concrete/steel: pull ALL bills — GRN-linked or not — since IGN is not used.
-    const mcLi = matCond(material_type, 'li', 'item_name', 2);
+    // For cement: restrict to no-GRN bills and filter line items by material name.
+    // For concrete/steel: pull ALL bills for matching POs — no line-item filter needed
+    // since the PO query already scopes to the right material type.
+    const mcLi = useIGN ? matCond(material_type, 'li', 'item_name', 2) : null;
     const bills = await query(`
       SELECT
         b.po_id, b.id, b.inv_number, b.inv_date, b.created_at AS bill_created_at,
@@ -842,10 +843,10 @@ router.post('/auto-import/run', authorize(...WRITE_ROLES), async (req, res) => {
       WHERE b.po_id = ANY($1::uuid[])
         ${useIGN ? 'AND b.grn_id IS NULL' : ''}
         AND b.is_deleted = FALSE
-        AND (li.item_name IS NULL OR (${mcLi.sql}))
+        ${mcLi ? `AND (li.item_name IS NULL OR (${mcLi.sql}))` : ''}
       GROUP BY b.po_id, b.id
       ORDER BY b.inv_date
-    `, [poIds, ...mcLi.params]);
+    `, [poIds, ...(mcLi ? mcLi.params : [])]);
 
     const billCols = ['entry_id','received_date','invoice_no','vehicle_no',
                       'invoice_qty','rate','gst_rate','gst_amount','grand_total','created_by','source_bill_id'];
