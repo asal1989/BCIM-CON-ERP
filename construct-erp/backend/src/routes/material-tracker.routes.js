@@ -560,6 +560,7 @@ router.get('/auto-import/preview', async (req, res) => {
   try {
     const { project_id, material_type = 'cement' } = req.query;
     const companyId = req.user.company_id;
+    // Cement syncs from IGN; concrete & steel sync from Bill Tracker (tqs_bills)
     const useIGN = material_type === 'cement';
 
     // pos query — material match params go LAST so indices stay predictable
@@ -603,11 +604,9 @@ router.get('/auto-import/preview', async (req, res) => {
           `SELECT source_grn_id FROM material_tracker_loads WHERE source_grn_id IS NOT NULL`
         );
         const importedGrnSet = new Set(importedGrns.rows.map(r => r.source_grn_id));
-
         const mcGi = matCond(material_type, 'ii', 'material_name', 2);
         const grns = await query(`
-          SELECT DISTINCT n.id
-          FROM ign n
+          SELECT DISTINCT n.id FROM ign n
           JOIN ign_items ii ON ii.ign_id = n.id
           WHERE n.po_id = ANY($1::uuid[])
             AND COALESCE(n.status,'') NOT IN ('cancelled')
@@ -616,7 +615,6 @@ router.get('/auto-import/preview', async (req, res) => {
         grnsNew = grns.rows.filter(r => !importedGrnSet.has(r.id)).length;
       }
 
-      // For concrete/steel: all bills (GRN-linked or not). For cement: no-GRN bills only.
       const mcLi = matCond(material_type, 'li', 'item_name', 2);
       const bills = await query(`
         SELECT DISTINCT b.id
