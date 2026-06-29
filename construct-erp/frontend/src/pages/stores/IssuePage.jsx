@@ -173,6 +173,7 @@ export default function IssuePage() {
     onSuccess: () => {
       toast.success('Stock deducted and material issued!');
       qc.invalidateQueries({ queryKey: ['min-list'] });
+      setDetailMIN(null);
     },
     onError: (e) => toast.error(e?.response?.data?.error || 'Authorization failed'),
   });
@@ -182,6 +183,7 @@ export default function IssuePage() {
     onSuccess: () => {
       toast.success('Receipt confirmed at site!');
       qc.invalidateQueries({ queryKey: ['min-list'] });
+      setDetailMIN(null);
     },
     onError: (e) => toast.error(e?.response?.data?.error || 'Failed to confirm receipt'),
   });
@@ -399,9 +401,9 @@ export default function IssuePage() {
         <MINDetailPanel
           min={detailMIN}
           onClose={() => setDetailMIN(null)}
-          onAuthorize={() => { authorizeMutation.mutate(detailMIN.id); setDetailMIN(null); }}
+          onAuthorize={() => authorizeMutation.mutate(detailMIN.id)}
           authLoading={authorizeMutation.isPending}
-          onReceive={() => { receiveMutation.mutate(detailMIN.id); setDetailMIN(null); }}
+          onReceive={() => receiveMutation.mutate(detailMIN.id)}
           receiveLoading={receiveMutation.isPending}
         />
       )}

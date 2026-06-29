@@ -266,6 +266,13 @@ router.post('/', authorize(...STORES_WRITE), async (req, res) => {
       for (let i = 0; i < items.length; i++) {
         const it = items[i];
         if (!it.material_name?.trim()) continue;
+        const _dcQty  = parseFloat(it.qty_as_per_dc  || 0);
+        const _insQty = parseFloat(it.qty_inspected   || 0);
+        const _rejQty = parseFloat(it.qty_rejected    || 0);
+        if (_dcQty  < 0) throw Object.assign(new Error(`Item ${i+1} "${it.material_name}": qty as per DC cannot be negative`), { statusCode: 400 });
+        if (_insQty < 0) throw Object.assign(new Error(`Item ${i+1} "${it.material_name}": inspected qty cannot be negative`), { statusCode: 400 });
+        if (_rejQty < 0) throw Object.assign(new Error(`Item ${i+1} "${it.material_name}": rejected qty cannot be negative`), { statusCode: 400 });
+        if (it.qty_inspected && it.qty_rejected && _rejQty > _insQty) throw Object.assign(new Error(`Item ${i+1} "${it.material_name}": rejected qty (${_rejQty}) cannot exceed inspected qty (${_insQty})`), { statusCode: 400 });
         const hasThumbRule = it.physical_qty && it.physical_unit && it.conversion_factor && parseFloat(it.conversion_factor) !== 1;
         // Use qty_inspected as the primary quantity for inventory purposes
         const qtyInPoUnit = hasThumbRule
