@@ -939,6 +939,54 @@ router.get('/summary', authenticate, async (req, res) => {
    SC (SUB-CONTRACTOR) ADVANCES
 ═══════════════════════════════════════════════════════════════════════════ */
 
+async function notifyScAdvance(adv, createdByName, projectName) {
+  const SC_NOTIFY = ['enosh@bcim.in', 'prithivi@bcim.in'];
+  const fmtINR = v => 'Rs ' + Math.round(parseFloat(v || 0)).toLocaleString('en-IN');
+  const fmtD   = v => v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto">
+      <div style="background:#0A1F5C;padding:18px 24px;border-radius:10px 10px 0 0">
+        <h2 style="margin:0;color:#fff;font-size:16px">🏗️ Sub-Contractor Advance Issued</h2>
+        <p style="margin:4px 0 0;color:#b0c4f0;font-size:12px">${projectName || 'General'} &bull; Entered by ${createdByName || 'System'}</p>
+      </div>
+      <div style="background:#f8fafc;padding:20px 24px;border:1px solid #e2e8f0;border-top:none">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <tr>
+            <td style="color:#64748b;padding:6px 0;width:150px">Sub-Contractor</td>
+            <td style="font-weight:700;color:#0A1F5C">${adv.vendor_name}</td>
+          </tr>
+          <tr>
+            <td style="color:#64748b;padding:6px 0">Date</td>
+            <td>${fmtD(adv.advance_date)}</td>
+          </tr>
+          <tr>
+            <td style="color:#64748b;padding:6px 0">Project</td>
+            <td>${projectName || '—'}</td>
+          </tr>
+          ${adv.wo_number ? `<tr><td style="color:#64748b;padding:6px 0">WO Number</td><td style="font-family:monospace;font-weight:600">${adv.wo_number}</td></tr>` : ''}
+          ${adv.payment_mode ? `<tr><td style="color:#64748b;padding:6px 0">Payment Mode</td><td style="text-transform:capitalize">${adv.payment_mode}</td></tr>` : ''}
+          ${adv.reference_number ? `<tr><td style="color:#64748b;padding:6px 0">Reference No</td><td>${adv.reference_number}</td></tr>` : ''}
+          ${adv.remarks ? `<tr><td style="color:#64748b;padding:6px 0">Remarks</td><td>${adv.remarks}</td></tr>` : ''}
+          <tr style="border-top:2px solid #0A1F5C">
+            <td style="color:#64748b;padding:8px 0;font-weight:700">Amount</td>
+            <td style="font-size:18px;font-weight:800;color:#0A1F5C">${fmtINR(adv.amount)}</td>
+          </tr>
+        </table>
+      </div>
+      <div style="background:#e8edf7;padding:10px 24px;border-radius:0 0 10px 10px;font-size:11px;color:#64748b">
+        Automated notification from BCIM Construct ERP — Stores Petty Cash &rsaquo; Sub-Contractor Advance
+      </div>
+    </div>`;
+
+  await sendMail({
+    to: SC_NOTIFY,
+    subject: `[SC Advance] ${adv.vendor_name} — ${fmtINR(adv.amount)} | ${projectName || 'General'}`,
+    html,
+    text: `Sub-Contractor Advance issued.\nSub-Contractor: ${adv.vendor_name}\nDate: ${fmtD(adv.advance_date)}\nProject: ${projectName || '—'}\nWO: ${adv.wo_number || '—'}\nAmount: ${fmtINR(adv.amount)}\nRemarks: ${adv.remarks || '—'}\nEntered by: ${createdByName}`,
+  });
+}
+
 // Vendor lookup for SC advance form
 router.get('/sc-advances/lookup/vendors', authenticate, async (req, res) => {
   try {
@@ -987,7 +1035,19 @@ router.post('/sc-advances', authenticate, async (req, res) => {
        RETURNING *`,
       [req.user.company_id, project_id || null, advance_date, vendor_id || null, vendor_name, wo_number || null, parseFloat(amount), payment_mode || 'cash', reference_number || null, remarks || null, req.user.id]
     );
-    res.status(201).json({ data: r.rows[0] });
+    const adv = r.rows[0];
+
+    // Resolve project name for notification
+    let projectName = null;
+    if (project_id) {
+      const pRes = await query(`SELECT name FROM projects WHERE id = $1`, [project_id]);
+      projectName = pRes.rows[0]?.name || null;
+    }
+
+    // Notify Enosh & Prithivi (fire-and-forget)
+    notifyScAdvance({ ...adv, payment_mode: payment_mode || 'cash', reference_number, remarks }, req.user.name, projectName).catch(() => {});
+
+    res.status(201).json({ data: adv });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
