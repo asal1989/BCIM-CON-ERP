@@ -487,14 +487,14 @@ router.get('/:project_id/costhead-drilldown', async (req, res) => {
     } else {
       // TQS bill line items for this cost head — only paid bills or accounts-approved
       const tqs = await query(`
-        SELECT tb.bill_number AS reference, tb.bill_date AS date,
+        SELECT tb.inv_number AS reference, COALESCE(tb.inv_date, tb.created_at) AS date,
                li.item_name AS description, li.basic_amount AS amount,
                'TQS Bill' AS source
         FROM tqs_bill_line_items li
         JOIN tqs_bills tb ON tb.id = li.bill_id
         WHERE tb.project_id=$1 AND li.cost_head=$2
           AND tb.workflow_status IN ('paid','accounts')
-        ORDER BY tb.bill_date`, [project_id, cost_head]);
+        ORDER BY COALESCE(tb.inv_date, tb.created_at)`, [project_id, cost_head]);
       rows.push(...tqs.rows);
 
       // RA bill items for this cost head
@@ -550,7 +550,7 @@ router.get('/:project_id/costhead-monthly', async (req, res) => {
       GROUP BY 1`, [project_id]);
 
     const tqsM = await query(`
-      SELECT TO_CHAR(COALESCE(tb.bill_date, tb.created_at), 'YYYY-MM') AS month,
+      SELECT TO_CHAR(COALESCE(tb.inv_date, tb.created_at), 'YYYY-MM') AS month,
              li.cost_head, SUM(li.basic_amount) AS actual
       FROM tqs_bill_line_items li JOIN tqs_bills tb ON tb.id = li.bill_id
       WHERE tb.project_id=$1 AND tb.workflow_status='paid' AND li.cost_head IS NOT NULL
