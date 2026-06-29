@@ -513,7 +513,14 @@ function CostHeadBudgetTab({ projectId }) {
                     </div>
                   </td>
                   <td className="px-2 py-1">
-                    {isEditing ? (
+                    {r.derived ? (
+                      <div className="flex items-center justify-end gap-2 px-2">
+                        <span className="text-sm font-semibold text-slate-800">
+                          {r.budget > 0 ? `₹${Math.round(r.budget).toLocaleString('en-IN')}` : '—'}
+                        </span>
+                        <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 font-bold">auto 10%</span>
+                      </div>
+                    ) : isEditing ? (
                       <div className="flex items-center gap-1">
                         <input autoFocus type="number" value={editVal}
                           onChange={e => setEditVal(e.target.value)}
@@ -538,7 +545,11 @@ function CostHeadBudgetTab({ projectId }) {
                     )}
                   </td>
                   <td className="px-4 py-2 text-right font-semibold">
-                    {hasActual ? (
+                    {r.derived ? (
+                      <span className="font-semibold text-emerald-700">
+                        {r.actual > 0 ? `₹${Math.round(r.actual).toLocaleString('en-IN')}` : '—'}
+                      </span>
+                    ) : hasActual ? (
                       <button onClick={() => toggleExpand(r.cost_head, hasActual)}
                         className={clsx('font-semibold hover:underline underline-offset-2 transition-colors',
                           isExpanded ? 'text-indigo-600' : 'text-emerald-700 hover:text-indigo-600')}>

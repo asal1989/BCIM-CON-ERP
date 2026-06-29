@@ -71,4 +71,8 @@ function classifyItemCostHead(itemName = '') {
   return 'Materials / Consumables';
 }
 
-module.exports = { BOQ_COST_HEADS, BOQ_COST_HEADS_ALL, classifyItemCostHead };
+// Heads that contribute to the Profit calculation (1–18, all except Profit and Contingency)
+const PROFIT_BASE_HEADS = BOQ_COST_HEADS.filter(h => h !== 'Profit' && h !== 'Contingency');
+const PROFIT_PCT = 0.10;
+
+module.exports = { BOQ_COST_HEADS, BOQ_COST_HEADS_ALL, PROFIT_BASE_HEADS, PROFIT_PCT, classifyItemCostHead };

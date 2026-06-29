@@ -4,7 +4,7 @@ const { authenticate } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const { loadProjectScope, userCanAccessProject } = require('../middleware/projectScope');
 const { runSchemaInit } = require('../utils/schemaInit');
-const { BOQ_COST_HEADS } = require('../constants/boqCostHeads');
+const { BOQ_COST_HEADS, PROFIT_BASE_HEADS, PROFIT_PCT } = require('../constants/boqCostHeads');
 
 runSchemaInit('boq_item_budget_breakdown', async () => {
   await query(`
@@ -371,13 +371,21 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
     const budgetMap = {};
     for (const b of budgets.rows) budgetMap[b.cost_head] = parseFloat(b.budget_amount || 0);
 
+    // Profit (head 19) = 10% of sum of heads 1-18 — derived, not stored
+    const baseActual = PROFIT_BASE_HEADS.reduce((s, h) => s + (actualMap[h] || 0), 0);
+    actualMap['Profit'] = baseActual * PROFIT_PCT;
+    const baseBudget = PROFIT_BASE_HEADS.reduce((s, h) => s + (budgetMap[h] || 0), 0);
+    if (baseBudget > 0) budgetMap['Profit'] = baseBudget * PROFIT_PCT;
+
     // Build result for all known cost heads + any extra heads with actuals
     const allHeads = new Set([...BOQ_COST_HEADS, ...Object.keys(actualMap), ...Object.keys(budgetMap)]);
+    const DERIVED_HEADS = new Set(['Profit']);
     const data = [...allHeads].map(head => ({
       cost_head: head,
       budget: budgetMap[head] || 0,
       actual: actualMap[head] || 0,
       balance: (budgetMap[head] || 0) - (actualMap[head] || 0),
+      derived: DERIVED_HEADS.has(head),
     }));
 
     // Sort by BOQ_COST_HEADS order, then extras at end
@@ -557,6 +565,12 @@ router.get('/:project_id/costhead-monthly', async (req, res) => {
         if (!monthly[r.month]) monthly[r.month] = {};
         monthly[r.month][r.cost_head] = (monthly[r.month][r.cost_head] || 0) + parseFloat(r.actual || 0);
       }
+    }
+
+    // Profit per month = 10% of sum of base heads for that month
+    for (const month of Object.keys(monthly)) {
+      const baseSum = PROFIT_BASE_HEADS.reduce((s, h) => s + (monthly[month][h] || 0), 0);
+      if (baseSum > 0) monthly[month]['Profit'] = baseSum * PROFIT_PCT;
     }
 
     const months = Object.keys(monthly).sort();
