@@ -227,21 +227,31 @@ export default function BOQBudgetBreakdownPage() {
   const toggle = (id) => setExpanded(e => ({ ...e, [id]: !e[id] }));
 
   // ── BOQ Summary rollup (chapter-level Bill Value vs Budgeted value) ───────────
+  // Grouped by chapter NAME (not chapter_no) so every item belonging to a chapter
+  // like "Blockwork" rolls into ONE row whose total equals the sum of those items,
+  // even when sub-items carry different hierarchical chapter_no values.
   // Independent of the search box so the summary/print always covers the whole BOQ.
+  const toNum = (v) => parseFloat(String(v || '').replace(/[^0-9.]/g, '')) || 0;
+  const chapterKey = (it) => {
+    const name = (it.chapter_name || '').trim();
+    return name ? name.toLowerCase() : `__no:${it.chapter_no || 'ZZZ'}`;
+  };
+  const chapterLabel = (it) => (it.chapter_name || '').trim() || (it.chapter_no ? `Chapter ${it.chapter_no}` : 'Other Miscellaneous Works');
+
   const chapterRows = useMemo(() => {
     const map = {};
-    const toNum = (v) => parseFloat(String(v || '').replace(/[^0-9.]/g, '')) || 0;
     allItems.forEach(it => {
       if (it.id === 'project-level-unlinked') return;
-      const key = it.chapter_no || 'ZZZ';
+      const key = chapterKey(it);
       let budget = 0;
       for (const h of costHeads) budget += num(it.breakdown?.[h]?.amount);
-      if (!map[key]) map[key] = { chapter_no: it.chapter_no, name: it.chapter_name || 'Other Miscellaneous Works', bill: 0, budget: 0 };
+      if (!map[key]) map[key] = { chapter_no: it.chapter_no, name: chapterLabel(it), bill: 0, budget: 0, sort: Infinity };
       map[key].bill   += num(it.amount);
       map[key].budget += budget;
+      const sk = toNum(it.chapter_no) || toNum(it.item_no);
+      if (sk) map[key].sort = Math.min(map[key].sort, sk);
     });
-    return Object.values(map).sort((a, b) =>
-      toNum(a.chapter_no) - toNum(b.chapter_no) || String(a.chapter_no).localeCompare(String(b.chapter_no)));
+    return Object.values(map).sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name));
   }, [allItems, costHeads]);
 
   const summaryTotals = useMemo(() => {
@@ -253,15 +263,18 @@ export default function BOQBudgetBreakdownPage() {
 
   const lineItemsByChapter = useMemo(() => {
     const map = {};
-    const toNum = (v) => parseFloat(String(v || '').replace(/[^0-9.]/g, '')) || 0;
     allItems.forEach(it => {
       if (it.id === 'project-level-unlinked') return;
-      const key = it.chapter_no || 'ZZZ';
-      if (!map[key]) map[key] = { chapter_no: it.chapter_no, name: it.chapter_name || 'Other Miscellaneous Works', items: [] };
+      const key = chapterKey(it);
+      if (!map[key]) map[key] = { chapter_no: it.chapter_no, name: chapterLabel(it), items: [], sort: Infinity };
       map[key].items.push(it);
+      const sk = toNum(it.chapter_no) || toNum(it.item_no);
+      if (sk) map[key].sort = Math.min(map[key].sort, sk);
     });
-    return Object.values(map).sort((a, b) =>
-      toNum(a.chapter_no) - toNum(b.chapter_no) || String(a.chapter_no).localeCompare(String(b.chapter_no)));
+    // keep items ordered by their item_no within each chapter
+    Object.values(map).forEach(ch =>
+      ch.items.sort((a, b) => toNum(a.item_no) - toNum(b.item_no) || String(a.item_no).localeCompare(String(b.item_no))));
+    return Object.values(map).sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name));
   }, [allItems]);
 
   const selectedProject = projects.find(p => p.id === projectId);
