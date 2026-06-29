@@ -23,6 +23,21 @@ runSchemaInit('boq_item_budget_breakdown', async () => {
   `);
 });
 
+runSchemaInit('project_costhead_budgets', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS project_costhead_budgets (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      cost_head TEXT NOT NULL,
+      budget_amount NUMERIC(16,2) DEFAULT 0,
+      created_by UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (project_id, cost_head)
+    )
+  `);
+});
+
 router.use(authenticate);
 router.use(loadProjectScope);
 
@@ -277,6 +292,121 @@ router.put('/item/:boq_item_id', async (req, res) => {
       total_budgeted: Math.round(totalAmount * 100) / 100,
       over_budget: itemAmount > 0 && totalAmount > itemAmount + 0.01,
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /boq-budget/:project_id/costhead-summary
+// Returns each cost head with its budget (from project_costhead_budgets)
+// and actual spend (aggregated from all transaction tables).
+router.get('/:project_id/costhead-summary', async (req, res) => {
+  try {
+    const { project_id } = req.params;
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) return res.status(403).json({ error: 'Access denied' });
+
+    // Saved budgets
+    const budgets = await query(
+      `SELECT cost_head, budget_amount FROM project_costhead_budgets WHERE project_id=$1`,
+      [project_id]
+    );
+
+    // Actuals: RA bills (certified/paid)
+    const raActuals = await query(`
+      SELECT rbi.cost_head, SUM(rbi.current_qty * rbi.rate) AS actual
+      FROM ra_bill_items rbi JOIN ra_bills rb ON rb.id = rbi.ra_bill_id
+      WHERE rb.project_id=$1 AND rb.status IN ('certified','paid')
+      GROUP BY rbi.cost_head`, [project_id]);
+
+    // Actuals: SC bills (approved/paid)
+    const scActuals = await query(`
+      SELECT bi.cost_head, SUM(bi.curr_qty * bi.rate) AS actual
+      FROM sc_bill_items bi JOIN sc_bills sb ON sb.id = bi.bill_id
+      WHERE sb.project_id=$1 AND sb.status IN ('approved','paid')
+      GROUP BY bi.cost_head`, [project_id]);
+
+    // Actuals: TQS material bills (paid)
+    const tqsActuals = await query(`
+      SELECT li.cost_head, SUM(li.basic_amount) AS actual
+      FROM tqs_bill_line_items li JOIN tqs_bills tb ON tb.id = li.bill_id
+      WHERE tb.project_id=$1 AND tb.workflow_status='paid' AND li.cost_head IS NOT NULL
+      GROUP BY li.cost_head`, [project_id]);
+
+    // Advances
+    const advActuals = await query(`
+      SELECT 'Sub Con' AS cost_head, SUM(paid_amount) AS actual
+      FROM tqs_advance_vouchers
+      WHERE project_id=$1 AND status IN ('issued','partial','recovered')
+        AND is_deleted=false AND paid_amount>0`, [project_id]);
+
+    // Petty cash
+    const spcActuals = await query(`
+      SELECT si.cost_head, SUM(si.total_amount) AS actual
+      FROM stores_petty_cash_items si
+      JOIN stores_petty_cash_entries se ON se.id = si.entry_id
+      WHERE se.project_id=$1 AND se.status='Approved' AND si.cost_head IS NOT NULL
+      GROUP BY si.cost_head`, [project_id]);
+
+    // Merge actuals by cost head
+    const actualMap = {};
+    for (const rows of [raActuals.rows, scActuals.rows, tqsActuals.rows, advActuals.rows, spcActuals.rows]) {
+      for (const r of rows) {
+        if (!r.cost_head) continue;
+        actualMap[r.cost_head] = (actualMap[r.cost_head] || 0) + parseFloat(r.actual || 0);
+      }
+    }
+
+    const budgetMap = {};
+    for (const b of budgets.rows) budgetMap[b.cost_head] = parseFloat(b.budget_amount || 0);
+
+    // Build result for all known cost heads + any extra heads with actuals
+    const allHeads = new Set([...BOQ_COST_HEADS, ...Object.keys(actualMap), ...Object.keys(budgetMap)]);
+    const data = [...allHeads].map(head => ({
+      cost_head: head,
+      budget: budgetMap[head] || 0,
+      actual: actualMap[head] || 0,
+      balance: (budgetMap[head] || 0) - (actualMap[head] || 0),
+    }));
+
+    // Sort by BOQ_COST_HEADS order, then extras at end
+    data.sort((a, b) => {
+      const ia = BOQ_COST_HEADS.indexOf(a.cost_head);
+      const ib = BOQ_COST_HEADS.indexOf(b.cost_head);
+      if (ia === -1 && ib === -1) return a.cost_head.localeCompare(b.cost_head);
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+
+    res.json({ data });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /boq-budget/:project_id/costhead-budget
+// Upsert budget amount for a single cost head at project level.
+router.put('/:project_id/costhead-budget', async (req, res) => {
+  try {
+    const { project_id } = req.params;
+    const { cost_head, budget_amount } = req.body;
+    if (!cost_head) return res.status(400).json({ error: 'cost_head is required' });
+
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) return res.status(403).json({ error: 'Access denied' });
+
+    const r = await query(`
+      INSERT INTO project_costhead_budgets (project_id, cost_head, budget_amount, created_by)
+      VALUES ($1,$2,$3,$4)
+      ON CONFLICT (project_id, cost_head)
+      DO UPDATE SET budget_amount=$3, updated_at=NOW()
+      RETURNING *`,
+      [project_id, cost_head, parseFloat(budget_amount) || 0, req.user.id]
+    );
+    res.json({ data: r.rows[0] });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

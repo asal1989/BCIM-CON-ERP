@@ -239,9 +239,11 @@ export const boqAPI = {
 };
 
 export const boqBudgetAPI = {
-  list:             (projectId)                  => api.get(`/boq-budget/${projectId}`),
-  updateItem:       (boqItemId, entries)          => api.put(`/boq-budget/item/${boqItemId}`, { entries }),
-  setChapterBudget: (projectId, payload)          => api.post(`/boq-budget/${projectId}/chapter-budget`, payload),
+  list:               (projectId)          => api.get(`/boq-budget/${projectId}`),
+  updateItem:         (boqItemId, entries) => api.put(`/boq-budget/item/${boqItemId}`, { entries }),
+  setChapterBudget:   (projectId, payload) => api.post(`/boq-budget/${projectId}/chapter-budget`, payload),
+  costheadSummary:    (projectId)          => api.get(`/boq-budget/${projectId}/costhead-summary`),
+  setCostheadBudget:  (projectId, payload) => api.put(`/boq-budget/${projectId}/costhead-budget`, payload),
 };
 
 export const boqMappingAPI = {

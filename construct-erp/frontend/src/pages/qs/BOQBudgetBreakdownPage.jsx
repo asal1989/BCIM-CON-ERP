@@ -6,7 +6,7 @@ import { clsx } from 'clsx';
 import toast from 'react-hot-toast';
 import {
   Percent, IndianRupee, AlertTriangle, ChevronRight, ChevronDown,
-  Search, Layers, CheckCircle2, Wallet, Printer, LayoutList, FileText,
+  Search, Layers, CheckCircle2, Wallet, Printer, LayoutList, FileText, BarChart2,
 } from 'lucide-react';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import { boqBudgetAPI, projectAPI } from '../../api/client';
@@ -193,6 +193,120 @@ function CostHeadDetail({ item, costHeads, mode, onSave }) {
           <span className="font-semibold">{inr(item.unallocated_actual)}</span> of actual spend isn't tagged to any cost head.
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Cost Head Budget Tab ─────────────────────────────────────────────────────
+function CostHeadBudgetTab({ projectId }) {
+  const qc = useQueryClient();
+  const [editingHead, setEditingHead] = useState(null);
+  const [editVal, setEditVal] = useState('');
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['costhead-summary', projectId],
+    queryFn: () => boqBudgetAPI.costheadSummary(projectId).then(r => r.data?.data || []),
+    enabled: !!projectId,
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: ({ cost_head, budget_amount }) =>
+      boqBudgetAPI.setCostheadBudget(projectId, { cost_head, budget_amount }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['costhead-summary', projectId] });
+      setEditingHead(null);
+      toast.success('Budget saved');
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to save'),
+  });
+
+  const commit = (cost_head) => {
+    const n = parseFloat(editVal);
+    if (isNaN(n) || n < 0) { toast.error('Enter a valid amount'); return; }
+    saveMutation.mutate({ cost_head, budget_amount: n });
+  };
+
+  const rows = data || [];
+  const totalBudget = rows.reduce((s, r) => s + r.budget, 0);
+  const totalActual = rows.reduce((s, r) => s + r.actual, 0);
+
+  if (isLoading) return <div className="py-16 text-center text-slate-400 text-sm">Loading…</div>;
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+      <div className="px-5 py-3 bg-slate-100 border-b border-slate-200">
+        <h3 className="text-sm font-bold text-slate-700">Actual Expenditure — Cost Head Budget vs Actual</h3>
+        <p className="text-[11px] text-slate-400">Click Budget cell to enter amount · Actual spend populates from bills &amp; POs</p>
+      </div>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-[#0B2E59] text-white text-xs">
+            <th className="px-4 py-2.5 text-center w-12">Sl No</th>
+            <th className="px-4 py-2.5 text-left">Description of Works</th>
+            <th className="px-4 py-2.5 text-right w-52">Budget</th>
+            <th className="px-4 py-2.5 text-right w-44">Actual Expenditure</th>
+            <th className="px-4 py-2.5 text-right w-44">Balance</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => {
+            const isEditing = editingHead === r.cost_head;
+            const over = r.actual > r.budget && r.budget > 0;
+            return (
+              <tr key={r.cost_head} className={clsx('border-b border-slate-100', over && 'bg-rose-50/30')}>
+                <td className="px-4 py-2 text-center text-slate-500 font-bold">{i + 1}</td>
+                <td className="px-4 py-2 font-medium text-slate-700">{r.cost_head}</td>
+                <td className="px-2 py-1">
+                  {isEditing ? (
+                    <div className="flex items-center gap-1">
+                      <input autoFocus type="number" value={editVal}
+                        onChange={e => setEditVal(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') commit(r.cost_head); if (e.key === 'Escape') setEditingHead(null); }}
+                        className="flex-1 min-w-0 border border-indigo-400 rounded-lg px-2 py-1 text-xs text-right focus:outline-none"
+                      />
+                      <button onClick={() => commit(r.cost_head)} disabled={saveMutation.isPending}
+                        className="shrink-0 px-2 py-1 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-500 disabled:opacity-50">Save</button>
+                      <button onClick={() => setEditingHead(null)}
+                        className="shrink-0 px-2 py-1 bg-slate-100 text-slate-600 text-[10px] rounded-lg hover:bg-slate-200">✕</button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-end gap-2 px-2">
+                      <span className={clsx('text-sm font-semibold', r.budget > 0 ? 'text-slate-800' : 'text-slate-300 italic text-xs')}>
+                        {r.budget > 0 ? `₹${Math.round(r.budget).toLocaleString('en-IN')}` : 'Not set'}
+                      </span>
+                      <button onClick={() => { setEditVal(r.budget ? Math.round(r.budget).toString() : ''); setEditingHead(r.cost_head); }}
+                        className="px-2 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-600 text-[10px] font-bold rounded hover:bg-indigo-100">
+                        Edit
+                      </button>
+                    </div>
+                  )}
+                </td>
+                <td className="px-4 py-2 text-right font-semibold text-emerald-700">
+                  {r.actual > 0 ? `₹${Math.round(r.actual).toLocaleString('en-IN')}` : <span className="text-slate-300">—</span>}
+                </td>
+                <td className={clsx('px-4 py-2 text-right font-bold',
+                  r.budget === 0 ? 'text-slate-300' : over ? 'text-rose-600' : 'text-emerald-600')}>
+                  {r.budget > 0 || r.actual > 0
+                    ? `₹${Math.round(r.budget - r.actual).toLocaleString('en-IN')}`
+                    : '—'}
+                  {over && <div className="text-[9px] text-rose-500">⚠ Over budget</div>}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot>
+          <tr className="bg-[#E4EFDC] font-bold border-t-2 border-slate-300">
+            <td className="px-4 py-2.5" />
+            <td className="px-4 py-2.5 text-sm font-bold text-slate-800">Total</td>
+            <td className="px-4 py-2.5 text-right text-sm">₹{Math.round(totalBudget).toLocaleString('en-IN')}</td>
+            <td className="px-4 py-2.5 text-right text-sm text-emerald-700">₹{Math.round(totalActual).toLocaleString('en-IN')}</td>
+            <td className={clsx('px-4 py-2.5 text-right text-sm font-bold', totalBudget - totalActual < 0 ? 'text-rose-600' : 'text-emerald-600')}>
+              ₹{Math.round(totalBudget - totalActual).toLocaleString('en-IN')}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
     </div>
   );
 }
@@ -451,6 +565,7 @@ export default function BOQBudgetBreakdownPage() {
               {[
                 { id: 'breakdown', label: 'Budget Breakdown', icon: LayoutList },
                 { id: 'summary',   label: 'BOQ Summary',      icon: FileText },
+                { id: 'costhead',  label: 'Cost Head Budget',  icon: BarChart2 },
               ].map(t => (
                 <button key={t.id} onClick={() => setView(t.id)}
                   className={clsx('flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg border transition',
@@ -519,6 +634,11 @@ export default function BOQBudgetBreakdownPage() {
                   </tbody>
                 </table>
               </div>
+            )}
+
+            {/* ── COST HEAD BUDGET VIEW ── */}
+            {view === 'costhead' && (
+              <CostHeadBudgetTab projectId={projectId} />
             )}
 
             {/* ── BUDGET BREAKDOWN VIEW (existing) ── */}
