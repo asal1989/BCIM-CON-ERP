@@ -53,6 +53,7 @@ const navGroups = [
   { label: 'Procurement', items: [
     { to: '/procurement/dashboard',        icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/procurement/material-request', icon: ClipboardList, label: 'Material Request (MRS)' },
+    { to: '/procurement/mr-register',      icon: ClipboardList, label: 'MR Register' },
     { to: '/procurement/vendors',          icon: Users,         label: 'Vendors' },
     { to: '/procurement/po',               icon: ShoppingCart,  label: 'Purchase Orders' },
     { to: '/procurement/po-amendments',    icon: FileSignature, label: 'PO Amendments' },
@@ -76,6 +77,7 @@ const navGroups = [
   { label: 'Stores', items: [
     { to: '/stores',                   icon: LayoutDashboard, label: 'Stores Dashboard' },
     { to: '/stores/mrs',               icon: ClipboardList,   label: 'Material Requisition' },
+    { to: '/stores/mr-register',       icon: ClipboardList,   label: 'MR Register' },
     { to: '/stores/po',                icon: ShoppingCart,    label: 'Purchase Orders' },
     { to: '/stores/po-register',       icon: ClipboardList,   label: 'PO Register' },
     { to: '/stores/work-orders',       icon: Hammer,          label: 'Work Orders' },
@@ -385,6 +387,7 @@ const NAV_SECTIONS = {
   'Procurement': [
     { label: 'Dashboard',        paths: ['/procurement/dashboard'] },
     { label: 'Request',          paths: ['/procurement/material-request'] },
+    { label: 'MR Register',      paths: ['/procurement/mr-register'] },
     { label: 'Vendors & Rates',  paths: ['/procurement/vendors'] },
     { label: 'Purchase Orders',  paths: ['/procurement/po','/procurement/po-register','/procurement/po-amendments'] },
     { label: 'Work Orders',      paths: ['/procurement/work-orders','/procurement/wo-register'] },
@@ -397,6 +400,7 @@ const NAV_SECTIONS = {
   'Stores': [
     { label: 'Overview',        paths: ['/stores'] },
     { label: 'Request',         paths: ['/stores/mrs'] },
+    { label: 'MR Register',     paths: ['/stores/mr-register'] },
     { label: 'Purchase Orders', paths: ['/stores/po','/stores/po-register'] },
     { label: 'Work Orders',     paths: ['/stores/work-orders','/stores/wo-register'] },
     { label: 'GRS Gate',        paths: ['/stores/grs'] },

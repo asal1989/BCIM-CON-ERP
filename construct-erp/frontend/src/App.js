@@ -121,6 +121,7 @@ const VendorRFQPortalPage = lazy(() => import('./pages/procurement/VendorRFQPort
 const WorkOrderPage         = lazy(() => import('./pages/procurement/WorkOrderPage'));
 const POBulkImportPage      = lazy(() => import('./pages/procurement/POBulkImportPage'));
 const PORegisterPage        = lazy(() => import('./pages/procurement/PORegisterPage'));
+const MRRegisterPage        = lazy(() => import('./pages/stores/MRRegisterPage'));
 const WORegisterPage        = lazy(() => import('./pages/procurement/WORegisterPage'));
 const WOBulkImportPage      = lazy(() => import('./pages/procurement/WOBulkImportPage'));
 const BulkPrintPage          = lazy(() => import('./pages/procurement/BulkPrintPage'));
@@ -709,6 +710,7 @@ export default function App() {
                 <Route path="procurement/rfq/:id" element={<RequireModule module="Procurement"><RFQPage /></RequireModule>} />
                 <Route path="procurement/quotations/entry/:id" element={<RequireModule module="Procurement"><QuotationEntryPage /></RequireModule>} />
                 <Route path="procurement/quotations/comparison/:id" element={<RequireModule module="Procurement"><ComparativeStatementPage /></RequireModule>} />
+                <Route path="procurement/mr-register" element={<RequireModule module="Procurement"><MRRegisterPage /></RequireModule>} />
                 <Route path="procurement/po" element={<RequireModule module="Procurement"><POPage /></RequireModule>} />
                 <Route path="procurement/po-register" element={<RequireModule module="Procurement"><PORegisterPage /></RequireModule>} />
                 <Route path="procurement/po-bulk-import" element={<RequireModule module="Procurement"><POBulkImportPage /></RequireModule>} />
@@ -728,6 +730,7 @@ export default function App() {
 
                 {/* Stores */}
                 <Route path="stores" element={<RequireModule module="Stores"><StoresDashboard /></RequireModule>} />
+                <Route path="stores/mr-register" element={<RequireModule module="Stores"><MRRegisterPage /></RequireModule>} />
                 <Route path="stores/po" element={<RequireModule module="Stores"><POPage /></RequireModule>} />
                 <Route path="stores/po-register" element={<RequireModule module="Stores"><PORegisterPage /></RequireModule>} />
                 <Route path="stores/work-orders" element={<RequireModule module="Stores"><WorkOrderPage /></RequireModule>} />
