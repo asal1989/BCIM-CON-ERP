@@ -154,16 +154,18 @@ router.get('/report/abstract', async (req, res) => {
 // ── GET /material-tracker/report/loadwise ─────────────────────────────────────
 router.get('/report/loadwise', async (req, res) => {
   try {
-    const { project_id, material_type, entry_id } = req.query;
+    const { project_id, material_type, entry_id, from_date, to_date } = req.query;
     const companyId = req.user.company_id;
 
     let where = `e.company_id = $1`;
     const params = [companyId];
     let idx = 2;
 
-    if (project_id)   { where += ` AND e.project_id = $${idx++}`;    params.push(project_id); }
-    if (material_type){ where += ` AND e.material_type = $${idx++}`;  params.push(material_type); }
-    if (entry_id)     { where += ` AND e.id = $${idx++}`;             params.push(entry_id); }
+    if (project_id)   { where += ` AND e.project_id = $${idx++}`;       params.push(project_id); }
+    if (material_type){ where += ` AND e.material_type = $${idx++}`;     params.push(material_type); }
+    if (entry_id)     { where += ` AND e.id = $${idx++}`;               params.push(entry_id); }
+    if (from_date)    { where += ` AND l.received_date >= $${idx++}`;   params.push(from_date); }
+    if (to_date)      { where += ` AND l.received_date <= $${idx++}`;   params.push(to_date); }
 
     const rows = await query(`
       SELECT
@@ -181,7 +183,7 @@ router.get('/report/loadwise', async (req, res) => {
       JOIN  material_tracker_loads l      ON l.entry_id = e.id
       LEFT JOIN material_tracker_steel_dia sd ON sd.load_id = l.id
       WHERE ${where}
-      ORDER BY e.po_number, l.received_date, l.created_at
+      ORDER BY l.received_date DESC, l.created_at DESC, e.po_number
     `, params);
 
     res.json({ data: rows.rows });
