@@ -2220,7 +2220,7 @@ export default function StoresPettyCashPage() {
             </div>
 
             {/* BOQ Budget Tracker — pulled from Cost Budget (Petty Cash cost head) */}
-            {projectId && (() => {
+            {projectId && user?.email !== 'lokpratap@bcim.in' && (() => {
               const budget  = boqPcBudget?.budget  || 0;
               const spent   = boqPcBudget?.actual  || totalSpent;
               const balance = budget - spent;
