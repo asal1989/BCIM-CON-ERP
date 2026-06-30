@@ -1,6 +1,16 @@
 // src/pages/stores/GatePassPrintTemplate.jsx
 import React from 'react';
 import dayjs from 'dayjs';
+import { QRCodeSVG } from 'qrcode.react';
+
+const getPublicAppOrigin = () => {
+  const configured = import.meta.env?.VITE_PUBLIC_APP_URL || import.meta.env?.VITE_APP_URL || import.meta.env?.VITE_APP_ORIGIN;
+  if (configured) return configured.replace(/\/$/, '');
+  if (typeof window === 'undefined') return '';
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') return 'http://bcim.ddns.net:3000';
+  return window.location.origin;
+};
 
 const GatePassPrintTemplate = React.forwardRef(({ data }, ref) => {
   if (!data) {
@@ -70,8 +80,13 @@ const GatePassPrintTemplate = React.forwardRef(({ data }, ref) => {
                 </div>
               </td>
 
+              {/* QR */}
+              <td style={{ width: '8%', border: '2px solid black', padding: '4px', textAlign: 'center', verticalAlign: 'middle' }}>
+                <QRCodeSVG value={`${getPublicAppOrigin()}/verify/gatepass/${data.id}`} size={40} />
+              </td>
+
               {/* GP meta */}
-              <td style={{ width: '28%', border: '2px solid black', padding: '6px', fontSize: '9px', verticalAlign: 'top' }}>
+              <td style={{ width: '22%', border: '2px solid black', padding: '6px', fontSize: '9px', verticalAlign: 'top' }}>
                 <MetaRow label="GP No."   value={data.gp_number} bold />
                 <MetaRow label="Date"     value={data.date_time ? dayjs(data.date_time).format('DD-MM-YYYY') : '—'} />
                 <MetaRow label="Status"   value={statusLabel} />

@@ -3,7 +3,17 @@ import React, { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Printer } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { hrPayrollAPI } from '../../api/client';
+
+const getPublicAppOrigin = () => {
+  const configured = import.meta.env?.VITE_PUBLIC_APP_URL || import.meta.env?.VITE_APP_URL || import.meta.env?.VITE_APP_ORIGIN;
+  if (configured) return configured.replace(/\/$/, '');
+  if (typeof window === 'undefined') return '';
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') return 'http://bcim.ddns.net:3000';
+  return window.location.origin;
+};
 
 const MONTHS = ['','January','February','March','April','May','June','July','August','September','October','November','December'];
 const fmt = (v) => `₹${parseFloat(v||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -113,10 +123,14 @@ function PayslipContent({ p, earnings, deductions }) {
   return (
     <div className="bg-white text-slate-900 p-8 print:shadow-none print:max-w-none" style={{fontFamily:'Arial,sans-serif'}}>
       {/* Company Header */}
-      <div className="text-center border-b-2 border-gray-800 pb-4 mb-6">
-        <div className="text-2xl font-bold text-gray-900">{p.company_name||'Company Name'}</div>
-        <div className="text-lg font-bold text-slate-900 mt-1 tracking-widest">SALARY SLIP</div>
-        <div className="text-gray-600 mt-1">{MONTHS[p.month]} {p.year}</div>
+      <div className="border-b-2 border-gray-800 pb-4 mb-6" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ width: 48 }} />
+        <div className="text-center" style={{ flex: 1 }}>
+          <div className="text-2xl font-bold text-gray-900">{p.company_name||'Company Name'}</div>
+          <div className="text-lg font-bold text-slate-900 mt-1 tracking-widest">SALARY SLIP</div>
+          <div className="text-gray-600 mt-1">{MONTHS[p.month]} {p.year}</div>
+        </div>
+        <QRCodeSVG value={`${getPublicAppOrigin()}/verify/payslip/${p.id}`} size={48} />
       </div>
 
       {/* Employee Details */}

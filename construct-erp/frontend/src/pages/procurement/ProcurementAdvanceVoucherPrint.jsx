@@ -5,7 +5,17 @@
 import React, { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { QRCodeSVG } from 'qrcode.react';
 import { procurementAdvanceAPI } from '../../api/client';
+
+const getPublicAppOrigin = () => {
+  const configured = import.meta.env?.VITE_PUBLIC_APP_URL || import.meta.env?.VITE_APP_URL || import.meta.env?.VITE_APP_ORIGIN;
+  if (configured) return configured.replace(/\/$/, '');
+  if (typeof window === 'undefined') return '';
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') return 'http://bcim.ddns.net:3000';
+  return window.location.origin;
+};
 
 const nv   = (v) => parseFloat(v || 0);
 const inr0 = (v) => Math.round(nv(v)).toLocaleString('en-IN', { maximumFractionDigits: 0 });
@@ -169,7 +179,7 @@ export default function ProcurementAdvanceVoucherPrint() {
           <h1 style={{ fontSize: '17px', fontWeight: 700, letterSpacing: '0.5px', margin: 0, flex: 1, textAlign: 'center' }}>
             PAYMENT CERTIFICATION
           </h1>
-          <div style={{ width: '40px' }} />
+          <QRCodeSVG value={`${getPublicAppOrigin()}/verify/advance/${voucher.id}`} size={40} />
         </div>
 
         {/* COMPANY + VOUCHER META */}

@@ -1,6 +1,16 @@
 // src/pages/accounts/EWayBillPrintTemplate.jsx
 import React from 'react';
 import dayjs from 'dayjs';
+import { QRCodeSVG } from 'qrcode.react';
+
+const getPublicAppOrigin = () => {
+  const configured = import.meta.env?.VITE_PUBLIC_APP_URL || import.meta.env?.VITE_APP_URL || import.meta.env?.VITE_APP_ORIGIN;
+  if (configured) return configured.replace(/\/$/, '');
+  if (typeof window === 'undefined') return '';
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') return 'http://bcim.ddns.net:3000';
+  return window.location.origin;
+};
 
 const cell = (label, value, mono = false) => (
   <div style={{ marginBottom: 6 }}>
@@ -25,18 +35,21 @@ const EWayBillPrintTemplate = React.forwardRef(function EWayBillPrintTemplate({ 
           <div style={{ fontSize: 18, fontWeight: 700, color: '#1e3a5f' }}>BCIM Engineering</div>
           <div style={{ fontSize: 10, color: '#6b7280', marginTop: 2 }}>Construction &amp; Infrastructure</div>
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#1e3a5f', letterSpacing: 1 }}>E-WAY BILL</div>
-          <div style={{ fontSize: 10, color: '#374151', marginTop: 4 }}>
-            <span style={{ fontWeight: 600 }}>EWB No: </span>
-            <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{data.ewb_no}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#1e3a5f', letterSpacing: 1 }}>E-WAY BILL</div>
+            <div style={{ fontSize: 10, color: '#374151', marginTop: 4 }}>
+              <span style={{ fontWeight: 600 }}>EWB No: </span>
+              <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{data.ewb_no}</span>
+            </div>
+            <div style={{ fontSize: 10, color: '#374151' }}>
+              <span style={{ fontWeight: 600 }}>Date: </span>{dayjs(data.ewb_date).format('DD/MM/YYYY')}
+            </div>
+            <div style={{ fontSize: 10, color: '#dc2626', fontWeight: 600 }}>
+              Valid Until: {dayjs(data.valid_until).format('DD/MM/YYYY')}
+            </div>
           </div>
-          <div style={{ fontSize: 10, color: '#374151' }}>
-            <span style={{ fontWeight: 600 }}>Date: </span>{dayjs(data.ewb_date).format('DD/MM/YYYY')}
-          </div>
-          <div style={{ fontSize: 10, color: '#dc2626', fontWeight: 600 }}>
-            Valid Until: {dayjs(data.valid_until).format('DD/MM/YYYY')}
-          </div>
+          <QRCodeSVG value={`${getPublicAppOrigin()}/verify/eway/${data.id}`} size={48} />
         </div>
       </div>
 

@@ -1,6 +1,16 @@
 import React from 'react';
 import dayjs from 'dayjs';
+import { QRCodeSVG } from 'qrcode.react';
 import bcimLogo from '../../assets/bcim-logo.png';
+
+const getPublicAppOrigin = () => {
+  const configured = import.meta.env?.VITE_PUBLIC_APP_URL || import.meta.env?.VITE_APP_URL || import.meta.env?.VITE_APP_ORIGIN;
+  if (configured) return configured.replace(/\/$/, '');
+  if (typeof window === 'undefined') return '';
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') return 'http://bcim.ddns.net:3000';
+  return window.location.origin;
+};
 
 const normalize = (v) => String(v || '').trim();
 
@@ -175,8 +185,12 @@ export default function DPRPrintTemplate({ dpr, project }) {
                 <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: 2, textTransform: 'uppercase' }}>Daily Progress Report</div>
                 <div style={{ fontSize: 8.5, color: '#555', marginTop: 2 }}>{v.projectName || '—'}</div>
               </td>
+              {/* QR */}
+              <td style={{ width: 50, border, padding: 4, textAlign: 'center', verticalAlign: 'middle' }}>
+                <QRCodeSVG value={`${getPublicAppOrigin()}/verify/dpr/${dpr.id}`} size={36} />
+              </td>
               {/* Right info box */}
-              <td style={{ width: 280, border, padding: 0, verticalAlign: 'top' }}>
+              <td style={{ width: 260, border, padding: 0, verticalAlign: 'top' }}>
                 <table style={{ width: '100%' }}>
                   <tbody>
                     <InfoRow label="Report Date"    value={v.reportDate} />

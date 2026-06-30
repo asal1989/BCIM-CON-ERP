@@ -1,5 +1,6 @@
 import React from 'react';
 import dayjs from 'dayjs';
+import { QRCodeSVG } from 'qrcode.react';
 import bcimLogo from '../../assets/bcim-logo.png';
 
 export const safeInr = (value) => {
@@ -67,7 +68,7 @@ export const PrintPage = ({ children, orientation = 'landscape' }) => (
   </div>
 );
 
-export const PrintHeader = ({ title, subtitle, billNumber }) => (
+export const PrintHeader = ({ title, subtitle, billNumber, qrUrl }) => (
   <div className="border-b border-slate-300 bg-white">
     <div className="h-2 bg-slate-900" />
     <div className="px-7 py-4 flex items-start justify-between gap-4">
@@ -84,12 +85,15 @@ export const PrintHeader = ({ title, subtitle, billNumber }) => (
         </div>
       </div>
 
-      <div className="text-right flex-shrink-0">
-        <div className="inline-flex items-center px-3 py-1 rounded-full border border-slate-300 text-[9px] uppercase tracking-[0.24em] text-slate-900 font-medium bg-slate-50">
-          Client Copy
+      <div className="flex items-start gap-3 flex-shrink-0">
+        <div className="text-right">
+          <div className="inline-flex items-center px-3 py-1 rounded-full border border-slate-300 text-[9px] uppercase tracking-[0.24em] text-slate-900 font-medium bg-slate-50">
+            Client Copy
+          </div>
+          <div className="mt-2 text-[10px] font-medium text-slate-900 font-medium uppercase tracking-[0.2em]">Bill No.</div>
+          <div className="text-[18px] font-mono font-medium text-slate-900 leading-none">{billNumber || '---'}</div>
         </div>
-        <div className="mt-2 text-[10px] font-medium text-slate-900 font-medium uppercase tracking-[0.2em]">Bill No.</div>
-        <div className="text-[18px] font-mono font-medium text-slate-900 leading-none">{billNumber || '---'}</div>
+        {qrUrl && <QRCodeSVG value={qrUrl} size={48} />}
       </div>
     </div>
   </div>

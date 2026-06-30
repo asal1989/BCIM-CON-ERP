@@ -10,6 +10,15 @@ import {
   PrintFooter,
 } from './PrintComponents';
 
+const getPublicAppOrigin = () => {
+  const configured = import.meta.env?.VITE_PUBLIC_APP_URL || import.meta.env?.VITE_APP_URL || import.meta.env?.VITE_APP_ORIGIN;
+  if (configured) return configured.replace(/\/$/, '');
+  if (typeof window === 'undefined') return '';
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') return 'http://bcim.ddns.net:3000';
+  return window.location.origin;
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const money = (value) => inr(value);
@@ -127,7 +136,7 @@ const AbstractPage = ({ data, variations }) => {
 
   return (
     <PrintPage orientation="landscape">
-      <PrintHeader title="ABSTRACT" subtitle="ITEM-WISE CERTIFIED SCHEDULE" billNumber={data.bill_number} />
+      <PrintHeader title="ABSTRACT" subtitle="ITEM-WISE CERTIFIED SCHEDULE" billNumber={data.bill_number} qrUrl={`${getPublicAppOrigin()}/verify/ra-bill/${data.id}`} />
       <ProjectStrip items={projectItems} />
 
       <div className="px-7 py-5">
@@ -192,7 +201,7 @@ const AbstractPage = ({ data, variations }) => {
 
 // ─── Page 2+: Chapter Item Pages (BOQ comparison) ─────────────────────────────
 
-const ChapterPage = ({ chapter, billNumber }) => {
+const ChapterPage = ({ chapter, billNumber, billId }) => {
   const qsTotal  = chapter.items.reduce((s, i) => s + Number(i.qs_amount  || Number(i.current_qty || 0) * Number(i.rate || 0)), 0);
   const conTotal = chapter.items.reduce((s, i) => s + Number(i.con_amount || qsTotal / chapter.items.length), 0);
 
@@ -202,6 +211,7 @@ const ChapterPage = ({ chapter, billNumber }) => {
         title={`CHAPTER ${formatChapterNo(chapter.chapter_no)} — ${chapter.chapter_name || 'UNSPECIFIED'}`}
         subtitle="ITEM-WISE BOQ — QS VS CONTRACTOR"
         billNumber={billNumber}
+        qrUrl={billId ? `${getPublicAppOrigin()}/verify/ra-bill/${billId}` : undefined}
       />
       <ProjectStrip items={[
         { label: 'Chapter',  value: `Chapter ${formatChapterNo(chapter.chapter_no)}` },
@@ -323,7 +333,7 @@ const DeductionsPage = ({ data }) => {
 
   return (
     <PrintPage orientation="portrait">
-      <PrintHeader title="DEDUCTIONS" subtitle="RECOVERY & DEDUCTION STATEMENT" billNumber={data.bill_number} />
+      <PrintHeader title="DEDUCTIONS" subtitle="RECOVERY & DEDUCTION STATEMENT" billNumber={data.bill_number} qrUrl={`${getPublicAppOrigin()}/verify/ra-bill/${data.id}`} />
       <ProjectStrip items={projectItems} />
 
       <div className="px-7 py-5">
@@ -461,7 +471,7 @@ const MeasurementPage = ({ data }) => {
 
   return (
     <PrintPage orientation="landscape">
-      <PrintHeader title="MEASUREMENT" subtitle="JOINT MEASUREMENT SHEETS" billNumber={data.bill_number} />
+      <PrintHeader title="MEASUREMENT" subtitle="JOINT MEASUREMENT SHEETS" billNumber={data.bill_number} qrUrl={`${getPublicAppOrigin()}/verify/ra-bill/${data.id}`} />
       <ProjectStrip items={projectItems} />
 
       <div className="px-7 py-4">
@@ -555,7 +565,7 @@ const FinancialSummaryPage = ({ data, variations }) => {
 
   return (
     <PrintPage orientation="portrait">
-      <PrintHeader title="SUMMARY" subtitle="Bill Certification Summary" billNumber={data.bill_number} />
+      <PrintHeader title="SUMMARY" subtitle="Bill Certification Summary" billNumber={data.bill_number} qrUrl={`${getPublicAppOrigin()}/verify/ra-bill/${data.id}`} />
       <ProjectStrip items={projectItems} />
 
       <div className="px-7 py-5">
@@ -723,7 +733,7 @@ const RABillPrintTemplate = forwardRef(({ data, variations }, ref) => {
 
       {/* Pages 2+: Chapter item-wise BOQ */}
       {chapterGroups.map((chapter, ci) => (
-        <ChapterPage key={`${chapter.chapter_no}-${ci}`} chapter={chapter} billNumber={normalizedData.bill_number} />
+        <ChapterPage key={`${chapter.chapter_no}-${ci}`} chapter={chapter} billNumber={normalizedData.bill_number} billId={data.id} />
       ))}
 
       {/* Measurement sheets page */}

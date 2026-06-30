@@ -3,7 +3,17 @@
 import React, { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { QRCodeSVG } from 'qrcode.react';
 import { tqsBillsAPI } from '../../api/client';
+
+const getPublicAppOrigin = () => {
+  const configured = import.meta.env?.VITE_PUBLIC_APP_URL || import.meta.env?.VITE_APP_URL || import.meta.env?.VITE_APP_ORIGIN;
+  if (configured) return configured.replace(/\/$/, '');
+  if (typeof window === 'undefined') return '';
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') return 'http://bcim.ddns.net:3000';
+  return window.location.origin;
+};
 
 const nv   = (v) => parseFloat(v || 0);
 const inr  = (v) => nv(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -173,12 +183,15 @@ export default function TQSPaymentCertPrint() {
             <div style={{ fontSize:'13px', fontWeight:900, color:'#1b2d52', letterSpacing:1.5, textTransform:'uppercase' }}>Payment Certificate</div>
             <div style={{ fontSize:'8px', color:'#64748b', marginTop:2 }}>BCIM Engineering Private Limited — QS &amp; Billing Department</div>
           </div>
-          <div style={{ textAlign:'right', flexShrink:0 }}>
-            <div style={{ fontSize:'8.5px', fontWeight:700, color:'#1b2d52', background:'#eef2fa', border:'1px solid #c0cbdf', borderRadius:3, padding:'2px 7px', display:'inline-block' }}>
-              PC No: {upd.pc_number || '—'}
+          <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+            <div style={{ textAlign:'right' }}>
+              <div style={{ fontSize:'8.5px', fontWeight:700, color:'#1b2d52', background:'#eef2fa', border:'1px solid #c0cbdf', borderRadius:3, padding:'2px 7px', display:'inline-block' }}>
+                PC No: {upd.pc_number || '—'}
+              </div>
+              <div style={{ marginTop:2, fontSize:'8px', color:'#555' }}>RA Bill: <b>{upd.ra_bill_number||'—'}</b></div>
+              <div style={{ fontSize:'8px', color:'#555' }}>Date: <b>{fmtD(upd.pc_generated_at)}</b></div>
             </div>
-            <div style={{ marginTop:2, fontSize:'8px', color:'#555' }}>RA Bill: <b>{upd.ra_bill_number||'—'}</b></div>
-            <div style={{ fontSize:'8px', color:'#555' }}>Date: <b>{fmtD(upd.pc_generated_at)}</b></div>
+            <QRCodeSVG value={`${getPublicAppOrigin()}/verify/payment-cert/${bill.id}`} size={40} />
           </div>
         </div>
 

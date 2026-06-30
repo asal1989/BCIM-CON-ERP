@@ -3,7 +3,17 @@
 import React, { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { QRCodeSVG } from 'qrcode.react';
 import { tqsBillsAPI } from '../../api/client';
+
+const getPublicAppOrigin = () => {
+  const configured = import.meta.env?.VITE_PUBLIC_APP_URL || import.meta.env?.VITE_APP_URL || import.meta.env?.VITE_APP_ORIGIN;
+  if (configured) return configured.replace(/\/$/, '');
+  if (typeof window === 'undefined') return '';
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') return 'http://bcim.ddns.net:3000';
+  return window.location.origin;
+};
 
 const inr  = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmt  = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day:'2-digit', month:'2-digit', year:'numeric' }) : '—';
@@ -157,7 +167,7 @@ export default function QSRABillPrint() {
               VENDOR RA BILL ABSTRACT — QS CERTIFICATION
             </div>
           </div>
-          <div style={{ width:120 }} />{/* spacer to balance logo */}
+          <QRCodeSVG value={`${getPublicAppOrigin()}/verify/ra-bill/${bill.id}`} size={48} />
         </div>
 
         {/* Header info */}

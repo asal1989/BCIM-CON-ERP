@@ -4,7 +4,17 @@
 //   Page 2 — Full BOQ line items with price, grouped by chapter
 // Font matches POPrintTemplate / QS certification ('Times New Roman').
 import React from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import bcimLogo from '../../assets/bcim-logo.png';
+
+const getPublicAppOrigin = () => {
+  const configured = import.meta.env?.VITE_PUBLIC_APP_URL || import.meta.env?.VITE_APP_URL || import.meta.env?.VITE_APP_ORIGIN;
+  if (configured) return configured.replace(/\/$/, '');
+  if (typeof window === 'undefined') return '';
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') return 'http://bcim.ddns.net:3000';
+  return window.location.origin;
+};
 
 const navy    = '#0B2E59';
 const grayHd  = '#C9C9C9';
@@ -39,7 +49,7 @@ function ValCell({ amount, bold, bg }) {
 }
 
 // Shared letterhead shown at the top of each page
-function Letterhead({ projectName, projectAddress, clientName, subtitle }) {
+function Letterhead({ projectName, projectAddress, clientName, subtitle, qrUrl }) {
   const now = new Date().toLocaleString('en-IN', {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
@@ -57,9 +67,12 @@ function Letterhead({ projectName, projectAddress, clientName, subtitle }) {
             <div style={{ fontSize: 8.5, color: '#94a3b8', marginTop: 1 }}>Bengaluru, Karnataka, India &nbsp;|&nbsp; www.bcim.in</div>
           </div>
         </div>
-        <div style={{ textAlign: 'right', fontSize: 8.5, color: '#64748b', lineHeight: 1.9 }}>
-          <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 9 }}>Confidential — Internal Use Only</div>
-          <div>Generated: {now}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ textAlign: 'right', fontSize: 8.5, color: '#64748b', lineHeight: 1.9 }}>
+            <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 9 }}>Confidential — Internal Use Only</div>
+            <div>Generated: {now}</div>
+          </div>
+          {qrUrl && <QRCodeSVG value={qrUrl} size={44} />}
         </div>
       </div>
       {/* Project info */}
@@ -132,13 +145,15 @@ export default function BOQSummaryPrintTemplate({
   lineItemsByChapter = [],
   totals = { bill: 0, budget: 0, gst: 0, billGrand: 0, budgetGrand: 0 },
   gstPct = 18,
+  projectId,
 }) {
+  const qrUrl = projectId ? `${getPublicAppOrigin()}/verify/boq/${projectId}` : null;
   return (
     <div style={S.page}>
 
       {/* ─────────────── PAGE 1 — BOQ SUMMARY ─────────────── */}
       <div style={S.sheet}>
-        <Letterhead projectName={projectName} projectAddress={projectAddress} clientName={clientName} subtitle="Bill of Quantities — Summary" />
+        <Letterhead projectName={projectName} projectAddress={projectAddress} clientName={clientName} subtitle="Bill of Quantities — Summary" qrUrl={qrUrl} />
 
         <table style={S.tbl}>
           <colgroup>
@@ -208,7 +223,7 @@ export default function BOQSummaryPrintTemplate({
 
       {/* ─────────────── PAGE 2 — FULL BOQ ITEMS ─────────────── */}
       <div style={{ ...S.sheet, pageBreakAfter: 'auto' }}>
-        <Letterhead projectName={projectName} projectAddress={projectAddress} clientName={clientName} subtitle="Bill of Quantities — Detailed Items" />
+        <Letterhead projectName={projectName} projectAddress={projectAddress} clientName={clientName} subtitle="Bill of Quantities — Detailed Items" qrUrl={qrUrl} />
 
         <table style={S.tbl}>
           <colgroup>
