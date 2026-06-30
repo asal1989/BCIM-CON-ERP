@@ -542,10 +542,12 @@ router.get('/:project_id/costhead-drilldown', async (req, res) => {
       // RA bill items for this cost head
       const ra = await query(`
         SELECT rb.bill_number AS reference, rb.bill_date AS date,
-               rbi.description, rbi.current_qty * rbi.rate AS amount,
+               COALESCE(bi.description, rb.bill_number, 'RA Bill Item') AS description,
+               rbi.current_qty * rbi.rate AS amount,
                'RA Bill' AS source
         FROM ra_bill_items rbi
         JOIN ra_bills rb ON rb.id = rbi.ra_bill_id
+        LEFT JOIN boq_items bi ON bi.id = rbi.boq_item_id
         WHERE rb.project_id=$1 AND rbi.cost_head=$2
           AND rb.status IN ('certified','paid')
         ORDER BY rb.bill_date`, [project_id, cost_head]);
