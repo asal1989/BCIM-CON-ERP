@@ -10,7 +10,8 @@ import {
   Bell, TrendingUp, Activity,
 } from 'lucide-react';
 import {
-  AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid,
+  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
@@ -511,11 +512,37 @@ function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName
 
   const VIEWS = [
     { id: 'table',    label: 'Monthly Matrix', icon: LayoutList },
+    { id: 'charts',   label: '3D Charts',      icon: BarChart2  },
     { id: 'scurve',   label: 'S-Curve',        icon: TrendingUp },
     { id: 'forecast', label: 'Cash Forecast',  icon: Activity   },
   ];
 
   const fmtCrore = (v) => v >= 1e7 ? `₹${(v / 1e7).toFixed(2)}Cr` : v >= 1e5 ? `₹${(v / 1e5).toFixed(1)}L` : fmtAmt(v);
+
+  const HEAD_COLORS = [
+    '#818cf8','#f472b6','#34d399','#fbbf24','#f87171',
+    '#a78bfa','#22d3ee','#4ade80','#fb923c','#60a5fa',
+    '#c084fc','#a3e635','#fb7185','#38bdf8','#facc15',
+    '#7c3aed','#10b981','#ef4444',
+  ];
+
+  const stackedBarData = useMemo(() => months.map(m => ({
+    month: fmtMonth(m),
+    ...BOQ_COST_HEADS_ORDER.reduce((acc, h) => { acc[h] = Math.round(byMonthBreakdown[m]?.[h] || 0); return acc; }, {}),
+  })), [months, BOQ_COST_HEADS_ORDER, byMonthBreakdown]);
+
+  const donutData = useMemo(() =>
+    BOQ_COST_HEADS_ORDER
+      .map((h, i) => ({ name: h, value: Math.round(headTotals[h] || 0), color: HEAD_COLORS[i % HEAD_COLORS.length] }))
+      .filter(d => d.value > 0),
+  [BOQ_COST_HEADS_ORDER, headTotals]);
+
+  const topMonthsData = useMemo(() =>
+    months
+      .map(m => ({ month: fmtMonth(m), total: Math.round(monthTotals[m] || 0) }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 8),
+  [months, monthTotals]);
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
@@ -546,6 +573,132 @@ function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName
           </button>
         </div>
       </div>
+
+      {/* ── 3D Charts view ───────────────────────────────────────────────────── */}
+      {monthlyView === 'charts' && (
+        <div className="p-5 space-y-6">
+          <style>{`@keyframes growBar { from { width: 0% } }`}</style>
+
+          {/* Animated stacked bar — months × cost heads */}
+          <div className="rounded-2xl overflow-hidden"
+            style={{ background: 'linear-gradient(135deg,#0f172a 0%,#1e1b4b 60%,#0f172a 100%)',
+                     boxShadow: '0 24px 64px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
+            <div className="px-5 pt-4 pb-2 border-b border-white/10 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-bold text-white tracking-wide">Monthly Expenditure by Cost Head</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">{months.length} months · Grand total {fmtCrore(grandTotal)}</p>
+              </div>
+              <span className="text-[10px] px-2.5 py-1 rounded-full font-semibold"
+                style={{ background: 'rgba(129,140,248,0.15)', color: '#a5b4fc', border: '1px solid rgba(129,140,248,0.3)' }}>
+                Animated · Stacked
+              </span>
+            </div>
+            <div className="p-4" style={{ filter: 'drop-shadow(0 8px 32px rgba(99,102,241,0.25))' }}>
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={stackedBarData} margin={{ top: 8, right: 24, left: 8, bottom: 24 }}
+                  barSize={Math.max(12, Math.min(36, Math.floor(400 / (months.length || 1) - 6)))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                  <XAxis dataKey="month" tick={{ fill: '#94a3b8', fontSize: 10 }} tickLine={false}
+                    axisLine={{ stroke: 'rgba(255,255,255,0.08)' }} angle={months.length > 8 ? -35 : 0}
+                    textAnchor={months.length > 8 ? 'end' : 'middle'} interval={0} />
+                  <YAxis tickFormatter={fmtCrore} tick={{ fill: '#64748b', fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    formatter={(v, n) => [fmtAmt(v), n]}
+                    contentStyle={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, fontSize: 11 }}
+                    labelStyle={{ color: '#e2e8f0', fontWeight: 700 }}
+                    cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                  />
+                  <Legend wrapperStyle={{ paddingTop: 14, fontSize: 10.5, color: '#94a3b8' }}
+                    formatter={(v) => <span style={{ color: '#cbd5e1' }}>{v}</span>} />
+                  {BOQ_COST_HEADS_ORDER.map((head, i) => (
+                    <Bar key={head} dataKey={head} stackId="a" fill={HEAD_COLORS[i % HEAD_COLORS.length]}
+                      isAnimationActive animationDuration={900} animationBegin={i * 50} animationEasing="ease-out"
+                      radius={i === BOQ_COST_HEADS_ORDER.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Row 2: Donut + Top months */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+            {/* Donut — cost head distribution */}
+            <div className="rounded-2xl overflow-hidden"
+              style={{ background: 'linear-gradient(135deg,#0f172a 0%,#0c1a3a 100%)',
+                       boxShadow: '0 16px 48px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05)' }}>
+              <div className="px-4 pt-4 pb-2 border-b border-white/10">
+                <p className="text-sm font-bold text-white">Cost Head Distribution</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Total spend breakdown across all cost heads</p>
+              </div>
+              <div className="flex flex-col items-center py-4">
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie data={donutData} cx="50%" cy="50%" innerRadius={72} outerRadius={110}
+                      dataKey="value" nameKey="name" paddingAngle={2}
+                      isAnimationActive animationBegin={0} animationDuration={1200} animationEasing="ease-out"
+                      startAngle={90} endAngle={-270}>
+                      {donutData.map((d, i) => (
+                        <Cell key={d.name} fill={d.color}
+                          style={{ filter: `drop-shadow(0 0 6px ${d.color}55)` }} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(v, n) => [fmtAmt(v), n]}
+                      contentStyle={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, fontSize: 11 }}
+                      labelStyle={{ color: '#e2e8f0' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                {/* Legend */}
+                <div className="px-4 pb-3 grid grid-cols-2 gap-x-4 gap-y-1.5 w-full">
+                  {donutData.map(d => (
+                    <div key={d.name} className="flex items-center gap-1.5 min-w-0">
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: d.color, boxShadow: `0 0 6px ${d.color}80` }} />
+                      <span className="text-[10px] text-slate-300 truncate">{d.name}</span>
+                      <span className="text-[10px] text-slate-500 ml-auto flex-shrink-0">{((d.value / grandTotal) * 100).toFixed(1)}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Top-spending months horizontal bar */}
+            <div className="rounded-2xl overflow-hidden"
+              style={{ background: 'linear-gradient(135deg,#0f172a 0%,#1a0e2e 100%)',
+                       boxShadow: '0 16px 48px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05)' }}>
+              <div className="px-4 pt-4 pb-2 border-b border-white/10">
+                <p className="text-sm font-bold text-white">Top Spending Months</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Highest expenditure months (sorted)</p>
+              </div>
+              <div className="p-4">
+                <div className="space-y-3 mt-1">
+                  {topMonthsData.map((d, i) => {
+                    const pct = grandTotal > 0 ? (d.total / (topMonthsData[0]?.total || 1)) * 100 : 0;
+                    const barColor = HEAD_COLORS[i % HEAD_COLORS.length];
+                    return (
+                      <div key={d.month}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[11px] font-semibold text-slate-300">{d.month}</span>
+                          <span className="text-[11px] font-bold" style={{ color: barColor }}>{fmtCrore(d.total)}</span>
+                        </div>
+                        <div className="h-5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                          <div className="h-full rounded-full transition-all duration-1000"
+                            style={{
+                              width: `${pct}%`,
+                              background: `linear-gradient(90deg, ${barColor}cc, ${barColor})`,
+                              boxShadow: `0 0 10px ${barColor}60`,
+                              animation: `growBar 1s ease-out ${i * 80}ms both`,
+                            }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* ── S-Curve view ─────────────────────────────────────────────────────── */}
       {monthlyView === 'scurve' && (
