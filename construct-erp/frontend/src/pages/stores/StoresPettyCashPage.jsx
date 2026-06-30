@@ -17,7 +17,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useLocation } from 'react-router-dom';
 import { PageHeader, Theme } from '../../theme';
-import { storesPettyCashAPI, projectAPI, uploadAPI, subcontractorAPI } from '../../api/client';
+import { storesPettyCashAPI, projectAPI, uploadAPI, subcontractorAPI, boqBudgetAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -1869,6 +1869,13 @@ export default function StoresPettyCashPage() {
     staleTime: 0,
     refetchOnMount: 'always',
   });
+  const { data: boqSummaryResp } = useQuery({
+    queryKey: ['boq-costhead-summary', projectId],
+    queryFn: () => boqBudgetAPI.costheadSummary(projectId).then(r => r.data),
+    enabled: !!projectId,
+    staleTime: 60_000,
+  });
+  const boqPcBudget = boqSummaryResp?.data?.find(r => r.cost_head === 'Petty Cash') ?? null;
   const { data: scAdvancesResp, isLoading: loadingScAdv } = useQuery({
     queryKey: ['spc-sc-advances', projectId],
     queryFn: () => storesPettyCashAPI.listScAdvances({ project_id: projectId || undefined }).then(r => r.data),
@@ -2211,6 +2218,59 @@ export default function StoresPettyCashPage() {
               <KpiCard label="Cash in Hand" value={inr(Math.abs(cashInHand))} sub={cashInHand < 0 ? 'OVERDRAWN' : cashInHand < 5000 ? 'Low — request top-up' : 'Sufficient'} accent={cashInHand < 0 ? 'border-red-500' : cashInHand < 5000 ? 'border-amber-400' : 'border-green-400'} valueClass={balanceColor} />
               <KpiCard label="Pending Approval" value={pendingCount} sub="entries awaiting review" accent="border-amber-400" valueClass="text-amber-700" />
             </div>
+
+            {/* BOQ Budget Tracker — pulled from Cost Budget (Petty Cash cost head) */}
+            {boqPcBudget && boqPcBudget.budget > 0 && (() => {
+              const budget  = boqPcBudget.budget;
+              const spent   = boqPcBudget.actual;
+              const balance = budget - spent;
+              const pct     = Math.min((spent / budget) * 100, 100);
+              const over    = spent > budget;
+              const warn    = !over && pct >= 80;
+              return (
+                <div className={clsx(
+                  'rounded-xl border p-4 shadow-sm',
+                  over ? 'bg-red-50 border-red-200' : warn ? 'bg-amber-50 border-amber-200' : 'bg-indigo-50 border-indigo-200'
+                )}>
+                  <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <Wallet className={clsx('w-4 h-4', over ? 'text-red-500' : warn ? 'text-amber-500' : 'text-indigo-600')} />
+                      <span className="text-sm font-bold text-slate-800">BOQ Budget — Petty Cash</span>
+                      <span className={clsx('text-[10px] px-2 py-0.5 rounded-full font-bold',
+                        over ? 'bg-red-100 text-red-700' : warn ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700')}>
+                        {over ? '⚠ OVER BUDGET' : warn ? `${pct.toFixed(0)}% used — caution` : `${pct.toFixed(0)}% used`}
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-slate-500">From Cost Budget → Petty Cash</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 mb-3">
+                    <div className="bg-white rounded-lg p-3 border border-indigo-100 text-center">
+                      <div className="text-[10px] text-slate-500 mb-1 font-medium uppercase tracking-wide">BOQ Budget</div>
+                      <div className="text-base font-bold text-indigo-700">{inr(budget)}</div>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 border border-red-100 text-center">
+                      <div className="text-[10px] text-slate-500 mb-1 font-medium uppercase tracking-wide">Total Spent</div>
+                      <div className={clsx('text-base font-bold', over ? 'text-red-700' : 'text-slate-800')}>{inr(spent)}</div>
+                    </div>
+                    <div className={clsx('rounded-lg p-3 border text-center', over ? 'bg-red-100 border-red-200' : 'bg-emerald-50 border-emerald-100')}>
+                      <div className="text-[10px] text-slate-500 mb-1 font-medium uppercase tracking-wide">Balance</div>
+                      <div className={clsx('text-base font-bold', over ? 'text-red-700' : 'text-emerald-700')}>{over ? '(' + inr(Math.abs(balance)) + ')' : inr(balance)}</div>
+                    </div>
+                  </div>
+                  {/* Progress bar */}
+                  <div className="h-3 rounded-full overflow-hidden bg-white/60 border border-white">
+                    <div className={clsx('h-full rounded-full transition-all duration-700',
+                      over ? 'bg-red-500' : warn ? 'bg-amber-400' : 'bg-indigo-500')}
+                      style={{ width: `${pct}%` }} />
+                  </div>
+                  {over && (
+                    <p className="text-[11px] text-red-700 font-semibold mt-2">
+                      ₹{inr(Math.abs(balance))} over the BOQ budget. Escalate to QS / Project Manager.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Reconciliation */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
