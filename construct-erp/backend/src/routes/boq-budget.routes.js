@@ -359,9 +359,15 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
       FROM stores_petty_cash_entries
       WHERE project_id=$1 AND status='Approved'`, [project_id]);
 
+    // Contractor advances given through the Stores Petty Cash module — mapped to "Sub Con"
+    const storePCAdvActuals = await query(`
+      SELECT 'Sub Con' AS cost_head, SUM(amount) AS actual
+      FROM stores_pc_sc_advances
+      WHERE project_id=$1 AND status != 'cancelled'`, [project_id]);
+
     // Merge actuals by cost head
     const actualMap = {};
-    for (const rows of [raActuals.rows, scActuals.rows, scPayActuals.rows, tqsActuals.rows, advActuals.rows, advTrackerActuals.rows, spcActuals.rows]) {
+    for (const rows of [raActuals.rows, scActuals.rows, scPayActuals.rows, tqsActuals.rows, advActuals.rows, advTrackerActuals.rows, spcActuals.rows, storePCAdvActuals.rows]) {
       for (const r of rows) {
         if (!r.cost_head) continue;
         actualMap[r.cost_head] = (actualMap[r.cost_head] || 0) + parseFloat(r.actual || 0);
@@ -489,6 +495,16 @@ router.get('/:project_id/costhead-drilldown', async (req, res) => {
         ORDER BY pay_date`, [project_id]);
       rows.push(...advTrk.rows);
 
+      // Contractor advances given through Stores Petty Cash
+      const storePCAdv = await query(`
+        SELECT COALESCE(reference_number, wo_number, 'ADV') AS reference,
+               advance_date AS date, vendor_name AS description,
+               amount, 'Stores PC Advance' AS source
+        FROM stores_pc_sc_advances
+        WHERE project_id=$1 AND status != 'cancelled'
+        ORDER BY advance_date`, [project_id]);
+      rows.push(...storePCAdv.rows);
+
     } else if (cost_head === 'Petty Cash') {
       // Stores petty cash entries
       const pc = await query(`
@@ -594,9 +610,17 @@ router.get('/:project_id/costhead-monthly', async (req, res) => {
       WHERE project_id=$1 AND status='Approved'
       GROUP BY 1`, [project_id]);
 
+    // Contractor advances through Stores Petty Cash — mapped to "Sub Con"
+    const storePCAdvM = await query(`
+      SELECT TO_CHAR(COALESCE(advance_date, created_at), 'YYYY-MM') AS month,
+             'Sub Con' AS cost_head, SUM(amount) AS actual
+      FROM stores_pc_sc_advances
+      WHERE project_id=$1 AND status != 'cancelled'
+      GROUP BY 1`, [project_id]);
+
     // Merge all sources into { [month]: { [cost_head]: amount } }
     const monthly = {};
-    for (const rows of [raM.rows, scM.rows, scPayM.rows, tqsM.rows, advM.rows, advTrkM.rows, spcM.rows]) {
+    for (const rows of [raM.rows, scM.rows, scPayM.rows, tqsM.rows, advM.rows, advTrkM.rows, spcM.rows, storePCAdvM.rows]) {
       for (const r of rows) {
         if (!r.month || !r.cost_head) continue;
         if (!monthly[r.month]) monthly[r.month] = {};

@@ -748,6 +748,19 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
     saveMutation.mutate({ cost_head, budget_amount: n });
   };
 
+  // Contingency absorption: overages in non-derived heads draw from the contingency reserve.
+  // Contingency is an emergency fund — it absorbs cost head overruns so they are not "over budget"
+  // as long as there is contingency remaining to cover them.
+  const totalNonDerivedOverage = rows
+    .filter(r => !r.derived && r.budget > 0 && r.actual > r.budget)
+    .reduce((s, r) => s + (r.actual - r.budget), 0);
+  const contRow = rows.find(r => r.cost_head === 'Contingency');
+  const contBudget = contRow?.budget || 0;
+  const contAbsorbed = Math.min(totalNonDerivedOverage, contBudget);
+  const contRemaining = contBudget - contAbsorbed;
+  // Fully covered = all overages fit within contingency
+  const contingencyCoversAll = contBudget > 0 && totalNonDerivedOverage <= contBudget;
+
   // Heads at ≥80% or over budget (derived heads like Profit/Contingency are reserves — never flagged)
   const alertHeads     = data.filter(r => !r.derived && r.budget > 0 && r.actual / r.budget >= 0.8);
   const overHeads      = alertHeads.filter(r => r.actual > r.budget);
@@ -791,12 +804,19 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
       {alertHeads.length > 0 && (
         <div className={clsx(
           'rounded-xl px-4 py-3 flex items-center justify-between gap-3 border',
-          overHeads.length > 0 ? 'bg-rose-50 border-rose-200' : 'bg-amber-50 border-amber-200'
+          overHeads.length > 0 && !contingencyCoversAll ? 'bg-rose-50 border-rose-200'
+          : overHeads.length > 0 && contingencyCoversAll ? 'bg-amber-50 border-amber-200'
+          : 'bg-amber-50 border-amber-200'
         )}>
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <AlertTriangle size={16} className={overHeads.length > 0 ? 'text-rose-500 flex-shrink-0' : 'text-amber-500 flex-shrink-0'} />
-            <span className={clsx('text-xs font-semibold', overHeads.length > 0 ? 'text-rose-800' : 'text-amber-800')}>
-              {overHeads.length > 0 && `${overHeads.length} head${overHeads.length > 1 ? 's' : ''} OVER budget`}
+            <AlertTriangle size={16} className={clsx(
+              overHeads.length > 0 && !contingencyCoversAll ? 'text-rose-500 flex-shrink-0'
+              : 'text-amber-500 flex-shrink-0'
+            )} />
+            <span className={clsx('text-xs font-semibold',
+              overHeads.length > 0 && !contingencyCoversAll ? 'text-rose-800' : 'text-amber-800')}>
+              {overHeads.length > 0 && contingencyCoversAll && `${overHeads.length} head${overHeads.length > 1 ? 's' : ''} over individual budget — covered by contingency`}
+              {overHeads.length > 0 && !contingencyCoversAll && `${overHeads.length} head${overHeads.length > 1 ? 's' : ''} OVER budget — contingency insufficient`}
               {overHeads.length > 0 && nearHeads.length > 0 && ' · '}
               {nearHeads.length > 0 && `${nearHeads.length} near limit (≥80%)`}
               {' — '}
@@ -808,7 +828,7 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
             disabled={alertMutation.isPending || !projectId}
             className={clsx(
               'flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition',
-              overHeads.length > 0
+              overHeads.length > 0 && !contingencyCoversAll
                 ? 'bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-50'
                 : 'bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50'
             )}>
@@ -876,10 +896,18 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
             const isEditing = editingHead === r.cost_head;
             const isExpanded = expandedHead === r.cost_head;
             const over = !r.derived && r.actual > r.budget && r.budget > 0;
+            // When contingency can cover all overages, treat over-budget heads as amber (covered) not rose (critical)
+            const overCovered = over && contingencyCoversAll;
+            const overCritical = over && !contingencyCoversAll;
+            const isContingency = r.cost_head === 'Contingency';
             const hasActual = r.actual > 0;
             return (
               <React.Fragment key={r.cost_head}>
-                <tr className={clsx('border-b border-slate-100', over && 'bg-rose-50/30', isExpanded && 'bg-indigo-50/40')}>
+                <tr className={clsx('border-b border-slate-100',
+                  overCritical && 'bg-rose-50/30',
+                  overCovered && 'bg-amber-50/30',
+                  isContingency && contAbsorbed > 0 && 'bg-blue-50/20',
+                  isExpanded && 'bg-indigo-50/40')}>
                   <td className="px-4 py-2 text-center text-slate-500 font-bold">{i + 1}</td>
                   <td className="px-4 py-2 font-medium text-slate-700">
                     <div className="flex items-center gap-1.5">
@@ -931,7 +959,20 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
                     )}
                   </td>
                   <td className="px-4 py-2 text-right font-semibold">
-                    {r.derived ? (
+                    {isContingency ? (
+                      <div className="text-right">
+                        {contAbsorbed > 0 ? (
+                          <>
+                            <div className="font-semibold text-amber-700">
+                              ₹{Math.round(contAbsorbed).toLocaleString('en-IN')}
+                            </div>
+                            <div className="text-[9px] text-amber-500">drawn for overages</div>
+                          </>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </div>
+                    ) : r.derived ? (
                       <span className="font-semibold text-emerald-700">
                         {r.actual > 0 ? `₹${Math.round(r.actual).toLocaleString('en-IN')}` : '—'}
                       </span>
@@ -947,17 +988,22 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
                     )}
                   </td>
                   <td className="px-4 py-2 text-right text-xs font-bold tabular-nums">
-                    {r.budget > 0 ? (
+                    {r.budget > 0 && !isContingency ? (
                       <span className={clsx(
-                        r.actual / r.budget > 1 ? 'text-rose-600' :
-                        r.actual / r.budget > 0.85 ? 'text-amber-600' : 'text-slate-600'
+                        r.actual / r.budget > 1
+                          ? (overCovered ? 'text-amber-600' : 'text-rose-600')
+                          : r.actual / r.budget > 0.85 ? 'text-amber-600' : 'text-slate-600'
                       )}>
                         {((r.actual / r.budget) * 100).toFixed(1)}%
+                      </span>
+                    ) : isContingency && contBudget > 0 ? (
+                      <span className={clsx('text-slate-500')}>
+                        {contAbsorbed > 0 ? `${((contAbsorbed / contBudget) * 100).toFixed(1)}%` : '0.0%'}
                       </span>
                     ) : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="px-4 py-2 text-right text-xs tabular-nums">
-                    {r.monthly_avg > 0 ? (
+                    {!isContingency && r.monthly_avg > 0 ? (
                       <div>
                         <div className={clsx('font-bold',
                           r.budget > 0 && r.monthly_avg * 12 > r.budget ? 'text-rose-600' : 'text-indigo-600')}>
@@ -968,11 +1014,27 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
                     ) : <span className="text-slate-300">—</span>}
                   </td>
                   <td className={clsx('px-4 py-2 text-right font-bold',
-                    r.budget === 0 ? 'text-slate-300' : over ? 'text-rose-600' : 'text-emerald-600')}>
-                    {r.budget > 0 || r.actual > 0
+                    r.budget === 0 && !isContingency ? 'text-slate-300'
+                    : overCritical ? 'text-rose-600'
+                    : overCovered ? 'text-amber-600'
+                    : isContingency && contAbsorbed > 0 ? (contRemaining > 0 ? 'text-emerald-600' : 'text-rose-600')
+                    : 'text-emerald-600')}>
+                    {isContingency ? (
+                      <>
+                        {contBudget > 0
+                          ? `₹${Math.round(contRemaining).toLocaleString('en-IN')}`
+                          : '—'}
+                        {contAbsorbed > 0 && contBudget > 0 && (
+                          <div className="text-[9px] text-blue-500">
+                            {contRemaining > 0 ? `₹${Math.round(contRemaining).toLocaleString('en-IN')} left` : '⚠ Exhausted'}
+                          </div>
+                        )}
+                      </>
+                    ) : r.budget > 0 || r.actual > 0
                       ? `₹${Math.round(r.budget - r.actual).toLocaleString('en-IN')}`
                       : '—'}
-                    {over && <div className="text-[9px] text-rose-500">⚠ Over budget</div>}
+                    {overCritical && <div className="text-[9px] text-rose-500">⚠ Over — contingency exhausted</div>}
+                    {overCovered && <div className="text-[9px] text-amber-500">↑ From contingency</div>}
                   </td>
                 </tr>
                 {isExpanded && <CostHeadDrilldown projectId={projectId} costHead={r.cost_head} />}
