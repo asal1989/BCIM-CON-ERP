@@ -1003,7 +1003,7 @@ function WORejectModal({ wo, onClose, onConfirm, isPending }) {
 }
 
 /* ── WO Detail Panel — Full-Screen Modal ────────────────────────────────── */
-function WODetailPanel({ wo, onClose, onEdit, onDelete, onApprove, onMDApprove, onReject, isApproving, isMDApproving, isRejecting, user, company }) {
+function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, isApproving, isMDApproving, isRejecting, user, company }) {
   const [rejectModal, setRejectModal] = useState(false);
   const { data: detail, isLoading: detailLoading } = useQuery({
     queryKey: ['work-order-detail', wo?.id],
@@ -1103,13 +1103,6 @@ function WODetailPanel({ wo, onClose, onEdit, onDelete, onApprove, onMDApprove, 
               className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-slate-200 text-xs font-medium text-slate-900 hover:border-slate-300 transition-all">
               <Printer className="w-3.5 h-3.5" /> Print
             </button>
-            {canManageProcurement(user) && (
-              <button
-                onClick={() => { if (window.confirm(`Delete Work Order ${wo.wo_number}? This cannot be undone.`)) { onDelete(wo.id); } }}
-                className="flex items-center gap-1.5 px-3 h-8 rounded-lg bg-white border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50 transition-all">
-                <X className="w-3.5 h-3.5" /> Delete
-              </button>
-            )}
           </div>
         </div>
 
@@ -1453,16 +1446,6 @@ export default function WorkOrderPage() {
     onError: e => toast.error(e?.response?.data?.error || 'Failed to issue Work Order'),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: id => subcontractorAPI.deleteWorkOrder(id),
-    onSuccess: () => {
-      toast.success('Work Order deleted');
-      setSelectedWO(null);
-      qc.invalidateQueries({ queryKey: ['work-orders'] });
-    },
-    onError: e => toast.error(e?.response?.data?.error || 'Failed to delete Work Order'),
-  });
-
   const approveMutation = useMutation({
     mutationFn: id => subcontractorAPI.approveWorkOrder(id),
     onSuccess: () => {
@@ -1785,7 +1768,6 @@ export default function WorkOrderPage() {
           wo={selectedWO}
           onClose={() => setSelectedWO(null)}
           onEdit={wo => setEditingWO(wo)}
-          onDelete={id => deleteMutation.mutate(id)}
           onApprove={id => approveMutation.mutate(id)}
           onMDApprove={id => mdApproveMutation.mutate(id)}
           onReject={(id, reason) => rejectMutation.mutate({ id, reason })}

@@ -1101,7 +1101,7 @@ function canManageProcurement(user) {
   return role === 'super_admin' || role === 'managing_director' || role.includes('procurement');
 }
 
-function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onDelete, onApprove, onReject, isApproving, isRejecting, user }) {
+function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, onReject, isApproving, isRejecting, user }) {
   const qc = useQueryClient();
   const [sigModal,    setSigModal]    = useState(null);  // { stage }
   const [mailModal,   setMailModal]   = useState(false);
@@ -1196,13 +1196,6 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onDelete, onA
               <button onClick={() => onEdit(detailedPO ?? po)}
                 className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-amber-300 bg-amber-50 text-amber-700 text-xs font-medium hover:bg-amber-100 transition-all">
                 <Edit2 className="w-3.5 h-3.5" /> Edit PO
-              </button>
-            )}
-            {onDelete && canManageProcurement(user) && (
-              <button
-                onClick={() => { if (window.confirm(`Delete PO ${po.po_ref_no || po.po_number || po.serial_no_formatted}? This cannot be undone.`)) onDelete(po.id); }}
-                className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-red-200 bg-white text-red-600 text-xs font-medium hover:bg-red-50 transition-all">
-                <Trash2 className="w-3.5 h-3.5" /> Delete
               </button>
             )}
             <button onClick={handlePrint} disabled={!detailedPO}
@@ -2130,16 +2123,6 @@ export default function POPage() {
     onError: e => toast.error(e?.response?.data?.error || 'Failed to update PO'),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: id => poAPI.delete(id),
-    onSuccess: () => {
-      toast.success('PO deleted');
-      setSelectedPO(null);
-      qc.invalidateQueries({ queryKey: ['purchase-orders'] });
-    },
-    onError: e => toast.error(e?.response?.data?.error || 'Failed to delete PO'),
-  });
-
   const filtered = poData.filter(p => {
     if (statusFilter !== 'all' && p.status !== statusFilter) return false;
     if (search) {
@@ -2440,7 +2423,6 @@ export default function POPage() {
           company={companyData}
           onClose={() => setSelectedPO(null)}
           onEdit={(po) => setEditingPO(po)}
-          onDelete={(id) => deleteMutation.mutate(id)}
           onApprove={(stage) => {
             approveMutation.mutate({ id: selectedPO.id, stage });
           }}

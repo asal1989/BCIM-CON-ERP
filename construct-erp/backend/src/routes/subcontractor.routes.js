@@ -53,20 +53,8 @@ router.get('/work-orders', ctrl.getWorkOrders);
 router.post('/work-orders', authorize('super_admin', 'admin', 'project_manager', 'procurement_manager'), ctrl.createWorkOrder);
 router.get('/work-orders/:id', ctrl.getWorkOrder);
 router.patch('/work-orders/:id', authorize(...PROCUREMENT_ROLES), ctrl.updateWorkOrder);
-router.delete('/work-orders/:id', authorize(...PROCUREMENT_ROLES), async (req, res) => {
-  try {
-    const before = await query(`SELECT wo_number, subject, status, total_value FROM work_orders WHERE id = $1`, [req.params.id]);
-    const result = await query(
-      `DELETE FROM work_orders WHERE id = $1 AND project_id IN (SELECT id FROM projects WHERE company_id = $2) RETURNING id`,
-      [req.params.id, req.user.company_id]
-    );
-    if (!result.rows.length) return res.status(404).json({ error: 'Work Order not found' });
-    await logAudit(req, { action: 'delete', tableName: 'work_orders', recordId: req.params.id, oldValues: before.rows[0] });
-    res.json({ message: 'Work Order deleted' });
-  } catch (err) {
-    if (err.code === '23503') return res.status(409).json({ error: 'Cannot delete — this Work Order has linked bills or measurements' });
-    res.status(500).json({ error: err.message });
-  }
+router.delete('/work-orders/:id', authorize(...PROCUREMENT_ROLES), (req, res) => {
+  res.status(403).json({ error: 'Deletion of Work Orders is not permitted. Work Orders are permanent financial records.' });
 });
 
 // PATCH /work-orders/:id/approve — Stage 1 (Procurement): draft/pending → submitted
