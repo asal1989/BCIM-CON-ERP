@@ -18,6 +18,57 @@ const inr  = (v) => `₹${(parseFloat(v) || 0).toLocaleString('en-IN', { maximum
 const inr2 = (v) => `₹${(parseFloat(v) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const num  = (v) => parseFloat(v) || 0;
 
+// ─── Shared professional print letterhead ─────────────────────────────────────
+function BOQPrintHeader({ title, subtitle, meta = [] }) {
+  const now = new Date().toLocaleString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+  return (
+    <div className="hidden print:block" style={{ fontFamily: 'Arial, sans-serif', marginBottom: 18 }}>
+      {/* Top gradient bar */}
+      <div style={{ height: 5, background: 'linear-gradient(90deg,#0B2E59 0%,#1e4d8c 60%,#2563eb 100%)', marginBottom: 14 }} />
+      {/* Letterhead row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{
+            width: 48, height: 48, background: '#0B2E59', borderRadius: 6,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#fff', fontWeight: 900, fontSize: 13, letterSpacing: 1, flexShrink: 0,
+          }}>BCIM</div>
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: '#0B2E59', lineHeight: 1.15 }}>
+              BCIM Engineering Pvt. Ltd.
+            </div>
+            <div style={{ fontSize: 9, color: '#64748b', marginTop: 3 }}>
+              Construction &amp; Infrastructure Management
+            </div>
+          </div>
+        </div>
+        <div style={{ textAlign: 'right', fontSize: 9, color: '#94a3b8', lineHeight: 1.7 }}>
+          <div style={{ fontWeight: 600, color: '#64748b' }}>Confidential — Internal Use Only</div>
+          <div>Generated: {now}</div>
+        </div>
+      </div>
+      {/* Navy title band */}
+      <div style={{ background: '#0B2E59', color: '#fff', padding: '7px 14px', borderRadius: 4, marginBottom: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1 }}>{title}</div>
+        {subtitle && <div style={{ fontSize: 9, color: '#93c5fd', marginTop: 2 }}>{subtitle}</div>}
+      </div>
+      {/* Metadata row */}
+      {meta.filter(([, v]) => v).length > 0 && (
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', gap: 20, fontSize: 9, color: '#475569',
+          borderBottom: '1px solid #e2e8f0', paddingBottom: 8, marginBottom: 10,
+        }}>
+          {meta.filter(([, v]) => v).map(([k, v]) => (
+            <span key={k}><span style={{ fontWeight: 700, color: '#1e293b' }}>{k}:</span> {v}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Synthetic row for cost-head spend (mainly material POs) that isn't tied to
 // one specific BOQ item — see boq-budget.routes.js. It has no real budget to
 // set, so its cells render read-only instead of going through the save API.
@@ -302,7 +353,10 @@ function CostHeadMonthlyTab({ projectId, projectName }) {
   const handlePrint = useReactToPrint({
     contentRef: printRef,
     documentTitle: `Monthly_Analysis_${projectName || projectId}`,
-    pageStyle: '@page { size: A4 landscape; margin: 12mm; } body { font-size: 10px; }',
+    pageStyle: `
+      @page { size: A4 landscape; margin: 10mm; }
+      @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; font-size: 10px; } }
+    `,
   });
 
   const { data: resp, isLoading } = useQuery({
@@ -396,12 +450,16 @@ function CostHeadMonthlyTab({ projectId, projectName }) {
         </div>
       </div>
       <div ref={printRef} className="overflow-x-auto">
-        {/* Print-only header */}
-        <div className="hidden print:block px-6 pt-4 pb-2 border-b border-slate-200">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">BCIM Engineering</p>
-          <h2 className="text-base font-bold text-slate-800">{projectName} — Monthly Cost Head Expenditure Analysis</h2>
-          <p className="text-xs text-slate-400">Generated: {new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })}</p>
-        </div>
+        <BOQPrintHeader
+          title="Monthly Cost Head Expenditure Analysis"
+          subtitle="All paid transactions grouped by month — cost head × month matrix for project analysis"
+          meta={[
+            ['Project', projectName],
+            ['Period', months.length > 0 ? `${fmtMonth(months[0])} – ${fmtMonth(months[months.length - 1])}` : '—'],
+            ['Total Paid', grandTotal > 0 ? `₹${Math.round(grandTotal).toLocaleString('en-IN')}` : '—'],
+            ['Months', String(months.length)],
+          ]}
+        />
         <table className="text-xs w-full min-w-max">
           <thead>
             <tr className="bg-[#0B2E59] text-white">
@@ -462,7 +520,10 @@ function CostHeadBudgetTab({ projectId, projectName }) {
   const handlePrintBudget = useReactToPrint({
     contentRef: printBudgetRef,
     documentTitle: `Cost_Head_Budget_${projectName || projectId}`,
-    pageStyle: '@page { size: A4 portrait; margin: 14mm; }',
+    pageStyle: `
+      @page { size: A4 portrait; margin: 10mm; }
+      @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+    `,
   });
 
   const { data: summaryResp, isLoading } = useQuery({
@@ -542,15 +603,16 @@ function CostHeadBudgetTab({ projectId, projectName }) {
         </div>
       </div>
       <div ref={printBudgetRef}>
-        {/* Print-only header */}
-        <div className="hidden print:block px-6 pt-4 pb-2 border-b border-slate-200">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">BCIM Engineering</p>
-          <h2 className="text-base font-bold text-slate-800">{projectName} — Cost Head Budget vs Actual</h2>
-          <div className="flex gap-6 mt-1">
-            <p className="text-xs text-slate-500">Generated: {new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })}</p>
-            {totalBoqValue > 0 && <p className="text-xs text-slate-500">Total BOQ Value: ₹{Math.round(totalBoqValue).toLocaleString('en-IN')}</p>}
-          </div>
-        </div>
+        <BOQPrintHeader
+          title="Cost Head Budget vs Actual Expenditure"
+          subtitle="Allocated budget vs actual spend — advance, invoiced and balance by cost head"
+          meta={[
+            ['Project', projectName],
+            ['Total BOQ Value', totalBoqValue > 0 ? `₹${Math.round(totalBoqValue).toLocaleString('en-IN')}` : null],
+            ['Total Budget', totalBudget > 0 ? `₹${Math.round(totalBudget).toLocaleString('en-IN')}` : null],
+            ['Total Actual', totalActual > 0 ? `₹${Math.round(totalActual).toLocaleString('en-IN')}` : null],
+          ]}
+        />
       <table className="w-full text-sm">
         <thead>
           <tr className="bg-[#0B2E59] text-white text-xs">
@@ -851,6 +913,15 @@ export default function BOQBudgetBreakdownPage() {
   const selectedProject = projects.find(p => p.id === projectId);
   const printRef = useRef();
   const handlePrint = useReactToPrint({ contentRef: printRef, documentTitle: `BOQ_${selectedProject?.name || 'Summary'}` });
+  const breakdownPrintRef = useRef();
+  const handlePrintBreakdown = useReactToPrint({
+    contentRef: breakdownPrintRef,
+    documentTitle: `Budget_Breakdown_${selectedProject?.name || projectId}`,
+    pageStyle: `
+      @page { size: A4 landscape; margin: 10mm; }
+      @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+    `,
+  });
   const [view, setView] = useState('breakdown'); // 'breakdown' | 'summary'
 
   const chapterBudgetMutation = useMutation({
@@ -1026,8 +1097,19 @@ export default function BOQBudgetBreakdownPage() {
 
             {/* Master list */}
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+              {/* Title + Print button */}
+              <div className="px-5 py-3 bg-slate-100 border-b border-slate-200 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-700">BOQ Budget Breakdown</h3>
+                  <p className="text-[11px] text-slate-400">Click any row to expand cost-head detail · Budget cells are editable</p>
+                </div>
+                <button onClick={handlePrintBreakdown}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition">
+                  <Printer className="w-3.5 h-3.5" /> Print
+                </button>
+              </div>
               {/* Column header */}
-              <div className="grid grid-cols-[auto_90px_1fr_repeat(5,minmax(0,1fr))_90px] gap-2 items-center px-4 py-3 bg-slate-100 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              <div className="grid grid-cols-[auto_90px_1fr_repeat(5,minmax(0,1fr))_90px] gap-2 items-center px-4 py-3 bg-slate-50 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wide text-slate-500">
                 <span className="w-4" />
                 <span>Item No</span>
                 <span>Description</span>
@@ -1148,7 +1230,7 @@ export default function BOQBudgetBreakdownPage() {
         )}
       </div>
 
-      {/* Hidden print zone — Page 1 summary + Page 2 detailed items */}
+      {/* Hidden print zone — BOQ Summary + Bill of Quantities */}
       <div style={{ display: 'none' }}>
         <div ref={printRef}>
           <BOQSummaryPrintTemplate
@@ -1158,6 +1240,96 @@ export default function BOQBudgetBreakdownPage() {
             totals={summaryTotals}
             gstPct={GST_PCT}
           />
+        </div>
+      </div>
+
+      {/* Hidden print zone — Budget Breakdown (item-level) */}
+      <div style={{ display: 'none' }}>
+        <div ref={breakdownPrintRef} style={{ fontFamily: 'Arial, sans-serif', padding: 4 }}>
+          <BOQPrintHeader
+            title="BOQ Budget Breakdown Report"
+            subtitle="Item-level budget allocation vs advance, invoiced spend and balance"
+            meta={[
+              ['Project', selectedProject?.name || ''],
+              ['Total BOQ Value', inr(totals.boq)],
+              ['Total Budgeted', totals.budgeted > 0 ? inr(totals.budgeted) : 'Not set'],
+              ['Total Balance', inr(totals.balance)],
+              ['Items', String(items.length)],
+            ]}
+          />
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 9 }}>
+            <thead>
+              <tr style={{ background: '#0B2E59', color: '#fff' }}>
+                <th style={{ padding: '6px 8px', textAlign: 'left', width: 70 }}>Item No</th>
+                <th style={{ padding: '6px 8px', textAlign: 'left' }}>Description of Works</th>
+                <th style={{ padding: '6px 8px', textAlign: 'right', width: 95 }}>BOQ Value</th>
+                <th style={{ padding: '6px 8px', textAlign: 'right', width: 95 }}>Budgeted</th>
+                <th style={{ padding: '6px 8px', textAlign: 'right', width: 85 }}>Advance</th>
+                <th style={{ padding: '6px 8px', textAlign: 'right', width: 85 }}>Invoiced</th>
+                <th style={{ padding: '6px 8px', textAlign: 'right', width: 85 }}>Balance</th>
+                <th style={{ padding: '6px 8px', textAlign: 'center', width: 55 }}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {itemsByChapter.map((ch) => {
+                const chBoq      = ch.items.reduce((s, i) => s + i.amount,    0);
+                const chBudgeted = ch.items.reduce((s, i) => s + i.budgeted,  0);
+                const chBalance  = ch.items.reduce((s, i) => s + i.balance,   0);
+                return (
+                  <React.Fragment key={ch.key}>
+                    {/* Chapter header row */}
+                    <tr style={{ background: '#1e4d8c', color: '#fff' }}>
+                      <td colSpan={2} style={{ padding: '5px 8px', fontWeight: 700, fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.4 }}>{ch.name}</td>
+                      <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700 }}>{inr(chBoq)}</td>
+                      <td style={{ padding: '5px 8px', textAlign: 'right' }}>{chBudgeted > 0 ? inr(chBudgeted) : '—'}</td>
+                      <td style={{ padding: '5px 8px', textAlign: 'right', color: '#c4b5fd' }}>—</td>
+                      <td style={{ padding: '5px 8px', textAlign: 'right', color: '#6ee7b7' }}>—</td>
+                      <td style={{ padding: '5px 8px', textAlign: 'right' }}>{chBudgeted > 0 ? inr(chBalance) : '—'}</td>
+                      <td />
+                    </tr>
+                    {/* Item rows */}
+                    {ch.items.map((item, ii) => (
+                      <tr key={item.id} style={{ background: ii % 2 === 0 ? '#fff' : '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '4px 8px', fontFamily: 'monospace', color: '#4338ca', fontWeight: 700 }}>{item.item_no}</td>
+                        <td style={{ padding: '4px 8px', color: '#334155' }}>{item.description}</td>
+                        <td style={{ padding: '4px 8px', textAlign: 'right', color: '#1e293b', fontWeight: 600 }}>{inr(item.amount)}</td>
+                        <td style={{ padding: '4px 8px', textAlign: 'right', color: item.over ? '#dc2626' : item.allocated ? '#4338ca' : '#94a3b8' }}>
+                          {item.budgeted > 0 ? inr(item.budgeted) : '—'}
+                        </td>
+                        <td style={{ padding: '4px 8px', textAlign: 'right', color: '#7c3aed' }}>
+                          {item.advance > 0 ? inr(item.advance) : '—'}
+                        </td>
+                        <td style={{ padding: '4px 8px', textAlign: 'right', color: '#059669' }}>
+                          {item.invoiced > 0 ? inr(item.invoiced) : '—'}
+                        </td>
+                        <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 700, color: item.balance < 0 ? '#dc2626' : item.allocated ? '#059669' : '#94a3b8' }}>
+                          {item.allocated || item.advance > 0 || item.invoiced > 0 ? inr(item.balance) : '—'}
+                        </td>
+                        <td style={{ padding: '4px 8px', textAlign: 'center' }}>
+                          {!item.allocated
+                            ? <span style={{ background: '#fef3c7', color: '#b45309', padding: '1px 5px', borderRadius: 10, fontWeight: 700, fontSize: 8 }}>Not set</span>
+                            : item.over
+                              ? <span style={{ background: '#fee2e2', color: '#dc2626', padding: '1px 5px', borderRadius: 10, fontWeight: 700, fontSize: 8 }}>Over</span>
+                              : <span style={{ background: '#dcfce7', color: '#059669', padding: '1px 5px', borderRadius: 10, fontWeight: 700, fontSize: 8 }}>OK</span>
+                          }
+                        </td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
+              {/* Grand total row */}
+              <tr style={{ background: '#0f172a', color: '#fff', fontWeight: 700 }}>
+                <td colSpan={2} style={{ padding: '7px 8px', textTransform: 'uppercase', letterSpacing: 0.5 }}>Grand Total</td>
+                <td style={{ padding: '7px 8px', textAlign: 'right' }}>{inr(totals.boq)}</td>
+                <td style={{ padding: '7px 8px', textAlign: 'right', color: '#a5b4fc' }}>{inr(totals.budgeted)}</td>
+                <td style={{ padding: '7px 8px', textAlign: 'right', color: '#c4b5fd' }}>{inr(totals.advance)}</td>
+                <td style={{ padding: '7px 8px', textAlign: 'right', color: '#6ee7b7' }}>{inr(totals.invoiced)}</td>
+                <td style={{ padding: '7px 8px', textAlign: 'right', color: totals.balance < 0 ? '#fca5a5' : '#6ee7b7' }}>{inr(totals.balance)}</td>
+                <td />
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
