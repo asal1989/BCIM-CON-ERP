@@ -220,11 +220,15 @@ function CostHeadDetail({ item, costHeads, mode, onSave }) {
     const budget   = num(cell.amount);
     const advance  = num(cell.advance);
     const invoiced = num(cell.invoiced);
-    const spent    = advance + invoiced;
+    const prorated = num(cell.prorated);
+    const spent    = advance + invoiced + prorated;
     const balance  = budget - spent;
     const over     = spent > budget + 0.01;
     const active   = budget > 0 || spent > 0;
-    return { h, cell, budget, advance, invoiced, spent, balance, over, active };
+    // "spent" is pro-rated (estimated by budget share) when there is no directly
+    // tagged advance/invoiced for this head — flag it so the number reads honestly.
+    const estimated = prorated > 0 && advance === 0 && invoiced === 0;
+    return { h, cell, budget, advance, invoiced, prorated, spent, balance, over, active, estimated };
   });
   const active = rows.filter(r => r.active);
   const empty  = rows.filter(r => !r.active);
@@ -243,14 +247,13 @@ function CostHeadDetail({ item, costHeads, mode, onSave }) {
           />
         )}
       </td>
-      <td className="px-3 py-2 text-right text-purple-600 font-medium">
-        {r.advance > 0 ? inr(r.advance) : <span className="text-slate-300">—</span>}
-      </td>
-      <td className="px-3 py-2 text-right text-emerald-600 font-medium">
-        {r.invoiced > 0 ? inr(r.invoiced) : <span className="text-slate-300">—</span>}
-      </td>
       <td className="px-3 py-2 text-right font-semibold text-slate-700">
-        {r.spent > 0 ? inr(r.spent) : <span className="text-slate-300">—</span>}
+        {r.spent > 0 ? (
+          <span className="inline-flex items-center gap-1 justify-end">
+            {r.estimated && <span title="Estimated — pro-rated by budget share" className="text-[9px] font-bold text-amber-500">≈</span>}
+            {inr(r.spent)}
+          </span>
+        ) : <span className="text-slate-300">—</span>}
       </td>
       <td className={clsx('px-3 py-2 text-right font-bold', r.balance < 0 ? 'text-rose-600' : r.budget > 0 ? 'text-emerald-600' : 'text-slate-300')}>
         {r.budget > 0 || r.spent > 0 ? inr(r.balance) : '—'}
@@ -273,8 +276,6 @@ function CostHeadDetail({ item, costHeads, mode, onSave }) {
             <tr className="bg-slate-100 border-b border-slate-200 text-[10px] uppercase tracking-wide text-slate-500 font-bold">
               <th className="px-3 py-2 text-left">Cost Head</th>
               <th className="px-3 py-2 text-right">Budget</th>
-              <th className="px-3 py-2 text-right text-purple-500">Advance</th>
-              <th className="px-3 py-2 text-right text-emerald-600">Invoiced</th>
               <th className="px-3 py-2 text-right">Spent</th>
               <th className="px-3 py-2 text-right">Balance</th>
             </tr>
@@ -282,7 +283,7 @@ function CostHeadDetail({ item, costHeads, mode, onSave }) {
           <tbody>
             {active.map(r => <Row key={r.h} r={r} dim={false} />)}
             {active.length > 0 && empty.length > 0 && (
-              <tr><td colSpan={6} className="px-3 py-1.5 bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400 font-bold">Unallocated cost heads</td></tr>
+              <tr><td colSpan={4} className="px-3 py-1.5 bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400 font-bold">Unallocated cost heads</td></tr>
             )}
             {empty.map(r => <Row key={r.h} r={r} dim />)}
           </tbody>
@@ -1310,17 +1311,18 @@ export default function BOQBudgetBreakdownPage() {
       .filter(it => !search ||
         [it.item_no, it.description].some(v => v?.toLowerCase().includes(search.toLowerCase())))
       .map(it => {
-        let budgeted = 0, advance = 0, invoiced = 0;
+        let budgeted = 0, advance = 0, invoiced = 0, prorated = 0;
         for (const h of costHeads) {
           const c = it.breakdown?.[h] || {};
           budgeted += num(c.amount);
           advance  += num(c.advance);
           invoiced += num(c.invoiced);
+          prorated += num(c.prorated);
         }
-        const spent = advance + invoiced;
+        const spent = advance + invoiced + prorated;
         const amount = num(it.amount);
         return {
-          ...it, amount, budgeted, advance, invoiced, spent,
+          ...it, amount, budgeted, advance, invoiced, prorated, spent,
           balance: budgeted - spent,
           over: budgeted > amount + 0.01,
           allocated: budgeted > 0,
@@ -1333,10 +1335,11 @@ export default function BOQBudgetBreakdownPage() {
     budgeted: t.budgeted + it.budgeted,
     advance:  t.advance + it.advance,
     invoiced: t.invoiced + it.invoiced,
+    prorated: t.prorated + it.prorated,
     spent:    t.spent + it.spent,
     balance:  t.balance + it.balance,
     allocated: t.allocated + (it.allocated ? 1 : 0),
-  }), { boq: 0, budgeted: 0, advance: 0, invoiced: 0, spent: 0, balance: 0, allocated: 0 }), [items]);
+  }), { boq: 0, budgeted: 0, advance: 0, invoiced: 0, prorated: 0, spent: 0, balance: 0, allocated: 0 }), [items]);
 
   const toggle = (id) => setExpanded(e => ({ ...e, [id]: !e[id] }));
 
@@ -1607,11 +1610,10 @@ export default function BOQBudgetBreakdownPage() {
             {view === 'breakdown' && (
             <>
             {/* Summary KPIs */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <ThemeKpiCard icon={IndianRupee} label="BOQ Value"     value={inr(totals.boq)}      color="blue"    sub="Total contract value" />
               <ThemeKpiCard icon={Wallet}      label="Budgeted"      value={inr(totals.budgeted)} color="slate"   sub={`${totals.allocated}/${items.length} items allocated`} />
-              <ThemeKpiCard icon={IndianRupee} label="Advance Paid"  value={inr(totals.advance)}  color="amber"   sub="Paid to vendors" />
-              <ThemeKpiCard icon={IndianRupee} label="Invoiced"      value={inr(totals.invoiced)} color="emerald" sub="Billed actuals" />
+              <ThemeKpiCard icon={IndianRupee} label="Spent"         value={inr(totals.spent)}    color="amber"   sub={totals.prorated > 0 ? 'Incl. pro-rated spend' : 'Advance + invoiced'} />
               <ThemeKpiCard icon={CheckCircle2} label="Budget Balance" value={inr(totals.balance)} color={totals.balance >= 0 ? 'emerald' : 'red'} sub="Budget minus spent" />
             </div>
 
@@ -1621,7 +1623,7 @@ export default function BOQBudgetBreakdownPage() {
               <div className="px-5 py-3 bg-slate-100 border-b border-slate-200 flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-bold text-slate-700">BOQ Budget Breakdown</h3>
-                  <p className="text-[11px] text-slate-400">Click any row to expand cost-head detail · Budget cells are editable</p>
+                  <p className="text-[11px] text-slate-400">Click any row to expand cost-head detail · Budget cells are editable · <span className="text-amber-600">Spend not line-tagged to a BOQ item is pro-rated by budget share (≈)</span></p>
                 </div>
                 <button onClick={handlePrintBreakdown}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition">
@@ -1629,14 +1631,13 @@ export default function BOQBudgetBreakdownPage() {
                 </button>
               </div>
               {/* Column header */}
-              <div className="grid grid-cols-[auto_90px_1fr_repeat(5,minmax(0,1fr))_90px] gap-2 items-center px-4 py-3 bg-slate-50 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              <div className="grid grid-cols-[auto_90px_1fr_repeat(4,minmax(0,1fr))_90px] gap-2 items-center px-4 py-3 bg-slate-50 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wide text-slate-500">
                 <span className="w-4" />
                 <span>Item No</span>
                 <span>Description</span>
                 <span className="text-right">BOQ Value</span>
-                <span className="text-right">Budgeted</span>
-                <span className="text-right text-purple-500">Advance</span>
-                <span className="text-right text-emerald-600">Invoiced</span>
+                <span className="text-right">Budget</span>
+                <span className="text-right">Spent</span>
                 <span className="text-right">Balance</span>
                 <span className="text-right">Status</span>
               </div>
@@ -1651,18 +1652,18 @@ export default function BOQBudgetBreakdownPage() {
                 {itemsByChapter.map(ch => {
                   const chBoq      = ch.items.reduce((s, i) => s + i.amount, 0);
                   const chBudgeted = ch.items.reduce((s, i) => s + i.budgeted, 0);
+                  const chSpent    = ch.items.reduce((s, i) => s + i.spent, 0);
                   const chBalance  = ch.items.reduce((s, i) => s + i.balance, 0);
                   return (
                     <div key={ch.key}>
                       {/* Chapter header */}
-                      <div className="grid grid-cols-[auto_90px_1fr_repeat(5,minmax(0,1fr))_90px] gap-2 items-center px-4 py-2 bg-[#0B2E59] text-white text-[10px] font-bold uppercase tracking-wide">
+                      <div className="grid grid-cols-[auto_90px_1fr_repeat(4,minmax(0,1fr))_90px] gap-2 items-center px-4 py-2 bg-[#0B2E59] text-white text-[10px] font-bold uppercase tracking-wide">
                         <span className="w-4" />
                         <span className="col-span-2">{ch.name}</span>
                         <span className="text-right">{inr(chBoq)}</span>
                         <span className={clsx('text-right', chBudgeted > 0 ? 'text-indigo-200' : 'text-slate-400')}>{chBudgeted > 0 ? inr(chBudgeted) : '—'}</span>
-                        <span className="text-right text-purple-300">—</span>
-                        <span className="text-right text-emerald-300">—</span>
-                        <span className={clsx('text-right', chBalance < 0 ? 'text-rose-300' : 'text-emerald-300')}>{chBudgeted > 0 ? inr(chBalance) : '—'}</span>
+                        <span className={clsx('text-right', chSpent > 0 ? 'text-amber-200' : 'text-slate-400')}>{chSpent > 0 ? inr(chSpent) : '—'}</span>
+                        <span className={clsx('text-right', chBalance < 0 ? 'text-rose-300' : 'text-emerald-300')}>{chBudgeted > 0 || chSpent > 0 ? inr(chBalance) : '—'}</span>
                         <span />
                       </div>
 
@@ -1671,7 +1672,7 @@ export default function BOQBudgetBreakdownPage() {
                         return (
                           <div key={item.id}>
                             <button onClick={() => toggle(item.id)}
-                              className={clsx('w-full grid grid-cols-[auto_90px_1fr_repeat(5,minmax(0,1fr))_90px] gap-2 items-center px-4 py-3 text-xs text-left hover:bg-slate-50 transition',
+                              className={clsx('w-full grid grid-cols-[auto_90px_1fr_repeat(4,minmax(0,1fr))_90px] gap-2 items-center px-4 py-3 text-xs text-left hover:bg-slate-50 transition',
                                 isOpen && 'bg-indigo-50/40')}>
                               <span className="w-4 text-slate-400">
                                 {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
@@ -1682,8 +1683,7 @@ export default function BOQBudgetBreakdownPage() {
                               <span className={clsx('text-right font-semibold', item.over ? 'text-rose-600' : item.allocated ? 'text-indigo-700' : 'text-slate-300')}>
                                 {item.budgeted > 0 ? inr(item.budgeted) : '—'}
                               </span>
-                              <span className="text-right font-medium text-purple-600">{item.advance > 0 ? inr(item.advance) : <span className="text-slate-300">—</span>}</span>
-                              <span className="text-right font-medium text-emerald-600">{item.invoiced > 0 ? inr(item.invoiced) : <span className="text-slate-300">—</span>}</span>
+                              <span className="text-right font-medium text-amber-600">{item.spent > 0 ? inr(item.spent) : <span className="text-slate-300">—</span>}</span>
                               <span className={clsx('text-right font-bold', item.balance < 0 ? 'text-rose-600' : item.allocated ? 'text-emerald-600' : 'text-slate-300')}>
                                 {item.allocated || item.spent > 0 ? inr(item.balance) : '—'}
                               </span>
@@ -1710,7 +1710,7 @@ export default function BOQBudgetBreakdownPage() {
                   return (
                     <div key={item.id}>
                       <button onClick={() => toggle(item.id)}
-                        className={clsx('w-full grid grid-cols-[auto_90px_1fr_repeat(5,minmax(0,1fr))_90px] gap-2 items-center px-4 py-3 text-xs text-left hover:bg-slate-50 transition italic bg-slate-50/60',
+                        className={clsx('w-full grid grid-cols-[auto_90px_1fr_repeat(4,minmax(0,1fr))_90px] gap-2 items-center px-4 py-3 text-xs text-left hover:bg-slate-50 transition italic bg-slate-50/60',
                           isOpen && 'bg-indigo-50/40')}>
                         <span className="w-4 text-slate-400">
                           {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
@@ -1719,8 +1719,7 @@ export default function BOQBudgetBreakdownPage() {
                         <span className="text-slate-700 font-medium truncate pr-2" title={item.description}>{item.description}</span>
                         <span className="text-right font-semibold text-slate-300">—</span>
                         <span className="text-slate-300 text-right">—</span>
-                        <span className="text-right font-medium text-purple-600">{item.advance > 0 ? inr(item.advance) : <span className="text-slate-300">—</span>}</span>
-                        <span className="text-right font-medium text-emerald-600">{item.invoiced > 0 ? inr(item.invoiced) : <span className="text-slate-300">—</span>}</span>
+                        <span className="text-right font-medium text-amber-600">{item.spent > 0 ? inr(item.spent) : <span className="text-slate-300">—</span>}</span>
                         <span className="text-slate-300 text-right">—</span>
                         <span className="text-right"><span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Unlinked</span></span>
                       </button>
@@ -1732,13 +1731,12 @@ export default function BOQBudgetBreakdownPage() {
 
               {/* Grand total footer */}
               {items.length > 0 && (
-                <div className="grid grid-cols-[auto_90px_1fr_repeat(5,minmax(0,1fr))_90px] gap-2 items-center px-4 py-3 bg-slate-900 text-xs">
+                <div className="grid grid-cols-[auto_90px_1fr_repeat(4,minmax(0,1fr))_90px] gap-2 items-center px-4 py-3 bg-slate-900 text-xs">
                   <span className="w-4" />
                   <span className="font-bold text-white uppercase tracking-wide col-span-2">Grand Total</span>
                   <span className="text-right font-bold text-white">{inr(totals.boq)}</span>
                   <span className="text-right font-bold text-indigo-300">{inr(totals.budgeted)}</span>
-                  <span className="text-right font-bold text-purple-300">{inr(totals.advance)}</span>
-                  <span className="text-right font-bold text-emerald-300">{inr(totals.invoiced)}</span>
+                  <span className="text-right font-bold text-amber-300">{inr(totals.spent)}</span>
                   <span className={clsx('text-right font-bold', totals.balance < 0 ? 'text-rose-400' : 'text-emerald-300')}>{inr(totals.balance)}</span>
                   <span />
                 </div>
@@ -1770,7 +1768,7 @@ export default function BOQBudgetBreakdownPage() {
         <div ref={breakdownPrintRef} style={{ fontFamily: 'Arial, sans-serif', padding: 4 }}>
           <BOQPrintHeader
             title="BOQ Budget Breakdown Report"
-            subtitle="Item-level budget allocation vs advance, invoiced spend and balance"
+            subtitle="Item-level budget vs spend and balance · spend not line-tagged to a BOQ item is pro-rated by budget share"
             projectName={selectedProject?.name || ''}
             projectAddress={projectAddress}
             clientName={clientName}
@@ -1787,10 +1785,9 @@ export default function BOQBudgetBreakdownPage() {
                 <th style={{ padding: '6px 8px', textAlign: 'left', width: 70 }}>Item No</th>
                 <th style={{ padding: '6px 8px', textAlign: 'left' }}>Description of Works</th>
                 <th style={{ padding: '6px 8px', textAlign: 'right', width: 95 }}>BOQ Value</th>
-                <th style={{ padding: '6px 8px', textAlign: 'right', width: 95 }}>Budgeted</th>
-                <th style={{ padding: '6px 8px', textAlign: 'right', width: 85 }}>Advance</th>
-                <th style={{ padding: '6px 8px', textAlign: 'right', width: 85 }}>Invoiced</th>
-                <th style={{ padding: '6px 8px', textAlign: 'right', width: 85 }}>Balance</th>
+                <th style={{ padding: '6px 8px', textAlign: 'right', width: 95 }}>Budget</th>
+                <th style={{ padding: '6px 8px', textAlign: 'right', width: 95 }}>Spent</th>
+                <th style={{ padding: '6px 8px', textAlign: 'right', width: 95 }}>Balance</th>
                 <th style={{ padding: '6px 8px', textAlign: 'center', width: 55 }}>Status</th>
               </tr>
             </thead>
@@ -1798,6 +1795,7 @@ export default function BOQBudgetBreakdownPage() {
               {itemsByChapter.map((ch) => {
                 const chBoq      = ch.items.reduce((s, i) => s + i.amount,    0);
                 const chBudgeted = ch.items.reduce((s, i) => s + i.budgeted,  0);
+                const chSpent    = ch.items.reduce((s, i) => s + i.spent,     0);
                 const chBalance  = ch.items.reduce((s, i) => s + i.balance,   0);
                 return (
                   <React.Fragment key={ch.key}>
@@ -1806,9 +1804,8 @@ export default function BOQBudgetBreakdownPage() {
                       <td colSpan={2} style={{ padding: '5px 8px', fontWeight: 700, fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.4 }}>{ch.name}</td>
                       <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700 }}>{inr(chBoq)}</td>
                       <td style={{ padding: '5px 8px', textAlign: 'right' }}>{chBudgeted > 0 ? inr(chBudgeted) : '—'}</td>
-                      <td style={{ padding: '5px 8px', textAlign: 'right', color: '#c4b5fd' }}>—</td>
-                      <td style={{ padding: '5px 8px', textAlign: 'right', color: '#6ee7b7' }}>—</td>
-                      <td style={{ padding: '5px 8px', textAlign: 'right' }}>{chBudgeted > 0 ? inr(chBalance) : '—'}</td>
+                      <td style={{ padding: '5px 8px', textAlign: 'right', color: '#fcd34d' }}>{chSpent > 0 ? inr(chSpent) : '—'}</td>
+                      <td style={{ padding: '5px 8px', textAlign: 'right' }}>{chBudgeted > 0 || chSpent > 0 ? inr(chBalance) : '—'}</td>
                       <td />
                     </tr>
                     {/* Item rows */}
@@ -1820,14 +1817,11 @@ export default function BOQBudgetBreakdownPage() {
                         <td style={{ padding: '4px 8px', textAlign: 'right', color: item.over ? '#dc2626' : item.allocated ? '#4338ca' : '#94a3b8' }}>
                           {item.budgeted > 0 ? inr(item.budgeted) : '—'}
                         </td>
-                        <td style={{ padding: '4px 8px', textAlign: 'right', color: '#7c3aed' }}>
-                          {item.advance > 0 ? inr(item.advance) : '—'}
-                        </td>
-                        <td style={{ padding: '4px 8px', textAlign: 'right', color: '#059669' }}>
-                          {item.invoiced > 0 ? inr(item.invoiced) : '—'}
+                        <td style={{ padding: '4px 8px', textAlign: 'right', color: '#b45309' }}>
+                          {item.spent > 0 ? inr(item.spent) : '—'}
                         </td>
                         <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 700, color: item.balance < 0 ? '#dc2626' : item.allocated ? '#059669' : '#94a3b8' }}>
-                          {item.allocated || item.advance > 0 || item.invoiced > 0 ? inr(item.balance) : '—'}
+                          {item.allocated || item.spent > 0 ? inr(item.balance) : '—'}
                         </td>
                         <td style={{ padding: '4px 8px', textAlign: 'center' }}>
                           {!item.allocated
@@ -1847,8 +1841,7 @@ export default function BOQBudgetBreakdownPage() {
                 <td colSpan={2} style={{ padding: '7px 8px', textTransform: 'uppercase', letterSpacing: 0.5 }}>Grand Total</td>
                 <td style={{ padding: '7px 8px', textAlign: 'right' }}>{inr(totals.boq)}</td>
                 <td style={{ padding: '7px 8px', textAlign: 'right', color: '#a5b4fc' }}>{inr(totals.budgeted)}</td>
-                <td style={{ padding: '7px 8px', textAlign: 'right', color: '#c4b5fd' }}>{inr(totals.advance)}</td>
-                <td style={{ padding: '7px 8px', textAlign: 'right', color: '#6ee7b7' }}>{inr(totals.invoiced)}</td>
+                <td style={{ padding: '7px 8px', textAlign: 'right', color: '#fcd34d' }}>{inr(totals.spent)}</td>
                 <td style={{ padding: '7px 8px', textAlign: 'right', color: totals.balance < 0 ? '#fca5a5' : '#6ee7b7' }}>{inr(totals.balance)}</td>
                 <td />
               </tr>

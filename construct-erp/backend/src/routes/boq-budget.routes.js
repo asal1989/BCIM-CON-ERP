@@ -202,24 +202,71 @@ router.get('/:project_id', async (req, res) => {
     addActual(spcActuals.rows, false);
     addActual(advanceActuals.rows, true);
 
+    // ── Pro-rata attribution (Option A) ──────────────────────────────────────
+    // Spend that isn't tied to a specific BOQ item (material POs / TQS bills
+    // tagged by cost head only) is distributed across BOQ items so the BOQ-wise
+    // view shows expenditure per item even when source transactions aren't
+    // line-tagged. Distribution basis, in order of preference:
+    //   1. each item's BUDGET in the SAME cost head (most precise), else
+    //   2. each item's TOTAL budget share (budgets are often all under one head
+    //      like "Sub Con" while spend lands under material heads), else
+    //   3. each item's BOQ value share (when no budgets exist at all).
+    // It is an estimate per item, but every cost head's total — and the project
+    // grand total — reconciles exactly (nothing is created or lost). Heads with
+    // no basis to distribute against stay in the unlinked row below.
+    const itemIds = items.rows.map(r => r.id);
+    const itemAmount = {};
+    items.rows.forEach(r => { itemAmount[r.id] = parseFloat(r.amount) || 0; });
+    const itemTotalBudget = {};
+    for (const id of itemIds) {
+      let t = 0;
+      const hb = byItem[id] || {};
+      for (const h of Object.keys(hb)) t += parseFloat(hb[h]?.amount) || 0;
+      itemTotalBudget[id] = t;
+    }
+    const grandBudget = itemIds.reduce((s, id) => s + itemTotalBudget[id], 0);
+    const grandAmount = itemIds.reduce((s, id) => s + itemAmount[id], 0);
+
+    const remainderLevel = {};
+    for (const [head, cell] of Object.entries(projectLevel)) {
+      const untagged = (parseFloat(cell.invoiced) || 0) + (parseFloat(cell.advance) || 0);
+      if (untagged <= 0) continue;
+      let totalHeadBudget = 0;
+      for (const id of itemIds) totalHeadBudget += parseFloat(byItem[id]?.[head]?.amount) || 0;
+
+      let basisFn, totalBasis;
+      if (totalHeadBudget > 0)      { basisFn = id => parseFloat(byItem[id]?.[head]?.amount) || 0; totalBasis = totalHeadBudget; }
+      else if (grandBudget > 0)     { basisFn = id => itemTotalBudget[id]; totalBasis = grandBudget; }
+      else if (grandAmount > 0)     { basisFn = id => itemAmount[id];      totalBasis = grandAmount; }
+      else { remainderLevel[head] = cell; continue; }
+
+      for (const id of itemIds) {
+        const basis = basisFn(id);
+        if (basis <= 0) continue;
+        if (!byItem[id]) byItem[id] = {};
+        if (!byItem[id][head]) byItem[id][head] = { pct: 0, amount: 0, actual: 0, advance: 0, invoiced: 0 };
+        byItem[id][head].prorated = (byItem[id][head].prorated || 0) + untagged * (basis / totalBasis);
+      }
+    }
+
     const data = items.rows.map(item => ({
       ...item,
       breakdown: byItem[item.id] || {},
       unallocated_actual: unallocated[item.id] || 0,
     }));
 
-    if (Object.keys(projectLevel).length) {
+    if (Object.keys(remainderLevel).length) {
       data.push({
         id: 'project-level-unlinked',
         chapter_no: null,
         chapter_name: null,
         item_no: '—',
-        description: 'Unlinked material / procurement spend — cost-head spend not tied to a specific BOQ item',
+        description: 'Unlinked material / procurement spend — cost-head spend with no matching BOQ budget to distribute against',
         unit: null,
         quantity: null,
         rate: null,
         amount: 0,
-        breakdown: projectLevel,
+        breakdown: remainderLevel,
         unallocated_actual: 0,
       });
     }
