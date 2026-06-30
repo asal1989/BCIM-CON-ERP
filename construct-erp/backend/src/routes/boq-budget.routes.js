@@ -391,6 +391,21 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
       budgetMap[CONTINGENCY_HEAD] = totalBoqValue - baseBudget - budgetMap['Profit'];
     }
 
+    // Months elapsed since first paid transaction — used for monthly run-rate (EAC)
+    const firstTxnR = await query(`
+      SELECT MIN(txn_date)::date AS first_date FROM (
+        SELECT MIN(bill_date) AS txn_date FROM ra_bills WHERE project_id=$1 AND status IN ('certified','paid') AND bill_date IS NOT NULL
+        UNION ALL
+        SELECT MIN(inv_date)  AS txn_date FROM tqs_bills WHERE project_id=$1 AND workflow_status='paid' AND inv_date IS NOT NULL
+        UNION ALL
+        SELECT MIN(entry_date) AS txn_date FROM stores_petty_cash_entries WHERE project_id=$1 AND status='Approved' AND entry_date IS NOT NULL
+      ) d WHERE txn_date IS NOT NULL
+    `, [project_id]);
+    const firstDate = firstTxnR.rows[0]?.first_date;
+    const monthsElapsed = firstDate
+      ? Math.max(1, Math.round((Date.now() - new Date(firstDate).getTime()) / (30 * 24 * 3600 * 1000)))
+      : 1;
+
     // Build result for all known cost heads + any extra heads with actuals
     const allHeads = new Set([...BOQ_COST_HEADS, ...Object.keys(actualMap), ...Object.keys(budgetMap)]);
     const DERIVED_HEADS = new Set(['Profit', CONTINGENCY_HEAD]);
@@ -400,6 +415,7 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
       actual: actualMap[head] || 0,
       balance: (budgetMap[head] || 0) - (actualMap[head] || 0),
       derived: DERIVED_HEADS.has(head),
+      monthly_avg: parseFloat(((actualMap[head] || 0) / monthsElapsed).toFixed(2)),
     }));
 
     // Sort by BOQ_COST_HEADS order, then extras at end
@@ -412,7 +428,7 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
       return ia - ib;
     });
 
-    res.json({ data, total_boq_value: totalBoqValue });
+    res.json({ data, total_boq_value: totalBoqValue, months_elapsed: monthsElapsed });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -734,6 +750,124 @@ router.post('/:project_id/chapter-budget', async (req, res) => {
 
     res.json({ data: saved, items_updated: saved.length, total_budget: budget, cost_head });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /boq-budget/:project_id/send-budget-alert
+// Emails stephen@bcim.in and it@bcim.in with a summary of all cost heads
+// that are >= 80% of their budget or over budget.
+router.post('/:project_id/send-budget-alert', async (req, res) => {
+  try {
+    const { project_id } = req.params;
+    const proj = await query(
+      `SELECT p.id, p.name, p.client_name FROM projects p WHERE p.id=$1 AND p.company_id=$2`,
+      [project_id, req.user.company_id]
+    );
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) return res.status(403).json({ error: 'Access denied' });
+    const project = proj.rows[0];
+
+    // Re-run costhead summary inline (simplified — same sources as GET endpoint)
+    const budgets = await query(
+      `SELECT cost_head, budget_amount FROM project_costhead_budgets WHERE project_id=$1`, [project_id]
+    );
+    const raA   = await query(`SELECT rbi.cost_head, SUM(rbi.current_qty*rbi.rate) AS actual FROM ra_bill_items rbi JOIN ra_bills rb ON rb.id=rbi.ra_bill_id WHERE rb.project_id=$1 AND rb.status IN ('certified','paid') GROUP BY rbi.cost_head`, [project_id]);
+    const scA   = await query(`SELECT 'Sub Con' AS cost_head, SUM(bi.curr_qty*bi.rate) AS actual FROM sc_bill_items bi JOIN sc_bills sb ON sb.id=bi.bill_id WHERE sb.project_id=$1 AND sb.status NOT IN ('draft','rejected','queried')`, [project_id]);
+    const tqsA  = await query(`SELECT li.cost_head, SUM(li.basic_amount) AS actual FROM tqs_bill_line_items li JOIN tqs_bills tb ON tb.id=li.bill_id WHERE tb.project_id=$1 AND tb.workflow_status='paid' AND li.cost_head IS NOT NULL GROUP BY li.cost_head`, [project_id]);
+    const spcA  = await query(`SELECT 'Petty Cash' AS cost_head, SUM(amount) AS actual FROM stores_petty_cash_entries WHERE project_id=$1 AND status='Approved'`, [project_id]);
+    const advA  = await query(`SELECT 'Sub Con' AS cost_head, SUM(paid_amount) AS actual FROM tqs_advance_vouchers WHERE project_id=$1 AND is_deleted=false AND status IN ('issued','partial','recovered') AND paid_amount>0`, [project_id]);
+
+    const actualMap = {};
+    for (const rows of [raA.rows, scA.rows, tqsA.rows, spcA.rows, advA.rows]) {
+      for (const r of rows) {
+        if (!r.cost_head) continue;
+        actualMap[r.cost_head] = (actualMap[r.cost_head] || 0) + parseFloat(r.actual || 0);
+      }
+    }
+    const budgetMap = {};
+    for (const b of budgets.rows) budgetMap[b.cost_head] = parseFloat(b.budget_amount || 0);
+
+    // Build alert rows (heads with budget set and >= 80% used, or over budget)
+    const alertRows = BOQ_COST_HEADS
+      .map(head => ({
+        head,
+        budget: budgetMap[head] || 0,
+        actual: actualMap[head] || 0,
+        pct: budgetMap[head] > 0 ? ((actualMap[head] || 0) / budgetMap[head]) * 100 : 0,
+      }))
+      .filter(r => r.budget > 0 && r.pct >= 80)
+      .sort((a, b) => b.pct - a.pct);
+
+    if (!alertRows.length) {
+      return res.json({ sent: false, reason: 'No cost heads at or above 80% budget utilisation.' });
+    }
+
+    const fmt = (v) => '₹' + Math.round(v).toLocaleString('en-IN');
+    const rowsHtml = alertRows.map(r => {
+      const over   = r.pct > 100;
+      const near   = r.pct >= 80 && r.pct <= 100;
+      const color  = over ? '#fef2f2' : '#fffbeb';
+      const badge  = over
+        ? `<span style="background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;">OVER BUDGET</span>`
+        : `<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;">NEAR LIMIT</span>`;
+      return `
+        <tr style="background:${color};">
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;font-weight:600;">${r.head}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right;">${fmt(r.budget)}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:700;">${fmt(r.actual)}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:700;color:${over ? '#b91c1c' : '#92400e'};">${r.pct.toFixed(1)}%</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right;color:${over ? '#b91c1c' : '#78350f'};font-weight:600;">${fmt(r.actual - r.budget)}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${badge}</td>
+        </tr>`;
+    }).join('');
+
+    const generatedAt = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;">
+        <div style="height:4px;background:linear-gradient(90deg,#0B2E59,#2563eb);"></div>
+        <div style="padding:20px 24px;background:#0B2E59;color:#fff;">
+          <div style="font-size:20px;font-weight:900;">BCIM Engineering Pvt. Ltd.</div>
+          <div style="font-size:12px;color:#93c5fd;margin-top:4px;">Budget Alert — ${project.name}${project.client_name ? ' · ' + project.client_name : ''}</div>
+        </div>
+        <div style="padding:16px 24px;background:#fff;">
+          <p style="margin:0 0 12px;font-size:14px;color:#1e293b;">
+            The following cost heads have reached <strong>80% or more</strong> of their allocated budget and require your attention.
+          </p>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+              <tr style="background:#0B2E59;color:#fff;">
+                <th style="padding:8px 12px;text-align:left;">Cost Head</th>
+                <th style="padding:8px 12px;text-align:right;">Budget</th>
+                <th style="padding:8px 12px;text-align:right;">Actual Spend</th>
+                <th style="padding:8px 12px;text-align:right;">% Used</th>
+                <th style="padding:8px 12px;text-align:right;">Over by</th>
+                <th style="padding:8px 12px;text-align:left;">Status</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+          <p style="margin:16px 0 0;font-size:11px;color:#94a3b8;">Generated: ${generatedAt} · BCIM Construct-ERP · Confidential — Internal Use Only</p>
+        </div>
+      </div>`;
+
+    const { sendMail } = require('../services/mail.service');
+    const overCount  = alertRows.filter(r => r.pct > 100).length;
+    const nearCount  = alertRows.length - overCount;
+    const subjParts  = [];
+    if (overCount) subjParts.push(`${overCount} over budget`);
+    if (nearCount) subjParts.push(`${nearCount} near limit`);
+    const subject = `[Budget Alert] ${project.name} — ${subjParts.join(', ')}`;
+
+    const result = await sendMail({
+      to: ['stephen@bcim.in', 'it@bcim.in'],
+      subject,
+      html,
+    });
+
+    res.json({ sent: true, alert_count: alertRows.length, over_count: overCount, near_count: nearCount, result });
+  } catch (err) {
+    console.error('[send-budget-alert]', err);
     res.status(500).json({ error: err.message });
   }
 });

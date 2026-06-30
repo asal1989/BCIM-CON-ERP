@@ -7,7 +7,12 @@ import toast from 'react-hot-toast';
 import {
   Percent, IndianRupee, AlertTriangle, ChevronRight, ChevronDown,
   Search, Layers, CheckCircle2, Wallet, Printer, LayoutList, FileText, BarChart2, Download,
+  Bell, TrendingUp, Activity,
 } from 'lucide-react';
+import {
+  AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer, ReferenceLine,
+} from 'recharts';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import { boqBudgetAPI, projectAPI } from '../../api/client';
 import BOQSummaryPrintTemplate from './BOQSummaryPrintTemplate';
@@ -393,6 +398,7 @@ function CostHeadDrilldown({ projectId, costHead }) {
 
 // ─── Monthly Analysis Matrix (cost heads × months) ───────────────────────────
 function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName }) {
+  const [monthlyView, setMonthlyView] = useState('table'); // 'table' | 'scurve' | 'forecast'
   const printRef = useRef();
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -470,22 +476,69 @@ function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName
     URL.revokeObjectURL(url);
   };
 
+  // ── S-curve data: cumulative spend per month ──────────────────────────────
+  const scurveData = useMemo(() => {
+    let cumulative = 0;
+    return months.map(m => {
+      cumulative += monthTotals[m] || 0;
+      return { month: fmtMonth(m), monthly: Math.round(monthTotals[m] || 0), cumulative: Math.round(cumulative) };
+    });
+  }, [months, monthTotals]);
+
+  // ── Cash flow projection: trailing 3-month avg per head → next 3 months ───
+  const forecastData = useMemo(() => {
+    const last3 = months.slice(-3);
+    const nextMonths = [1, 2, 3].map(n => {
+      const d = new Date();
+      d.setMonth(d.getMonth() + n);
+      return d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+    });
+    const rows = BOQ_COST_HEADS_ORDER
+      .map(head => {
+        const trailing = last3.map(m => byMonthBreakdown[m]?.[head] || 0);
+        const avg = trailing.reduce((s, v) => s + v, 0) / Math.max(last3.length, 1);
+        return { head, trailing_avg: avg, projected: [avg, avg, avg] };
+      })
+      .filter(r => r.trailing_avg > 0);
+    const totalAvg = rows.reduce((s, r) => s + r.trailing_avg, 0);
+    return { rows, nextMonths, totalAvg };
+  }, [months, byMonthBreakdown, BOQ_COST_HEADS_ORDER]);
+
   if (isLoading) return <div className="py-16 text-center text-slate-400 text-sm">Loading…</div>;
   if (!months.length) return (
     <div className="py-16 text-center text-slate-400 text-sm">No paid expenditure records found for this project.</div>
   );
 
+  const VIEWS = [
+    { id: 'table',    label: 'Monthly Matrix', icon: LayoutList },
+    { id: 'scurve',   label: 'S-Curve',        icon: TrendingUp },
+    { id: 'forecast', label: 'Cash Forecast',  icon: Activity   },
+  ];
+
+  const fmtCrore = (v) => v >= 1e7 ? `₹${(v / 1e7).toFixed(2)}Cr` : v >= 1e5 ? `₹${(v / 1e5).toFixed(1)}L` : fmtAmt(v);
+
   return (
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-      <div className="px-5 py-3 bg-slate-100 border-b border-slate-200 flex items-center justify-between">
+      <div className="px-5 py-3 bg-slate-100 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h3 className="text-sm font-bold text-slate-700">Monthly Expenditure — Cost Head × Month</h3>
-          <p className="text-[11px] text-slate-400">All paid transactions grouped by month · Use for project analysis and trend review</p>
+          <h3 className="text-sm font-bold text-slate-700">Monthly Expenditure Analysis</h3>
+          <p className="text-[11px] text-slate-400">Period: {months.length > 0 ? `${fmtMonth(months[0])} – ${fmtMonth(months[months.length - 1])}` : '—'} · Total paid: {fmtAmt(grandTotal)}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* View toggle */}
+          {VIEWS.map(v => {
+            const Icon = v.icon;
+            return (
+              <button key={v.id} onClick={() => setMonthlyView(v.id)}
+                className={clsx('flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition',
+                  monthlyView === v.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50')}>
+                <Icon className="w-3.5 h-3.5" /> {v.label}
+              </button>
+            );
+          })}
           <button onClick={exportCSV}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition">
-            <Download className="w-3.5 h-3.5" /> Export CSV
+            <Download className="w-3.5 h-3.5" /> CSV
           </button>
           <button onClick={handlePrint}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition">
@@ -493,6 +546,91 @@ function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName
           </button>
         </div>
       </div>
+
+      {/* ── S-Curve view ─────────────────────────────────────────────────────── */}
+      {monthlyView === 'scurve' && (
+        <div className="p-5">
+          <p className="text-xs text-slate-500 mb-4">Cumulative spend (blue area) and monthly spend (green bars) across the project duration.</p>
+          <ResponsiveContainer width="100%" height={340}>
+            <AreaChart data={scurveData} margin={{ top: 10, right: 20, left: 20, bottom: 5 }}>
+              <defs>
+                <linearGradient id="cumulGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor="#2563eb" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#2563eb" stopOpacity={0.02} />
+                </linearGradient>
+                <linearGradient id="monthGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor="#10b981" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} />
+              <YAxis yAxisId="left"  tickFormatter={fmtCrore} tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} axisLine={false} />
+              <YAxis yAxisId="right" orientation="right" tickFormatter={fmtCrore} tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} />
+              <Tooltip
+                formatter={(v, name) => [fmtAmt(v), name]}
+                contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0' }}
+              />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Area yAxisId="left" type="monotone" dataKey="cumulative" name="Cumulative Spend" stroke="#2563eb" strokeWidth={2.5} fill="url(#cumulGrad)" dot={{ r: 3, fill: '#2563eb' }} />
+              <Area yAxisId="right" type="monotone" dataKey="monthly"    name="Monthly Spend"    stroke="#10b981" strokeWidth={1.5} fill="url(#monthGrad)" dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* ── Cash Flow Forecast view ───────────────────────────────────────────── */}
+      {monthlyView === 'forecast' && (
+        <div className="p-5">
+          <p className="text-xs text-slate-500 mb-1">
+            Projected spend for the next 3 months based on <strong>trailing 3-month average</strong> per cost head.
+            Actual outcomes may vary with project phase and procurement cycles.
+          </p>
+          <div className="mb-4 flex gap-4 text-xs text-slate-600">
+            <span>Trailing period: <strong>{months.slice(-3).map(fmtMonth).join(', ')}</strong></span>
+            <span>Projected total/month: <strong className="text-indigo-600">{fmtAmt(forecastData.totalAvg)}</strong></span>
+          </div>
+          <div className="rounded-xl border border-slate-200 overflow-hidden">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-[#0B2E59] text-white">
+                  <th className="px-4 py-2.5 text-left min-w-[180px]">Cost Head</th>
+                  <th className="px-4 py-2.5 text-right">3-Month Avg</th>
+                  {forecastData.nextMonths.map(m => (
+                    <th key={m} className="px-4 py-2.5 text-right text-blue-200">{m} <span className="text-[9px] opacity-60">(proj.)</span></th>
+                  ))}
+                  <th className="px-4 py-2.5 text-right">3-Month Proj. Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {forecastData.rows.map((r, i) => (
+                  <tr key={r.head} className={clsx('border-b border-slate-100', i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40')}>
+                    <td className="px-4 py-2 font-medium text-slate-700">{r.head}</td>
+                    <td className="px-4 py-2 text-right font-semibold text-slate-800">{fmtAmt(r.trailing_avg)}</td>
+                    {r.projected.map((v, j) => (
+                      <td key={j} className="px-4 py-2 text-right text-indigo-600 font-medium">{fmtAmt(v)}</td>
+                    ))}
+                    <td className="px-4 py-2 text-right font-bold text-slate-800">{fmtAmt(r.trailing_avg * 3)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-[#E4EFDC] font-bold border-t-2 border-slate-300">
+                  <td className="px-4 py-2.5 text-sm font-bold text-slate-800">Total</td>
+                  <td className="px-4 py-2.5 text-right text-sm text-emerald-700">{fmtAmt(forecastData.totalAvg)}</td>
+                  {[0, 1, 2].map(j => (
+                    <td key={j} className="px-4 py-2.5 text-right text-sm text-indigo-700 font-bold">{fmtAmt(forecastData.totalAvg)}</td>
+                  ))}
+                  <td className="px-4 py-2.5 text-right text-sm font-bold text-slate-900">{fmtAmt(forecastData.totalAvg * 3)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Monthly matrix table (default) ───────────────────────────────────── */}
+      {monthlyView === 'table' && (
       <div ref={printRef} className="overflow-x-auto">
         <BOQPrintHeader
           title="Monthly Cost Head Expenditure Analysis"
@@ -550,6 +688,7 @@ function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName
         </table>
         <BOQPrintFooter />
       </div>
+      )}
     </div>
   );
 }
@@ -578,8 +717,9 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
     queryFn: () => boqBudgetAPI.costheadSummary(projectId).then(r => r.data),
     enabled: !!projectId,
   });
-  const data = summaryResp?.data || [];
+  const data          = summaryResp?.data          || [];
   const totalBoqValue = summaryResp?.total_boq_value || 0;
+  const monthsElapsed = summaryResp?.months_elapsed  || 1;
 
   const saveMutation = useMutation({
     mutationFn: ({ cost_head, budget_amount }) =>
@@ -592,11 +732,26 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
     onError: (e) => toast.error(e?.response?.data?.error || 'Failed to save'),
   });
 
+  const alertMutation = useMutation({
+    mutationFn: () => boqBudgetAPI.sendBudgetAlert(projectId),
+    onSuccess: (res) => {
+      const d = res.data;
+      if (d.sent) toast.success(`Alert emailed — ${d.alert_count} head(s) flagged (${d.over_count} over, ${d.near_count} near limit)`);
+      else toast(`No alert sent: ${d.reason}`, { icon: 'ℹ️' });
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to send alert'),
+  });
+
   const commit = (cost_head) => {
     const n = parseFloat(editVal);
     if (isNaN(n) || n < 0) { toast.error('Enter a valid amount'); return; }
     saveMutation.mutate({ cost_head, budget_amount: n });
   };
+
+  // Heads at ≥80% or over budget (only those with a budget set)
+  const alertHeads     = data.filter(r => r.budget > 0 && r.actual / r.budget >= 0.8);
+  const overHeads      = alertHeads.filter(r => r.actual > r.budget);
+  const nearHeads      = alertHeads.filter(r => r.actual <= r.budget);
 
   const toggleExpand = (cost_head, hasActual) => {
     if (!hasActual) return;
@@ -630,6 +785,39 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
       {costheadView === 'monthly' && <CostHeadMonthlyTab projectId={projectId} projectName={projectName} projectAddress={projectAddress} clientName={clientName} />}
 
       {costheadView === 'summary' && (
+    <div className="space-y-3">
+
+      {/* ── Budget alert banner ── */}
+      {alertHeads.length > 0 && (
+        <div className={clsx(
+          'rounded-xl px-4 py-3 flex items-center justify-between gap-3 border',
+          overHeads.length > 0 ? 'bg-rose-50 border-rose-200' : 'bg-amber-50 border-amber-200'
+        )}>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <AlertTriangle size={16} className={overHeads.length > 0 ? 'text-rose-500 flex-shrink-0' : 'text-amber-500 flex-shrink-0'} />
+            <span className={clsx('text-xs font-semibold', overHeads.length > 0 ? 'text-rose-800' : 'text-amber-800')}>
+              {overHeads.length > 0 && `${overHeads.length} head${overHeads.length > 1 ? 's' : ''} OVER budget`}
+              {overHeads.length > 0 && nearHeads.length > 0 && ' · '}
+              {nearHeads.length > 0 && `${nearHeads.length} near limit (≥80%)`}
+              {' — '}
+              {alertHeads.map(r => r.cost_head).join(', ')}
+            </span>
+          </div>
+          <button
+            onClick={() => alertMutation.mutate()}
+            disabled={alertMutation.isPending || !projectId}
+            className={clsx(
+              'flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition',
+              overHeads.length > 0
+                ? 'bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-50'
+                : 'bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50'
+            )}>
+            <Bell size={12} />
+            {alertMutation.isPending ? 'Sending…' : 'Email Alert'}
+          </button>
+        </div>
+      )}
+
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
       <div className="px-5 py-3 bg-slate-100 border-b border-slate-200 flex items-center justify-between">
         <div>
@@ -637,6 +825,12 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
           <p className="text-[11px] text-slate-400">Click Budget cell to enter amount · Click Actual amount to expand transaction details</p>
         </div>
         <div className="flex items-center gap-3">
+          {monthsElapsed > 1 && (
+            <div className="text-right">
+              <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Months Tracked</div>
+              <div className="text-sm font-bold text-slate-700">{monthsElapsed} mo</div>
+            </div>
+          )}
           {totalBoqValue > 0 && (
             <div className="text-right">
               <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Total BOQ Value</div>
@@ -670,6 +864,10 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
             <th className="px-4 py-2.5 text-right w-52">Budget</th>
             <th className="px-4 py-2.5 text-right w-44">Actual Expenditure</th>
             <th className="px-4 py-2.5 text-right w-24">% Used</th>
+            <th className="px-4 py-2.5 text-right w-40">
+              <div>EAC (Annual)</div>
+              <div className="text-[9px] font-normal opacity-70">at current run rate</div>
+            </th>
             <th className="px-4 py-2.5 text-right w-44">Balance</th>
           </tr>
         </thead>
@@ -758,6 +956,17 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
                       </span>
                     ) : <span className="text-slate-300">—</span>}
                   </td>
+                  <td className="px-4 py-2 text-right text-xs tabular-nums">
+                    {r.monthly_avg > 0 ? (
+                      <div>
+                        <div className={clsx('font-bold',
+                          r.budget > 0 && r.monthly_avg * 12 > r.budget ? 'text-rose-600' : 'text-indigo-600')}>
+                          {inr(r.monthly_avg * 12)}
+                        </div>
+                        <div className="text-[9px] text-slate-400">{inr(r.monthly_avg)}/mo</div>
+                      </div>
+                    ) : <span className="text-slate-300">—</span>}
+                  </td>
                   <td className={clsx('px-4 py-2 text-right font-bold',
                     r.budget === 0 ? 'text-slate-300' : over ? 'text-rose-600' : 'text-emerald-600')}>
                     {r.budget > 0 || r.actual > 0
@@ -780,6 +989,11 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
             <td className="px-4 py-2.5 text-right text-xs font-bold text-slate-600">
               {totalBudget > 0 ? `${((totalActual / totalBudget) * 100).toFixed(1)}%` : '—'}
             </td>
+            <td className="px-4 py-2.5 text-right text-xs font-bold text-indigo-600">
+              {monthsElapsed > 0
+                ? inr((rows.reduce((s, r) => s + (r.monthly_avg || 0), 0)) * 12)
+                : '—'}
+            </td>
             <td className={clsx('px-4 py-2.5 text-right text-sm font-bold', totalBudget - totalActual < 0 ? 'text-rose-600' : 'text-emerald-600')}>
               ₹{Math.round(totalBudget - totalActual).toLocaleString('en-IN')}
             </td>
@@ -789,6 +1003,7 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
         <BOQPrintFooter />
       </div>
     </div>
+    </div>  {/* end space-y-3 wrapper */}
       )}
     </div>
   );

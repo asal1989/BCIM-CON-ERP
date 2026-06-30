@@ -247,6 +247,7 @@ export const boqBudgetAPI = {
   bulkCostheadBudget:  (projectId, entries)   => api.post(`/boq-budget/${projectId}/bulk-costhead-budget`, { entries }),
   costheadDrilldown:   (projectId, costHead)  => api.get(`/boq-budget/${projectId}/costhead-drilldown`, { params: { cost_head: costHead } }),
   costheadMonthly:     (projectId)            => api.get(`/boq-budget/${projectId}/costhead-monthly`),
+  sendBudgetAlert:     (projectId)            => api.post(`/boq-budget/${projectId}/send-budget-alert`),
 };
 
 export const boqMappingAPI = {
