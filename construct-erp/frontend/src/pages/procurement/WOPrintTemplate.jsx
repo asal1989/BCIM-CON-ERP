@@ -5,7 +5,17 @@
 // kept but restyled into the same bordered/Times-New-Roman look.
 import React from 'react';
 import dayjs from 'dayjs';
+import { QRCodeSVG } from 'qrcode.react';
 import { LANCO_DELIVERY_ADDRESS, DQS_YELAHANKA_DELIVERY_ADDRESS, isDQSYelahankaProject } from '../../constants/poAddresses';
+
+const getPublicAppOrigin = () => {
+  const configured = import.meta.env?.VITE_PUBLIC_APP_URL || import.meta.env?.VITE_APP_URL || import.meta.env?.VITE_APP_ORIGIN;
+  if (configured) return configured.replace(/\/$/, '');
+  if (typeof window === 'undefined') return '';
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') return 'http://bcim.ddns.net:3000';
+  return window.location.origin;
+};
 
 // ─── Amount to words ─────────────────────────────────────────────────────────
 const ONES  = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
@@ -62,6 +72,7 @@ const WOPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
 
   const items   = data.items || [];
   const isAmend = /-A\d+$/.test(data.wo_number || '');
+  const qrUrl   = `${getPublicAppOrigin()}/verify/wo/${data.id}`;
 
   // ── Company header (left block) — live company settings, BCIM fallback ──────
   // LANCO Hills (LH-10) work orders bill from BCIM's Hyderabad address instead
@@ -164,7 +175,7 @@ const WOPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
               <h1 style={{ fontSize: '17px', fontWeight: 700, letterSpacing: '0.5px', margin: 0, flex: 1, textAlign: 'center' }}>
                 {isAmend ? 'AMENDMENT WORK ORDER' : 'WORK ORDER'}
               </h1>
-              <div style={{ width: '40px' }} />
+              <QRCodeSVG value={qrUrl} size={40} />
             </div>
 
             {/* COMPANY + WO META */}

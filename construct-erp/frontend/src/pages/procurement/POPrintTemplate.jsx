@@ -3,8 +3,18 @@
 // Header (doc code) repeats on every printed page via <thead>; the signature
 // row + registered-office footer repeat on every page via <tfoot>.
 import React from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import dayjs from 'dayjs';
 import { LANCO_DELIVERY_ADDRESS, DQS_YELAHANKA_DELIVERY_ADDRESS, isDQSYelahankaProject } from '../../constants/poAddresses';
+
+const getPublicAppOrigin = () => {
+  const configured = import.meta.env?.VITE_PUBLIC_APP_URL || import.meta.env?.VITE_APP_URL || import.meta.env?.VITE_APP_ORIGIN;
+  if (configured) return configured.replace(/\/$/, '');
+  if (typeof window === 'undefined') return '';
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') return 'http://bcim.ddns.net:3000';
+  return window.location.origin;
+};
 
 // ─── Amount to words ─────────────────────────────────────────────────────────
 const ONES  = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
@@ -62,6 +72,8 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
       Preparing Purchase Order…
     </div>
   );
+
+  const qrUrl = `${getPublicAppOrigin()}/verify/po/${data.id}`;
 
   const items     = data.items || [];
   const isTaxIncl = Boolean(data.gst_inclusive);
@@ -188,7 +200,7 @@ const POPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
                   {isAmendment ? 'AMENDMENT PURCHASE ORDER' : 'PURCHASE ORDER'}
                 </h1>
               </div>
-              <div style={{ width: '40px' }} />
+              <QRCodeSVG value={qrUrl} size={40} />
             </div>
 
             {/* COMPANY + PO META */}
