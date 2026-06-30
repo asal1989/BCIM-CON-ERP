@@ -4,22 +4,20 @@
 //   Page 2 — Full BOQ line items with price, grouped by chapter
 // Font matches POPrintTemplate / QS certification ('Times New Roman').
 import React from 'react';
+import bcimLogo from '../../assets/bcim-logo.png';
 
-const navy = '#0B2E59';
-const rust = '#9A3412';
-const grayHd = '#C9C9C9';
-const blueHd = '#7E93B8';
+const navy    = '#0B2E59';
+const grayHd  = '#C9C9C9';
+const blueHd  = '#7E93B8';
 const totalBg = '#E4EFDC';
 
-// "INR  5,08,23,047" — rounded, no decimals (matches the client's Excel sheet)
-const INR = (v) => 'INR  ' + Math.round(Number(v || 0)).toLocaleString('en-IN');
-const QTY = (v) => { const x = parseFloat((Number(v || 0)).toFixed(3)); return x || '—'; };
+const INR  = (v) => 'INR  ' + Math.round(Number(v || 0)).toLocaleString('en-IN');
+const QTY  = (v) => { const x = parseFloat((Number(v || 0)).toFixed(3)); return x || '—'; };
 const RATE = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const S = {
   page:   { fontFamily: "'Times New Roman',Times,serif", color: '#0A0A0A', fontSize: '12px' },
   sheet:  { width: '100%', background: '#fff', padding: '6mm 5mm', boxSizing: 'border-box', pageBreakAfter: 'always' },
-  title:  { textAlign: 'center', fontWeight: 'bold', fontSize: '15px', border: '2px solid #000', padding: '8px', letterSpacing: '0.3px' },
   tbl:    { width: '100%', borderCollapse: 'collapse', marginTop: '0' },
   th:     { border: '1px solid #000', padding: '8px 10px', fontWeight: 'bold', fontSize: '13px', textAlign: 'center', background: blueHd },
   thGray: { border: '1px solid #000', padding: '8px 10px', background: grayHd },
@@ -29,8 +27,6 @@ const S = {
   tdValL: { border: '1px solid #000', padding: '7px 10px', fontSize: '12.5px', whiteSpace: 'nowrap' },
 };
 
-// Renders "INR" left-aligned and the number right-aligned within one cell,
-// mimicking the screenshot's two-part value column.
 function ValCell({ amount, bold, bg }) {
   return (
     <td style={{ ...S.td, padding: 0, background: bg || 'transparent' }}>
@@ -42,8 +38,95 @@ function ValCell({ amount, bold, bg }) {
   );
 }
 
+// Shared letterhead shown at the top of each page
+function Letterhead({ projectName, projectAddress, clientName, subtitle }) {
+  const now = new Date().toLocaleString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+  return (
+    <div style={{ fontFamily: 'Arial, sans-serif', marginBottom: 14 }}>
+      {/* Top gradient bar */}
+      <div style={{ height: 5, background: 'linear-gradient(90deg,#0B2E59 0%,#1e4d8c 55%,#2563eb 100%)', marginBottom: 12 }} />
+      {/* Company row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: 10, marginBottom: 10, borderBottom: '1.5px solid #0B2E59' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <img src={bcimLogo} alt="BCIM" style={{ width: 60, height: 60, objectFit: 'contain', flexShrink: 0 }} />
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: '#0B2E59', lineHeight: 1.1 }}>BCIM Engineering Pvt. Ltd.</div>
+            <div style={{ fontSize: 9, color: '#475569', marginTop: 3 }}>Construction &amp; Infrastructure Management</div>
+            <div style={{ fontSize: 8.5, color: '#94a3b8', marginTop: 1 }}>Bengaluru, Karnataka, India &nbsp;|&nbsp; www.bcim.in</div>
+          </div>
+        </div>
+        <div style={{ textAlign: 'right', fontSize: 8.5, color: '#64748b', lineHeight: 1.9 }}>
+          <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 9 }}>Confidential — Internal Use Only</div>
+          <div>Generated: {now}</div>
+        </div>
+      </div>
+      {/* Project info */}
+      {(projectName || clientName) && (
+        <div style={{ display: 'flex', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 4, marginBottom: 10, overflow: 'hidden' }}>
+          {projectName && (
+            <div style={{ flex: 2, padding: '7px 14px', borderRight: clientName ? '1px solid #e2e8f0' : 'none' }}>
+              <div style={{ fontSize: 8, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2 }}>Project</div>
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#0B2E59' }}>{projectName}</div>
+              {projectAddress && <div style={{ fontSize: 9, color: '#64748b', marginTop: 2 }}>{projectAddress}</div>}
+            </div>
+          )}
+          {clientName && (
+            <div style={{ flex: 1, padding: '7px 14px' }}>
+              <div style={{ fontSize: 8, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2 }}>Client</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#1e293b' }}>{clientName}</div>
+            </div>
+          )}
+        </div>
+      )}
+      {/* Document title band */}
+      <div style={{ background: '#0B2E59', color: '#fff', padding: '7px 14px', borderRadius: 4, marginBottom: 12 }}>
+        <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1 }}>{subtitle}</div>
+      </div>
+    </div>
+  );
+}
+
+// Signature footer shown at the end of the last page
+function SignatureFooter() {
+  const cols = [
+    { role: 'Prepared by', designation: 'QS / Site Engineer' },
+    { role: 'Checked by',  designation: 'Project Manager'    },
+    { role: 'Approved by', designation: 'Director / MD'      },
+  ];
+  return (
+    <div style={{ marginTop: 48, fontFamily: 'Arial, sans-serif', pageBreakInside: 'avoid' }}>
+      <div style={{ borderTop: '2px solid #0B2E59', paddingTop: 14 }}>
+        <div style={{ display: 'flex' }}>
+          {cols.map((c, i) => (
+            <div key={c.role} style={{
+              flex: 1,
+              paddingLeft: i > 0 ? 24 : 0,
+              paddingRight: i < cols.length - 1 ? 24 : 0,
+              borderLeft: i > 0 ? '1px solid #e2e8f0' : 'none',
+            }}>
+              <div style={{ fontSize: 9, fontWeight: 800, color: '#0B2E59', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 38 }}>{c.role}</div>
+              <div style={{ borderTop: '1px solid #334155', paddingTop: 4, display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 8, color: '#64748b' }}>Signature</span>
+                <span style={{ fontSize: 8, color: '#94a3b8' }}>{c.designation}</span>
+              </div>
+              <div style={{ marginTop: 8, fontSize: 8.5, color: '#475569', lineHeight: 2.1 }}>
+                <div>Name &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: _______________________________</div>
+                <div>Date &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: _______________________________</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function BOQSummaryPrintTemplate({
   projectName = '',
+  projectAddress = '',
+  clientName = '',
   subtitle = 'CIVIL WORKS - BOQ',
   chapterRows = [],
   lineItemsByChapter = [],
@@ -55,6 +138,8 @@ export default function BOQSummaryPrintTemplate({
 
       {/* ─────────────── PAGE 1 — BOQ SUMMARY ─────────────── */}
       <div style={S.sheet}>
+        <Letterhead projectName={projectName} projectAddress={projectAddress} clientName={clientName} subtitle="Bill of Quantities — Summary" />
+
         <table style={S.tbl}>
           <colgroup>
             <col style={{ width: '6%' }} />
@@ -63,11 +148,11 @@ export default function BOQSummaryPrintTemplate({
             <col style={{ width: '23%' }} />
           </colgroup>
 
-          {/* Banner */}
           <thead>
             <tr>
-              <td colSpan={4} style={{ ...S.thGray, textAlign: 'center', fontWeight: 'bold', fontSize: '15px', lineHeight: 1.5 }}>
-                {(projectName || 'PROJECT').toUpperCase()}<br />{subtitle}
+              <td colSpan={4} style={{ ...S.thGray, textAlign: 'center', fontWeight: 'bold', fontSize: '14px', lineHeight: 1.5 }}>
+                {(projectName || 'PROJECT').toUpperCase()}<br />
+                <span style={{ fontSize: '12px', fontWeight: 'normal' }}>{subtitle}</span>
               </td>
             </tr>
             <tr>
@@ -82,7 +167,6 @@ export default function BOQSummaryPrintTemplate({
           </thead>
 
           <tbody>
-            {/* spacer row like the sheet */}
             <tr>
               <td style={S.td}>&nbsp;</td><td style={S.td} /><td style={S.td} /><td style={S.td} />
             </tr>
@@ -96,23 +180,18 @@ export default function BOQSummaryPrintTemplate({
               </tr>
             ))}
 
-            {/* Total ex-GST */}
             <tr>
               <td style={{ ...S.td, background: totalBg }} />
               <td style={{ ...S.td, fontWeight: 'bold', background: totalBg }}>Total Works Value excluding GST</td>
               <ValCell amount={totals.bill} bold bg={totalBg} />
               <ValCell amount={totals.budget} bold bg={totalBg} />
             </tr>
-
-            {/* GST — bill-side GST applied to both columns (per client sheet) */}
             <tr>
               <td style={S.td} />
               <td style={S.td}>GST {gstPct}%</td>
               <ValCell amount={totals.gst} />
               <ValCell amount={totals.gst} />
             </tr>
-
-            {/* Grand total */}
             <tr>
               <td style={{ ...S.td, background: totalBg }} />
               <td style={{ ...S.td, fontWeight: 'bold', background: totalBg }}>Grand Total Including GST</td>
@@ -123,15 +202,13 @@ export default function BOQSummaryPrintTemplate({
         </table>
 
         <p style={{ textAlign: 'center', fontStyle: 'italic', color: '#555', marginTop: '10px', fontSize: '11px' }}>
-          Page 1 — BOQ Summary
+          Page 1 of 2 — BOQ Summary
         </p>
       </div>
 
       {/* ─────────────── PAGE 2 — FULL BOQ ITEMS ─────────────── */}
       <div style={{ ...S.sheet, pageBreakAfter: 'auto' }}>
-        <div style={{ ...S.title, marginBottom: '8px' }}>
-          {(projectName || 'PROJECT').toUpperCase()} — BILL OF QUANTITIES (DETAILED)
-        </div>
+        <Letterhead projectName={projectName} projectAddress={projectAddress} clientName={clientName} subtitle="Bill of Quantities — Detailed Items" />
 
         <table style={S.tbl}>
           <colgroup>
@@ -194,8 +271,10 @@ export default function BOQSummaryPrintTemplate({
         </table>
 
         <p style={{ textAlign: 'center', fontStyle: 'italic', color: '#555', marginTop: '10px', fontSize: '11px' }}>
-          Page 2 — Detailed BOQ Items
+          Page 2 of 2 — Detailed BOQ Items
         </p>
+
+        <SignatureFooter />
       </div>
     </div>
   );

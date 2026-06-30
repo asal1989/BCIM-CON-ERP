@@ -14,6 +14,7 @@ import { supplyTrackerAPI, projectAPI } from '../../api/client';
 import { PageHeader, Theme } from '../../theme';
 import dayjs from 'dayjs';
 import { clsx } from 'clsx';
+import bcimLogo from '../../assets/bcim-logo.png';
 
 function exportCSV(filename, headers, dataRows) {
   const csv = [headers, ...dataRows]
@@ -26,57 +27,81 @@ function exportCSV(filename, headers, dataRows) {
   URL.revokeObjectURL(url);
 }
 
-function PrintHeader({ title, subtitle, meta = [] }) {
+function PrintHeader({ title, subtitle, projectName, projectAddress, clientName, meta = [] }) {
   return (
-    <div className="hidden print:block" style={{ fontFamily: 'Arial, sans-serif', marginBottom: 18 }}>
-      {/* Top colour bar */}
-      <div style={{ height: 5, background: 'linear-gradient(90deg,#1e3a5f 0%,#2563eb 60%,#38bdf8 100%)', marginBottom: 14 }} />
-      {/* Letterhead row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            width: 48, height: 48, background: '#1e3a5f', borderRadius: 6,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', fontWeight: 900, fontSize: 13, letterSpacing: 1, flexShrink: 0,
-          }}>BCIM</div>
+    <div className="hidden print:block" style={{ fontFamily: 'Arial, sans-serif', marginBottom: 16 }}>
+      <div style={{ height: 5, background: 'linear-gradient(90deg,#0B2E59 0%,#1e4d8c 55%,#2563eb 100%)', marginBottom: 12 }} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: 10, marginBottom: 10, borderBottom: '1.5px solid #0B2E59' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <img src={bcimLogo} alt="BCIM" style={{ width: 64, height: 64, objectFit: 'contain', flexShrink: 0 }} />
           <div>
-            <div style={{ fontSize: 17, fontWeight: 800, color: '#1e3a5f', lineHeight: 1.15 }}>
-              BCIM Engineering Pvt. Ltd.
-            </div>
-            <div style={{ fontSize: 9, color: '#64748b', marginTop: 3 }}>
-              Construction &amp; Infrastructure Management
-            </div>
+            <div style={{ fontSize: 19, fontWeight: 900, color: '#0B2E59', lineHeight: 1.1 }}>BCIM Engineering Pvt. Ltd.</div>
+            <div style={{ fontSize: 9, color: '#475569', marginTop: 3 }}>Construction &amp; Infrastructure Management</div>
+            <div style={{ fontSize: 8.5, color: '#94a3b8', marginTop: 1 }}>Bengaluru, Karnataka, India &nbsp;|&nbsp; www.bcim.in</div>
           </div>
         </div>
-        <div style={{ textAlign: 'right', fontSize: 9, color: '#94a3b8', lineHeight: 1.6 }}>
-          <div style={{ fontWeight: 600, color: '#64748b' }}>Confidential — Internal Use Only</div>
+        <div style={{ textAlign: 'right', fontSize: 8.5, color: '#64748b', lineHeight: 1.9 }}>
+          <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 9 }}>Confidential — Internal Use Only</div>
           <div>Generated: {dayjs().format('DD MMM YYYY, hh:mm A')}</div>
         </div>
       </div>
-      {/* Section title band */}
-      <div style={{
-        background: '#1e3a5f', color: '#fff', padding: '6px 12px',
-        borderRadius: 4, marginBottom: 8,
-      }}>
-        <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1 }}>
-          {title}
+      {(projectName || clientName) && (
+        <div style={{ display: 'flex', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 4, marginBottom: 8, overflow: 'hidden' }}>
+          {projectName && (
+            <div style={{ flex: 2, padding: '7px 14px', borderRight: clientName ? '1px solid #e2e8f0' : 'none' }}>
+              <div style={{ fontSize: 8, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2 }}>Project</div>
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#0B2E59' }}>{projectName}</div>
+              {projectAddress && <div style={{ fontSize: 9, color: '#64748b', marginTop: 2 }}>{projectAddress}</div>}
+            </div>
+          )}
+          {clientName && (
+            <div style={{ flex: 1, padding: '7px 14px' }}>
+              <div style={{ fontSize: 8, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2 }}>Client</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#1e293b' }}>{clientName}</div>
+            </div>
+          )}
         </div>
-        {subtitle && (
-          <div style={{ fontSize: 9, color: '#93c5fd', marginTop: 2 }}>{subtitle}</div>
-        )}
+      )}
+      <div style={{ background: '#0B2E59', color: '#fff', padding: '7px 14px', borderRadius: 4, marginBottom: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1 }}>{title}</div>
+        {subtitle && <div style={{ fontSize: 9, color: '#93c5fd', marginTop: 2 }}>{subtitle}</div>}
       </div>
-      {/* Meta row */}
       {meta.filter(([, v]) => v).length > 0 && (
-        <div style={{
-          display: 'flex', flexWrap: 'wrap', gap: 20,
-          fontSize: 9, color: '#475569',
-          borderBottom: '1px solid #e2e8f0', paddingBottom: 8, marginBottom: 10,
-        }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, fontSize: 9, color: '#475569', borderBottom: '1px solid #e2e8f0', paddingBottom: 8, marginBottom: 10 }}>
           {meta.filter(([, v]) => v).map(([k, v]) => (
             <span key={k}><span style={{ fontWeight: 700, color: '#1e293b' }}>{k}:</span> {v}</span>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function PrintFooter() {
+  const cols = [
+    { role: 'Prepared by', designation: 'Store / Site Engineer' },
+    { role: 'Checked by',  designation: 'Project Manager'       },
+    { role: 'Approved by', designation: 'Director / MD'         },
+  ];
+  return (
+    <div className="hidden print:block" style={{ marginTop: 48, fontFamily: 'Arial, sans-serif', pageBreakInside: 'avoid' }}>
+      <div style={{ borderTop: '2px solid #0B2E59', paddingTop: 14 }}>
+        <div style={{ display: 'flex' }}>
+          {cols.map((c, i) => (
+            <div key={c.role} style={{ flex: 1, paddingLeft: i > 0 ? 24 : 0, paddingRight: i < cols.length - 1 ? 24 : 0, borderLeft: i > 0 ? '1px solid #e2e8f0' : 'none' }}>
+              <div style={{ fontSize: 9, fontWeight: 800, color: '#0B2E59', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 38 }}>{c.role}</div>
+              <div style={{ borderTop: '1px solid #334155', paddingTop: 4, display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 8, color: '#64748b' }}>Signature</span>
+                <span style={{ fontSize: 8, color: '#94a3b8' }}>{c.designation}</span>
+              </div>
+              <div style={{ marginTop: 8, fontSize: 8.5, color: '#475569', lineHeight: 2.1 }}>
+                <div>Name &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: _______________________________</div>
+                <div>Date &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: _______________________________</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -708,7 +733,7 @@ function TrackerTable({ rows, isLoading, onRowClick }) {
 }
 
 // ── Summary Tab ───────────────────────────────────────────────────────────────
-function SummaryTab({ projectId }) {
+function SummaryTab({ projectId, projectName, projectAddress, clientName }) {
   const [groupBy, setGroupBy] = useState('vendor');
   const summaryPrintRef = useRef();
   const { data = [], isLoading } = useQuery({
@@ -763,6 +788,9 @@ function SummaryTab({ projectId }) {
           <PrintHeader
             title="Material Supply Summary / Abstract"
             subtitle="Aggregated view of material procurement and delivery progress"
+            projectName={projectName}
+            projectAddress={projectAddress}
+            clientName={clientName}
             meta={[
               ['Grouped By', groupBy.charAt(0).toUpperCase() + groupBy.slice(1)],
               ['Total Groups', String(data.length)],
@@ -799,6 +827,7 @@ function SummaryTab({ projectId }) {
               </tbody>
             </table>
           </div>
+          <PrintFooter />
         </div>
       )}
     </div>
@@ -818,6 +847,11 @@ export default function MaterialSupplyTrackerPage() {
     queryKey: ['projects-list'],
     queryFn: () => projectAPI.list().then(r => r.data?.data || r.data || []),
   });
+
+  const currentProject = projects.find(p => String(p.id) === String(filters.project_id)) || null;
+  const currentProjectName = currentProject?.name || '';
+  const currentProjectAddress = [currentProject?.location, currentProject?.city, currentProject?.state].filter(Boolean).join(', ');
+  const currentClientName = currentProject?.client_name || '';
 
   const { data: kpis = {} } = useQuery({
     queryKey: ['supply-dashboard', filters.project_id],
@@ -974,18 +1008,22 @@ export default function MaterialSupplyTrackerPage() {
               <PrintHeader
                 title="Material Supply Tracker"
                 subtitle="End-to-end MR → PO → Delivery → GRN → Site Issue tracking"
+                projectName={currentProjectName}
+                projectAddress={currentProjectAddress}
+                clientName={currentClientName}
                 meta={[
-                  ['Project', filters.project_id ? (projects.find(p => p.id === filters.project_id)?.name || filters.project_id) : 'All Projects'],
+                  ['Project', currentProjectName || 'All Projects'],
                   ['Status Filter', filters.status || 'All Statuses'],
                   ['Records', `${rows.length}${isTruncated ? ` of ${totalCount}` : ''}`],
                 ]}
               />
               <TrackerTable rows={rows} isLoading={isLoading} onRowClick={setDetail} />
+              <PrintFooter />
             </div>
           </>
         )}
         {tab === 'summary' && (
-          <SummaryTab projectId={filters.project_id} />
+          <SummaryTab projectId={filters.project_id} projectName={currentProjectName} projectAddress={currentProjectAddress} clientName={currentClientName} />
         )}
       </div>
 

@@ -11,6 +11,7 @@ import {
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import { boqBudgetAPI, projectAPI } from '../../api/client';
 import BOQSummaryPrintTemplate from './BOQSummaryPrintTemplate';
+import bcimLogo from '../../assets/bcim-logo.png';
 
 const GST_PCT = 18;
 
@@ -19,36 +20,47 @@ const inr2 = (v) => `₹${(parseFloat(v) || 0).toLocaleString('en-IN', { minimum
 const num  = (v) => parseFloat(v) || 0;
 
 // ─── Shared professional print letterhead ─────────────────────────────────────
-function BOQPrintHeader({ title, subtitle, meta = [] }) {
+function BOQPrintHeader({ title, subtitle, projectName, projectAddress, clientName, meta = [] }) {
   const now = new Date().toLocaleString('en-IN', {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
   return (
-    <div className="hidden print:block" style={{ fontFamily: 'Arial, sans-serif', marginBottom: 18 }}>
-      {/* Top gradient bar */}
-      <div style={{ height: 5, background: 'linear-gradient(90deg,#0B2E59 0%,#1e4d8c 60%,#2563eb 100%)', marginBottom: 14 }} />
-      {/* Letterhead row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            width: 48, height: 48, background: '#0B2E59', borderRadius: 6,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', fontWeight: 900, fontSize: 13, letterSpacing: 1, flexShrink: 0,
-          }}>BCIM</div>
+    <div className="hidden print:block" style={{ fontFamily: 'Arial, sans-serif', marginBottom: 16 }}>
+      {/* Top colour bar */}
+      <div style={{ height: 5, background: 'linear-gradient(90deg,#0B2E59 0%,#1e4d8c 55%,#2563eb 100%)', marginBottom: 12 }} />
+      {/* Letterhead */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: 10, marginBottom: 10, borderBottom: '1.5px solid #0B2E59' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <img src={bcimLogo} alt="BCIM" style={{ width: 64, height: 64, objectFit: 'contain', flexShrink: 0 }} />
           <div>
-            <div style={{ fontSize: 17, fontWeight: 800, color: '#0B2E59', lineHeight: 1.15 }}>
-              BCIM Engineering Pvt. Ltd.
-            </div>
-            <div style={{ fontSize: 9, color: '#64748b', marginTop: 3 }}>
-              Construction &amp; Infrastructure Management
-            </div>
+            <div style={{ fontSize: 19, fontWeight: 900, color: '#0B2E59', lineHeight: 1.1 }}>BCIM Engineering Pvt. Ltd.</div>
+            <div style={{ fontSize: 9, color: '#475569', marginTop: 3 }}>Construction &amp; Infrastructure Management</div>
+            <div style={{ fontSize: 8.5, color: '#94a3b8', marginTop: 1 }}>Bengaluru, Karnataka, India &nbsp;|&nbsp; www.bcim.in</div>
           </div>
         </div>
-        <div style={{ textAlign: 'right', fontSize: 9, color: '#94a3b8', lineHeight: 1.7 }}>
-          <div style={{ fontWeight: 600, color: '#64748b' }}>Confidential — Internal Use Only</div>
+        <div style={{ textAlign: 'right', fontSize: 8.5, color: '#64748b', lineHeight: 1.9 }}>
+          <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 9 }}>Confidential — Internal Use Only</div>
           <div>Generated: {now}</div>
         </div>
       </div>
+      {/* Project info block */}
+      {(projectName || clientName) && (
+        <div style={{ display: 'flex', gap: 0, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 4, marginBottom: 8, overflow: 'hidden' }}>
+          {projectName && (
+            <div style={{ flex: 2, padding: '7px 14px', borderRight: clientName ? '1px solid #e2e8f0' : 'none' }}>
+              <div style={{ fontSize: 8, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2 }}>Project</div>
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#0B2E59' }}>{projectName}</div>
+              {projectAddress && <div style={{ fontSize: 9, color: '#64748b', marginTop: 2 }}>{projectAddress}</div>}
+            </div>
+          )}
+          {clientName && (
+            <div style={{ flex: 1, padding: '7px 14px' }}>
+              <div style={{ fontSize: 8, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2 }}>Client</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#1e293b' }}>{clientName}</div>
+            </div>
+          )}
+        </div>
+      )}
       {/* Navy title band */}
       <div style={{ background: '#0B2E59', color: '#fff', padding: '7px 14px', borderRadius: 4, marginBottom: 8 }}>
         <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1 }}>{title}</div>
@@ -56,15 +68,47 @@ function BOQPrintHeader({ title, subtitle, meta = [] }) {
       </div>
       {/* Metadata row */}
       {meta.filter(([, v]) => v).length > 0 && (
-        <div style={{
-          display: 'flex', flexWrap: 'wrap', gap: 20, fontSize: 9, color: '#475569',
-          borderBottom: '1px solid #e2e8f0', paddingBottom: 8, marginBottom: 10,
-        }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, fontSize: 9, color: '#475569', borderBottom: '1px solid #e2e8f0', paddingBottom: 8, marginBottom: 10 }}>
           {meta.filter(([, v]) => v).map(([k, v]) => (
             <span key={k}><span style={{ fontWeight: 700, color: '#1e293b' }}>{k}:</span> {v}</span>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Shared print footer with signature columns ────────────────────────────────
+function BOQPrintFooter() {
+  const cols = [
+    { role: 'Prepared by', designation: 'QS / Site Engineer' },
+    { role: 'Checked by',  designation: 'Project Manager'    },
+    { role: 'Approved by', designation: 'Director / MD'      },
+  ];
+  return (
+    <div className="hidden print:block" style={{ marginTop: 48, fontFamily: 'Arial, sans-serif', pageBreakInside: 'avoid' }}>
+      <div style={{ borderTop: '2px solid #0B2E59', paddingTop: 14 }}>
+        <div style={{ display: 'flex' }}>
+          {cols.map((c, i) => (
+            <div key={c.role} style={{
+              flex: 1,
+              paddingLeft: i > 0 ? 24 : 0,
+              paddingRight: i < cols.length - 1 ? 24 : 0,
+              borderLeft: i > 0 ? '1px solid #e2e8f0' : 'none',
+            }}>
+              <div style={{ fontSize: 9, fontWeight: 800, color: '#0B2E59', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 38 }}>{c.role}</div>
+              <div style={{ borderTop: '1px solid #334155', paddingTop: 4, display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 8, color: '#64748b' }}>Signature</span>
+                <span style={{ fontSize: 8, color: '#94a3b8' }}>{c.designation}</span>
+              </div>
+              <div style={{ marginTop: 8, fontSize: 8.5, color: '#475569', lineHeight: 2.1 }}>
+                <div>Name &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: _______________________________</div>
+                <div>Date &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: _______________________________</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -348,7 +392,7 @@ function CostHeadDrilldown({ projectId, costHead }) {
 }
 
 // ─── Monthly Analysis Matrix (cost heads × months) ───────────────────────────
-function CostHeadMonthlyTab({ projectId, projectName }) {
+function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName }) {
   const printRef = useRef();
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -453,8 +497,10 @@ function CostHeadMonthlyTab({ projectId, projectName }) {
         <BOQPrintHeader
           title="Monthly Cost Head Expenditure Analysis"
           subtitle="All paid transactions grouped by month — cost head × month matrix for project analysis"
+          projectName={projectName}
+          projectAddress={projectAddress}
+          clientName={clientName}
           meta={[
-            ['Project', projectName],
             ['Period', months.length > 0 ? `${fmtMonth(months[0])} – ${fmtMonth(months[months.length - 1])}` : '—'],
             ['Total Paid', grandTotal > 0 ? `₹${Math.round(grandTotal).toLocaleString('en-IN')}` : '—'],
             ['Months', String(months.length)],
@@ -502,13 +548,14 @@ function CostHeadMonthlyTab({ projectId, projectName }) {
             </tr>
           </tfoot>
         </table>
+        <BOQPrintFooter />
       </div>
     </div>
   );
 }
 
 // ─── Cost Head Budget Tab ─────────────────────────────────────────────────────
-function CostHeadBudgetTab({ projectId, projectName }) {
+function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName }) {
   const qc = useQueryClient();
   const [editingHead, setEditingHead] = useState(null);
   const [editVal, setEditVal] = useState('');
@@ -580,7 +627,7 @@ function CostHeadBudgetTab({ projectId, projectName }) {
         ))}
       </div>
 
-      {costheadView === 'monthly' && <CostHeadMonthlyTab projectId={projectId} projectName={projectName} />}
+      {costheadView === 'monthly' && <CostHeadMonthlyTab projectId={projectId} projectName={projectName} projectAddress={projectAddress} clientName={clientName} />}
 
       {costheadView === 'summary' && (
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
@@ -606,8 +653,10 @@ function CostHeadBudgetTab({ projectId, projectName }) {
         <BOQPrintHeader
           title="Cost Head Budget vs Actual Expenditure"
           subtitle="Allocated budget vs actual spend — advance, invoiced and balance by cost head"
+          projectName={projectName}
+          projectAddress={projectAddress}
+          clientName={clientName}
           meta={[
-            ['Project', projectName],
             ['Total BOQ Value', totalBoqValue > 0 ? `₹${Math.round(totalBoqValue).toLocaleString('en-IN')}` : null],
             ['Total Budget', totalBudget > 0 ? `₹${Math.round(totalBudget).toLocaleString('en-IN')}` : null],
             ['Total Actual', totalActual > 0 ? `₹${Math.round(totalActual).toLocaleString('en-IN')}` : null],
@@ -737,6 +786,7 @@ function CostHeadBudgetTab({ projectId, projectName }) {
           </tr>
         </tfoot>
       </table>
+        <BOQPrintFooter />
       </div>
     </div>
       )}
@@ -911,6 +961,8 @@ export default function BOQBudgetBreakdownPage() {
   const unlinkedItem = items.find(isUnlinkedRow);
 
   const selectedProject = projects.find(p => p.id === projectId);
+  const projectAddress = [selectedProject?.location, selectedProject?.city, selectedProject?.state].filter(Boolean).join(', ');
+  const clientName = selectedProject?.client_name || '';
   const printRef = useRef();
   const handlePrint = useReactToPrint({ contentRef: printRef, documentTitle: `BOQ_${selectedProject?.name || 'Summary'}` });
   const breakdownPrintRef = useRef();
@@ -1080,7 +1132,7 @@ export default function BOQBudgetBreakdownPage() {
 
             {/* ── COST HEAD BUDGET VIEW ── */}
             {view === 'costhead' && (
-              <CostHeadBudgetTab projectId={projectId} projectName={selectedProject?.name || ''} />
+              <CostHeadBudgetTab projectId={projectId} projectName={selectedProject?.name || ''} projectAddress={projectAddress} clientName={clientName} />
             )}
 
             {/* ── BUDGET BREAKDOWN VIEW (existing) ── */}
@@ -1235,6 +1287,8 @@ export default function BOQBudgetBreakdownPage() {
         <div ref={printRef}>
           <BOQSummaryPrintTemplate
             projectName={selectedProject?.name || ''}
+            projectAddress={projectAddress}
+            clientName={clientName}
             chapterRows={chapterRows}
             lineItemsByChapter={lineItemsByChapter}
             totals={summaryTotals}
@@ -1249,8 +1303,10 @@ export default function BOQBudgetBreakdownPage() {
           <BOQPrintHeader
             title="BOQ Budget Breakdown Report"
             subtitle="Item-level budget allocation vs advance, invoiced spend and balance"
+            projectName={selectedProject?.name || ''}
+            projectAddress={projectAddress}
+            clientName={clientName}
             meta={[
-              ['Project', selectedProject?.name || ''],
               ['Total BOQ Value', inr(totals.boq)],
               ['Total Budgeted', totals.budgeted > 0 ? inr(totals.budgeted) : 'Not set'],
               ['Total Balance', inr(totals.balance)],
@@ -1330,8 +1386,10 @@ export default function BOQBudgetBreakdownPage() {
               </tr>
             </tbody>
           </table>
+          <BOQPrintFooter />
         </div>
       </div>
     </div>
   );
 }
+
