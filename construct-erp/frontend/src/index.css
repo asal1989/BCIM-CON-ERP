@@ -273,6 +273,121 @@ html { scrollbar-gutter: stable; }
     background: rgba(15,23,42,0.4);
     backdrop-filter: blur(4px);
   }
+
+  /* ── Mobile table scroll hint ───────────────────────── */
+  .table-scroll-hint {
+    position: relative;
+  }
+  .table-scroll-hint::after {
+    content: '';
+    position: absolute;
+    top: 0; right: 0; bottom: 0; width: 24px;
+    background: linear-gradient(to right, transparent, rgba(15,23,42,0.06));
+    pointer-events: none;
+    border-radius: 0 12px 12px 0;
+    opacity: 1;
+    transition: opacity 0.3s;
+  }
+  .table-scroll-hint.scrolled-end::after { opacity: 0; }
+}
+
+/* ── Mobile Responsive ─────────────────────────────────── */
+@media (max-width: 1023px) {
+  html { font-size: 13px; }
+
+  /* Page headers: reduce padding */
+  .page-header { @apply px-3 py-2 gap-2; }
+  .page-title { font-size: 1.15rem; }
+  .page-subtitle { font-size: 0.8rem; }
+
+  /* Cards: tighter on mobile */
+  .card { @apply p-3 rounded-lg; }
+  .card-lg { @apply p-4 rounded-lg; }
+
+  /* Metric cards — stack in 2 columns */
+  .metric-value { font-size: 1.2rem; }
+  .metric-label { font-size: 0.65rem; }
+
+  /* Tables: smaller text and padding */
+  .data-table th { @apply px-2.5 py-2; font-size: 0.6rem; }
+  .data-table td { @apply px-2.5 py-2; font-size: 0.75rem; }
+
+  /* Table wrappers: sticky first column for readability */
+  .table-wrapper { position: relative; }
+  .table-wrapper table th:first-child,
+  .table-wrapper table td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: inherit;
+  }
+  .table-wrapper table th:first-child { @apply bg-slate-50; }
+  .table-wrapper table tbody tr:hover td:first-child { @apply bg-slate-50; }
+
+  /* Inline tables in page content */
+  main table { font-size: 0.75rem; }
+  main table th { @apply px-2 py-1.5; font-size: 0.6rem; }
+  main table td { @apply px-2 py-1.5; }
+
+  /* Buttons — full-width in stacked contexts */
+  .btn-primary, .btn-secondary { @apply text-xs px-3 py-1.5; }
+
+  /* Inputs */
+  .input, .input-field { @apply text-xs py-1.5 px-2.5; }
+  .label { font-size: 0.65rem; }
+
+  /* Modal responsiveness */
+  .modal-overlay > div,
+  [class*="max-w-2xl"],
+  [class*="max-w-3xl"],
+  [class*="max-w-4xl"],
+  [class*="max-w-5xl"] {
+    max-width: calc(100vw - 16px) !important;
+    margin: 8px !important;
+  }
+
+  /* Grid: force 1-col on small phones, 2-col on tablets */
+  .grid-cols-3, .grid-cols-4, .grid-cols-5 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+  /* Flex rows: allow wrapping so buttons don't overflow */
+  main .flex.items-center.justify-between { flex-wrap: wrap; }
+  main .flex.items-center.gap-2,
+  main .flex.items-center.gap-3,
+  main .flex.items-center.gap-4 { flex-wrap: wrap; }
+
+  /* Space-y containers: tighter gaps */
+  main .space-y-6 > * + * { margin-top: 12px !important; }
+  main .space-y-4 > * + * { margin-top: 8px !important; }
+
+  /* Rounded corners — slightly smaller on mobile */
+  .rounded-2xl { border-radius: 12px !important; }
+  .rounded-xl  { border-radius: 10px !important; }
+
+  /* Charts: give them breathing room */
+  .recharts-responsive-container { min-height: 220px; }
+
+  /* Tab buttons: smaller on mobile */
+  main button[class*="rounded-lg"][class*="text-xs"] {
+    padding: 4px 8px !important;
+    font-size: 10px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Tiny phones: even tighter */
+  .grid-cols-2, .grid-cols-3, .grid-cols-4, .grid-cols-5 {
+    grid-template-columns: 1fr !important;
+  }
+  /* Page title bar: even smaller */
+  .page-header { @apply px-2 py-1.5 gap-1.5; }
+  .page-title { font-size: 1rem; }
+
+  /* Hide secondary action buttons text, keep icons */
+  .btn-secondary span,
+  .btn-ghost span { font-size: 0; width: 0; overflow: hidden; }
 }
 
 @media print {

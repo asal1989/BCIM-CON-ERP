@@ -1078,9 +1078,9 @@ function MobileBottomNav({ onMenuOpen }) {
 
   const tabs = [
     { to: '/dashboard',       icon: LayoutDashboard, label: 'Home' },
-    { to: '/procurement/po',  icon: ShoppingCart,    label: 'PO/WO' },
     { to: '/stores',          icon: Warehouse,       label: 'Stores' },
-    { to: '/hr-admin',        icon: Users,           label: 'HR' },
+    { to: '/qs',              icon: Receipt,         label: 'QS' },
+    { to: '/approvals',       icon: BadgeCheck,      label: 'Approvals' },
   ];
 
   return (
@@ -1138,11 +1138,12 @@ function MobileSidebar({ open, onClose, navGroups, user, matchesPath, recentPage
     <>
       {open && <div className="fixed inset-0 z-[90] bg-black/50 backdrop-blur-sm" onClick={onClose} />}
       <div style={{
-        position: 'fixed', left: 0, top: 0, bottom: 0, width: 'min(280px, 85vw)',
+        position: 'fixed', left: 0, top: 0, bottom: 0, width: 'min(300px, 88vw)',
         background: 'linear-gradient(180deg,#1E40AF 0%,#172554 100%)',
         zIndex: 100, transform: open ? 'translateX(0)' : 'translateX(-100%)',
-        transition: 'transform 0.25s ease', overflowY: 'auto',
+        transition: 'transform 0.25s cubic-bezier(0.22,1,0.36,1)', overflowY: 'auto',
         display: 'flex', flexDirection: 'column',
+        WebkitOverflowScrolling: 'touch',
       }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
@@ -2163,7 +2164,7 @@ export default function Layout() {
         </div>
 
         {/* Right actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 12px', flexShrink: 0, borderLeft: '1px solid rgba(255,255,255,0.1)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 6px', flexShrink: 0, borderLeft: '1px solid rgba(255,255,255,0.1)' }}>
 
           {/* Search */}
           <button
@@ -2180,8 +2181,8 @@ export default function Layout() {
             <kbd className="sm-show" style={{ display: 'none', fontSize: 9, background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.85)', padding: '1px 5px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.15)' }}>⌘K</kbd>
           </button>
 
-          {/* Language */}
-          <div style={{ position: 'relative' }}>
+          {/* Language — hidden on mobile */}
+          <div style={{ position: 'relative' }} className="lg-show">
             <button
               onClick={() => setLangOpen(o => !o)}
               style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 8px', borderRadius: 8, background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 12 }}
@@ -2213,10 +2214,11 @@ export default function Layout() {
           {/* Current Project chip — switches project for the session */}
           <ProjectChip />
 
-          {/* My ESS Portal — quick access for all employees */}
+          {/* My ESS Portal — hidden on mobile (available via bottom nav) */}
           <NavLink
             to="/ess"
             title="My ESS Portal"
+            className="lg-show"
             style={({ isActive }) => ({
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '5px 10px', borderRadius: 8, textDecoration: 'none',
@@ -2252,7 +2254,7 @@ export default function Layout() {
 
           {/* Profile + Logout */}
           <NavLink to="/profile"
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', borderRadius: 8, textDecoration: 'none', border: '1px solid rgba(255,255,255,0.18)' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 6px', borderRadius: 8, textDecoration: 'none', border: '1px solid rgba(255,255,255,0.18)' }}
             onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
           >
@@ -2278,10 +2280,10 @@ export default function Layout() {
         </div>
       </header>
 
-      {/* ── Breadcrumb sub-bar ── */}
+      {/* ── Breadcrumb sub-bar — hidden on small mobile ── */}
       {pageGroup && (
         <div
-          className="print:hidden"
+          className="print:hidden lg-show"
           style={{
             flexShrink: 0, height: 28,
             background: '#F8FAFC',
@@ -2441,6 +2443,33 @@ export default function Layout() {
         main table {
           min-width: max-content;
         }
+        /* ── Mobile content padding ────────────────────────────────────────── */
+        @media (max-width: 1023px) {
+          main > .page-enter { padding: 8px !important; }
+          main > .page-enter > .p-6,
+          main > .page-enter > div > .p-6 { padding: 12px !important; }
+          main > .page-enter > .px-6,
+          main > .page-enter > div > .px-6 { padding-left: 12px !important; padding-right: 12px !important; }
+          main > .page-enter > .py-6,
+          main > .page-enter > div > .py-6 { padding-top: 12px !important; padding-bottom: 12px !important; }
+          main > .page-enter > .p-8,
+          main > .page-enter > div > .p-8 { padding: 12px !important; }
+          /* Flex wrapping for action bars */
+          main .flex.gap-3 { gap: 6px !important; }
+          main .flex.gap-4 { gap: 8px !important; }
+          /* Responsive container widths */
+          main [class*="max-w-7xl"],
+          main [class*="max-w-6xl"],
+          main [class*="max-w-5xl"] {
+            max-width: 100% !important;
+            padding-left: 8px !important;
+            padding-right: 8px !important;
+          }
+        }
+        @media (max-width: 480px) {
+          main > .page-enter { padding: 4px !important; }
+        }
+
         /* ── Touch-friendly horizontal scrolling on mobile ──────────────────── */
         /* Capacitor WebView on Android needs this for horizontal swipe to work  */
         /* in overflow-x: auto containers (otherwise vertical scroll steals the  */

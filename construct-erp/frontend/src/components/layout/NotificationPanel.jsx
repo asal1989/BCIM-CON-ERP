@@ -65,7 +65,7 @@ export default function NotificationPanel({ onClose }) {
 
       {/* Panel */}
       <div
-        className="absolute right-0 top-full mt-2 w-[380px] rounded-2xl overflow-hidden z-50 flex flex-col"
+        className="absolute right-0 top-full mt-2 w-[380px] max-w-[calc(100vw-16px)] rounded-2xl overflow-hidden z-50 flex flex-col"
         style={{
           background: '#fff',
           border: '1px solid #E8EAED',
