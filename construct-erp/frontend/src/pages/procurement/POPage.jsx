@@ -2087,6 +2087,8 @@ export default function POPage() {
       setShowForm(false);
       setPrefillData(null);
       qc.invalidateQueries({ queryKey: ['purchase-orders'] });
+      // Refresh MR list so already-ordered items drop off the next PO's picker
+      qc.invalidateQueries({ queryKey: ['mrs-for-po'] });
     },
     onError: e => toast.error(e?.response?.data?.error || 'Failed to create PO'),
   });
@@ -2119,6 +2121,7 @@ export default function POPage() {
       // Refresh detail and list
       qc.invalidateQueries({ queryKey: ['purchase-orders'] });
       qc.invalidateQueries({ queryKey: ['purchase-orders', selectedPO?.id] });
+      qc.invalidateQueries({ queryKey: ['mrs-for-po'] });
       if (selectedPO && res?.data?.data) setSelectedPO(res.data.data);
     },
     onError: e => toast.error(e?.response?.data?.error || 'Failed to update PO'),
