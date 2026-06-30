@@ -1400,15 +1400,20 @@ export default function WorkOrderPage() {
     queryFn: () => companySettingsAPI.get().then(r => r.data?.data ?? r.data),
     staleTime: Infinity,
   });
-  const [showCreate,     setShowCreate]     = useState(false);
-  const [showPdfImport,  setShowPdfImport]  = useState(false);
-  const [showExcelImport,setShowExcelImport]= useState(false);
-  const [selectedWO,     setSelectedWO]     = useState(null);
-  const [editingWO,      setEditingWO]      = useState(null);
-  const [attachWOId,     setAttachWOId]     = useState(null);
-  const [search,         setSearch]         = useState('');
-  const [filterStatus,   setFilterStatus]   = useState('');
-  const [sortConfig,     setSortConfig]     = useState({ key: 'date', dir: 'desc' });
+  const [showCreate,      setShowCreate]      = useState(false);
+  const [showPdfImport,   setShowPdfImport]   = useState(false);
+  const [showExcelImport, setShowExcelImport] = useState(false);
+  const [selectedWO,      setSelectedWO]      = useState(null);
+  const [editingWO,       setEditingWO]       = useState(null);
+  const [attachWOId,      setAttachWOId]      = useState(null);
+  const [search,          setSearch]          = useState('');
+  const [filterStatus,    setFilterStatus]    = useState('');
+  const [filterProject,   setFilterProject]   = useState('');
+  const [filterCategory,  setFilterCategory]  = useState('');
+  const [dateFrom,        setDateFrom]        = useState('');
+  const [dateTo,          setDateTo]          = useState('');
+  const [showFilters,     setShowFilters]     = useState(false);
+  const [sortConfig,      setSortConfig]      = useState({ key: 'date', dir: 'desc' });
   const qc = useQueryClient();
   const location = useLocation();
 
@@ -1416,323 +1421,531 @@ export default function WorkOrderPage() {
     queryKey: ['work-orders'],
     queryFn: () => subcontractorAPI.listWorkOrders().then(r => r.data?.data ?? []),
   });
-
   const { data: vendorsData = [] } = useQuery({
     queryKey: ['vendors'],
     queryFn: () => vendorAPI.list().then(r => r.data?.data ?? []),
   });
-
   const { data: projectsData = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: () => projectAPI.list().then(r => r.data?.data ?? []),
   });
-
   const { data: mrsData = [] } = useQuery({
     queryKey: ['mrs-for-wo'],
     queryFn: () => mrsAPI.list({}, { skipProjectInject: true }).then(r => r.data?.data || []),
   });
 
-  // Auto-open WO when navigated from Approvals dashboard
   useEffect(() => {
     const viewId = location.state?.viewId;
     if (!viewId || !woData.length) return;
     const found = woData.find(w => w.id === viewId);
-    if (found) {
-      setSelectedWO(found);
-      window.history.replaceState({}, '');
-    }
+    if (found) { setSelectedWO(found); window.history.replaceState({}, ''); }
   }, [location.state, woData]);
 
   const createMutation = useMutation({
     mutationFn: d => subcontractorAPI.createWorkOrder(d),
-    onSuccess: () => {
-      toast.success('Work Order issued successfully');
-      setShowCreate(false);
-      qc.invalidateQueries({ queryKey: ['work-orders'] });
-    },
+    onSuccess: () => { toast.success('Work Order issued successfully'); setShowCreate(false); qc.invalidateQueries({ queryKey: ['work-orders'] }); },
     onError: e => toast.error(e?.response?.data?.error || 'Failed to issue Work Order'),
   });
-
   const deleteMutation = useMutation({
     mutationFn: id => subcontractorAPI.deleteWorkOrder(id),
-    onSuccess: () => {
-      toast.success('Work Order deleted');
-      setSelectedWO(null);
-      qc.invalidateQueries({ queryKey: ['work-orders'] });
-    },
+    onSuccess: () => { toast.success('Work Order deleted'); setSelectedWO(null); qc.invalidateQueries({ queryKey: ['work-orders'] }); },
     onError: e => toast.error(e?.response?.data?.error || 'Failed to delete Work Order'),
   });
-
   const approveMutation = useMutation({
     mutationFn: id => subcontractorAPI.approveWorkOrder(id),
-    onSuccess: () => {
-      toast.success('Work Order procurement approved');
-      qc.invalidateQueries({ queryKey: ['work-orders'] });
-    },
+    onSuccess: () => { toast.success('Work Order procurement approved'); qc.invalidateQueries({ queryKey: ['work-orders'] }); },
     onError: e => toast.error(e?.response?.data?.error || 'Approval failed'),
   });
-
   const mdApproveMutation = useMutation({
     mutationFn: id => subcontractorAPI.mdApproveWorkOrder(id),
-    onSuccess: () => {
-      toast.success('Work Order MD authorized');
-      setSelectedWO(null);
-      qc.invalidateQueries({ queryKey: ['work-orders'] });
-    },
+    onSuccess: () => { toast.success('Work Order MD authorized'); setSelectedWO(null); qc.invalidateQueries({ queryKey: ['work-orders'] }); },
     onError: e => toast.error(e?.response?.data?.error || 'MD approval failed'),
   });
-
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => subcontractorAPI.updateWorkOrder(id, data),
     onSuccess: () => {
-      toast.success('Work Order updated');
-      setEditingWO(null);
+      toast.success('Work Order updated'); setEditingWO(null);
       qc.invalidateQueries({ queryKey: ['work-orders'] });
       qc.invalidateQueries({ queryKey: ['work-order-detail', selectedWO?.id] });
     },
     onError: e => toast.error(e?.response?.data?.error || 'Failed to update Work Order'),
   });
-
   const rejectMutation = useMutation({
     mutationFn: ({ id, reason }) => subcontractorAPI.rejectWorkOrder(id, { reason }),
-    onSuccess: () => {
-      toast.success('Work Order rejected');
-      setSelectedWO(null);
-      qc.invalidateQueries({ queryKey: ['work-orders'] });
-    },
+    onSuccess: () => { toast.success('Work Order rejected'); setSelectedWO(null); qc.invalidateQueries({ queryKey: ['work-orders'] }); },
     onError: e => toast.error(e?.response?.data?.error || 'Rejection failed'),
   });
 
   const allWOs = woData;
-  const filtered = allWOs.filter(wo => {
-    const matchSearch = !search || `${wo.wo_number} ${wo.vendor_name||''} ${wo.project_name||''} ${wo.subject||''}`.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = !filterStatus || wo.status === filterStatus;
-    return matchSearch && matchStatus;
+  const today  = dayjs();
+
+  /* ── KPI metrics ── */
+  const totalValue       = allWOs.reduce((s, w) => s + parseFloat(w.total_value || 0), 0);
+  const activeWOs        = allWOs.filter(w => ['active', 'approved'].includes(w.status));
+  const activeValue      = activeWOs.reduce((s, w) => s + parseFloat(w.total_value || 0), 0);
+  const pendingApproval  = allWOs.filter(w => ['draft', 'pending', 'submitted'].includes(w.status));
+  const completedWOs     = allWOs.filter(w => ['completed', 'closed'].includes(w.status));
+  const overdueWOs       = allWOs.filter(w => w.end_date && today.isAfter(dayjs(w.end_date)) && !['completed', 'closed', 'terminated', 'rejected'].includes(w.status));
+  const expiringSoon     = allWOs.filter(w => {
+    if (!w.end_date) return false;
+    const daysLeft = dayjs(w.end_date).diff(today, 'day');
+    return daysLeft >= 0 && daysLeft <= 30 && !['completed', 'closed', 'terminated', 'rejected'].includes(w.status);
   });
 
+  /* ── Unique categories from data ── */
+  const categories = [...new Set(allWOs.map(w => w.work_category).filter(Boolean))].sort();
+
+  /* ── Active filter count (for badge) ── */
+  const activeFilterCount = [filterStatus, filterProject, filterCategory, dateFrom, dateTo].filter(Boolean).length;
+
+  /* ── Filtering ── */
+  const filtered = allWOs.filter(wo => {
+    const q = search.toLowerCase();
+    const matchSearch   = !search || `${wo.wo_number} ${wo.vendor_name||''} ${wo.project_name||''} ${wo.subject||''} ${wo.work_category||''}`.toLowerCase().includes(q);
+    const matchStatus   = !filterStatus   || wo.status        === filterStatus;
+    const matchProject  = !filterProject  || String(wo.project_id) === String(filterProject);
+    const matchCategory = !filterCategory || wo.work_category  === filterCategory;
+    const woDate        = wo.start_date || wo.created_at;
+    const matchFrom     = !dateFrom || !woDate || dayjs(woDate).isAfter(dayjs(dateFrom).subtract(1, 'day'));
+    const matchTo       = !dateTo   || !woDate || dayjs(woDate).isBefore(dayjs(dateTo).add(1, 'day'));
+    return matchSearch && matchStatus && matchProject && matchCategory && matchFrom && matchTo;
+  });
+
+  /* ── Sorting ── */
   const woSortAccessors = {
-    wo_number:    w => (w.wo_number || '').toLowerCase(),
-    subject:      w => (w.subject || '').toLowerCase(),
-    vendor_name:  w => (w.vendor_name || '').toLowerCase(),
+    wo_number:    w => (w.wo_number    || '').toLowerCase(),
+    subject:      w => (w.subject      || '').toLowerCase(),
+    vendor_name:  w => (w.vendor_name  || '').toLowerCase(),
     project_name: w => (w.project_name || '').toLowerCase(),
     date:         w => new Date(w.start_date || w.created_at || 0).getTime(),
-    value:        w => (parseFloat(w.total_value) || 0),
+    end_date:     w => new Date(w.end_date || 0).getTime(),
+    value:        w => parseFloat(w.total_value) || 0,
     status:       w => (w.status || '').toLowerCase(),
+    category:     w => (w.work_category || '').toLowerCase(),
   };
   const sorted = [...filtered].sort((a, b) => {
     const acc = woSortAccessors[sortConfig.key] || woSortAccessors.date;
     const av = acc(a), bv = acc(b);
     if (av < bv) return sortConfig.dir === 'asc' ? -1 : 1;
-    if (av > bv) return sortConfig.dir === 'asc' ? 1 : -1;
+    if (av > bv) return sortConfig.dir === 'asc' ? 1  : -1;
     return 0;
   });
   const toggleSort = (key) =>
-    setSortConfig(c => c.key === key
-      ? { key, dir: c.dir === 'asc' ? 'desc' : 'asc' }
-      : { key, dir: 'asc' });
+    setSortConfig(c => c.key === key ? { key, dir: c.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' });
 
-  const totalValue    = allWOs.reduce((s, w) => s + parseFloat(w.total_value || 0), 0);
-  const approvedCount = allWOs.filter(w => w.status === 'approved').length;
-  const pendingCount  = allWOs.filter(w => w.status === 'pending').length;
+  const SortIcon = ({ col }) => {
+    if (sortConfig.key !== col) return <ChevronsUpDown className="w-3 h-3 text-slate-400" />;
+    return sortConfig.dir === 'asc'
+      ? <ChevronUp className="w-3 h-3 text-indigo-500" />
+      : <ChevronDown className="w-3 h-3 text-indigo-500" />;
+  };
 
+  const clearAllFilters = () => { setSearch(''); setFilterStatus(''); setFilterProject(''); setFilterCategory(''); setDateFrom(''); setDateTo(''); };
   const refresh = () => qc.invalidateQueries({ queryKey: ['work-orders'] });
 
+  const STATUS_TABS = [
+    { key: '', label: 'All', count: allWOs.length },
+    { key: 'pending',   label: 'Pending',   count: allWOs.filter(w => w.status === 'pending').length },
+    { key: 'submitted', label: 'Proc. Approved', count: allWOs.filter(w => w.status === 'submitted').length },
+    { key: 'approved',  label: 'MD Auth',   count: allWOs.filter(w => w.status === 'approved').length },
+    { key: 'active',    label: 'Active',    count: allWOs.filter(w => w.status === 'active').length },
+    { key: 'completed', label: 'Completed', count: allWOs.filter(w => w.status === 'completed').length },
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-[#f5f6fa]">
 
       {/* ── Page Header ── */}
-      <div className="bg-white border-b border-slate-200 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
+        <div className="max-w-[1400px] mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium mb-1">
-              <Hammer className="w-3.5 h-3.5" />
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium mb-1.5">
+              <Hammer className="w-3 h-3" />
               <span>Procurement</span>
               <ChevronRight className="w-3 h-3" />
-              <span className="text-slate-400">Work Orders</span>
+              <span className="text-slate-500 font-semibold">Work Orders</span>
             </div>
-            <h1 className="text-2xl font-semibold text-slate-800 tracking-tight">Work Orders</h1>
-            <p className="text-sm text-slate-400 mt-0.5">Subcontractor & labour work order management</p>
+            <h1 className="text-[22px] font-bold text-slate-900 tracking-tight">Work Orders</h1>
+            <p className="text-xs text-slate-400 mt-0.5">Subcontractor & labour work order management</p>
           </div>
-
           <div className="flex items-center gap-2 flex-wrap">
             <button onClick={() => setShowPdfImport(true)}
-              className="flex items-center gap-2 px-3.5 h-9 bg-white border border-slate-300 text-slate-600 text-sm font-medium rounded-md hover:bg-slate-50 transition-colors">
+              className="flex items-center gap-1.5 px-3 h-8 bg-white border border-slate-200 text-slate-600 text-xs font-medium rounded-lg hover:bg-slate-50 transition-colors">
               <FileText className="w-3.5 h-3.5" /> Import PDF
             </button>
             <button onClick={() => setShowExcelImport(true)}
-              className="flex items-center gap-2 px-3.5 h-9 bg-white border border-emerald-200 text-emerald-700 text-sm font-medium rounded-md hover:bg-emerald-50 transition-colors">
+              className="flex items-center gap-1.5 px-3 h-8 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium rounded-lg hover:bg-emerald-100 transition-colors">
               <FileSpreadsheet className="w-3.5 h-3.5" /> Import Excel
             </button>
             <button onClick={() => setShowCreate(true)}
-              className="flex items-center gap-2 px-4 h-9 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors">
+              className="flex items-center gap-1.5 px-4 h-8 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm">
               <Plus className="w-3.5 h-3.5" /> New Work Order
             </button>
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+      <div className="max-w-[1400px] mx-auto px-6 py-5 space-y-5">
 
         {/* ── KPI Cards ── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {[
-            { label: 'Total WOs',     value: allWOs.length,         iconBg: 'bg-blue-50',    iconText: 'text-blue-600',    icon: FileText },
-            { label: 'Total Value',   value: `₹${inr(totalValue)}`, iconBg: 'bg-indigo-50',  iconText: 'text-indigo-600',  icon: IndianRupee },
-            { label: 'Pending Appvl', value: pendingCount,          iconBg: 'bg-amber-50',   iconText: 'text-amber-600',   icon: Clock },
-            { label: 'Approved',      value: approvedCount,         iconBg: 'bg-emerald-50', iconText: 'text-emerald-600', icon: CheckCircle2 },
-          ].map(({ label, value, iconBg, iconText, icon: Icon }) => (
-            <div key={label} className="bg-white border border-slate-200 rounded-md p-4">
-              <div className={`w-8 h-8 rounded-md flex items-center justify-center mb-3 ${iconBg}`}>
-                <Icon className={`w-4 h-4 ${iconText}`} />
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {/* Total WOs */}
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center">
+                <FileText className="w-4 h-4 text-indigo-600" />
               </div>
-              <div className="text-xl font-semibold font-mono text-slate-800">{value}</div>
-              <div className="text-xs text-slate-400 mt-0.5">{label}</div>
+              <span className="text-[10px] font-semibold text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded-full">TOTAL</span>
             </div>
+            <div className="text-2xl font-bold text-slate-900 font-mono">{allWOs.length}</div>
+            <div className="text-[11px] text-slate-500 mt-0.5">Work Orders</div>
+          </div>
+
+          {/* Total Contract Value */}
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                <IndianRupee className="w-4 h-4 text-blue-600" />
+              </div>
+              <span className="text-[10px] font-semibold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded-full">VALUE</span>
+            </div>
+            <div className="text-base font-bold text-slate-900 font-mono leading-tight">₹{Number(totalValue/100000).toFixed(1)}L</div>
+            <div className="text-[11px] text-slate-500 mt-0.5">Contract Value</div>
+          </div>
+
+          {/* Active */}
+          <div className="bg-white border border-teal-200 rounded-xl p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center">
+                <Activity className="w-4 h-4 text-teal-600" />
+              </div>
+              <span className="text-[10px] font-semibold text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded-full">ACTIVE</span>
+            </div>
+            <div className="text-2xl font-bold text-teal-700 font-mono">{activeWOs.length}</div>
+            <div className="text-[11px] text-slate-500 mt-0.5">₹{Number(activeValue/100000).toFixed(1)}L ongoing</div>
+          </div>
+
+          {/* Pending Approval */}
+          <div className={clsx('bg-white border rounded-xl p-4 shadow-sm', pendingApproval.length > 0 ? 'border-amber-300' : 'border-slate-200')}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
+                <Clock className="w-4 h-4 text-amber-600" />
+              </div>
+              {pendingApproval.length > 0 && (
+                <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full animate-pulse">ACTION</span>
+              )}
+            </div>
+            <div className={clsx('text-2xl font-bold font-mono', pendingApproval.length > 0 ? 'text-amber-600' : 'text-slate-900')}>{pendingApproval.length}</div>
+            <div className="text-[11px] text-slate-500 mt-0.5">Pending Approval</div>
+          </div>
+
+          {/* Expiring Soon */}
+          <div className={clsx('bg-white border rounded-xl p-4 shadow-sm', expiringSoon.length > 0 ? 'border-orange-300' : 'border-slate-200')}>
+            <div className="flex items-center justify-between mb-3">
+              <div className={clsx('w-8 h-8 rounded-lg flex items-center justify-center', expiringSoon.length > 0 ? 'bg-orange-50' : 'bg-slate-50')}>
+                <AlertCircle className={clsx('w-4 h-4', expiringSoon.length > 0 ? 'text-orange-500' : 'text-slate-400')} />
+              </div>
+              {expiringSoon.length > 0 && (
+                <span className="text-[10px] font-semibold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-full">≤30 DAYS</span>
+              )}
+            </div>
+            <div className={clsx('text-2xl font-bold font-mono', expiringSoon.length > 0 ? 'text-orange-600' : 'text-slate-900')}>{expiringSoon.length}</div>
+            <div className="text-[11px] text-slate-500 mt-0.5">Expiring Soon</div>
+          </div>
+
+          {/* Overdue / Completed */}
+          <div className={clsx('bg-white border rounded-xl p-4 shadow-sm', overdueWOs.length > 0 ? 'border-red-300' : 'border-slate-200')}>
+            <div className="flex items-center justify-between mb-3">
+              <div className={clsx('w-8 h-8 rounded-lg flex items-center justify-center', overdueWOs.length > 0 ? 'bg-red-50' : 'bg-emerald-50')}>
+                {overdueWOs.length > 0
+                  ? <XCircle className="w-4 h-4 text-red-500" />
+                  : <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+              </div>
+              <span className={clsx('text-[10px] font-semibold px-1.5 py-0.5 rounded-full',
+                overdueWOs.length > 0 ? 'text-red-600 bg-red-50' : 'text-emerald-600 bg-emerald-50')}>
+                {overdueWOs.length > 0 ? 'OVERDUE' : 'DONE'}
+              </span>
+            </div>
+            <div className={clsx('text-2xl font-bold font-mono', overdueWOs.length > 0 ? 'text-red-600' : 'text-emerald-700')}>
+              {overdueWOs.length > 0 ? overdueWOs.length : completedWOs.length}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-0.5">{overdueWOs.length > 0 ? 'Overdue WOs' : 'Completed'}</div>
+          </div>
+        </div>
+
+        {/* ── Status Tabs ── */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+          {STATUS_TABS.map(tab => (
+            <button key={tab.key} onClick={() => setFilterStatus(tab.key)}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-semibold whitespace-nowrap transition-all border',
+                filterStatus === tab.key
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
+              )}>
+              {tab.label}
+              <span className={clsx(
+                'text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center',
+                filterStatus === tab.key ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+              )}>{tab.count}</span>
+            </button>
           ))}
+          <div className="flex-1" />
+          <button onClick={refresh} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all" title="Refresh">
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
         </div>
 
         {/* ── Search + Filter Bar ── */}
-        <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search WO number, vendor, project…"
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all placeholder:text-slate-400" />
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm">
+          {/* Main search row */}
+          <div className="flex items-center gap-3 px-4 py-3">
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <input value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Search WO#, vendor, project, subject…"
+                className="w-full h-8 bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 text-xs outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50 transition-all placeholder:text-slate-400" />
+            </div>
+            <button onClick={() => setShowFilters(v => !v)}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 h-8 rounded-lg border text-xs font-medium transition-all',
+                showFilters || activeFilterCount > 0
+                  ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
+                  : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+              )}>
+              <Activity className="w-3.5 h-3.5" />
+              Filters
+              {activeFilterCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center">{activeFilterCount}</span>
+              )}
+            </button>
+            {(activeFilterCount > 0 || search) && (
+              <button onClick={clearAllFilters} className="flex items-center gap-1 text-xs text-slate-400 hover:text-red-500 transition-colors font-medium">
+                <X className="w-3 h-3" /> Clear
+              </button>
+            )}
+            <span className="text-xs text-slate-400 ml-auto shrink-0">
+              <span className="font-semibold text-slate-700">{filtered.length}</span> of {allWOs.length} WOs
+            </span>
           </div>
-          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-            className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-400 transition-all">
-            <option value="">All Status</option>
-            {Object.entries(STATUS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-          </select>
-          <button onClick={refresh} className="p-2 text-slate-900 font-medium hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-all" title="Refresh">
-            <RefreshCw className="w-4 h-4" />
-          </button>
-          <span className="text-xs text-slate-900 font-medium shrink-0">{filtered.length} of {allWOs.length}</span>
+
+          {/* Expanded filter panel */}
+          {showFilters && (
+            <div className="px-4 pb-3 pt-0 border-t border-slate-100">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-3">
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Project</label>
+                  <select value={filterProject} onChange={e => setFilterProject(e.target.value)}
+                    className="w-full h-8 bg-slate-50 border border-slate-200 rounded-lg px-2 text-xs text-slate-700 outline-none focus:border-indigo-400 transition-all">
+                    <option value="">All Projects</option>
+                    {projectsData.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Work Category</label>
+                  <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
+                    className="w-full h-8 bg-slate-50 border border-slate-200 rounded-lg px-2 text-xs text-slate-700 outline-none focus:border-indigo-400 transition-all">
+                    <option value="">All Categories</option>
+                    {categories.map(c => <option key={c}>{c}</option>)}
+                    {!categories.length && WORK_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Start Date From</label>
+                  <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                    className="w-full h-8 bg-slate-50 border border-slate-200 rounded-lg px-2 text-xs text-slate-700 outline-none focus:border-indigo-400 transition-all" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Start Date To</label>
+                  <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                    className="w-full h-8 bg-slate-50 border border-slate-200 rounded-lg px-2 text-xs text-slate-700 outline-none focus:border-indigo-400 transition-all" />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Table ── */}
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-xs">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
+                <tr className="border-b border-slate-200 bg-slate-50">
                   {[
-                    { label: 'WO Number',        key: 'wo_number' },
-                    { label: 'Subject',          key: 'subject' },
-                    { label: 'Vendor / Sub-Con', key: 'vendor_name' },
-                    { label: 'Project',          key: 'project_name' },
-                    { label: 'Date',             key: 'date' },
-                    { label: 'Value',            key: 'value' },
-                    { label: 'Status',           key: 'status' },
-                    { label: '',                 key: null },
+                    { label: 'WO Number',     key: 'wo_number',    w: 'w-[130px]' },
+                    { label: 'Subject / Scope', key: 'subject',    w: 'min-w-[180px]' },
+                    { label: 'Contractor',    key: 'vendor_name',  w: 'w-[150px]' },
+                    { label: 'Project',       key: 'project_name', w: 'w-[140px]' },
+                    { label: 'Category',      key: 'category',     w: 'w-[110px]' },
+                    { label: 'Period',        key: 'date',         w: 'w-[150px]' },
+                    { label: 'Contract Value',key: 'value',        w: 'w-[130px]' },
+                    { label: 'Status',        key: 'status',       w: 'w-[140px]' },
+                    { label: '',              key: null,           w: 'w-[80px]' },
                   ].map(h => (
-                    <th key={h.label || 'actions'} className="px-4 py-3 text-left text-[11px] font-medium text-slate-900 font-medium uppercase tracking-wider whitespace-nowrap">
+                    <th key={h.label || 'act'} className={clsx('px-4 py-3 text-left font-semibold text-[10px] uppercase tracking-wider text-slate-500 whitespace-nowrap', h.w)}>
                       {h.key ? (
-                        <button onClick={() => toggleSort(h.key)} className="inline-flex items-center gap-1 hover:text-indigo-600 transition-colors uppercase tracking-wider">
-                          {h.label}
-                          {sortConfig.key === h.key
-                            ? (sortConfig.dir === 'asc'
-                                ? <ChevronUp className="w-3.5 h-3.5 text-indigo-600" />
-                                : <ChevronDown className="w-3.5 h-3.5 text-indigo-600" />)
-                            : <ChevronsUpDown className="w-3.5 h-3.5 text-slate-500" />}
+                        <button onClick={() => toggleSort(h.key)} className="inline-flex items-center gap-1 hover:text-indigo-600 transition-colors group">
+                          {h.label} <SortIcon col={h.key} />
                         </button>
                       ) : h.label}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {isLoading ? (
-                  [...Array(5)].map((_, i) => (
-                    <tr key={i} className="border-b border-slate-100">
-                      {[...Array(8)].map((_, j) => (
-                        <td key={j} className="px-4 py-3">
-                          <div className="h-4 bg-slate-100 rounded animate-pulse" />
-                        </td>
-                      ))}
-                    </tr>
-                  ))
-                ) : sorted.map(wo => (
-                  <React.Fragment key={wo.id}>
-                  <tr onClick={() => setSelectedWO(wo)}
-                    className="border-b border-slate-100 last:border-0 cursor-pointer hover:bg-slate-50 transition-colors group">
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center flex-shrink-0">
-                          <Hammer className="w-3.5 h-3.5 text-indigo-500" />
-                        </div>
-                        <span className="text-xs font-medium font-mono text-indigo-700 group-hover:underline">{wo.wo_number}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 max-w-[200px]">
-                      <p className="text-xs text-slate-900 truncate">{wo.subject || '—'}</p>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <p className="text-xs font-medium text-slate-900 font-medium max-w-[140px] truncate">{wo.vendor_name || '—'}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-xs text-slate-900 font-medium max-w-[140px] truncate">{wo.project_name || '—'}</p>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-500">
-                      {wo.start_date ? dayjs(wo.start_date).format('DD-MM-YYYY') : wo.created_at ? dayjs(wo.created_at).format('DD-MM-YYYY') : '—'}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="text-sm font-medium font-mono text-slate-800">₹{inr(wo.total_value)}</span>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <StatusBadge status={wo.status} />
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right" onClick={e => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => setAttachWOId(attachWOId === wo.id ? null : wo.id)}
-                          title="Attachments"
-                          className={clsx(
-                            'flex items-center gap-1 px-2 py-1 rounded-lg border text-xs font-medium transition-all',
-                            attachWOId === wo.id
-                              ? 'bg-indigo-600 text-white border-indigo-600'
-                              : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 opacity-0 group-hover:opacity-100'
+              <tbody className="divide-y divide-slate-100">
+                {isLoading
+                  ? [...Array(6)].map((_, i) => (
+                      <tr key={i}>
+                        {[...Array(9)].map((_, j) => (
+                          <td key={j} className="px-4 py-3.5">
+                            <div className="h-3.5 bg-slate-100 rounded animate-pulse" style={{ width: `${60 + Math.random()*30}%` }} />
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  : sorted.map(wo => {
+                      const isOverdue = wo.end_date && today.isAfter(dayjs(wo.end_date)) && !['completed', 'closed', 'terminated', 'rejected'].includes(wo.status);
+                      const daysLeft  = wo.end_date ? dayjs(wo.end_date).diff(today, 'day') : null;
+                      const isExpiring = daysLeft !== null && daysLeft >= 0 && daysLeft <= 30;
+                      return (
+                        <React.Fragment key={wo.id}>
+                          <tr
+                            onClick={() => setSelectedWO(wo)}
+                            className={clsx(
+                              'cursor-pointer transition-colors group',
+                              isOverdue   ? 'bg-red-50/40 hover:bg-red-50'    :
+                              isExpiring  ? 'bg-amber-50/30 hover:bg-amber-50' :
+                              'hover:bg-indigo-50/30'
+                            )}>
+                            {/* WO Number */}
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className={clsx(
+                                  'w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0',
+                                  isOverdue ? 'bg-red-100' : 'bg-indigo-50'
+                                )}>
+                                  <Hammer className={clsx('w-3 h-3', isOverdue ? 'text-red-500' : 'text-indigo-500')} />
+                                </div>
+                                <div>
+                                  <span className="font-bold font-mono text-indigo-700 text-[11px] group-hover:underline">{wo.wo_number}</span>
+                                  {wo.wo_date && <div className="text-[10px] text-slate-400 font-mono">{dayjs(wo.wo_date).format('DD-MM-YY')}</div>}
+                                </div>
+                              </div>
+                            </td>
+                            {/* Subject */}
+                            <td className="px-4 py-3 max-w-[220px]">
+                              <p className="text-xs font-medium text-slate-800 truncate leading-tight">{wo.subject || '—'}</p>
+                              {wo.tower_block && <p className="text-[10px] text-slate-400 truncate mt-0.5">{wo.tower_block}</p>}
+                            </td>
+                            {/* Contractor */}
+                            <td className="px-4 py-3">
+                              <p className="font-semibold text-slate-800 truncate max-w-[140px]">{wo.vendor_name || '—'}</p>
+                              {wo.vendor_type && <p className="text-[10px] text-slate-400 capitalize mt-0.5">{wo.vendor_type.replace(/_/g,' ')}</p>}
+                            </td>
+                            {/* Project */}
+                            <td className="px-4 py-3">
+                              <p className="text-slate-600 truncate max-w-[130px]">{wo.project_name || '—'}</p>
+                            </td>
+                            {/* Category */}
+                            <td className="px-4 py-3">
+                              {wo.work_category
+                                ? <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-semibold">{wo.work_category}</span>
+                                : <span className="text-slate-300">—</span>}
+                            </td>
+                            {/* Period */}
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <div className="text-[11px] text-slate-600">
+                                {wo.start_date ? dayjs(wo.start_date).format('DD MMM YY') : '—'}
+                                {wo.end_date && <span className="text-slate-400"> → {dayjs(wo.end_date).format('DD MMM YY')}</span>}
+                              </div>
+                              {isOverdue && (
+                                <div className="flex items-center gap-1 mt-0.5">
+                                  <AlertCircle className="w-2.5 h-2.5 text-red-500" />
+                                  <span className="text-[10px] font-bold text-red-600">{Math.abs(daysLeft)}d overdue</span>
+                                </div>
+                              )}
+                              {isExpiring && !isOverdue && (
+                                <div className="flex items-center gap-1 mt-0.5">
+                                  <Clock className="w-2.5 h-2.5 text-amber-500" />
+                                  <span className="text-[10px] font-bold text-amber-600">{daysLeft}d left</span>
+                                </div>
+                              )}
+                            </td>
+                            {/* Value */}
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span className="font-bold font-mono text-slate-800 text-xs">₹{inr(wo.total_value)}</span>
+                              {wo.cost_head && <div className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[120px]">{wo.cost_head}</div>}
+                            </td>
+                            {/* Status */}
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <StatusBadge status={wo.status} />
+                              {wo.mrs_number && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  <Hash className="w-2.5 h-2.5 text-slate-400" />
+                                  <span className="text-[10px] font-mono text-slate-400">{wo.mrs_number}</span>
+                                </div>
+                              )}
+                            </td>
+                            {/* Actions */}
+                            <td className="px-4 py-3 whitespace-nowrap text-right" onClick={e => e.stopPropagation()}>
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  onClick={() => setAttachWOId(attachWOId === wo.id ? null : wo.id)}
+                                  title="Attachments"
+                                  className={clsx(
+                                    'flex items-center gap-1 px-2 py-1 rounded-md border text-[10px] font-semibold transition-all',
+                                    attachWOId === wo.id
+                                      ? 'bg-indigo-600 text-white border-indigo-600'
+                                      : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600 opacity-0 group-hover:opacity-100'
+                                  )}>
+                                  <Upload className="w-2.5 h-2.5" />
+                                </button>
+                                <div className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-indigo-100 transition-colors">
+                                  <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-indigo-500 transition-colors" />
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                          {attachWOId === wo.id && (
+                            <tr>
+                              <td colSpan={9} className="px-6 py-4 bg-indigo-50/40 border-b border-indigo-100">
+                                <RecordAttachments
+                                  module="work_order"
+                                  recordId={wo.id}
+                                  projectId={wo.project_id}
+                                  label="WO Attachments — Contract Document, BOQ, Site Photos, Completion Certificate"
+                                />
+                              </td>
+                            </tr>
                           )}
-                        >
-                          <Upload className="w-3 h-3" />
-                          {attachWOId === wo.id ? 'Close' : 'Attach'}
-                        </button>
-                        <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 transition-colors ml-auto" />
-                      </div>
-                    </td>
-                  </tr>
-                  {attachWOId === wo.id && (
-                    <tr>
-                      <td colSpan={8} className="px-6 pb-4 bg-indigo-50/30 border-b border-indigo-100">
-                        <RecordAttachments
-                          module="work_order"
-                          recordId={wo.id}
-                          projectId={wo.project_id}
-                          label="WO Attachments — Contract Document, BOQ, Site Photos, Completion Certificate"
-                        />
-                      </td>
-                    </tr>
-                  )}
-                  </React.Fragment>
-                ))}
-
+                        </React.Fragment>
+                      );
+                    })
+                }
                 {!isLoading && filtered.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="py-20 text-center">
+                    <td colSpan={9} className="py-20 text-center">
                       <div className="flex flex-col items-center gap-3">
-                        <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
-                          <Hammer className="w-5 h-5 text-slate-300" />
+                        <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center">
+                          <Hammer className="w-6 h-6 text-slate-300" />
                         </div>
-                        <p className="text-sm font-medium text-slate-400">
-                          {search || filterStatus ? 'No work orders match your filters' : 'No work orders yet'}
-                        </p>
-                        {(search || filterStatus) ? (
-                          <button onClick={() => { setSearch(''); setFilterStatus(''); }}
-                            className="text-xs text-indigo-500 hover:underline font-semibold">Clear filters</button>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-500">
+                            {search || activeFilterCount > 0 ? 'No work orders match your filters' : 'No work orders yet'}
+                          </p>
+                          <p className="text-xs text-slate-400 mt-1">
+                            {search || activeFilterCount > 0 ? 'Try adjusting the filters above' : 'Create a work order to engage a subcontractor'}
+                          </p>
+                        </div>
+                        {(search || activeFilterCount > 0) ? (
+                          <button onClick={clearAllFilters}
+                            className="flex items-center gap-1.5 px-3 h-7 rounded-lg bg-slate-100 text-slate-600 text-xs font-semibold hover:bg-slate-200 transition-colors">
+                            <X className="w-3 h-3" /> Clear all filters
+                          </button>
                         ) : (
                           <button onClick={() => setShowCreate(true)}
-                            className="flex items-center gap-1.5 text-xs text-indigo-600 hover:underline font-semibold">
-                            <Plus className="w-3.5 h-3.5" /> Create your first Work Order
+                            className="flex items-center gap-1.5 px-4 h-8 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition-colors">
+                            <Plus className="w-3.5 h-3.5" /> Create Work Order
                           </button>
                         )}
                       </div>
@@ -1743,10 +1956,16 @@ export default function WorkOrderPage() {
             </table>
           </div>
 
+          {/* Table footer */}
           {allWOs.length > 0 && (
-            <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
-              <span className="text-xs text-slate-400">{allWOs.length} work order{allWOs.length !== 1 ? 's' : ''} total</span>
-              <span className="text-xs font-medium font-mono text-slate-600">Total Value: ₹{inr(totalValue)}</span>
+            <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
+              <span className="text-[11px] text-slate-400">
+                Showing <span className="font-semibold text-slate-600">{filtered.length}</span> of <span className="font-semibold">{allWOs.length}</span> work orders
+              </span>
+              <div className="flex items-center gap-4 text-[11px]">
+                <span className="text-slate-400">Filtered Value: <span className="font-bold font-mono text-slate-700">₹{inr(filtered.reduce((s, w) => s + parseFloat(w.total_value || 0), 0))}</span></span>
+                <span className="text-slate-400">Total: <span className="font-bold font-mono text-indigo-700">₹{inr(totalValue)}</span></span>
+              </div>
             </div>
           )}
         </div>
@@ -1754,60 +1973,29 @@ export default function WorkOrderPage() {
 
       {/* ── Modals ── */}
       {showCreate && (
-        <CreateWOModal
-          onClose={() => setShowCreate(false)}
-          vendors={vendorsData}
-          projects={projectsData}
-          mrsList={mrsData}
-          onCreate={data => createMutation.mutate(data)}
-          isPending={createMutation.isPending}
-        />
+        <CreateWOModal onClose={() => setShowCreate(false)} vendors={vendorsData} projects={projectsData} mrsList={mrsData}
+          onCreate={data => createMutation.mutate(data)} isPending={createMutation.isPending} />
       )}
-
       {showPdfImport && (
-        <PdfImportModal
-          onClose={() => setShowPdfImport(false)}
-          vendors={vendorsData}
-          projects={projectsData}
-          onImported={refresh}
-        />
+        <PdfImportModal onClose={() => setShowPdfImport(false)} vendors={vendorsData} projects={projectsData} onImported={refresh} />
       )}
-
       {showExcelImport && (
-        <ExcelImportModal
-          onClose={() => setShowExcelImport(false)}
-          onImported={refresh}
-        />
+        <ExcelImportModal onClose={() => setShowExcelImport(false)} onImported={refresh} />
       )}
-
       {selectedWO && (
         <WODetailPanel
-          wo={selectedWO}
-          onClose={() => setSelectedWO(null)}
-          onEdit={wo => setEditingWO(wo)}
-          onDelete={id => deleteMutation.mutate(id)}
-          onApprove={id => approveMutation.mutate(id)}
-          onMDApprove={id => mdApproveMutation.mutate(id)}
+          wo={selectedWO} onClose={() => setSelectedWO(null)}
+          onEdit={wo => setEditingWO(wo)} onDelete={id => deleteMutation.mutate(id)}
+          onApprove={id => approveMutation.mutate(id)} onMDApprove={id => mdApproveMutation.mutate(id)}
           onReject={(id, reason) => rejectMutation.mutate({ id, reason })}
-          isApproving={approveMutation.isPending}
-          isMDApproving={mdApproveMutation.isPending}
-          isRejecting={rejectMutation.isPending}
-          user={user}
-          company={companyData}
+          isApproving={approveMutation.isPending} isMDApproving={mdApproveMutation.isPending}
+          isRejecting={rejectMutation.isPending} user={user} company={companyData}
         />
       )}
-
-      {/* Edit WO modal */}
       {editingWO && (
-        <CreateWOModal
-          onClose={() => setEditingWO(null)}
-          vendors={vendorsData}
-          projects={projectsData}
-          mrsList={mrsData}
+        <CreateWOModal onClose={() => setEditingWO(null)} vendors={vendorsData} projects={projectsData} mrsList={mrsData}
           onUpdate={data => updateMutation.mutate({ id: editingWO.id, data })}
-          isPending={updateMutation.isPending}
-          editingWO={editingWO}
-        />
+          isPending={updateMutation.isPending} editingWO={editingWO} />
       )}
     </div>
   );
