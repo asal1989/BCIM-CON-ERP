@@ -457,33 +457,38 @@ router.get('/:project_id/costhead-drilldown', async (req, res) => {
     let rows = [];
 
     if (cost_head === 'Sub Con') {
-      // SC bills (non-draft/rejected)
+      // SC bills — aggregate by bill using line items (same formula as costhead-summary)
+      // Use LEFT JOIN so bills without a matching sc_subcontractors row still appear
       const scBills = await query(`
         SELECT sb.bill_number AS reference, sb.bill_date AS date,
-               sc.name AS description, sb.net_payable AS amount, 'SC Bill' AS source
-        FROM sc_bills sb
-        JOIN sc_subcontractors sc ON sc.id = sb.sc_id
+               COALESCE(sc.name, sb.bill_number, 'Subcontractor') AS description,
+               SUM(bi.curr_qty * bi.rate) AS amount, 'SC Bill' AS source
+        FROM sc_bill_items bi
+        JOIN sc_bills sb ON sb.id = bi.bill_id
+        LEFT JOIN sc_subcontractors sc ON sc.id = sb.sc_id
         WHERE sb.project_id=$1 AND sb.status NOT IN ('draft','rejected','queried')
+        GROUP BY sb.id, sb.bill_number, sb.bill_date, sc.name
         ORDER BY sb.bill_date`, [project_id]);
       rows.push(...scBills.rows);
 
-      // SC payments
+      // SC payments — LEFT JOIN so payment rows aren't dropped by missing subcontractor
       const scPay = await query(`
         SELECT sp.reference_no AS reference, sp.payment_date AS date,
-               sc.name AS description, sp.amount, 'SC Payment' AS source
+               COALESCE(sc.name, sb.bill_number, 'Payment') AS description,
+               sp.amount, 'SC Payment' AS source
         FROM sc_payments sp
-        JOIN sc_bills sb ON sb.id = sp.bill_id
-        JOIN sc_subcontractors sc ON sc.id = sb.sc_id
+        LEFT JOIN sc_bills sb ON sb.id = sp.bill_id
+        LEFT JOIN sc_subcontractors sc ON sc.id = sb.sc_id
         WHERE sp.project_id=$1
         ORDER BY sp.payment_date`, [project_id]);
       rows.push(...scPay.rows);
 
-      // SC advances (dedicated SC module)
+      // SC advances — LEFT JOIN for the same reason
       const scAdv = await query(`
         SELECT sa.advance_number AS reference, sa.advance_date AS date,
-               sc.name AS description, sa.amount, 'SC Advance' AS source
+               COALESCE(sc.name, 'Advance') AS description, sa.amount, 'SC Advance' AS source
         FROM sc_advances sa
-        JOIN sc_subcontractors sc ON sc.id = sa.sc_id
+        LEFT JOIN sc_subcontractors sc ON sc.id = sa.sc_id
         WHERE sa.project_id=$1 AND sa.status NOT IN ('cancelled')
         ORDER BY sa.advance_date`, [project_id]);
       rows.push(...scAdv.rows);

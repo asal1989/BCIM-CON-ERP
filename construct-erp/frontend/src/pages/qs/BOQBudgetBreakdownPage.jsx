@@ -5,7 +5,7 @@ import { useReactToPrint } from 'react-to-print';
 import { clsx } from 'clsx';
 import toast from 'react-hot-toast';
 import {
-  Percent, IndianRupee, AlertTriangle, ChevronRight, ChevronDown,
+  Percent, IndianRupee, AlertTriangle, AlertCircle, ChevronRight, ChevronDown,
   Search, Layers, CheckCircle2, Wallet, Printer, LayoutList, FileText, BarChart2, Download,
   Bell, TrendingUp, Activity,
 } from 'lucide-react';
@@ -320,80 +320,122 @@ Overhead	14496254.84
 Petty Cash	954211.41`;
 
 // ─── Drilldown sub-table shown when a cost head row is expanded ───────────────
+const DRILLDOWN_COLSPAN = 7; // must match number of <th> columns in the parent table
 function CostHeadDrilldown({ projectId, costHead }) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['costhead-drilldown', projectId, costHead],
     queryFn: () => boqBudgetAPI.costheadDrilldown(projectId, costHead).then(r => r.data?.data || []),
     enabled: !!projectId && !!costHead,
+    retry: 1,
   });
 
   const fmt = (n) => `₹${Math.round(parseFloat(n) || 0).toLocaleString('en-IN')}`;
   const SOURCE_COLORS = {
-    'SC Bill':        'bg-blue-50 text-blue-700',
-    'SC Payment':     'bg-emerald-50 text-emerald-700',
-    'SC Advance':     'bg-violet-50 text-violet-700',
-    'Advance Tracker':'bg-amber-50 text-amber-700',
-    'TQS Bill':       'bg-sky-50 text-sky-700',
-    'RA Bill':        'bg-teal-50 text-teal-700',
-    'Petty Cash':     'bg-orange-50 text-orange-700',
+    'SC Bill':          'bg-blue-50 text-blue-700 border border-blue-200',
+    'SC Payment':       'bg-emerald-50 text-emerald-700 border border-emerald-200',
+    'SC Advance':       'bg-violet-50 text-violet-700 border border-violet-200',
+    'Stores PC Advance':'bg-purple-50 text-purple-700 border border-purple-200',
+    'Advance Tracker':  'bg-amber-50 text-amber-700 border border-amber-200',
+    'TQS Bill':         'bg-sky-50 text-sky-700 border border-sky-200',
+    'RA Bill':          'bg-teal-50 text-teal-700 border border-teal-200',
+    'Petty Cash':       'bg-orange-50 text-orange-700 border border-orange-200',
   };
 
   if (isLoading) return (
-    <tr><td colSpan={5} className="bg-slate-50 px-8 py-3 text-xs text-slate-400">Loading…</td></tr>
+    <tr>
+      <td colSpan={DRILLDOWN_COLSPAN} className="bg-indigo-50/40 px-8 py-4">
+        <div className="flex items-center gap-2 text-xs text-indigo-500">
+          <div className="w-3.5 h-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+          Loading transactions for <strong>{costHead}</strong>…
+        </div>
+      </td>
+    </tr>
+  );
+
+  if (isError) return (
+    <tr>
+      <td colSpan={DRILLDOWN_COLSPAN} className="bg-red-50 px-8 py-3">
+        <div className="flex items-center gap-2 text-xs text-red-600">
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+          Failed to load transactions: {error?.response?.data?.error || error?.message || 'Unknown error'}
+        </div>
+      </td>
+    </tr>
   );
 
   const rows = data || [];
   const total = rows.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
 
   if (!rows.length) return (
-    <tr><td colSpan={5} className="bg-slate-50 px-8 py-3 text-xs text-slate-400 italic">
-      No paid transactions yet for this cost head.
-    </td></tr>
+    <tr>
+      <td colSpan={DRILLDOWN_COLSPAN} className="bg-slate-50 px-8 py-4">
+        <div className="flex items-center gap-2 text-xs text-slate-400 italic">
+          <AlertCircle className="w-3.5 h-3.5" />
+          No transactions found for <strong className="not-italic text-slate-500">{costHead}</strong>.
+          Amount may come from a source not yet linked to drilldown (check SC module, TQS bills, or advance tracker).
+        </div>
+      </td>
+    </tr>
   );
 
+  // Group by source for a summary header
+  const bySource = rows.reduce((acc, r) => {
+    acc[r.source] = (acc[r.source] || 0) + parseFloat(r.amount || 0);
+    return acc;
+  }, {});
+
   return (
-    <>
-      <tr>
-        <td colSpan={5} className="p-0">
-          <div className="mx-4 my-2 rounded-xl border border-slate-200 overflow-hidden shadow-inner bg-slate-50">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-slate-200 text-slate-600">
-                  <th className="px-3 py-2 text-left w-36">Date</th>
-                  <th className="px-3 py-2 text-left w-36">Reference</th>
-                  <th className="px-3 py-2 text-left">Description</th>
-                  <th className="px-3 py-2 text-center w-32">Source</th>
-                  <th className="px-3 py-2 text-right w-36">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r, idx) => (
-                  <tr key={idx} className="border-t border-slate-100 hover:bg-white">
-                    <td className="px-3 py-1.5 text-slate-500">
-                      {r.date ? new Date(r.date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'}
-                    </td>
-                    <td className="px-3 py-1.5 font-mono text-slate-600">{r.reference || '—'}</td>
-                    <td className="px-3 py-1.5 text-slate-700 max-w-xs truncate" title={r.description}>{r.description || '—'}</td>
-                    <td className="px-3 py-1.5 text-center">
-                      <span className={clsx('px-2 py-0.5 rounded-full text-[10px] font-bold', SOURCE_COLORS[r.source] || 'bg-slate-100 text-slate-500')}>
-                        {r.source}
-                      </span>
-                    </td>
-                    <td className="px-3 py-1.5 text-right font-semibold text-slate-800">{fmt(r.amount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="bg-slate-100 border-t border-slate-300">
-                  <td colSpan={4} className="px-3 py-1.5 text-right font-bold text-slate-600 text-xs">Total</td>
-                  <td className="px-3 py-1.5 text-right font-bold text-slate-800">{fmt(total)}</td>
-                </tr>
-              </tfoot>
-            </table>
+    <tr>
+      <td colSpan={DRILLDOWN_COLSPAN} className="p-0 bg-indigo-50/20">
+        <div className="mx-6 my-3 rounded-xl border border-indigo-100 overflow-hidden shadow-sm">
+          {/* Source summary pills */}
+          <div className="flex items-center gap-2 flex-wrap px-4 py-2.5 bg-white border-b border-indigo-100">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mr-1">Sources:</span>
+            {Object.entries(bySource).map(([src, amt]) => (
+              <span key={src} className={clsx('flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold', SOURCE_COLORS[src] || 'bg-slate-100 text-slate-500')}>
+                {src} <span className="font-mono font-bold">{fmt(amt)}</span>
+              </span>
+            ))}
+            <span className="ml-auto text-[11px] font-bold text-slate-700 font-mono">Total: {fmt(total)}</span>
           </div>
-        </td>
-      </tr>
-    </>
+          {/* Transaction rows */}
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-slate-100 text-slate-600 text-[10px] uppercase tracking-wide">
+                <th className="px-4 py-2 text-left w-32">Date</th>
+                <th className="px-4 py-2 text-left w-40">Reference</th>
+                <th className="px-4 py-2 text-left">Description</th>
+                <th className="px-4 py-2 text-center w-36">Source</th>
+                <th className="px-4 py-2 text-right w-36">Amount</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {rows.map((r, idx) => (
+                <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-4 py-2 text-slate-500 font-mono text-[11px]">
+                    {r.date ? new Date(r.date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'}
+                  </td>
+                  <td className="px-4 py-2 font-mono text-indigo-700 text-[11px]">{r.reference || '—'}</td>
+                  <td className="px-4 py-2 text-slate-700 max-w-sm truncate" title={r.description}>{r.description || '—'}</td>
+                  <td className="px-4 py-2 text-center">
+                    <span className={clsx('px-2 py-0.5 rounded-full text-[10px] font-bold', SOURCE_COLORS[r.source] || 'bg-slate-100 text-slate-500')}>
+                      {r.source}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 text-right font-semibold text-slate-800 font-mono">{fmt(r.amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-slate-100 border-t-2 border-slate-300">
+                <td colSpan={4} className="px-4 py-2 text-right font-bold text-slate-600 text-xs">Total — {costHead}</td>
+                <td className="px-4 py-2 text-right font-bold text-emerald-700 font-mono">{fmt(total)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </td>
+    </tr>
   );
 }
 
