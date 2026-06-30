@@ -505,11 +505,6 @@ function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName
     return { rows, nextMonths, totalAvg };
   }, [months, byMonthBreakdown, BOQ_COST_HEADS_ORDER]);
 
-  if (isLoading) return <div className="py-16 text-center text-slate-400 text-sm">Loading…</div>;
-  if (!months.length) return (
-    <div className="py-16 text-center text-slate-400 text-sm">No paid expenditure records found for this project.</div>
-  );
-
   const VIEWS = [
     { id: 'table',    label: 'Monthly Matrix', icon: LayoutList },
     { id: 'charts',   label: '3D Charts',      icon: BarChart2  },
@@ -543,6 +538,11 @@ function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName
       .sort((a, b) => b.total - a.total)
       .slice(0, 8),
   [months, monthTotals]);
+
+  if (isLoading) return <div className="py-16 text-center text-slate-400 text-sm">Loading…</div>;
+  if (!months.length) return (
+    <div className="py-16 text-center text-slate-400 text-sm">No paid expenditure records found for this project.</div>
+  );
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
