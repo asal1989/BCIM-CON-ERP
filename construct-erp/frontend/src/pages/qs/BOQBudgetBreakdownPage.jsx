@@ -1350,7 +1350,7 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
   );
 }
 
-export default function BOQBudgetBreakdownPage({ embedded = false }) {
+export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = null }) {
   const [projectId, setProjectId] = useState('');
   const [mode, setMode] = useState('amount'); // 'amount' | 'pct'
   const [search, setSearch] = useState('');
@@ -1573,7 +1573,7 @@ export default function BOQBudgetBreakdownPage({ embedded = false }) {
       @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
     `,
   });
-  const [view, setView] = useState('breakdown'); // 'breakdown' | 'summary'
+  const [view, setView] = useState(lockedView || 'breakdown'); // 'breakdown' | 'summary' | 'costhead'
 
   const chapterBudgetMutation = useMutation({
     mutationFn: ({ chapterName, chapterNo, totalBudget }) =>
@@ -1655,8 +1655,8 @@ export default function BOQBudgetBreakdownPage({ embedded = false }) {
 
         {projectId && !isLoading && (
           <>
-            {/* View tabs */}
-            <div className="flex gap-2">
+            {/* View tabs — hidden when a specific view is locked (e.g. Budget Control page) */}
+            {!lockedView && <div className="flex gap-2">
               {[
                 { id: 'breakdown', label: 'Budget Breakdown', icon: LayoutList },
                 { id: 'summary',   label: 'BOQ Summary',      icon: FileText },
@@ -1669,7 +1669,7 @@ export default function BOQBudgetBreakdownPage({ embedded = false }) {
                   <t.icon className="w-3.5 h-3.5" /> {t.label}
                 </button>
               ))}
-            </div>
+            </div>}
 
             {/* ── BOQ SUMMARY VIEW (chapter rollup — same data as print) ── */}
             {view === 'summary' && (

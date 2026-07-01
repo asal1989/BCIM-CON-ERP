@@ -1,2 +1,5 @@
-// src/pages/finance/BudgetPage.jsx — redirects to BOQ Budget Breakdown
-export { default } from '../qs/BOQBudgetBreakdownPage';
+import BOQBudgetBreakdownPage from '../qs/BOQBudgetBreakdownPage';
+
+export default function BudgetPage() {
+  return <BOQBudgetBreakdownPage lockedView="costhead" />;
+}
