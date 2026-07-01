@@ -358,11 +358,18 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
     enabled: !!form.project_id,
     staleTime: 2 * 60 * 1000,
   });
+  // Deduplicate by chapter_name (all items share chapter_no "01", so chapter_name is the real grouping key)
   const boqChapters = useMemo(() => {
     const seen = new Set();
     return boqItemsRaw
-      .filter(it => it.chapter_no != null && String(it.chapter_no).trim() !== '' && !seen.has(it.chapter_no) && seen.add(it.chapter_no))
-      .map(it => ({ chapter_no: it.chapter_no, chapter_name: it.chapter_name }));
+      .filter(it => {
+        const key = it.chapter_name || it.chapter_no;
+        if (!key || String(key).trim() === '') return false;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map(it => ({ chapter_no: it.chapter_no, chapter_name: it.chapter_name || it.chapter_no }));
   }, [boqItemsRaw]);
 
   let vendorOptions = form.project_id && projectVendors?.length ? projectVendors : vendors;
@@ -841,12 +848,14 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
                         <span className="text-[10px] text-slate-400 italic">Select a project in Step 1 to link BOQ chapter / cost head</span>
                       ) : boqLoading ? (
                         <span className="text-[10px] text-slate-400 italic">Loading BOQ…</span>
+                      ) : boqChapters.length === 0 ? (
+                        <span className="text-[10px] text-slate-400 italic">No BOQ items found for this project</span>
                       ) : (
                         <>
                           <div className="flex items-center gap-1.5 min-w-0">
                             <span className="text-[10px] font-medium text-slate-400 whitespace-nowrap">Chapter</span>
                             <select
-                              className="h-6 text-[11px] border border-slate-200 rounded-md px-1.5 text-slate-600 bg-white focus:border-indigo-400 focus:outline-none min-w-[140px]"
+                              className="h-6 text-[11px] border border-slate-200 rounded-md px-1.5 text-slate-600 bg-white focus:border-indigo-400 focus:outline-none min-w-[160px]"
                               value={it.boq_chapter || ''}
                               onChange={e => {
                                 setItem(i, 'boq_chapter', e.target.value);
@@ -855,8 +864,8 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
                             >
                               <option value="">— Select chapter —</option>
                               {boqChapters.map(ch => (
-                                <option key={ch.chapter_no} value={ch.chapter_no}>
-                                  {ch.chapter_no} – {ch.chapter_name}
+                                <option key={ch.chapter_name} value={ch.chapter_name}>
+                                  {ch.chapter_name}
                                 </option>
                               ))}
                             </select>
@@ -871,7 +880,7 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
                               >
                                 <option value="">— Select line item —</option>
                                 {boqItemsRaw
-                                  .filter(b => String(b.chapter_no) === String(it.boq_chapter))
+                                  .filter(b => (b.chapter_name || b.chapter_no) === it.boq_chapter)
                                   .map(b => (
                                     <option key={b.id} value={b.id}>
                                       {b.item_no} – {b.description}
