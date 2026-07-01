@@ -6,10 +6,31 @@ const { createNotification } = require('../controllers/notification.controller')
 const { sendPushToUser, sendPushToUsersByEmail, sendPushToRole } = require('./fcm.service');
 
 // ─── Shared push helper ────────────────────────────────────────────────────────
-// Sends push to a specific user AND creates an in-app notification record.
+// Sends push to a specific user/role AND creates an in-app notification record.
+//
+// Accepts either target_role (single) or target_roles (array — used by the
+// several call sites below that loop over a list of approver roles for one
+// event). Every role-targeted call here is an "action needed" alert, and none
+// of those role lists ever included super_admin, so the top of the org saw
+// nothing unless they happened to also hold one of those specific roles.
+// CC super_admin exactly once per event (not once per role) so they always
+// have visibility without getting duplicate pushes for the same event.
 function notify(opts) {
-  // opts: { company_id, user_id?, target_role?, type, title, message, link, severity, related_type, related_id }
-  createNotification({ sendEmail: false, ...opts }).catch(() => {});
+  // opts: { company_id, user_id?, target_role?, target_roles?, type, title, message, link, severity, related_type, related_id }
+  const roles = opts.target_roles || (opts.target_role ? [opts.target_role] : []);
+
+  if (!roles.length) {
+    // Direct-to-user notification (e.g. "your request was approved") — unchanged.
+    createNotification({ sendEmail: false, ...opts, target_roles: undefined }).catch(() => {});
+    return;
+  }
+
+  for (const role of roles) {
+    createNotification({ sendEmail: false, ...opts, target_role: role, target_roles: undefined }).catch(() => {});
+  }
+  if (!roles.includes('super_admin')) {
+    createNotification({ sendEmail: false, ...opts, target_role: 'super_admin', target_roles: undefined }).catch(() => {});
+  }
 }
 
 // Convenience: push directly to multiple email addresses (no in-app record)
@@ -40,19 +61,17 @@ function notifyMrNextApprover(companyId, mrs, nextRole, stageDoneLabel) {
 // ══════════════════════════════════════════════════════════════════════════════
 function notifyScBillSubmitted(companyId, bill) {
   // Notify accounts + management + project_manager
-  for (const role of ['accounts', 'project_manager', 'management']) {
-    notify({
-      company_id: companyId,
-      target_role: role,
-      type: 'sc_bill_submitted',
-      title: `SC Bill Submitted: ${bill.bill_number || bill.id}`,
-      message: `${bill.sc_name || 'Subcontractor'} submitted bill ${bill.bill_number} (${bill.project_name || ''}) for ₹${Number(bill.net_payable || 0).toLocaleString('en-IN')}. Review & approve.`,
-      link: '/sc/bill-approval',
-      severity: 'warning',
-      related_type: 'sc_bill',
-      related_id: bill.id,
-    });
-  }
+  notify({
+    company_id: companyId,
+    target_roles: ['accounts', 'project_manager', 'management'],
+    type: 'sc_bill_submitted',
+    title: `SC Bill Submitted: ${bill.bill_number || bill.id}`,
+    message: `${bill.sc_name || 'Subcontractor'} submitted bill ${bill.bill_number} (${bill.project_name || ''}) for ₹${Number(bill.net_payable || 0).toLocaleString('en-IN')}. Review & approve.`,
+    link: '/sc/bill-approval',
+    severity: 'warning',
+    related_type: 'sc_bill',
+    related_id: bill.id,
+  });
 }
 
 function notifyScBillApproved(companyId, bill, actorName) {
@@ -107,19 +126,17 @@ function notifyScBillRejected(companyId, bill, actorName, reason) {
 // SC WORK ORDERS
 // ══════════════════════════════════════════════════════════════════════════════
 function notifyScWoSubmitted(companyId, wo) {
-  for (const role of ['project_manager', 'admin']) {
-    notify({
-      company_id: companyId,
-      target_role: role,
-      type: 'sc_wo_submitted',
-      title: `Work Order Submitted: ${wo.wo_number || wo.id}`,
-      message: `A new work order for ${wo.sc_name || 'subcontractor'} (${wo.project_name || ''}) worth ₹${Number(wo.contract_amount || 0).toLocaleString('en-IN')} needs your approval.`,
-      link: '/sc/work-orders',
-      severity: 'warning',
-      related_type: 'sc_wo',
-      related_id: wo.id,
-    });
-  }
+  notify({
+    company_id: companyId,
+    target_roles: ['project_manager', 'admin'],
+    type: 'sc_wo_submitted',
+    title: `Work Order Submitted: ${wo.wo_number || wo.id}`,
+    message: `A new work order for ${wo.sc_name || 'subcontractor'} (${wo.project_name || ''}) worth ₹${Number(wo.contract_amount || 0).toLocaleString('en-IN')} needs your approval.`,
+    link: '/sc/work-orders',
+    severity: 'warning',
+    related_type: 'sc_wo',
+    related_id: wo.id,
+  });
 }
 
 function notifyScWoApproved(companyId, wo, actorName) {
@@ -364,19 +381,17 @@ function notifyGrnRejected(companyId, grn, actorName, reason) {
 // PURCHASE ORDERS
 // ══════════════════════════════════════════════════════════════════════════════
 function notifyPoCreated(companyId, po) {
-  for (const role of ['accounts', 'project_manager', 'management']) {
-    notify({
-      company_id: companyId,
-      target_role: role,
-      type: 'po_created',
-      title: `New PO Created: ${po.po_number}`,
-      message: `PO ${po.po_number} for ${po.vendor_name || 'vendor'} (₹${Number(po.total_amount || 0).toLocaleString('en-IN')}) has been created by ${po.created_by_name || 'procurement'}.`,
-      link: '/procurement/po',
-      severity: 'info',
-      related_type: 'po',
-      related_id: po.id,
-    });
-  }
+  notify({
+    company_id: companyId,
+    target_roles: ['accounts', 'project_manager', 'management'],
+    type: 'po_created',
+    title: `New PO Created: ${po.po_number}`,
+    message: `PO ${po.po_number} for ${po.vendor_name || 'vendor'} (₹${Number(po.total_amount || 0).toLocaleString('en-IN')}) has been created by ${po.created_by_name || 'procurement'}.`,
+    link: '/procurement/po',
+    severity: 'info',
+    related_type: 'po',
+    related_id: po.id,
+  });
 }
 
 function notifyPoApproved(companyId, po, actorName) {
@@ -417,21 +432,10 @@ function notifyPoRejected(companyId, po, actorName, reason) {
 function notifyLeaveRequested(companyId, leave, requesterName) {
   notify({
     company_id: companyId,
-    target_role: 'hr',
+    target_roles: ['hr', 'project_manager'],
     type: 'leave_requested',
     title: `Leave Request: ${requesterName}`,
     message: `${requesterName} has applied for ${leave.leave_type || 'leave'} from ${leave.from_date} to ${leave.to_date}. Please review and approve.`,
-    link: '/hr/leave',
-    severity: 'info',
-    related_type: 'leave',
-    related_id: leave.id,
-  });
-  notify({
-    company_id: companyId,
-    target_role: 'project_manager',
-    type: 'leave_requested',
-    title: `Leave Request: ${requesterName}`,
-    message: `${requesterName} has applied for ${leave.leave_type || 'leave'} from ${leave.from_date} to ${leave.to_date}.`,
     link: '/hr/leave',
     severity: 'info',
     related_type: 'leave',
@@ -666,19 +670,17 @@ function notifyIndentRejected(companyId, indent, submitterUserId, actorName, rea
 // QUALITY — NCR, Submittals, RFI
 // ══════════════════════════════════════════════════════════════════════════════
 function notifyNcrRaised(companyId, ncr, raisedByName) {
-  for (const role of ['project_manager', 'qs_engineer']) {
-    notify({
-      company_id: companyId,
-      target_role: role,
-      type: 'ncr_raised',
-      title: `NCR Raised: ${ncr.ncr_number || ncr.id}`,
-      message: `Non-conformance reported by ${raisedByName} for ${ncr.project_name || 'a project'}. Action required.`,
-      link: '/quality/document-control',
-      severity: 'critical',
-      related_type: 'ncr',
-      related_id: ncr.id,
-    });
-  }
+  notify({
+    company_id: companyId,
+    target_roles: ['project_manager', 'qs_engineer'],
+    type: 'ncr_raised',
+    title: `NCR Raised: ${ncr.ncr_number || ncr.id}`,
+    message: `Non-conformance reported by ${raisedByName} for ${ncr.project_name || 'a project'}. Action required.`,
+    link: '/quality/document-control',
+    severity: 'critical',
+    related_type: 'ncr',
+    related_id: ncr.id,
+  });
 }
 
 function notifySubmittalStatusChanged(companyId, submittal, newStatus, actorName) {
