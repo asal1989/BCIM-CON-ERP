@@ -599,12 +599,19 @@ function CreateWOModal({ onClose, vendors, projects, mrsList = [], onCreate, onU
   const vendor = (vendors || []).find(v => String(v.id) === String(form.vendor_id));
   const project = (projects || []).find(p => String(p.id) === String(form.project_id));
 
-  // Approved MRs (Material Requisitions) this WO can be issued against — same
-  // "exclude only rejected" rule used by Purchase Orders, scoped to the chosen
-  // project once one is selected.
-  const activeMrsList = (mrsList || [])
-    .filter(m => m.status !== 'rejected')
-    .filter(m => !form.project_id || String(m.project_id) === String(form.project_id));
+  // Fetch MRs directly inside the modal so we always have the right project scope.
+  // The parent-level mrsList prop was fetched without a project filter and may be
+  // empty or contain wrong-project rows; fetching here with project_id ensures
+  // the dropdown always shows the correct MRs once a project is selected.
+  const { data: projectMrsList = [], isFetching: mrsFetching } = useQuery({
+    queryKey: ['mrs-for-wo-modal', form.project_id],
+    queryFn: () => mrsAPI.list(
+      form.project_id ? { project_id: form.project_id } : {},
+      { skipProjectInject: true }
+    ).then(r => r.data?.data || []),
+    staleTime: 30_000,
+  });
+  const activeMrsList = projectMrsList.filter(m => m.status !== 'rejected');
   const mrLabel = (m) => m ? `${m.mrs_number || m.id?.slice(0, 8)} — ${m.project_name || 'Project'} — ${(m.status || 'pending').replaceAll('_', ' ')}` : '';
   const linkedMr = activeMrsList.find(m => String(m.id) === String(form.mrs_id))
     || (mrsList || []).find(m => String(m.id) === String(form.mrs_id));
@@ -732,8 +739,21 @@ function CreateWOModal({ onClose, vendors, projects, mrsList = [], onCreate, onU
                 <input className={Z_INP} placeholder="e.g. Civil Works" value={form.cost_head} onChange={e => f('cost_head', e.target.value)} />
               </ZField>
               <ZField label="Approved MR *" className="col-span-2 md:col-span-2">
-                <select className={`${Z_INP}${!form.mrs_id ? ' border-red-300' : ''}`} value={form.mrs_id} onChange={e => selectMR(e.target.value)}>
-                  <option value="">— Select an Approved MR (required) —</option>
+                <select
+                  className={`${Z_INP}${!form.mrs_id ? ' border-red-300' : ''}`}
+                  value={form.mrs_id}
+                  onChange={e => selectMR(e.target.value)}
+                  disabled={mrsFetching}
+                >
+                  <option value="">
+                    {mrsFetching
+                      ? 'Loading MRs…'
+                      : !form.project_id
+                        ? '— Select a project first —'
+                        : activeMrsList.length === 0
+                          ? '— No MRs found for this project —'
+                          : '— Select an MR —'}
+                  </option>
                   {activeMrsList.map(m => (
                     <option key={m.id} value={m.id}>{mrLabel(m)}</option>
                   ))}
