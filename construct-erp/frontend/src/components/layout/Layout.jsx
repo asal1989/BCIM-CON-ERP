@@ -198,6 +198,7 @@ const navGroups = [
   { label: 'HR & Admin', items: [
     { to: '/hr-admin',                   icon: LayoutDashboard, label: 'HR Dashboard' },
     { to: '/hr-admin/checklist',         icon: ClipboardList,   label: 'HR Checklist' },
+    { to: '/hr-admin/ops-checklist',     icon: ClipboardCheck,  label: 'HR Ops Checklist' },
     { to: '/hr-admin/analytics',         icon: BarChart2,       label: 'Analytics Hub' },
     { to: '/hr-admin/directory',         icon: Users,           label: 'Employee Directory' },
     { to: '/hr-admin/org-chart',         icon: GitBranch,       label: 'Organization Chart' },
