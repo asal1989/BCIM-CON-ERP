@@ -74,8 +74,8 @@ router.get('/:id', async (req, res) => {
        JOIN vendors v ON i.vendor_id = v.id
        LEFT JOIN purchase_orders po ON i.po_id = po.id
        LEFT JOIN grn g ON i.grn_id = g.id
-       WHERE i.id = $1`,
-      [req.params.id]
+       WHERE i.id = $1 AND p.company_id = $2`,
+      [req.params.id, req.user.company_id]
     );
     if (!invRes.rows.length) return res.status(404).json({ error: 'Invoice not found' });
     

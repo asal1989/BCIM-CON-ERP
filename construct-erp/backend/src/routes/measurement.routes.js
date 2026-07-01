@@ -36,6 +36,9 @@ router.post('/', async (req, res) => {
   const { project_id, boq_item_id, mb_number, entry_date, description, location,
           nos, length, breadth, height, deduction, drawing_ref, site_photos, remarks } = req.body;
 
+  const projCheck = await query(`SELECT 1 FROM projects WHERE id = $1 AND company_id = $2`, [project_id, req.user.company_id]);
+  if (!projCheck.rows.length) return res.status(403).json({ error: 'Invalid project for this company' });
+
   // Auto-calculate quantity
   const quantity = (nos || 1) * (length || 1) * (breadth || 1) * (height || 1);
   const net_quantity = quantity - (deduction || 0);
@@ -59,7 +62,11 @@ router.patch('/:id/approve', authorize('qs_engineer','project_manager','admin'),
     const role = req.user.role;
 
     // Fetch current measurement to validate status
-    const current = await query('SELECT * FROM measurements WHERE id = $1', [req.params.id]);
+    const current = await query(
+      `SELECT m.* FROM measurements m JOIN projects p ON m.project_id = p.id
+       WHERE m.id = $1 AND p.company_id = $2`,
+      [req.params.id, req.user.company_id]
+    );
     if (!current.rows[0]) return res.status(404).json({ error: 'Measurement not found' });
     const mb = current.rows[0];
 
@@ -105,7 +112,11 @@ router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const check = await query('SELECT status FROM measurements WHERE id = $1', [id]);
+    const check = await query(
+      `SELECT m.status FROM measurements m JOIN projects p ON m.project_id = p.id
+       WHERE m.id = $1 AND p.company_id = $2`,
+      [id, req.user.company_id]
+    );
     if (check.rowCount === 0) return res.status(404).json({ error: 'Measurement not found' });
 
     const {
@@ -155,7 +166,12 @@ router.put('/:id', async (req, res) => {
 // DELETE /:id
 router.delete('/:id', async (req, res) => {
   try {
-    const result = await query('DELETE FROM measurements WHERE id = $1 RETURNING *', [req.params.id]);
+    const result = await query(
+      `DELETE FROM measurements m USING projects p
+       WHERE m.project_id = p.id AND m.id = $1 AND p.company_id = $2
+       RETURNING m.*`,
+      [req.params.id, req.user.company_id]
+    );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Measurement not found' });
     res.json({ message: 'Measurement deleted successfully', data: result.rows[0] });
   } catch (err) {

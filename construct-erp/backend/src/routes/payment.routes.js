@@ -278,7 +278,13 @@ router.post('/', authorize('super_admin', 'admin', 'accountant'), async (req, re
 // ── DELETE /payments/:id ──────────────────────────────────────────────────
 router.delete('/:id', authorize('super_admin', 'admin'), async (req, res) => {
   try {
-    await query(`DELETE FROM payments WHERE id = $1`, [req.params.id]);
+    const r = await query(
+      `DELETE FROM payments pay USING projects p
+       WHERE pay.project_id = p.id AND pay.id = $1 AND p.company_id = $2
+       RETURNING pay.id`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Payment not found' });
     res.json({ message: 'Deleted' });
   } catch (err) {
     res.status(500).json({ error: err.message });

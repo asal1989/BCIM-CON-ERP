@@ -75,6 +75,9 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'project_id and report_date are required' });
     }
 
+    const projCheck = await query(`SELECT 1 FROM projects WHERE id = $1 AND company_id = $2`, [project_id, req.user.company_id]);
+    if (!projCheck.rows.length) return res.status(403).json({ error: 'Invalid project for this company' });
+
     const dprNum       = `DPR-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
     const workDone     = work_done     || activities || [];
     const matConsumed  = material_consumed || materials || [];
