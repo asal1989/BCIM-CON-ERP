@@ -1,12 +1,13 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { StatusBar } from 'expo-status-bar';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { addNotificationResponseListener } from './src/utils/pushNotifications';
 import { theme } from './src/theme';
 import LoginScreen from './src/screens/LoginScreen';
 import ProjectSelectScreen from './src/screens/ProjectSelectScreen';
@@ -23,6 +24,18 @@ import MoreScreen from './src/screens/MoreScreen';
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 const MoreStack = createNativeStackNavigator();
+const navigationRef = createNavigationContainerRef();
+
+// Backend notification links are web paths (e.g. "/hr/leave"); the mobile
+// app only has a handful of screens today, so this is a best-effort mapping
+// rather than full deep linking — good enough to land on the right tab.
+function navigateForLink(link) {
+  if (!navigationRef.isReady() || !link) return;
+  if (link.startsWith('/hr/leave')) navigationRef.navigate('Main', { screen: 'More', params: { screen: 'ESS' } });
+  else if (link.startsWith('/stores/mrs') || link.startsWith('/procurement/mrs')) navigationRef.navigate('Main', { screen: 'MRS' });
+  else if (link.startsWith('/stores')) navigationRef.navigate('Main', { screen: 'Stores' });
+  else navigationRef.navigate('Main', { screen: 'Dashboard' });
+}
 
 // Bottom tabs are capped at 5 — platform guidance (and what actually fits
 // without labels wrapping/overlapping on a normal phone width). Everything
@@ -78,6 +91,11 @@ function Tabs() {
 function RootNavigator() {
   const { booting, user, selectedProject } = useAuth();
 
+  useEffect(() => {
+    const sub = addNotificationResponseListener(navigateForLink);
+    return () => sub.remove();
+  }, []);
+
   if (booting) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.bg }}>
@@ -87,7 +105,7 @@ function RootNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!user ? (
           <Stack.Screen name="Login" component={LoginScreen} />

@@ -1,8 +1,8 @@
 // src/pages/hr-admin/AttendancePage.jsx — 2026 Premium UI
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Calendar, Fingerprint, RefreshCw, CheckCircle, AlertTriangle, CalendarCheck } from 'lucide-react';
+import { Calendar, Fingerprint, RefreshCw, CheckCircle, AlertTriangle, CalendarCheck, Clock, Download } from 'lucide-react';
 import { hrAttendanceAPI, hrMastersAPI, hrEmployeesAPI, hrEsslAPI } from '../../api/client';
 import toast from 'react-hot-toast';
 
@@ -20,6 +20,270 @@ const STATUS_CELL = {
 
 const NEXT_STATUS = { present:'absent', absent:'half_day', half_day:'leave', leave:'present' };
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+// hh:mm string → total minutes
+const toMins = (t) => { if (!t) return null; const [h,m] = t.split(':').map(Number); return h*60+(m||0); };
+// minutes → "Xh Ym"
+const fmtHrs = (mins) => { if (mins == null || mins <= 0) return '—'; const h=Math.floor(mins/60),m=mins%60; return m ? `${h}h ${m}m` : `${h}h`; };
+
+// ── Inline editable time cell ─────────────────────────────────────────────────
+function TimeCell({ value, onSave, disabled }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(value || '');
+  const ref = useRef();
+
+  const commit = () => {
+    setEditing(false);
+    if ((val || '') !== (value || '')) onSave(val || null);
+  };
+
+  if (disabled) return <span className="text-slate-300 text-xs">—</span>;
+
+  if (editing) return (
+    <input ref={ref} type="time" value={val} autoFocus
+      onChange={e => setVal(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
+      className="w-20 border border-indigo-400 rounded-lg px-1.5 py-0.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-200"
+    />
+  );
+  return (
+    <button onClick={() => { setVal(value || ''); setEditing(true); }}
+      className="text-xs font-mono px-2 py-0.5 rounded hover:bg-indigo-50 border border-transparent hover:border-indigo-200 transition min-w-[56px] text-left">
+      {value || <span className="text-slate-300">--:--</span>}
+    </button>
+  );
+}
+
+// ── Per-employee monthly timesheet ─────────────────────────────────────────────
+function TimesheetView({ month, year, allEmployees, qc }) {
+  const [empId, setEmpId] = useState('');
+  const daysInMonth = new Date(year, month, 0).getDate();
+
+  const { data: attData, isLoading } = useQuery({
+    queryKey: ['hr-timesheet', month, year, empId],
+    queryFn: () => hrAttendanceAPI.list({ month, year, user_id: empId }).then(r => r.data),
+    enabled: !!empId,
+  });
+
+  // Build a map: day → attendance record
+  const recMap = useMemo(() => {
+    const m = {};
+    (attData?.data || []).forEach(a => {
+      const d = new Date(a.attendance_date).getDate();
+      m[d] = a;
+    });
+    return m;
+  }, [attData]);
+
+  const upsertMut = useMutation({
+    mutationFn: (data) => hrAttendanceAPI.upsert(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hr-timesheet', month, year, empId] }),
+    onError: e => toast.error(e.response?.data?.error || 'Failed to save'),
+  });
+  const updateMut = useMutation({
+    mutationFn: ({ id, ...data }) => hrAttendanceAPI.update(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['hr-timesheet', month, year, empId] }),
+    onError: e => toast.error(e.response?.data?.error || 'Failed to save'),
+  });
+
+  const saveField = (day, field, value) => {
+    const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const rec = recMap[day];
+    if (rec?.id) {
+      updateMut.mutate({ id: rec.id, [field]: value,
+        status: rec.status, in_time: rec.in_time, out_time: rec.out_time,
+        late_minutes: rec.late_minutes, remarks: rec.remarks,
+        // override with the new field value
+        ...{ [field]: value },
+      });
+    } else {
+      upsertMut.mutate({ user_id: empId, attendance_date: dateStr, status: 'present', [field]: value });
+    }
+  };
+
+  const toggleStatus = (day) => {
+    const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const rec = recMap[day];
+    const next = rec ? (NEXT_STATUS[rec.status] || 'present') : 'present';
+    if (rec?.id) {
+      updateMut.mutate({ id: rec.id, status: next, in_time: rec.in_time, out_time: rec.out_time, late_minutes: rec.late_minutes, remarks: rec.remarks });
+    } else {
+      upsertMut.mutate({ user_id: empId, attendance_date: dateStr, status: next });
+    }
+  };
+
+  // Monthly totals
+  const totals = useMemo(() => {
+    let present=0, absent=0, halfDay=0, leave=0, totalMins=0, lateDays=0, otMins=0;
+    for (let d=1; d<=daysInMonth; d++) {
+      const rec = recMap[d];
+      if (!rec) continue;
+      if (rec.status === 'present') present++;
+      else if (rec.status === 'absent') absent++;
+      else if (rec.status === 'half_day') halfDay++;
+      else if (rec.status === 'leave') leave++;
+      const inM = toMins(rec.in_time), outM = toMins(rec.out_time);
+      if (inM != null && outM != null && outM > inM) {
+        const worked = outM - inM;
+        totalMins += worked;
+        if (worked > 480) otMins += worked - 480; // > 8h is OT
+      }
+      if (rec.late_minutes > 0) lateDays++;
+    }
+    return { present, absent, halfDay, leave, totalMins, lateDays, otMins };
+  }, [recMap, daysInMonth]);
+
+  const selectedEmp = allEmployees.find(e => e.id === empId);
+
+  return (
+    <div className="space-y-4">
+      {/* Employee selector + export hint */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-4 flex flex-wrap items-center gap-3"
+        style={{ boxShadow: '0 2px 12px rgba(10,31,92,0.06)' }}>
+        <Clock className="w-4 h-4 text-indigo-500 shrink-0" />
+        <span className="text-sm font-semibold text-slate-600">Employee Timesheet</span>
+        <select value={empId} onChange={e => setEmpId(e.target.value)}
+          className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-sm focus:outline-none focus:border-indigo-400 min-w-52">
+          <option value="">— Select Employee —</option>
+          {allEmployees.map(e => (
+            <option key={e.id} value={e.id}>{e.name}{e.employee_code ? ` (${e.employee_code})` : ''}</option>
+          ))}
+        </select>
+        {selectedEmp && (
+          <span className="text-xs text-slate-400 ml-1">
+            {MONTHS[month-1]} {year} · click any In/Out cell to edit
+          </span>
+        )}
+      </div>
+
+      {!empId && (
+        <div className="bg-white rounded-2xl border border-gray-100 py-20 text-center">
+          <Clock className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+          <p className="text-slate-500 font-semibold">Select an employee to view their timesheet</p>
+        </div>
+      )}
+
+      {empId && isLoading && (
+        <div className="bg-white rounded-2xl border border-gray-100 flex items-center justify-center py-16">
+          <div className="w-8 h-8 rounded-full border-2 border-indigo-200 border-t-indigo-600 animate-spin" />
+        </div>
+      )}
+
+      {empId && !isLoading && (
+        <>
+          {/* KPI summary */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {[
+              { label: 'Present',       value: totals.present,           color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-200' },
+              { label: 'Absent',        value: totals.absent,            color: 'text-red-600',     bg: 'bg-red-50 border-red-200' },
+              { label: 'Half Day',      value: totals.halfDay,           color: 'text-amber-600',   bg: 'bg-amber-50 border-amber-200' },
+              { label: 'Total Hours',   value: fmtHrs(totals.totalMins), color: 'text-indigo-700',  bg: 'bg-indigo-50 border-indigo-200' },
+              { label: 'Overtime',      value: fmtHrs(totals.otMins),    color: 'text-purple-600',  bg: 'bg-purple-50 border-purple-200' },
+            ].map(c => (
+              <div key={c.label} className={`rounded-xl border p-3 text-center ${c.bg}`}>
+                <div className={`text-2xl font-black ${c.color}`}>{c.value}</div>
+                <div className="text-[11px] text-slate-500 font-semibold mt-0.5">{c.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Day-by-day table */}
+          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden"
+            style={{ boxShadow: '0 2px 12px rgba(10,31,92,0.06)' }}>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-100 text-[11px] uppercase tracking-wide text-slate-500 font-bold">
+                  <th className="text-left px-4 py-3">Date</th>
+                  <th className="text-left px-4 py-3">Day</th>
+                  <th className="text-center px-4 py-3">Status</th>
+                  <th className="text-center px-4 py-3">In Time</th>
+                  <th className="text-center px-4 py-3">Out Time</th>
+                  <th className="text-right px-4 py-3">Hours</th>
+                  <th className="text-right px-4 py-3">Late (min)</th>
+                  <th className="text-left px-4 py-3">Remarks</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => {
+                  const date    = new Date(year, month-1, d);
+                  const dayName = DAYS[date.getDay()];
+                  const isSun   = date.getDay() === 0;
+                  const rec     = recMap[d];
+                  const st      = rec ? STATUS_CELL[rec.status] : null;
+                  const inM     = toMins(rec?.in_time);
+                  const outM    = toMins(rec?.out_time);
+                  const workedMins = (inM != null && outM != null && outM > inM) ? outM - inM : null;
+                  const isOT    = workedMins != null && workedMins > 480;
+                  const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+
+                  return (
+                    <tr key={d} className={`transition-colors hover:bg-slate-50 ${isSun ? 'bg-gray-50/60' : ''}`}>
+                      <td className="px-4 py-2.5">
+                        <span className="font-mono text-xs font-semibold text-slate-700">
+                          {dateStr}
+                        </span>
+                      </td>
+                      <td className={`px-4 py-2.5 text-xs font-semibold ${isSun ? 'text-rose-400' : 'text-slate-500'}`}>
+                        {dayName}
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        {isSun ? (
+                          <span className="text-[10px] font-bold bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full">WO</span>
+                        ) : (
+                          <button onClick={() => toggleStatus(d)}
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition hover:opacity-80 ${st ? `${st.bg.split(' ')[0]} ${st.text}` : 'bg-slate-100 text-slate-400 border-slate-200'}`}>
+                            {st?.label || '·'}
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        <TimeCell
+                          value={rec?.in_time}
+                          disabled={isSun || rec?.status === 'absent' || rec?.status === 'week_off'}
+                          onSave={v => saveField(d, 'in_time', v)}
+                        />
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        <TimeCell
+                          value={rec?.out_time}
+                          disabled={isSun || rec?.status === 'absent' || rec?.status === 'week_off'}
+                          onSave={v => saveField(d, 'out_time', v)}
+                        />
+                      </td>
+                      <td className={`px-4 py-2.5 text-right text-xs font-bold ${isOT ? 'text-purple-600' : 'text-slate-600'}`}>
+                        {fmtHrs(workedMins)}
+                        {isOT && <span className="ml-1 text-[9px] bg-purple-100 text-purple-600 px-1 rounded">OT</span>}
+                      </td>
+                      <td className={`px-4 py-2.5 text-right text-xs ${rec?.late_minutes > 0 ? 'text-rose-500 font-bold' : 'text-slate-300'}`}>
+                        {rec?.late_minutes > 0 ? rec.late_minutes : '—'}
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-slate-400 max-w-[160px] truncate">
+                        {rec?.remarks || ''}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {/* Footer totals */}
+              <tfoot>
+                <tr className="bg-slate-800 text-xs font-bold">
+                  <td className="px-4 py-3 text-slate-300 col-span-2" colSpan={2}>Monthly Total</td>
+                  <td className="px-4 py-3 text-center text-white">{totals.present}P / {totals.absent}A</td>
+                  <td colSpan={2} />
+                  <td className="px-4 py-3 text-right text-indigo-300">{fmtHrs(totals.totalMins)}</td>
+                  <td className="px-4 py-3 text-right text-rose-300">{totals.lateDays} late</td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 export default function AttendancePage() {
   const qc  = useQueryClient();
@@ -30,6 +294,7 @@ export default function AttendancePage() {
   const [view,      setView]      = useState('summary');
   const [syncing,   setSyncing]   = useState(false);
   const [syncResult,setSyncResult]= useState(null);
+  const allEmployees = useMemo(() => empData?.data || [], [empData]);
 
   const daysInMonth = new Date(year, month, 0).getDate();
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
@@ -186,8 +451,9 @@ export default function AttendancePage() {
           {(deptData?.data||[]).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
         </select>
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1 ml-auto">
-          <button onClick={()=>setView('summary')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${view==='summary'?'bg-white text-blue-700 shadow-sm':'text-gray-500 hover:text-gray-700'}`}>Summary</button>
-          <button onClick={()=>setView('grid')}    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${view==='grid'   ?'bg-white text-blue-700 shadow-sm':'text-gray-500 hover:text-gray-700'}`}>Grid</button>
+          <button onClick={()=>setView('summary')}   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${view==='summary'  ?'bg-white text-blue-700 shadow-sm':'text-gray-500 hover:text-gray-700'}`}>Summary</button>
+          <button onClick={()=>setView('grid')}      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${view==='grid'     ?'bg-white text-blue-700 shadow-sm':'text-gray-500 hover:text-gray-700'}`}>Grid</button>
+          <button onClick={()=>setView('timesheet')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${view==='timesheet'?'bg-white text-indigo-700 shadow-sm':'text-gray-500 hover:text-gray-700'}`}>Timesheet</button>
         </div>
       </motion.div>
 
@@ -272,6 +538,13 @@ export default function AttendancePage() {
               </tbody>
             </table>
           )}
+        </motion.div>
+      )}
+
+      {/* Timesheet View */}
+      {view==='timesheet' && (
+        <motion.div {...fade(0.12)}>
+          <TimesheetView month={month} year={year} allEmployees={allEmployees} qc={qc} />
         </motion.div>
       )}
 

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { authAPI, setOnAuthExpired } from '../api/client';
+import { registerForPushNotifications } from '../utils/pushNotifications';
 
 const AuthContext = createContext(null);
 
@@ -31,6 +32,7 @@ export function AuthProvider({ children }) {
           const res = await authAPI.me();
           setUser(res.data?.data || res.data?.user || res.data);
           if (proj) setSelectedProject(JSON.parse(proj));
+          registerForPushNotifications();
         }
       } catch {}
       setBooting(false);
@@ -43,6 +45,7 @@ export function AuthProvider({ children }) {
     await SecureStore.setItemAsync('auth_token', accessToken);
     await SecureStore.setItemAsync('refresh_token', refreshToken);
     setUser(u);
+    registerForPushNotifications();
   };
 
   const logout = async () => {

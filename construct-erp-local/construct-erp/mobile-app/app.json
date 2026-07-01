@@ -10,6 +10,19 @@
       "adaptiveIcon": { "backgroundColor": "#0F172A" },
       "package": "com.bcimengineering.erp"
     },
-    "plugins": ["expo-secure-store"]
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "color": "#2563EB"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+      }
+    }
   }
 }
