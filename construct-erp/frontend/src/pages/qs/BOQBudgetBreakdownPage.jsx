@@ -1036,7 +1036,7 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
   };
 
   const rows = data || [];
-  const totalBudget = rows.reduce((s, r) => s + r.budget, 0);
+  const totalBudget = rows.filter(r => !r.derived).reduce((s, r) => s + r.budget, 0);
   const totalActual = rows.filter(r => !r.derived).reduce((s, r) => s + r.actual, 0);
 
   // Contingency absorption: overages in non-derived heads draw from the contingency reserve.
@@ -1320,11 +1320,6 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
           <tr className="bg-[#E4EFDC] font-bold border-t-2 border-slate-300">
             <td className="px-4 py-2.5" />
             <td className="px-4 py-2.5 text-sm font-bold text-slate-800">Total</td>
-            <td className="px-4 py-2.5 text-right text-sm text-slate-700">
-              {rows.reduce((s, r) => s + (r.boq_value || 0), 0) > 0
-                ? `₹${Math.round(rows.reduce((s, r) => s + (r.boq_value || 0), 0)).toLocaleString('en-IN')}`
-                : '—'}
-            </td>
             <td className="px-4 py-2.5 text-right text-sm">₹{Math.round(totalBudget).toLocaleString('en-IN')}</td>
             <td className="px-4 py-2.5 text-right text-sm text-emerald-700">₹{Math.round(totalActual).toLocaleString('en-IN')}</td>
             <td className="px-4 py-2.5 text-right text-xs font-bold text-slate-600">
