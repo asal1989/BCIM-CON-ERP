@@ -1345,7 +1345,7 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
   );
 }
 
-export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = null }) {
+export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = null, pageTitle = null, pageSubtitle = null }) {
   const [projectId, setProjectId] = useState('');
   const [mode, setMode] = useState('amount'); // 'amount' | 'pct'
   const [search, setSearch] = useState('');
@@ -1589,9 +1589,9 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
     <div style={embedded ? {} : { background: Theme.pageBg, minHeight: '100vh' }}>
       {!embedded && (
         <PageHeader
-          title="BOQ Budget Breakdown"
-          subtitle="Allocate each BOQ item's budget across cost heads and track advance, invoiced & balance"
-          breadcrumbs={[{ label: 'Procurement' }, { label: 'BOQ Budget Breakdown' }]}
+          title={pageTitle || 'BOQ Budget Breakdown'}
+          subtitle={pageSubtitle || 'Allocate each BOQ item\'s budget across cost heads and track advance, invoiced & balance'}
+          breadcrumbs={[{ label: 'Procurement' }, { label: pageTitle || 'BOQ Budget Breakdown' }]}
           actions={
             <div className="flex items-center gap-2">
               {mode !== undefined && view === 'breakdown' && (
