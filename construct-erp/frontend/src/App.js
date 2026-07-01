@@ -379,7 +379,7 @@ function getHomeRoute(user) {
   if (!user) return '/login';
   const role = String(user.role || '').toLowerCase();
   // Stores-specific roles → direct to their section
-  if (role === 'security_guard') return '/stores/grs';
+  if (role === 'security_guard') return '/stores/ign';
   if (role === 'store_keeper')   return '/stores';
   // MD / admin users → executive dashboard with approvals panel
   if (isMDDashboardUser(user)) return '/dashboard';
@@ -746,7 +746,7 @@ export default function App() {
                 <Route path="stores/po-register" element={<RequireModule module="Stores"><PORegisterPage /></RequireModule>} />
                 <Route path="stores/work-orders" element={<RequireModule module="Stores"><WorkOrderPage /></RequireModule>} />
                 <Route path="stores/wo-register" element={<RequireModule module="Stores"><WORegisterPage /></RequireModule>} />
-                <Route path="stores/grs" element={<RequireModule module="Stores"><GRSPage /></RequireModule>} />
+                <Route path="stores/grs" element={<Navigate to="/stores/ign?status=gate_received" replace />} />
                 <Route path="stores/ign" element={<RequireModule module="Stores"><IGNPage /></RequireModule>} />
                 {/* GRN route removed — features merged into IGN */}
                 <Route path="stores/gate-pass" element={<RequireModule module="Stores"><GatePassPage /></RequireModule>} />

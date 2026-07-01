@@ -26,9 +26,11 @@ const IGNPrintTemplate = React.forwardRef(({ data }, ref) => {
   const displayRows = Math.max(items.length, MIN_ROWS);
 
   const statusLabel = {
-    pending:  'Pending',
-    approved: 'Approved',
-    rejected: 'Rejected',
+    gate_received: 'Gate Received',
+    pending:   'Pending',
+    inspected: 'Inspected',
+    approved:  'Approved',
+    cancelled: 'Cancelled',
   }[data.status] || (data.status || '—');
 
   const totalDC         = items.reduce((s, i) => s + (parseFloat(i.qty_as_per_dc  || 0)), 0);
@@ -99,6 +101,33 @@ const IGNPrintTemplate = React.forwardRef(({ data }, ref) => {
             </tr>
           </tbody>
         </table>
+
+        {/* ── GATE SECURITY (if gate entry) ────────────────────── */}
+        {(data.security_incharge || data.gate_received_at) && (
+          <table style={{ width: '100%', borderCollapse: 'collapse', borderLeft: '2px solid black', borderRight: '2px solid black', borderBottom: '2px solid black', fontSize: '9px' }}>
+            <tbody>
+              <tr style={{ backgroundColor: '#f0f4f8' }}>
+                <td colSpan={4} style={{ padding: '4px 6px', fontWeight: 700, fontSize: '9px', borderBottom: '1px solid #ccc' }}>
+                  GATE SECURITY VERIFICATION
+                </td>
+              </tr>
+              <tr>
+                <td style={{ width: '25%', padding: '4px 6px', borderRight: '1px solid #ccc' }}>
+                  <InfoRow label="Security In-charge" value={data.security_incharge || '—'} />
+                </td>
+                <td style={{ width: '25%', padding: '4px 6px', borderRight: '1px solid #ccc' }}>
+                  <InfoRow label="Gate Received At" value={data.gate_received_at ? dayjs(data.gate_received_at).format('DD-MM-YYYY HH:mm') : '—'} />
+                </td>
+                <td style={{ width: '25%', padding: '4px 6px', borderRight: '1px solid #ccc' }}>
+                  <InfoRow label="Gate Received By" value={data.gate_received_by_name || '—'} />
+                </td>
+                <td style={{ width: '25%', padding: '4px 6px' }}>
+                  <InfoRow label="Vehicle No." value={data.vehicle_no || '—'} />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        )}
 
         {/* ── ITEMS TABLE ──────────────────────────────────────── */}
         <table style={{ width: '100%', borderCollapse: 'collapse', borderLeft: '2px solid black', borderRight: '2px solid black', borderBottom: '2px solid black', fontSize: '9px' }}>

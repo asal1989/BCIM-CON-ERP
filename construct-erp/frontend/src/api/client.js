@@ -461,14 +461,16 @@ export const grsAPI = {
 };
 
 export const ignAPI = {
-  list:    (params) => api.get('/ign', { params }),
-  register:(params) => api.get('/ign/register', { params }),
-  get:     (id)     => api.get(`/ign/${id}`),
-  create:  (data)   => api.post('/ign', data),
-  inspect: (id)     => api.patch(`/ign/${id}/inspect`),
-  approve: (id)     => api.patch(`/ign/${id}/approve`),
-  cancel:  (id)     => api.patch(`/ign/${id}/cancel`),
-  remove:  (id)     => api.delete(`/ign/${id}`),
+  list:      (params) => api.get('/ign', { params }),
+  register:  (params) => api.get('/ign/register', { params }),
+  get:       (id)     => api.get(`/ign/${id}`),
+  create:    (data)   => api.post('/ign', data),
+  gateEntry: (data)   => api.post('/ign/gate-entry', data),
+  receive:   (id, data) => api.patch(`/ign/${id}/receive`, data),
+  inspect:   (id)     => api.patch(`/ign/${id}/inspect`),
+  approve:   (id)     => api.patch(`/ign/${id}/approve`),
+  cancel:    (id)     => api.patch(`/ign/${id}/cancel`),
+  remove:    (id)     => api.delete(`/ign/${id}`),
 };
 
 // ── HR Extended APIs ──────────────────────────────────────────────────────────

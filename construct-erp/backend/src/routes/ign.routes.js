@@ -95,8 +95,13 @@ const STORES_WRITE = ['store_keeper','stores_manager','stores_officer','admin','
   await safe(`CREATE INDEX IF NOT EXISTS idx_ign_date     ON ign(date_time)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_ign_grs      ON ign(grs_id)`);
 
+  // GRS merge — gate-entry columns
+  await safe(`ALTER TABLE ign ADD COLUMN IF NOT EXISTS security_incharge VARCHAR(120)`);
+  await safe(`ALTER TABLE ign ADD COLUMN IF NOT EXISTS gate_received_by UUID REFERENCES users(id)`);
+  await safe(`ALTER TABLE ign ADD COLUMN IF NOT EXISTS gate_received_at TIMESTAMPTZ`);
+
   await safe(`ALTER TABLE ign DROP CONSTRAINT IF EXISTS ign_status_check`);
-  await safe(`ALTER TABLE ign ADD CONSTRAINT ign_status_check CHECK (status IN ('pending','inspected','approved','cancelled'))`);
+  await safe(`ALTER TABLE ign ADD CONSTRAINT ign_status_check CHECK (status IN ('gate_received','pending','inspected','approved','cancelled'))`);
 
   console.log('[IGN] Schema migration OK');
 })();
@@ -123,6 +128,167 @@ router.get('/public/verify/:id', async (req, res) => {
 
 router.use(authenticate);
 router.use(loadProjectScope);
+
+const GATE_ROLES = ['security_guard','store_keeper','stores_manager','stores_officer','admin','super_admin'];
+
+// ── POST /ign/gate-entry — Security guard creates gate receipt ───────────────
+router.post('/gate-entry', authorize(...GATE_ROLES), async (req, res) => {
+  try {
+    const { project_id, vehicle_no, date_time, security_incharge, remarks, items = [] } = req.body;
+    if (!project_id) return res.status(400).json({ error: 'Project is required' });
+    if (!userCanAccessProject(req, project_id)) {
+      return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
+    if (!items.length) return res.status(400).json({ error: 'Add at least one item' });
+
+    const result = await withTransaction(async (client) => {
+      const yr = new Date().getFullYear();
+      const seqRes = await client.query(
+        `SELECT COALESCE(MAX(CAST(SPLIT_PART(ign_number,'/',3) AS INTEGER)),0)+1 AS next
+         FROM ign WHERE company_id=$1 AND EXTRACT(YEAR FROM created_at)=$2`,
+        [req.user.company_id, yr]
+      );
+      const seq = String(seqRes.rows[0].next).padStart(4, '0');
+      const ign_number = `IGN/${yr}/${seq}`;
+
+      const projRes = await client.query('SELECT project_code FROM projects WHERE id = $1', [project_id]);
+      const serial_no_formatted = `BCIM-${projRes.rows[0]?.project_code || 'PRJ'}-IGN-${seq}`;
+
+      const hdr = await client.query(
+        `INSERT INTO ign
+           (company_id, project_id, ign_number, serial_no_formatted,
+            vehicle_no, date_time, security_incharge, remarks,
+            status, gate_received_by, gate_received_at, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'gate_received',$9,NOW(),$9)
+         RETURNING *`,
+        [req.user.company_id, project_id, ign_number, serial_no_formatted,
+         vehicle_no || null, date_time || new Date().toISOString(),
+         security_incharge || req.user.name || null, remarks || null,
+         req.user.id]
+      );
+      const ignId = hdr.rows[0].id;
+
+      let totalQty = 0;
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        const name = (it.particulars || it.material_name || '').trim();
+        if (!name) continue;
+        const qty = parseFloat(it.quantity || it.qty_as_per_dc || 0);
+        await client.query(
+          `INSERT INTO ign_items (ign_id, sl_no, sort_order, material_name, unit, qty_as_per_dc, remarks)
+           VALUES ($1,$2,$2,$3,$4,$5,$6)`,
+          [ignId, i + 1, name, it.unit || null, qty || null, it.remarks || null]
+        );
+        totalQty += qty;
+      }
+
+      await client.query(`UPDATE ign SET total_quantity = $1 WHERE id = $2`, [totalQty, ignId]);
+      return { ...hdr.rows[0], total_quantity: totalQty };
+    });
+
+    res.status(201).json({ data: result });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+// ── PATCH /ign/:id/receive — Stores receives gate entry → pending ────────────
+router.patch('/:id/receive', authorize(...STORES_WRITE), async (req, res) => {
+  try {
+    const {
+      vendor_id, supplier_name, po_id, po_number,
+      dc_number, bill_number, inspected_by, stores_incharge,
+      driver_name, gate_pass_no, wb_slip_no, site_location,
+      issues_notes, inspection_notes, remarks,
+      items = [],
+    } = req.body;
+
+    const check = await query(
+      `SELECT n.*, p.company_id FROM ign n
+       JOIN projects p ON p.id = n.project_id
+       WHERE n.id = $1 AND n.status = 'gate_received'`,
+      [req.params.id]
+    );
+    if (!check.rows.length || check.rows[0].company_id !== req.user.company_id) {
+      return res.status(404).json({ error: 'IGN not found or not in gate_received state' });
+    }
+    if (!userCanAccessProject(req, check.rows[0].project_id)) {
+      return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
+
+    await withTransaction(async (client) => {
+      // Update header with stores details
+      await client.query(
+        `UPDATE ign SET
+           vendor_id = COALESCE($1, vendor_id),
+           supplier_name = COALESCE($2, supplier_name),
+           po_id = COALESCE($3, po_id),
+           po_number = COALESCE($4, po_number),
+           dc_number = COALESCE($5, dc_number),
+           bill_number = COALESCE($6, bill_number),
+           inspected_by = COALESCE($7, inspected_by),
+           stores_incharge = COALESCE($8, stores_incharge),
+           driver_name = COALESCE($9, driver_name),
+           gate_pass_no = COALESCE($10, gate_pass_no),
+           wb_slip_no = COALESCE($11, wb_slip_no),
+           site_location = COALESCE($12, site_location),
+           issues_notes = COALESCE($13, issues_notes),
+           inspection_notes = COALESCE($14, inspection_notes),
+           remarks = COALESCE($15, remarks),
+           received_by = $16,
+           status = 'pending'
+         WHERE id = $17`,
+        [vendor_id || null, supplier_name || null, po_id || null, po_number || null,
+         dc_number || null, bill_number || null, inspected_by || null, stores_incharge || null,
+         driver_name || null, gate_pass_no || null, wb_slip_no || null, site_location || null,
+         issues_notes || null, inspection_notes || null, remarks || null,
+         req.user.id, req.params.id]
+      );
+
+      // If items provided, replace/enrich existing items
+      if (items.length) {
+        await client.query(`DELETE FROM ign_items WHERE ign_id = $1`, [req.params.id]);
+        let totalQty = 0;
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          if (!it.material_name?.trim()) continue;
+          await client.query(
+            `INSERT INTO ign_items
+               (ign_id, sl_no, sort_order, invoice_no, material_name, unit,
+                qty_as_per_dc, qty_inspected, qty_rejected, remarks,
+                rate, batch_number, expiry_date,
+                physical_qty, physical_unit, conversion_factor,
+                quality_remarks, po_item_id)
+             VALUES ($1,$2,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+            [req.params.id, i + 1, it.invoice_no || null, it.material_name.trim(),
+             it.unit || null,
+             it.qty_as_per_dc ? parseFloat(it.qty_as_per_dc) : null,
+             it.qty_inspected ? parseFloat(it.qty_inspected) : null,
+             it.qty_rejected ? parseFloat(it.qty_rejected) : null,
+             it.remarks || null,
+             it.rate ? parseFloat(it.rate) : 0,
+             it.batch_number || null, it.expiry_date || null,
+             it.physical_qty || null, it.physical_unit || null,
+             it.conversion_factor ? parseFloat(it.conversion_factor) : 1,
+             it.quality_remarks || null, it.po_item_id || null]
+          );
+          totalQty += parseFloat(it.qty_inspected || it.qty_as_per_dc || 0);
+        }
+        await client.query(`UPDATE ign SET total_quantity = $1 WHERE id = $2`, [totalQty, req.params.id]);
+      }
+    });
+
+    const updated = await query(
+      `SELECT n.*, p.name AS project_name, v.name AS vendor_name
+       FROM ign n JOIN projects p ON p.id = n.project_id
+       LEFT JOIN vendors v ON v.id = n.vendor_id WHERE n.id = $1`,
+      [req.params.id]
+    );
+    res.json({ data: updated.rows[0], message: 'Gate entry received — IGN now pending' });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
 
 async function nextIgnNumber(companyId) {
   const yr = new Date().getFullYear();
@@ -210,12 +376,14 @@ router.get('/:id', async (req, res) => {
     const ign = await query(
       `SELECT n.*, p.name AS project_name, p.company_id, p.project_code,
               v.name AS vendor_name,
-              u.name AS created_by_name, ap.name AS approved_by_name
+              u.name AS created_by_name, ap.name AS approved_by_name,
+              gr.name AS gate_received_by_name
        FROM ign n
        JOIN projects p ON n.project_id = p.id
        LEFT JOIN vendors v  ON n.vendor_id = v.id
        LEFT JOIN users u  ON n.created_by  = u.id
        LEFT JOIN users ap ON n.approved_by = ap.id
+       LEFT JOIN users gr ON n.gate_received_by = gr.id
        WHERE n.id = $1`,
       [req.params.id]
     );
@@ -721,7 +889,7 @@ router.patch('/:id/cancel', async (req, res) => {
     const check = await query(
       `SELECT n.project_id, p.company_id FROM ign n
        JOIN projects p ON p.id = n.project_id
-       WHERE n.id = $1 AND n.status = 'pending'`,
+       WHERE n.id = $1 AND n.status IN ('gate_received','pending')`,
       [req.params.id]
     );
     if (!check.rows.length || check.rows[0].company_id !== req.user.company_id) {

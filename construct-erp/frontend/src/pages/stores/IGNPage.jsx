@@ -26,11 +26,14 @@ const fmt    = n => n != null ? Number(n).toLocaleString('en-IN', { minimumFract
 const inr    = n => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const STATUS_CONFIG = {
+  gate_received: { label: 'Gate Entry', color: 'bg-slate-100 text-slate-700 border-slate-300', icon: Truck },
   pending:   { label: 'Pending',   color: 'bg-amber-50 text-amber-700 border-amber-200',       icon: Clock },
   inspected: { label: 'Inspected', color: 'bg-blue-50 text-blue-700 border-blue-200',          icon: Eye },
   approved:  { label: 'Approved',  color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: CheckCircle2 },
   cancelled: { label: 'Cancelled', color: 'bg-red-50 text-red-600 border-red-200',             icon: XCircle },
 };
+
+const GATE_ROLES = ['security_guard','store_keeper','stores_manager','stores_officer','admin','super_admin'];
 
 function StatusBadge({ status }) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
@@ -43,7 +46,7 @@ function StatusBadge({ status }) {
 }
 
 /* ── Detail Panel ─────────────────────────────────────────────────────────── */
-function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, inspectLoading, onCancel, cancelLoading, isSuperAdmin, onDelete, deleteLoading }) {
+function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, inspectLoading, onCancel, cancelLoading, isSuperAdmin, onDelete, deleteLoading, onReceive }) {
   if (!ign) return null;
   const items = ign.items || [];
   const totalRejected = items.reduce((s, it) => s + parseFloat(it.qty_rejected || 0), 0);
@@ -92,6 +95,8 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, in
               ['Site Location',     ign.site_location  || 'main'],
               ['Inspected By',      ign.inspected_by   || '—'],
               ['Stores In-charge',  ign.stores_incharge || '—'],
+              ['Security In-charge', ign.security_incharge || '—'],
+              ['Gate Received At',  ign.gate_received_at ? dayjs(ign.gate_received_at).format('DD-MM-YYYY HH:mm') : '—'],
               ['Serial No.',        ign.serial_no_formatted || '—'],
             ].map(([lbl, val]) => (
               <div key={lbl} className="bg-white border border-slate-200 rounded-lg px-3 py-2.5">
@@ -116,17 +121,18 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, in
             </div>
           )}
 
-          {/* 3-step workflow progress */}
+          {/* 4-step workflow progress */}
           {ign.status !== 'cancelled' && (
             <div className="bg-white border border-slate-200 rounded-xl p-4">
               <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Workflow Progress</div>
               <div className="flex items-center gap-2">
                 {[
-                  { key: 'pending',   label: 'Created' },
-                  { key: 'inspected', label: 'Inspected' },
-                  { key: 'approved',  label: 'Stock Posted' },
+                  { key: 'gate_received', label: 'Gate Entry' },
+                  { key: 'pending',       label: 'Received' },
+                  { key: 'inspected',     label: 'Inspected' },
+                  { key: 'approved',      label: 'Stock Posted' },
                 ].map((step, idx, arr) => {
-                  const statusOrder = ['pending','inspected','approved'];
+                  const statusOrder = ['gate_received','pending','inspected','approved'];
                   const currentIdx = statusOrder.indexOf(ign.status);
                   const stepIdx = statusOrder.indexOf(step.key);
                   const done = currentIdx > stepIdx || (ign.status === step.key);
@@ -268,6 +274,13 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, in
 
       <div className="border-t border-slate-200 bg-white flex-shrink-0 px-6 py-4">
         <div className="max-w-5xl mx-auto flex flex-wrap gap-3">
+          {ign.status === 'gate_received' && (
+            <button onClick={onReceive}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-6 py-2.5 rounded-xl text-sm transition shadow-sm">
+              <Package size={16} />
+              Receive at Stores
+            </button>
+          )}
           {ign.status === 'pending' && (
             <button onClick={onInspect} disabled={inspectLoading}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium px-6 py-2.5 rounded-xl text-sm transition shadow-sm">
@@ -287,7 +300,7 @@ function IGNDetailPanel({ ign, onClose, onApprove, approveLoading, onInspect, in
               <CheckCircle2 size={16} className="text-emerald-600" /> Approved — Stock Posted
             </div>
           )}
-          {ign.status === 'pending' && (
+          {(ign.status === 'pending' || ign.status === 'gate_received') && (
             <button onClick={onCancel} disabled={cancelLoading}
               className="flex items-center gap-2 border border-red-200 text-red-600 hover:bg-red-50 font-medium px-5 py-2.5 rounded-xl text-sm transition disabled:opacity-50">
               <XCircle size={15} />
@@ -318,10 +331,16 @@ export default function IGNPage() {
   const { user } = useAuthStore();
   const isSuperAdmin = String(user?.role || '').toLowerCase() === 'super_admin';
   const [showForm, setShowForm]           = useState(() => !!new URLSearchParams(window.location.search).get('from_grs'));
+  const [showGateEntry, setShowGateEntry] = useState(false);
+  const [receiveId, setReceiveId]         = useState(null);
   const [selectedId, setSelectedId]       = useState(null);
   const [search, setSearch]               = useState('');
-  const [statusFilter, setStatusFilter]   = useState('all');
+  const [statusFilter, setStatusFilter]   = useState(() => {
+    const sp = new URLSearchParams(window.location.search);
+    return sp.get('status') || 'all';
+  });
   const [projectFilter, setProjectFilter] = useState('');
+  const isGateRole = GATE_ROLES.includes(String(user?.role || '').toLowerCase());
 
   const { data: ignList = [], isLoading, refetch } = useQuery({
     queryKey: ['ign-list', projectFilter],
@@ -387,9 +406,10 @@ export default function IGNPage() {
   };
 
   const counts = {
-    pending:   ignList.filter(g => g.status === 'pending').length,
-    inspected: ignList.filter(g => g.status === 'inspected').length,
-    approved:  ignList.filter(g => g.status === 'approved').length,
+    gate_received: ignList.filter(g => g.status === 'gate_received').length,
+    pending:       ignList.filter(g => g.status === 'pending').length,
+    inspected:     ignList.filter(g => g.status === 'inspected').length,
+    approved:      ignList.filter(g => g.status === 'approved').length,
   };
 
   const filtered = ignList.filter(g => {
@@ -436,6 +456,12 @@ export default function IGNPage() {
               style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.20)', color: '#fff' }}>
               <Download size={14} /> Export
             </button>
+            {isGateRole && (
+              <button onClick={() => setShowGateEntry(true)} className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition shadow-sm"
+                style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)' }}>
+                <Truck size={14} /> Gate Entry
+              </button>
+            )}
             <button onClick={() => setShowForm(true)} className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition shadow-sm"
               style={{ background: '#fff', color: Theme.navyDark, border: '1px solid rgba(255,255,255,0.4)' }}>
               <Plus size={14} /> New IGN
@@ -446,12 +472,13 @@ export default function IGNPage() {
 
       <div className="p-6 md:p-8 max-w-full mx-auto">
         {/* KPI summary cards — also act as status filters */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
           {[
-            { key: 'all',       label: 'Total IGNs', value: ignList.length,   icon: FileText,     topbar: 'before:bg-slate-400',   soft: 'bg-slate-100',  text: 'text-slate-600' },
-            { key: 'pending',   label: 'Pending',    value: counts.pending,   icon: Clock,        topbar: 'before:bg-amber-500',   soft: 'bg-amber-50',   text: 'text-amber-600' },
-            { key: 'inspected', label: 'Inspected',  value: counts.inspected, icon: Eye,          topbar: 'before:bg-blue-500',    soft: 'bg-blue-50',    text: 'text-blue-600' },
-            { key: 'approved',  label: 'Approved',   value: counts.approved,  icon: CheckCircle2, topbar: 'before:bg-emerald-500', soft: 'bg-emerald-50', text: 'text-emerald-600' },
+            { key: 'all',           label: 'Total IGNs',  value: ignList.length,        icon: FileText,     topbar: 'before:bg-slate-400',   soft: 'bg-slate-100',  text: 'text-slate-600' },
+            { key: 'gate_received', label: 'Gate Entries', value: counts.gate_received,  icon: Truck,        topbar: 'before:bg-slate-500',   soft: 'bg-slate-100',  text: 'text-slate-700' },
+            { key: 'pending',       label: 'Pending',      value: counts.pending,        icon: Clock,        topbar: 'before:bg-amber-500',   soft: 'bg-amber-50',   text: 'text-amber-600' },
+            { key: 'inspected',     label: 'Inspected',    value: counts.inspected,      icon: Eye,          topbar: 'before:bg-blue-500',    soft: 'bg-blue-50',    text: 'text-blue-600' },
+            { key: 'approved',      label: 'Approved',     value: counts.approved,       icon: CheckCircle2, topbar: 'before:bg-emerald-500', soft: 'bg-emerald-50', text: 'text-emerald-600' },
           ].map(c => {
             const Icon = c.icon;
             const active = statusFilter === c.key;
@@ -531,6 +558,7 @@ export default function IGNPage() {
                       ign.status === 'approved' ? 'border-l-emerald-400'
                         : ign.status === 'inspected' ? 'border-l-blue-400'
                         : ign.status === 'cancelled' ? 'border-l-red-300'
+                        : ign.status === 'gate_received' ? 'border-l-slate-400'
                         : 'border-l-amber-400')}>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-2">
@@ -600,6 +628,7 @@ export default function IGNPage() {
             isSuperAdmin={isSuperAdmin}
             onDelete={() => handleDelete(detailedIGN)}
             deleteLoading={deleteMutation.isPending}
+            onReceive={() => { setReceiveId(selectedId); setSelectedId(null); }}
           />
         )}
 
@@ -609,6 +638,23 @@ export default function IGNPage() {
             projects={projects}
             qc={qc}
             fromGrsId={new URLSearchParams(window.location.search).get('from_grs')}
+          />
+        )}
+
+        {showGateEntry && (
+          <GateEntryForm
+            onClose={() => setShowGateEntry(false)}
+            projects={projects}
+            qc={qc}
+          />
+        )}
+
+        {receiveId && (
+          <ReceiveForm
+            ignId={receiveId}
+            onClose={() => setReceiveId(null)}
+            projects={projects}
+            qc={qc}
           />
         )}
       </div>
@@ -1349,6 +1395,327 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
             </button>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Gate Entry Form (Security Guard) ────────────────────────────────────── */
+function GateEntryForm({ onClose, projects, qc }) {
+  const [form, setForm] = useState({
+    project_id: '', vehicle_no: '', date_time: dayjs().format('YYYY-MM-DDTHH:mm'),
+    security_incharge: '', remarks: '',
+  });
+  const [items, setItems] = useState([{ particulars: '', unit: 'Nos', quantity: '' }]);
+  const setField = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const mutation = useMutation({
+    mutationFn: (d) => ignAPI.gateEntry(d),
+    onSuccess: () => {
+      toast.success('Gate entry created');
+      qc.invalidateQueries({ queryKey: ['ign-list'] });
+      onClose();
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
+  });
+
+  const submit = () => {
+    if (!form.project_id) return toast.error('Select a project');
+    const validItems = items.filter(it => it.particulars?.trim());
+    if (!validItems.length) return toast.error('Add at least one item');
+    mutation.mutate({ ...form, items: validItems });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">New Gate Entry</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Security gate — record incoming materials</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100"><X size={16}/></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2 space-y-1.5">
+              <label className="text-xs font-medium text-slate-500">Project *</label>
+              <select value={form.project_id} onChange={e => setField('project_id', e.target.value)} className={Z_INP}>
+                <option value="">Select project…</option>
+                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-500">Vehicle No.</label>
+              <input value={form.vehicle_no} onChange={e => setField('vehicle_no', e.target.value)} className={Z_INP} placeholder="KA-01-AB-1234" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-500">Date & Time</label>
+              <input type="datetime-local" value={form.date_time} onChange={e => setField('date_time', e.target.value)} className={Z_INP} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-500">Security In-charge</label>
+              <input value={form.security_incharge} onChange={e => setField('security_incharge', e.target.value)} className={Z_INP} placeholder="Guard name" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-500">Remarks</label>
+              <input value={form.remarks} onChange={e => setField('remarks', e.target.value)} className={Z_INP} placeholder="Optional notes" />
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Items</h4>
+              <button onClick={() => setItems(p => [...p, { particulars: '', unit: 'Nos', quantity: '' }])}
+                className="text-xs text-blue-600 font-medium hover:underline">+ Add row</button>
+            </div>
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 border-b border-slate-100">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium text-slate-600">Particulars *</th>
+                    <th className="px-3 py-2 text-left font-medium text-slate-600 w-24">Unit</th>
+                    <th className="px-3 py-2 text-left font-medium text-slate-600 w-24">Qty</th>
+                    <th className="w-8"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {items.map((it, i) => (
+                    <tr key={i}>
+                      <td className="px-2 py-1.5">
+                        <input value={it.particulars} onChange={e => { const v = e.target.value; setItems(p => p.map((x, j) => j === i ? { ...x, particulars: v } : x)); }}
+                          className={Z_INP} placeholder="Material description" />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <select value={it.unit} onChange={e => { const v = e.target.value; setItems(p => p.map((x, j) => j === i ? { ...x, unit: v } : x)); }} className={Z_INP}>
+                          {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input type="number" value={it.quantity} onChange={e => { const v = e.target.value; setItems(p => p.map((x, j) => j === i ? { ...x, quantity: v } : x)); }}
+                          className={Z_INP} placeholder="0" />
+                      </td>
+                      <td className="px-1">
+                        {items.length > 1 && (
+                          <button onClick={() => setItems(p => p.filter((_, j) => j !== i))} className="text-slate-300 hover:text-red-500"><X size={14}/></button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50">Cancel</button>
+          <button onClick={submit} disabled={mutation.isPending}
+            className="px-5 py-2 text-sm font-medium bg-slate-800 text-white rounded-lg hover:bg-slate-900 disabled:opacity-50 transition">
+            {mutation.isPending ? 'Saving…' : 'Create Gate Entry'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Receive Form (Stores fills details for gate_received IGN) ───────────── */
+function ReceiveForm({ ignId, onClose, projects, qc }) {
+  const { data: ign } = useQuery({
+    queryKey: ['ign', ignId],
+    queryFn: () => ignAPI.get(ignId).then(r => r.data?.data ?? null),
+    enabled: !!ignId,
+  });
+
+  const { data: vendors = [] } = useQuery({
+    queryKey: ['vendors'],
+    queryFn: () => vendorAPI.list().then(r => r.data?.data ?? r.data ?? []).catch(() => []),
+  });
+
+  const { data: releasedPOs = [] } = useQuery({
+    queryKey: ['po-released-recv', ign?.project_id, ign?.vendor_id],
+    queryFn: () => poAPI.list({
+      project_id: ign?.project_id || undefined,
+      vendor_id:  ign?.vendor_id  || undefined,
+      status: 'approved',
+    }, { skipProjectInject: true }).then(r => r.data?.data ?? r.data ?? []).catch(() => []),
+    enabled: !!(ign?.project_id),
+  });
+
+  const [form, setForm] = useState({
+    vendor_id: '', supplier_name: '', po_id: '', po_number: '',
+    dc_number: '', bill_number: '', inspected_by: '', stores_incharge: '',
+    driver_name: '', gate_pass_no: '', wb_slip_no: '', site_location: 'main',
+  });
+  const [items, setItems] = useState([]);
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    if (!ign || initialized) return;
+    setItems((ign.items || []).map(it => ({
+      material_name: it.material_name || '',
+      unit: it.unit || 'Nos',
+      qty_as_per_dc: it.qty_as_per_dc ? String(it.qty_as_per_dc) : '',
+      qty_inspected: it.qty_inspected ? String(it.qty_inspected) : '',
+      qty_rejected: '',
+      rate: it.rate ? String(it.rate) : '',
+      remarks: it.remarks || '',
+    })));
+    if (ign.supplier_name) setForm(p => ({ ...p, supplier_name: ign.supplier_name }));
+    setInitialized(true);
+  }, [ign, initialized]);
+
+  const setField = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const mutation = useMutation({
+    mutationFn: (d) => ignAPI.receive(ignId, d),
+    onSuccess: () => {
+      toast.success('IGN received — ready for inspection');
+      qc.invalidateQueries({ queryKey: ['ign-list'] });
+      qc.invalidateQueries({ queryKey: ['ign', ignId] });
+      onClose();
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
+  });
+
+  const submit = () => {
+    const validItems = items.filter(it => it.material_name?.trim());
+    if (!validItems.length) return toast.error('At least one item required');
+    mutation.mutate({
+      ...form,
+      vendor_id: form.vendor_id || null,
+      po_id: form.po_id || null,
+      items: validItems.map(it => ({
+        material_name: it.material_name,
+        unit: it.unit || null,
+        qty_as_per_dc: it.qty_as_per_dc ? parseFloat(it.qty_as_per_dc) : null,
+        qty_inspected: it.qty_inspected ? parseFloat(it.qty_inspected) : null,
+        qty_rejected: it.qty_rejected ? parseFloat(it.qty_rejected) : null,
+        rate: it.rate ? parseFloat(it.rate) : 0,
+        remarks: it.remarks || null,
+      })),
+    });
+  };
+
+  if (!ign) return null;
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-white flex flex-col overflow-hidden" style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
+      <div className="flex items-center justify-between px-6 py-3.5 flex-shrink-0 bg-white border-b border-slate-200">
+        <div className="flex items-center gap-3">
+          <div className="text-xs text-slate-400">Stores <span className="text-slate-300">›</span> IGN <span className="text-slate-300">›</span> <b className="text-slate-700">Receive {ign.ign_number}</b></div>
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-300 text-[11px] font-medium">Gate Entry → Stores</span>
+        </div>
+        <button onClick={onClose} className="w-8 h-8 rounded-md flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+          <X size={16} />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-5 bg-slate-50">
+        <div className="max-w-4xl mx-auto space-y-4">
+
+          <div className="bg-slate-100 border border-slate-200 rounded-xl p-4 flex items-center gap-3">
+            <Truck size={18} className="text-slate-600" />
+            <div>
+              <div className="text-sm font-medium text-slate-800">Gate entry by {ign.security_incharge || 'Security'}</div>
+              <div className="text-xs text-slate-500">Vehicle: {ign.vehicle_no || '—'} · {ign.gate_received_at ? dayjs(ign.gate_received_at).format('DD-MM-YYYY HH:mm') : ''} · {ign.project_name}</div>
+            </div>
+          </div>
+
+          <div className={Z_CARD}>
+            <h3 className={Z_HEAD}><Building2 size={13} className="inline mr-1.5 text-blue-500" />Stores Details</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 p-4">
+              <div className="col-span-2 space-y-1.5">
+                <label className="text-xs font-medium text-slate-500">Vendor</label>
+                <SearchableSelect
+                  options={vendors.map(v => ({ value: v.id, label: v.name }))}
+                  value={form.vendor_id}
+                  onChange={(v) => { setField('vendor_id', v); const vn = vendors.find(x => x.id === v); if (vn) setField('supplier_name', vn.name); }}
+                  placeholder="Select vendor…"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-500">PO</label>
+                <select value={form.po_id} onChange={e => { const v = e.target.value; setField('po_id', v); const po = releasedPOs.find(p => p.id === v); if (po) setField('po_number', po.po_number); }} className={Z_INP}>
+                  <option value="">Select PO…</option>
+                  {releasedPOs.map(p => <option key={p.id} value={p.id}>{p.po_number}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-500">DC No.</label>
+                <input value={form.dc_number} onChange={e => setField('dc_number', e.target.value)} className={Z_INP} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-500">Bill No.</label>
+                <input value={form.bill_number} onChange={e => setField('bill_number', e.target.value)} className={Z_INP} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-500">Inspected By</label>
+                <input value={form.inspected_by} onChange={e => setField('inspected_by', e.target.value)} className={Z_INP} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-500">Stores In-charge</label>
+                <input value={form.stores_incharge} onChange={e => setField('stores_incharge', e.target.value)} className={Z_INP} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-500">Driver Name</label>
+                <input value={form.driver_name} onChange={e => setField('driver_name', e.target.value)} className={Z_INP} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-500">Gate Pass No.</label>
+                <input value={form.gate_pass_no} onChange={e => setField('gate_pass_no', e.target.value)} className={Z_INP} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-500">WB Slip No.</label>
+                <input value={form.wb_slip_no} onChange={e => setField('wb_slip_no', e.target.value)} className={Z_INP} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-500">Site Location</label>
+                <input value={form.site_location} onChange={e => setField('site_location', e.target.value)} className={Z_INP} />
+              </div>
+            </div>
+          </div>
+
+          <div className={Z_CARD}>
+            <h3 className={Z_HEAD}><Package size={13} className="inline mr-1.5 text-blue-500" />Materials — Enrich & Inspect</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 border-b border-slate-100">
+                  <tr>
+                    {['Material','Unit','Rate','Qty (DC)','Qty Inspected','Qty Rejected','Remarks'].map(h => (
+                      <th key={h} className="px-3 py-2 text-left font-medium text-slate-600 whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {items.map((it, i) => (
+                    <tr key={i}>
+                      <td className="px-2 py-1.5"><input value={it.material_name} onChange={e => { const v = e.target.value; setItems(p => p.map((x, j) => j === i ? { ...x, material_name: v } : x)); }} className={Z_INP} /></td>
+                      <td className="px-2 py-1.5 w-20">
+                        <select value={it.unit} onChange={e => { const v = e.target.value; setItems(p => p.map((x, j) => j === i ? { ...x, unit: v } : x)); }} className={Z_INP}>
+                          {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-2 py-1.5 w-24"><input type="number" value={it.rate} onChange={e => { const v = e.target.value; setItems(p => p.map((x, j) => j === i ? { ...x, rate: v } : x)); }} className={Z_INP} placeholder="0" /></td>
+                      <td className="px-2 py-1.5 w-24"><input type="number" value={it.qty_as_per_dc} onChange={e => { const v = e.target.value; setItems(p => p.map((x, j) => j === i ? { ...x, qty_as_per_dc: v } : x)); }} className={Z_INP} /></td>
+                      <td className="px-2 py-1.5 w-24"><input type="number" value={it.qty_inspected} onChange={e => { const v = e.target.value; setItems(p => p.map((x, j) => j === i ? { ...x, qty_inspected: v } : x)); }} className={Z_INP} /></td>
+                      <td className="px-2 py-1.5 w-24"><input type="number" value={it.qty_rejected} onChange={e => { const v = e.target.value; setItems(p => p.map((x, j) => j === i ? { ...x, qty_rejected: v } : x)); }} className={Z_INP} /></td>
+                      <td className="px-2 py-1.5"><input value={it.remarks} onChange={e => { const v = e.target.value; setItems(p => p.map((x, j) => j === i ? { ...x, remarks: v } : x)); }} className={Z_INP} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-shrink-0 border-t border-slate-200 bg-white px-6 py-3.5 flex items-center justify-end gap-2">
+        <button onClick={onClose} className="px-4 h-9 rounded-md border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+        <button onClick={submit} disabled={mutation.isPending}
+          className="px-5 h-9 rounded-md bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-50">
+          {mutation.isPending ? 'Saving…' : 'Receive & Move to Pending →'}
+        </button>
       </div>
     </div>
   );
