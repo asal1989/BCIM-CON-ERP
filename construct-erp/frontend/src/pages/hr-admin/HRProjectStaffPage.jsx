@@ -233,10 +233,10 @@ export default function HRProjectStaffPage() {
   const projectCount      = Object.keys(projectGroups).length;
 
   const KPI_CARDS = [
-    { label: 'Total Staff',       value: totalStaff,      icon: Users,       color: 'indigo' },
-    { label: 'Projects with Staff', value: projectCount,  icon: FolderKanban, color: 'blue'  },
-    { label: 'Assigned to Project', value: assignedCount, icon: UserCheck,   color: 'emerald'},
-    { label: 'Unassigned',         value: unassignedCount,icon: UserX,       color: 'amber'  },
+    { label: 'Total Staff',         value: totalStaff,      icon: Users,       color: 'indigo' },
+    { label: 'Projects with Staff', value: projectCount,    icon: FolderKanban, color: 'blue'  },
+    { label: 'Assigned to Project', value: assignedCount,   icon: UserCheck,   color: 'emerald'},
+    { label: 'Head Office (HO)',    value: unassignedCount, icon: Building2,   color: 'amber'  },
   ];
 
   const COLOR_MAP = {
@@ -350,26 +350,26 @@ export default function HRProjectStaffPage() {
           );
         })}
 
-        {/* Unassigned section */}
+        {/* Head Office section */}
         {!isLoading && unassigned.length > 0 && (
-          <div className="bg-white rounded-2xl border border-amber-200 overflow-hidden shadow-sm">
+          <div className="bg-white rounded-2xl border border-indigo-200 overflow-hidden shadow-sm">
             <details open={projectOrder.length === 0}>
-              <summary className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-amber-50/50 transition-colors list-none">
-                <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
-                  <UserX className="w-5 h-5 text-amber-600" />
+              <summary className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-indigo-50/50 transition-colors list-none">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center flex-shrink-0">
+                  <Building2 className="w-5 h-5 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-slate-700">Unassigned Staff</span>
-                    <span className="text-[11px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">
+                    <span className="text-sm font-bold text-slate-800">Head Office (HO)</span>
+                    <span className="text-[11px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-semibold">
                       {unassigned.length} staff
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 mt-0.5">Not assigned to any project</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Head office and support staff</p>
                 </div>
-                <ChevronRight className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                <ChevronRight className="w-4 h-4 text-indigo-400 flex-shrink-0" />
               </summary>
-              <div className="border-t border-amber-100 px-5 pb-5 pt-4">
+              <div className="border-t border-indigo-100 px-5 pb-5 pt-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                   {unassigned.map(emp => <StaffCard key={emp.id} emp={emp} />)}
                 </div>
