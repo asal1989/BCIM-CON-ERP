@@ -452,7 +452,7 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
     const selected = activeMrsList.find(m => m.id === mrsId);
     if (!selected) return;
     // All MRS on one PO must belong to the same project
-    if (form.project_id && selected.project_id && selected.project_id !== form.project_id) {
+    if (form.project_id && selected.project_id && String(selected.project_id) !== String(form.project_id)) {
       toast.error('All MRs in one PO must belong to the same project');
       return;
     }
@@ -731,11 +731,14 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
                 <Field label="MR Number(s)">
                   <select className={INP} value="" onChange={e => { addMRS(e.target.value); e.target.value = ''; }}>
                     <option value="">+ Add MR / Manual PO...</option>
-                    {activeMrsList.filter(m => !form.mrs_ids.includes(m.id)).map(m => (
-                      <option key={m.id} value={m.id}>
-                        {(m.serial_no_formatted || m.mrs_number || m.id?.slice(0, 8))} — {m.project_name || 'Project'} — {(m.status || 'raised').replaceAll('_', ' ')}
-                      </option>
-                    ))}
+                    {activeMrsList
+                      .filter(m => !form.mrs_ids.includes(m.id))
+                      .filter(m => !form.project_id || String(m.project_id) === String(form.project_id))
+                      .map(m => (
+                        <option key={m.id} value={m.id}>
+                          {(m.serial_no_formatted || m.mrs_number || m.id?.slice(0, 8))} — {(m.status || 'raised').replaceAll('_', ' ')}
+                        </option>
+                      ))}
                   </select>
                   {form.mrs_ids.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mt-2">
