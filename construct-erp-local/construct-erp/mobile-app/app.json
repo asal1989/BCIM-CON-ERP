@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "BCIM ERP",
+    "slug": "bcim-erp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": { "resizeMode": "contain", "backgroundColor": "#0F172A" },
+    "android": {
+      "adaptiveIcon": { "backgroundColor": "#0F172A" },
+      "package": "com.bcimengineering.erp"
+    },
+    "plugins": ["expo-secure-store"]
+  }
+}
