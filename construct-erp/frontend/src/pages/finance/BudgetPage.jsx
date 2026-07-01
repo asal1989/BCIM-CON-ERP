@@ -1,5 +1,6 @@
 // src/pages/finance/BudgetPage.jsx  — Zoho ERP-style redesign
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
+const BOQBudgetBreakdownPage = lazy(() => import('../qs/BOQBudgetBreakdownPage'));
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   TrendingUp, AlertTriangle, X, ChevronDown, PieChart, Zap,
@@ -83,6 +84,7 @@ function TabBar({ active, onChange }) {
     { key: 'budget',     label: 'Budget vs Actual',  icon: BarChart3 },
     { key: 'commitment', label: 'Committed Costs',   icon: TrendingUp },
     { key: 'stock',      label: 'Stock on Hand',     icon: Warehouse },
+    { key: 'boq-budget', label: 'BOQ Budget',        icon: PieChart  },
   ];
   return (
     <div className="flex border-b border-slate-200 bg-white">
@@ -292,7 +294,13 @@ export default function BudgetPage() {
         <TabBar active={activeTab} onChange={v => { setActiveTab(v); setDrillHead(null); }} />
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-5 space-y-4">
+      {activeTab === 'boq-budget' && (
+        <Suspense fallback={<div className="py-20 text-center text-sm text-slate-400">Loading…</div>}>
+          <BOQBudgetBreakdownPage embedded />
+        </Suspense>
+      )}
+
+      <div className={activeTab === 'boq-budget' ? 'hidden' : 'max-w-7xl mx-auto px-6 py-5 space-y-4'}>
 
         {/* ══════════════ BUDGET TAB ══════════════ */}
         {activeTab === 'budget' && (

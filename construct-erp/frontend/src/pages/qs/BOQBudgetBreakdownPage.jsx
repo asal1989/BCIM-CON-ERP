@@ -1344,7 +1344,7 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
   );
 }
 
-export default function BOQBudgetBreakdownPage() {
+export default function BOQBudgetBreakdownPage({ embedded = false }) {
   const [projectId, setProjectId] = useState('');
   const [mode, setMode] = useState('amount'); // 'amount' | 'pct'
   const [search, setSearch] = useState('');
@@ -1557,35 +1557,37 @@ export default function BOQBudgetBreakdownPage() {
   });
 
   return (
-    <div style={{ background: Theme.pageBg, minHeight: '100vh' }}>
-      <PageHeader
-        title="BOQ Budget Breakdown"
-        subtitle="Allocate each BOQ item's budget across cost heads and track advance, invoiced & balance"
-        breadcrumbs={[{ label: 'Procurement' }, { label: 'BOQ Budget Breakdown' }]}
-        actions={
-          <div className="flex items-center gap-2">
-            {mode !== undefined && view === 'breakdown' && (
-              <button
-                onClick={() => setMode(mode === 'amount' ? 'pct' : 'amount')}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg transition"
-                style={{ background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.25)', color: '#fff' }}
-                title="Toggle budget entry mode">
-                {mode === 'amount' ? <IndianRupee className="w-3.5 h-3.5" /> : <Percent className="w-3.5 h-3.5" />}
-                Enter as {mode === 'amount' ? 'Amount' : 'Percent'}
-              </button>
-            )}
-            {projectId && (
-              <button
-                onClick={handlePrint}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg transition"
-                style={{ background: '#fff', color: '#0B2E59', border: '1px solid rgba(255,255,255,0.25)' }}
-                title="Print BOQ Summary + Items">
-                <Printer className="w-3.5 h-3.5" /> Print BOQ
-              </button>
-            )}
-          </div>
-        }
-      />
+    <div style={embedded ? {} : { background: Theme.pageBg, minHeight: '100vh' }}>
+      {!embedded && (
+        <PageHeader
+          title="BOQ Budget Breakdown"
+          subtitle="Allocate each BOQ item's budget across cost heads and track advance, invoiced & balance"
+          breadcrumbs={[{ label: 'Procurement' }, { label: 'BOQ Budget Breakdown' }]}
+          actions={
+            <div className="flex items-center gap-2">
+              {mode !== undefined && view === 'breakdown' && (
+                <button
+                  onClick={() => setMode(mode === 'amount' ? 'pct' : 'amount')}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg transition"
+                  style={{ background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.25)', color: '#fff' }}
+                  title="Toggle budget entry mode">
+                  {mode === 'amount' ? <IndianRupee className="w-3.5 h-3.5" /> : <Percent className="w-3.5 h-3.5" />}
+                  Enter as {mode === 'amount' ? 'Amount' : 'Percent'}
+                </button>
+              )}
+              {projectId && (
+                <button
+                  onClick={handlePrint}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg transition"
+                  style={{ background: '#fff', color: '#0B2E59', border: '1px solid rgba(255,255,255,0.25)' }}
+                  title="Print BOQ Summary + Items">
+                  <Printer className="w-3.5 h-3.5" /> Print BOQ
+                </button>
+              )}
+            </div>
+          }
+        />
+      )}
 
       <div className="p-5 md:p-6 max-w-[1400px] mx-auto space-y-5">
 
