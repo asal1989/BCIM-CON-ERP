@@ -50,6 +50,7 @@ import { CONSTRUCTION_UNITS as UNITS } from '../../constants/units';
 // 2-Stage Approval: Procurement → MD
 // Flow: pending → verified_audit (Procurement Approved) → approved (MD Authorized)
 const STATUS_CONFIG = {
+  draft:          { label: 'Draft',               short: 'Draft',       color: 'bg-slate-100 text-slate-600 border-slate-200',    dot: 'bg-slate-400',   icon: FileText,     stage: 0 },
   pending:        { label: 'Pending Procurement', short: 'Pending',     color: 'bg-yellow-50 text-yellow-700 border-yellow-200',  dot: 'bg-yellow-500',  icon: Clock,        stage: 1 },
   verified_audit: { label: 'Procurement Approved',short: 'Proc OK',    color: 'bg-blue-50 text-blue-700 border-blue-200',        dot: 'bg-blue-500',    icon: UserCheck,    stage: 2 },
   released_mgmt:  { label: 'Procurement Approved',short: 'Proc OK',    color: 'bg-blue-50 text-blue-700 border-blue-200',        dot: 'bg-blue-500',    icon: UserCheck,    stage: 2 },
@@ -590,10 +591,10 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
     setStep(s => Math.min(s + 1, PO_WIZARD_STEPS.length));
   };
   const goBack = () => setStep(s => Math.max(s - 1, 1));
-  const PO_DRAFT_KEY = 'po_new_draft';
   const saveDraft = () => {
-    try { localStorage.setItem(PO_DRAFT_KEY, JSON.stringify({ form, items })); toast.success('Draft saved locally'); }
-    catch { toast.error('Could not save draft'); }
+    if (!form.project_id) return toast.error('Select a project before saving draft');
+    const payload = { ...form, items, status: 'draft' };
+    onCreate(payload);
   };
 
   const handleSubmit = (sendToVendor = false) => {
@@ -609,7 +610,6 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
       mrs_id: form.mrs_ids[0] || prefill?.mrs_id || null,
       _send_to_vendor: sendToVendor,
     };
-    localStorage.removeItem(PO_DRAFT_KEY);
     if (isEditing) onUpdate(payload);
     else onCreate(payload);
   };
@@ -2167,12 +2167,11 @@ export default function POPage() {
 
   const createMutation = useMutation({
     mutationFn: d => poAPI.create(d),
-    onSuccess: () => {
-      toast.success('PO submitted for audit');
+    onSuccess: (res, vars) => {
+      toast.success(vars.status === 'draft' ? 'Draft saved' : 'PO submitted for audit');
       setShowForm(false);
       setPrefillData(null);
       qc.invalidateQueries({ queryKey: ['purchase-orders'] });
-      // Refresh MR list so already-ordered items drop off the next PO's picker
       qc.invalidateQueries({ queryKey: ['mrs-for-po'] });
     },
     onError: e => toast.error(e?.response?.data?.error || 'Failed to create PO'),

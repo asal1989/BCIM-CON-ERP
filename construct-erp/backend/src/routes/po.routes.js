@@ -1214,7 +1214,11 @@ router.post('/', async (req, res) => {
       internal_remarks, delivery_instructions, cost_head
     } = req.body;
 
-    if (!project_id || !vendor_id || !items?.length) {
+    const isDraft = status === 'draft';
+    if (!project_id) {
+      return res.status(400).json({ error: 'Missing required project.' });
+    }
+    if (!isDraft && (!vendor_id || !items?.length)) {
       return res.status(400).json({ error: 'Missing required project, vendor or items.' });
     }
 
@@ -1244,7 +1248,7 @@ router.post('/', async (req, res) => {
           internal_remarks, delivery_instructions, cost_head
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
           $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34) RETURNING *`,
-        [project_id, vendor_id, po_number, po_date || null, delivery_date || null, terms_conditions || null, notes || null, bank_details || null, payment_terms || null, parseFloat(tcs_amount) || 0, po_req_no || null, po_req_date || null, approval_no || null, delivery_address || null, order_intro || null, 'pending', req.user.id, primaryMrsId]
+        [project_id, vendor_id || null, po_number, po_date || null, delivery_date || null, terms_conditions || null, notes || null, bank_details || null, payment_terms || null, parseFloat(tcs_amount) || 0, po_req_no || null, po_req_date || null, approval_no || null, delivery_address || null, order_intro || null, isDraft ? 'draft' : 'pending', req.user.id, primaryMrsId]
           .concat([po_number, po_number, mrsIdList.length ? mrsIdList : null])
           .concat([department || null, currency || 'INR', billing_address || null, freight_mode || null, transport_mode || null, tax_type || 'intra',
             parseFloat(freight_charges) || 0, parseFloat(loading_unloading_charges) || 0, parseFloat(insurance_charges) || 0, parseFloat(tds_percent) || 0,
@@ -1255,8 +1259,10 @@ router.post('/', async (req, res) => {
       // 3. Insert Items & Calculate Totals (taxable = qty*rate less line discount)
       let subTotal = 0;
       let totalGst = 0;
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
+      const itemList = items || [];
+      for (let i = 0; i < itemList.length; i++) {
+        const item = itemList[i];
+        if (!item.material_name) continue;
         const gross = (parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0);
         const disc  = parseFloat(item.discount_pct || 0) || 0;
         const basic = gross * (1 - disc / 100);
@@ -1266,7 +1272,7 @@ router.post('/', async (req, res) => {
           `INSERT INTO po_items (
             po_id, material_name, make_model, hsn_code, quantity, unit, rate, gst_rate, req_date, sort_order, mrs_item_id, item_code, discount_pct, boq_item_id, cost_head
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
-          [poId, item.material_name, item.make_model || null, item.hsn_code || null, parseFloat(item.quantity) || 0, item.unit, parseFloat(item.rate) || 0, parseFloat(item.gst_rate) || 0, item.req_date || null, i + 1, item.mrs_item_id || null, item.item_code || null, disc, item.boq_item_id || null, item.cost_head || null]
+          [poId, item.material_name, item.make_model || null, item.hsn_code || null, parseFloat(item.quantity) || 0, item.unit || 'Nos', parseFloat(item.rate) || 0, parseFloat(item.gst_rate) || 0, item.req_date || null, i + 1, item.mrs_item_id || null, item.item_code || null, disc, item.boq_item_id || null, item.cost_head || null]
         );
         subTotal += basic;
         totalGst += gst;

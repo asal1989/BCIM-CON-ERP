@@ -225,10 +225,11 @@ const createWorkOrder = async (req, res) => {
   const finalSubject  = subject || scope_of_work || '';
   const finalValue    = parseFloat(contract_value || total_value || 0);
   const mrsIdList     = (Array.isArray(mrs_ids) ? mrs_ids : (mrs_id ? [mrs_id] : [])).filter(Boolean);
+  const isDraft       = req.body.status === 'draft';
 
   if (!project_id) return res.status(400).json({ error: 'project_id required' });
-  if (!vendor_id)  return res.status(400).json({ error: 'vendor_id required' });
-  if (!finalSubject) return res.status(400).json({ error: 'subject required' });
+  if (!isDraft && !vendor_id)  return res.status(400).json({ error: 'vendor_id required' });
+  if (!isDraft && !finalSubject) return res.status(400).json({ error: 'subject required' });
 
   try {
     let created;
@@ -250,11 +251,11 @@ const createWorkOrder = async (req, res) => {
             status, created_by,
             gst_pct, tds_pct, retention_pct, advance_recovery_pct,
             mrs_id, mrs_ids)
-         VALUES ($1,$2,$3,$4,$5,$5,$6,$7,$8,$9,$9,$10,$11,$12,$13,'pending',$14,$15,$16,$17,$18,$19,$20)
+         VALUES ($1,$2,$3,$4,$5,$5,$6,$7,$8,$9,$9,$10,$11,$12,$13,$21,$14,$15,$16,$17,$18,$19,$20)
          RETURNING *`,
         [
-          project_id, vendor_id, wo_number, wo_date,
-          finalSubject, scope_of_work || null,
+          project_id, vendor_id || null, wo_number, wo_date,
+          finalSubject || null, scope_of_work || null,
           start_date || null, end_date || null, finalValue,
           terms_conditions || null,
           cost_head || null, work_category || null, tower_block || null,
@@ -262,6 +263,7 @@ const createWorkOrder = async (req, res) => {
           parseFloat(gst_pct) || 18, parseFloat(tds_pct) || 2,
           parseFloat(retention_pct) || 5, parseFloat(advance_recovery_pct) || 10,
           mrsIdList[0] || null, mrsIdList.length ? mrsIdList : null,
+          isDraft ? 'draft' : 'pending',
         ]
       );
       const wo = woResult.rows[0];

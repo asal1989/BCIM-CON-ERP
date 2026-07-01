@@ -935,6 +935,17 @@ function CreateWOModal({ onClose, vendors, projects, mrsList = [], onCreate, onU
           </div>
           <div className="flex items-center gap-2">
             <button onClick={onClose} className="px-5 h-9 rounded-md border border-slate-300 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">Cancel</button>
+            {!isEditing && (
+              <button
+                onClick={() => {
+                  if (!form.project_id) return toast.error('Select a project before saving draft');
+                  onCreate({ ...form, items, total_value: formTotal, status: 'draft' });
+                }}
+                disabled={isPending || !form.project_id}
+                className="px-4 h-9 rounded-md border border-blue-300 text-sm font-medium text-blue-600 hover:bg-blue-50 disabled:opacity-50 transition-colors flex items-center gap-1.5">
+                <Download className="w-4 h-4" /> Save Draft
+              </button>
+            )}
             <button
               onClick={() => {
                 const payload = { ...form, items, total_value: formTotal };
@@ -1439,7 +1450,7 @@ export default function WorkOrderPage() {
 
   const createMutation = useMutation({
     mutationFn: d => subcontractorAPI.createWorkOrder(d),
-    onSuccess: () => { toast.success('Work Order issued successfully'); setShowCreate(false); qc.invalidateQueries({ queryKey: ['work-orders'] }); },
+    onSuccess: (res, vars) => { toast.success(vars.status === 'draft' ? 'Draft saved' : 'Work Order issued successfully'); setShowCreate(false); qc.invalidateQueries({ queryKey: ['work-orders'] }); },
     onError: e => toast.error(e?.response?.data?.error || 'Failed to issue Work Order'),
   });
   const approveMutation = useMutation({
