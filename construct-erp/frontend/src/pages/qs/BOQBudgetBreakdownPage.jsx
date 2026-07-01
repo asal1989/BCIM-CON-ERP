@@ -160,6 +160,38 @@ function EditableBudget({ value, onSave, mode, itemAmount }) {
   );
 }
 
+// Inline-edit cell for item-row total budget (div-based to avoid nested <button>)
+function EditableTotal({ value, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState('');
+
+  const commit = () => {
+    setEditing(false);
+    const newVal = parseFloat(val || 0);
+    if (!isNaN(newVal) && newVal !== parseFloat(value || 0)) onSave(newVal);
+  };
+
+  if (editing) return (
+    <input
+      autoFocus type="number" value={val}
+      onChange={e => setVal(e.target.value)}
+      onBlur={commit}
+      onClick={e => e.stopPropagation()}
+      onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
+      className="w-28 border border-indigo-400 rounded-lg px-2 py-1 text-xs text-right focus:outline-none focus:ring-2 focus:ring-indigo-200"
+    />
+  );
+
+  return (
+    <div
+      onClick={e => { e.stopPropagation(); setVal(value ?? ''); setEditing(true); }}
+      className="w-28 text-right text-xs font-semibold hover:bg-indigo-50 rounded-lg px-2 py-1 transition border border-transparent hover:border-indigo-200 cursor-pointer select-none"
+    >
+      {value > 0 ? inr(value) : <span className="text-slate-300 italic font-normal">set budget</span>}
+    </div>
+  );
+}
+
 // ─── Editable chapter-level budget cell in the BOQ Summary tab ───────────────
 function ChapterBudgetCell({ value, onSave, saving }) {
   const [editing, setEditing] = useState(false);
@@ -1348,10 +1380,23 @@ export default function BOQBudgetBreakdownPage() {
     onError: (e) => toast.error(e?.response?.data?.error || 'Failed to save'),
   });
 
+  const setTotalMutation = useMutation({
+    mutationFn: ({ boqItemId, total }) => boqBudgetAPI.setItemTotal(boqItemId, total),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['boq-budget', projectId] });
+      toast.success('Budget saved');
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to save'),
+  });
+
   const saveCell = (item, costHead, field, value) => {
     const entry = { cost_head: costHead };
     entry[field] = value;
     updateMutation.mutate({ boqItemId: item.id, entries: [entry] });
+  };
+
+  const saveItemTotal = (item, total) => {
+    setTotalMutation.mutate({ boqItemId: item.id, total });
   };
 
   // Per-item rollups
@@ -1747,8 +1792,8 @@ export default function BOQBudgetBreakdownPage() {
                                   <span className="font-mono text-[10px] text-indigo-600 truncate">{item.item_no}</span>
                                   <span className="text-slate-600 truncate pr-2" title={item.description}>{item.description}</span>
                                   <span className="text-right text-slate-700">{inr(item.amount)}</span>
-                                  <span className={clsx('text-right', item.allocated ? 'text-indigo-600' : 'text-slate-300')}>
-                                    {item.budgeted > 0 ? inr(item.budgeted) : '—'}
+                                  <span className={clsx(item.allocated ? 'text-indigo-600' : 'text-slate-400')}>
+                                    <EditableTotal value={item.budgeted} onSave={total => saveItemTotal(item, total)} />
                                   </span>
                                   <span className="text-right text-amber-600">{item.spent > 0 ? inr(item.spent) : <span className="text-slate-300">—</span>}</span>
                                   <span className={clsx('text-right', item.balance < 0 ? 'text-rose-600' : item.allocated ? 'text-emerald-600' : 'text-slate-300')}>

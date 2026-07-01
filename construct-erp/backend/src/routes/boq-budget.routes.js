@@ -347,6 +347,72 @@ router.put('/item/:boq_item_id', async (req, res) => {
   }
 });
 
+// PUT /boq-budget/item/:boq_item_id/total — set total budget for a single item
+// Distributes proportionally across existing cost-head entries; if none, uses "Sub Con".
+router.put('/item/:boq_item_id/total', async (req, res) => {
+  try {
+    const { boq_item_id } = req.params;
+    const total = parseFloat(req.body.total);
+    if (isNaN(total) || total < 0) return res.status(400).json({ error: 'total must be a non-negative number' });
+
+    const itemR = await query(`
+      SELECT b.*, p.company_id, ROUND((b.quantity * b.rate)::numeric, 2) AS amount
+      FROM boq_items b JOIN projects p ON p.id = b.project_id
+      WHERE b.id = $1
+    `, [boq_item_id]);
+    if (!itemR.rows.length || itemR.rows[0].company_id !== req.user.company_id) {
+      return res.status(404).json({ error: 'BOQ item not found' });
+    }
+    const boqItem = itemR.rows[0];
+    if (!userCanAccessProject(req, boqItem.project_id)) {
+      return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
+    const itemAmount = parseFloat(boqItem.amount) || 0;
+
+    const existingR = await query(
+      `SELECT cost_head, budgeted_amount FROM boq_item_budget_breakdown WHERE boq_item_id = $1`,
+      [boq_item_id]
+    );
+    const existing = existingR.rows;
+    const existingTotal = existing.reduce((s, r) => s + parseFloat(r.budgeted_amount || 0), 0);
+
+    const result = await withTransaction(async (client) => {
+      const saved = [];
+      if (!existing.length || existingTotal === 0) {
+        // No breakdown yet — store full amount under "Sub Con"
+        const pct = itemAmount > 0 ? (total / itemAmount) * 100 : 0;
+        const r = await client.query(`
+          INSERT INTO boq_item_budget_breakdown (boq_item_id, project_id, cost_head, budgeted_pct, budgeted_amount, created_by)
+          VALUES ($1,$2,'Sub Con',$3,$4,$5)
+          ON CONFLICT (boq_item_id, cost_head)
+          DO UPDATE SET budgeted_pct=$3, budgeted_amount=$4, updated_at=NOW()
+          RETURNING *
+        `, [boq_item_id, boqItem.project_id, pct, total, req.user.id]);
+        saved.push(r.rows[0]);
+      } else {
+        // Scale each existing cost-head proportionally
+        const scaleFactor = total / existingTotal;
+        for (const row of existing) {
+          const newAmount = Math.round(parseFloat(row.budgeted_amount) * scaleFactor * 100) / 100;
+          const pct = itemAmount > 0 ? (newAmount / itemAmount) * 100 : 0;
+          const r = await client.query(`
+            UPDATE boq_item_budget_breakdown
+            SET budgeted_amount=$1, budgeted_pct=$2, updated_at=NOW()
+            WHERE boq_item_id=$3 AND cost_head=$4
+            RETURNING *
+          `, [newAmount, pct, boq_item_id, row.cost_head]);
+          if (r.rows[0]) saved.push(r.rows[0]);
+        }
+      }
+      return saved;
+    });
+
+    res.json({ data: result, total_budgeted: total });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /boq-budget/:project_id/costhead-summary
 // Returns each cost head with its budget (from project_costhead_budgets)
 // and actual spend (aggregated from all transaction tables).
