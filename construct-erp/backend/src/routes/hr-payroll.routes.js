@@ -7,6 +7,26 @@ const { query, withTransaction } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
 const { postAutoJournalStandalone } = require('../services/journalAutoPost');
 
+// Public verification endpoint (no auth — QR scan)
+router.get('/public/verify/:id', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT mp.id, mp.month, mp.year, mp.employee_code, mp.basic, mp.hra,
+              mp.gross_earnings, mp.total_deductions, mp.net_pay, mp.status,
+              e.name AS employee_name, d.name AS department_name, des.name AS designation_name,
+              c.name AS company_name
+       FROM hr_monthly_payroll mp
+       LEFT JOIN hr_employees e ON mp.employee_id = e.id
+       LEFT JOIN hr_departments d ON e.department_id = d.id
+       LEFT JOIN hr_designations des ON e.designation_id = des.id
+       LEFT JOIN companies c ON mp.company_id = c.id
+       WHERE mp.id = $1`, [req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Payslip not found' });
+    res.json({ data: result.rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.use(authenticate);
 router.use(authorize('super_admin', 'admin', 'hr_admin', 'hr_manager'));
 

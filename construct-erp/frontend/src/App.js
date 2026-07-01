@@ -233,8 +233,8 @@ const AuditLogPage        = lazy(() => import('./pages/admin/AuditLogPage'));
 const RolePermissionsPage = lazy(() => import('./pages/admin/RolePermissionsPage'));
 const MRSVerificationPage = lazy(() => import('./pages/stores/MRSVerificationPage'));
 const POVerificationPage = lazy(() => import('./pages/procurement/POVerificationPage'));
-// GRNVerificationPage removed — GRN features merged into IGN
 const MINVerificationPage = lazy(() => import('./pages/stores/MINVerificationPage'));
+const DocumentVerificationPage = lazy(() => import('./pages/common/DocumentVerificationPage'));
 const SubcontractorPortalPage = lazy(() => import('./pages/subcontractor/PortalPage'));
 // New SC Module — 12 separate pages
 const SCDashboard        = lazy(() => import('./pages/sc/SCDashboard'));
@@ -549,8 +549,18 @@ export default function App() {
               {/* Public Verification Links */}
               <Route path="/verify/mrs/:id" element={<MRSVerificationPage />} />
               <Route path="/verify/po/:id" element={<POVerificationPage />} />
-              {/* GRN verification route removed — GRN features merged into IGN */}
               <Route path="/verify/min/:id" element={<MINVerificationPage />} />
+              <Route path="/verify/wo/:id" element={<DocumentVerificationPage type="wo" />} />
+              <Route path="/verify/grs/:id" element={<DocumentVerificationPage type="grs" />} />
+              <Route path="/verify/gatepass/:id" element={<DocumentVerificationPage type="gatepass" />} />
+              <Route path="/verify/ign/:id" element={<DocumentVerificationPage type="ign" />} />
+              <Route path="/verify/ra-bill/:id" element={<DocumentVerificationPage type="ra-bill" />} />
+              <Route path="/verify/payment-cert/:id" element={<DocumentVerificationPage type="payment-cert" />} />
+              <Route path="/verify/eway/:id" element={<DocumentVerificationPage type="eway" />} />
+              <Route path="/verify/dpr/:id" element={<DocumentVerificationPage type="dpr" />} />
+              <Route path="/verify/payslip/:id" element={<DocumentVerificationPage type="payslip" />} />
+              <Route path="/verify/advance/:id" element={<DocumentVerificationPage type="advance" />} />
+              <Route path="/verify/boq/:id" element={<DocumentVerificationPage type="boq" />} />
               <Route path="/vendor-rfq/:token" element={<VendorRFQPortalPage />} />
 
               {/* Print pages — ProtectedRoute but NO Layout sidebar */}

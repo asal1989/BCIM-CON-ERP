@@ -8,6 +8,39 @@ const { loadProjectScope, appendProjectScope } = require('../middleware/projectS
 const { logAudit } = require('../utils/auditLog');
 const { BOQ_COST_HEADS } = require('../constants/boqCostHeads');
 const { postAutoJournalStandalone } = require('../services/journalAutoPost');
+// Public verification endpoint (no auth — QR scan)
+router.get('/public/verify/:id', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT rb.*, p.name AS project_name, p.project_code,
+              sc.name AS contractor_name, u.name AS created_by_name
+       FROM ra_bills rb
+       LEFT JOIN projects p ON rb.project_id = p.id
+       LEFT JOIN vendors sc ON rb.contractor_id = sc.id
+       LEFT JOIN users u ON rb.created_by = u.id
+       WHERE rb.id = $1`, [req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'RA Bill not found' });
+    const items = await query(`SELECT * FROM ra_bill_items WHERE ra_bill_id = $1 ORDER BY sort_order`, [req.params.id]);
+    res.json({ data: { ...result.rows[0], items: items.rows } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Public BOQ summary verification
+router.get('/public/verify-boq/:projectId', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT p.id, p.name AS project_name, p.project_code, p.location, p.status,
+              c.name AS company_name
+       FROM projects p
+       LEFT JOIN companies c ON p.company_id = c.id
+       WHERE p.id = $1`, [req.params.projectId]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Project not found' });
+    res.json({ data: result.rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.use(authenticate);
 router.use(loadProjectScope);
 

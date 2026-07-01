@@ -5,6 +5,20 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
 
+// Public verification endpoint (no auth — QR scan)
+router.get('/public/verify/:id', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT e.*, p.name AS project_name, p.project_code
+       FROM eway_bills e
+       LEFT JOIN projects p ON e.project_id = p.id
+       WHERE e.id = $1`, [req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'E-Way Bill not found' });
+    res.json({ data: result.rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.use(authenticate);
 const CID = req => req.user.company_id;
 

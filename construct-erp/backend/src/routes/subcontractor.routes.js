@@ -21,6 +21,24 @@ runSchemaInit('work_orders_mrs_columns', async () => {
   `);
 });
 
+// Public verification endpoint (no auth — QR scan)
+router.get('/public/verify/:id', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT wo.*, v.name AS contractor_name, p.name AS project_name, p.project_code,
+              u.name AS created_by_name
+       FROM work_orders wo
+       LEFT JOIN vendors v ON wo.vendor_id = v.id
+       LEFT JOIN projects p ON wo.project_id = p.id
+       LEFT JOIN users u ON wo.created_by = u.id
+       WHERE wo.id = $1`, [req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Work Order not found' });
+    const items = await query(`SELECT * FROM wo_items WHERE wo_id = $1 ORDER BY sort_order`, [req.params.id]);
+    res.json({ data: { ...result.rows[0], items: items.rows } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.use(authenticate);
 
 // Editing/deleting a work order is restricted to procurement, super admin & MD users

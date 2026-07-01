@@ -101,6 +101,26 @@ const STORES_WRITE = ['store_keeper','stores_manager','stores_officer','admin','
   console.log('[IGN] Schema migration OK');
 })();
 
+// Public verification endpoint (no auth — QR scan)
+router.get('/public/verify/:id', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT i.*, v.name AS vendor_display_name, p.name AS project_name, p.project_code,
+              u.name AS created_by_name
+       FROM ign i
+       LEFT JOIN vendors v ON i.vendor_id = v.id
+       LEFT JOIN projects p ON i.project_id = p.id
+       LEFT JOIN users u ON i.created_by = u.id
+       WHERE i.id = $1`, [req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'IGN not found' });
+    const row = result.rows[0];
+    if (!row.supplier_name && row.vendor_display_name) row.supplier_name = row.vendor_display_name;
+    const items = await query(`SELECT * FROM ign_items WHERE ign_id = $1 ORDER BY sl_no`, [req.params.id]);
+    res.json({ data: { ...row, items: items.rows } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.use(authenticate);
 router.use(loadProjectScope);
 

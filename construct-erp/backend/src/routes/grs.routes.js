@@ -52,11 +52,29 @@ const router = express.Router();
   await safe(`ALTER TABLE grs ADD COLUMN IF NOT EXISTS po_id     UUID REFERENCES purchase_orders(id)`);
   await safe(`ALTER TABLE grs ADD COLUMN IF NOT EXISTS po_number VARCHAR(80)`);
 
+  await safe(`ALTER TABLE grs ADD COLUMN IF NOT EXISTS supplier_name VARCHAR(200)`);
+
   await safe(`ALTER TABLE grs DROP CONSTRAINT IF EXISTS grs_status_check`);
   await safe(`ALTER TABLE grs ADD CONSTRAINT grs_status_check CHECK (status IN ('pending','acknowledged','cancelled'))`);
 
   console.log('[GRS] Schema migration OK');
 })();
+
+// Public verification endpoint (no auth — QR scan)
+router.get('/public/verify/:id', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT g.*, p.name AS project_name, p.project_code, u.name AS created_by_name
+       FROM grs g
+       LEFT JOIN projects p ON g.project_id = p.id
+       LEFT JOIN users u ON g.created_by = u.id
+       WHERE g.id = $1`, [req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'GRS not found' });
+    const items = await query(`SELECT * FROM grs_items WHERE grs_id = $1 ORDER BY sl_no`, [req.params.id]);
+    res.json({ data: { ...result.rows[0], items: items.rows } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 router.use(authenticate);
 router.use(loadProjectScope);

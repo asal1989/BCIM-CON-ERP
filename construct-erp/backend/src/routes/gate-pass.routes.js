@@ -60,6 +60,22 @@ const router = express.Router();
   console.log('[GatePass] Schema migration OK');
 })();
 
+// Public verification endpoint (no auth — QR scan)
+router.get('/public/verify/:id', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT gp.*, p.name AS project_name, p.project_code, u.name AS created_by_name
+       FROM gate_passes gp
+       LEFT JOIN projects p ON gp.project_id = p.id
+       LEFT JOIN users u ON gp.created_by = u.id
+       WHERE gp.id = $1`, [req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Gate Pass not found' });
+    const items = await query(`SELECT * FROM gate_pass_items WHERE gp_id = $1 ORDER BY sl_no`, [req.params.id]);
+    res.json({ data: { ...result.rows[0], items: items.rows } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.use(authenticate);
 router.use(loadProjectScope);
 

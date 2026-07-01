@@ -20,6 +20,24 @@ const { BOQ_COST_HEADS, classifyItemCostHead } = require('../constants/boqCostHe
 
 
 const router = express.Router();
+
+// Public verification endpoint (no auth — QR scan)
+router.get('/public/verify/:id', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT b.*, v.name AS vendor_name, p.name AS project_name, p.project_code,
+              u.name AS created_by_name
+       FROM tqs_bills b
+       LEFT JOIN vendors v ON b.vendor_id = v.id
+       LEFT JOIN projects p ON b.project_id = p.id
+       LEFT JOIN users u ON b.created_by = u.id
+       WHERE b.id = $1`, [req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Bill not found' });
+    res.json({ data: result.rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.use(authenticate);
 router.use(loadProjectScope);
 

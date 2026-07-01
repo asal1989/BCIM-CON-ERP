@@ -7,6 +7,23 @@ const { runSchemaInit } = require('../utils/schemaInit');
 const { postAutoJournal, postAutoJournalStandalone } = require('../services/journalAutoPost');
 const { notifyAdvanceCreated, notifyAdvanceProcurementApproved } = require('../services/notif.helper');
 
+// Public verification endpoint (no auth — QR scan)
+router.get('/public/verify/:id', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT av.*, v.name AS vendor_name, p.name AS project_name, p.project_code,
+              u.name AS created_by_name
+       FROM tqs_advance_vouchers av
+       LEFT JOIN vendors v ON av.vendor_id = v.id
+       LEFT JOIN projects p ON av.project_id = p.id
+       LEFT JOIN users u ON av.created_by = u.id
+       WHERE av.id = $1`, [req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Advance Voucher not found' });
+    res.json({ data: result.rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.use(authenticate);
 router.use(loadProjectScope);
 

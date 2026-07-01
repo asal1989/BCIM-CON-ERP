@@ -3,10 +3,19 @@ import React from 'react';
 import dayjs from 'dayjs';
 import { QRCodeSVG as QRCode } from 'qrcode.react';
 
+const getPublicAppOrigin = () => {
+  const configured = import.meta.env?.VITE_PUBLIC_APP_URL || import.meta.env?.VITE_APP_URL || import.meta.env?.VITE_APP_ORIGIN;
+  if (configured) return configured.replace(/\/$/, '');
+  if (typeof window === 'undefined') return '';
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') return 'http://bcim.ddns.net:3000';
+  return window.location.origin;
+};
+
 export default function MINPrintTemplate({ min }) {
   if (!min) return null;
 
-  const verificationUrl = `${window.location.origin}/verify/min/${min.id}`;
+  const verificationUrl = `${getPublicAppOrigin()}/verify/min/${min.id}`;
 
   return (
     <div className="print-area p-10 bg-white text-slate-900 font-sans min-h-[297mm]">

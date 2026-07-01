@@ -4,6 +4,21 @@ const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { query } = require('../config/database');
 
+// Public verification endpoint (no auth — QR scan)
+router.get('/public/verify/:id', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT d.*, p.name AS project_name, p.project_code, u.name AS submitted_by_name
+       FROM daily_progress_reports d
+       LEFT JOIN projects p ON d.project_id = p.id
+       LEFT JOIN users u ON d.submitted_by = u.id
+       WHERE d.id = $1`, [req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'DPR not found' });
+    res.json({ data: result.rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.use(authenticate);
 
 router.get('/', async (req, res) => {
