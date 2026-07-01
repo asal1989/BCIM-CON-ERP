@@ -1,4 +1,5 @@
 // src/pages/hr-admin/HRDashboardPage.jsx  — BCIM HRMS 2026 Premium Dashboard
+import CelebrationsWidget from '../../components/hr/CelebrationsWidget';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
@@ -699,6 +700,11 @@ export default function HRDashboardPage() {
                     onClick={()=>a.to&&navigate(a.to)}/>
                 ))}
               </div>
+            </motion.div>
+
+            {/* ── CELEBRATIONS ──────────────────────────────────────────── */}
+            <motion.div {...fade(0.36)}>
+              <CelebrationsWidget />
             </motion.div>
 
             {/* ── ANALYTICS CHARTS ─────────────────────────────────────── */}

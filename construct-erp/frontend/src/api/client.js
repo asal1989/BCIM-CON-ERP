@@ -1956,6 +1956,8 @@ export const hrComplianceAPI = {
   deleteChallan:       (id)       => api.delete(`/hr-admin/compliance/challan-filings/${id}`),
   clraRegister:        (p)        => api.get('/hr-admin/compliance/clra-register',  { params: p }),
   hrChecklist:         ()         => api.get('/hr-admin/compliance/hr-checklist'),
+  celebrations:        ()         => api.get('/hr-admin/compliance/celebrations'),
+  triggerCelebrations: ()         => api.post('/hr-admin/compliance/celebrations/trigger'),
 };
 
 export const mailAPI = {

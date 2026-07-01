@@ -747,6 +747,9 @@ if (require.main === module) {
 
     const { initDailyActivityDigest } = require('./utils/daily-activity-digest.service');
     initDailyActivityDigest();
+
+    const { initBirthdayAnniversary } = require('./utils/hr-birthday-anniversary.service');
+    initBirthdayAnniversary();
   });
   }); // end .finally()
 }

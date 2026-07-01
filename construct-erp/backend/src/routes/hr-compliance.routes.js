@@ -1294,4 +1294,26 @@ router.get('/hr-checklist', async (req, res) => {
   }
 });
 
+// ── GET /compliance/celebrations — today's birthdays & anniversaries ──────────
+router.get('/celebrations', async (req, res) => {
+  try {
+    const { getTodayCelebrations } = require('../utils/hr-birthday-anniversary.service');
+    const data = await getTodayCelebrations(req.user.company_id);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /compliance/celebrations/trigger — manually trigger greetings ────────
+router.post('/celebrations/trigger', async (req, res) => {
+  try {
+    const { runBirthdayAnniversary } = require('../utils/hr-birthday-anniversary.service');
+    const result = await runBirthdayAnniversary();
+    res.json({ ok: true, message: 'Birthday/anniversary greetings sent', result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
