@@ -434,6 +434,15 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
     );
     const totalBoqValue = parseFloat(boqTotalR.rows[0]?.total || 0);
 
+    // Per-cost-head BOQ value from the BOQ items breakdown tab
+    const boqBreakdownR = await query(
+      `SELECT cost_head, COALESCE(SUM(budgeted_amount), 0) AS boq_value
+       FROM boq_item_budget_breakdown WHERE project_id=$1 GROUP BY cost_head`,
+      [project_id]
+    );
+    const boqValueMap = {};
+    for (const r of boqBreakdownR.rows) boqValueMap[r.cost_head] = parseFloat(r.boq_value || 0);
+
     // Profit (head 19) = 10% of sum of heads 1-18 — derived, not stored
     const baseActual = PROFIT_BASE_HEADS.reduce((s, h) => s + (actualMap[h] || 0), 0);
     actualMap['Profit'] = baseActual * PROFIT_PCT;
@@ -467,6 +476,7 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
     const DERIVED_HEADS = new Set(['Profit', CONTINGENCY_HEAD]);
     const data = [...allHeads].map(head => ({
       cost_head: head,
+      boq_value: boqValueMap[head] || 0,
       budget: budgetMap[head] || 0,
       actual: actualMap[head] || 0,
       balance: (budgetMap[head] || 0) - (actualMap[head] || 0),

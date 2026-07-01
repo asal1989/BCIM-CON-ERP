@@ -321,7 +321,7 @@ Overhead	14496254.84
 Petty Cash	954211.41`;
 
 // ─── Drilldown sub-table shown when a cost head row is expanded ───────────────
-const DRILLDOWN_COLSPAN = 7; // must match number of <th> columns in the parent table
+const DRILLDOWN_COLSPAN = 8; // must match number of <th> columns in the parent table
 function CostHeadDrilldown({ projectId, costHead }) {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['costhead-drilldown', projectId, costHead],
@@ -1073,13 +1073,11 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
           <tr className="bg-[#0B2E59] text-white text-xs">
             <th className="px-4 py-2.5 text-center w-12">Sl No</th>
             <th className="px-4 py-2.5 text-left">Description of Works</th>
+            <th className="px-4 py-2.5 text-right w-44">BOQ Value</th>
             <th className="px-4 py-2.5 text-right w-52">Budget</th>
             <th className="px-4 py-2.5 text-right w-44">Actual Expenditure</th>
             <th className="px-4 py-2.5 text-right w-24">% Used</th>
-            <th className="px-4 py-2.5 text-right w-40">
-              <div>EAC (Annual)</div>
-              <div className="text-[9px] font-normal opacity-70">at current run rate</div>
-            </th>
+            <th className="px-4 py-2.5 text-right w-40">Provisional</th>
             <th className="px-4 py-2.5 text-right w-44">Balance</th>
           </tr>
         </thead>
@@ -1113,6 +1111,9 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
                       )}
                       <span>{r.cost_head}</span>
                     </div>
+                  </td>
+                  <td className="px-4 py-2 text-right text-slate-600 font-medium text-sm tabular-nums">
+                    {r.boq_value > 0 ? `₹${Math.round(r.boq_value).toLocaleString('en-IN')}` : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="px-2 py-1">
                     {r.derived ? (
@@ -1238,6 +1239,11 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName 
           <tr className="bg-[#E4EFDC] font-bold border-t-2 border-slate-300">
             <td className="px-4 py-2.5" />
             <td className="px-4 py-2.5 text-sm font-bold text-slate-800">Total</td>
+            <td className="px-4 py-2.5 text-right text-sm text-slate-700">
+              {rows.reduce((s, r) => s + (r.boq_value || 0), 0) > 0
+                ? `₹${Math.round(rows.reduce((s, r) => s + (r.boq_value || 0), 0)).toLocaleString('en-IN')}`
+                : '—'}
+            </td>
             <td className="px-4 py-2.5 text-right text-sm">₹{Math.round(totalBudget).toLocaleString('en-IN')}</td>
             <td className="px-4 py-2.5 text-right text-sm text-emerald-700">₹{Math.round(totalActual).toLocaleString('en-IN')}</td>
             <td className="px-4 py-2.5 text-right text-xs font-bold text-slate-600">
