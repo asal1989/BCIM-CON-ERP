@@ -472,6 +472,57 @@ function CostHeadDrilldown({ projectId, costHead }) {
   );
 }
 
+// ─── RA Bill-wise breakdown panel (shown inside expanded chapter/item rows) ───
+function RaBillsPanel({ bills }) {
+  const STATUS_COLORS = {
+    paid:      'bg-emerald-100 text-emerald-700 border border-emerald-200',
+    certified: 'bg-blue-100 text-blue-700 border border-blue-200',
+    verified:  'bg-indigo-100 text-indigo-700 border border-indigo-200',
+    submitted: 'bg-amber-100 text-amber-700 border border-amber-200',
+  };
+  const total = bills.reduce((s, b) => s + parseFloat(b.amount || 0), 0);
+  return (
+    <div className="mx-4 my-2 rounded-xl border border-violet-200 overflow-hidden bg-white shadow-sm">
+      <div className="px-4 py-2 bg-violet-50 border-b border-violet-100 flex items-center justify-between">
+        <span className="text-[10px] font-bold text-violet-700 uppercase tracking-wide">RA Bill — Wise Breakup</span>
+        <span className="text-xs font-bold text-violet-700">{`₹${Math.round(total).toLocaleString('en-IN')}`}</span>
+      </div>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="bg-slate-50 text-[10px] uppercase text-slate-500 font-bold border-b border-slate-100">
+            <th className="px-4 py-2 text-left">Bill No</th>
+            <th className="px-4 py-2 text-left">Date</th>
+            <th className="px-4 py-2 text-center">Status</th>
+            <th className="px-4 py-2 text-right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {bills.map((b, i) => (
+            <tr key={b.ra_bill_id || i} className="border-b border-slate-100 hover:bg-violet-50/30 transition-colors">
+              <td className="px-4 py-2 font-mono font-bold text-indigo-700">{b.bill_number || '—'}</td>
+              <td className="px-4 py-2 text-slate-500">
+                {b.bill_date ? new Date(b.bill_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+              </td>
+              <td className="px-4 py-2 text-center">
+                <span className={clsx('px-2 py-0.5 rounded-full text-[10px] font-bold', STATUS_COLORS[b.status] || 'bg-slate-100 text-slate-500 border border-slate-200')}>
+                  {b.status}
+                </span>
+              </td>
+              <td className="px-4 py-2 text-right font-semibold text-violet-700">{`₹${Math.round(parseFloat(b.amount || 0)).toLocaleString('en-IN')}`}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="bg-violet-50 border-t-2 border-violet-200">
+            <td colSpan={3} className="px-4 py-2 text-right font-bold text-violet-700 text-xs">Total RA Billed</td>
+            <td className="px-4 py-2 text-right font-bold text-violet-700">{`₹${Math.round(total).toLocaleString('en-IN')}`}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
 // ─── Monthly Analysis Matrix (cost heads × months) ───────────────────────────
 function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName }) {
   const [monthlyView, setMonthlyView] = useState('table'); // 'table' | 'scurve' | 'forecast'
@@ -1383,6 +1434,21 @@ export default function BOQBudgetBreakdownPage({ embedded = false }) {
     return m;
   }, [raBilledRaw]);
 
+  const { data: raBillsDetailRaw = [] } = useQuery({
+    queryKey: ['ra-bills-detail-boq', projectId],
+    queryFn: () => raBillAPI.boqBillsDetail(projectId).then(r => r.data?.data || []).catch(() => []),
+    enabled: !!projectId,
+  });
+  // Map boq_item_id → [{ ra_bill_id, bill_number, bill_date, status, amount }, ...]
+  const raBillsDetailByItemId = useMemo(() => {
+    const m = {};
+    raBillsDetailRaw.forEach(r => {
+      if (!m[r.boq_item_id]) m[r.boq_item_id] = [];
+      m[r.boq_item_id].push(r);
+    });
+    return m;
+  }, [raBillsDetailRaw]);
+
   const updateMutation = useMutation({
     mutationFn: ({ boqItemId, entries }) => boqBudgetAPI.updateItem(boqItemId, entries),
     onSuccess: (res) => {
@@ -1816,6 +1882,18 @@ export default function BOQBudgetBreakdownPage({ embedded = false }) {
                       </button>
                       {isOpen && (
                         <div className="bg-slate-50 border-t border-slate-200">
+                          {/* Chapter-level RA bill-wise breakdown panel */}
+                          {chRaBilled > 0 && (() => {
+                            const billMap = {};
+                            ch.items.forEach(i => {
+                              (raBillsDetailByItemId[i.id] || []).forEach(b => {
+                                if (!billMap[b.bill_number]) billMap[b.bill_number] = { ...b, amount: 0 };
+                                billMap[b.bill_number].amount += parseFloat(b.amount || 0);
+                              });
+                            });
+                            const chBills = Object.values(billMap).sort((a, bv) => (a.bill_number || '').localeCompare(bv.bill_number || ''));
+                            return chBills.length > 0 ? <RaBillsPanel bills={chBills} /> : null;
+                          })()}
                           {ch.items.map(item => {
                             const itemOpen = expanded[item.id];
                             return (
@@ -1858,6 +1936,9 @@ export default function BOQBudgetBreakdownPage({ embedded = false }) {
                                 </button>
                                   );
                                 })()}
+                                {itemOpen && (raBillsDetailByItemId[item.id] || []).length > 0 && (
+                                  <RaBillsPanel bills={raBillsDetailByItemId[item.id]} />
+                                )}
                                 {itemOpen && <CostHeadDetail item={item} costHeads={costHeads} mode={mode} onSave={saveCell} />}
                               </div>
                             );

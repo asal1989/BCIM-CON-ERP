@@ -137,6 +137,31 @@ router.get('/boq-item-billed', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /ra-bills/boq-bills-detail?project_id=X — individual bill rows per BOQ item
+router.get('/boq-bills-detail', async (req, res) => {
+  try {
+    const { project_id } = req.query;
+    if (!project_id) return res.status(400).json({ error: 'project_id required' });
+    const result = await query(`
+      SELECT
+        rbi.boq_item_id,
+        rb.id          AS ra_bill_id,
+        rb.bill_number,
+        rb.bill_date,
+        rb.status,
+        rbi.amount
+      FROM ra_bill_items rbi
+      JOIN ra_bills rb ON rbi.ra_bill_id = rb.id
+      JOIN projects p  ON rb.project_id  = p.id
+      WHERE rb.project_id = $1
+        AND p.company_id  = $2
+        AND rb.status NOT IN ('draft','rejected')
+      ORDER BY rb.bill_date ASC NULLS LAST, rb.bill_number ASC
+    `, [project_id, req.user.company_id]);
+    res.json({ data: result.rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // GET /ra-bills/previous-stats
 router.get('/previous-stats', async (req, res) => {
   try {
