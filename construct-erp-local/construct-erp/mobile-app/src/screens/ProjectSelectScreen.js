@@ -3,11 +3,13 @@ import {
   View, Text, FlatList, TouchableOpacity,
   StyleSheet, ActivityIndicator, Alert,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { projectAPI } from '../api/client';
 
 export default function ProjectSelectScreen() {
   const { user, selectProject, logout } = useAuth();
+  const insets = useSafeAreaInsets();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading]   = useState(true);
 
@@ -29,7 +31,7 @@ export default function ProjectSelectScreen() {
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 24 }]}>
         <Text style={styles.greeting}>Hi, {user?.name || user?.email} 👋</Text>
         <Text style={styles.sub}>Select a project to continue</Text>
       </View>
@@ -59,7 +61,7 @@ export default function ProjectSelectScreen() {
         }
       />
 
-      <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
+      <TouchableOpacity style={[styles.logoutBtn, { paddingBottom: 20 + insets.bottom }]} onPress={logout}>
         <Text style={styles.logoutText}>Sign out</Text>
       </TouchableOpacity>
     </View>
@@ -70,7 +72,7 @@ const styles = StyleSheet.create({
   wrap:        { flex: 1, backgroundColor: '#0F172A' },
   center:      { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0F172A', gap: 12 },
   loadingText: { color: '#94A3B8', fontSize: 14 },
-  header:      { padding: 24, paddingTop: 56 },
+  header:      { padding: 24 },
   greeting:    { fontSize: 22, fontWeight: '800', color: '#F8FAFC' },
   sub:         { fontSize: 14, color: '#94A3B8', marginTop: 4 },
   card:        {

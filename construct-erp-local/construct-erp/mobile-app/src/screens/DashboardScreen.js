@@ -3,6 +3,7 @@ import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, RefreshControl, ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { dashboardAPI } from '../api/client';
 import { theme } from '../theme';
@@ -26,6 +27,7 @@ function KPICard({ label, value, color, sub }) {
 
 export default function DashboardScreen() {
   const { user, selectedProject, changeProject } = useAuth();
+  const insets = useSafeAreaInsets();
   const [kpis, setKpis]           = useState(null);
   const [loading, setLoading]     = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -45,7 +47,7 @@ export default function DashboardScreen() {
   return (
     <View style={styles.wrap}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <View style={{ flex: 1 }}>
           <Text style={styles.projectName} numberOfLines={1}>
             {selectedProject.project_code ? `${selectedProject.project_code} — ` : ''}{selectedProject.name}
@@ -90,7 +92,7 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   wrap:        { flex: 1, backgroundColor: theme.colors.bg },
   header:      {
-    backgroundColor: '#fff', paddingHorizontal: 16, paddingTop: 48, paddingBottom: 14,
+    backgroundColor: '#fff', paddingHorizontal: 16, paddingBottom: 14,
     borderBottomWidth: 1, borderBottomColor: theme.colors.border,
     flexDirection: 'row', alignItems: 'center', gap: 12,
   },

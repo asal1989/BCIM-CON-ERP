@@ -3,6 +3,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { StatusBar } from 'expo-status-bar';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
@@ -17,22 +18,41 @@ import AssetsScreen from './src/screens/AssetsScreen';
 import DocumentsScreen from './src/screens/DocumentsScreen';
 import ESSScreen from './src/screens/ESSScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import MoreScreen from './src/screens/MoreScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+const MoreStack = createNativeStackNavigator();
+
+// Bottom tabs are capped at 5 — platform guidance (and what actually fits
+// without labels wrapping/overlapping on a normal phone width). Everything
+// past Dashboard/MRS/Stores/Bills lives one tap deeper, under "More".
+function MoreStackScreen() {
+  return (
+    <MoreStack.Navigator screenOptions={{ headerShown: false }}>
+      <MoreStack.Screen name="MoreHome" component={MoreScreen} />
+      <MoreStack.Screen name="Assets" component={AssetsScreen} />
+      <MoreStack.Screen name="Documents" component={DocumentsScreen} />
+      <MoreStack.Screen name="ESS" component={ESSScreen} />
+      <MoreStack.Screen name="Profile" component={ProfileScreen} />
+    </MoreStack.Navigator>
+  );
+}
 
 function Tabs() {
+  const insets = useSafeAreaInsets();
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.muted,
+        tabBarLabelStyle: { fontSize: 11 },
         tabBarStyle: {
-          height: 64,
-          paddingBottom: 8,
-          paddingTop: 8,
-          borderTopColor: theme.colors.border
+          height: 54 + insets.bottom,
+          paddingBottom: Math.max(6, insets.bottom),
+          paddingTop: 6,
+          borderTopColor: theme.colors.border,
         },
         tabBarIcon: ({ color, size }) => {
           const icons = {
@@ -40,23 +60,17 @@ function Tabs() {
             MRS: 'clipboard-outline',
             Stores: 'cube-outline',
             Bills: 'receipt-outline',
-            Assets: 'qr-code-outline',
-            Docs: 'folder-open-outline',
-            ESS: 'person-check-outline',
-            Profile: 'person-circle-outline'
+            More: 'menu-outline',
           };
           return <Ionicons name={icons[route.name]} size={size} color={color} />;
-        }
+        },
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="MRS" component={MaterialRequestScreen} />
       <Tab.Screen name="Stores" component={StoresScreen} />
       <Tab.Screen name="Bills" component={BillsScreen} />
-      <Tab.Screen name="ESS" component={ESSScreen} />
-      <Tab.Screen name="Assets" component={AssetsScreen} />
-      <Tab.Screen name="Docs" component={DocumentsScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen name="More" component={MoreStackScreen} />
     </Tab.Navigator>
   );
 }
@@ -89,9 +103,11 @@ function RootNavigator() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <StatusBar style="light" />
-      <RootNavigator />
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <StatusBar style="light" />
+        <RootNavigator />
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }

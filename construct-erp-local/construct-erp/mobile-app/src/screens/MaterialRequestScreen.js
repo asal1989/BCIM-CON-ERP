@@ -3,6 +3,7 @@ import {
   View, Text, FlatList, StyleSheet,
   RefreshControl, ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { mrsAPI } from '../api/client';
 import { theme } from '../theme';
@@ -18,6 +19,7 @@ const STATUS = {
 
 export default function MaterialRequestScreen() {
   const { selectedProject } = useAuth();
+  const insets = useSafeAreaInsets();
   const [items, setItems]       = useState([]);
   const [loading, setLoading]   = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -40,7 +42,7 @@ export default function MaterialRequestScreen() {
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <Text style={styles.title}>Material Requests</Text>
         <Text style={styles.count}>{items.length} records</Text>
       </View>
@@ -77,7 +79,7 @@ export default function MaterialRequestScreen() {
 const styles = StyleSheet.create({
   wrap:     { flex: 1, backgroundColor: theme.colors.bg },
   center:   { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header:   { backgroundColor: '#fff', paddingHorizontal: 16, paddingTop: 48, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: theme.colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+  header:   { backgroundColor: '#fff', paddingHorizontal: 16, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: theme.colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   title:    { fontSize: 18, fontWeight: '700', color: theme.colors.text },
   count:    { fontSize: 12, color: theme.colors.muted },
   card:     { backgroundColor: '#fff', borderRadius: 10, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: theme.colors.border },
