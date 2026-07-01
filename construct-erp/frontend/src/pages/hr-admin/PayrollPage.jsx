@@ -8,7 +8,7 @@ import {
   CheckCircle, Clock, Banknote, TrendingDown, Users, X, ChevronDown,
   FileText, ArrowRight, Trash2,
 } from 'lucide-react';
-import { hrPayrollAPI, hrEmployeesAPI } from '../../api/client';
+import { hrPayrollAPI, hrEmployeesAPI, projectAPI } from '../../api/client';
 import toast from 'react-hot-toast';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -178,14 +178,20 @@ export default function PayrollPage() {
   const navigate = useNavigate();
   const qc       = useQueryClient();
   const now      = new Date();
-  const [month,    setMonth]    = useState(now.getMonth() + 1);
-  const [year,     setYear]     = useState(now.getFullYear());
-  const [payModal, setPayModal] = useState(false);
+  const [month,      setMonth]      = useState(now.getMonth() + 1);
+  const [year,       setYear]       = useState(now.getFullYear());
+  const [projectId,  setProjectId]  = useState('');
+  const [payModal,   setPayModal]   = useState(false);
   const [singleEmpId, setSingleEmpId] = useState('');
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['hr-payroll', month, year],
-    queryFn: () => hrPayrollAPI.list({ month, year }).then(r => r.data),
+    queryKey: ['hr-payroll', month, year, projectId],
+    queryFn: () => hrPayrollAPI.list({ month, year, ...(projectId && { project_id: projectId }) }).then(r => r.data),
+  });
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects-list'],
+    queryFn: () => projectAPI.list().then(r => r.data?.data || r.data || []),
   });
   const records = data?.data   || [];
   const totals  = data?.totals || {};
@@ -196,13 +202,20 @@ export default function PayrollPage() {
   });
 
   const runMut = useMutation({
-    mutationFn: (user_id) => hrPayrollAPI.run(user_id ? { month, year, user_id } : { month, year }),
+    mutationFn: (user_id) => {
+      const payload = { month, year };
+      if (user_id)   payload.user_id    = user_id;
+      if (projectId) payload.project_id = projectId;
+      return hrPayrollAPI.run(payload);
+    },
     onSuccess: (res, user_id) => {
       const first = res.data?.data?.[0];
       if (user_id) {
         toast.success(first?.skipped ? `Already ${first.status} for this employee` : 'Payroll generated for this employee');
       } else {
-        toast.success(`Payroll generated for ${res.data?.data?.length || 0} employees`);
+        const proj = projects.find(p => p.id === projectId);
+        const label = proj ? ` for ${proj.name}` : '';
+        toast.success(`Payroll generated for ${res.data?.data?.length || 0} employees${label}`);
       }
       refetch();
     },
@@ -288,8 +301,8 @@ export default function PayrollPage() {
           </div>
         </div>
 
-        {/* Month / Year picker */}
-        <div className="flex items-center gap-2">
+        {/* Month / Year / Project pickers */}
+        <div className="flex items-center gap-2 flex-wrap">
           <select value={month} onChange={e => setMonth(parseInt(e.target.value))}
             className="px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-indigo-400 shadow-sm">
             {MONTHS.slice(1).map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
@@ -298,6 +311,17 @@ export default function PayrollPage() {
             className="px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-indigo-400 shadow-sm">
             {[2024,2025,2026,2027].map(y => <option key={y} value={y}>{y}</option>)}
           </select>
+          <select value={projectId} onChange={e => setProjectId(e.target.value)}
+            className="px-3 py-2.5 bg-white border border-indigo-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-indigo-500 shadow-sm min-w-[160px]">
+            <option value="">All Projects</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          {projectId && (
+            <button onClick={() => setProjectId('')}
+              className="text-xs text-slate-500 hover:text-red-500 underline">
+              Clear
+            </button>
+          )}
         </div>
       </motion.div>
 
@@ -314,7 +338,10 @@ export default function PayrollPage() {
               style={{ background: 'linear-gradient(135deg, #6366F1, #4F46E5)' }}
             >
               <Play className="w-4 h-4" />
-              {runMut.isPending ? 'Generating…' : records.length > 0 ? 'Regenerate' : 'Generate Payroll'}
+              {runMut.isPending ? 'Generating…'
+                : records.length > 0
+                  ? `Regenerate${projectId ? ` — ${projects.find(p=>p.id===projectId)?.name || ''}` : ''}`
+                  : `Generate Payroll${projectId ? ` — ${projects.find(p=>p.id===projectId)?.name || ''}` : ''}`}
             </button>
 
             {/* Single-employee run */}

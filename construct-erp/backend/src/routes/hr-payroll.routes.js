@@ -139,24 +139,27 @@ function workingDaysInMonth(month, year) {
 // ═══════════════════════════════════════════════════════════
 router.get('/', async (req, res) => {
   try {
-    const { month, year, status, user_id } = req.query;
+    const { month, year, status, user_id, project_id } = req.query;
     const m = parseInt(month) || new Date().getMonth() + 1;
     const y = parseInt(year)  || new Date().getFullYear();
 
     let sql = `
       SELECT p.*, u.name as employee_name, u.employee_code,
-             dep.name as department_name, des.name as designation_name
+             dep.name as department_name, des.name as designation_name,
+             ep.project_id, proj.name as project_name
       FROM hr_monthly_payroll p
       JOIN users u ON u.id = p.user_id
       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
       LEFT JOIN hr_departments dep ON dep.id = ep.department_id
       LEFT JOIN hr_designations des ON des.id = ep.designation_id
+      LEFT JOIN projects proj ON proj.id = ep.project_id
       WHERE p.company_id = $1 AND p.month = $2 AND p.year = $3`;
     const params = [req.user.company_id, m, y];
     let idx = 4;
 
-    if (status)  { sql += ` AND p.status=$${idx}`;  params.push(status);  idx++; }
-    if (user_id) { sql += ` AND p.user_id=$${idx}`; params.push(user_id); idx++; }
+    if (status)     { sql += ` AND p.status=$${idx}`;      params.push(status);     idx++; }
+    if (user_id)    { sql += ` AND p.user_id=$${idx}`;     params.push(user_id);    idx++; }
+    if (project_id) { sql += ` AND ep.project_id=$${idx}`; params.push(project_id); idx++; }
 
     sql += ' ORDER BY u.name';
     const { rows } = await query(sql, params);
@@ -213,12 +216,12 @@ router.get('/:id', async (req, res) => {
 // ═══════════════════════════════════════════════════════════
 router.post('/run', async (req, res) => {
   try {
-    const { month, year, user_id } = req.body;
+    const { month, year, user_id, project_id } = req.body;
     const m = parseInt(month);
     const y = parseInt(year);
     const workDays = workingDaysInMonth(m, y);
 
-    // Get active employee(s) with salary — optionally scoped to one employee
+    // Get active employee(s) with salary — optionally scoped to one employee or project
     let employeeSql = `
       SELECT u.id as user_id,
               u.name as employee_name,
@@ -229,19 +232,19 @@ router.post('/run', async (req, res) => {
        JOIN hr_employee_salaries es ON es.user_id = u.id
          AND es.effective_from <= make_date($3,$1,1)
          AND (es.effective_to IS NULL OR es.effective_to >= make_date($3,$1,1))
+       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
        WHERE u.company_id = $2 AND u.is_active = TRUE`;
     const employeeParams = [m, req.user.company_id, y];
-    if (user_id) {
-      employeeSql += ` AND u.id = $4`;
-      employeeParams.push(user_id);
-    }
+    let epIdx = 4;
+    if (user_id)    { employeeSql += ` AND u.id = $${epIdx}`;          employeeParams.push(user_id);    epIdx++; }
+    if (project_id) { employeeSql += ` AND ep.project_id = $${epIdx}`; employeeParams.push(project_id); epIdx++; }
     const employees = await query(employeeSql, employeeParams);
 
     if (!employees.rows.length) {
       return res.status(400).json({
-        error: user_id
-          ? 'No active salary record found for this employee in the selected month.'
-          : 'No active employee salaries configured. Assign employee salaries before payroll generation.',
+        error: user_id    ? 'No active salary record found for this employee in the selected month.'
+             : project_id ? 'No active employees with salary found for the selected project.'
+             : 'No active employee salaries configured. Assign employee salaries before payroll generation.',
       });
     }
 
