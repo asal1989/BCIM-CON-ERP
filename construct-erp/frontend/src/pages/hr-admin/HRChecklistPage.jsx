@@ -130,8 +130,8 @@ export default function HRChecklistPage() {
   );
 
   const {
-    month_name, year,
-    payroll_month_name, payroll_year,
+    month_name, year,                          // current calendar month (July)
+    payroll_month_name, payroll_year,          // payroll month being processed (June)
     payroll = {},
     compliance_tasks = [],
     probation_due = [],
@@ -184,7 +184,7 @@ export default function HRChecklistPage() {
     {
       label: 'New Joiners',
       value: new_joiners.length,
-      sub:   `This month (${month_name})`,
+      sub:   `${payroll_month_name} ${payroll_year}`,
       icon:  UserCheck,
       color: 'blue',
     },
@@ -221,8 +221,8 @@ export default function HRChecklistPage() {
 
       <div className="h-full flex flex-col overflow-hidden bg-[#f5f6fa]">
         <PageHeader
-          title={`HR Checklist — ${month_name} ${year}`}
-          subtitle={`Payroll processing for ${payroll_month_name} ${payroll_year} · Compliance & employee tasks`}
+          title={`HR Checklist — ${payroll_month_name} ${payroll_year}`}
+          subtitle={`Running ${payroll_month_name} payroll · Compliance due dates for ${month_name} ${year}`}
           breadcrumbs={[{ label:'HR & Admin' }, { label:'Checklist' }]}
           actions={
             <div className="flex gap-2">
@@ -242,8 +242,8 @@ export default function HRChecklistPage() {
 
           {/* Print header (only shows when printing) */}
           <div className="hidden print:block mb-4">
-            <h1 className="text-xl font-bold text-slate-900">HR Checklist — {month_name} {year}</h1>
-            <p className="text-sm text-slate-500">Payroll: {payroll_month_name} {payroll_year} · Generated: {new Date().toLocaleDateString('en-IN')}</p>
+            <h1 className="text-xl font-bold text-slate-900">HR Checklist — {payroll_month_name} {payroll_year}</h1>
+            <p className="text-sm text-slate-500">Generated: {new Date().toLocaleDateString('en-IN')} · Compliance due dates for {month_name} {year}</p>
           </div>
 
           {/* Summary strip */}

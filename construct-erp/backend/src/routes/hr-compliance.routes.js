@@ -1167,7 +1167,7 @@ router.get('/hr-checklist', async (req, res) => {
         JOIN users u ON u.id = ec.user_id
         WHERE u.company_id=$1 AND ec.status='submitted'`, [companyId]).catch(() => ({ rows: [{ count: 0 }] })),
 
-      // 8. New joiners this month (no profile or incomplete onboarding)
+      // 8. New joiners in the PAYROLL month (previous month — June when in July)
       query(`
         SELECT u.id, u.name, u.employee_code, ep.date_of_joining,
                dep.name AS department_name
@@ -1175,9 +1175,9 @@ router.get('/hr-checklist', async (req, res) => {
         JOIN employee_profiles ep ON ep.user_id = u.id
         LEFT JOIN hr_departments dep ON dep.id = ep.department_id
         WHERE u.company_id=$1
-          AND ep.date_of_joining >= DATE_TRUNC('month', CURRENT_DATE)
-          AND ep.date_of_joining <= CURRENT_DATE
-        ORDER BY ep.date_of_joining DESC`, [companyId]),
+          AND EXTRACT(MONTH FROM ep.date_of_joining) = $2
+          AND EXTRACT(YEAR  FROM ep.date_of_joining) = $3
+        ORDER BY ep.date_of_joining DESC`, [companyId, prevM, prevY]),
 
       // 9. Exit pending (resigned but not fully settled)
       query(`
