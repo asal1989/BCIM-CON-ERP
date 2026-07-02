@@ -44,6 +44,7 @@ runSchemaInit('purchase_orders_columns', async () => {
   await query(`ALTER TABLE po_items ADD COLUMN IF NOT EXISTS item_code TEXT`);
   await query(`ALTER TABLE po_items ADD COLUMN IF NOT EXISTS discount_pct NUMERIC(6,2) DEFAULT 0`);
   await query(`ALTER TABLE po_items ADD COLUMN IF NOT EXISTS boq_item_id UUID REFERENCES boq_items(id) ON DELETE SET NULL`);
+  await query(`ALTER TABLE po_items ADD COLUMN IF NOT EXISTS boq_chapter TEXT`);
   await query(`ALTER TABLE po_items ADD COLUMN IF NOT EXISTS cost_head TEXT`);
   // Allow long material descriptions (was VARCHAR(200) ≈ 30 words) — widen to TEXT
   try { await query(`ALTER TABLE po_items ALTER COLUMN material_name TYPE TEXT`); } catch (_) {}
@@ -1048,12 +1049,12 @@ router.patch('/:id', authorize(...PROCUREMENT_ROLES), async (req, res) => {
           const basic = (parseFloat(it.quantity) || 0) * (parseFloat(it.rate) || 0);
           const gst   = basic * ((parseFloat(it.gst_rate) || 0) / 100);
           await client.query(
-            `INSERT INTO po_items (po_id, material_name, make_model, hsn_code, quantity, unit, rate, gst_rate, req_date, sort_order, mrs_item_id, boq_item_id, cost_head)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+            `INSERT INTO po_items (po_id, material_name, make_model, hsn_code, quantity, unit, rate, gst_rate, req_date, sort_order, mrs_item_id, boq_item_id, boq_chapter, cost_head)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
             [req.params.id, it.material_name, it.make_model || null, it.hsn_code || null,
              parseFloat(it.quantity) || 0, it.unit || 'Nos',
              parseFloat(it.rate) || 0, parseFloat(it.gst_rate) || 0,
-             it.req_date || null, j + 1, it.mrs_item_id || null, it.boq_item_id || null, it.cost_head || null]
+             it.req_date || null, j + 1, it.mrs_item_id || null, it.boq_item_id || null, it.boq_chapter || null, it.cost_head || null]
           );
           subTotal += basic;
           totalGst += gst;
@@ -1270,9 +1271,9 @@ router.post('/', async (req, res) => {
 
         await client.query(
           `INSERT INTO po_items (
-            po_id, material_name, make_model, hsn_code, quantity, unit, rate, gst_rate, req_date, sort_order, mrs_item_id, item_code, discount_pct, boq_item_id, cost_head
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
-          [poId, item.material_name, item.make_model || null, item.hsn_code || null, parseFloat(item.quantity) || 0, item.unit || 'Nos', parseFloat(item.rate) || 0, parseFloat(item.gst_rate) || 0, item.req_date || null, i + 1, item.mrs_item_id || null, item.item_code || null, disc, item.boq_item_id || null, item.cost_head || null]
+            po_id, material_name, make_model, hsn_code, quantity, unit, rate, gst_rate, req_date, sort_order, mrs_item_id, item_code, discount_pct, boq_item_id, boq_chapter, cost_head
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+          [poId, item.material_name, item.make_model || null, item.hsn_code || null, parseFloat(item.quantity) || 0, item.unit || 'Nos', parseFloat(item.rate) || 0, parseFloat(item.gst_rate) || 0, item.req_date || null, i + 1, item.mrs_item_id || null, item.item_code || null, disc, item.boq_item_id || null, item.boq_chapter || null, item.cost_head || null]
         );
         subTotal += basic;
         totalGst += gst;

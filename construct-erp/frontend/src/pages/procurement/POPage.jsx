@@ -878,25 +878,6 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
                               ))}
                             </select>
                           </div>
-                          {it.boq_chapter && (
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="text-[10px] font-medium text-slate-400 whitespace-nowrap">BOQ Item</span>
-                              <select
-                                className="h-6 text-[11px] border border-slate-200 rounded-md px-1.5 text-slate-600 bg-white focus:border-indigo-400 focus:outline-none min-w-[220px]"
-                                value={it.boq_item_id || ''}
-                                onChange={e => setItem(i, 'boq_item_id', e.target.value)}
-                              >
-                                <option value="">— Select line item —</option>
-                                {boqItemsRaw
-                                  .filter(b => (b.chapter_name || b.chapter_no) === it.boq_chapter)
-                                  .map(b => (
-                                    <option key={b.id} value={b.id}>
-                                      {b.item_no} – {b.description}
-                                    </option>
-                                  ))}
-                              </select>
-                            </div>
-                          )}
                           <div className="flex items-center gap-1.5 min-w-0">
                             <span className="text-[10px] font-medium text-slate-400 whitespace-nowrap">Cost Head</span>
                             <select
