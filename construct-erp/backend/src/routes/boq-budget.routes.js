@@ -77,12 +77,12 @@ router.get('/:project_id', async (req, res) => {
     `, [project_id]);
 
     const scActuals = await query(`
-      SELECT swi.boq_item_id, bi.cost_head, SUM(bi.curr_qty * bi.rate) AS actual
+      SELECT swi.boq_item_id, COALESCE(bi.cost_head, 'Sub Con') AS cost_head, SUM(bi.curr_qty * bi.rate) AS actual
       FROM sc_bill_items bi
       JOIN sc_bills sb ON sb.id = bi.bill_id
       JOIN sc_wo_items swi ON swi.id = bi.wo_item_id
       WHERE sb.project_id = $1 AND sb.status IN ('approved','paid') AND swi.boq_item_id IS NOT NULL
-      GROUP BY swi.boq_item_id, bi.cost_head
+      GROUP BY swi.boq_item_id, COALESCE(bi.cost_head, 'Sub Con')
     `, [project_id]);
 
     // Link advances to BOQ items via: advance.wo_number → sc_work_orders → sc_wo_items.boq_item_id
@@ -241,6 +241,76 @@ router.get('/:project_id', async (req, res) => {
     addActual(spcActuals.rows, false);
     addActual(advanceActuals.rows, true);
 
+    // ── Project-level sources with no BOQ-item link ──────────────────────────
+    // Mirrored 1:1 from the Budget Control (costhead-summary) aggregation so
+    // both screens reconcile to the same Spent total. Each lands in the
+    // project-level pool and gets pro-rated across items like other untagged
+    // spend.
+    // 1. Advance vouchers that can't be linked to any WO/BOQ item (the linkable
+    //    ones are already in advanceActuals above).
+    const unlinkableAdv = await query(`
+      SELECT SUM(av.paid_amount) AS actual
+      FROM tqs_advance_vouchers av
+      WHERE av.project_id = $1 AND av.is_deleted = false
+        AND av.status IN ('issued','partial','recovered') AND av.paid_amount > 0
+        AND NOT EXISTS (
+          SELECT 1 FROM sc_work_orders wo
+          JOIN sc_wo_items wi ON wi.wo_id = wo.id AND wi.boq_item_id IS NOT NULL
+          WHERE wo.wo_number = av.wo_number AND wo.project_id = $1
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM boq_sc_mapping m
+          WHERE m.sc_id = av.vendor_id AND m.project_id = $1 AND m.status != 'cancelled'
+        )
+    `, [project_id]);
+
+    // 2. Subcontractor payments/advances recorded outside the WO-linked flow
+    const scPayments = await query(
+      `SELECT SUM(amount) AS actual FROM sc_payments WHERE project_id = $1`, [project_id]);
+    const scAdvances = await query(
+      `SELECT SUM(amount) AS actual FROM sc_advances WHERE project_id = $1 AND status NOT IN ('cancelled')`, [project_id]);
+    let storePCAdv = { rows: [{ actual: 0 }] };
+    try {
+      storePCAdv = await query(
+        `SELECT SUM(amount) AS actual FROM stores_pc_sc_advances WHERE project_id = $1 AND status != 'cancelled'`, [project_id]);
+    } catch (_) {}
+
+    // 3. SC bill lines whose WO item has no BOQ link (scActuals above requires one)
+    const scUnlinked = await query(`
+      SELECT SUM(bi.curr_qty * bi.rate) AS actual
+      FROM sc_bill_items bi
+      JOIN sc_bills sb ON sb.id = bi.bill_id
+      LEFT JOIN sc_wo_items swi ON swi.id = bi.wo_item_id
+      WHERE sb.project_id = $1 AND sb.status IN ('approved','paid')
+        AND (swi.id IS NULL OR swi.boq_item_id IS NULL)
+    `, [project_id]);
+
+    // 4. Petty cash whose item lines carry no cost head (entry total − tagged items)
+    const spcRemainder = await query(`
+      SELECT GREATEST(
+        COALESCE((SELECT SUM(amount) FROM stores_petty_cash_entries WHERE project_id = $1 AND status = 'Approved'), 0)
+        - COALESCE((SELECT SUM(si.total_amount) FROM stores_petty_cash_items si
+                    JOIN stores_petty_cash_entries se ON se.id = si.entry_id
+                    WHERE se.project_id = $1 AND se.status = 'Approved' AND si.cost_head IS NOT NULL), 0)
+      , 0) AS actual
+    `, [project_id]);
+
+    const bumpProjectLevel = (head, field, value) => {
+      const amt = parseFloat(value) || 0;
+      if (amt <= 0) return;
+      const cell = (projectLevel[head] ||= { pct: 0, amount: 0, actual: 0, advance: 0, invoiced: 0 });
+      cell[field] += amt;
+      if (field === 'invoiced') cell.actual += amt;
+    };
+    bumpProjectLevel('Sub Con', 'advance', unlinkableAdv.rows[0]?.actual);
+    bumpProjectLevel('Sub Con', 'advance', scAdvances.rows[0]?.actual);
+    bumpProjectLevel('Sub Con', 'advance', storePCAdv.rows[0]?.actual);
+    bumpProjectLevel('Sub Con', 'invoiced', scPayments.rows[0]?.actual);
+    bumpProjectLevel('Sub Con', 'invoiced', scUnlinked.rows[0]?.actual);
+    // 'Petty Cash' is not one of the 16 canonical heads — it's appended to the
+    // cost_heads list in the response below so the frontend renders it.
+    bumpProjectLevel('Petty Cash', 'invoiced', spcRemainder.rows[0]?.actual);
+
     // TQS-bill and PO spend: item-tagged rows attach directly; chapter-tagged
     // rows (chapter known from the PO line, or the bill's single-chapter PO)
     // are pooled per chapter so the amount lands ONLY in that chapter — never
@@ -367,7 +437,11 @@ router.get('/:project_id', async (req, res) => {
       });
     }
 
-    res.json({ data, cost_heads: BOQ_COST_HEADS });
+    // Non-canonical heads that received project-level spend (e.g. 'Petty Cash')
+    // must appear in cost_heads or the frontend won't render/count them.
+    const extraHeads = [...new Set([...Object.keys(projectLevel), ...Object.keys(remainderLevel)])]
+      .filter(h => !BOQ_COST_HEADS.includes(h));
+    res.json({ data, cost_heads: [...BOQ_COST_HEADS, ...extraHeads] });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -529,11 +603,13 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
       WHERE rb.project_id=$1 AND rb.status IN ('certified','paid')
       GROUP BY rbi.cost_head`, [project_id]);
 
-    // Actuals: SC bills — all mapped to "Sub Con" (any non-draft/non-rejected bill counts)
+    // Actuals: SC bills — same statuses and cost-head attribution as the BOQ
+    // item view (untagged lines default to "Sub Con") so both screens agree.
     const scActuals = await query(`
-      SELECT 'Sub Con' AS cost_head, SUM(bi.curr_qty * bi.rate) AS actual
+      SELECT COALESCE(bi.cost_head, 'Sub Con') AS cost_head, SUM(bi.curr_qty * bi.rate) AS actual
       FROM sc_bill_items bi JOIN sc_bills sb ON sb.id = bi.bill_id
-      WHERE sb.project_id=$1 AND sb.status NOT IN ('draft','rejected','queried')`, [project_id]);
+      WHERE sb.project_id=$1 AND sb.status IN ('approved','paid')
+      GROUP BY COALESCE(bi.cost_head, 'Sub Con')`, [project_id]);
 
     // Actuals: SC payments (actual money paid to subcontractors) — mapped to "Sub Con"
     const scPayActuals = await query(`
@@ -562,11 +638,38 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
       WHERE project_id=$1 AND is_deleted=false
         AND status IN ('issued','partial','recovered') AND paid_amount > 0`, [project_id]);
 
-    // Petty cash — sum of entry-level amount (more reliable than total_amount which was added later)
+    // Petty cash — item lines carry their own cost head (same attribution as the
+    // BOQ item view); whatever portion of approved entries has no cost-headed
+    // items stays under the extra 'Petty Cash' head so no money is hidden.
     const spcActuals = await query(`
-      SELECT 'Petty Cash' AS cost_head, SUM(amount) AS actual
-      FROM stores_petty_cash_entries
-      WHERE project_id=$1 AND status='Approved'`, [project_id]);
+      SELECT si.cost_head, SUM(si.total_amount) AS actual
+      FROM stores_petty_cash_items si
+      JOIN stores_petty_cash_entries se ON se.id = si.entry_id
+      WHERE se.project_id=$1 AND se.status='Approved' AND si.cost_head IS NOT NULL
+      GROUP BY si.cost_head`, [project_id]);
+    const spcRemainder = await query(`
+      SELECT 'Petty Cash' AS cost_head, GREATEST(
+        COALESCE((SELECT SUM(amount) FROM stores_petty_cash_entries WHERE project_id=$1 AND status='Approved'), 0)
+        - COALESCE((SELECT SUM(si.total_amount) FROM stores_petty_cash_items si
+                    JOIN stores_petty_cash_entries se ON se.id = si.entry_id
+                    WHERE se.project_id=$1 AND se.status='Approved' AND si.cost_head IS NOT NULL), 0)
+      , 0) AS actual`, [project_id]);
+
+    // PO-tagged spend where the bill line itself wasn't cost-headed — same
+    // fallback (and same dedup guard) as the BOQ item view.
+    const poFallbackActuals = await query(`
+      SELECT pi.cost_head, SUM(li.basic_amount) AS actual
+      FROM po_items pi
+      JOIN purchase_orders po ON po.id = pi.po_id
+      JOIN tqs_bill_line_items li ON li.po_item_id = pi.id
+      JOIN tqs_bills tb ON tb.id = li.bill_id
+      WHERE po.project_id = $1
+        AND po.status NOT IN ('rejected', 'cancelled')
+        AND pi.cost_head IS NOT NULL
+        AND li.cost_head IS NULL
+        AND tb.is_deleted = FALSE
+        AND tb.workflow_status NOT IN ('rejected')
+      GROUP BY pi.cost_head`, [project_id]);
 
     // Contractor advances given through the Stores Petty Cash module — mapped to "Sub Con"
     let storePCAdvActuals = { rows: [] };
@@ -579,7 +682,7 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
 
     // Merge actuals by cost head
     const actualMap = {};
-    for (const rows of [raActuals.rows, scActuals.rows, scPayActuals.rows, tqsActuals.rows, advActuals.rows, advTrackerActuals.rows, spcActuals.rows, storePCAdvActuals.rows]) {
+    for (const rows of [raActuals.rows, scActuals.rows, scPayActuals.rows, tqsActuals.rows, advActuals.rows, advTrackerActuals.rows, spcActuals.rows, spcRemainder.rows, poFallbackActuals.rows, storePCAdvActuals.rows]) {
       for (const r of rows) {
         if (!r.cost_head) continue;
         actualMap[r.cost_head] = (actualMap[r.cost_head] || 0) + parseFloat(r.actual || 0);
