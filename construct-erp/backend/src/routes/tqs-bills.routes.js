@@ -1904,7 +1904,8 @@ router.post('/', async (req, res) => {
     const preTcsTotal = parseFloat(basic_amount) + gst_amount +
                          parseFloat(transport_charges) + parseFloat(transport_gst_amt) +
                          parseFloat(other_charges);
-    const tcs_amt = preTcsTotal * (parseFloat(tcs_pct) || 0) / 100;
+    // TCS is charged on the basic (ex-GST) amount only, not the full invoice value
+    const tcs_amt = parseFloat(basic_amount) * (parseFloat(tcs_pct) || 0) / 100;
     const total_amount = preTcsTotal + tcs_amt;
     if (!project_id || !userCanAccessProject(req, project_id)) {
       return res.status(403).json({ error: 'Access denied for this project.' });

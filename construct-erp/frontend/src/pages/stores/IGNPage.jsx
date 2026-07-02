@@ -938,7 +938,8 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
     const oc = parseFloat(b.other_charges) || 0;
     const gst = cgst + sgst + igst;
     const preTcs = basic + gst + tc + tgst + oc;
-    const tcs = preTcs * (parseFloat(b.tcs_pct) || 0) / 100;
+    // TCS is charged on the basic (ex-GST) amount only, not the full invoice value
+    const tcs = basic * (parseFloat(b.tcs_pct) || 0) / 100;
     return { basic, cgst, sgst, igst, gst, tc, tgst, oc, tcs, total: preTcs + tcs };
   };
 

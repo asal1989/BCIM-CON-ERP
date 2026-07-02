@@ -506,7 +506,8 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
   const transportGST = transportAmt * (parseFloat(form.transport_gst_pct) || 0) / 100;
   const otherAmt     = parseFloat(form.other_charges) || 0;
   const preTcsTotal  = effectBasic + totalGST + transportAmt + transportGST + otherAmt;
-  const tcsAmt       = preTcsTotal * (parseFloat(form.tcs_pct) || 0) / 100;
+  // TCS is charged on the basic (ex-GST) amount only, not the full invoice value
+  const tcsAmt       = effectBasic * (parseFloat(form.tcs_pct) || 0) / 100;
   const grandTotal   = preTcsTotal + tcsAmt;
 
   // Quick GST button handler (sets CGST+SGST for intrastate, IGST for interstate)
@@ -1509,7 +1510,8 @@ function EditBillModal({ bill, projects, onClose }) {
   const otherAmt     = parseFloat(form.other_charges)      || 0;
   const creditVal    = parseFloat(form.credit_note_val)    || 0;
   const preTcsTotal  = basicAmt + totalGST + transportAmt + transportGST + otherAmt - creditVal;
-  const tcsAmt       = preTcsTotal * (parseFloat(form.tcs_pct) || 0) / 100;
+  // TCS is charged on the basic (ex-GST) amount only, not the full invoice value
+  const tcsAmt       = basicAmt * (parseFloat(form.tcs_pct) || 0) / 100;
   const grandTotal   = preTcsTotal + tcsAmt;
 
   // Quick GST buttons

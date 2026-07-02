@@ -333,7 +333,8 @@ router.post('/', async (req, res) => {
         });
         const gst_amount = cgst_amt + sgst_amt + igst_amt;
         const preTcsTotal = basic_amount + gst_amount + transport_charges + transport_gst_amt + other_charges;
-        const tcs_amt = preTcsTotal * tcs_pct / 100;
+        // TCS is charged on the basic (ex-GST) amount only, not the full invoice value
+        const tcs_amt = basic_amount * tcs_pct / 100;
         const total_amount = preTcsTotal + tcs_amt;
 
         // Insert tqs_bills header
