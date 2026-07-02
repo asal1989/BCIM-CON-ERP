@@ -358,9 +358,9 @@ function CostHeadDrilldownInline({ projectId, costHead, boqItemId, itemInfo }) {
 }
 
 // ─── Cost-head detail table (shown when a BOQ item is expanded) ────────────────
-function CostHeadDetail({ item, costHeads, mode, onSave, projectId }) {
+function CostHeadDetail({ item, costHeads, mode, onSave, projectId, readOnlyOverride }) {
   const itemAmount = num(item.amount);
-  const readOnly = isUnlinkedRow(item);
+  const readOnly = readOnlyOverride || isUnlinkedRow(item);
   const [drillHead, setDrillHead] = useState(null);
 
   // Split rows into "active" (has budget or actuals) and "empty" for clarity
@@ -423,7 +423,7 @@ function CostHeadDetail({ item, costHeads, mode, onSave, projectId }) {
               <CostHeadDrilldownInline
                 projectId={projectId}
                 costHead={r.h}
-                boqItemId={item.id}
+                boqItemId={readOnlyOverride ? undefined : item.id}
                 itemInfo={{ estimated: r.estimated, spent: r.spent, prorated: r.prorated }}
               />
             </td>
@@ -435,7 +435,13 @@ function CostHeadDetail({ item, costHeads, mode, onSave, projectId }) {
 
   return (
     <div className="bg-slate-50 px-4 py-4">
-      {readOnly && (
+      {readOnlyOverride && (
+        <div className="mb-2 flex items-center gap-2 text-[11px] text-slate-500 bg-slate-100 border border-slate-200 rounded-lg px-3 py-2">
+          <Layers size={13} />
+          Chapter-level totals — aggregated across all line items in this chapter. Edit budgets on individual items instead.
+        </div>
+      )}
+      {readOnly && !readOnlyOverride && (
         <div className="mb-2 flex items-center gap-2 text-[11px] text-slate-500 bg-slate-100 border border-slate-200 rounded-lg px-3 py-2">
           <Layers size={13} />
           Cost-head spend from POs/bills not linked to a specific BOQ item — no budget to set here, totals only.
@@ -1983,55 +1989,31 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
                             const chBills = Object.values(billMap).sort((a, bv) => (a.bill_number || '').localeCompare(bv.bill_number || ''));
                             return chBills.length > 0 ? <RaBillsPanel bills={chBills} /> : null;
                           })()}
-                          {ch.items.map(item => {
-                            const itemOpen = expanded[item.id];
-                            return (
-                              <div key={item.id}>
-                                {(() => {
-                                  const ra = raByItemId[item.id];
-                                  return (
-                                <button onClick={() => toggle(item.id)}
-                                  className={clsx('w-full grid grid-cols-[auto_90px_1fr_repeat(5,minmax(0,1fr))_90px_110px] gap-2 items-center px-4 py-2 text-xs text-left hover:bg-white/60 transition pl-10',
-                                    itemOpen && 'bg-indigo-50/40')}>
-                                  <span className="w-4 text-slate-300">
-                                    {itemOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                                  </span>
-                                  <span className="font-mono text-[10px] text-indigo-600 truncate">{item.item_no}</span>
-                                  <span className="text-slate-600 truncate pr-2" title={item.description}>{item.description}</span>
-                                  <span className="text-right text-slate-700">{inr(item.amount)}</span>
-                                  <span className={clsx(item.allocated ? 'text-indigo-600' : 'text-slate-400')}>
-                                    <EditableTotal value={item.budgeted} onSave={total => saveItemTotal(item, total)} />
-                                  </span>
-                                  <span className="text-right text-violet-700">
-                                    {ra?.total_billed > 0 ? inr(ra.total_billed) : <span className="text-slate-300">—</span>}
-                                  </span>
-                                  <span className="text-right text-amber-600">{item.spent > 0 ? inr(item.spent) : <span className="text-slate-300">—</span>}</span>
-                                  <span className={clsx('text-right', item.balance < 0 ? 'text-rose-600' : item.allocated ? 'text-emerald-600' : 'text-slate-300')}>
-                                    {item.allocated || item.spent > 0 ? inr(item.balance) : '—'}
-                                  </span>
-                                  <span />
-                                  <span className="pl-2">
-                                    {ra ? (
-                                      <span className={clsx('text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap',
-                                        ra.last_bill_status === 'paid'      ? 'bg-emerald-100 text-emerald-700' :
-                                        ra.last_bill_status === 'certified' ? 'bg-blue-100 text-blue-700' :
-                                        ra.last_bill_status === 'verified'  ? 'bg-indigo-100 text-indigo-700' :
-                                        ra.last_bill_status === 'submitted' ? 'bg-amber-100 text-amber-700' :
-                                        'bg-slate-100 text-slate-500')}>
-                                        {ra.last_bill_number ? `${ra.last_bill_number} · ` : ''}{ra.last_bill_status}
-                                      </span>
-                                    ) : <span className="text-slate-300">—</span>}
-                                  </span>
-                                </button>
-                                  );
-                                })()}
-                                {itemOpen && (raBillsDetailByItemId[item.id] || []).length > 0 && (
-                                  <RaBillsPanel bills={raBillsDetailByItemId[item.id]} />
-                                )}
-                                {itemOpen && <CostHeadDetail item={item} costHeads={costHeads} mode={mode} onSave={saveCell} projectId={projectId} />}
-                              </div>
-                            );
-                          })}
+                          {/* Chapter-level cost-head detail (Budget / Spent / Balance per cost head, aggregated across the whole chapter) */}
+                          <CostHeadDetail
+                            item={{
+                              id: `ch-${ch.key}`,
+                              amount: chBoq,
+                              breakdown: costHeads.reduce((acc, h) => {
+                                const cell = { pct: 0, amount: 0, advance: 0, invoiced: 0, prorated: 0 };
+                                ch.items.forEach(i => {
+                                  const c = i.breakdown?.[h];
+                                  if (!c) return;
+                                  cell.amount   += num(c.amount);
+                                  cell.advance  += num(c.advance);
+                                  cell.invoiced += num(c.invoiced);
+                                  cell.prorated += num(c.prorated);
+                                });
+                                acc[h] = cell;
+                                return acc;
+                              }, {}),
+                            }}
+                            costHeads={costHeads}
+                            mode={mode}
+                            onSave={() => {}}
+                            projectId={projectId}
+                            readOnlyOverride
+                          />
                         </div>
                       )}
                     </div>
