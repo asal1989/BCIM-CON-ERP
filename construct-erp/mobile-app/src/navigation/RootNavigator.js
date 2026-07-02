@@ -24,6 +24,8 @@ import BillDetailScreen from '../screens/BillDetailScreen';
 import AssetDetailScreen from '../screens/AssetDetailScreen';
 import VendorDetailScreen from '../screens/VendorDetailScreen';
 import MaterialTrackerDetailScreen from '../screens/MaterialTrackerDetailScreen';
+import CreateMaterialTrackerEntryScreen from '../screens/CreateMaterialTrackerEntryScreen';
+import AddMaterialTrackerLoadScreen from '../screens/AddMaterialTrackerLoadScreen';
 import MaterialTrackerScreen from '../screens/MaterialTrackerScreen';
 import MaterialRequestScreen from '../screens/MaterialRequestScreen';
 import VendorsScreen from '../screens/VendorsScreen';
@@ -138,6 +140,8 @@ export default function RootNavigator() {
       <Stack.Screen name="AssetDetail" component={AssetDetailScreen} />
       <Stack.Screen name="VendorDetail" component={VendorDetailScreen} />
       <Stack.Screen name="MaterialTrackerDetail" component={MaterialTrackerDetailScreen} />
+      <Stack.Screen name="CreateMaterialTrackerEntry" component={CreateMaterialTrackerEntryScreen} />
+      <Stack.Screen name="AddMaterialTrackerLoad" component={AddMaterialTrackerLoadScreen} />
       <Stack.Screen name="MaterialTracker" component={MaterialTrackerScreen} />
       <Stack.Screen name="MaterialRequest" component={MaterialRequestScreen} />
       <Stack.Screen name="Vendors" component={VendorsScreen} />

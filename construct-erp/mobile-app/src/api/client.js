@@ -88,8 +88,10 @@ export const grsAPI = {
 };
 
 export const materialTrackerAPI = {
-  list:   (projectId) => api.get('/material-tracker', { params: { project_id: projectId, limit: 50 } }),
-  detail: (id)         => api.get(`/material-tracker/${id}`),
+  list:    (projectId, materialType) => api.get('/material-tracker', { params: { project_id: projectId, material_type: materialType } }),
+  detail:  (id)         => api.get(`/material-tracker/${id}`),
+  create:  (data)       => api.post('/material-tracker', data),
+  addLoad: (id, data)   => api.post(`/material-tracker/${id}/loads`, data),
 };
 
 export const vendorAPI = {
