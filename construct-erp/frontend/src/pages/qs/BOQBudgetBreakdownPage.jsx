@@ -241,11 +241,40 @@ function ChapterBudgetCell({ value, onSave, saving }) {
   );
 }
 
+// ─── Invoice/advance chips for one cost head inside the chapter split ────────
+// Uses item-tagged transactions when available; otherwise falls back to the
+// cost head's own transaction list so real invoice numbers always show.
+function HeadInvoiceChips({ projectId, head, taggedTxns, taggedLoading }) {
+  const needFallback = !taggedLoading && (!taggedTxns || taggedTxns.length === 0);
+  const { data: fallbackData, isLoading: fbLoading } = useQuery({
+    queryKey: ['costhead-drilldown', projectId, head, null],
+    queryFn: () => boqBudgetAPI.costheadDrilldown(projectId, head).then(r => r.data?.data || []),
+    enabled: !!projectId && !!head && needFallback,
+    retry: 1,
+  });
+
+  if (taggedLoading || (needFallback && fbLoading)) {
+    return <span className="text-slate-300 italic">Loading…</span>;
+  }
+  const txns = (taggedTxns && taggedTxns.length > 0) ? taggedTxns : (fallbackData || []);
+  if (!txns.length) return <span className="text-slate-300">—</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {txns.map((t, idx) => (
+        <span key={idx} title={`${t.description || ''} — ${t.source}`}
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-50 border border-slate-200 text-[10px] font-mono text-indigo-700">
+          {t.reference || '—'}
+          <span className="text-slate-400 font-sans">({inr(t.amount)})</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // ─── Chapter Spent split by cost head ─────────────────────────────────────────
 // Shown under a chapter row when its Spent amount is clicked. Amounts per cost
-// head are computed from already-fetched item breakdown data; the invoice /
-// advance reference numbers underneath each head are fetched separately so
-// the user can see exactly which bill each amount came from.
+// head come from the item breakdown data; the invoice / advance reference
+// numbers next to each head show which bills the money went out on.
 function ChapterCostHeadSplit({ projectId, chapterName, ch, costHeads }) {
   const itemIds = ch.items.map(i => i.id);
   const { data: txnData, isLoading: txnLoading } = useQuery({
@@ -258,9 +287,8 @@ function ChapterCostHeadSplit({ projectId, chapterName, ch, costHeads }) {
   const rows = costHeads
     .map(h => {
       const amt = ch.items.reduce((s, i) => s + num(i.breakdown?.[h]?.advance) + num(i.breakdown?.[h]?.invoiced) + num(i.breakdown?.[h]?.prorated), 0);
-      const prorated = ch.items.reduce((s, i) => s + num(i.breakdown?.[h]?.prorated), 0);
       const txns = (txnData || []).filter(t => t.cost_head === h);
-      return { head: h, amt, prorated, txns };
+      return { head: h, amt, txns };
     })
     .filter(r => r.amt > 1)
     .sort((a, b) => b.amt - a.amt);
@@ -290,32 +318,7 @@ function ChapterCostHeadSplit({ projectId, chapterName, ch, costHeads }) {
               <tr key={r.head} className="hover:bg-slate-50 transition-colors align-top">
                 <td className="px-4 py-1.5 text-slate-700 font-medium whitespace-nowrap">{r.head}</td>
                 <td className="px-4 py-1.5 text-slate-600">
-                  {txnLoading ? (
-                    <span className="text-slate-300 italic">Loading…</span>
-                  ) : r.txns.length > 0 ? (
-                    <div className="flex flex-wrap gap-1">
-                      {r.txns.map((t, idx) => (
-                        <span key={idx} title={`${t.description || ''} — ${t.source}`}
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-50 border border-slate-200 text-[10px] font-mono text-indigo-700">
-                          {t.reference || '—'}
-                          <span className="text-slate-400 font-sans">({inr(t.amount)})</span>
-                        </span>
-                      ))}
-                      {r.prorated > 1 && (
-                        <span title="Estimated — pro-rated by budget share, not tied to a specific bill"
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-[10px] font-mono text-amber-700">
-                          ≈ pro-rated <span className="text-amber-500 font-sans">({inr(r.prorated)})</span>
-                        </span>
-                      )}
-                    </div>
-                  ) : r.prorated > 1 ? (
-                    <span title="Estimated — pro-rated by budget share, not tied to a specific bill"
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-[10px] font-mono text-amber-700">
-                      ≈ pro-rated <span className="text-amber-500 font-sans">({inr(r.prorated)})</span>
-                    </span>
-                  ) : (
-                    <span className="text-slate-300">—</span>
-                  )}
+                  <HeadInvoiceChips projectId={projectId} head={r.head} taggedTxns={r.txns} taggedLoading={txnLoading} />
                 </td>
                 <td className="px-4 py-1.5 text-right font-semibold text-amber-600 font-mono">{inr(r.amt)}</td>
               </tr>
