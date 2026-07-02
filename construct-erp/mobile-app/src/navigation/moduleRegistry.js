@@ -170,7 +170,7 @@ export const MODULE_GROUPS = [
   },
   {
     label: 'Subcontractors',
-    icon: 'account-hard-hat-outline',
+    icon: 'account-hard-hat',
     items: [
       { label: 'Subcontractors',      screen: 'Subcontractors' },
     ],

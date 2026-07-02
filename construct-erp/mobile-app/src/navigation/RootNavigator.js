@@ -64,6 +64,10 @@ import ESSScreen from '../screens/ESSScreen';
 import ApplyLeaveScreen from '../screens/ApplyLeaveScreen';
 import PayslipDetailScreen from '../screens/PayslipDetailScreen';
 import PlaceholderScreen from '../screens/PlaceholderScreen';
+import CreateMaterialRequestScreen from '../screens/CreateMaterialRequestScreen';
+import CreateIGNScreen from '../screens/CreateIGNScreen';
+import CreateDPRScreen from '../screens/CreateDPRScreen';
+import AttendanceCorrectionScreen from '../screens/AttendanceCorrectionScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -162,6 +166,10 @@ export default function RootNavigator() {
       <Stack.Screen name="ApplyLeave" component={ApplyLeaveScreen} />
       <Stack.Screen name="PayslipDetail" component={PayslipDetailScreen} />
       <Stack.Screen name="Placeholder" component={PlaceholderScreen} />
+      <Stack.Screen name="CreateMaterialRequest" component={CreateMaterialRequestScreen} />
+      <Stack.Screen name="CreateIGN" component={CreateIGNScreen} />
+      <Stack.Screen name="CreateDPR" component={CreateDPRScreen} />
+      <Stack.Screen name="AttendanceCorrection" component={AttendanceCorrectionScreen} />
     </Stack.Navigator>
   );
 }

@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl } 
 import { useQuery } from '@tanstack/react-query';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { dashboardAPI } from '../api/client';
+import { projectDashboardAPI } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import Screen from '../components/Screen';
 import Card from '../components/Card';
@@ -24,9 +24,14 @@ export default function DashboardScreen() {
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['dashboard-kpis', selectedProject?.id],
-    queryFn: () => dashboardAPI.kpis(selectedProject?.id).then(r => r.data?.data ?? r.data ?? {}),
+    queryFn: () => projectDashboardAPI.get(selectedProject.id).then(r => r.data ?? {}),
     enabled: !!selectedProject?.id,
   });
+
+  const boq = data?.boq || {};
+  const billing = data?.billing || {};
+  const workers = data?.workers || {};
+  const incidents = data?.incidents || {};
 
   return (
     <Screen>
@@ -44,22 +49,22 @@ export default function DashboardScreen() {
 
         <View style={styles.kpiRow}>
           <Card style={styles.kpiCard}>
-            <Text style={styles.kpiValue}>{data?.pending_approvals ?? '—'}</Text>
-            <Text style={styles.kpiLabel}>Pending Approvals</Text>
+            <Text style={styles.kpiValue}>{boq.items ?? '—'}</Text>
+            <Text style={styles.kpiLabel}>BOQ Items</Text>
           </Card>
           <Card style={styles.kpiCard}>
-            <Text style={styles.kpiValue}>{data?.open_mrs ?? '—'}</Text>
-            <Text style={styles.kpiLabel}>Open MRs</Text>
+            <Text style={styles.kpiValue}>₹{Number(billing.certified || 0).toLocaleString('en-IN')}</Text>
+            <Text style={styles.kpiLabel}>Certified Billing</Text>
           </Card>
         </View>
         <View style={styles.kpiRow}>
           <Card style={styles.kpiCard}>
-            <Text style={styles.kpiValue}>{data?.pending_bills ?? '—'}</Text>
-            <Text style={styles.kpiLabel}>Pending Bills</Text>
+            <Text style={styles.kpiValue}>{workers.total ?? '—'}</Text>
+            <Text style={styles.kpiLabel}>Active Workers</Text>
           </Card>
           <Card style={styles.kpiCard}>
-            <Text style={styles.kpiValue}>{data?.active_pos ?? '—'}</Text>
-            <Text style={styles.kpiLabel}>Active POs</Text>
+            <Text style={[styles.kpiValue, Number(incidents.open) > 0 && styles.kpiWarn]}>{incidents.open ?? '—'}</Text>
+            <Text style={styles.kpiLabel}>Open Incidents</Text>
           </Card>
         </View>
 
@@ -95,6 +100,7 @@ const styles = StyleSheet.create({
   kpiRow: { flexDirection: 'row', gap: 10, paddingHorizontal: theme.spacing.md, marginBottom: 10 },
   kpiCard: { flex: 1 },
   kpiValue: { fontSize: 24, fontWeight: '800', color: theme.colors.text },
+  kpiWarn: { color: theme.colors.warning },
   kpiLabel: { fontSize: 12, color: theme.colors.muted, marginTop: 2 },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: theme.colors.text, paddingHorizontal: theme.spacing.md, marginTop: 18, marginBottom: 10 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: theme.spacing.md, gap: 12, paddingBottom: 24 },

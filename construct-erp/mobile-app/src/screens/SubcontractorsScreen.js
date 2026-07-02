@@ -3,7 +3,7 @@ import { subcontractorAPI } from '../api/client';
 
 export default makeListScreen({
   title: 'Subcontractors',
-  icon: 'account-hard-hat-outline',
+  icon: 'account-hard-hat',
   queryKey: 'subcontractors-list',
   projectScoped: false,
   fetcher: () => subcontractorAPI.list(),

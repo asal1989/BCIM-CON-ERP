@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "415654134599",
+    "project_id": "bcim-erp",
+    "storage_bucket": "bcim-erp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:415654134599:android:b2baf38bc4bbc05ccd4262",
+        "android_client_info": {
+          "package_name": "com.bcim.erp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCI-c1JYC1ZO1naziFuw9LEO-hTh98JDTA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -84,18 +84,24 @@ export default function ESSScreen() {
         )}
 
         {tab === 'Attendance' && (
-          (attendance || []).length === 0
-            ? <EmptyState icon="calendar-blank-outline" title="No attendance records" />
-            : attendance.map((a, i) => (
-              <Card key={i} style={styles.listRow}>
-                <MaterialCommunityIcons name="calendar-check-outline" size={18} color={theme.colors.primary} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.rowTitle}>{a.date}</Text>
-                  <Text style={styles.rowSub}>{a.check_in || '—'} – {a.check_out || '—'}</Text>
-                </View>
-                <Text style={[styles.rowStatus, a.status === 'present' ? styles.statusOk : styles.statusWarn]}>{a.status}</Text>
-              </Card>
-            ))
+          <>
+            <TouchableOpacity style={styles.applyBtn} onPress={() => navigation.navigate('AttendanceCorrection')}>
+              <MaterialCommunityIcons name="pencil-outline" size={16} color="#fff" />
+              <Text style={styles.applyBtnText}>Request Correction</Text>
+            </TouchableOpacity>
+            {(attendance || []).length === 0
+              ? <EmptyState icon="calendar-blank-outline" title="No attendance records" />
+              : attendance.map((a, i) => (
+                <Card key={i} style={styles.listRow}>
+                  <MaterialCommunityIcons name="calendar-check-outline" size={18} color={theme.colors.primary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rowTitle}>{a.date}</Text>
+                    <Text style={styles.rowSub}>{a.check_in || '—'} – {a.check_out || '—'}</Text>
+                  </View>
+                  <Text style={[styles.rowStatus, a.status === 'present' ? styles.statusOk : styles.statusWarn]}>{a.status}</Text>
+                </Card>
+              ))}
+          </>
         )}
 
         {tab === 'Leave' && (

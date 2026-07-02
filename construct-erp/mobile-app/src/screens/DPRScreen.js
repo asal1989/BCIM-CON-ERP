@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { dprAPI } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -10,9 +11,11 @@ import Card from '../components/Card';
 import ListSkeleton from '../components/ListSkeleton';
 import ErrorState from '../components/ErrorState';
 import EmptyState from '../components/EmptyState';
+import FAB from '../components/FAB';
 import { theme } from '../theme';
 
 export default function DPRScreen() {
+  const navigation = useNavigation();
   const { selectedProject } = useAuth();
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['dpr-list', selectedProject?.id],
@@ -35,7 +38,7 @@ export default function DPRScreen() {
         <FlatList
           data={items}
           keyExtractor={(item, i) => String(item.id ?? i)}
-          contentContainerStyle={{ padding: theme.spacing.md, gap: 10 }}
+          contentContainerStyle={{ padding: theme.spacing.md, gap: 10, paddingBottom: 90 }}
           renderItem={({ item }) => (
             <Card>
               <View style={styles.rowTop}>
@@ -47,6 +50,7 @@ export default function DPRScreen() {
           )}
         />
       )}
+      {selectedProject?.id && <FAB onPress={() => navigation.navigate('CreateDPR')} />}
     </Screen>
   );
 }

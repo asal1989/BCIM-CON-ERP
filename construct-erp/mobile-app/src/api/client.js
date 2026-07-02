@@ -63,15 +63,11 @@ export const projectAPI = {
   list: () => api.get('/projects'),
 };
 
-export const dashboardAPI = {
-  kpis: (projectId) => api.get('/analytics/dashboard', { params: { project_id: projectId } }),
-};
-
 export const mrsAPI = {
-  list:   (projectId) => api.get('/mrs', { params: { project_id: projectId, limit: 50 } }),
-  detail: (id)         => api.get(`/mrs/${id}`),
-  create: (data)       => api.post('/mrs', data),
-  reject: (id, reason) => api.patch(`/mrs/${id}/reject`, { reason }),
+  list:   (projectId) => api.get('/stores/mrs', { params: { project_id: projectId, limit: 50 } }),
+  detail: (id)         => api.get(`/stores/mrs/${id}`),
+  create: (data)       => api.post('/stores/mrs', data),
+  reject: (id, reason) => api.patch(`/stores/mrs/${id}/reject`, { reason }),
 };
 
 export const storesAPI = {
@@ -81,6 +77,7 @@ export const storesAPI = {
 export const ignAPI = {
   list:   (projectId) => api.get('/ign', { params: { project_id: projectId, limit: 50 } }),
   detail: (id)         => api.get(`/ign/${id}`),
+  create: (data)        => api.post('/ign', data),
 };
 
 export const grsAPI = {
@@ -101,8 +98,8 @@ export const vendorAPI = {
 };
 
 export const poAPI = {
-  list:   (projectId) => api.get('/po', { params: { project_id: projectId, limit: 50 } }),
-  detail: (id)         => api.get(`/po/${id}`),
+  list:   (projectId) => api.get('/purchase-orders', { params: { project_id: projectId, limit: 50 } }),
+  detail: (id)         => api.get(`/purchase-orders/${id}`),
 };
 
 export const workOrderAPI = {
@@ -258,13 +255,13 @@ export const reportsAPI = {
 };
 
 export const billsAPI = {
-  list:   (projectId) => api.get('/tqs-bills', { params: { project_id: projectId, limit: 50 } }),
-  detail: (id)         => api.get(`/tqs-bills/${id}`),
+  list:   (projectId) => api.get('/tqs/bills', { params: { project_id: projectId, limit: 50 } }),
+  detail: (id)         => api.get(`/tqs/bills/${id}`),
 };
 
 export const assetAPI = {
-  list:   (projectId) => api.get('/asset', { params: { project_id: projectId, limit: 100 } }),
-  detail: (id)         => api.get(`/asset/${id}`),
+  list:   (projectId) => api.get('/assets', { params: { project_id: projectId, limit: 100 } }),
+  detail: (id)         => api.get(`/assets/${id}`),
 };
 
 export const dmsAPI = {
@@ -277,6 +274,7 @@ export const essAPI = {
   leaveBalances: () => api.get('/ess/leave/balances'),
   leaveRequests: () => api.get('/ess/leave/requests'),
   applyLeave:    (data) => api.post('/ess/leave/requests', data),
+  requestAttendanceCorrection: (data) => api.post('/ess/attendance/corrections', data),
   cancelLeave:   (id)   => api.patch(`/ess/leave/requests/${id}/cancel`),
   payslips:      ()     => api.get('/ess/payslips'),
   payslipDetail: (id)   => api.get(`/ess/payslips/${id}`),

@@ -15,7 +15,9 @@
       "adaptiveIcon": {
         "backgroundColor": "#0F172A"
       },
-      "permissions": ["NOTIFICATIONS"]
+      "permissions": ["NOTIFICATIONS"],
+      "usesCleartextTraffic": true,
+      "googleServicesFile": "./google-services.json"
     },
     "plugins": [
       [
