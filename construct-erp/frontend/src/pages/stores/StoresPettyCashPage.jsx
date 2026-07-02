@@ -2177,7 +2177,9 @@ export default function StoresPettyCashPage() {
         </div>
       </div>
 
-      <div className="px-6 py-6 max-w-7xl mx-auto">
+      {/* Full width — the Local Purchase table has 11 columns and gets its
+          Balance/Actions columns clipped under a max-w-7xl constraint. */}
+      <div className="px-6 py-6 max-w-[1800px] mx-auto">
 
         {/* ══ DASHBOARD ══ */}
         {tab === 'dashboard' && (
@@ -2523,7 +2525,9 @@ export default function StoresPettyCashPage() {
                   </button>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                // Compact cell padding — 11 columns must fit a ~1366px laptop
+                // without clipping Balance/Actions behind a horizontal scroll
+                <div className="overflow-x-auto [&_th]:!px-2 [&_td]:!px-2">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-gradient-to-r from-slate-50 to-white border-b border-slate-200">
