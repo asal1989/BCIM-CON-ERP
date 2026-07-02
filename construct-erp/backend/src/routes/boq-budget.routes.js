@@ -295,21 +295,27 @@ router.get('/:project_id', async (req, res) => {
       , 0) AS actual
     `, [project_id]);
 
-    const bumpProjectLevel = (head, field, value) => {
+    // These sources have no BOQ/PO/chapter linkage at all, so they are NOT
+    // pro-rated into items — they go straight to the dedicated "unlinked" row
+    // (merged into remainderLevel below). This keeps per-item / per-chapter
+    // Spent strictly following the PO cost-head + chapter mapping, while the
+    // grand total still reconciles with Budget Control.
+    const projectOnly = {};
+    const bumpProjectOnly = (head, field, value) => {
       const amt = parseFloat(value) || 0;
       if (amt <= 0) return;
-      const cell = (projectLevel[head] ||= { pct: 0, amount: 0, actual: 0, advance: 0, invoiced: 0 });
+      const cell = (projectOnly[head] ||= { pct: 0, amount: 0, actual: 0, advance: 0, invoiced: 0 });
       cell[field] += amt;
       if (field === 'invoiced') cell.actual += amt;
     };
-    bumpProjectLevel('Sub Con', 'advance', unlinkableAdv.rows[0]?.actual);
-    bumpProjectLevel('Sub Con', 'advance', scAdvances.rows[0]?.actual);
-    bumpProjectLevel('Sub Con', 'advance', storePCAdv.rows[0]?.actual);
-    bumpProjectLevel('Sub Con', 'invoiced', scPayments.rows[0]?.actual);
-    bumpProjectLevel('Sub Con', 'invoiced', scUnlinked.rows[0]?.actual);
+    bumpProjectOnly('Sub Con', 'advance', unlinkableAdv.rows[0]?.actual);
+    bumpProjectOnly('Sub Con', 'advance', scAdvances.rows[0]?.actual);
+    bumpProjectOnly('Sub Con', 'advance', storePCAdv.rows[0]?.actual);
+    bumpProjectOnly('Sub Con', 'invoiced', scPayments.rows[0]?.actual);
+    bumpProjectOnly('Sub Con', 'invoiced', scUnlinked.rows[0]?.actual);
     // 'Petty Cash' is not one of the 16 canonical heads — it's appended to the
     // cost_heads list in the response below so the frontend renders it.
-    bumpProjectLevel('Petty Cash', 'invoiced', spcRemainder.rows[0]?.actual);
+    bumpProjectOnly('Petty Cash', 'invoiced', spcRemainder.rows[0]?.actual);
 
     // TQS-bill and PO spend: item-tagged rows attach directly; chapter-tagged
     // rows (chapter known from the PO line, or the bill's single-chapter PO)
@@ -415,6 +421,16 @@ router.get('/:project_id', async (req, res) => {
       }
     }
 
+    // Merge the never-prorated sources (advances, petty-cash remainder, SC
+    // payments) into the unlinked row so they show up once, at project level,
+    // instead of being smeared across items/chapters that never had such spend.
+    for (const [head, cell] of Object.entries(projectOnly)) {
+      const tgt = (remainderLevel[head] ||= { pct: 0, amount: 0, actual: 0, advance: 0, invoiced: 0 });
+      tgt.advance  += cell.advance;
+      tgt.invoiced += cell.invoiced;
+      tgt.actual   += cell.actual;
+    }
+
     const data = items.rows.map(item => ({
       ...item,
       breakdown: byItem[item.id] || {},
@@ -427,7 +443,7 @@ router.get('/:project_id', async (req, res) => {
         chapter_no: null,
         chapter_name: null,
         item_no: '—',
-        description: 'Unlinked material / procurement spend — cost-head spend with no matching BOQ budget to distribute against',
+        description: 'Unlinked project-level spend — advances, petty cash and cost-head spend not tied to any BOQ item or chapter',
         unit: null,
         quantity: null,
         rate: null,
