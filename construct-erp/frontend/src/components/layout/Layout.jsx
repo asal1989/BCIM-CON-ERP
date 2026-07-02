@@ -148,7 +148,7 @@ const navGroups = [
     { to: '/accounts/purchases/bills/booking',          icon: ClipboardList,   label: 'Bill Booking' },
     { to: '/accounts/purchases/recurring-bills',        icon: ScrollText,      label: 'Recurring Bills' },
     { to: '/accounts/purchases/payments-made',          icon: CreditCard,      label: 'Vendor Payments' },
-    { to: '/accounts/purchases/vendor-credits',         icon: ArrowUpRight,    label: 'Vendor Credits' },
+    { to: '/accounts/purchases/vendor-credits',         icon: ArrowUpRight,    label: 'Debit Notes' },
     { to: '/accounts/purchases/payment-run',            icon: Wallet,          label: 'Payment Run' },
     // ── Accountant ───────────────────────────────────────────────────────────
     { to: '/accounts/accountant/chart-of-accounts',     icon: BookOpen,        label: 'Chart of Accounts' },
