@@ -341,6 +341,8 @@ async function ensureTables() {
     `ALTER TABLE tqs_bills ADD COLUMN IF NOT EXISTS tax_mode TEXT DEFAULT 'intrastate'`,
     `ALTER TABLE tqs_bills ADD COLUMN IF NOT EXISTS credit_note_num TEXT`,
     `ALTER TABLE tqs_bills ADD COLUMN IF NOT EXISTS credit_note_val NUMERIC(14,2) DEFAULT 0`,
+    `ALTER TABLE tqs_bills ADD COLUMN IF NOT EXISTS tcs_pct NUMERIC(6,3) DEFAULT 0`,
+    `ALTER TABLE tqs_bills ADD COLUMN IF NOT EXISTS tcs_amt NUMERIC(14,2) DEFAULT 0`,
     `ALTER TABLE tqs_bills ADD COLUMN IF NOT EXISTS transport_gst_pct NUMERIC(5,2) DEFAULT 0`,
     `ALTER TABLE tqs_bills ADD COLUMN IF NOT EXISTS transport_gst_amt NUMERIC(14,2) DEFAULT 0`,
     `ALTER TABLE tqs_bills ADD COLUMN IF NOT EXISTS transport_desc TEXT`,
@@ -1894,13 +1896,16 @@ router.post('/', async (req, res) => {
       transport_charges = 0, transport_gst_pct = 0, transport_gst_amt = 0, transport_desc,
       other_charges = 0, other_charges_desc,
       credit_note_num, credit_note_val = 0,
+      tcs_pct = 0,
       remarks, items = [],
     } = req.body;
 
     const gst_amount = parseFloat(cgst_amt) + parseFloat(sgst_amt) + parseFloat(igst_amt);
-    const total_amount = parseFloat(basic_amount) + gst_amount +
+    const preTcsTotal = parseFloat(basic_amount) + gst_amount +
                          parseFloat(transport_charges) + parseFloat(transport_gst_amt) +
                          parseFloat(other_charges);
+    const tcs_amt = preTcsTotal * (parseFloat(tcs_pct) || 0) / 100;
+    const total_amount = preTcsTotal + tcs_amt;
     if (!project_id || !userCanAccessProject(req, project_id)) {
       return res.status(403).json({ error: 'Access denied for this project.' });
     }
@@ -1932,9 +1937,10 @@ router.post('/', async (req, res) => {
           transport_charges, transport_gst_pct, transport_gst_amt, transport_desc,
           other_charges, other_charges_desc,
           credit_note_num, credit_note_val,
+          tcs_pct, tcs_amt,
           total_amount, remarks, workflow_status, created_by,
           hire_period_from, hire_period_to, equipment_type
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39)
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41)
         RETURNING *
       `, [
         req.user.company_id, project_id, sl_number, vendor_id || null, vendor_name,
@@ -1947,6 +1953,7 @@ router.post('/', async (req, res) => {
         transport_charges, transport_gst_pct, transport_gst_amt, transport_desc || null,
         other_charges, other_charges_desc || null,
         credit_note_num || null, credit_note_val,
+        parseFloat(tcs_pct) || 0, tcs_amt.toFixed(2),
         total_amount, remarks || null, initialStatus, req.user.id,
         hire_period_from || null, hire_period_to || null, equipment_type || null,
       ]);
@@ -2701,6 +2708,8 @@ router.put('/:id', async (req, res) => {
       'other_charges','other_charges_desc',
       // Credit note
       'credit_note_num','credit_note_val',
+      // TCS
+      'tcs_pct','tcs_amt',
       // Grand total
       'total_amount',
     ];

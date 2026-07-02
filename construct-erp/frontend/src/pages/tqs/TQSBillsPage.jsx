@@ -67,6 +67,7 @@ const EMPTY_FORM = {
   transport_charges: '', transport_gst_pct: '', transport_gst_amt: '', transport_desc: '',
   other_charges: '', other_charges_desc: '',
   credit_note_num: '', credit_note_val: '', remarks: '',
+  tcs_pct: '',
   // hire/rental fields
   hire_period_from: '', hire_period_to: '', equipment_type: '',
   // transient (not sent to backend)
@@ -504,7 +505,9 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
   const transportAmt = parseFloat(form.transport_charges) || 0;
   const transportGST = transportAmt * (parseFloat(form.transport_gst_pct) || 0) / 100;
   const otherAmt     = parseFloat(form.other_charges) || 0;
-  const grandTotal   = effectBasic + totalGST + transportAmt + transportGST + otherAmt;
+  const preTcsTotal  = effectBasic + totalGST + transportAmt + transportGST + otherAmt;
+  const tcsAmt       = preTcsTotal * (parseFloat(form.tcs_pct) || 0) / 100;
+  const grandTotal   = preTcsTotal + tcsAmt;
 
   // Quick GST button handler (sets CGST+SGST for intrastate, IGST for interstate)
   const applyGST = (pct, isIGST = false) => {
@@ -579,6 +582,8 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
       transport_gst_amt:  transportGST.toFixed(2),
       other_charges:      n(form.other_charges).toFixed(2),
       credit_note_val:    n(form.credit_note_val).toFixed(2),
+      tcs_pct:            n(form.tcs_pct),
+      tcs_amt:            tcsAmt.toFixed(2),
       total_amount:       grandTotal.toFixed(2),
       items:              items.filter(it => it.item_name?.trim()).map(it => {
         const row = calcItemRow(it, form.tax_mode);
@@ -1134,6 +1139,16 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                 <input type="number" step="0.01" className={F} placeholder="0.00"
                   value={form.other_charges} onChange={e => set('other_charges', e.target.value)} />
               </div>
+              <div>
+                <Lbl>TCS %</Lbl>
+                <input type="number" step="0.01" className={F} placeholder="0.1"
+                  value={form.tcs_pct} onChange={e => set('tcs_pct', e.target.value)} />
+              </div>
+              <div>
+                <Lbl>TCS Amount</Lbl>
+                <input type="number" className={F + ' bg-slate-100 text-slate-500'} readOnly
+                  value={tcsAmt > 0 ? tcsAmt.toFixed(2) : ''} placeholder="Auto" />
+              </div>
             </div>
           </div>
 
@@ -1184,6 +1199,12 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                 <div className="text-center">
                   <p className="text-xs text-slate-500 mb-0.5">Extra Charges</p>
                   <p className="font-medium text-slate-700">Rs {inr(transportAmt + transportGST + otherAmt)}</p>
+                </div>
+              )}
+              {tcsAmt > 0 && (
+                <div className="text-center">
+                  <p className="text-xs text-slate-500 mb-0.5">TCS ({form.tcs_pct}%)</p>
+                  <p className="font-medium text-slate-700">Rs {inr(tcsAmt)}</p>
                 </div>
               )}
             </div>
@@ -1470,6 +1491,7 @@ function EditBillModal({ bill, projects, onClose }) {
     other_charges:    bill.other_charges     || '',
     credit_note_num:  bill.credit_note_num   || '',
     credit_note_val:  bill.credit_note_val   || '',
+    tcs_pct:          bill.tcs_pct           || '',
     remarks:          bill.remarks           || '',
   });
 
@@ -1486,7 +1508,9 @@ function EditBillModal({ bill, projects, onClose }) {
   const transportGST = transportAmt * (parseFloat(form.transport_gst_pct) || 0) / 100;
   const otherAmt     = parseFloat(form.other_charges)      || 0;
   const creditVal    = parseFloat(form.credit_note_val)    || 0;
-  const grandTotal   = basicAmt + totalGST + transportAmt + transportGST + otherAmt - creditVal;
+  const preTcsTotal  = basicAmt + totalGST + transportAmt + transportGST + otherAmt - creditVal;
+  const tcsAmt       = preTcsTotal * (parseFloat(form.tcs_pct) || 0) / 100;
+  const grandTotal   = preTcsTotal + tcsAmt;
 
   // Quick GST buttons
   const applyGST = (pct, isIGST = false) => {
@@ -1529,6 +1553,8 @@ function EditBillModal({ bill, projects, onClose }) {
       transport_gst_amt: transportGST.toFixed(2),
       other_charges:     otherAmt.toFixed(2),
       credit_note_val:   creditVal.toFixed(2),
+      tcs_pct:           parseFloat(form.tcs_pct) || 0,
+      tcs_amt:           tcsAmt.toFixed(2),
       total_amount:      grandTotal.toFixed(2),
     });
   };
@@ -1732,6 +1758,14 @@ function EditBillModal({ bill, projects, onClose }) {
                 <input type="number" step="0.01" className={F} placeholder="0.00"
                   value={form.credit_note_val} onChange={e => set('credit_note_val', e.target.value)} />
               </div>
+              <div>
+                <Lbl>TCS %</Lbl>
+                <input type="number" step="0.01" className={F} placeholder="0.1"
+                  value={form.tcs_pct} onChange={e => set('tcs_pct', e.target.value)} />
+                {tcsAmt > 0 && (
+                  <p className="text-xs text-slate-900 font-medium mt-1">= Rs {inrFmt(tcsAmt)}</p>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1763,8 +1797,8 @@ function EditBillModal({ bill, projects, onClose }) {
                 <p className="font-medium text-slate-700">Rs {inrFmt(totalGST)}</p>
               </div>
             </div>
-            {(transportAmt > 0 || otherAmt > 0 || creditVal > 0) && (
-              <div className="grid grid-cols-3 gap-3 text-sm mb-3">
+            {(transportAmt > 0 || otherAmt > 0 || creditVal > 0 || tcsAmt > 0) && (
+              <div className="grid grid-cols-4 gap-3 text-sm mb-3">
                 {transportAmt > 0 && (
                   <div className="text-center bg-white rounded-lg p-2 border border-slate-100">
                     <p className="text-xs text-slate-900 font-medium mb-0.5">Transport + GST</p>
@@ -1781,6 +1815,12 @@ function EditBillModal({ bill, projects, onClose }) {
                   <div className="text-center bg-white rounded-lg p-2 border border-red-100">
                     <p className="text-xs text-slate-900 font-medium mb-0.5">Credit Note</p>
                     <p className="font-medium text-red-600">- Rs {inrFmt(creditVal)}</p>
+                  </div>
+                )}
+                {tcsAmt > 0 && (
+                  <div className="text-center bg-white rounded-lg p-2 border border-slate-100">
+                    <p className="text-xs text-slate-900 font-medium mb-0.5">TCS ({form.tcs_pct}%)</p>
+                    <p className="font-medium text-slate-700">Rs {inrFmt(tcsAmt)}</p>
                   </div>
                 )}
               </div>

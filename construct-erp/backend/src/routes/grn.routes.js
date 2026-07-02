@@ -288,6 +288,7 @@ router.post('/', async (req, res) => {
         const transport_gst_pct = parseFloat(billData.transport_gst_pct) || 18;
         const transport_gst_amt = transport_charges * transport_gst_pct / 100;
         const other_charges = parseFloat(billData.other_charges) || 0;
+        const tcs_pct = parseFloat(billData.tcs_pct) || 0;
         const inv_date = billData.inv_date || null;
         const inv_month = inv_date ? inv_date.slice(0, 7) : null;
         const inv_number = billData.inv_number || invoice_number || null;
@@ -331,7 +332,9 @@ router.post('/', async (req, res) => {
                    po_item_id: it.po_item_id || null };
         });
         const gst_amount = cgst_amt + sgst_amt + igst_amt;
-        const total_amount = basic_amount + gst_amount + transport_charges + transport_gst_amt + other_charges;
+        const preTcsTotal = basic_amount + gst_amount + transport_charges + transport_gst_amt + other_charges;
+        const tcs_amt = preTcsTotal * tcs_pct / 100;
+        const total_amount = preTcsTotal + tcs_amt;
 
         // Insert tqs_bills header
         const billRes = await client.query(`
@@ -343,10 +346,11 @@ router.post('/', async (req, res) => {
             igst_pct, igst_amt, gst_amount,
             transport_charges, transport_gst_pct, transport_gst_amt, transport_desc,
             other_charges, other_charges_desc,
+            tcs_pct, tcs_amt,
             total_amount, remarks, workflow_status, created_by
           ) VALUES (
             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
-            $15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32
+            $15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34
           ) RETURNING *
         `, [
           req.user.company_id, project_id, billSlNumber, vendor_id || null, vendor_name,
@@ -356,6 +360,7 @@ router.post('/', async (req, res) => {
           igst_pct_hdr, igst_amt, gst_amount,
           transport_charges, transport_gst_pct, transport_gst_amt, billData.transport_desc || null,
           other_charges, billData.other_charges_desc || null,
+          tcs_pct, tcs_amt.toFixed(2),
           total_amount, remarks || null, 'pending', req.user.id,
         ]);
         const billId = billRes.rows[0].id;

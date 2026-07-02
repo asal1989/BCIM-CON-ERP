@@ -707,6 +707,7 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
     tax_inclusive: false,
     transport_charges: '', transport_gst_pct: '18', transport_desc: '',
     other_charges: '', other_charges_desc: '',
+    tcs_pct: '',
   });
   const [bills, setBills] = useState([emptyBillForm()]);
   const [allGstOverrides, setAllGstOverrides] = useState([{}]);
@@ -936,7 +937,9 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
     const tgst = tc * parseFloat(b.transport_gst_pct || '18') / 100;
     const oc = parseFloat(b.other_charges) || 0;
     const gst = cgst + sgst + igst;
-    return { basic, cgst, sgst, igst, gst, tc, tgst, oc, total: basic + gst + tc + tgst + oc };
+    const preTcs = basic + gst + tc + tgst + oc;
+    const tcs = preTcs * (parseFloat(b.tcs_pct) || 0) / 100;
+    return { basic, cgst, sgst, igst, gst, tc, tgst, oc, tcs, total: preTcs + tcs };
   };
 
   const submit = () => {
@@ -1260,6 +1263,14 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
                       <label className="text-xs font-medium text-slate-500">Other Charges Desc.</label>
                       <input type="text" value={b.other_charges_desc} onChange={e => setBillField(billIdx, 'other_charges_desc', e.target.value)} placeholder="e.g. Packing" className={Z_INP} />
                     </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-500">TCS %</label>
+                      <input type="number" value={b.tcs_pct} onChange={e => setBillField(billIdx, 'tcs_pct', e.target.value)} placeholder="0.1" className={Z_INP} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-500">TCS Amount</label>
+                      <input type="text" readOnly value={calc.tcs > 0 ? `₹${inr(calc.tcs)}` : ''} placeholder="Auto" className={Z_INP + ' bg-slate-100 text-slate-500'} />
+                    </div>
                   </div>
                   {/* Bill summary */}
                   <div className="bg-slate-50 border border-slate-200 rounded-md p-3 text-xs space-y-1 font-mono">
@@ -1270,6 +1281,7 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
                     </> : <div className="flex justify-between"><span className="text-slate-600">IGST</span><span>₹{inr(calc.igst)}</span></div>}
                     {calc.tc > 0 && <div className="flex justify-between"><span className="text-slate-600">Transport + GST</span><span>₹{inr(calc.tc + calc.tgst)}</span></div>}
                     {calc.oc > 0 && <div className="flex justify-between"><span className="text-slate-600">Other Charges</span><span>₹{inr(calc.oc)}</span></div>}
+                    {calc.tcs > 0 && <div className="flex justify-between"><span className="text-slate-600">TCS ({b.tcs_pct}%)</span><span>₹{inr(calc.tcs)}</span></div>}
                     <div className="flex justify-between border-t border-slate-200 pt-1 font-bold text-slate-800">
                       <span>Grand Total</span><span>₹{inr(calc.total)}</span>
                     </div>
