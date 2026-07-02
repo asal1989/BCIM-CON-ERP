@@ -173,7 +173,7 @@ router.get('/:project_id', async (req, res) => {
     // carry their own cost_head tag are already counted via tqsActuals above —
     // this only picks up the fallback case where the bill line wasn't tagged.
     const poActuals = await query(`
-      SELECT pi.boq_item_id, pi.cost_head, SUM(li.basic_amount) AS actual
+      SELECT pi.boq_item_id, pi.boq_chapter, pi.cost_head, SUM(li.basic_amount) AS actual
       FROM po_items pi
       JOIN purchase_orders po ON po.id = pi.po_id
       JOIN tqs_bill_line_items li ON li.po_item_id = pi.id
@@ -184,7 +184,7 @@ router.get('/:project_id', async (req, res) => {
         AND li.cost_head IS NULL
         AND tb.is_deleted = FALSE
         AND tb.workflow_status NOT IN ('rejected')
-      GROUP BY pi.boq_item_id, pi.cost_head
+      GROUP BY pi.boq_item_id, pi.boq_chapter, pi.cost_head
     `, [project_id]);
 
     const byItem = {};
@@ -225,8 +225,63 @@ router.get('/:project_id', async (req, res) => {
     addActual(scActuals.rows, false);
     addActual(tqsActuals.rows, false);
     addActual(spcActuals.rows, false);
-    addActual(poActuals.rows, false);
     addActual(advanceActuals.rows, true);
+
+    // PO spend: item-tagged rows attach directly; chapter-tagged rows (chapter
+    // chosen on the PO line but no specific item) are pooled per chapter so the
+    // amount lands ONLY in that chapter — never spread across other chapters.
+    // Rows with neither tag fall through to the project-level pro-rata pool.
+    const chapterPools = {}; // chapterName -> { costHead -> amount }
+    const poProjectLevelRows = [];
+    for (const row of poActuals.rows) {
+      const amt = parseFloat(row.actual) || 0;
+      if (!row.cost_head || !BOQ_COST_HEADS.includes(row.cost_head)) {
+        if (row.boq_item_id) unallocated[row.boq_item_id] = (unallocated[row.boq_item_id] || 0) + amt;
+        continue;
+      }
+      if (row.boq_item_id) {
+        addActual([row], false);
+      } else if (row.boq_chapter) {
+        const pool = (chapterPools[row.boq_chapter] ||= {});
+        pool[row.cost_head] = (pool[row.cost_head] || 0) + amt;
+      } else {
+        poProjectLevelRows.push(row);
+      }
+    }
+    addActual(poProjectLevelRows, false);
+
+    // Distribute each chapter pool among that chapter's own items — by budget
+    // share in the same cost head within the chapter, else by BOQ value share.
+    // Chapters that match no item fall back to the project-level pool.
+    for (const [chapName, pool] of Object.entries(chapterPools)) {
+      const chapItems = items.rows.filter(r =>
+        (r.chapter_name && r.chapter_name === chapName) || String(r.chapter_no) === chapName);
+      for (const [head, amt] of Object.entries(pool)) {
+        if (!chapItems.length) {
+          if (!projectLevel[head]) projectLevel[head] = { pct: 0, amount: 0, actual: 0, advance: 0, invoiced: 0 };
+          projectLevel[head].invoiced += amt;
+          projectLevel[head].actual += amt;
+          continue;
+        }
+        let headBudget = 0;
+        for (const it of chapItems) headBudget += parseFloat(byItem[it.id]?.[head]?.amount) || 0;
+        const boqBasis = chapItems.reduce((s, it) => s + (parseFloat(it.amount) || 0), 0);
+        const basisFn = headBudget > 0
+          ? (it) => parseFloat(byItem[it.id]?.[head]?.amount) || 0
+          : (it) => parseFloat(it.amount) || 0;
+        const totalBasis = headBudget > 0 ? headBudget : boqBasis;
+        if (totalBasis <= 0) continue;
+        for (const it of chapItems) {
+          const basis = basisFn(it);
+          if (basis <= 0) continue;
+          if (!byItem[it.id]) byItem[it.id] = {};
+          if (!byItem[it.id][head]) byItem[it.id][head] = { pct: 0, amount: 0, actual: 0, advance: 0, invoiced: 0 };
+          const share = amt * (basis / totalBasis);
+          byItem[it.id][head].invoiced += share;
+          byItem[it.id][head].actual += share;
+        }
+      }
+    }
 
     // ── Pro-rata attribution (Option A) ──────────────────────────────────────
     // Spend that isn't tied to a specific BOQ item (material POs / TQS bills
