@@ -2099,12 +2099,12 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
         </div>
       </div>
 
-      {/* Hidden print zone — Budget Breakdown (item-level) */}
+      {/* Hidden print zone — Budget Breakdown (chapter-wise) */}
       <div style={{ display: 'none' }}>
         <div ref={breakdownPrintRef} style={{ fontFamily: 'Arial, sans-serif', padding: 4 }}>
           <BOQPrintHeader
             title="BOQ Budget Breakdown Report"
-            subtitle="Item-level budget vs spend and balance · spend not line-tagged to a BOQ item is pro-rated by budget share"
+            subtitle="Chapter-wise budget vs spend and balance, with cost-head split · spend not tagged to a BOQ item is pro-rated by budget share"
             projectName={selectedProject?.name || ''}
             projectAddress={projectAddress}
             clientName={clientName}
@@ -2112,63 +2112,88 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
               ['Total BOQ Value', inr(totals.boq)],
               ['Total Budgeted', totals.budgeted > 0 ? inr(totals.budgeted) : 'Not set'],
               ['Total Balance', inr(totals.balance)],
-              ['Items', String(items.length)],
+              ['Chapters', String(itemsByChapter.length)],
             ]}
           />
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 9 }}>
             <thead>
               <tr style={{ background: '#0B2E59', color: '#fff' }}>
-                <th style={{ padding: '6px 8px', textAlign: 'left', width: 70 }}>Item No</th>
-                <th style={{ padding: '6px 8px', textAlign: 'left' }}>Description of Works</th>
+                <th style={{ padding: '6px 8px', textAlign: 'center', width: 30 }}>S.No</th>
+                <th style={{ padding: '6px 8px', textAlign: 'left' }}>Chapter / Description</th>
                 <th style={{ padding: '6px 8px', textAlign: 'right', width: 95 }}>BOQ Value</th>
                 <th style={{ padding: '6px 8px', textAlign: 'right', width: 95 }}>Budget</th>
+                <th style={{ padding: '6px 8px', textAlign: 'right', width: 85 }}>RA Billed</th>
                 <th style={{ padding: '6px 8px', textAlign: 'right', width: 95 }}>Spent</th>
                 <th style={{ padding: '6px 8px', textAlign: 'right', width: 95 }}>Balance</th>
                 <th style={{ padding: '6px 8px', textAlign: 'center', width: 55 }}>Status</th>
               </tr>
             </thead>
             <tbody>
-              {itemsByChapter.map((ch) => {
-                const chBoq      = ch.items.reduce((s, i) => s + i.amount,    0);
-                const chBudgeted = ch.items.reduce((s, i) => s + i.budgeted,  0);
-                const chSpent    = ch.items.reduce((s, i) => s + i.spent,     0);
-                const chBalance  = ch.items.reduce((s, i) => s + i.balance,   0);
+              {itemsByChapter.map((ch, ci) => {
+                const chBoq       = ch.items.reduce((s, i) => s + i.amount, 0);
+                const chBudgeted  = ch.items.reduce((s, i) => s + i.budgeted, 0);
+                const chSpent     = ch.items.reduce((s, i) => s + i.spent, 0);
+                const chBalance   = chBudgeted - chSpent;
+                const chOver      = chSpent > chBoq + 0.01;
+                const chAllocated = chBudgeted > 0;
+                const chRaBilled  = ch.items.reduce((s, i) => s + parseFloat(raByItemId[i.id]?.total_billed || 0), 0);
+
+                // Cost-head split for this chapter — same computation as the on-screen panel
+                const splitRows = costHeads
+                  .map(h => ({ head: h, amt: ch.items.reduce((s, i) => s + num(i.breakdown?.[h]?.advance) + num(i.breakdown?.[h]?.invoiced) + num(i.breakdown?.[h]?.prorated), 0) }))
+                  .filter(r => r.amt > 1)
+                  .sort((a, b) => b.amt - a.amt);
+
                 return (
                   <React.Fragment key={ch.key}>
-                    {/* Chapter header row */}
-                    <tr style={{ background: '#1e4d8c', color: '#fff' }}>
-                      <td colSpan={2} style={{ padding: '5px 8px', fontWeight: 700, fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.4 }}>{ch.name}</td>
-                      <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700 }}>{inr(chBoq)}</td>
-                      <td style={{ padding: '5px 8px', textAlign: 'right' }}>{chBudgeted > 0 ? inr(chBudgeted) : '—'}</td>
-                      <td style={{ padding: '5px 8px', textAlign: 'right', color: '#fcd34d' }}>{chSpent > 0 ? inr(chSpent) : '—'}</td>
-                      <td style={{ padding: '5px 8px', textAlign: 'right' }}>{chBudgeted > 0 || chSpent > 0 ? inr(chBalance) : '—'}</td>
-                      <td />
+                    <tr style={{ background: ci % 2 === 0 ? '#fff' : '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                      <td style={{ padding: '5px 8px', textAlign: 'center', fontWeight: 700, color: '#64748b' }}>{ci + 1}</td>
+                      <td style={{ padding: '5px 8px', fontWeight: 700, color: '#1e293b' }}>{ch.name}</td>
+                      <td style={{ padding: '5px 8px', textAlign: 'right', color: '#1e293b', fontWeight: 600 }}>{inr(chBoq)}</td>
+                      <td style={{ padding: '5px 8px', textAlign: 'right', color: chOver ? '#dc2626' : chAllocated ? '#4338ca' : '#94a3b8' }}>
+                        {chBudgeted > 0 ? inr(chBudgeted) : '—'}
+                      </td>
+                      <td style={{ padding: '5px 8px', textAlign: 'right', color: '#7c3aed' }}>
+                        {chRaBilled > 0 ? inr(chRaBilled) : '—'}
+                      </td>
+                      <td style={{ padding: '5px 8px', textAlign: 'right', color: '#b45309' }}>
+                        {chSpent > 0 ? inr(chSpent) : '—'}
+                      </td>
+                      <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: chBalance < 0 ? '#dc2626' : chAllocated ? '#059669' : '#94a3b8' }}>
+                        {chAllocated || chSpent > 0 ? inr(chBalance) : '—'}
+                      </td>
+                      <td style={{ padding: '5px 8px', textAlign: 'center' }}>
+                        {!chAllocated
+                          ? <span style={{ background: '#fef3c7', color: '#b45309', padding: '1px 5px', borderRadius: 10, fontWeight: 700, fontSize: 8 }}>Not set</span>
+                          : chOver
+                            ? <span style={{ background: '#fee2e2', color: '#dc2626', padding: '1px 5px', borderRadius: 10, fontWeight: 700, fontSize: 8 }}>Over</span>
+                            : <span style={{ background: '#dcfce7', color: '#059669', padding: '1px 5px', borderRadius: 10, fontWeight: 700, fontSize: 8 }}>OK</span>
+                        }
+                      </td>
                     </tr>
-                    {/* Item rows */}
-                    {ch.items.map((item, ii) => (
-                      <tr key={item.id} style={{ background: ii % 2 === 0 ? '#fff' : '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                        <td style={{ padding: '4px 8px', fontFamily: 'monospace', color: '#4338ca', fontWeight: 700 }}>{item.item_no}</td>
-                        <td style={{ padding: '4px 8px', color: '#334155' }}>{item.description}</td>
-                        <td style={{ padding: '4px 8px', textAlign: 'right', color: '#1e293b', fontWeight: 600 }}>{inr(item.amount)}</td>
-                        <td style={{ padding: '4px 8px', textAlign: 'right', color: item.over ? '#dc2626' : item.allocated ? '#4338ca' : '#94a3b8' }}>
-                          {item.budgeted > 0 ? inr(item.budgeted) : '—'}
-                        </td>
-                        <td style={{ padding: '4px 8px', textAlign: 'right', color: '#b45309' }}>
-                          {item.spent > 0 ? inr(item.spent) : '—'}
-                        </td>
-                        <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 700, color: item.balance < 0 ? '#dc2626' : item.allocated ? '#059669' : '#94a3b8' }}>
-                          {item.allocated || item.spent > 0 ? inr(item.balance) : '—'}
-                        </td>
-                        <td style={{ padding: '4px 8px', textAlign: 'center' }}>
-                          {!item.allocated
-                            ? <span style={{ background: '#fef3c7', color: '#b45309', padding: '1px 5px', borderRadius: 10, fontWeight: 700, fontSize: 8 }}>Not set</span>
-                            : item.over
-                              ? <span style={{ background: '#fee2e2', color: '#dc2626', padding: '1px 5px', borderRadius: 10, fontWeight: 700, fontSize: 8 }}>Over</span>
-                              : <span style={{ background: '#dcfce7', color: '#059669', padding: '1px 5px', borderRadius: 10, fontWeight: 700, fontSize: 8 }}>OK</span>
-                          }
+                    {splitRows.length > 0 && (
+                      <tr style={{ background: ci % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                        <td />
+                        <td colSpan={7} style={{ padding: '0 8px 8px 24px' }}>
+                          <table style={{ width: '100%', maxWidth: 320, borderCollapse: 'collapse', fontSize: 8, border: '1px solid #e2e8f0' }}>
+                            <thead>
+                              <tr style={{ background: '#eef2ff' }}>
+                                <th style={{ padding: '3px 8px', textAlign: 'left', color: '#4338ca', fontWeight: 700 }}>Cost Head</th>
+                                <th style={{ padding: '3px 8px', textAlign: 'right', color: '#4338ca', fontWeight: 700, width: 85 }}>Spent</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {splitRows.map(r => (
+                                <tr key={r.head}>
+                                  <td style={{ padding: '2px 8px', color: '#475569' }}>{r.head}</td>
+                                  <td style={{ padding: '2px 8px', textAlign: 'right', color: '#b45309', fontWeight: 600 }}>{inr(r.amt)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </td>
                       </tr>
-                    ))}
+                    )}
                   </React.Fragment>
                 );
               })}
@@ -2177,6 +2202,7 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
                 <td colSpan={2} style={{ padding: '7px 8px', textTransform: 'uppercase', letterSpacing: 0.5 }}>Grand Total</td>
                 <td style={{ padding: '7px 8px', textAlign: 'right' }}>{inr(totals.boq)}</td>
                 <td style={{ padding: '7px 8px', textAlign: 'right', color: '#a5b4fc' }}>{inr(totals.budgeted)}</td>
+                <td style={{ padding: '7px 8px', textAlign: 'right', color: '#c4b5fd' }}>{totals.raBilled > 0 ? inr(totals.raBilled) : '—'}</td>
                 <td style={{ padding: '7px 8px', textAlign: 'right', color: '#fcd34d' }}>{inr(totals.spent)}</td>
                 <td style={{ padding: '7px 8px', textAlign: 'right', color: totals.balance < 0 ? '#fca5a5' : '#6ee7b7' }}>{inr(totals.balance)}</td>
                 <td />
