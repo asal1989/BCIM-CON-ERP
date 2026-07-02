@@ -241,242 +241,51 @@ function ChapterBudgetCell({ value, onSave, saving }) {
   );
 }
 
-// ─── Pool of untagged transactions behind a pro-rated cost head ──────────────
-// Shows the actual bills that make up the project-wide "pool" for one cost
-// head (transactions never tagged to a specific BOQ item), plus this
-// chapter's estimated share of that pool.
-function ProratedPoolPanel({ projectId, costHead, chapterShare, poolTotal }) {
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['prorated-pool', projectId, costHead],
-    queryFn: () => boqBudgetAPI.proratedPool(projectId, costHead).then(r => r.data?.data || []),
-    enabled: !!projectId && !!costHead,
-    retry: 1,
-  });
-
-  const fmt = (n) => `₹${Math.round(parseFloat(n) || 0).toLocaleString('en-IN')}`;
-  const rows = data || [];
-  const total = rows.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
-  const sharePct = poolTotal > 0 ? (chapterShare / poolTotal) * 100 : 0;
-
-  return (
-    <div className="mx-4 my-2 rounded-lg border border-amber-200 overflow-hidden bg-white">
-      <div className="px-4 py-2 bg-amber-50 border-b border-amber-100 text-[11px] text-amber-800">
-        This chapter's estimated share of <strong>{costHead}</strong>'s untagged pool is{' '}
-        <strong>{fmt(chapterShare)}</strong> — that's <strong>{sharePct.toFixed(1)}%</strong> of the{' '}
-        <strong>{fmt(poolTotal)}</strong> pool below, split by budget proportion across every item that
-        has a budget under {costHead}.
-      </div>
-      {isLoading && (
-        <div className="flex items-center gap-2 px-4 py-3 text-xs text-indigo-500">
-          <div className="w-3.5 h-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-          Loading pool transactions…
-        </div>
-      )}
-      {isError && (
-        <div className="flex items-center gap-2 px-4 py-3 text-xs text-red-600">
-          <AlertCircle className="w-3.5 h-3.5" />
-          {error?.response?.data?.error || error?.message || 'Failed to load'}
-        </div>
-      )}
-      {!isLoading && !isError && !rows.length && (
-        <div className="flex items-center gap-2 px-4 py-3 text-xs text-slate-400 italic">
-          <AlertCircle className="w-3.5 h-3.5" />
-          No pool transactions found for {costHead}.
-        </div>
-      )}
-      {rows.length > 0 && (
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500 font-bold border-b border-slate-100">
-              <th className="px-4 py-1.5 text-left w-28">Date</th>
-              <th className="px-4 py-1.5 text-left w-36">Reference</th>
-              <th className="px-4 py-1.5 text-left">Description</th>
-              <th className="px-4 py-1.5 text-center w-32">Source</th>
-              <th className="px-4 py-1.5 text-right w-28">Amount</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {rows.map((r, idx) => (
-              <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                <td className="px-4 py-1.5 text-slate-500 font-mono text-[11px]">
-                  {r.date ? new Date(r.date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'}
-                </td>
-                <td className="px-4 py-1.5 font-mono text-indigo-700 text-[11px]">{r.reference || '—'}</td>
-                <td className="px-4 py-1.5 text-slate-700 max-w-xs truncate" title={r.description}>{r.description || '—'}</td>
-                <td className="px-4 py-1.5 text-center">
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">{r.source}</span>
-                </td>
-                <td className="px-4 py-1.5 text-right font-semibold text-slate-800 font-mono">{fmt(r.amount)}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="bg-slate-100 border-t-2 border-slate-200">
-              <td colSpan={4} className="px-4 py-1.5 text-right font-bold text-slate-600 text-xs">Pool total (whole project) — {costHead}</td>
-              <td className="px-4 py-1.5 text-right font-bold text-emerald-700 font-mono">{fmt(total)}</td>
-            </tr>
-          </tfoot>
-        </table>
-      )}
-    </div>
-  );
-}
-
-// ─── Chapter-wise spend drilldown — every transaction across every cost head ──
-// for the BOQ items in one chapter. Rendered under a chapter row when its
-// Spent amount is clicked.
-function ChapterDrilldownInline({ projectId, chapterName, itemIds, expectedTotal, proratedByHead, poolTotalByHead }) {
-  const [openPoolHead, setOpenPoolHead] = useState(null);
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['items-drilldown', projectId, itemIds],
-    queryFn: () => boqBudgetAPI.itemsDrilldown(projectId, itemIds).then(r => r.data?.data || []),
-    enabled: !!projectId && Array.isArray(itemIds) && itemIds.length > 0,
-    retry: 1,
-  });
-
-  const fmt = (n) => `₹${Math.round(parseFloat(n) || 0).toLocaleString('en-IN')}`;
-  const SOURCE_COLORS = {
-    'SC Bill':          'bg-blue-50 text-blue-700 border border-blue-200',
-    'SC Payment':       'bg-emerald-50 text-emerald-700 border border-emerald-200',
-    'SC Advance':       'bg-violet-50 text-violet-700 border border-violet-200',
-    'Stores PC Advance':'bg-purple-50 text-purple-700 border border-purple-200',
-    'Advance Tracker':  'bg-amber-50 text-amber-700 border border-amber-200',
-    'TQS Bill':         'bg-sky-50 text-sky-700 border border-sky-200',
-    'RA Bill':          'bg-teal-50 text-teal-700 border border-teal-200',
-    'Petty Cash':       'bg-orange-50 text-orange-700 border border-orange-200',
-    'Purchase Order':   'bg-rose-50 text-rose-700 border border-rose-200',
-  };
-
-  const rows = data || [];
-  const total = rows.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
-  const bySource = rows.reduce((acc, r) => { acc[r.source] = (acc[r.source] || 0) + parseFloat(r.amount || 0); return acc; }, {});
-  // The chapter's "Spent" figure can include pro-rated cost-head spend that
-  // isn't tagged to any specific BOQ item (so no bill exists for it here).
-  // Show the gap explicitly rather than let the totals silently mismatch.
-  const gap = !isLoading && !isError ? num(expectedTotal) - total : 0;
-  const hasGap = Math.abs(gap) > 1;
+// ─── Chapter Spent split by cost head — plain client-side breakdown ──────────
+// Shown under a chapter row when its Spent amount is clicked. Purely computed
+// from already-fetched item breakdown data (no extra API calls), so it always
+// sums exactly to the chapter's Spent figure.
+function ChapterCostHeadSplit({ chapterName, ch, costHeads }) {
+  const rows = costHeads
+    .map(h => ({
+      head: h,
+      amt: ch.items.reduce((s, i) => s + num(i.breakdown?.[h]?.advance) + num(i.breakdown?.[h]?.invoiced) + num(i.breakdown?.[h]?.prorated), 0),
+    }))
+    .filter(r => r.amt > 1)
+    .sort((a, b) => b.amt - a.amt);
+  const total = rows.reduce((s, r) => s + r.amt, 0);
 
   return (
     <div className="mx-4 my-2 rounded-xl border border-indigo-200 overflow-hidden shadow-sm bg-white">
-      <div className="flex items-center gap-2 px-4 py-2 bg-indigo-50 border-b border-indigo-100 flex-wrap">
-        <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wide">Spend Bills — {chapterName}</span>
-        {!isLoading && !isError && rows.length > 0 && (
-          <>
-            <span className="mx-1 text-indigo-200">·</span>
-            {Object.entries(bySource).map(([src, amt]) => (
-              <span key={src} className={clsx('flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold', SOURCE_COLORS[src] || 'bg-slate-100 text-slate-500')}>
-                {src} <span className="font-mono font-bold">{fmt(amt)}</span>
-              </span>
-            ))}
-            <span className="ml-auto text-[11px] font-bold text-indigo-800 font-mono">Bills total: {fmt(total)}</span>
-          </>
-        )}
+      <div className="px-4 py-2 bg-indigo-50 border-b border-indigo-100 text-[10px] font-bold text-indigo-700 uppercase tracking-wide">
+        Spent Split — {chapterName}
       </div>
-
-      {hasGap && (
-        <div className="border-b border-amber-100">
-          <div className="flex items-start gap-2 px-4 py-2.5 text-xs text-amber-700 bg-amber-50">
-            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-            <span>
-              Chapter Spent shows <strong>{fmt(expectedTotal)}</strong>, but the bills listed below total{' '}
-              <strong>{fmt(total)}</strong> — the remaining <strong>{fmt(gap)}</strong> is <strong>pro-rated</strong> cost-head
-              spend that wasn't tagged to a specific BOQ item anywhere in the project. Click a cost head below to see the
-              actual bills it came from.
-            </span>
-          </div>
-          {proratedByHead && Object.entries(proratedByHead).filter(([, amt]) => amt > 1).map(([head, amt]) => {
-            const isOpen = openPoolHead === head;
-            return (
-              <div key={head}>
-                <button
-                  onClick={() => setOpenPoolHead(isOpen ? null : head)}
-                  className="w-full flex items-center justify-between px-4 py-2 text-xs bg-amber-50/50 hover:bg-amber-100/60 transition-colors border-t border-amber-100"
-                >
-                  <span className="flex items-center gap-1.5 font-semibold text-amber-800">
-                    <ChevronDown className={clsx('w-3 h-3 transition-transform duration-200', isOpen && 'rotate-180')} />
-                    {head}
-                  </span>
-                  <span className="font-mono font-bold text-amber-700">≈ {fmt(amt)}</span>
-                </button>
-                {isOpen && (
-                  <ProratedPoolPanel
-                    projectId={projectId}
-                    costHead={head}
-                    chapterShare={amt}
-                    poolTotal={poolTotalByHead?.[head] || 0}
-                  />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {isLoading && (
-        <div className="flex items-center gap-2 px-4 py-3 text-xs text-indigo-500">
-          <div className="w-3.5 h-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-          Loading bills…
-        </div>
-      )}
-      {isError && (
-        <div className="flex items-center gap-2 px-4 py-3 text-xs text-red-600">
-          <AlertCircle className="w-3.5 h-3.5" />
-          {error?.response?.data?.error || error?.message || 'Failed to load'}
-        </div>
-      )}
-      {!isLoading && !isError && !rows.length && (
+      {rows.length === 0 ? (
         <div className="flex items-center gap-2 px-4 py-3 text-xs text-slate-400 italic">
           <AlertCircle className="w-3.5 h-3.5" />
-          No bills tagged directly to items in this chapter yet.
+          No spend recorded for this chapter yet.
         </div>
-      )}
-      {rows.length > 0 && (
+      ) : (
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500 font-bold border-b border-slate-100">
-              <th className="px-4 py-1.5 text-left w-28">Date</th>
-              <th className="px-4 py-1.5 text-left w-36">Reference</th>
-              <th className="px-4 py-1.5 text-left">Description</th>
-              <th className="px-4 py-1.5 text-left w-40">Cost Head</th>
-              <th className="px-4 py-1.5 text-center w-32">Source</th>
-              <th className="px-4 py-1.5 text-right w-28">Amount</th>
+              <th className="px-4 py-1.5 text-left">Cost Head</th>
+              <th className="px-4 py-1.5 text-right w-32">Spent</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
-            {rows.map((r, idx) => (
-              <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                <td className="px-4 py-1.5 text-slate-500 font-mono text-[11px]">
-                  {r.date ? new Date(r.date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'}
-                </td>
-                <td className="px-4 py-1.5 font-mono text-indigo-700 text-[11px]">{r.reference || '—'}</td>
-                <td className="px-4 py-1.5 text-slate-700 max-w-xs truncate" title={r.description}>{r.description || '—'}</td>
-                <td className="px-4 py-1.5 text-slate-500">{r.cost_head || '—'}</td>
-                <td className="px-4 py-1.5 text-center">
-                  <span className={clsx('px-2 py-0.5 rounded-full text-[10px] font-bold', SOURCE_COLORS[r.source] || 'bg-slate-100 text-slate-500')}>
-                    {r.source}
-                  </span>
-                </td>
-                <td className="px-4 py-1.5 text-right font-semibold text-slate-800 font-mono">{fmt(r.amount)}</td>
+            {rows.map(r => (
+              <tr key={r.head} className="hover:bg-slate-50 transition-colors">
+                <td className="px-4 py-1.5 text-slate-700 font-medium">{r.head}</td>
+                <td className="px-4 py-1.5 text-right font-semibold text-amber-600 font-mono">{inr(r.amt)}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="bg-slate-100 border-t-2 border-slate-200">
-              <td colSpan={5} className="px-4 py-1.5 text-right font-bold text-slate-600 text-xs">Bills total — {chapterName}</td>
-              <td className="px-4 py-1.5 text-right font-bold text-emerald-700 font-mono">{fmt(total)}</td>
+              <td className="px-4 py-1.5 text-right font-bold text-slate-600 text-xs">Total — {chapterName}</td>
+              <td className="px-4 py-1.5 text-right font-bold text-emerald-700 font-mono">{inr(total)}</td>
             </tr>
-            {hasGap && (
-              <tr className="bg-amber-50 border-t border-amber-100">
-                <td colSpan={5} className="px-4 py-1.5 text-right font-bold text-amber-700 text-xs">+ Pro-rated (untagged) spend</td>
-                <td className="px-4 py-1.5 text-right font-bold text-amber-700 font-mono">{fmt(gap)}</td>
-              </tr>
-            )}
-            {hasGap && (
-              <tr className="bg-slate-800 border-t-2 border-slate-700">
-                <td colSpan={5} className="px-4 py-1.5 text-right font-bold text-white text-xs">Chapter Spent (matches summary)</td>
-                <td className="px-4 py-1.5 text-right font-bold text-amber-300 font-mono">{fmt(expectedTotal)}</td>
-              </tr>
-            )}
           </tfoot>
         </table>
       )}
@@ -2176,29 +1985,9 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
                           ) : <span className="text-slate-300">—</span>}
                         </span>
                       </div>
-                      {spendOpen && projectId && (() => {
-                        // This chapter's estimated share of each cost head's pro-rated pool,
-                        // plus the total pool for that head across the whole project (conservation:
-                        // the sum of every item's prorated amount for a head equals that head's
-                        // total untagged pool, since pro-rata distributes 100% of it).
-                        const proratedByHead = {};
-                        const poolTotalByHead = {};
-                        costHeads.forEach(h => {
-                          const chAmt = ch.items.reduce((s, i) => s + num(i.breakdown?.[h]?.prorated), 0);
-                          if (chAmt > 1) proratedByHead[h] = chAmt;
-                          poolTotalByHead[h] = allItems.reduce((s, i) => s + num(i.breakdown?.[h]?.prorated), 0);
-                        });
-                        return (
-                          <ChapterDrilldownInline
-                            projectId={projectId}
-                            chapterName={ch.name}
-                            itemIds={ch.items.map(i => i.id)}
-                            expectedTotal={chSpent}
-                            proratedByHead={proratedByHead}
-                            poolTotalByHead={poolTotalByHead}
-                          />
-                        );
-                      })()}
+                      {spendOpen && (
+                        <ChapterCostHeadSplit chapterName={ch.name} ch={ch} costHeads={costHeads} />
+                      )}
                     </div>
                   );
                 })}
