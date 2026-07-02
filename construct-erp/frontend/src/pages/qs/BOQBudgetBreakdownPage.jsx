@@ -244,7 +244,7 @@ function ChapterBudgetCell({ value, onSave, saving }) {
 // ─── Chapter-wise spend drilldown — every transaction across every cost head ──
 // for the BOQ items in one chapter. Rendered under a chapter row when its
 // Spent amount is clicked.
-function ChapterDrilldownInline({ projectId, chapterName, itemIds }) {
+function ChapterDrilldownInline({ projectId, chapterName, itemIds, expectedTotal }) {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['items-drilldown', projectId, itemIds],
     queryFn: () => boqBudgetAPI.itemsDrilldown(projectId, itemIds).then(r => r.data?.data || []),
@@ -268,6 +268,11 @@ function ChapterDrilldownInline({ projectId, chapterName, itemIds }) {
   const rows = data || [];
   const total = rows.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
   const bySource = rows.reduce((acc, r) => { acc[r.source] = (acc[r.source] || 0) + parseFloat(r.amount || 0); return acc; }, {});
+  // The chapter's "Spent" figure can include pro-rated cost-head spend that
+  // isn't tagged to any specific BOQ item (so no bill exists for it here).
+  // Show the gap explicitly rather than let the totals silently mismatch.
+  const gap = !isLoading && !isError ? num(expectedTotal) - total : 0;
+  const hasGap = Math.abs(gap) > 1;
 
   return (
     <div className="mx-4 my-2 rounded-xl border border-indigo-200 overflow-hidden shadow-sm bg-white">
@@ -281,10 +286,22 @@ function ChapterDrilldownInline({ projectId, chapterName, itemIds }) {
                 {src} <span className="font-mono font-bold">{fmt(amt)}</span>
               </span>
             ))}
-            <span className="ml-auto text-[11px] font-bold text-indigo-800 font-mono">Total: {fmt(total)}</span>
+            <span className="ml-auto text-[11px] font-bold text-indigo-800 font-mono">Bills total: {fmt(total)}</span>
           </>
         )}
       </div>
+
+      {hasGap && (
+        <div className="flex items-start gap-2 px-4 py-2.5 text-xs text-amber-700 bg-amber-50 border-b border-amber-100">
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+          <span>
+            Chapter Spent shows <strong>{fmt(expectedTotal)}</strong>, but the bills listed below total{' '}
+            <strong>{fmt(total)}</strong> — the remaining <strong>{fmt(gap)}</strong> is <strong>pro-rated</strong> cost-head
+            spend that wasn't tagged to a specific BOQ item anywhere in the project. It's distributed across chapters/items
+            by budget share, so no individual bill can be shown for it.
+          </span>
+        </div>
+      )}
 
       {isLoading && (
         <div className="flex items-center gap-2 px-4 py-3 text-xs text-indigo-500">
@@ -336,9 +353,21 @@ function ChapterDrilldownInline({ projectId, chapterName, itemIds }) {
           </tbody>
           <tfoot>
             <tr className="bg-slate-100 border-t-2 border-slate-200">
-              <td colSpan={5} className="px-4 py-1.5 text-right font-bold text-slate-600 text-xs">Total — {chapterName}</td>
+              <td colSpan={5} className="px-4 py-1.5 text-right font-bold text-slate-600 text-xs">Bills total — {chapterName}</td>
               <td className="px-4 py-1.5 text-right font-bold text-emerald-700 font-mono">{fmt(total)}</td>
             </tr>
+            {hasGap && (
+              <tr className="bg-amber-50 border-t border-amber-100">
+                <td colSpan={5} className="px-4 py-1.5 text-right font-bold text-amber-700 text-xs">+ Pro-rated (untagged) spend</td>
+                <td className="px-4 py-1.5 text-right font-bold text-amber-700 font-mono">{fmt(gap)}</td>
+              </tr>
+            )}
+            {hasGap && (
+              <tr className="bg-slate-800 border-t-2 border-slate-700">
+                <td colSpan={5} className="px-4 py-1.5 text-right font-bold text-white text-xs">Chapter Spent (matches summary)</td>
+                <td className="px-4 py-1.5 text-right font-bold text-amber-300 font-mono">{fmt(expectedTotal)}</td>
+              </tr>
+            )}
           </tfoot>
         </table>
       )}
@@ -2043,6 +2072,7 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
                           projectId={projectId}
                           chapterName={ch.name}
                           itemIds={ch.items.map(i => i.id)}
+                          expectedTotal={chSpent}
                         />
                       )}
                     </div>
