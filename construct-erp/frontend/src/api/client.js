@@ -1849,6 +1849,7 @@ export const hrSalaryAPI = {
   listEmpSalaries:    (params) => api.get('/hr-admin/salary/employee-salaries', { params }),
   getCurrentSalary:   (uid)    => api.get(`/hr-admin/salary/employee-salaries/${uid}/current`),
   assignSalary:       (data)   => api.post('/hr-admin/salary/employee-salaries', data),
+  calculateBreakup:   (data)   => api.post('/hr-admin/salary/calculate-breakup', data),
 };
 
 export const hrPayrollAPI = {

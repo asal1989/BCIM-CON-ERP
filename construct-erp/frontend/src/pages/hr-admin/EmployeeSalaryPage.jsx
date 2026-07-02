@@ -14,44 +14,44 @@ const lbl = "text-xs font-bold text-gray-600 uppercase tracking-wide block mb-1.
 const fmt = (n) => Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
 const today = () => new Date().toISOString().slice(0,10);
 
-function splitGross(gross) {
-  const g = Number(gross||0);
-  const basic     = Math.round(g*0.4);
-  const hra       = Math.round(basic*0.4);
-  const conveyance= g>0?1600:0;
-  const medical   = g>0?1250:0;
-  const special   = Math.max(0,g-basic-hra-conveyance-medical);
-  return { basic, hra, conveyance, medical, special_allowance:special, other_allowance:0 };
-}
-
-function SalaryModal({ employees, structures, onClose, onSave, saving }) {
+function SalaryModal({ employees, structures, onClose, onSave, saving, calculateBreakup, calculating }) {
   const [form, setForm] = useState({
     user_id:'', structure_id:structures[0]?.id||'',
-    monthly_gross:'', basic:'', hra:'', conveyance:'', medical:'',
-    special_allowance:'', other_allowance:'',
-    pf_applicable:true, esi_applicable:false, pt_applicable:true,
+    ctc_monthly:'', pf_applicable:true, esi_applicable:false, pt_applicable:true,
     effective_from:today(),
   });
+  const [breakup, setBreakup] = useState(null);
   const update = (k,v) => setForm(p=>({...p,[k]:v}));
-  const applyGross = () => { const s=splitGross(form.monthly_gross); setForm(p=>({...p,...s})); };
 
-  const grossMonthly = useMemo(()=>(
-    Number(form.basic||0)+Number(form.hra||0)+Number(form.conveyance||0)+
-    Number(form.medical||0)+Number(form.special_allowance||0)+Number(form.other_allowance||0)
-  ),[form.basic,form.hra,form.conveyance,form.medical,form.special_allowance,form.other_allowance]);
+  const runCalculate = async () => {
+    if (!form.ctc_monthly || Number(form.ctc_monthly) <= 0) return toast.error('Enter a monthly CTC to calculate');
+    try {
+      const res = await calculateBreakup({ ctc_monthly: Number(form.ctc_monthly) });
+      setBreakup(res.data?.data || null);
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Failed to calculate breakup');
+    }
+  };
 
   const submit = () => {
     if(!form.user_id) return toast.error('Select employee');
     if(!form.effective_from) return toast.error('Effective date is required');
-    if(grossMonthly<=0) return toast.error('Enter salary components');
+    if(!breakup) return toast.error('Calculate the CTC breakup first');
     onSave({
       user_id:form.user_id, structure_id:form.structure_id||null,
-      ctc_annual:grossMonthly*12, basic:Number(form.basic||0), hra:Number(form.hra||0),
-      conveyance:Number(form.conveyance||0), medical:Number(form.medical||0),
-      special_allowance:Number(form.special_allowance||0), other_allowance:Number(form.other_allowance||0),
-      gross_monthly:grossMonthly, pf_applicable:form.pf_applicable,
+      ctc_annual:breakup.ctc_annual, basic:breakup.basic, hra:breakup.hra,
+      special_allowance:breakup.special_allowance, other_allowance:0,
+      gross_monthly:breakup.gross_monthly, pf_applicable:form.pf_applicable,
       esi_applicable:form.esi_applicable, pt_applicable:form.pt_applicable,
       effective_from:form.effective_from,
+      vda:breakup.vda, lta:breakup.lta,
+      education_allowance:breakup.education_allowance, washing_allowance:breakup.washing_allowance,
+      mobile_allowance:breakup.mobile_allowance, project_allowance:breakup.project_allowance,
+      accommodation_allowance:breakup.accommodation_allowance, food_allowance:breakup.food_allowance,
+      transport_allowance:breakup.transport_allowance,
+      employer_pf:breakup.employer_pf, employee_pf:breakup.employee_pf,
+      gratuity:breakup.gratuity, pt_deduction:breakup.pt_deduction,
+      net_pay_monthly:breakup.net_pay_monthly,
     });
   };
 
@@ -90,14 +90,14 @@ function SalaryModal({ employees, structures, onClose, onSave, saving }) {
             </select>
           </div>
           <div>
-            <label className={lbl}>Monthly Gross</label>
+            <label className={lbl}>Monthly CTC</label>
             <div className="flex gap-2">
-              <input type="number" value={form.monthly_gross} onChange={e=>update('monthly_gross',e.target.value)}
+              <input type="number" value={form.ctc_monthly} onChange={e=>{update('ctc_monthly',e.target.value); setBreakup(null);}}
                 className={inp} placeholder="e.g. 45000"/>
-              <button onClick={applyGross} type="button"
-                className="px-4 py-2.5 rounded-xl text-sm font-black text-white whitespace-nowrap"
+              <button onClick={runCalculate} type="button" disabled={calculating}
+                className="px-4 py-2.5 rounded-xl text-sm font-black text-white whitespace-nowrap disabled:opacity-50"
                 style={{background:`linear-gradient(135deg,${B.blue},${B.navy})`}}>
-                Auto-Split
+                {calculating?'Calculating…':'Calculate Breakup'}
               </button>
             </div>
           </div>
@@ -105,13 +105,46 @@ function SalaryModal({ employees, structures, onClose, onSave, saving }) {
             <label className={lbl}>Effective From</label>
             <input type="date" value={form.effective_from} onChange={e=>update('effective_from',e.target.value)} className={inp}/>
           </div>
-          {[['basic','Basic'],['hra','HRA'],['conveyance','Conveyance'],['medical','Medical'],
-            ['special_allowance','Special Allowance'],['other_allowance','Other Allowance']].map(([k,l])=>(
-            <div key={k}>
-              <label className={lbl}>{l}</label>
-              <input type="number" value={form[k]} onChange={e=>update(k,e.target.value)} className={inp}/>
+
+          {breakup && (
+            <div className="md:col-span-2 rounded-xl border border-gray-200 overflow-hidden">
+              <div className="px-4 py-2 bg-gray-100 text-xs font-black text-gray-600 uppercase tracking-wide">Part A — Earnings (Monthly)</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-px bg-gray-100">
+                {[
+                  ['Basic', breakup.basic], ['VDA', breakup.vda], ['HRA', breakup.hra],
+                  ['LTA', breakup.lta], ['Education Allowance', breakup.education_allowance],
+                  ['Washing Allowance', breakup.washing_allowance], ['Medical Allowance', breakup.medical_allowance],
+                  ['Mobile Allowance', breakup.mobile_allowance], ['Project/Office Spl. Allowance', breakup.project_allowance],
+                  ['Accommodation Allowance', breakup.accommodation_allowance], ['Food Allowance', breakup.food_allowance],
+                  ['Transport Allowance', breakup.transport_allowance], ['Special Allowance', breakup.special_allowance],
+                ].map(([l,v])=>(
+                  <div key={l} className="bg-white px-3 py-2">
+                    <div className="text-[10px] font-bold text-gray-400 uppercase">{l}</div>
+                    <div className="text-sm font-black text-gray-900">₹{fmt(v)}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="px-4 py-2 bg-gray-100 text-xs font-black text-gray-600 uppercase tracking-wide">Part B — Employer Contribution</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-px bg-gray-100">
+                {[['Employer PF', breakup.employer_pf], ['Gratuity', breakup.gratuity]].map(([l,v])=>(
+                  <div key={l} className="bg-white px-3 py-2">
+                    <div className="text-[10px] font-bold text-gray-400 uppercase">{l}</div>
+                    <div className="text-sm font-black text-gray-900">₹{fmt(v)}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="px-4 py-2 bg-gray-100 text-xs font-black text-gray-600 uppercase tracking-wide">Part C — Deductions</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-px bg-gray-100">
+                {[['Employee PF', breakup.employee_pf], ['PT Deduction', breakup.pt_deduction]].map(([l,v])=>(
+                  <div key={l} className="bg-white px-3 py-2">
+                    <div className="text-[10px] font-bold text-gray-400 uppercase">{l}</div>
+                    <div className="text-sm font-black text-gray-900">₹{fmt(v)}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
+          )}
+
           <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[['pf_applicable','PF Applicable'],['esi_applicable','ESI Applicable'],['pt_applicable','PT Applicable']].map(([k,l])=>(
               <label key={k} className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-800 cursor-pointer hover:bg-blue-50 transition-colors">
@@ -125,12 +158,15 @@ function SalaryModal({ employees, structures, onClose, onSave, saving }) {
         <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm">
             <span className="text-gray-500">Gross Monthly: </span>
-            <strong className="text-gray-900">₹{fmt(grossMonthly)}</strong>
+            <strong className="text-gray-900">₹{fmt(breakup?.gross_monthly)}</strong>
+            <span className="mx-3 text-gray-200">|</span>
+            <span className="text-gray-500">Net Pay Monthly: </span>
+            <strong className="text-gray-900">₹{fmt(breakup?.net_pay_monthly)}</strong>
             <span className="mx-3 text-gray-200">|</span>
             <span className="text-gray-500">Annual CTC: </span>
-            <strong className="text-gray-900">₹{fmt(grossMonthly*12)}</strong>
+            <strong className="text-gray-900">₹{fmt(breakup?.ctc_annual)}</strong>
           </div>
-          <button onClick={submit} disabled={saving}
+          <button onClick={submit} disabled={saving||!breakup}
             className="px-6 py-2.5 rounded-xl text-sm font-black text-white disabled:opacity-50"
             style={{background:`linear-gradient(135deg,${B.blue},${B.navy})`}}>
             {saving?'Saving…':'Save Salary'}
@@ -185,6 +221,8 @@ export default function EmployeeSalaryPage() {
     onSuccess:()=>{ toast.success('Employee salary saved'); setShowModal(false); qc.invalidateQueries({queryKey:['hr-employee-salaries']}); },
     onError:(e)=>toast.error(e.response?.data?.error||'Failed to save salary'),
   });
+
+  const breakupMut = useMutation({ mutationFn:(payload)=>hrSalaryAPI.calculateBreakup(payload) });
 
   const kpis = [
     { label:'Active Employees', value:employees.length,                  icon:Users,        bg:'bg-blue-50',    text:'text-blue-700'    },
@@ -311,6 +349,8 @@ export default function EmployeeSalaryPage() {
           employees={employees}
           structures={structures}
           saving={saveMut.isPending}
+          calculating={breakupMut.isPending}
+          calculateBreakup={payload=>breakupMut.mutateAsync(payload)}
           onClose={()=>setShowModal(false)}
           onSave={payload=>saveMut.mutate(payload)}
         />

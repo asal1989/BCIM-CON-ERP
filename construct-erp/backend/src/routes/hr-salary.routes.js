@@ -54,8 +54,103 @@ const initTables = async () => {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  // CTC breakup fields (BCIM Salary Structure formula — Basic/VDA driven allowances,
+  // employer PF/gratuity, employee PF/PT, net pay). Added via ALTER so existing rows survive.
+  const breakupCols = [
+    ['vda', 'NUMERIC(12,2) DEFAULT 0'],
+    ['lta', 'NUMERIC(12,2) DEFAULT 0'],
+    ['education_allowance', 'NUMERIC(12,2) DEFAULT 0'],
+    ['washing_allowance', 'NUMERIC(12,2) DEFAULT 0'],
+    ['mobile_allowance', 'NUMERIC(12,2) DEFAULT 0'],
+    ['project_allowance', 'NUMERIC(12,2) DEFAULT 0'],
+    ['accommodation_allowance', 'NUMERIC(12,2) DEFAULT 0'],
+    ['food_allowance', 'NUMERIC(12,2) DEFAULT 0'],
+    ['transport_allowance', 'NUMERIC(12,2) DEFAULT 0'],
+    ['employer_pf', 'NUMERIC(12,2) DEFAULT 0'],
+    ['employee_pf', 'NUMERIC(12,2) DEFAULT 0'],
+    ['gratuity', 'NUMERIC(12,2) DEFAULT 0'],
+    ['pt_deduction', 'NUMERIC(12,2) DEFAULT 0'],
+    ['net_pay_monthly', 'NUMERIC(12,2) DEFAULT 0'],
+  ];
+  for (const [col, def] of breakupCols) {
+    await query(`ALTER TABLE hr_employee_salaries ADD COLUMN IF NOT EXISTS ${col} ${def}`).catch(() => {});
+  }
 };
 runSchemaInit('hr-salary', initTables);
+
+// ─── CTC Breakup calculator — mirrors "Salary Structure.xlsx" (Part A/B/C) ────
+// Basic = max(40% of CTC, statutory floor). Every other earning is a % of
+// Basic (with a cap). Employer PF (13%) and Gratuity (4.81%) are computed on
+// (Basic+VDA), capped at the ₹15,000 PF wage ceiling. Special Allowance is
+// the balancing figure that makes the earnings total reconcile to CTC minus
+// the employer-side contributions. Net Pay reduces algebraically to
+// Gross Salary − Employee PF − PT − Employee ESIC − Employee LWF (the
+// employer PF/gratuity that get added into CTC on one side cancel out when
+// subtracted again on the other — verified against the source spreadsheet).
+const PF_WAGE_CEILING = 15000;
+function calculateCTCBreakup(ctcMonthly, opts = {}) {
+  const ctc = parseFloat(ctcMonthly) || 0;
+  const vda = opts.vda ?? 1592;
+  const ptDeduction = opts.pt_deduction ?? 200;
+  const employeeLwf = opts.employee_lwf ?? 0;
+  const employerLwf = opts.employer_lwf ?? 0;
+  const employerEsic = opts.employer_esic ?? 0;
+  const employeeEsic = opts.employee_esic ?? 0;
+
+  const basic = Math.max(ctc * 0.4, 15000);
+  const hra = basic * 0.10;
+  const accommodationAllowance = Math.min(basic * 0.09, 50000);
+  const foodAllowance = Math.min(basic * 0.0325, 9000);
+  const transportAllowance = Math.min(basic * 0.02, 35000);
+  const educationAllowance = Math.min(basic * 0.01, 2500);
+  const washingAllowance = Math.min(basic * 0.01, 2500);
+  const medicalAllowance = Math.min(basic * 0.01, 7500);
+  const mobileAllowance = Math.min(basic * 0.01, 500);
+  const projectAllowance = Math.min(basic * 0.01, 7500);
+  const lta = basic * 0.0833;
+
+  const pfWage = basic + vda;
+  const employerPf = pfWage > PF_WAGE_CEILING ? PF_WAGE_CEILING * 0.13 : pfWage * 0.13;
+  const employeePf = pfWage > PF_WAGE_CEILING ? PF_WAGE_CEILING * 0.12 : pfWage * 0.12;
+  const gratuity = Math.round(basic * 0.0481);
+
+  const earningsBeforeSpecial = basic + vda + hra + educationAllowance + washingAllowance
+    + lta + medicalAllowance + mobileAllowance + projectAllowance
+    + accommodationAllowance + foodAllowance + transportAllowance;
+
+  const specialAllowance = Math.max(
+    0,
+    ctc - earningsBeforeSpecial - employerPf - gratuity - employerEsic - employerLwf
+  );
+
+  const grossSalary = earningsBeforeSpecial + specialAllowance;
+  const netPayMonthly = grossSalary - employeePf - ptDeduction - employeeEsic - employeeLwf;
+
+  return {
+    ctc_monthly: ctc, ctc_annual: ctc * 12,
+    basic, vda, hra,
+    education_allowance: educationAllowance, washing_allowance: washingAllowance, lta,
+    medical_allowance: medicalAllowance, mobile_allowance: mobileAllowance, project_allowance: projectAllowance,
+    special_allowance: specialAllowance,
+    accommodation_allowance: accommodationAllowance, food_allowance: foodAllowance, transport_allowance: transportAllowance,
+    gross_monthly: grossSalary,
+    employer_pf: employerPf, gratuity, employer_esic: employerEsic, employer_lwf: employerLwf,
+    employee_pf: employeePf, pt_deduction: ptDeduction, employee_esic: employeeEsic, employee_lwf: employeeLwf,
+    net_pay_monthly: netPayMonthly,
+    ctc_reconciled: earningsBeforeSpecial + specialAllowance + employerPf + gratuity + employerEsic + employerLwf,
+  };
+}
+
+// POST /hr-admin/salary/calculate-breakup — stateless, returns the full
+// component breakdown for a given monthly or annual CTC (no DB write).
+router.post('/calculate-breakup', async (req, res) => {
+  try {
+    const { ctc_monthly, ctc_annual, ...overrides } = req.body;
+    const monthly = ctc_monthly != null ? parseFloat(ctc_monthly) : parseFloat(ctc_annual || 0) / 12;
+    if (!monthly || monthly <= 0) return res.status(400).json({ error: 'ctc_monthly or ctc_annual is required' });
+    res.json({ data: calculateCTCBreakup(monthly, overrides) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 // ═══════════════════════════════════════════════════════════
 // SALARY STRUCTURES
@@ -177,7 +272,10 @@ router.post('/employee-salaries', async (req, res) => {
     const {
       user_id, structure_id, ctc_annual, basic, hra, conveyance, medical,
       special_allowance, other_allowance, gross_monthly,
-      pf_applicable, esi_applicable, pt_applicable, effective_from, effective_to
+      pf_applicable, esi_applicable, pt_applicable, effective_from, effective_to,
+      vda, lta, education_allowance, washing_allowance, mobile_allowance, project_allowance,
+      accommodation_allowance, food_allowance, transport_allowance,
+      employer_pf, employee_pf, gratuity, pt_deduction, net_pay_monthly,
     } = req.body;
 
     // Close any open salary record for this employee
@@ -193,12 +291,19 @@ router.post('/employee-salaries', async (req, res) => {
       `INSERT INTO hr_employee_salaries
        (user_id, structure_id, ctc_annual, basic, hra, conveyance, medical,
         special_allowance, other_allowance, gross_monthly,
-        pf_applicable, esi_applicable, pt_applicable, effective_from, effective_to)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+        pf_applicable, esi_applicable, pt_applicable, effective_from, effective_to,
+        vda, lta, education_allowance, washing_allowance, mobile_allowance, project_allowance,
+        accommodation_allowance, food_allowance, transport_allowance,
+        employer_pf, employee_pf, gratuity, pt_deduction, net_pay_monthly)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
+               $16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29) RETURNING *`,
       [user_id, structure_id || null, ctc_annual || null, basic || 0, hra || 0,
        conveyance || 0, medical || 0, special_allowance || 0, other_allowance || 0,
        gross_monthly || 0, pf_applicable ?? true, esi_applicable ?? true,
-       pt_applicable ?? true, effective_from, effective_to || null]
+       pt_applicable ?? true, effective_from, effective_to || null,
+       vda || 0, lta || 0, education_allowance || 0, washing_allowance || 0, mobile_allowance || 0, project_allowance || 0,
+       accommodation_allowance || 0, food_allowance || 0, transport_allowance || 0,
+       employer_pf || 0, employee_pf || 0, gratuity || 0, pt_deduction || 0, net_pay_monthly || 0]
     );
     res.status(201).json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
