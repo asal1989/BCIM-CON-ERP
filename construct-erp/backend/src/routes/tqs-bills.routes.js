@@ -3240,7 +3240,7 @@ router.patch('/:id/accounts', requireTqsStageAccess('accounts'), async (req, res
 
     // Fetch bill base amounts for certified_net calculation
     const billRes = await query(
-      `SELECT b.sl_number, b.bill_type, b.basic_amount, b.gst_amount, b.total_amount,
+      `SELECT b.sl_number, b.bill_type, b.basic_amount, b.gst_amount, b.total_amount, b.tcs_amt,
               b.vendor_id, b.vendor_name, b.wo_number, b.po_number, b.project_id, b.grn_id
        FROM tqs_bills b WHERE b.id = $1`,
       [req.params.id]
@@ -3343,7 +3343,8 @@ router.patch('/:id/accounts', requireTqsStageAccess('accounts'), async (req, res
     try {
       const total     = n(bill.total_amount);
       const gst        = n(bill.gst_amount);
-      const expenseBase = total - gst;            // basic + transport + other charges
+      const tcs         = n(bill.tcs_amt);
+      const expenseBase = total - gst - tcs;       // basic + transport + other charges
       const tds         = n(tds_deduction);
       const retention   = n(retention_money);
       const apCredit    = total - tds - retention; // advance & other deductions settle via subledger/payment
@@ -3364,6 +3365,7 @@ router.patch('/:id/accounts', requireTqsStageAccess('accounts'), async (req, res
           { code: expenseCode, debit: expenseBase, description: `${expenseLabel} — ${bill.vendor_name || ''} ${ref}` },
         ];
         if (gst > 0)       lines.push({ code: '1300', debit: gst, description: `Input GST / ITC — ${ref}` });
+        if (tcs > 0)       lines.push({ code: '1310', debit: tcs, description: `TCS collected by vendor — ${ref}` });
         lines.push({ code: '2000', credit: apCredit, description: `Payable to ${bill.vendor_name || 'vendor'} — ${ref}` });
         if (tds > 0)       lines.push({ code: '2200', credit: tds, description: `TDS deducted — ${ref}` });
         if (retention > 0) lines.push({ code: '2300', credit: retention, description: `Retention withheld — ${ref}` });
@@ -4033,7 +4035,7 @@ router.post('/backfill-jv', async (req, res) => {
     applyProjectScope(req, conditions, params, 'b', req.body?.project_id || null);
 
     const candidates = await query(`
-      SELECT b.id, b.sl_number, b.bill_type, b.total_amount, b.gst_amount,
+      SELECT b.id, b.sl_number, b.bill_type, b.total_amount, b.gst_amount, b.tcs_amt,
              b.vendor_name, b.wo_number, b.po_number, b.grn_id, b.project_id,
              COALESCE(u.tds_deduction, 0)   AS tds_deduction,
              COALESCE(u.retention_money, 0) AS retention_money,
@@ -4063,7 +4065,8 @@ router.post('/backfill-jv', async (req, res) => {
     for (const bill of candidates.rows) {
       const total       = nn(bill.total_amount);
       const gst         = nn(bill.gst_amount);
-      const expenseBase = total - gst;
+      const tcs         = nn(bill.tcs_amt);
+      const expenseBase = total - gst - tcs;
       const tds         = nn(bill.tds_deduction);
       const retention   = nn(bill.retention_money);
       const apCredit    = total - tds - retention;
@@ -4077,6 +4080,7 @@ router.post('/backfill-jv', async (req, res) => {
         { code: expenseCode, debit: expenseBase, description: `${expenseLabel} — ${bill.vendor_name || ''} ${ref}` },
       ];
       if (gst > 0)       lines.push({ code: '1300', debit: gst, description: `Input GST / ITC — ${ref}` });
+      if (tcs > 0)       lines.push({ code: '1310', debit: tcs, description: `TCS collected by vendor — ${ref}` });
       lines.push({ code: '2000', credit: apCredit, description: `Payable to ${bill.vendor_name || 'vendor'} — ${ref}` });
       if (tds > 0)       lines.push({ code: '2200', credit: tds, description: `TDS deducted — ${ref}` });
       if (retention > 0) lines.push({ code: '2300', credit: retention, description: `Retention withheld — ${ref}` });
