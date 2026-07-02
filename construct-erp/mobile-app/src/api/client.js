@@ -289,6 +289,19 @@ export const hrServiceRequestAPI = {
   create: (data)    => api.post('/hr-admin/advanced/service-requests', data),
 };
 
+export const holidaysAPI = {
+  list: (year) => api.get('/hr-admin/masters/holidays', { params: { year } }),
+};
+
+export const currentSalaryAPI = {
+  get: (userId) => api.get(`/hr-admin/salary/employee-salaries/${userId}/current`),
+};
+
+export const taxDeclarationAPI = {
+  list:   (financialYear) => api.get('/hr-admin/advanced/payroll-compliance/tax-declarations', { params: { financial_year: financialYear } }),
+  create: (data)           => api.post('/hr-admin/advanced/payroll-compliance/tax-declarations', data),
+};
+
 export const dprAPI = {
   list:   (projectId) => api.get('/dpr', { params: { project_id: projectId } }),
   create: (data)       => api.post('/dpr', data),

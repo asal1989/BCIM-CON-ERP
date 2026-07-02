@@ -163,6 +163,34 @@ export default function ESSScreen() {
         <View style={{ padding: theme.spacing.md, gap: 12 }}>
           {tab === 'Summary' && (
             <>
+              {Number(summary?.pending_corrections ?? 0) > 0 && (
+                <FadeInView index={0}>
+                  <TouchableOpacity onPress={() => { setTab('Attendance'); navigation.navigate('AttendanceCorrection'); }} style={styles.exceptionBanner}>
+                    <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#B45309" />
+                    <Text style={styles.exceptionText}>
+                      {summary.pending_corrections} exception day{summary.pending_corrections !== 1 ? 's' : ''}
+                    </Text>
+                    <Text style={styles.exceptionAction}>Regularize</Text>
+                  </TouchableOpacity>
+                </FadeInView>
+              )}
+
+              <View style={styles.quickGrid}>
+                {[
+                  { label: 'Regularize', icon: 'pencil-outline', color: '#7C3AED', screen: 'AttendanceCorrection' },
+                  { label: 'Current Salary', icon: 'cash-multiple', color: '#059669', screen: 'CurrentSalary' },
+                  { label: 'IT Declaration', icon: 'file-percent-outline', color: '#2563EB', screen: 'ITDeclaration' },
+                  { label: 'Holidays', icon: 'calendar-star', color: '#D97706', screen: 'Holidays' },
+                ].map((q, i) => (
+                  <TouchableOpacity key={q.label} onPress={() => navigation.navigate(q.screen)} style={styles.quickItem}>
+                    <View style={[styles.quickIconWrap, { backgroundColor: `${q.color}1A` }]}>
+                      <MaterialCommunityIcons name={q.icon} size={20} color={q.color} />
+                    </View>
+                    <Text style={styles.quickLabel}>{q.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
               <View style={styles.kpiGrid}>
                 {[
                   { label: 'Present Days', value: summary?.present_days ?? summary?.present ?? 0, icon: 'calendar-check', color: '#059669' },
@@ -170,7 +198,7 @@ export default function ESSScreen() {
                   { label: 'Pending Leaves', value: summary?.pending_leaves ?? 0, icon: 'clock-outline', color: '#D97706', warn: true },
                   { label: 'Corrections', value: summary?.pending_corrections ?? 0, icon: 'pencil-outline', color: '#7C3AED', warn: true },
                 ].map((kpi, i) => (
-                  <FadeInView key={kpi.label} index={i} style={styles.kpiWrap}>
+                  <FadeInView key={kpi.label} index={i + 1} style={styles.kpiWrap}>
                     <Card style={styles.kpiCard}>
                       <View style={[styles.kpiIconWrap, { backgroundColor: `${kpi.color}1A` }]}>
                         <MaterialCommunityIcons name={kpi.icon} size={16} color={kpi.color} />
@@ -183,7 +211,7 @@ export default function ESSScreen() {
               </View>
 
               {latestPayslip && (
-                <FadeInView index={4}>
+                <FadeInView index={5}>
                   <TouchableOpacity onPress={() => navigation.navigate('PayslipDetail', { id: latestPayslip.id })}>
                     <Card style={styles.payslipCard}>
                       <View style={styles.payslipTopRow}>
@@ -384,6 +412,16 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: theme.colors.primary },
   tabText: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary },
   tabTextActive: { color: '#fff' },
+  exceptionBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFFBEB',
+    borderWidth: 1, borderColor: '#FDE68A', borderRadius: theme.radius.md, padding: 12,
+  },
+  exceptionText: { flex: 1, fontSize: 12, fontWeight: '600', color: '#92400E' },
+  exceptionAction: { fontSize: 12, fontWeight: '800', color: theme.colors.primary },
+  quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  quickItem: { width: '23%', alignItems: 'center', gap: 6 },
+  quickIconWrap: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  quickLabel: { fontSize: 10, fontWeight: '600', color: theme.colors.textSecondary, textAlign: 'center' },
   kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   kpiWrap: { width: '47%' },
   kpiCard: { minHeight: 90 },

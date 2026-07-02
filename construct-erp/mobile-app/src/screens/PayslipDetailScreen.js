@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Share, Alert } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { essAPI } from '../api/client';
 import Screen from '../components/Screen';
 import ScreenHeader from '../components/ScreenHeader';
@@ -27,9 +28,37 @@ export default function PayslipDetailScreen({ route }) {
   const earnings   = slip?.earnings   || [];
   const deductions = slip?.deductions || [];
 
+  const handleDownload = async () => {
+    if (!slip) return;
+    const lines = [
+      `Payslip — ${slip.month} ${slip.year}`,
+      '',
+      'Earnings:',
+      ...earnings.map(e => `  ${e.label || e.component}: ₹${Number(e.amount || 0).toLocaleString('en-IN')}`),
+      '',
+      'Deductions:',
+      ...deductions.map(d => `  ${d.label || d.component}: ₹${Number(d.amount || 0).toLocaleString('en-IN')}`),
+      '',
+      `Net Pay: ₹${Number(slip.net_pay || 0).toLocaleString('en-IN')}`,
+    ];
+    try {
+      await Share.share({ message: lines.join('\n'), title: `Payslip ${slip.month} ${slip.year}` });
+    } catch (e) {
+      Alert.alert('Failed', 'Could not share payslip');
+    }
+  };
+
   return (
     <Screen>
-      <ScreenHeader title={slip ? `${slip.month} ${slip.year}` : 'Payslip'} showBack />
+      <ScreenHeader
+        title={slip ? `${slip.month} ${slip.year}` : 'Payslip'}
+        showBack
+        right={slip && (
+          <TouchableOpacity onPress={handleDownload} style={styles.downloadBtn}>
+            <MaterialCommunityIcons name="tray-arrow-down" size={18} color={theme.colors.primary} />
+          </TouchableOpacity>
+        )}
+      />
       {slip && (
         <ScrollView contentContainerStyle={{ padding: theme.spacing.md, gap: 12 }}>
           <Card style={styles.netCard}>
@@ -70,6 +99,7 @@ function Row({ label, value, negative, last }) {
 }
 
 const styles = StyleSheet.create({
+  downloadBtn: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center' },
   netCard: { alignItems: 'center', backgroundColor: theme.colors.dark },
   netLabel: { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
   netValue: { fontSize: 28, fontWeight: '800', color: '#fff', marginTop: 4 },
