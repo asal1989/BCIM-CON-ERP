@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -136,16 +136,23 @@ export default function ESSScreen() {
       <ScrollView stickyHeaderIndices={[1]}>
         {/* Profile header */}
         <View style={styles.profileBanner}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initial}</Text>
+          <View style={styles.logoRow}>
+            <View style={styles.logoChip}>
+              <Image source={require('../../assets/bcim-logo.png')} style={styles.bannerLogo} resizeMode="contain" />
+            </View>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.profileName}>{user?.name || user?.full_name || 'Employee'}</Text>
-            <Text style={styles.profileMeta}>{user?.designation || user?.role || 'Employee'}{user?.employee_code ? ` · ${user.employee_code}` : ''}</Text>
+          <View style={styles.profileRow}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initial}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.profileName}>{user?.name || user?.full_name || 'Employee'}</Text>
+              <Text style={styles.profileMeta}>{user?.designation || user?.role || 'Employee'}{user?.employee_code ? ` · ${user.employee_code}` : ''}</Text>
+            </View>
+            <TouchableOpacity onPress={() => navigation.navigate('HRRequests')} style={styles.hrReqBtn}>
+              <MaterialCommunityIcons name="account-question-outline" size={16} color="#fff" />
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity onPress={() => navigation.navigate('HRRequests')} style={styles.hrReqBtn}>
-            <MaterialCommunityIcons name="account-question-outline" size={16} color="#fff" />
-          </TouchableOpacity>
         </View>
 
         {/* Sticky tab bar */}
@@ -397,10 +404,13 @@ export default function ESSScreen() {
 
 const styles = StyleSheet.create({
   profileBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: theme.colors.dark, padding: theme.spacing.md, paddingTop: theme.spacing.lg,
     paddingBottom: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 20,
   },
+  logoRow: { alignItems: 'flex-start', marginBottom: 14 },
+  logoChip: { backgroundColor: '#fff', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
+  bannerLogo: { width: 84, height: 36 },
+  profileRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: '#fff', fontSize: 20, fontWeight: '800' },
   profileName: { fontSize: 16, fontWeight: '800', color: '#fff' },

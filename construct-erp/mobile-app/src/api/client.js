@@ -113,6 +113,12 @@ export const boqAPI = {
   list: (projectId) => api.get('/boq', { params: { project_id: projectId } }),
 };
 
+export const budgetAPI = {
+  commitment:    (projectId) => api.get('/budget/commitment', { params: { project_id: projectId } }),
+  actuals:       (projectId, costHead) => api.get('/budget/actuals', { params: { project_id: projectId, cost_head: costHead } }),
+  commitmentPOs: (projectId, costHead) => api.get('/budget/commitment-pos', { params: { project_id: projectId, cost_head: costHead } }),
+};
+
 export const raBillAPI = {
   list:   (projectId) => api.get('/ra-bills', { params: { project_id: projectId } }),
   detail: (id)         => api.get(`/ra-bills/${id}`),

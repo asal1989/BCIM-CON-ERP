@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
+import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -19,6 +19,8 @@ const QUICK_LINKS = [
   { label: 'Material Req.', icon: 'clipboard-list-outline',  screen: 'MaterialRequest', color: '#EA580C' },
   { label: 'ESS Portal',    icon: 'account-circle-outline',  screen: 'ESS',       color: '#0891B2' },
   { label: 'Bills',         icon: 'receipt',                 screen: 'Bills',     color: '#DB2777' },
+  { label: 'BOQ Breakdown', icon: 'ruler-square',            screen: 'BOQ',       color: '#0369A1' },
+  { label: 'Budget Control',icon: 'cash-multiple',           screen: 'BudgetControl', color: '#B45309' },
 ];
 
 export default function DashboardScreen() {
@@ -68,8 +70,8 @@ export default function DashboardScreen() {
               <MaterialCommunityIcons name="chevron-down" size={14} color="#fff" />
             </TouchableOpacity>
           </View>
-          <View style={styles.headerIconWrap}>
-            <MaterialCommunityIcons name="view-dashboard-outline" size={26} color="rgba(255,255,255,0.85)" />
+          <View style={styles.headerLogoChip}>
+            <Image source={require('../../assets/bcim-logo.png')} style={styles.headerLogo} resizeMode="contain" />
           </View>
         </View>
 
@@ -146,10 +148,11 @@ const styles = StyleSheet.create({
     maxWidth: 240,
   },
   projectText: { fontSize: 12, fontWeight: '600', color: '#fff', flexShrink: 1 },
-  headerIconWrap: {
-    width: 44, height: 44, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.10)',
+  headerLogoChip: {
+    backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 6,
     alignItems: 'center', justifyContent: 'center',
   },
+  headerLogo: { width: 52, height: 24 },
   kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: theme.spacing.md, marginTop: -14, gap: 10 },
   kpiWrap: { width: '47%' },
   kpiCard: { minHeight: 92 },
