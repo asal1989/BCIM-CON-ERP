@@ -948,7 +948,7 @@ router.get('/:project_id/costhead-drilldown', async (req, res) => {
       const poSubCon = await query(`
         SELECT COALESCE(po.po_ref_no, po.po_number, 'PO') AS reference,
                tb.inv_date AS date,
-               COALESCE(v.name, po.vendor_name, pi.material_name, 'Vendor') || ' — ' || COALESCE(tb.inv_number, 'Bill') AS description,
+               COALESCE(v.name, pi.material_name, 'Vendor') || ' — ' || COALESCE(tb.inv_number, 'Bill') AS description,
                li.basic_amount AS amount, 'Purchase Order' AS source
         FROM po_items pi
         JOIN purchase_orders po ON po.id = pi.po_id
