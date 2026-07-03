@@ -250,6 +250,7 @@ export const boqBudgetAPI = {
   itemsDrilldown:      (projectId, itemIds, chapter) => api.get(`/boq-budget/${projectId}/items-drilldown`, { params: { item_ids: (itemIds || []).join(','), chapter: chapter || undefined } }),
   costheadMonthly:     (projectId)            => api.get(`/boq-budget/${projectId}/costhead-monthly`),
   sendBudgetAlert:     (projectId)            => api.post(`/boq-budget/${projectId}/send-budget-alert`),
+  unlinkedLines:       (projectId, costHead)  => api.get(`/boq-budget/${projectId}/unlinked-lines`, { params: { cost_head: costHead || undefined } }),
 };
 
 export const boqMappingAPI = {
@@ -1700,6 +1701,7 @@ export const tqsBillsAPI = {
   updateQSSign: (id, d)    => api.patch(`/tqs/bills/${id}/qs-sign`, d),
   updatePayment:(id, d)    => api.patch(`/tqs/bills/${id}/payment`, d),
   markPaid:    (id)        => api.patch(`/tqs/bills/${id}/mark-paid`),
+  tagLineChapter: (billId, lineId, boqChapter) => api.patch(`/tqs/bills/${billId}/line-items/${lineId}/chapter`, { boq_chapter: boqChapter }),
   uploadFile:   (id, fd)   => api.post(`/tqs/bills/${id}/files`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
   linkOneDrive: (id, data) => api.post(`/tqs/bills/${id}/files/link`, data),
   syncFileToOneDrive: (id, fid) => api.post(`/tqs/bills/${id}/files/${fid}/sync-onedrive`),

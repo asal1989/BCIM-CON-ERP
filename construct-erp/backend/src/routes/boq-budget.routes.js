@@ -148,14 +148,15 @@ router.get('/:project_id', async (req, res) => {
     // dozens of items), so unlike RA/SC actuals this is NOT filtered to
     // boq_item_id IS NOT NULL — lines with a cost_head but no specific BOQ
     // item still come through and get rolled up at the project level below.
-    // Chapter inheritance: a bill line linked to a PO line (po_item_id) takes
-    // that PO line's chapter; otherwise, if the bill's header PO has all its
-    // items under ONE chapter, that chapter is used. Keeps cost-head-tagged
-    // invoices inside the chapter chosen on the PO instead of pro-rating them
-    // across the whole project.
+    // Chapter inheritance: a bill line tagged with its own boq_chapter (set
+    // directly on the line, e.g. for direct/no-PO bills) wins; otherwise a bill
+    // line linked to a PO line (po_item_id) takes that PO line's chapter;
+    // otherwise, if the bill's header PO has all its items under ONE chapter,
+    // that chapter is used. Keeps cost-head-tagged invoices inside the chapter
+    // chosen on the PO/line instead of pro-rating them across the whole project.
     const tqsActuals = await query(`
       SELECT li.boq_item_id, li.cost_head,
-             COALESCE(pi.boq_chapter, po_single.chapter) AS boq_chapter,
+             COALESCE(li.boq_chapter, pi.boq_chapter, po_single.chapter) AS boq_chapter,
              SUM(li.basic_amount) AS actual
       FROM tqs_bill_line_items li
       JOIN tqs_bills tb ON tb.id = li.bill_id
@@ -168,7 +169,7 @@ router.get('/:project_id', async (req, res) => {
         HAVING COUNT(DISTINCT pi2.boq_chapter) = 1
       ) po_single ON po_single.po_id = tb.po_id
       WHERE tb.project_id = $1 AND tb.is_deleted = FALSE
-      GROUP BY li.boq_item_id, li.cost_head, COALESCE(pi.boq_chapter, po_single.chapter)
+      GROUP BY li.boq_item_id, li.cost_head, COALESCE(li.boq_chapter, pi.boq_chapter, po_single.chapter)
     `, [project_id]);
 
     // Stores petty cash approved purchases — rolled up by cost_head at project level
@@ -950,7 +951,7 @@ router.get('/:project_id/items-drilldown', async (req, res) => {
         ) po_single ON po_single.po_id = tb.po_id
         WHERE tb.project_id=$1 AND tb.is_deleted = FALSE
           AND li.boq_item_id IS NULL AND li.cost_head IS NOT NULL
-          AND COALESCE(pi.boq_chapter, po_single.chapter) = $2
+          AND COALESCE(li.boq_chapter, pi.boq_chapter, po_single.chapter) = $2
         ORDER BY COALESCE(tb.inv_date, tb.created_at)`, [project_id, chapter]);
       rows.push(...chTqs.rows);
 
@@ -1079,6 +1080,47 @@ router.get('/:project_id/items-drilldown', async (req, res) => {
 
     rows.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
     res.json({ data: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /boq-budget/:project_id/unlinked-lines?cost_head=Blocks
+// Lists the TQS bill line items behind the project-level "Unlinked Spend"
+// bucket — lines with a cost head but no BOQ item AND no chapter tag at all
+// (direct/no-PO bills for consumables, tools, safety gear, etc). Returns the
+// line item id + parent bill id so the frontend can tag each one to a chapter
+// via PATCH /tqs/bills/:billId/line-items/:lineId/chapter.
+router.get('/:project_id/unlinked-lines', async (req, res) => {
+  try {
+    const { project_id } = req.params;
+    const { cost_head } = req.query;
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) return res.status(403).json({ error: 'Access denied' });
+
+    const costHeadFilter = cost_head ? ' AND li.cost_head = $2' : '';
+    const params = cost_head ? [project_id, cost_head] : [project_id];
+    const rows = await query(`
+      SELECT li.id AS line_id, tb.id AS bill_id,
+             tb.inv_number AS reference, COALESCE(tb.inv_date, tb.created_at) AS date,
+             li.item_name AS description, li.cost_head, li.basic_amount AS amount
+      FROM tqs_bill_line_items li
+      JOIN tqs_bills tb ON tb.id = li.bill_id
+      LEFT JOIN po_items pi ON pi.id = li.po_item_id
+      LEFT JOIN (
+        SELECT pi2.po_id, MIN(pi2.boq_chapter) AS chapter
+        FROM po_items pi2
+        WHERE pi2.boq_chapter IS NOT NULL
+        GROUP BY pi2.po_id
+        HAVING COUNT(DISTINCT pi2.boq_chapter) = 1
+      ) po_single ON po_single.po_id = tb.po_id
+      WHERE tb.project_id = $1 AND tb.is_deleted = FALSE
+        AND li.boq_item_id IS NULL AND li.cost_head IS NOT NULL
+        AND COALESCE(li.boq_chapter, pi.boq_chapter, po_single.chapter) IS NULL
+        ${costHeadFilter}
+      ORDER BY COALESCE(tb.inv_date, tb.created_at)`, params);
+    res.json({ data: rows.rows });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

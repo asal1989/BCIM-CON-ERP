@@ -374,6 +374,9 @@ async function ensureTables() {
     // BOQ linkage — tags this line item to a BOQ item + cost sub-heading for budget-vs-actual tracking
     `ALTER TABLE tqs_bill_line_items ADD COLUMN IF NOT EXISTS boq_item_id UUID`,
     `ALTER TABLE tqs_bill_line_items ADD COLUMN IF NOT EXISTS cost_head TEXT`,
+    // Chapter-only linkage — for lines with no PO/BOQ item at all (direct bills), lets
+    // Budget Breakdown attribute the spend to a chapter without a specific item match.
+    `ALTER TABLE tqs_bill_line_items ADD COLUMN IF NOT EXISTS boq_chapter TEXT`,
     // Thumb rule — unit conversion audit trail (e.g. PO in Sqm, vendor invoices in Nos)
     `ALTER TABLE tqs_bill_line_items ADD COLUMN IF NOT EXISTS physical_qty NUMERIC(14,3)`,
     `ALTER TABLE tqs_bill_line_items ADD COLUMN IF NOT EXISTS physical_unit VARCHAR(30)`,
@@ -2772,6 +2775,30 @@ router.put('/:id', async (req, res) => {
     sets.push(`updated_at = NOW()`);
     const r = await query(`UPDATE tqs_bills SET ${sets.join(', ')} WHERE id = $1 AND company_id = $2 RETURNING *`, params);
     await logHistory(req.params.id, 'system', 'Bill updated', req.user.id);
+    res.json({ data: r.rows[0] });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// ── PATCH /tqs/bills/:id/line-items/:lineId/chapter ────────────────────────
+// Tags a single bill line item to a BOQ chapter, for spend that has no PO/BOQ
+// item to attach to (e.g. direct site-purchase bills for consumables, tools,
+// safety gear) but should still roll into a chapter's Budget Breakdown total
+// instead of sitting in the project-level "Unlinked Spend" bucket.
+router.patch('/:id/line-items/:lineId/chapter', async (req, res) => {
+  try {
+    await getAccessibleBill(req, req.params.id);
+    const { boq_chapter } = req.body;
+    const r = await query(
+      `UPDATE tqs_bill_line_items SET boq_chapter = $1
+       WHERE id = $2 AND bill_id = $3 RETURNING id, boq_chapter`,
+      [boq_chapter || null, req.params.lineId, req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Line item not found on this bill' });
+    await logHistory(req.params.id, 'system',
+      boq_chapter ? `Line item tagged to chapter "${boq_chapter}"` : 'Line item chapter tag cleared',
+      req.user.id);
     res.json({ data: r.rows[0] });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });

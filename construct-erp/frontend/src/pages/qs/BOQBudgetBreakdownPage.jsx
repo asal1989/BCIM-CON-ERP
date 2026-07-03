@@ -15,7 +15,7 @@ import {
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
-import { boqBudgetAPI, projectAPI, raBillAPI } from '../../api/client';
+import { boqBudgetAPI, projectAPI, raBillAPI, tqsBillsAPI } from '../../api/client';
 import BOQSummaryPrintTemplate from './BOQSummaryPrintTemplate';
 import bcimLogo from '../../assets/bcim-logo.png';
 
@@ -518,10 +518,117 @@ function CostHeadDrilldownInline({ projectId, costHead, boqItemId, itemInfo }) {
   );
 }
 
+// ─── Unlinked-spend line tagger — lets a user assign a chapter to bill lines ───
+// that currently have a cost head but no BOQ item/chapter link at all (direct,
+// no-PO bills for consumables, tools, safety gear, etc). Tagging a line moves
+// its amount out of the project-level "Unlinked Spend" bucket and into the
+// chosen chapter's total on the next refetch.
+function UnlinkedLineTagger({ projectId, costHead, chapterNames }) {
+  const qc = useQueryClient();
+  const [selected, setSelected] = useState({}); // line_id -> chosen chapter name
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['unlinked-lines', projectId, costHead],
+    queryFn: () => boqBudgetAPI.unlinkedLines(projectId, costHead).then(r => r.data?.data || []),
+    enabled: !!projectId && !!costHead,
+    retry: 1,
+  });
+
+  const tagMutation = useMutation({
+    mutationFn: ({ billId, lineId, chapter }) => tqsBillsAPI.tagLineChapter(billId, lineId, chapter),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['boq-budget', projectId] });
+      qc.invalidateQueries({ queryKey: ['unlinked-lines', projectId, costHead] });
+      toast.success(`Tagged to "${vars.chapter}"`);
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to tag line'),
+  });
+
+  const fmt = (n) => `₹${Math.round(parseFloat(n) || 0).toLocaleString('en-IN')}`;
+  const rows = data || [];
+  const total = rows.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
+
+  if (isLoading) return (
+    <div className="flex items-center gap-2 px-4 py-3 text-xs text-indigo-500">
+      <div className="w-3.5 h-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+      Loading unlinked lines for <strong className="ml-1">{costHead}</strong>…
+    </div>
+  );
+  if (isError) return (
+    <div className="flex items-center gap-2 px-4 py-3 text-xs text-red-600">
+      <AlertCircle className="w-3.5 h-3.5" />
+      {error?.response?.data?.error || error?.message || 'Failed to load'}
+    </div>
+  );
+
+  return (
+    <div className="mx-3 my-2 rounded-xl border border-indigo-200 overflow-hidden shadow-sm bg-white">
+      <div className="flex items-center gap-2 px-4 py-2 bg-indigo-50 border-b border-indigo-100">
+        <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wide">Tag to a chapter — {costHead}</span>
+        <span className="ml-auto text-[11px] font-bold text-indigo-800 font-mono">Total: {fmt(total)}</span>
+      </div>
+      {!rows.length && (
+        <div className="flex items-center gap-2 px-4 py-3 text-xs text-slate-400 italic">
+          <AlertCircle className="w-3.5 h-3.5" />
+          Nothing left to tag — every line under this cost head now has a chapter.
+        </div>
+      )}
+      {rows.length > 0 && (
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500 font-bold border-b border-slate-100">
+              <th className="px-4 py-1.5 text-left w-28">Date</th>
+              <th className="px-4 py-1.5 text-left w-36">Bill No.</th>
+              <th className="px-4 py-1.5 text-left">Description</th>
+              <th className="px-4 py-1.5 text-right w-28">Amount</th>
+              <th className="px-4 py-1.5 text-left w-52">Chapter</th>
+              <th className="px-4 py-1.5 w-20" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-50">
+            {rows.map(r => (
+              <tr key={r.line_id} className="hover:bg-slate-50 transition-colors">
+                <td className="px-4 py-1.5 text-slate-500 font-mono text-[11px]">
+                  {r.date ? new Date(r.date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'}
+                </td>
+                <td className="px-4 py-1.5 font-mono text-indigo-700 text-[11px]">{r.reference || '—'}</td>
+                <td className="px-4 py-1.5 text-slate-700 max-w-xs truncate" title={r.description}>{r.description || '—'}</td>
+                <td className="px-4 py-1.5 text-right font-semibold text-slate-800 font-mono">{fmt(r.amount)}</td>
+                <td className="px-4 py-1.5">
+                  <select
+                    className="w-full text-[11px] border border-slate-200 rounded-md px-1.5 py-1 bg-white"
+                    value={selected[r.line_id] || ''}
+                    onChange={e => setSelected(s => ({ ...s, [r.line_id]: e.target.value }))}
+                  >
+                    <option value="">Select chapter…</option>
+                    {chapterNames.map(name => <option key={name} value={name}>{name}</option>)}
+                  </select>
+                </td>
+                <td className="px-4 py-1.5">
+                  <button
+                    disabled={!selected[r.line_id] || tagMutation.isPending}
+                    onClick={() => tagMutation.mutate({ billId: r.bill_id, lineId: r.line_id, chapter: selected[r.line_id] })}
+                    className="px-2.5 py-1 text-[10px] font-bold rounded-md bg-indigo-600 text-white disabled:bg-slate-200 disabled:text-slate-400 hover:bg-indigo-700 transition"
+                  >
+                    Tag
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 // ─── Cost-head detail table (shown when a BOQ item is expanded) ────────────────
-function CostHeadDetail({ item, costHeads, mode, onSave, projectId, readOnlyOverride }) {
+function CostHeadDetail({ item, costHeads, mode, onSave, projectId, readOnlyOverride, chapterNames }) {
   const itemAmount = num(item.amount);
   const readOnly = readOnlyOverride || isUnlinkedRow(item);
+  // Only the true project-level bucket has taggable lines (chapter-unlinked-*
+  // rows are already chapter-scoped; a real BOQ item row has boqItemId set).
+  const isProjectUnlinked = item.id === 'project-level-unlinked';
   const [drillHead, setDrillHead] = useState(null);
 
   // Split rows into "active" (has budget or actuals) and "empty" for clarity
@@ -578,13 +685,23 @@ function CostHeadDetail({ item, costHeads, mode, onSave, projectId, readOnlyOver
             {r.over && !readOnly && <div className="text-[9px] text-rose-500 font-bold">⚠ over budget</div>}
           </td>
         </tr>
-        {isOpen && projectId && (
+        {isOpen && projectId && isProjectUnlinked && (
+          <tr>
+            <td colSpan={4} className="p-0 bg-indigo-50/20">
+              <UnlinkedLineTagger projectId={projectId} costHead={r.h} chapterNames={chapterNames || []} />
+            </td>
+          </tr>
+        )}
+        {isOpen && projectId && !isProjectUnlinked && (
           <tr>
             <td colSpan={4} className="p-0 bg-indigo-50/20">
               <CostHeadDrilldownInline
                 projectId={projectId}
                 costHead={r.h}
-                boqItemId={readOnlyOverride ? undefined : item.id}
+                // item.id is a real BOQ item UUID only for readOnlyOverride === false
+                // non-unlinked rows; isUnlinkedRow ids like "project-level-unlinked" or
+                // "chapter-unlinked-X" are NOT valid UUIDs and 500 the backend if sent.
+                boqItemId={readOnlyOverride || isUnlinkedRow(item) ? undefined : item.id}
                 itemInfo={{ estimated: r.estimated, spent: r.spent, prorated: r.prorated }}
               />
             </td>
@@ -2214,7 +2331,7 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
                         <span className="text-right"><span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Unlinked</span></span>
                         <span />
                       </button>
-                      {isOpen && <CostHeadDetail item={item} costHeads={costHeads} mode={mode} onSave={saveCell} projectId={projectId} />}
+                      {isOpen && <CostHeadDetail item={item} costHeads={costHeads} mode={mode} onSave={saveCell} projectId={projectId} chapterNames={itemsByChapter.map(ch => ch.name)} />}
                     </div>
                   );
                 })()}
