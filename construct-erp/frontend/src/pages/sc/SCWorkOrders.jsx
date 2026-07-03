@@ -347,9 +347,23 @@ function WOForm({ wo, projects, subcontractors, onClose }) {
                     <td className="px-3 py-2 text-slate-400">{i+1}</td>
                     <td className="px-2 py-2">
                       <select value={it.boq_item_id||''} onChange={e=>setItem(i,'boq_item_id',e.target.value)}
-                        className="w-36 border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-emerald-300">
+                        className="w-48 border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-emerald-300">
                         <option value="">— none —</option>
-                        {boqItems.map(b=><option key={b.id} value={b.id}>{b.item_no||b.sr_no} — {(b.description||'').slice(0,28)}</option>)}
+                        {/* Grouped by chapter — item_no alone doesn't distinguish items
+                            since every chapter in this BOQ shares chapter_no "01"; without
+                            the chapter name, Blockwork/Plastering items were indistinguishable
+                            from every other chapter's items and looked "missing". */}
+                        {Object.entries(
+                          boqItems.reduce((acc, b) => {
+                            const ch = b.chapter_name || `Chapter ${b.chapter_no || '—'}`;
+                            (acc[ch] ||= []).push(b);
+                            return acc;
+                          }, {})
+                        ).map(([chapterName, chapterItems]) => (
+                          <optgroup key={chapterName} label={chapterName}>
+                            {chapterItems.map(b=><option key={b.id} value={b.id}>{b.item_no||b.sr_no} — {(b.description||'').slice(0,32)}</option>)}
+                          </optgroup>
+                        ))}
                       </select>
                     </td>
                     <td className="px-2 py-2"><input value={it.item_code} onChange={e=>setItem(i,'item_code',e.target.value)} className="w-16 border border-slate-200 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-emerald-300" placeholder="B-01"/></td>
