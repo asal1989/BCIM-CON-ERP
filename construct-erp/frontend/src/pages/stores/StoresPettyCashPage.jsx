@@ -1795,6 +1795,140 @@ function AttachOnlyModal({ entry, onClose, onSaved }) {
   );
 }
 
+// ════════════════════════════════════════════════════════════════════════════════
+// ── Bulk Upload Modal ────────────────────────────────────────────────────────
+// Scan a stack of vouchers/bills at once, upload them all in one batch (via
+// Microsoft Graph / OneDrive, same as the single-file FileSlot uploader),
+// then match each scan to an existing entry's voucher or bill slot.
+function BulkUploadModal({ entries, projectId, onClose, onSaved }) {
+  const [files, setFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [results, setResults] = useState(null); // [{ file_name, file_url, provider }]
+  const [assignments, setAssignments] = useState({}); // index -> { entryId, slot }
+  const [saving, setSaving] = useState({}); // index -> bool
+
+  const addFiles = (fileList) => {
+    const picked = Array.from(fileList).filter(f => /\.(jpg|jpeg|png|pdf)$/i.test(f.name));
+    if (picked.length < fileList.length) toast.error('Only JPG, PNG, or PDF files are accepted — some files were skipped');
+    setFiles(prev => [...prev, ...picked]);
+  };
+  const removeFile = (i) => setFiles(prev => prev.filter((_, idx) => idx !== i));
+
+  const upload = async () => {
+    if (!files.length) return toast.error('Select at least one scanned file');
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      files.forEach(f => fd.append('files', f));
+      if (projectId) fd.append('project_id', projectId);
+      const { data } = await storesPettyCashAPI.bulkUpload(fd);
+      setResults(data.data);
+      toast.success(`${data.count} file(s) uploaded — assign each to a voucher below`);
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Bulk upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const assign = async (i) => {
+    const a = assignments[i];
+    const file = results[i];
+    if (!a?.entryId || !a?.slot) return toast.error('Pick an entry and Voucher/Bill first');
+    const entry = entries.find(e => e.id === a.entryId);
+    if (!entry) return toast.error('Entry not found');
+    setSaving(s => ({ ...s, [i]: true }));
+    try {
+      const payload = { ...entry, force: true };
+      if (a.slot === 'voucher') { payload.voucher_file_url = file.file_url; payload.voucher_file_name = file.file_name; }
+      else { payload.bill_file_url = file.file_url; payload.bill_file_name = file.file_name; }
+      await storesPettyCashAPI.updateEntry(entry.id, payload);
+      toast.success(`Linked to ${entry.invoice_no || entry.supplier}`);
+      setResults(prev => prev.filter((_, idx) => idx !== i));
+      onSaved();
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to link');
+    } finally {
+      setSaving(s => ({ ...s, [i]: false }));
+    }
+  };
+
+  const entryLabel = (e) => `${e.entry_date} — ${e.supplier}${e.invoice_no ? ` (${e.invoice_no})` : ''}`;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <p className="text-sm font-semibold text-slate-900">Bulk Upload Voucher / Bill Scans</p>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="px-5 py-4 overflow-y-auto space-y-3">
+          {!results ? (
+            <>
+              <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-300 rounded-2xl py-10 cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition-colors">
+                <Upload className="w-7 h-7 text-slate-400" />
+                <span className="text-sm text-slate-500">Click to select scanned vouchers/bills (JPG, PNG, PDF)</span>
+                <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" className="hidden" onChange={e => addFiles(e.target.files)} />
+              </label>
+              {files.length > 0 && (
+                <div className="space-y-1 max-h-48 overflow-y-auto">
+                  {files.map((f, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs bg-slate-50 rounded-lg px-3 py-1.5">
+                      <span className="truncate flex-1">{f.name}</span>
+                      <button onClick={() => removeFile(i)} className="text-red-500 ml-2"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : results.length === 0 ? (
+            <p className="text-sm text-slate-500 py-6 text-center">All uploaded scans have been linked.</p>
+          ) : (
+            <div className="space-y-2">
+              {results.map((r, i) => (
+                <div key={i} className="border border-slate-200 rounded-xl px-3 py-2.5 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="truncate flex-1 font-medium text-slate-700">{r.file_name}</span>
+                    <span className="text-[10px] text-slate-400 ml-2">{r.provider}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select className={clsx(F, 'text-xs py-1')} value={assignments[i]?.entryId || ''}
+                      onChange={e => setAssignments(a => ({ ...a, [i]: { ...a[i], entryId: e.target.value } }))}>
+                      <option value="">— Select voucher entry —</option>
+                      {entries.map(e => <option key={e.id} value={e.id}>{entryLabel(e)}</option>)}
+                    </select>
+                    <select className={clsx(F, 'text-xs py-1 w-28')} value={assignments[i]?.slot || ''}
+                      onChange={e => setAssignments(a => ({ ...a, [i]: { ...a[i], slot: e.target.value } }))}>
+                      <option value="">Slot…</option>
+                      <option value="voucher">Voucher</option>
+                      <option value="bill">Bill</option>
+                    </select>
+                    <button onClick={() => assign(i)} disabled={saving[i]}
+                      className="px-3 py-1 text-xs rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50 whitespace-nowrap">
+                      {saving[i] ? '…' : 'Link'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-100">
+          <button onClick={onClose} className="px-4 py-1.5 text-sm rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">
+            {results ? 'Done' : 'Cancel'}
+          </button>
+          {!results && (
+            <button onClick={upload} disabled={uploading || !files.length}
+              className="px-4 py-1.5 text-sm rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50">
+              {uploading ? 'Uploading…' : `Upload ${files.length || ''} File(s)`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function StoresPettyCashPage() {
   const qc = useQueryClient();
   const { user } = useAuthStore();
@@ -1816,6 +1950,7 @@ export default function StoresPettyCashPage() {
   const [showRepl,        setShowRepl]        = useState(false);
   const [editBudgets,     setEditBudgets]     = useState(false);
   const [attachModal,     setAttachModal]     = useState(null); // { entry } — upload-only modal for any status
+  const [showBulkUpload,  setShowBulkUpload]  = useState(false);
   const [localBudgets,    setLocalBudgets]    = useState(null);
   const [statusFilter,    setStatusFilter]    = useState(highlightId ? 'All' : 'All');
   const [catFilter,       setCatFilter]       = useState('All');
@@ -2505,6 +2640,10 @@ export default function StoresPettyCashPage() {
               </div>
               <div className="ml-auto flex items-center gap-2">
                 <span className="text-xs text-slate-400 whitespace-nowrap">{filteredEntries.length} entries · <span className="font-semibold text-slate-600">{inr(filteredEntries.filter(r=>r.status!=='Rejected').reduce((s,r)=>s+Number(r.amount),0))}</span></span>
+                <button onClick={() => setShowBulkUpload(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white border border-slate-200 text-slate-700 text-sm font-semibold rounded-lg hover:bg-slate-50 shadow-sm whitespace-nowrap">
+                  <Upload className="w-3.5 h-3.5" /> Bulk Upload Scans
+                </button>
                 <button onClick={() => { setEditEntry(null); setShowEntryForm(true); }}
                   className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 shadow-sm whitespace-nowrap">
                   <Plus className="w-3.5 h-3.5" /> New Entry
@@ -3194,6 +3333,14 @@ export default function StoresPettyCashPage() {
           entry={attachModal.entry}
           onClose={() => setAttachModal(null)}
           onSaved={() => { setAttachModal(null); qc.invalidateQueries({ queryKey: ['spc-entries'] }); }}
+        />
+      )}
+      {showBulkUpload && (
+        <BulkUploadModal
+          entries={entries}
+          projectId={projectId}
+          onClose={() => setShowBulkUpload(false)}
+          onSaved={() => qc.invalidateQueries({ queryKey: ['spc-entries'] })}
         />
       )}
       {approvalModal && (

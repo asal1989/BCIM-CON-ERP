@@ -1,10 +1,66 @@
 ﻿// src/routes/stores-petty-cash.routes.js
 const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const { v4: uuid } = require('uuid');
 const { authenticate } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const { postAutoJournalStandalone } = require('../services/journalAutoPost');
 const { sendMail } = require('../services/mail.service');
+const { uploadAndShare, isConfigured: onedriveConfigured } = require('../services/onedrive.service');
 const router = express.Router();
+
+const spcUploadStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, path.join(__dirname, '../../uploads')),
+  filename: (req, file, cb) => cb(null, `${uuid()}${path.extname(file.originalname)}`),
+});
+const SPC_ALLOWED_EXT = new Set(['.jpg', '.jpeg', '.png', '.pdf']);
+const spcUpload = multer({
+  storage: spcUploadStorage,
+  fileFilter: (req, file, cb) => {
+    if (!SPC_ALLOWED_EXT.has(path.extname(file.originalname).toLowerCase())) return cb(new Error('Only JPG, PNG, or PDF scans are allowed'), false);
+    cb(null, true);
+  },
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB per file
+});
+
+// POST /stores-petty-cash/bulk-upload — bulk scan intake for vouchers/bills.
+// Each file goes to OneDrive via Microsoft Graph (falls back to local disk if
+// not configured); the caller then assigns each returned URL to an entry's
+// voucher_file_url or bill_file_url slot via PUT /entries/:id.
+router.post('/bulk-upload', authenticate, spcUpload.array('files', 20), async (req, res) => {
+  try {
+    if (!req.files?.length) return res.status(400).json({ error: 'No files uploaded' });
+    const { project_id } = req.body;
+
+    let projectName = '';
+    if (project_id) {
+      const { rows } = await query(`SELECT name FROM projects WHERE id=$1`, [project_id]);
+      projectName = rows[0]?.name || '';
+    }
+
+    const results = [];
+    for (const file of req.files) {
+      let fileUrl = `/uploads/${file.filename}`;
+      let provider = 'local';
+      if (onedriveConfigured()) {
+        try {
+          const od = await uploadAndShare(file.path, file.originalname, 'StoresPettyCash', projectName);
+          if (od?.share_url) {
+            fileUrl = od.share_url;
+            provider = 'onedrive';
+            fs.unlink(file.path, () => {});
+          }
+        } catch (e) {
+          console.error('[stores-petty-cash] OneDrive upload failed, keeping local copy:', e.message);
+        }
+      }
+      results.push({ file_name: file.originalname, file_url: fileUrl, provider });
+    }
+    res.status(201).json({ data: results, count: results.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 // Mirrors frontend categoryOf() in StoresPettyCashPage.jsx — keep the two in sync.
 const CATEGORY_GL = {
