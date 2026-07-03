@@ -1,8 +1,13 @@
 // src/controllers/project.controller.js
 const { query, withTransaction } = require('../config/database');
 
-// Roles that can see every project in the company
-const GLOBAL_ROLES = ['super_admin', 'admin', 'managing_director', 'director', 'ceo', 'cfo', 'md'];
+// Roles that can see every project in the company — kept in sync with
+// GLOBAL_ROLES in middleware/projectScope.js (accountant/finance roles need
+// company-wide project visibility for Accounts module pages like Customers).
+const GLOBAL_ROLES = [
+  'super_admin', 'admin', 'managing_director', 'director', 'ceo', 'cfo', 'md',
+  'accountant', 'accounts_manager', 'finance_manager',
+];
 
 const attachProjectSpend = async (projects) => {
   if (!projects.length) return projects;
