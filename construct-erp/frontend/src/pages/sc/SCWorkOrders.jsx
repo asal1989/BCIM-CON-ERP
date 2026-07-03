@@ -224,7 +224,15 @@ function WOForm({ wo, projects, subcontractors, onClose }) {
 
   const mut = useMutation({
     mutationFn: d => isEdit ? scAPI.updateWO(wo.id,d) : scAPI.createWO({...d, contract_amount: totalAmt||d.contract_amount}),
-    onSuccess: () => { toast.success(isEdit?'Updated':'Work order created'); qc.invalidateQueries({queryKey:['sc-wo-all-view']}); onClose(); },
+    onSuccess: () => {
+      toast.success(isEdit?'Updated':'Work order created');
+      qc.invalidateQueries({queryKey:['sc-wo-all-view']});
+      // Detail cache wasn't being invalidated — reopening Edit on the same WO
+      // right after saving could show the pre-save BOQ links until some other
+      // action happened to refresh it, looking like the save silently failed.
+      if (isEdit) qc.invalidateQueries({queryKey:['sc-wo-detail', wo.id]});
+      onClose();
+    },
     onError: e => toast.error(e?.response?.data?.error||'Failed'),
   });
 
