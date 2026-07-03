@@ -270,10 +270,67 @@ router.get('/:project_id', async (req, res) => {
       `SELECT SUM(amount) AS actual FROM sc_payments WHERE project_id = $1`, [project_id]);
     const scAdvances = await query(
       `SELECT SUM(amount) AS actual FROM sc_advances WHERE project_id = $1 AND status NOT IN ('cancelled')`, [project_id]);
-    let storePCAdv = { rows: [{ actual: 0 }] };
+
+    // Stores Petty Cash contractor advances — same wo_number → BOQ-item routing
+    // as tqs_advance_vouchers above (advanceActuals). Previously this summed
+    // ALL such advances straight into the project-level "unlinked" bucket with
+    // no attempt to trace them through the WO, so linking a WO's items to BOQ
+    // never moved these advances out of "Unlinked Spend".
+    let storePCAdvLinked = { rows: [] };
+    let storePCAdvUnlinkable = { rows: [{ actual: 0 }] };
     try {
-      storePCAdv = await query(
-        `SELECT SUM(amount) AS actual FROM stores_pc_sc_advances WHERE project_id = $1 AND status != 'cancelled'`, [project_id]);
+      storePCAdvLinked = await query(`
+        WITH wo_linked AS (
+          SELECT av.id AS advance_id, wi.boq_item_id,
+                 av.amount * (wi.qty * wi.rate) / NULLIF(tot.total_amount, 0) AS share
+          FROM stores_pc_sc_advances av
+          JOIN sc_work_orders wo ON wo.wo_number = av.wo_number AND wo.project_id = $1
+          JOIN sc_wo_items wi ON wi.wo_id = wo.id AND wi.boq_item_id IS NOT NULL
+          JOIN (
+            SELECT wo2.wo_number, SUM(wi2.qty * wi2.rate) AS total_amount
+            FROM sc_work_orders wo2
+            JOIN sc_wo_items wi2 ON wi2.wo_id = wo2.id AND wi2.boq_item_id IS NOT NULL
+            WHERE wo2.project_id = $1
+            GROUP BY wo2.wo_number
+          ) tot ON tot.wo_number = wo.wo_number
+          WHERE av.project_id = $1 AND av.status != 'cancelled'
+        ),
+        sc_linked AS (
+          SELECT av.id AS advance_id, m.boq_item_id,
+                 av.amount * m.sc_amount / NULLIF(tot2.total_sc, 0) AS share
+          FROM stores_pc_sc_advances av
+          JOIN boq_sc_mapping m ON m.sc_id = av.vendor_id AND m.project_id = $1 AND m.status != 'cancelled'
+          JOIN (
+            SELECT m2.sc_id, SUM(m2.sc_amount) AS total_sc
+            FROM boq_sc_mapping m2 WHERE m2.project_id = $1 AND m2.status != 'cancelled'
+            GROUP BY m2.sc_id
+          ) tot2 ON tot2.sc_id = m.sc_id
+          WHERE av.project_id = $1 AND av.status != 'cancelled' AND av.vendor_id IS NOT NULL
+            AND av.id NOT IN (SELECT DISTINCT advance_id FROM wo_linked)
+        )
+        SELECT boq_item_id, 'Sub Con' AS cost_head, SUM(share) AS actual
+        FROM (
+          SELECT advance_id, boq_item_id, share FROM wo_linked
+          UNION ALL
+          SELECT advance_id, boq_item_id, share FROM sc_linked
+        ) combined
+        WHERE boq_item_id IS NOT NULL
+        GROUP BY boq_item_id
+      `, [project_id]);
+      storePCAdvUnlinkable = await query(`
+        SELECT SUM(av.amount) AS actual
+        FROM stores_pc_sc_advances av
+        WHERE av.project_id = $1 AND av.status != 'cancelled'
+          AND NOT EXISTS (
+            SELECT 1 FROM sc_work_orders wo
+            JOIN sc_wo_items wi ON wi.wo_id = wo.id AND wi.boq_item_id IS NOT NULL
+            WHERE wo.wo_number = av.wo_number AND wo.project_id = $1
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM boq_sc_mapping m
+            WHERE m.sc_id = av.vendor_id AND m.project_id = $1 AND m.status != 'cancelled'
+          )
+      `, [project_id]);
     } catch (_) {}
 
     // 3. SC bill lines whose WO item has no BOQ link (scActuals above requires one)
@@ -311,12 +368,16 @@ router.get('/:project_id', async (req, res) => {
     };
     bumpProjectOnly('Sub Con', 'advance', unlinkableAdv.rows[0]?.actual);
     bumpProjectOnly('Sub Con', 'advance', scAdvances.rows[0]?.actual);
-    bumpProjectOnly('Sub Con', 'advance', storePCAdv.rows[0]?.actual);
+    bumpProjectOnly('Sub Con', 'advance', storePCAdvUnlinkable.rows[0]?.actual);
     bumpProjectOnly('Sub Con', 'invoiced', scPayments.rows[0]?.actual);
     bumpProjectOnly('Sub Con', 'invoiced', scUnlinked.rows[0]?.actual);
     // 'Petty Cash' is not one of the 16 canonical heads — it's appended to the
     // cost_heads list in the response below so the frontend renders it.
     bumpProjectOnly('Petty Cash', 'invoiced', spcRemainder.rows[0]?.actual);
+    // The portion of stores_pc_sc_advances that DID resolve to a BOQ item via
+    // the WO (or boq_sc_mapping fallback) attaches directly, same as any other
+    // advance — not lumped into the unlinked bucket.
+    addActual(storePCAdvLinked.rows, true);
 
     // TQS-bill and PO spend — NO pro-rata anywhere. Every rupee lands exactly
     // where its PO/bill was tagged: a specific BOQ item, or (if only the PO's
