@@ -898,14 +898,40 @@ router.get('/:project_id/costhead-drilldown', async (req, res) => {
       rows.push(...poSubCon.rows);
 
     } else if (cost_head === 'Petty Cash') {
-      // Stores petty cash entries
+      // "Petty Cash" here means the part of each approved entry NOT already
+      // tagged to a specific cost head (mirrors the spcRemainder calculation in
+      // the summary above: entry total minus whatever its items tag elsewhere,
+      // e.g. an entry with one item tagged "Materials / Consumables" is already
+      // counted in that head's Spent — showing the full entry amount again here
+      // double-counted it). Per entry, subtract only ITS OWN tagged items so the
+      // sum of these rows reconciles exactly to the summary's Petty Cash figure.
+      // Description prefers the untagged item names (material-level detail) and
+      // falls back to the supplier name only when an entry has no items at all.
       const pc = await query(`
-        SELECT COALESCE(je_reference, CAST(sl_no AS TEXT)) AS reference,
-               entry_date AS date, supplier AS description,
-               amount, 'Petty Cash' AS source
-        FROM stores_petty_cash_entries
-        WHERE project_id=$1 AND status='Approved'
-        ORDER BY entry_date`, [project_id]);
+        WITH entry_untagged AS (
+          SELECT se.id AS entry_id, se.je_reference, se.sl_no, se.entry_date, se.supplier,
+                 se.amount - COALESCE((
+                   SELECT SUM(si2.total_amount) FROM stores_petty_cash_items si2
+                   WHERE si2.entry_id = se.id AND si2.cost_head IS NOT NULL
+                 ), 0) AS untagged_amount
+          FROM stores_petty_cash_entries se
+          WHERE se.project_id=$1 AND se.status='Approved'
+        ),
+        item_desc AS (
+          SELECT entry_id, STRING_AGG(material_name, ', ' ORDER BY sort_order) AS names
+          FROM stores_petty_cash_items
+          WHERE cost_head IS NULL
+          GROUP BY entry_id
+        )
+        SELECT COALESCE(eu.je_reference, CAST(eu.sl_no AS TEXT)) AS reference,
+               eu.entry_date AS date,
+               COALESCE(d.names, eu.supplier) AS description,
+               GREATEST(eu.untagged_amount, 0) AS amount,
+               'Petty Cash' AS source
+        FROM entry_untagged eu
+        LEFT JOIN item_desc d ON d.entry_id = eu.entry_id
+        WHERE eu.untagged_amount > 0.01
+        ORDER BY eu.entry_date`, [project_id]);
       rows.push(...pc.rows);
 
     } else {
