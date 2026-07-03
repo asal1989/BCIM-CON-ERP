@@ -120,12 +120,12 @@ function SignaturePadModal({ signerName, signerRole, onSave, onClose }) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div>
             <h3 className="text-sm font-medium text-slate-800">Digital Signature</h3>
-            <p className="text-xs text-slate-900 font-medium mt-0.5">{signerRole} — {signerName}</p>
+            <p className="text-xs text-slate-500 mt-0.5">{signerRole} — {signerName}</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><X className="w-4 h-4" /></button>
         </div>
         <div className="px-5 pt-4 pb-2">
-          <p className="text-xs text-slate-900 font-medium mb-2 text-center">Draw your signature in the box below</p>
+          <p className="text-xs text-slate-500 mb-2 text-center">Draw your signature in the box below</p>
           <div className="border-2 border-dashed border-slate-300 rounded-xl overflow-hidden bg-white cursor-crosshair">
             <canvas ref={canvasRef} width={420} height={160}
               style={{ display: 'block', width: '100%', height: '160px', touchAction: 'none' }}
@@ -133,7 +133,7 @@ function SignaturePadModal({ signerName, signerRole, onSave, onClose }) {
               onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={endDraw} />
           </div>
           <div className="flex items-center justify-between mt-2">
-            <p className="text-[10px] text-slate-900 font-medium italic">Use mouse or touch to sign</p>
+            <p className="text-[10px] text-slate-400 italic">Use mouse or touch to sign</p>
             <button onClick={clear} className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600">
               <Trash2 className="w-3 h-3" /> Clear
             </button>
@@ -1161,7 +1161,7 @@ function PORejectModal({ po, onClose, onConfirm, isPending }) {
 
 /* ─── Detail Slide-over ─── */
 const BILL_STATUS = {
-  draft:    { label: 'Draft',    cls: 'bg-slate-100 text-slate-900 font-medium border-slate-200' },
+  draft:    { label: 'Draft',    cls: 'bg-slate-100 text-slate-600 border-slate-200' },
   pending:  { label: 'Pending',  cls: 'bg-amber-50 text-amber-700 border-amber-200' },
   approved: { label: 'Approved', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   rejected: { label: 'Rejected', cls: 'bg-red-50 text-red-600 border-red-200' },
@@ -1240,7 +1240,7 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
         {/* ── Full-window Header ── */}
         <div className="flex items-center justify-between px-6 py-3.5 border-b border-slate-200 bg-white flex-shrink-0 shadow-sm">
           <div className="flex items-center gap-3">
-            <button onClick={onClose} className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-900 font-medium hover:text-slate-900 hover:border-slate-300 transition-all mr-1">
+            <button onClick={onClose} className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:border-slate-300 transition-all mr-1">
               <X className="w-4 h-4" />
             </button>
             <div className="w-9 h-9 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center">
@@ -1248,7 +1248,7 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
             </div>
             <div>
               <p className="text-base font-medium text-slate-900 font-mono">{po.po_ref_no || po.po_number || po.serial_no_formatted}</p>
-              <p className="text-xs text-slate-900 font-medium mt-0.5">{po.vendor_name} · {fmt(po.po_date)}</p>
+              <p className="text-xs text-slate-500 mt-0.5">{po.vendor_name} · {fmt(po.po_date)}</p>
             </div>
             <StatusBadge status={liveStatus} />
           </div>
@@ -1261,7 +1261,7 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
                 { label: 'Grand Total', value: inr(po.grand_total), color: 'text-indigo-700 font-extrabold' },
               ].map((k, i) => (
                 <div key={i} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg">
-                  <span className="text-[10px] text-slate-900 font-medium uppercase tracking-wider">{k.label}</span>
+                  <span className="text-[10px] text-slate-400 uppercase tracking-wider">{k.label}</span>
                   <span className={clsx('text-sm font-bold', k.color)}>{k.value}</span>
                 </div>
               ))}
@@ -1301,7 +1301,7 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
               ['Narration',      po.narration || po.notes || '—'],
             ].map(([label, value]) => (
               <div key={label} className="bg-white border border-slate-200 rounded-lg p-3">
-                <p className="text-xs text-slate-900 font-medium uppercase tracking-wider mb-1">{label}</p>
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">{label}</p>
                 <p className="text-sm font-medium text-slate-800">{value}</p>
               </div>
             ))}
@@ -1328,7 +1328,7 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
                       ? ['#', 'Material', 'Unit', 'Qty', 'Rate (Incl. GST)', 'Amount']
                       : ['#', 'Material', 'Unit', 'Qty', 'Rate', 'Basic', 'GST', 'Total with GST']
                     ).map(h => (
-                      <th key={h} className="px-3 py-2 text-left font-medium text-slate-900 font-medium uppercase tracking-wider bg-slate-50">{h}</th>
+                      <th key={h} className="px-3 py-2 text-left font-medium text-slate-400 uppercase tracking-wider bg-slate-50">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1339,14 +1339,14 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
                     const total = parseFloat(it.total_amount || 0) || basic + gst;
                     return (
                       <tr key={i} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-3 py-2.5 text-slate-900 font-medium font-mono">{i + 1}</td>
+                        <td className="px-3 py-2.5 text-slate-400 font-mono">{i + 1}</td>
                         <td className="px-3 py-2.5 font-medium text-slate-800">
                           {it.material_name}
                           {it.make_model && <div className="text-xs text-indigo-600 font-medium">{it.make_model}</div>}
-                          {it.hsn_code && <div className="text-slate-900 font-medium font-normal text-xs">HSN: {it.hsn_code}</div>}
+                          {it.hsn_code && <div className="text-slate-400 text-xs">HSN: {it.hsn_code}</div>}
                         </td>
                         <td className="px-3 py-2.5">
-                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-900 border border-slate-200 font-medium uppercase">{it.unit}</span>
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 font-medium uppercase">{it.unit}</span>
                         </td>
                         <td className="px-3 py-2.5 font-medium text-indigo-600">{parseFloat(it.quantity)}</td>
                         <td className="px-3 py-2.5 text-slate-600">{inr(it.rate)}</td>
@@ -1367,7 +1367,7 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
 
           {po.notes && (
             <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <p className="text-xs font-medium text-slate-900 font-medium uppercase tracking-wider mb-2">Notes / Narration</p>
+              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Notes / Narration</p>
               <p className="text-sm text-slate-600">{po.notes}</p>
             </div>
           )}
@@ -1439,7 +1439,7 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
                   { label: 'Pending',       value: inr(billsSummary.total_pending),  color: 'text-amber-600' },
                 ].map((k, i) => (
                   <div key={i} className="bg-white p-3 text-center">
-                    <p className="text-[10px] text-slate-900 font-medium mb-0.5">{k.label}</p>
+                    <p className="text-[10px] text-slate-400 mb-0.5">{k.label}</p>
                     <p className={clsx('text-xs font-bold', k.color)}>{k.value}</p>
                   </div>
                 ))}
@@ -1447,7 +1447,7 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
             )}
 
             {linkedBills.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-slate-900 font-medium gap-2">
+              <div className="flex flex-col items-center justify-center py-8 text-slate-400 gap-2">
                 <Receipt className="w-6 h-6 opacity-30" />
                 <p className="text-xs">No bills linked to this PO yet</p>
               </div>
@@ -1457,7 +1457,7 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50">
                       {['SL', 'Invoice No.', 'Inv Date', 'Amount', 'Status'].map(h => (
-                        <th key={h} className="px-3 py-2 text-left font-medium text-slate-900 font-medium uppercase tracking-wider">{h}</th>
+                        <th key={h} className="px-3 py-2 text-left font-medium text-slate-400 uppercase tracking-wider">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -1466,15 +1466,15 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
                       const st = BILL_STATUS[b.workflow_status] || BILL_STATUS.pending;
                       return (
                         <tr key={b.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-3 py-2.5 text-slate-900 font-medium font-mono">{b.sl_number}</td>
+                          <td className="px-3 py-2.5 text-slate-400 font-mono">{b.sl_number}</td>
                           <td className="px-3 py-2.5 font-medium text-slate-800">
                             {b.inv_number || '—'}
-                            {b.work_desc && <div className="text-slate-900 font-medium font-normal truncate max-w-[140px]">{b.work_desc}</div>}
+                            {b.work_desc && <div className="text-slate-400 truncate max-w-[140px]">{b.work_desc}</div>}
                           </td>
-                          <td className="px-3 py-2.5 text-slate-900 font-medium whitespace-nowrap">
+                          <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">
                             {b.inv_date ? dayjs(b.inv_date).format('DD-MM-YYYY') : '—'}
                           </td>
-                          <td className="px-3 py-2.5 font-medium text-slate-900 font-medium whitespace-nowrap">{inr(b.total_amount)}</td>
+                          <td className="px-3 py-2.5 font-medium text-slate-800 whitespace-nowrap">{inr(b.total_amount)}</td>
                           <td className="px-3 py-2.5">
                             <span className={clsx('px-2 py-0.5 rounded-full text-[10px] font-medium border', st.cls)}>
                               {st.label}
@@ -1486,7 +1486,7 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-slate-200 bg-slate-50">
-                      <td colSpan={3} className="px-3 py-2.5 text-xs font-medium text-slate-900 font-medium uppercase">Total</td>
+                      <td colSpan={3} className="px-3 py-2.5 text-xs font-medium text-slate-500 uppercase">Total</td>
                       <td className="px-3 py-2.5 text-xs font-medium text-indigo-700">{inr(billsSummary.total_billed)}</td>
                       <td />
                     </tr>
@@ -1498,7 +1498,7 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
             {/* Utilisation bar */}
             {billsSummary.count > 0 && parseFloat(po.grand_total) > 0 && (
               <div className="px-4 pb-4 pt-2">
-                <div className="flex justify-between text-[10px] text-slate-900 font-medium mb-1">
+                <div className="flex justify-between text-[10px] text-slate-400 mb-1">
                   <span>PO Utilisation</span>
                   <span className="font-medium text-slate-600">
                     {Math.min(100, ((billsSummary.total_billed / parseFloat(po.grand_total)) * 100)).toFixed(1)}%
@@ -1961,7 +1961,7 @@ function POImportModal({ onClose, vendors, projects, onImported }) {
               {/* Header fields */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-900 font-medium mb-1">Project *</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Project *</label>
                   <select value={projectId} onChange={e => setProjectId(e.target.value)}
                     className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400">
                     <option value="">Select project…</option>
@@ -1972,7 +1972,7 @@ function POImportModal({ onClose, vendors, projects, onImported }) {
                   )}
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-900 font-medium mb-1">Vendor *</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Vendor *</label>
                   <select value={vendorId} onChange={e => setVendorId(e.target.value)}
                     className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400">
                     <option value="">Select vendor…</option>
@@ -1987,22 +1987,22 @@ function POImportModal({ onClose, vendors, projects, onImported }) {
                   )}
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-900 font-medium mb-1">PO Number</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">PO Number</label>
                   <input value={header.po_number || ''} onChange={e => setHeader(h => ({ ...h, po_number: e.target.value }))}
                     className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-900 font-medium mb-1">PO Date</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">PO Date</label>
                   <input type="date" value={header.po_date || ''} onChange={e => setHeader(h => ({ ...h, po_date: e.target.value }))}
                     className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-900 font-medium mb-1">Delivery Date</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Delivery Date</label>
                   <input type="date" value={header.delivery_date || ''} onChange={e => setHeader(h => ({ ...h, delivery_date: e.target.value }))}
                     className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-900 font-medium mb-1">Notes</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Notes</label>
                   <input value={header.notes || ''} onChange={e => setHeader(h => ({ ...h, notes: e.target.value }))}
                     className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400" />
                 </div>
@@ -2019,7 +2019,7 @@ function POImportModal({ onClose, vendors, projects, onImported }) {
                     <thead className="bg-slate-50">
                       <tr>
                         {['Material / Description', 'Unit', 'Qty', 'Rate', 'GST%', 'HSN', ''].map(h => (
-                          <th key={h} className="px-3 py-2 text-left font-medium text-slate-900 font-medium whitespace-nowrap">{h}</th>
+                          <th key={h} className="px-3 py-2 text-left font-medium text-slate-400 whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -2064,8 +2064,8 @@ function POImportModal({ onClose, vendors, projects, onImported }) {
               <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <CheckCircle2 className="w-8 h-8 text-emerald-600" />
               </div>
-              <h3 className="text-lg font-medium text-slate-900 font-medium mb-1">Purchase Order Imported!</h3>
-              <p className="text-sm text-slate-900 font-medium mb-4">PO <strong>{result.po_number}</strong> has been created with status <strong>Pending Audit</strong>.</p>
+              <h3 className="text-lg font-medium text-slate-900 mb-1">Purchase Order Imported!</h3>
+              <p className="text-sm text-slate-600 mb-4">PO <strong>{result.po_number}</strong> has been created with status <strong>Pending Audit</strong>.</p>
               <button onClick={onClose} className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg px-6 py-2">
                 Close
               </button>
@@ -2346,7 +2346,7 @@ export default function POPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search PO number, vendor, project…"
-            className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-900 placeholder:text-slate-900 font-medium outline-none focus:border-indigo-400 transition-all" />
+            className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 font-medium outline-none focus:border-indigo-400 transition-all" />
         </div>
         {/* Series filter */}
         <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto">
@@ -2377,14 +2377,14 @@ export default function POPage() {
               className={clsx('px-3 py-1.5 rounded-lg text-xs font-medium border transition-all',
                 statusFilter === val
                   ? 'bg-indigo-600 text-white border-indigo-600'
-                  : 'bg-white text-slate-900 font-medium border-slate-200 hover:border-indigo-300'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
               )}>
               {lbl}
               {val !== 'all' && <span className="ml-1 opacity-70">{poData.filter(p => p.status === val).length}</span>}
             </button>
           ))}
         </div>
-        <span className="text-xs text-slate-900 font-medium ml-auto hidden sm:block">{filtered.length} of {poData.length}</span>
+        <span className="text-xs text-slate-400 ml-auto hidden sm:block">{filtered.length} of {poData.length}</span>
       </div>
 
       {/* Table */}
@@ -2403,7 +2403,7 @@ export default function POPage() {
                   { label: 'Status',           key: 'status' },
                   { label: '',                 key: null },
                 ].map(h => (
-                  <th key={h.label || 'actions'} className="px-4 py-3 text-left text-xs font-medium text-slate-900 font-medium uppercase tracking-wider whitespace-nowrap">
+                  <th key={h.label || 'actions'} className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider whitespace-nowrap">
                     {h.key ? (
                       <button onClick={() => toggleSort(h.key)} className="inline-flex items-center gap-1 hover:text-indigo-600 transition-colors uppercase tracking-wider">
                         {h.label}
@@ -2429,8 +2429,8 @@ export default function POPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-xs font-medium text-slate-900 font-medium max-w-40 truncate">{po.vendor_name}</div>
-                    <div className="text-xs text-slate-900 font-medium truncate max-w-40">{po.project_name}</div>
+                    <div className="text-xs font-medium text-slate-800 max-w-40 truncate">{po.vendor_name}</div>
+                    <div className="text-xs text-slate-400 truncate max-w-40">{po.project_name}</div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-xs font-medium text-slate-700">{fmt(po.po_date)}</td>
                   <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-400">{fmt(po.delivery_date)}</td>
