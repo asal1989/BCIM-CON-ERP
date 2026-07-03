@@ -2223,9 +2223,10 @@ export default function POPage() {
   });
 
   const sortAccessors = {
-    po_ref:      p => (p.po_ref_no || p.po_number || p.serial_no_formatted || '').toLowerCase(),
-    vendor_name: p => (p.vendor_name || '').toLowerCase(),
-    po_date:     p => (p.po_date ? new Date(p.po_date).getTime() : 0),
+    po_ref:       p => (p.po_ref_no || p.po_number || p.serial_no_formatted || '').toLowerCase(),
+    vendor_name:  p => (p.vendor_name || '').toLowerCase(),
+    project_name: p => (p.project_name || '').toLowerCase(),
+    po_date:      p => (p.po_date ? new Date(p.po_date).getTime() : 0),
     delivery:    p => (p.delivery_date ? new Date(p.delivery_date).getTime() : 0),
     grand_total: p => (parseFloat(p.grand_total) || 0),
     status:      p => (p.status || '').toLowerCase(),
@@ -2268,7 +2269,7 @@ export default function POPage() {
   ];
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto min-h-screen bg-slate-50">
+    <div className="p-6 md:p-8 max-w-[1600px] mx-auto min-h-screen bg-slate-50">
 
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -2394,16 +2395,17 @@ export default function POPage() {
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
                 {[
-                  { label: 'PO Reference',     key: 'po_ref' },
-                  { label: 'Vendor / Project', key: 'vendor_name' },
-                  { label: 'PO Date',          key: 'po_date' },
-                  { label: 'Delivery',         key: 'delivery' },
-                  { label: 'Receipt',          key: null },
-                  { label: 'Total with GST',   key: 'grand_total' },
-                  { label: 'Status',           key: 'status' },
-                  { label: '',                 key: null },
+                  { label: 'PO Reference',   key: 'po_ref' },
+                  { label: 'Vendor',         key: 'vendor_name' },
+                  { label: 'Project',        key: 'project_name' },
+                  { label: 'PO Date',        key: 'po_date' },
+                  { label: 'Delivery',       key: 'delivery' },
+                  { label: 'Receipt',        key: null },
+                  { label: 'Total with GST', key: 'grand_total' },
+                  { label: 'Status',         key: 'status' },
+                  { label: '',               key: null },
                 ].map(h => (
-                  <th key={h.label || 'actions'} className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                  <th key={h.label || 'actions'} className="px-5 py-3.5 text-left text-xs font-medium text-slate-400 uppercase tracking-wider whitespace-nowrap">
                     {h.key ? (
                       <button onClick={() => toggleSort(h.key)} className="inline-flex items-center gap-1 hover:text-indigo-600 transition-colors uppercase tracking-wider">
                         {h.label}
@@ -2423,21 +2425,23 @@ export default function POPage() {
                 <React.Fragment key={po.id}>
                 <tr onClick={() => setSelectedPO(po)}
                   className="cursor-pointer hover:bg-slate-50 transition-colors group">
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  <td className="px-5 py-3.5 whitespace-nowrap">
                     <span className="text-xs font-medium font-mono text-indigo-600 group-hover:underline">
                       {po.po_ref_no || po.po_number || po.serial_no_formatted}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="text-xs font-medium text-slate-800 max-w-40 truncate">{po.vendor_name}</div>
-                    <div className="text-xs text-slate-400 truncate max-w-40">{po.project_name}</div>
+                  <td className="px-5 py-3.5">
+                    <div className="text-sm font-medium text-slate-800 max-w-56 truncate">{po.vendor_name}</div>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-xs font-medium text-slate-700">{fmt(po.po_date)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-400">{fmt(po.delivery_date)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  <td className="px-5 py-3.5">
+                    <div className="text-xs text-slate-400 truncate max-w-56">{po.project_name}</div>
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap text-xs font-medium text-slate-700">{fmt(po.po_date)}</td>
+                  <td className="px-5 py-3.5 whitespace-nowrap text-xs text-slate-400">{fmt(po.delivery_date)}</td>
+                  <td className="px-5 py-3.5 whitespace-nowrap">
                     {po.items_total > 0 ? (
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="flex items-center gap-2">
+                        <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                           <div
                             className={`h-full rounded-full ${po.items_received >= po.items_total ? 'bg-green-500' : po.items_received > 0 ? 'bg-amber-400' : 'bg-slate-200'}`}
                             style={{ width: `${Math.round((po.items_received / po.items_total) * 100)}%` }}
@@ -2447,14 +2451,14 @@ export default function POPage() {
                       </div>
                     ) : <span className="text-xs text-slate-300">—</span>}
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <div className="text-xs font-medium text-slate-800">{inr(po.grand_total)}</div>
+                  <td className="px-5 py-3.5 whitespace-nowrap">
+                    <div className="text-sm font-medium text-slate-800">{inr(po.grand_total)}</div>
                     <div className="text-xs text-slate-400">{po.gst_inclusive ? 'Tax inclusive' : 'Basic + GST'}</div>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  <td className="px-5 py-3.5 whitespace-nowrap">
                     <StatusBadge status={po.status} />
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-right" onClick={e => e.stopPropagation()}>
+                  <td className="px-5 py-3.5 whitespace-nowrap text-right" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-1.5">
                       <button
                         onClick={() => setAttachPOId(attachPOId === po.id ? null : po.id)}
@@ -2475,7 +2479,7 @@ export default function POPage() {
                 </tr>
                 {attachPOId === po.id && (
                   <tr>
-                    <td colSpan={8} className="px-6 pb-4 bg-indigo-50/30 border-b border-indigo-100">
+                    <td colSpan={9} className="px-6 pb-4 bg-indigo-50/30 border-b border-indigo-100">
                       <RecordAttachments
                         module="purchase_order"
                         recordId={po.id}
@@ -2489,14 +2493,14 @@ export default function POPage() {
               ))}
               {poError && (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-red-500 text-sm">
+                  <td colSpan={9} className="py-12 text-center text-red-500 text-sm">
                     Failed to load purchase orders. Please refresh.
                   </td>
                 </tr>
               )}
               {!poError && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center">
+                  <td colSpan={9} className="py-16 text-center">
                     <ShoppingCart className="w-8 h-8 text-slate-300 mx-auto mb-3" />
                     <p className="text-sm font-medium text-slate-400">No purchase orders found</p>
                     <p className="text-xs text-slate-300 mt-1">Adjust filters or create a new PO</p>
