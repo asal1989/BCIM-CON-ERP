@@ -242,9 +242,21 @@ function ChapterBudgetCell({ value, onSave, saving }) {
 }
 
 // ─── Invoice/advance chips for one cost head inside the chapter split ────────
-function HeadInvoiceChips({ txns, loading }) {
+function HeadInvoiceChips({ txns, loading, estimated }) {
   if (loading) return <span className="text-slate-300 italic">Loading…</span>;
-  if (!txns?.length) return <span className="text-slate-300">—</span>;
+  if (!txns?.length) {
+    // No direct invoice/advance exists for this row — the amount is a pro-rated
+    // estimate (untagged spend distributed across chapters by budget/BOQ share),
+    // not tied to any single transaction. Say so instead of a bare dash.
+    if (estimated) {
+      return (
+        <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 italic">
+          <span className="font-bold not-italic">≈</span> estimated pro-rata share — no direct invoice
+        </span>
+      );
+    }
+    return <span className="text-slate-300">—</span>;
+  }
   return (
     <div className="flex flex-wrap gap-1">
       {txns.map((t, idx) => (
@@ -279,9 +291,15 @@ function ChapterCostHeadSplit({ projectId, chapterName, ch, costHeads }) {
 
   const rows = costHeads
     .map(h => {
-      const amt = ch.items.reduce((s, i) => s + num(i.breakdown?.[h]?.advance) + num(i.breakdown?.[h]?.invoiced) + num(i.breakdown?.[h]?.prorated), 0);
+      const advance  = ch.items.reduce((s, i) => s + num(i.breakdown?.[h]?.advance), 0);
+      const invoiced = ch.items.reduce((s, i) => s + num(i.breakdown?.[h]?.invoiced), 0);
+      const prorated = ch.items.reduce((s, i) => s + num(i.breakdown?.[h]?.prorated), 0);
+      const amt = advance + invoiced + prorated;
       const txns = (txnData || []).filter(t => t.cost_head === h);
-      return { head: h, amt, txns };
+      // Entirely pro-rated (no directly tagged advance/invoice) — same distinction
+      // the item-level drilldown already makes, just applied at chapter level.
+      const estimated = prorated > 0 && advance === 0 && invoiced === 0;
+      return { head: h, amt, txns, estimated };
     })
     .filter(r => r.amt > 1)
     .sort((a, b) => b.amt - a.amt);
@@ -309,9 +327,12 @@ function ChapterCostHeadSplit({ projectId, chapterName, ch, costHeads }) {
           <tbody className="divide-y divide-slate-50">
             {rows.map(r => (
               <tr key={r.head} className="hover:bg-slate-50 transition-colors align-top">
-                <td className="px-4 py-1.5 text-slate-700 font-medium whitespace-nowrap">{r.head}</td>
+                <td className="px-4 py-1.5 text-slate-700 font-medium whitespace-nowrap">
+                  {r.estimated && <span title="Estimated — pro-rated by budget share" className="mr-1 text-[9px] font-bold text-amber-500">≈</span>}
+                  {r.head}
+                </td>
                 <td className="px-4 py-1.5 text-slate-600">
-                  <HeadInvoiceChips txns={r.txns} loading={txnLoading} />
+                  <HeadInvoiceChips txns={r.txns} loading={txnLoading} estimated={r.estimated} />
                 </td>
                 <td className="px-4 py-1.5 text-right font-semibold text-amber-600 font-mono">{inr(r.amt)}</td>
               </tr>
@@ -335,11 +356,17 @@ function ChapterCostHeadSplit({ projectId, chapterName, ch, costHeads }) {
 function ChapterPrintSplit({ projectId, ch, costHeads }) {
   const { data: txnData } = useChapterTxns(projectId, ch);
   const splitRows = costHeads
-    .map(h => ({
-      head: h,
-      amt: ch.items.reduce((s, i) => s + num(i.breakdown?.[h]?.advance) + num(i.breakdown?.[h]?.invoiced) + num(i.breakdown?.[h]?.prorated), 0),
-      txns: (txnData || []).filter(t => t.cost_head === h),
-    }))
+    .map(h => {
+      const advance  = ch.items.reduce((s, i) => s + num(i.breakdown?.[h]?.advance), 0);
+      const invoiced = ch.items.reduce((s, i) => s + num(i.breakdown?.[h]?.invoiced), 0);
+      const prorated = ch.items.reduce((s, i) => s + num(i.breakdown?.[h]?.prorated), 0);
+      return {
+        head: h,
+        amt: advance + invoiced + prorated,
+        txns: (txnData || []).filter(t => t.cost_head === h),
+        estimated: prorated > 0 && advance === 0 && invoiced === 0,
+      };
+    })
     .filter(r => r.amt > 1)
     .sort((a, b) => b.amt - a.amt);
   if (!splitRows.length) return null;
@@ -355,11 +382,11 @@ function ChapterPrintSplit({ projectId, ch, costHeads }) {
       <tbody>
         {splitRows.map(r => (
           <tr key={r.head} style={{ verticalAlign: 'top' }}>
-            <td style={{ padding: '2px 8px', color: '#475569', whiteSpace: 'nowrap' }}>{r.head}</td>
+            <td style={{ padding: '2px 8px', color: '#475569', whiteSpace: 'nowrap' }}>{r.estimated ? '≈ ' : ''}{r.head}</td>
             <td style={{ padding: '2px 8px', color: '#4338ca', fontFamily: 'monospace' }}>
               {r.txns.length > 0
                 ? r.txns.map((t, idx) => `${t.reference || '—'} (${inr(t.amount)})`).join('  ·  ')
-                : '—'}
+                : r.estimated ? 'estimated pro-rata share — no direct invoice' : '—'}
             </td>
             <td style={{ padding: '2px 8px', textAlign: 'right', color: '#b45309', fontWeight: 600 }}>{inr(r.amt)}</td>
           </tr>
@@ -1236,6 +1263,49 @@ function ClientKPI({ label, value, sub, icon: Icon, color }) {
   );
 }
 
+// ─── Profitability Abstract — Cumulative RA Bill Value vs Total Spent ────────
+function ProfitabilityAbstract({ projectId, totalSpent }) {
+  // Same queryKey as ClientBillingSummary — react-query dedupes, no extra fetch.
+  const { data: bills = [] } = useQuery({
+    queryKey: ['ra-bills-client-summary', projectId],
+    queryFn: () => raBillAPI.list({ project_id: projectId }).then(r => r.data?.data || []).catch(() => []),
+    enabled: !!projectId,
+  });
+  const certifiedBills = bills.filter(b => ['certified', 'paid'].includes(b.status));
+  const cumulativeBilled = certifiedBills.reduce((s, b) => s + parseFloat(b.net_payable || 0), 0);
+  const margin = cumulativeBilled - totalSpent;
+  const marginPct = cumulativeBilled > 0 ? (margin / cumulativeBilled) * 100 : null;
+
+  return (
+    <div className="bg-[#0B2E59] rounded-2xl px-5 py-4 shadow-sm">
+      <div className="text-[10px] font-bold text-blue-200 uppercase tracking-widest mb-3">Project Profitability Abstract</div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-center">
+        <div>
+          <div className="text-[10px] text-blue-200 uppercase tracking-wide">Cumulative RA Bill Value</div>
+          <div className="text-lg font-bold text-white mt-0.5">₹{Math.round(cumulativeBilled).toLocaleString('en-IN')}</div>
+          <div className="text-[10px] text-blue-300 mt-0.5">{certifiedBills.length} certified/paid bill{certifiedBills.length !== 1 ? 's' : ''}</div>
+        </div>
+        <div className="text-center text-blue-300 text-lg font-bold">−</div>
+        <div>
+          <div className="text-[10px] text-blue-200 uppercase tracking-wide">Total Spent</div>
+          <div className="text-lg font-bold text-white mt-0.5">₹{Math.round(totalSpent).toLocaleString('en-IN')}</div>
+        </div>
+        <div className="border-l border-blue-400/30 pl-4">
+          <div className="text-[10px] text-blue-200 uppercase tracking-wide">Gross Margin</div>
+          <div className={clsx('text-xl font-bold mt-0.5', margin >= 0 ? 'text-emerald-300' : 'text-rose-300')}>
+            {margin < 0 ? '−' : ''}₹{Math.round(Math.abs(margin)).toLocaleString('en-IN')}
+          </div>
+          {marginPct != null && (
+            <div className={clsx('text-[10px] mt-0.5', margin >= 0 ? 'text-emerald-300' : 'text-rose-300')}>
+              {marginPct.toFixed(1)}% of billed value
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName, contractValue }) {
   const qc = useQueryClient();
   const [editingHead, setEditingHead] = useState(null);
@@ -1609,6 +1679,8 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
     </div>
     </div>
       )}
+
+      <ProfitabilityAbstract projectId={projectId} totalSpent={totalActual} />
     </div>
   );
 }

@@ -281,7 +281,7 @@ export const measurementAPI = {
 };
 
 export const raBillAPI = {
-  list:          (params) => api.get('/ra-bills', { params }),
+  list:          (params, config = {}) => api.get('/ra-bills', { ...config, params }),
   get:           (id)     => api.get(`/ra-bills/${id}`),
   create:        (data)   => api.post('/ra-bills', data),
   verify:        (id)     => api.patch(`/ra-bills/${id}/verify`),
@@ -654,6 +654,35 @@ export const debitNoteAPI = {
   create:       (data)   => api.post('/debit-notes', data),
   updateStatus: (id, status) => api.patch(`/debit-notes/${id}/status`, { status }),
   remove:       (id)     => api.delete(`/debit-notes/${id}`),
+};
+
+export const estimateAPI = {
+  list:         (params) => api.get('/estimates', { params }),
+  get:          (id)     => api.get(`/estimates/${id}`),
+  create:       (data)   => api.post('/estimates', data),
+  update:       (id, d)  => api.put(`/estimates/${id}`, d),
+  updateStatus: (id, status) => api.patch(`/estimates/${id}/status`, { status }),
+  remove:       (id)     => api.delete(`/estimates/${id}`),
+};
+
+export const recurringInvoiceAPI = {
+  list:         (params) => api.get('/recurring-invoices', { params }),
+  create:       (data)   => api.post('/recurring-invoices', data),
+  update:       (id, d)  => api.put(`/recurring-invoices/${id}`, d),
+  updateStatus: (id, status) => api.patch(`/recurring-invoices/${id}/status`, { status }),
+  generate:     (id)     => api.post(`/recurring-invoices/${id}/generate`),
+  log:          (id)     => api.get(`/recurring-invoices/${id}/log`),
+  remove:       (id)     => api.delete(`/recurring-invoices/${id}`),
+};
+
+export const recurringBillAPI = {
+  list:         (params) => api.get('/recurring-bills', { params }),
+  create:       (data)   => api.post('/recurring-bills', data),
+  update:       (id, d)  => api.put(`/recurring-bills/${id}`, d),
+  updateStatus: (id, status) => api.patch(`/recurring-bills/${id}/status`, { status }),
+  generate:     (id)     => api.post(`/recurring-bills/${id}/generate`),
+  log:          (id)     => api.get(`/recurring-bills/${id}/log`),
+  remove:       (id)     => api.delete(`/recurring-bills/${id}`),
 };
 
 export const chartOfAccountsAPI = {

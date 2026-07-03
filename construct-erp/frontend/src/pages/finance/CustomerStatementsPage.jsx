@@ -27,9 +27,13 @@ export default function CustomerStatementsPage() {
     queryFn: () => projectAPI.list().then(r => r.data?.data || []).catch(() => []),
   });
 
+  // skipProjectInject: this page has its own project dropdown (selectedProject,
+  // filtered client-side below) — the global top-bar project filter must not
+  // silently narrow the fetch, or switching projects elsewhere in the app makes
+  // this page appear empty for no visible reason.
   const { data: bills = [], isLoading } = useQuery({
     queryKey: ['finance-customer-statements'],
-    queryFn: () => raBillAPI.list({ limit: 500 }).then(r => r.data?.data || []).catch(() => []),
+    queryFn: () => raBillAPI.list({ limit: 500 }, { skipProjectInject: true }).then(r => r.data?.data || []).catch(() => []),
   });
 
   const filtered = bills.filter(b => {
