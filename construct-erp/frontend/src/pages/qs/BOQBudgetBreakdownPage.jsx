@@ -1466,6 +1466,26 @@ function ProfitabilityAbstract({ projectId, totalSpent }) {
 
 // Clickable column header for the Cost Head Budget table — toggles asc/desc on
 // the given field, shows a chevron indicating current sort direction.
+// Mini budget-utilization gauge — lets a user scan for problem cost heads at a
+// glance instead of reading a bare percentage across a wide, dense table.
+function UsageBar({ pct, status }) {
+  const clamped = Math.max(0, Math.min(pct, 100));
+  const colors = {
+    emerald: { bar: 'bg-emerald-500', text: 'text-emerald-700' },
+    amber:   { bar: 'bg-amber-500',   text: 'text-amber-600' },
+    rose:    { bar: 'bg-rose-500',    text: 'text-rose-600' },
+    slate:   { bar: 'bg-slate-400',   text: 'text-slate-500' },
+  }[status] || { bar: 'bg-slate-400', text: 'text-slate-500' };
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <span className={clsx('font-bold', colors.text)}>{pct.toFixed(1)}%</span>
+      <div className="w-16 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+        <div className={clsx('h-full rounded-full transition-all', colors.bar)} style={{ width: `${clamped}%` }} />
+      </div>
+    </div>
+  );
+}
+
 function SortableTh({ label, sortKey, chSort, onSort, className }) {
   const active = chSort.key === sortKey;
   return (
@@ -1791,12 +1811,15 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
             const overCritical = over && !contingencyCoversAll;
             const isContingency = r.cost_head === 'Contingency';
             const hasActual = r.actual > 0;
+            const pctUsed = r.budget > 0 ? (r.actual / r.budget) * 100 : 0;
+            const barStatus = pctUsed > 100 ? (overCovered ? 'amber' : 'rose') : pctUsed >= 85 ? 'amber' : 'emerald';
             return (
               <React.Fragment key={r.cost_head}>
-                <tr className={clsx('border-b border-slate-100',
-                  overCritical && 'bg-rose-50/30',
-                  overCovered && 'bg-amber-50/30',
-                  isContingency && contAbsorbed > 0 && 'bg-blue-50/20',
+                <tr className={clsx('group border-b border-slate-100 border-l-[3px]',
+                  overCritical ? 'border-l-rose-400 bg-rose-50/30'
+                    : overCovered ? 'border-l-amber-400 bg-amber-50/30'
+                    : isContingency && contAbsorbed > 0 ? 'border-l-blue-300 bg-blue-50/20'
+                    : 'border-l-transparent',
                   isExpanded && 'bg-indigo-50/40')}>
                   <td className="px-4 py-2 text-center text-slate-500 font-bold">{i + 1}</td>
                   <td className="px-4 py-2 font-medium text-slate-700">
@@ -1842,7 +1865,8 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
                           {r.budget > 0 ? `₹${Math.round(r.budget).toLocaleString('en-IN')}` : 'Not set'}
                         </span>
                         <button onClick={() => { setEditVal(r.budget ? Math.round(r.budget).toString() : ''); setEditingHead(r.cost_head); }}
-                          className="px-2 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-600 text-[10px] font-bold rounded hover:bg-indigo-100">
+                          className={clsx('px-2 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-600 text-[10px] font-bold rounded hover:bg-indigo-100 transition-opacity',
+                            r.budget > 0 && 'opacity-0 group-hover:opacity-100')}>
                           Edit
                         </button>
                       </div>
@@ -1915,17 +1939,9 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
                   </td>
                   <td className="px-4 py-2 text-right text-xs font-bold tabular-nums">
                     {r.budget > 0 && !isContingency ? (
-                      <span className={clsx(
-                        r.actual / r.budget > 1
-                          ? (overCovered ? 'text-amber-600' : 'text-rose-600')
-                          : r.actual / r.budget > 0.85 ? 'text-amber-600' : 'text-slate-600'
-                      )}>
-                        {((r.actual / r.budget) * 100).toFixed(1)}%
-                      </span>
+                      <UsageBar pct={pctUsed} status={barStatus} />
                     ) : isContingency && contBudget > 0 ? (
-                      <span className={clsx('text-slate-500')}>
-                        {contAbsorbed > 0 ? `${((contAbsorbed / contBudget) * 100).toFixed(1)}%` : '0.0%'}
-                      </span>
+                      <UsageBar pct={(contAbsorbed / contBudget) * 100} status="slate" />
                     ) : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="px-4 py-2 text-right text-xs tabular-nums">
