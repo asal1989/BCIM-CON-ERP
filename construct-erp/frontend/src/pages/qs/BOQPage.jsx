@@ -36,7 +36,7 @@ import { CONSTRUCTION_UNITS as UNITS } from '../../constants/units';
 
 const EMPTY_FORM = {
   chapter_no: '', chapter_name: '', item_no: '', sr_no: '',
-  description: '', unit: 'CUM', quantity: '', rate: '', hsn_code: '', remarks: ''
+  description: '', short_description: '', unit: 'CUM', quantity: '', rate: '', hsn_code: '', remarks: ''
 };
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
@@ -264,7 +264,7 @@ export default function BOQPage() {
     if (!editItem) return;
     updateMutation.mutate({
       id: editItem.id,
-      data: { description: editItem.description, quantity: editItem.quantity, rate: editItem.rate, remarks: editItem.remarks, sr_no: editItem.sr_no, chapter_name: editItem.chapter_name, chapter_no: editItem.chapter_no }
+      data: { description: editItem.description, short_description: editItem.short_description, quantity: editItem.quantity, rate: editItem.rate, remarks: editItem.remarks, sr_no: editItem.sr_no, chapter_name: editItem.chapter_name, chapter_no: editItem.chapter_no }
     });
   };
 
@@ -525,6 +525,7 @@ export default function BOQPage() {
                                   <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest w-16">Item No</th>
                                   <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest w-36">Chapter</th>
                                   <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest">Description</th>
+                                  <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest w-44">Short Description</th>
                                   <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest text-center w-16">Unit</th>
                                   <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest text-right w-28">Contract Qty</th>
                                   <th className="px-4 py-3 text-[9px] font-medium text-slate-400 uppercase tracking-widest text-right w-28">Rate (₹)</th>
@@ -585,6 +586,18 @@ export default function BOQPage() {
                                             <div className="text-[11px] font-medium text-slate-900 font-medium leading-snug" title={it.description}>{it.description}</div>
                                             {it.hsn_code && <div className="text-[9px] text-slate-900 font-medium mt-0.5">HSN: {it.hsn_code}</div>}
                                           </>
+                                        )}
+                                      </td>
+                                      <td className="px-4 py-3 max-w-[176px]">
+                                        {isEditing ? (
+                                          <input
+                                            className="w-full bg-white border border-indigo-300 rounded-lg px-2 py-1 text-[11px] outline-none"
+                                            value={editItem.short_description || ''}
+                                            placeholder="Short description"
+                                            onChange={e => setEditItem(p => ({ ...p, short_description: e.target.value }))}
+                                          />
+                                        ) : (
+                                          <div className="text-[10px] text-slate-500 leading-snug" title={it.short_description}>{it.short_description || '—'}</div>
                                         )}
                                       </td>
                                       <td className="px-4 py-3 text-center">
@@ -753,6 +766,15 @@ export default function BOQPage() {
                   value={form.description}
                   onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
                   required
+                />
+              </FormField>
+
+              <FormField label="Short Description">
+                <input
+                  className={inputCls}
+                  placeholder="Brief label for lists/reports"
+                  value={form.short_description}
+                  onChange={e => setForm(p => ({ ...p, short_description: e.target.value }))}
                 />
               </FormField>
 

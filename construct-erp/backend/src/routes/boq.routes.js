@@ -18,6 +18,7 @@ const upload = multer({
   await safe(`ALTER TABLE boq_items ADD COLUMN IF NOT EXISTS current_rate     NUMERIC(14,2)`);
   await safe(`ALTER TABLE boq_items ADD COLUMN IF NOT EXISTS current_quantity NUMERIC(14,3)`);
   await safe(`ALTER TABLE boq_items ADD COLUMN IF NOT EXISTS amendment_ref    VARCHAR(20)`);
+  await safe(`ALTER TABLE boq_items ADD COLUMN IF NOT EXISTS short_description VARCHAR(150)`);
   await safe(`CREATE TABLE IF NOT EXISTS boq_amendments (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id       UUID REFERENCES projects(id) ON DELETE CASCADE,
@@ -92,24 +93,24 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', authorize('super_admin','admin','qs_engineer','project_manager'), async (req, res) => {
-  const { project_id, chapter_no, chapter_name, item_no, sr_no, description, unit, quantity, rate, hsn_code, remarks } = req.body;
+  const { project_id, chapter_no, chapter_name, item_no, sr_no, description, short_description, unit, quantity, rate, hsn_code, remarks } = req.body;
   if (!project_id || !description || !unit || quantity == null || rate == null) {
     return res.status(400).json({ error: 'project_id, description, unit, quantity and rate are required' });
   }
   const result = await query(
-    `INSERT INTO boq_items (project_id,chapter_no,chapter_name,item_no,sr_no,description,unit,quantity,rate,hsn_code,remarks,created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+    `INSERT INTO boq_items (project_id,chapter_no,chapter_name,item_no,sr_no,description,short_description,unit,quantity,rate,hsn_code,remarks,created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
     [project_id, chapter_no || null, chapter_name || null, item_no || null, sr_no || null,
-     description, unit, parseFloat(quantity), parseFloat(rate), hsn_code || null, remarks || null, req.user.id]
+     description, short_description || null, unit, parseFloat(quantity), parseFloat(rate), hsn_code || null, remarks || null, req.user.id]
   );
   res.status(201).json({ data: result.rows[0] });
 });
 
 router.put('/:id', authorize('super_admin','admin','qs_engineer'), async (req, res) => {
-  const { sr_no, description, quantity, rate, remarks, chapter_name, chapter_no } = req.body;
+  const { sr_no, description, short_description, quantity, rate, remarks, chapter_name, chapter_no } = req.body;
   const result = await query(
-    'UPDATE boq_items SET sr_no=$1,description=$2,quantity=$3,rate=$4,remarks=$5,chapter_name=$6,chapter_no=$7,updated_at=NOW() WHERE id=$8 RETURNING *',
-    [sr_no, description, quantity, rate, remarks, chapter_name || null, chapter_no || null, req.params.id]
+    'UPDATE boq_items SET sr_no=$1,description=$2,short_description=$3,quantity=$4,rate=$5,remarks=$6,chapter_name=$7,chapter_no=$8,updated_at=NOW() WHERE id=$9 RETURNING *',
+    [sr_no, description, short_description || null, quantity, rate, remarks, chapter_name || null, chapter_no || null, req.params.id]
   );
   res.json({ data: result.rows[0] });
 });
