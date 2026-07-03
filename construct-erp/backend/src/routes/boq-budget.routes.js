@@ -812,7 +812,7 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
 router.get('/:project_id/costhead-drilldown', async (req, res) => {
   try {
     const { project_id } = req.params;
-    const { cost_head, boq_item_id } = req.query;
+    const { cost_head, boq_item_id, chapter, unlinked } = req.query;
     if (!cost_head) return res.status(400).json({ error: 'cost_head is required' });
     const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
     if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
@@ -909,11 +909,37 @@ router.get('/:project_id/costhead-drilldown', async (req, res) => {
       rows.push(...pc.rows);
 
     } else {
-      // When boq_item_id is supplied (drilling in from a specific BOQ item's row),
-      // restrict every query to that item so the total matches the item's own
-      // "spent" figure instead of the whole project's spend under this cost head.
-      const itemFilter = boq_item_id ? ' AND li.boq_item_id=$3' : '';
-      const itemParams = boq_item_id ? [project_id, cost_head, boq_item_id] : [project_id, cost_head];
+      // Scope, in order of precedence:
+      //  - boq_item_id supplied → restrict to that one BOQ item (item-row drilldown)
+      //  - chapter supplied     → restrict to that chapter's "unlinked chapter spend"
+      //                            row (tagged to the chapter, not a specific item)
+      //  - unlinked=1 supplied  → restrict to the true project-level unlinked bucket
+      //                            (no BOQ item AND no chapter resolvable at all)
+      //  - none supplied        → whole-project total for this cost head (used by
+      //                            the Cost Head Budget tab's own drilldown)
+      // Chapter resolution mirrors the exact logic used to build the summary
+      // (tqsActuals/poActuals above) so a row's drilldown total always matches
+      // the number shown on that row.
+      const isUnlinked = unlinked === '1' || unlinked === 'true';
+
+      let tqsFilter = '', poFilter = '', raFilter = '';
+      let tqsParams = [project_id, cost_head], poParams = [project_id, cost_head], raParams = [project_id, cost_head];
+
+      if (boq_item_id) {
+        tqsFilter = ' AND li.boq_item_id=$3';
+        poFilter  = ' AND pi.boq_item_id=$3';
+        raFilter  = ' AND rbi.boq_item_id=$3';
+        tqsParams = poParams = raParams = [project_id, cost_head, boq_item_id];
+      } else if (chapter) {
+        tqsFilter = ' AND li.boq_item_id IS NULL AND COALESCE(li.boq_chapter, pi.boq_chapter, po_single.chapter)=$3';
+        poFilter  = ' AND pi.boq_item_id IS NULL AND pi.boq_chapter=$3';
+        tqsParams = poParams = [project_id, cost_head, chapter];
+        raFilter = ' AND FALSE'; // RA items carry no chapter tag — never part of a chapter-unlinked bucket
+      } else if (isUnlinked) {
+        tqsFilter = ' AND li.boq_item_id IS NULL AND COALESCE(li.boq_chapter, pi.boq_chapter, po_single.chapter) IS NULL';
+        poFilter  = ' AND pi.boq_item_id IS NULL AND pi.boq_chapter IS NULL';
+        raFilter  = ' AND rbi.boq_item_id IS NULL';
+      }
 
       // TQS bill line items for this cost head — only paid bills or accounts-approved
       const tqs = await query(`
@@ -922,14 +948,22 @@ router.get('/:project_id/costhead-drilldown', async (req, res) => {
                'TQS Bill' AS source
         FROM tqs_bill_line_items li
         JOIN tqs_bills tb ON tb.id = li.bill_id
+        LEFT JOIN po_items pi ON pi.id = li.po_item_id
+        LEFT JOIN (
+          SELECT pi2.po_id, MIN(pi2.boq_chapter) AS chapter
+          FROM po_items pi2
+          WHERE pi2.boq_chapter IS NOT NULL
+          GROUP BY pi2.po_id
+          HAVING COUNT(DISTINCT pi2.boq_chapter) = 1
+        ) po_single ON po_single.po_id = tb.po_id
         WHERE tb.project_id=$1 AND li.cost_head=$2
           AND tb.is_deleted = FALSE
-          ${itemFilter}
-        ORDER BY COALESCE(tb.inv_date, tb.created_at)`, itemParams);
+          ${tqsFilter}
+        ORDER BY COALESCE(tb.inv_date, tb.created_at)`, tqsParams);
       rows.push(...tqs.rows);
 
-      // RA bill items for this cost head
-      const raFilter = boq_item_id ? ' AND rbi.boq_item_id=$3' : '';
+      // RA bill items for this cost head — no chapter concept, so only relevant
+      // for the item-level and true-unlinked scopes (excluded for chapter scope above)
       const ra = await query(`
         SELECT rb.bill_number AS reference, rb.bill_date AS date,
                COALESCE(bi.description, rb.bill_number, 'RA Bill Item') AS description,
@@ -941,11 +975,10 @@ router.get('/:project_id/costhead-drilldown', async (req, res) => {
         WHERE rb.project_id=$1 AND rbi.cost_head=$2
           AND rb.status IN ('certified','paid')
           ${raFilter}
-        ORDER BY rb.bill_date`, itemParams);
+        ORDER BY rb.bill_date`, raParams);
       rows.push(...ra.rows);
 
       // PO line items tagged to this cost head — only the invoiced (billed) portion
-      const poFilter = boq_item_id ? ' AND pi.boq_item_id=$3' : '';
       const poDrill = await query(`
         SELECT COALESCE(po.po_ref_no, po.po_number, 'PO') AS reference,
                tb.inv_date AS date,
@@ -961,8 +994,28 @@ router.get('/:project_id/costhead-drilldown', async (req, res) => {
           AND li.cost_head IS NULL
           AND tb.is_deleted = FALSE AND tb.workflow_status NOT IN ('rejected')
           ${poFilter}
-        ORDER BY tb.inv_date`, itemParams);
+        ORDER BY tb.inv_date`, poParams);
       rows.push(...poDrill.rows);
+
+      // Stores Petty Cash purchase items tagged directly to this cost head (e.g.
+      // small Materials/Consumables or Safety Items buys). This table has no
+      // boq_item_id or chapter column at all, so these can only ever be part of
+      // the true project-level "unlinked" bucket or the whole-project total —
+      // never an item- or chapter-specific drilldown. Without this, the summary
+      // row's Spent figure (which does include these via spcActuals) had no
+      // matching drilldown rows to show, since none of the other queries above
+      // reach this table.
+      if (!boq_item_id && !chapter) {
+        const spc = await query(`
+          SELECT COALESCE(se.je_reference, CAST(se.sl_no AS TEXT)) AS reference,
+                 se.entry_date AS date, si.material_name AS description,
+                 si.total_amount AS amount, 'Petty Cash' AS source
+          FROM stores_petty_cash_items si
+          JOIN stores_petty_cash_entries se ON se.id = si.entry_id
+          WHERE se.project_id=$1 AND se.status='Approved' AND si.cost_head=$2
+          ORDER BY se.entry_date`, [project_id, cost_head]);
+        rows.push(...spc.rows);
+      }
     }
 
     // Sort all by date

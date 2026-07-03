@@ -406,10 +406,10 @@ function ChapterPrintSplit({ projectId, ch, costHeads }) {
 // itemInfo (optional): { estimated, spent, prorated } — when the row being drilled into
 // is a per-BOQ-item pro-rated estimate (no direct tag), we explain the math instead of
 // showing the whole project's transactions under this cost head.
-function CostHeadDrilldownInline({ projectId, costHead, boqItemId, itemInfo }) {
+function CostHeadDrilldownInline({ projectId, costHead, boqItemId, chapter, unlinked, itemInfo }) {
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['costhead-drilldown', projectId, costHead, boqItemId],
-    queryFn: () => boqBudgetAPI.costheadDrilldown(projectId, costHead, boqItemId).then(r => r.data?.data || []),
+    queryKey: ['costhead-drilldown', projectId, costHead, boqItemId, chapter, unlinked],
+    queryFn: () => boqBudgetAPI.costheadDrilldown(projectId, costHead, boqItemId, { chapter, unlinked }).then(r => r.data?.data || []),
     enabled: !!projectId && !!costHead,
     retry: 1,
   });
@@ -689,11 +689,14 @@ function CostHeadDetail({ item, costHeads, mode, onSave, projectId, readOnlyOver
           <tr>
             <td colSpan={4} className="p-0 bg-indigo-50/20">
               {/* What this unlinked amount is made of — invoice / bill / petty-cash
-                  entries with their reference numbers, dates and sources. */}
+                  entries with their reference numbers, dates and sources. Scoped to
+                  "unlinked" (no BOQ item, no chapter) so the total matches this row's
+                  own Spent figure instead of the whole project's spend under this head. */}
               <CostHeadDrilldownInline
                 projectId={projectId}
                 costHead={r.h}
                 boqItemId={undefined}
+                unlinked
                 itemInfo={{ estimated: false, spent: r.spent }}
               />
               {/* Still offer chapter-tagging for any taggable bill lines below. */}
@@ -711,6 +714,10 @@ function CostHeadDetail({ item, costHeads, mode, onSave, projectId, readOnlyOver
                 // non-unlinked rows; isUnlinkedRow ids like "project-level-unlinked" or
                 // "chapter-unlinked-X" are NOT valid UUIDs and 500 the backend if sent.
                 boqItemId={readOnlyOverride || isUnlinkedRow(item) ? undefined : item.id}
+                // "chapter-unlinked-X" rows hold spend tagged to a chapter but not a
+                // specific item — scope the drilldown to that one chapter so its total
+                // matches the row instead of showing the whole project's spend.
+                chapter={String(item.id || '').startsWith('chapter-unlinked-') ? String(item.id).replace(/^chapter-unlinked-/, '') : undefined}
                 itemInfo={{ estimated: r.estimated, spent: r.spent, prorated: r.prorated }}
               />
             </td>
