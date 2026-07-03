@@ -484,7 +484,7 @@ router.get('/:project_id', async (req, res) => {
 });
 
 // PUT /boq-budget/item/:boq_item_id — upsert all 16 entries for one BOQ item
-router.put('/item/:boq_item_id', async (req, res) => {
+router.put('/item/:boq_item_id', authorize(...BUDGET_WRITERS), async (req, res) => {
   try {
     const { boq_item_id } = req.params;
     const { entries } = req.body;
@@ -552,7 +552,7 @@ router.put('/item/:boq_item_id', async (req, res) => {
 
 // PUT /boq-budget/item/:boq_item_id/total — set total budget for a single item
 // Distributes proportionally across existing cost-head entries; if none, uses "Sub Con".
-router.put('/item/:boq_item_id/total', async (req, res) => {
+router.put('/item/:boq_item_id/total', authorize(...BUDGET_WRITERS), async (req, res) => {
   try {
     const { boq_item_id } = req.params;
     const total = parseFloat(req.body.total);
