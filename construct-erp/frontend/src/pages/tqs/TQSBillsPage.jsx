@@ -280,6 +280,11 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                          : it.gst_pct  != null ? String(it.gst_pct) : '18',
             po_item_id:    it.id            || '',
             wo_item_id:    '',
+            // Carry over the chapter/cost-head tagged on the PO item itself, so a
+            // bill raised against this PO keeps the same Budget Breakdown attribution
+            // instead of falling back to a keyword guess (classifyItemCostHead).
+            boq_item_id:   it.boq_item_id   || '',
+            cost_head:     it.cost_head     || '',
             remaining_qty: bal.remaining_qty != null ? parseFloat(bal.remaining_qty) : null,
             discount_amount: it.discount_amount != null
               ? String(Math.abs(Number(it.discount_amount) || 0))
