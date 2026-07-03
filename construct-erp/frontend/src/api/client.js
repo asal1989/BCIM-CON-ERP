@@ -656,6 +656,35 @@ export const debitNoteAPI = {
   remove:       (id)     => api.delete(`/debit-notes/${id}`),
 };
 
+export const estimateAPI = {
+  list:         (params) => api.get('/estimates', { params }),
+  get:          (id)     => api.get(`/estimates/${id}`),
+  create:       (data)   => api.post('/estimates', data),
+  update:       (id, d)  => api.put(`/estimates/${id}`, d),
+  updateStatus: (id, status) => api.patch(`/estimates/${id}/status`, { status }),
+  remove:       (id)     => api.delete(`/estimates/${id}`),
+};
+
+export const recurringInvoiceAPI = {
+  list:         (params) => api.get('/recurring-invoices', { params }),
+  create:       (data)   => api.post('/recurring-invoices', data),
+  update:       (id, d)  => api.put(`/recurring-invoices/${id}`, d),
+  updateStatus: (id, status) => api.patch(`/recurring-invoices/${id}/status`, { status }),
+  generate:     (id)     => api.post(`/recurring-invoices/${id}/generate`),
+  log:          (id)     => api.get(`/recurring-invoices/${id}/log`),
+  remove:       (id)     => api.delete(`/recurring-invoices/${id}`),
+};
+
+export const recurringBillAPI = {
+  list:         (params) => api.get('/recurring-bills', { params }),
+  create:       (data)   => api.post('/recurring-bills', data),
+  update:       (id, d)  => api.put(`/recurring-bills/${id}`, d),
+  updateStatus: (id, status) => api.patch(`/recurring-bills/${id}/status`, { status }),
+  generate:     (id)     => api.post(`/recurring-bills/${id}/generate`),
+  log:          (id)     => api.get(`/recurring-bills/${id}/log`),
+  remove:       (id)     => api.delete(`/recurring-bills/${id}`),
+};
+
 export const chartOfAccountsAPI = {
   list:   (params) => api.get('/chart-of-accounts', { params }),
   create: (data)   => api.post('/chart-of-accounts', data),
