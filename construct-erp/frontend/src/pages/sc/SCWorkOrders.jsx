@@ -235,6 +235,16 @@ function WOForm({ wo, projects, subcontractors, onClose }) {
     enabled:  !!form.project_id,
     staleTime: 60000,
   });
+  const boqItemsByChapter = useMemo(() => boqItems.reduce((acc, b) => {
+    const ch = b.chapter_name || `Chapter ${b.chapter_no || '—'}`;
+    (acc[ch] ||= []).push(b);
+    return acc;
+  }, {}), [boqItems]);
+  // Most SC work orders here cover one trade/chapter across many line items
+  // (e.g. 11 "Block work" rows), so picking a BOQ item once and applying it
+  // to every row is far faster than doing it 11 times.
+  const [bulkBoqItemId, setBulkBoqItemId] = useState('');
+  const applyBulkBoqItem = () => setForm(f => ({ ...f, items: f.items.map(it => ({ ...it, boq_item_id: bulkBoqItemId })) }));
 
   const WORK_CATEGORIES = ['Civil','Structural','Waterproofing','Electrical','Plumbing','Painting','Carpentry','Tiles','Aluminium','Demolition','Earth Work','Fabrication','Interior','Landscaping','General'];
 
@@ -332,6 +342,24 @@ function WOForm({ wo, projects, subcontractors, onClose }) {
               <Plus className="w-3.5 h-3.5"/> Add Item
             </button>
           </div>
+          {boqItems.length > 0 && (
+            <div className="flex items-center gap-2 mb-3 p-2.5 bg-emerald-50/60 border border-emerald-200 rounded-lg">
+              <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide whitespace-nowrap">Link all rows to</span>
+              <select value={bulkBoqItemId} onChange={e=>setBulkBoqItemId(e.target.value)}
+                className="flex-1 border border-emerald-200 rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-300 bg-white">
+                <option value="">Select a BOQ item…</option>
+                {Object.entries(boqItemsByChapter).map(([chapterName, chapterItems]) => (
+                  <optgroup key={chapterName} label={chapterName}>
+                    {chapterItems.map(b=><option key={b.id} value={b.id}>{b.item_no||b.sr_no} — {(b.description||'').slice(0,32)}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+              <button onClick={applyBulkBoqItem} disabled={!bulkBoqItemId}
+                className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 whitespace-nowrap">
+                Apply to All Rows
+              </button>
+            </div>
+          )}
           <div className="border border-slate-200 rounded-xl overflow-hidden">
             <table className="w-full text-xs">
               <thead style={{background:`linear-gradient(90deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)`}}>
@@ -353,13 +381,7 @@ function WOForm({ wo, projects, subcontractors, onClose }) {
                             since every chapter in this BOQ shares chapter_no "01"; without
                             the chapter name, Blockwork/Plastering items were indistinguishable
                             from every other chapter's items and looked "missing". */}
-                        {Object.entries(
-                          boqItems.reduce((acc, b) => {
-                            const ch = b.chapter_name || `Chapter ${b.chapter_no || '—'}`;
-                            (acc[ch] ||= []).push(b);
-                            return acc;
-                          }, {})
-                        ).map(([chapterName, chapterItems]) => (
+                        {Object.entries(boqItemsByChapter).map(([chapterName, chapterItems]) => (
                           <optgroup key={chapterName} label={chapterName}>
                             {chapterItems.map(b=><option key={b.id} value={b.id}>{b.item_no||b.sr_no} — {(b.description||'').slice(0,32)}</option>)}
                           </optgroup>
