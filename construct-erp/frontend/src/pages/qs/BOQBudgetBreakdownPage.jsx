@@ -2342,13 +2342,13 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
                           {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                         </span>
                         <span className="font-bold text-slate-500">—</span>
-                        <span className="text-slate-700 font-medium">Unlinked Spend</span>
+                        <span className="text-slate-700 font-medium">Miscellaneous Spend</span>
                         <span className="text-right font-semibold text-slate-300">—</span>
                         <span className="text-slate-300 text-right">—</span>
                         <span className="text-slate-300 text-right">—</span>
                         <span className="text-right font-medium text-amber-600">{item.spent > 0 ? inr(item.spent) : <span className="text-slate-300">—</span>}</span>
                         <span className="text-slate-300 text-right">—</span>
-                        <span className="text-right"><span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Unlinked</span></span>
+                        <span className="text-right"><span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Misc.</span></span>
                         <span />
                       </button>
                       {isOpen && <CostHeadDetail item={item} costHeads={costHeads} mode={mode} onSave={saveCell} projectId={projectId} chapterNames={itemsByChapter.map(ch => ch.name)} />}
