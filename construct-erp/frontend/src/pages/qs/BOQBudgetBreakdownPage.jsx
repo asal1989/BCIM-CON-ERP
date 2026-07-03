@@ -2297,7 +2297,7 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
         />
       )}
 
-      <div className="p-5 md:p-6 max-w-[1400px] mx-auto space-y-5">
+      <div className="p-5 md:p-6 max-w-[1700px] mx-auto space-y-5">
 
         {/* Project selector + search */}
         <div className="flex flex-wrap gap-3">
