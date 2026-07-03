@@ -2015,8 +2015,12 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
     return Object.values(map).sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name));
   }, [items, useNameGrouping]);
 
-  // unlinked row (if any) shown after all chapters
-  const unlinkedItem = items.find(isUnlinkedRow);
+  // Standalone "Unlinked Spend" row after all chapters — ONLY the project-level
+  // bucket. chapter-unlinked-* rows already group inside their own chapter via
+  // itemsByChapter (they carry the chapter's name), so matching them here too
+  // (items.find(isUnlinkedRow) did) displayed the same money twice: once in the
+  // chapter's Spent and again in this standalone row.
+  const unlinkedItem = items.find(i => i.id === 'project-level-unlinked');
 
   const selectedProject = projects.find(p => p.id === projectId);
   const projectAddress = [selectedProject?.location, selectedProject?.city, selectedProject?.state].filter(Boolean).join(', ');
