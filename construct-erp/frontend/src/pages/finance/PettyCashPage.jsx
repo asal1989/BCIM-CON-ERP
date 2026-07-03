@@ -7,7 +7,7 @@ import dayjs from 'dayjs';
 import {
   Wallet, PlusCircle, CheckCircle, XCircle, Clock, BarChart2,
   FileText, RefreshCw, Settings, Send, IndianRupee, TrendingUp,
-  AlertCircle, Layers, Store
+  AlertCircle, Layers, Store, UploadCloud, Paperclip, Link2, Trash2, ExternalLink
 } from 'lucide-react';
 
 const fmt = n => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
@@ -319,11 +319,126 @@ function RequestsTab({ projectId, projects, custodians, accounts }) {
   );
 }
 
+// ── Bulk Upload Modal — scan vouchers/bills, upload in one batch ───────────────
+function BulkUploadModal({ projectId, onClose, onDone }) {
+  const [files, setFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [results, setResults] = useState(null);
+
+  const addFiles = (fileList) => {
+    const picked = Array.from(fileList).filter(f => /\.(jpg|jpeg|png|pdf)$/i.test(f.name));
+    if (picked.length < fileList.length) toast.error('Only JPG, PNG, or PDF files are accepted — some files were skipped');
+    setFiles(prev => [...prev, ...picked]);
+  };
+
+  const removeFile = (i) => setFiles(prev => prev.filter((_, idx) => idx !== i));
+
+  const upload = async () => {
+    if (!files.length) return toast.error('Select at least one scanned file');
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      files.forEach(f => fd.append('files', f));
+      if (projectId) fd.append('project_id', projectId);
+      const res = await pettyCashAPI.bulkUploadAttachments(fd);
+      setResults(res.data.data);
+      toast.success(`${res.data.count} file(s) uploaded — link them to vouchers below`);
+      onDone?.();
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Bulk upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <Modal title="Bulk Upload Voucher / Bill Scans" onClose={onClose} wide>
+      {!results ? (
+        <>
+          <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-2xl py-10 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors">
+            <UploadCloud size={28} className="text-gray-400" />
+            <span className="text-sm text-gray-500">Click to select scanned vouchers/bills (JPG, PNG, PDF)</span>
+            <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" className="hidden" onChange={e => addFiles(e.target.files)} />
+          </label>
+          {files.length > 0 && (
+            <div className="mt-3 space-y-1 max-h-48 overflow-y-auto">
+              {files.map((f, i) => (
+                <div key={i} className="flex items-center justify-between text-xs bg-gray-50 rounded-lg px-3 py-1.5">
+                  <span className="truncate flex-1">{f.name}</span>
+                  <button onClick={() => removeFile(i)} className="text-red-500 ml-2"><XCircle size={14} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2 mt-4 justify-end">
+            <button onClick={onClose} className={btnSecondary}>Cancel</button>
+            <button onClick={upload} disabled={uploading || !files.length} className={btnPrimary}>
+              {uploading ? 'Uploading…' : `Upload ${files.length || ''} File(s)`}
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="text-sm text-gray-500 mb-3">Uploaded. Go to a voucher row and click the paperclip to link a scan to it, or close and link later — unlinked scans stay available.</p>
+          <div className="space-y-1 max-h-64 overflow-y-auto">
+            {results.map(r => (
+              <div key={r.id} className="flex items-center justify-between text-xs bg-gray-50 rounded-lg px-3 py-1.5">
+                <span className="truncate flex-1">{r.file_name}</span>
+                <span className="text-[10px] text-gray-400 ml-2">{r.provider}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end mt-4"><button onClick={onClose} className={btnPrimary}>Done</button></div>
+        </>
+      )}
+    </Modal>
+  );
+}
+
+// ── Attachments viewer/linker for a single voucher ──────────────────────────────
+function AttachmentsModal({ expense, projectId, onClose }) {
+  const qc = useQueryClient();
+  const { data: linked } = useQuery({ queryKey: ['pc-attachments', expense.id], queryFn: () => pettyCashAPI.attachments({ expense_id: expense.id }).then(r => r.data.data) });
+  const { data: unlinked } = useQuery({ queryKey: ['pc-attachments-unlinked', projectId], queryFn: () => pettyCashAPI.attachments({ project_id: projectId || undefined, unlinked: 'true' }).then(r => r.data.data) });
+
+  const invalidate = () => { qc.invalidateQueries({ queryKey: ['pc-attachments'] }); qc.invalidateQueries({ queryKey: ['pc-attachments-unlinked'] }); qc.invalidateQueries({ queryKey: ['pc-expenses'] }); };
+  const linkMut = useMutation({ mutationFn: id => pettyCashAPI.linkAttachment(id, { expense_id: expense.id }), onSuccess: () => { toast.success('Linked'); invalidate(); } });
+  const deleteMut = useMutation({ mutationFn: id => pettyCashAPI.deleteAttachment(id), onSuccess: () => { toast.success('Removed'); invalidate(); } });
+
+  return (
+    <Modal title={`Scans — Voucher ${expense.voucher_number}`} onClose={onClose} wide>
+      <div className="text-xs font-semibold text-gray-500 mb-2">Linked to this voucher</div>
+      <div className="space-y-1 mb-4">
+        {(linked || []).map(a => (
+          <div key={a.id} className="flex items-center justify-between text-xs bg-gray-50 rounded-lg px-3 py-1.5">
+            <a href={a.file_url} target="_blank" rel="noreferrer" className="truncate flex-1 text-blue-600 hover:underline flex items-center gap-1"><ExternalLink size={11} />{a.file_name}</a>
+            <button onClick={() => deleteMut.mutate(a.id)} className="text-red-500 ml-2"><Trash2 size={13} /></button>
+          </div>
+        ))}
+        {(linked || []).length === 0 && <div className="text-xs text-gray-400 py-2">No scans linked yet</div>}
+      </div>
+
+      <div className="text-xs font-semibold text-gray-500 mb-2">Unlinked uploads — click to attach to this voucher</div>
+      <div className="space-y-1 max-h-48 overflow-y-auto">
+        {(unlinked || []).map(a => (
+          <div key={a.id} className="flex items-center justify-between text-xs bg-amber-50 rounded-lg px-3 py-1.5">
+            <a href={a.file_url} target="_blank" rel="noreferrer" className="truncate flex-1 text-gray-700 hover:underline">{a.file_name}</a>
+            <button onClick={() => linkMut.mutate(a.id)} className="text-[10px] px-2 py-0.5 rounded-lg bg-blue-600 text-white font-medium ml-2 flex items-center gap-1"><Link2 size={11} />Link</button>
+          </div>
+        ))}
+        {(unlinked || []).length === 0 && <div className="text-xs text-gray-400 py-2">No unlinked scans available</div>}
+      </div>
+    </Modal>
+  );
+}
+
 // ── Expenses Tab ───────────────────────────────────────────────────────────────
 function ExpensesTab({ projectId, custodians, categories }) {
   const qc = useQueryClient();
   const [filters, setFilters] = useState({ status: '', from_date: '', to_date: '' });
   const [showForm, setShowForm] = useState(false);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
+  const [attachmentsFor, setAttachmentsFor] = useState(null);
   const blankExp = { expense_date: dayjs().format('YYYY-MM-DD'), description: '', amount: '', category_id: '', cost_head: '', custodian_id: '', site_location: '', payment_mode: 'cash', bill_number: '', vendor_name: '', remarks: '' };
   const [form, setForm] = useState(blankExp);
 
@@ -352,6 +467,7 @@ function ExpensesTab({ projectId, custodians, categories }) {
         <div className="flex items-center gap-3 ml-auto text-xs text-gray-500">
           <span>Total: <strong className="text-gray-800">{fmt(totals.total)}</strong></span>
           <span>Approved: <strong className="text-green-700">{fmt(totals.approved)}</strong></span>
+          <button onClick={() => setShowBulkUpload(true)} className={btnSecondary}><UploadCloud size={14} className="inline mr-1" />Bulk Upload Scans</button>
           <button onClick={() => setShowForm(true)} className={btnPrimary}><PlusCircle size={14} className="inline mr-1" />Add Expense</button>
         </div>
       </div>
@@ -360,7 +476,7 @@ function ExpensesTab({ projectId, custodians, categories }) {
         <div className="overflow-x-auto rounded-2xl border border-gray-100">
           <table className="w-full text-xs">
             <thead className="bg-gray-50">
-              <tr>{['Voucher','Date','Cost Head','Category','Description','Vendor','Custodian','Amount','Status','Actions'].map(h => (
+              <tr>{['Voucher','Date','Cost Head','Category','Description','Vendor','Custodian','Amount','Scans','Status','Actions'].map(h => (
                 <th key={h} className="px-3 py-2.5 text-left font-semibold text-gray-500 whitespace-nowrap">{h}</th>
               ))}</tr>
             </thead>
@@ -375,6 +491,11 @@ function ExpensesTab({ projectId, custodians, categories }) {
                   <td className="px-3 py-2 text-gray-500">{e.vendor_name || '—'}</td>
                   <td className="px-3 py-2">{e.custodian_name || '—'}</td>
                   <td className="px-3 py-2 text-right font-semibold">{fmt(e.amount)}</td>
+                  <td className="px-3 py-2">
+                    <button onClick={() => setAttachmentsFor(e)} className={clsx('flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-lg font-medium', e.attachment_count > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-50 text-gray-400')}>
+                      <Paperclip size={11} />{e.attachment_count || 0}
+                    </button>
+                  </td>
                   <td className="px-3 py-2"><Badge status={e.status} /></td>
                   <td className="px-3 py-2">
                     <div className="flex gap-1">
@@ -386,7 +507,7 @@ function ExpensesTab({ projectId, custodians, categories }) {
                   </td>
                 </tr>
               ))}
-              {(data || []).length === 0 && <tr><td colSpan={10} className="py-8 text-center text-gray-400">No expenses found</td></tr>}
+              {(data || []).length === 0 && <tr><td colSpan={11} className="py-8 text-center text-gray-400">No expenses found</td></tr>}
             </tbody>
           </table>
         </div>
@@ -431,6 +552,14 @@ function ExpensesTab({ projectId, custodians, categories }) {
             <button onClick={() => { if (!form.expense_date || !form.description || !form.amount) return toast.error('Date, description, amount required'); createMut.mutate(form); }} disabled={createMut.isPending} className={btnPrimary}>Save Expense</button>
           </div>
         </Modal>
+      )}
+
+      {showBulkUpload && (
+        <BulkUploadModal projectId={projectId} onClose={() => setShowBulkUpload(false)} onDone={invalidate} />
+      )}
+
+      {attachmentsFor && (
+        <AttachmentsModal expense={attachmentsFor} projectId={projectId} onClose={() => setAttachmentsFor(null)} />
       )}
     </div>
   );

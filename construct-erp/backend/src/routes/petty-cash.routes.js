@@ -1,11 +1,30 @@
 // src/routes/petty-cash.routes.js  — Complete Petty Cash Management Module
 const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const { v4: uuid } = require('uuid');
 const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
 const { postAutoJournalStandalone } = require('../services/journalAutoPost');
+const { uploadAndShare, isConfigured: onedriveConfigured } = require('../services/onedrive.service');
 const router = express.Router();
 router.use(authenticate);
+
+const pcUploadStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, path.join(__dirname, '../../uploads')),
+  filename: (req, file, cb) => cb(null, `${uuid()}${path.extname(file.originalname)}`),
+});
+const PC_ALLOWED_EXT = new Set(['.jpg', '.jpeg', '.png', '.pdf']);
+const pcUpload = multer({
+  storage: pcUploadStorage,
+  fileFilter: (req, file, cb) => {
+    if (!PC_ALLOWED_EXT.has(path.extname(file.originalname).toLowerCase())) return cb(new Error('Only JPG, PNG, or PDF scans are allowed'), false);
+    cb(null, true);
+  },
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB per file
+});
 
 // RBAC: creating/submitting requests & expenses stays open to all authenticated
 // users (site staff raise them), but master data and every approval/issue/verify
@@ -161,6 +180,23 @@ runSchemaInit('petty_cash_v2', async () => {
     updated_at     TIMESTAMPTZ DEFAULT NOW()
   )`);
   await safe(`CREATE UNIQUE INDEX IF NOT EXISTS idx_pc_expenses_num ON pc_expenses(company_id, voucher_number)`);
+
+  // Scanned voucher/bill attachments — uploaded in bulk, then linked to an
+  // expense (voucher). expense_id starts NULL so a batch of scans can be
+  // uploaded before anyone has matched them to individual vouchers.
+  await safe(`CREATE TABLE IF NOT EXISTS pc_attachments (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id    UUID NOT NULL,
+    project_id    UUID REFERENCES projects(id),
+    expense_id    UUID REFERENCES pc_expenses(id) ON DELETE SET NULL,
+    file_name     VARCHAR(300) NOT NULL,
+    file_url      TEXT NOT NULL,
+    provider      VARCHAR(20) DEFAULT 'local',
+    uploaded_by   UUID REFERENCES users(id),
+    uploaded_at   TIMESTAMPTZ DEFAULT NOW()
+  )`);
+  await safe(`CREATE INDEX IF NOT EXISTS idx_pc_attachments_expense ON pc_attachments(expense_id)`);
+  await safe(`CREATE INDEX IF NOT EXISTS idx_pc_attachments_company ON pc_attachments(company_id, project_id)`);
 
   // Transaction: Settlements
   await safe(`CREATE TABLE IF NOT EXISTS pc_settlements (
@@ -705,7 +741,8 @@ router.get('/expenses', async (req, res) => {
     const { rows } = await query(
       `SELECT e.*, c.category_name, c.construction_type,
          cust.custodian_name, p.name AS project_name,
-         u1.name AS submitted_by_name, u2.name AS approved_by_name
+         u1.name AS submitted_by_name, u2.name AS approved_by_name,
+         (SELECT COUNT(*) FROM pc_attachments a WHERE a.expense_id = e.id)::int AS attachment_count
        FROM pc_expenses e
        LEFT JOIN pc_expense_categories c ON c.id = e.category_id
        LEFT JOIN pc_custodians cust ON cust.id = e.custodian_id
@@ -820,6 +857,93 @@ router.delete('/expenses/:id', async (req, res) => {
       [req.params.id, req.user.company_id]
     );
     if (!rowCount) return res.status(404).json({ error: 'Not found or not deletable' });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── ATTACHMENTS: bulk scan upload ────────────────────────────────────────────
+// POST /petty-cash/attachments/bulk-upload  (multipart, field name "files", up to 20)
+// Each file goes to OneDrive (falls back to local disk if not configured) and
+// gets its own pc_attachments row. expense_id is optional — pass it to attach
+// straight to a known voucher, or omit to upload now and link later.
+router.post('/attachments/bulk-upload', pcUpload.array('files', 20), async (req, res) => {
+  try {
+    if (!req.files?.length) return res.status(400).json({ error: 'No files uploaded' });
+    const { project_id, expense_id } = req.body;
+
+    let projectName = '';
+    if (project_id) {
+      const { rows } = await query(`SELECT name FROM projects WHERE id=$1`, [project_id]);
+      projectName = rows[0]?.name || '';
+    }
+
+    const results = [];
+    for (const file of req.files) {
+      let fileUrl = `/uploads/${file.filename}`;
+      let provider = 'local';
+      if (onedriveConfigured()) {
+        try {
+          const od = await uploadAndShare(file.path, file.originalname, 'PettyCash', projectName);
+          if (od?.share_url) {
+            fileUrl = od.share_url;
+            provider = 'onedrive';
+            fs.unlink(file.path, () => {});
+          }
+        } catch (e) {
+          console.error('[petty-cash] OneDrive upload failed, keeping local copy:', e.message);
+        }
+      }
+      const { rows: [row] } = await query(
+        `INSERT INTO pc_attachments (company_id, project_id, expense_id, file_name, file_url, provider, uploaded_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+        [req.user.company_id, project_id || null, expense_id || null, file.originalname, fileUrl, provider, req.user.id]
+      );
+      results.push(row);
+    }
+    res.status(201).json({ data: results, count: results.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /petty-cash/attachments?project_id=&expense_id=&unlinked=true
+router.get('/attachments', async (req, res) => {
+  try {
+    const { project_id, expense_id, unlinked } = req.query;
+    const params = [req.user.company_id];
+    let where = 'a.company_id=$1';
+    if (project_id) { params.push(project_id); where += ` AND a.project_id=$${params.length}`; }
+    if (expense_id) { params.push(expense_id); where += ` AND a.expense_id=$${params.length}`; }
+    if (unlinked === 'true') where += ' AND a.expense_id IS NULL';
+    const { rows } = await query(
+      `SELECT a.*, e.voucher_number, u.name AS uploaded_by_name
+       FROM pc_attachments a
+       LEFT JOIN pc_expenses e ON e.id = a.expense_id
+       LEFT JOIN users u ON u.id = a.uploaded_by
+       WHERE ${where} ORDER BY a.uploaded_at DESC`, params);
+    res.json({ data: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /petty-cash/attachments/:id/link  { expense_id }
+router.put('/attachments/:id/link', async (req, res) => {
+  try {
+    const { expense_id } = req.body;
+    if (!expense_id) return res.status(400).json({ error: 'expense_id required' });
+    const { rows: [row] } = await query(
+      `UPDATE pc_attachments SET expense_id=$1 WHERE id=$2 AND company_id=$3 RETURNING *`,
+      [expense_id, req.params.id, req.user.company_id]
+    );
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    res.json(row);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/attachments/:id', async (req, res) => {
+  try {
+    const { rowCount } = await query(
+      `DELETE FROM pc_attachments WHERE id=$1 AND company_id=$2`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!rowCount) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

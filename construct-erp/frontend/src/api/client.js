@@ -368,6 +368,11 @@ export const pettyCashAPI = {
   submitExpense:(id)     => api.post(`/petty-cash/expenses/${id}/submit`),
   approveExpense:(id, d) => api.post(`/petty-cash/expenses/${id}/approve`, d),
   deleteExpense:(id)     => api.delete(`/petty-cash/expenses/${id}`),
+  // Attachments (bulk scan upload)
+  bulkUploadAttachments:(formData) => api.post('/petty-cash/attachments/bulk-upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  attachments:  (params) => api.get('/petty-cash/attachments', { params }),
+  linkAttachment:(id, d) => api.put(`/petty-cash/attachments/${id}/link`, d),
+  deleteAttachment:(id)  => api.delete(`/petty-cash/attachments/${id}`),
   // Settlements
   settlements:  (params) => api.get('/petty-cash/settlements', { params }),
   createSettlement:(data)=> api.post('/petty-cash/settlements', data),
