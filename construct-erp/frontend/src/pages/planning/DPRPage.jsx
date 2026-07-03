@@ -16,6 +16,7 @@ import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
 import DPRPrintTemplate from './DPRPrintTemplate';
+import RecordAttachments from '../../components/shared/RecordAttachments';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -305,9 +306,17 @@ function DPRViewPanel({ dpr, project, onClose, onEdit, qc }) {
           </div>
         </div>
 
-        {/* Scrollable body — only the print template */}
+        {/* Scrollable body — print template + photo attachments */}
         <div className="flex-1 overflow-y-auto">
           <DPRPrintTemplate dpr={d} project={project} />
+          <div className="px-6 pb-6">
+            <RecordAttachments
+              module="daily_progress_report"
+              recordId={d.id}
+              projectId={d.project_id}
+              label="DPR Photos & Attachments"
+            />
+          </div>
         </div>
 
         {/* Footer */}
