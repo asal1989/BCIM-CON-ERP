@@ -951,6 +951,7 @@ const PROC_SHORTCUTS = [
   { label: 'IGN',                to: '/stores/ign',                   icon: ClipboardCheck },
   { label: 'Petty Cash',         to: '/stores/petty-cash',            icon: Wallet        },
   { label: 'Bill Tracker',       to: '/tqs/bills',                    icon: FileText      },
+  { label: 'Liability Register', to: '/tqs/liability-register',       icon: BookOpen      },
   { label: 'Budget & Cost',      to: '/procurement/budget-control',   icon: PieChart      },
 ];
 
@@ -1015,6 +1016,7 @@ const MD_SHORTCUTS = [
   { label: 'Analytics',         to: '/dashboard',                             icon: LayoutDashboard },
   { label: 'GRN / IGN',         to: '/stores/ign',                            icon: ClipboardCheck },
   { label: 'DPR',               to: '/planning/dpr-console',                  icon: FileText },
+  { label: 'Liability Register', to: '/tqs/liability-register',              icon: BookOpen },
 ];
 
 function MDQuickAccessBar() {
