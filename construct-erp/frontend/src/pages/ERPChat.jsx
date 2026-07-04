@@ -352,6 +352,7 @@ export default function ERPChat() {
   const [searchOpen, setSearchOpen]       = useState(false);
   const [pinsOpen, setPinsOpen]           = useState(false);
   const [searchQuery, setSearchQuery]     = useState('');
+  const [sidebarQuery, setSidebarQuery]   = useState('');
 
   // ── DM popup pane ──────────────────────────────────────────────────────────
   const [popup, setPopup]                 = useState(null); // { channel, name, photo }
@@ -600,6 +601,10 @@ export default function ERPChat() {
 
   const otherEmployees = employees.filter(e => e.id !== user?.id);
 
+  const q = sidebarQuery.trim().toLowerCase();
+  const filteredChannels  = q ? CHANNELS.filter(ch => ch.label.toLowerCase().includes(q) || ch.desc.toLowerCase().includes(q)) : CHANNELS;
+  const filteredEmployees = q ? otherEmployees.filter(emp => (emp.full_name || emp.name || '').toLowerCase().includes(q) || (emp.designation_name || emp.designation || '').toLowerCase().includes(q)) : otherEmployees;
+
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', position: 'relative' }}>
@@ -636,13 +641,21 @@ export default function ERPChat() {
           <div style={{ padding: '8px 12px', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderRadius: 8, padding: '7px 12px', border: `1px solid ${WA.divider}` }}>
               <Search size={14} color={WA.muted} />
-              <input placeholder="Search channels…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: WA.dark }} />
+              <input value={sidebarQuery} onChange={e => setSidebarQuery(e.target.value)}
+                placeholder="Search channels or staff…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: WA.dark }} />
+              {sidebarQuery && (
+                <button onClick={() => setSidebarQuery('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: WA.muted, display: 'flex', padding: 0 }}>
+                  <X size={13} />
+                </button>
+              )}
             </div>
           </div>
 
           <nav style={{ flex: 1, overflowY: 'auto' }}>
+            {filteredChannels.length > 0 && (
             <div style={{ padding: '8px 16px 4px', fontSize: 11, fontWeight: 700, color: WA.muted, textTransform: 'uppercase', letterSpacing: 0.8 }}>Channels</div>
-            {CHANNELS.map(ch => {
+            )}
+            {filteredChannels.map(ch => {
               const isActive = mainChannel === ch.id;
               const badge = unread[ch.id] || 0;
               return (
@@ -664,10 +677,14 @@ export default function ERPChat() {
               );
             })}
 
-            {otherEmployees.length > 0 && (
+            {filteredChannels.length === 0 && filteredEmployees.length === 0 && (
+              <p style={{ padding: '24px 16px', textAlign: 'center', fontSize: 13, color: WA.muted }}>No channels or staff match "{sidebarQuery}"</p>
+            )}
+
+            {filteredEmployees.length > 0 && (
               <>
                 <div style={{ padding: '12px 16px 4px', fontSize: 11, fontWeight: 700, color: WA.muted, textTransform: 'uppercase', letterSpacing: 0.8 }}>Direct Messages</div>
-                {otherEmployees.map(emp => {
+                {filteredEmployees.map(emp => {
                   const name = emp.full_name || emp.name || 'Employee';
                   const dmId = `dm-${[user?.id, emp.id].sort().join('-')}`;
                   const isOpenInPopup = popup?.channel === dmId;
