@@ -181,7 +181,6 @@ const InventoryAssetPage    = lazy(() => import('./pages/assets/InventoryAssetPa
 const AssetReportsPage      = lazy(() => import('./pages/assets/AssetReportsPage'));
 const AssetOperationsPage   = lazy(() => import('./pages/assets/AssetOperationsPage'));
 const PlanningDashboard     = lazy(() => import('./pages/planning/PlanningDashboard'));
-const PlanningDPRPage       = lazy(() => import('./pages/planning/DPRPage'));
 const DPRConsole            = lazy(() => import('./pages/planning/DPRConsole'));
 const EngineerDailyLogPage  = lazy(() => import('./pages/planning/EngineerDailyLogPage'));
 const ActivitiesPage        = lazy(() => import('./pages/planning/ActivitiesPage'));
@@ -842,7 +841,7 @@ export default function App() {
                 {/* Planning */}
                 <Route path="planning" element={<RequireModule module="Planning"><PlanningDashboard /></RequireModule>} />
                 <Route path="planning/engineer-log" element={<RequireModule module="Planning"><EngineerDailyLogPage /></RequireModule>} />
-                <Route path="planning/dpr" element={<RequireModule module="Planning"><PlanningDPRPage /></RequireModule>} />
+                <Route path="planning/dpr" element={<Navigate to="/planning/dpr-console" replace />} />
                 <Route path="planning/dpr-console" element={<RequireModule module="Planning"><DPRConsole /></RequireModule>} />
                 <Route path="planning/activities" element={<RequireModule module="Planning"><ActivitiesPage /></RequireModule>} />
                 <Route path="planning/milestones" element={<RequireModule module="Planning"><MilestonePage /></RequireModule>} />

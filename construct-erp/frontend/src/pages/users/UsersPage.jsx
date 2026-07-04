@@ -133,7 +133,7 @@ const MENU_CONFIG = {
     { to:'/planning/risks',         label:'Risk Register' },
     { to:'/planning/mrp',           label:'Material Plan (MRP)' },
     { to:'/planning/engineer-log',  label:'Engineer Daily Log' },
-    { to:'/planning/dpr',           label:'Daily Progress (DPR)' },
+    { to:'/planning/dpr-console',   label:'Daily Progress (DPR)' },
     { to:'/planning/reports',       label:'Planning Reports' },
     { to:'/planning/documents',     label:'Documents' },
   ],

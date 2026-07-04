@@ -46,8 +46,7 @@ const navGroups = [
     { to: '/planning/risks',        icon: ShieldCheck,      label: 'Risk Register' },
     { to: '/planning/mrp',          icon: Package,          label: 'Material Plan (MRP)' },
     { to: '/planning/engineer-log',  icon: ClipboardList,    label: 'Engineer Daily Log' },
-    { to: '/planning/dpr',          icon: FileText,         label: 'Daily Progress (DPR)' },
-    { to: '/planning/dpr-console',  icon: LayoutDashboard,  label: 'DPR Console' },
+    { to: '/planning/dpr-console',  icon: LayoutDashboard,  label: 'Daily Progress (DPR)' },
     { to: '/planning/reports',      icon: BarChart3,        label: 'Planning Reports' },
     { to: '/planning/documents',    icon: FolderSearch,     label: 'Documents' },
   ]},
@@ -386,7 +385,7 @@ const NAV_SECTIONS = {
   'Planning': [
     { label: 'Dashboard',  paths: ['/planning','/planning/p6-dashboard'] },
     { label: 'Schedule',   paths: ['/planning/wbs','/planning/activities','/planning/milestones','/planning/look-ahead'] },
-    { label: 'Progress',   paths: ['/planning/engineer-log','/planning/dpr','/planning/dpr-console','/planning/progress','/planning/delays','/planning/reports'] },
+    { label: 'Progress',   paths: ['/planning/engineer-log','/planning/dpr-console','/planning/progress','/planning/delays','/planning/reports'] },
     { label: 'P6',         paths: ['/planning/risks','/planning/mrp'] },
     { label: 'Documents',  paths: ['/planning/documents'] },
   ],
@@ -1015,7 +1014,7 @@ const MD_SHORTCUTS = [
   { label: 'Chart of Accounts', to: '/accounts/accountant/chart-of-accounts', icon: BookOpen },
   { label: 'Analytics',         to: '/dashboard',                             icon: LayoutDashboard },
   { label: 'GRN / IGN',         to: '/stores/ign',                            icon: ClipboardCheck },
-  { label: 'DPR',               to: '/planning/dpr',                          icon: FileText },
+  { label: 'DPR',               to: '/planning/dpr-console',                  icon: FileText },
 ];
 
 function MDQuickAccessBar() {
