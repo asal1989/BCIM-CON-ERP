@@ -87,27 +87,35 @@ router.get('/ledger', async (req, res) => {
 
     let billProjectFilter = '';
     let advProjectFilter = '';
+    let avProjectFilter = '';
     if (project_id && project_id.trim()) {
       params.push(project_id);
-      billProjectFilter = `AND b.project_id = $${params.length}`;
-      advProjectFilter = `AND a.project_id = $${params.length}`;
+      const pn = params.length;
+      billProjectFilter = `AND b.project_id = $${pn}`;
+      advProjectFilter = `AND a.project_id = $${pn}`;
+      avProjectFilter = `AND av.project_id = $${pn}`;
     } else if (!req.isGlobalRole) {
       const allowed = req.allowedProjectIds || [];
       if (allowed.length === 0) {
         billProjectFilter = 'AND FALSE';
         advProjectFilter = 'AND FALSE';
+        avProjectFilter = 'AND FALSE';
       } else {
         params.push(allowed);
-        billProjectFilter = `AND b.project_id = ANY($${params.length}::uuid[])`;
-        advProjectFilter = `AND a.project_id = ANY($${params.length}::uuid[])`;
+        const pn = params.length;
+        billProjectFilter = `AND b.project_id = ANY($${pn}::uuid[])`;
+        advProjectFilter = `AND a.project_id = ANY($${pn}::uuid[])`;
+        avProjectFilter = `AND av.project_id = ANY($${pn}::uuid[])`;
       }
     }
 
     let billTypeFilter = '';
     let advSourceFilter = '';
+    let avSourceFilter = '';
     if (accountType === 'po' || accountType === 'wo') {
       billTypeFilter = `AND ${billSourceSql(accountType, 'b')}`;
       advSourceFilter = `AND ${advanceSourceSql(accountType, 'a')}`;
+      avSourceFilter = `AND ${advanceSourceSql(accountType, 'av')}`;
     }
 
     const advanceCreditSql = `
@@ -272,6 +280,36 @@ router.get('/ledger', async (req, res) => {
           AND LOWER(TRIM(a.vendor_name)) = LOWER(TRIM($2))
           ${advProjectFilter}
           ${advSourceFilter}
+
+        UNION ALL
+
+        -- Procurement Advance Tracker (tqs_advance_vouchers) — disbursed WO/PO advances
+        SELECT
+          av.pay_date,
+          'Advance Given',
+          COALESCE(av.voucher_number, av.sl_number, '-'),
+          COALESCE(av.wo_number, av.po_number, '-'),
+          'Advance Payment'
+            || CASE WHEN av.wo_number IS NOT NULL THEN ' - WO: ' || av.wo_number
+                    WHEN av.po_number IS NOT NULL THEN ' - PO: ' || av.po_number
+                    ELSE '' END
+            || CASE WHEN av.voucher_number IS NOT NULL THEN ' (Voucher: ' || av.voucher_number || ')' ELSE '' END
+            || CASE WHEN av.remarks IS NOT NULL THEN ' | ' || av.remarks ELSE '' END,
+          p2.name,
+          av.paid_amount,
+          NULL::numeric,
+          'advance',
+          av.id::text,
+          'advance',
+          NULL::numeric
+        FROM tqs_advance_vouchers av
+        LEFT JOIN projects p2 ON p2.id = av.project_id
+        WHERE av.company_id = $1
+          AND LOWER(TRIM(av.vendor_name)) = LOWER(TRIM($2))
+          AND av.is_deleted = FALSE
+          AND COALESCE(av.paid_amount, 0) > 0
+          ${avProjectFilter}
+          ${avSourceFilter}
 
         -- ⚠️ TDS on advance is NOT a vendor-ledger entry — it's between
         -- the company and the tax department. The advance gross is already
