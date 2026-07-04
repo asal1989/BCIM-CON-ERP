@@ -4,11 +4,12 @@ import { Link } from 'react-router-dom';
 import {
   IndianRupee, Clock, CheckCircle2, AlertTriangle, ArrowRight,
   FileText, ChevronDown, ChevronRight, CreditCard, X,
-  Search, Filter, RefreshCw, BadgeCheck,
+  Search, Filter, RefreshCw, BadgeCheck, ArrowUpRight, BarChart3,
 } from 'lucide-react';
 import { tqsBillsAPI, paymentAPI, vendorQSCertificationAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
-import { DashKPI, DashSection, DashTable, Badge, FlatKPI, inr } from './DashKPI';
+import { Badge, inr } from './DashKPI';
+import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import ProjectFilter from '../../components/ProjectFilter';
 import dayjs from 'dayjs';
 import { clsx } from 'clsx';
@@ -20,6 +21,23 @@ const inrFmt = v => {
   const n = Number(v || 0);
   return `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
+
+function SectionTitle({ icon: Icon, title, subtitle, action }) {
+  return (
+    <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center gap-2.5">
+        <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center">
+          <Icon className="w-4 h-4 text-emerald-600" />
+        </div>
+        <div>
+          <h2 className="text-sm font-bold text-slate-800 leading-tight">{title}</h2>
+          {subtitle && <p className="text-[10px] text-slate-400 uppercase tracking-wider">{subtitle}</p>}
+        </div>
+      </div>
+      {action}
+    </div>
+  );
+}
 
 // ── PC Payment Modal ──────────────────────────────────────────────────────────
 function PCPaymentModal({ pc, onClose, onSuccess }) {
@@ -245,7 +263,7 @@ function PCRow({ pc, onPay }) {
 
   return (
     <>
-      <tr className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setExpanded(e => !e)}>
+      <tr className="hover:bg-slate-50 transition-colors group cursor-pointer" onClick={() => setExpanded(e => !e)}>
         <td className="px-3 py-2.5 w-4">
           {expanded ? <ChevronDown className="w-3.5 h-3.5 text-slate-400" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-400" />}
         </td>
@@ -444,40 +462,73 @@ export default function AccountsDashboard() {
   ];
 
   return (
-    <div className="p-6 space-y-5 bg-slate-50 min-h-full">
+    <div style={{ background: Theme.pageBg, minHeight: '100vh' }}>
 
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-800">
-            Good {dayjs().hour() < 12 ? 'morning' : dayjs().hour() < 17 ? 'afternoon' : 'evening'}, {user?.name?.split(' ')[0]} 👋
-          </h1>
-          <p className="text-sm text-slate-400 mt-0.5">Accounts Overview — {dayjs().format('dddd, D MMMM YYYY')}</p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <ProjectFilter />
-          <Badge label="Accountant" cls="bg-emerald-50 text-emerald-700 text-xs px-3 py-1" />
-        </div>
-      </div>
+      <PageHeader
+        title="Accounts Dashboard"
+        subtitle="Payments, ledgers & financial overview"
+        breadcrumbs={[{ label: 'Finance' }, { label: 'Dashboard' }]}
+        actions={
+          <>
+            <div className="flex items-center gap-1.5 px-1">
+              <ProjectFilter />
+            </div>
+            <button onClick={() => { qc.invalidateQueries({ queryKey: ['tqs-bills'] }); }}
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition shadow-sm"
+              style={{ background: '#fff', color: Theme.navyDark }}>
+              <RefreshCw className="w-3.5 h-3.5" /> Refresh
+            </button>
+            <Link to="/accounts/purchases/qs-certifications"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg transition"
+              style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', color: '#fff' }}>
+              <BadgeCheck className="w-3.5 h-3.5" /> QS Certifications
+            </Link>
+          </>
+        }
+      />
+
+      <div className="p-5 md:p-6 max-w-[1400px] mx-auto space-y-5">
 
       {/* ── KPIs ── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <FlatKPI icon={IndianRupee}    label="Total Outstanding"    value={unpaidBills.length}           sub={inrFmt(totalOutstanding)} color="red"    loading={loadB} />
-        <FlatKPI icon={FileText}      label="PCs Pending Payment"  value={pendingPCCount}               sub={inrFmt(totalPCDue)}       color="amber"  loading={loadPC} />
-        <FlatKPI icon={Clock}         label="At Accounts Stage"    value={readyForPayment.length}       sub={inrFmt(totalDue)}         color="purple" loading={loadB} />
-        <FlatKPI icon={CheckCircle2}  label="Paid This Month"      value={paidThisMonth.length}         sub={inrFmt(paidAmt)}          color="emerald" loading={loadB} />
-        <FlatKPI icon={AlertTriangle} label="Overdue 90+ Days"     value={overdue90.length}             sub={inrFmt(totalOverdue)}     color="red"    loading={loadA} />
-        <FlatKPI icon={AlertTriangle} label="Stuck Bills (7+ days)" value={stuckBills.length}           sub={`${unpaidBills.length} unpaid total`} color="orange" loading={loadB} />
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        <ThemeKpiCard icon={IndianRupee}    label="Total Outstanding"     value={unpaidBills.length}     color="red"     sub={inrFmt(totalOutstanding)} />
+        <ThemeKpiCard icon={FileText}       label="PCs Pending Payment"   value={pendingPCCount}         color="amber"   sub={inrFmt(totalPCDue)} />
+        <ThemeKpiCard icon={Clock}          label="At Accounts Stage"     value={readyForPayment.length} color="purple"  sub={inrFmt(totalDue)} />
+        <ThemeKpiCard icon={CheckCircle2}   label="Paid This Month"       value={paidThisMonth.length}   color="emerald" sub={inrFmt(paidAmt)} />
+        <ThemeKpiCard icon={AlertTriangle}  label="Overdue 90+ Days"      value={overdue90.length}       color="orange"  sub={inrFmt(totalOverdue)} />
+        <ThemeKpiCard icon={AlertTriangle}  label="Stuck Bills (7+ days)" value={stuckBills.length}      color="slate"   sub={`${unpaidBills.length} unpaid total`} />
       </div>
 
+      {/* ── Alert banners ── */}
+      {(overdue90.length > 0 || stuckBills.length > 0) && (
+        <div className="flex flex-col gap-2">
+          {overdue90.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-3">
+              <AlertTriangle size={15} className="text-amber-600 flex-shrink-0" />
+              <span className="text-sm font-medium text-amber-800">
+                {overdue90.length} bill{overdue90.length > 1 ? 's' : ''} overdue 90+ days — {inrFmt(totalOverdue)} outstanding
+              </span>
+            </div>
+          )}
+          {stuckBills.length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-center gap-3">
+              <Clock size={15} className="text-blue-600 flex-shrink-0" />
+              <span className="text-sm font-medium text-blue-800">
+                {stuckBills.length} bill{stuckBills.length > 1 ? 's' : ''} stuck at Accounts stage for 7+ days
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── AP Aging Bar ── */}
-      <div className="bg-white rounded-md border border-slate-200 p-4">
-        <p className="text-sm font-medium text-slate-800 mb-3">AP Aging Distribution</p>
+      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+        <SectionTitle icon={BarChart3} title="AP Aging Distribution" subtitle="Outstanding bills by age" />
         <div className="flex gap-3 flex-wrap">
           {agingBuckets.map(b => (
-            <div key={b.bucket} className="flex-1 min-w-[100px] bg-slate-50 rounded-md p-3 text-center border border-slate-200">
+            <div key={b.bucket} className="flex-1 min-w-[100px] bg-slate-50 rounded-xl p-3 text-center border border-slate-100">
               <div className={`h-1.5 rounded-full mb-2 ${AGING_COLOR[b.bucket] || 'bg-slate-400'}`} />
-              <p className="text-lg font-semibold text-slate-800">{b.count}</p>
+              <p className="text-lg font-bold text-slate-800">{b.count}</p>
               <p className="text-[11px] text-slate-400">{b.bucket} days</p>
               <p className="text-[11px] text-slate-400">{inrFmt(b.total)}</p>
             </div>
@@ -486,33 +537,17 @@ export default function AccountsDashboard() {
       </div>
 
       {/* ── PC Payment Table ── */}
-      <div className="bg-white rounded-md border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
-          <div className="flex items-center gap-2">
-            <CreditCard className="w-4 h-4 text-indigo-500" />
-            <div>
-              <p className="text-sm font-medium text-slate-800">Payment Certificates — Pending Payment</p>
-              <p className="text-xs text-slate-900 font-medium mt-0.5">
-                {filteredPCs.length} of {pcList.length} PCs · {inrFmt(filteredDue)} due · Click row to expand bills
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link to="/accounts/purchases/qs-certifications"
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:text-emerald-600 hover:border-emerald-300 transition-all">
-              <BadgeCheck className="w-3.5 h-3.5" /> QS Certifications
-            </Link>
-            <button onClick={() => { qc.invalidateQueries({ queryKey: ['tqs-bills'] }); }}
-              className="h-8 w-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-900 font-medium hover:text-indigo-600 hover:border-indigo-300 transition-all">
-              <RefreshCw className="w-3.5 h-3.5" />
-            </button>
-          </div>
+        <div className="p-5 pb-0">
+          <SectionTitle icon={CreditCard} title="Payment Certificates — Pending Payment"
+            subtitle={`${filteredPCs.length} of ${pcList.length} PCs · ${inrFmt(filteredDue)} due · click row to expand bills`}
+          />
         </div>
 
         {/* Filter bar */}
-        <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+        <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-y border-slate-100 bg-slate-50/60">
           {/* Search */}
           <div className="relative flex-1 min-w-[180px] max-w-xs">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-900 font-medium pointer-events-none" />
@@ -581,18 +616,18 @@ export default function AccountsDashboard() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-100">
+                <tr className="bg-slate-50 border-y border-slate-100">
                   <th className="w-4 px-3 py-2.5" />
-                  <th className="px-3 py-2.5 text-left text-[11px] font-medium text-slate-900 font-medium uppercase tracking-wide whitespace-nowrap">PC Number</th>
-                  <th className="px-3 py-2.5 text-left text-[11px] font-medium text-slate-900 font-medium uppercase tracking-wide">Vendor</th>
-                  <th className="px-3 py-2.5 text-center text-[11px] font-medium text-slate-900 font-medium uppercase tracking-wide">Bills</th>
-                  <th className="px-3 py-2.5 text-right text-[11px] font-medium text-slate-900 font-medium uppercase tracking-wide whitespace-nowrap">Certified (₹)</th>
-                  <th className="px-3 py-2.5 text-right text-[11px] font-medium text-slate-900 font-medium uppercase tracking-wide">TDS</th>
-                  <th className="px-3 py-2.5 text-right text-[11px] font-medium text-slate-900 font-medium uppercase tracking-wide whitespace-nowrap">Balance Due</th>
-                  <th className="px-3 py-2.5 text-right text-[11px] font-medium text-emerald-600 uppercase tracking-wide whitespace-nowrap">Advance (−)</th>
-                  <th className="px-3 py-2.5 text-right text-[11px] font-medium text-red-600 uppercase tracking-wide whitespace-nowrap">Net Payable</th>
-                  <th className="px-3 py-2.5 text-right text-[11px] font-medium text-slate-900 font-medium uppercase tracking-wide">Paid%</th>
-                  <th className="px-3 py-2.5 text-[11px] font-medium text-slate-900 font-medium uppercase tracking-wide">Action</th>
+                  <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400 whitespace-nowrap">PC Number</th>
+                  <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-widest text-slate-400">Vendor</th>
+                  <th className="px-3 py-2.5 text-center text-[10px] font-bold uppercase tracking-widest text-slate-400">Bills</th>
+                  <th className="px-3 py-2.5 text-right text-[10px] font-bold uppercase tracking-widest text-slate-400 whitespace-nowrap">Certified (₹)</th>
+                  <th className="px-3 py-2.5 text-right text-[10px] font-bold uppercase tracking-widest text-slate-400">TDS</th>
+                  <th className="px-3 py-2.5 text-right text-[10px] font-bold uppercase tracking-widest text-slate-400 whitespace-nowrap">Balance Due</th>
+                  <th className="px-3 py-2.5 text-right text-[10px] font-bold uppercase tracking-widest text-emerald-500 whitespace-nowrap">Advance (−)</th>
+                  <th className="px-3 py-2.5 text-right text-[10px] font-bold uppercase tracking-widest text-red-500 whitespace-nowrap">Net Payable</th>
+                  <th className="px-3 py-2.5 text-right text-[10px] font-bold uppercase tracking-widest text-slate-400">Paid%</th>
+                  <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -629,12 +664,48 @@ export default function AccountsDashboard() {
       </div>
 
       {/* ── Recent Payments ── */}
-      <DashSection
-        title="Recent Payments"
-        action={<Link to="/accounts/purchases/payments-made" className="text-xs text-blue-600 flex items-center gap-1 hover:underline">All <ArrowRight className="w-3 h-3" /></Link>}
-      >
-        <DashTable cols={paymentCols} rows={payments.slice(0, 8)} empty="No recent payments" />
-      </DashSection>
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-5 pb-0">
+          <SectionTitle icon={IndianRupee} title="Recent Payments"
+            subtitle="Latest outgoing payments"
+            action={
+              <Link to="/accounts/purchases/payments-made" className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 hover:text-emerald-700">
+                All <ChevronRight className="w-3 h-3" />
+              </Link>
+            }
+          />
+        </div>
+        {loadPay ? (
+          <div className="p-5 space-y-2">{[1,2,3,4].map(n => <div key={n} className="h-10 bg-slate-100 rounded-xl animate-pulse" />)}</div>
+        ) : payments.length === 0 ? (
+          <div className="py-12 text-center text-xs text-slate-400">No recent payments</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-y border-slate-100">
+                  {paymentCols.map(c => (
+                    <th key={c.key} className={`px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 ${c.right ? 'text-right' : 'text-left'}`}>
+                      {c.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {payments.slice(0, 8).map((row, i) => (
+                  <tr key={i} className="hover:bg-slate-50 transition-colors group">
+                    {paymentCols.map(c => (
+                      <td key={c.key} className={`px-4 py-3 text-xs ${c.right ? 'text-right' : ''} ${c.cls || 'text-slate-700'}`}>
+                        {c.render ? c.render(row) : (row[c.key] ?? <span className="text-slate-300">—</span>)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* ── PC Payment Modal ── */}
       {payingPC && (
@@ -653,6 +724,7 @@ export default function AccountsDashboard() {
           }}
         />
       )}
+      </div>
     </div>
   );
 }
