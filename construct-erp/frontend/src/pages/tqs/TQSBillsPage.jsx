@@ -12,7 +12,7 @@ import { Z_CARD, Z_HEAD } from '../../constants/zohoStyles';
 import { clsx } from 'clsx';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
-import { FileText, Plus, Search, ChevronRight, X, ChevronUp, ChevronDown, Pencil, Trash2, AlertTriangle, Upload, Download, CheckCircle2, IndianRupee, SlidersHorizontal, FileSpreadsheet, ChevronsRight, ExternalLink, Edit2 } from 'lucide-react';
+import { FileText, Plus, Search, ChevronRight, X, ChevronUp, ChevronDown, Pencil, Trash2, AlertTriangle, Upload, Download, CheckCircle2, IndianRupee, SlidersHorizontal, FileSpreadsheet, ChevronsRight, ExternalLink, Edit2, Building2, Truck, Receipt, StickyNote, Package } from 'lucide-react';
 import dayjs from 'dayjs';
 
 const STATUS_CONFIG = {
@@ -126,6 +126,34 @@ function POWOWarningBanner({ warning }) {
           <strong>{warning.po_number}</strong> ({warning.vendor_name}) — ₹{inr(warning.billed_amount)} already billed out of ₹{inr(warning.total_amount)} ({warning.pct}%).
         </p>
       </div>
+    </div>
+  );
+}
+
+// Professional section-card wrapper used across the New/Edit Bill screens —
+// icon chip + title + optional subtitle/badge, in place of the plain
+// Z_CARD/Z_HEAD text-only headers.
+function SectionCard({ icon: Icon, title, subtitle, badge, right, children }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-100 bg-slate-50/60">
+        <div className="flex items-center gap-3 min-w-0">
+          {Icon && (
+            <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center flex-shrink-0">
+              <Icon className="w-4 h-4 text-blue-600" />
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="text-[13.5px] font-semibold text-slate-800 truncate">{title}</h3>
+              {badge}
+            </div>
+            {subtitle && <p className="text-[11px] text-slate-400 mt-0.5 truncate">{subtitle}</p>}
+          </div>
+        </div>
+        {right}
+      </div>
+      <div className="p-4">{children}</div>
     </div>
   );
 }
@@ -620,10 +648,19 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-white" style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
 
-      {/* ── Breadcrumb header (matches New MR) ── */}
-      <div className="flex items-center justify-between px-6 py-3.5 flex-shrink-0 bg-white border-b border-slate-200">
-        <div className="flex items-center gap-3">
-          <div className="text-xs text-slate-400">Bill Tracker <span className="text-slate-300">›</span> Bills <span className="text-slate-300">›</span> <b className="text-slate-700">New Bill</b></div>
+      {/* ── Page header ── */}
+      <div className="flex items-center justify-between px-6 py-4 flex-shrink-0 bg-white border-b border-slate-200">
+        <div>
+          <div className="text-xs text-slate-400 mb-1">Bill Tracker <span className="text-slate-300">›</span> Bills <span className="text-slate-300">›</span> <b className="text-slate-500">New Bill</b></div>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-lg font-semibold text-slate-900">New Bill</h1>
+            <span className={clsx('text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border',
+              form.bill_type === 'wo' ? 'bg-orange-50 text-orange-700 border-orange-200'
+                : form.bill_type === 'hire' ? 'bg-purple-50 text-purple-700 border-purple-200'
+                : 'bg-blue-50 text-blue-700 border-blue-200')}>
+              {form.bill_type === 'wo' ? 'Work Order' : form.bill_type === 'hire' ? 'Hire / Rental' : 'Purchase Order'}
+            </span>
+          </div>
         </div>
         <button
           onClick={onClose}
@@ -638,9 +675,8 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
         <div className="w-full max-w-[1600px] mx-auto px-6 py-6 space-y-5">
 
           {/* ── SECTION 1: Vendor & PO Info ── */}
-          <div className={Z_CARD}>
-            <h3 className={Z_HEAD}>Vendor &amp; PO Information</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-4">
+          <SectionCard icon={Building2} title="Vendor & PO Information" subtitle="Who you're billing from, and the linked PO / WO">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               {/* Project */}
               <div>
                 <Lbl req>Project</Lbl>
@@ -887,14 +923,15 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                 <input type="date" className={F} value={form.received_date} onChange={e => set('received_date', e.target.value)} />
               </div>
             </div>
-          </div>
+          </SectionCard>
 
           {/* ── SECTION 2: Invoice Materials (Line Items) ── */}
-          <div className={Z_CARD}>
-            <div className={clsx(Z_HEAD, 'flex items-center justify-between')}>
-              <span>Invoice Materials</span>
-              <div className="flex items-center gap-3">
-                {/* Tax Mode */}
+          <SectionCard
+            icon={Package}
+            title="Invoice Materials"
+            subtitle={`${items.filter(it => it.item_name?.trim()).length} line item${items.filter(it => it.item_name?.trim()).length === 1 ? '' : 's'}`}
+            right={
+              <div className="flex items-center gap-2">
                 <select
                   className={`text-xs h-9 rounded-md px-2 text-slate-900 outline-none transition-colors border ${FIELD_HL}`}
                   value={form.tax_mode} onChange={e => set('tax_mode', e.target.value)}
@@ -903,13 +940,12 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                   <option value="interstate">Interstate (IGST)</option>
                 </select>
                 <button type="button" onClick={addItem}
-                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-semibold">
+                  className="flex items-center gap-1.5 h-9 px-3 rounded-md bg-blue-50 hover:bg-blue-100 text-xs text-blue-700 font-semibold transition-colors">
                   <Plus className="w-3.5 h-3.5" /> Add Item
                 </button>
               </div>
-            </div>
-
-            <div className="p-4">
+            }
+          >
             {/* GST quick-select */}
             {(() => {
               const isIGST = form.tax_mode === 'interstate';
@@ -1103,13 +1139,11 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                 </div>
               </div>
             )}
-            </div>
-          </div>
+          </SectionCard>
 
           {/* ── SECTION 3: Additional Charges ── */}
-          <div className={Z_CARD}>
-            <h3 className={Z_HEAD}>Additional Charges</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4">
+          <SectionCard icon={Truck} title="Additional Charges" subtitle="Transport, packing/insurance and TCS">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div>
                 <Lbl>Transport Description</Lbl>
                 <input className={F} placeholder="e.g. Freight, Delivery..."
@@ -1151,12 +1185,11 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                   value={tcsAmt > 0 ? tcsAmt.toFixed(2) : ''} placeholder="Auto" />
               </div>
             </div>
-          </div>
+          </SectionCard>
 
           {/* ── SECTION 4: Credit Note ── */}
-          <div className={Z_CARD}>
-            <h3 className={Z_HEAD}>Credit Note <span className="text-slate-400 font-normal">(Optional)</span></h3>
-            <div className="grid grid-cols-2 gap-3 p-4">
+          <SectionCard icon={Receipt} title="Credit Note" badge={<span className="text-[10px] font-medium text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">Optional</span>}>
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <Lbl>Credit Note Number</Lbl>
                 <input className={F} placeholder="CN-001"
@@ -1168,11 +1201,16 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                   value={form.credit_note_val} onChange={e => set('credit_note_val', e.target.value)} />
               </div>
             </div>
-          </div>
+          </SectionCard>
 
           {/* ── SECTION 5: Invoice Totals (read-only) ── */}
-          <div className="bg-blue-50 border border-blue-100 rounded-md p-5">
-            <p className="text-[11px] font-semibold text-blue-400 uppercase tracking-wider mb-3">Invoice Totals</p>
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-xl shadow-sm p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-white border border-blue-200 flex items-center justify-center flex-shrink-0">
+                <IndianRupee className="w-4 h-4 text-blue-600" />
+              </div>
+              <h3 className="text-[13.5px] font-semibold text-blue-900">Invoice Totals (Live)</h3>
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
               <div className="text-center">
                 <p className="text-xs text-slate-500 mb-0.5">Basic Amount</p>
@@ -1213,15 +1251,12 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
           </div>
 
           {/* ── SECTION 6: Remarks ── */}
-          <div className={Z_CARD}>
-            <h3 className={Z_HEAD}>Remarks</h3>
-            <div className="p-4">
-              <Lbl>Remarks / Notes</Lbl>
-              <textarea rows={2} className={F + ' resize-none'}
-                placeholder="Any initial remarks..."
-                value={form.remarks} onChange={e => set('remarks', e.target.value)} />
-            </div>
-          </div>
+          <SectionCard icon={StickyNote} title="Remarks">
+            <Lbl>Remarks / Notes</Lbl>
+            <textarea rows={2} className={F + ' resize-none'}
+              placeholder="Any initial remarks..."
+              value={form.remarks} onChange={e => set('remarks', e.target.value)} />
+          </SectionCard>
 
         </div>{/* /max-w-5xl */}
       </div>{/* /scrollable body */}
