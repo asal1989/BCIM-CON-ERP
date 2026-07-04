@@ -76,19 +76,24 @@ async function getVendorLiabilitySummary({
 
   const billConds = [`(b.company_id = $1 OR b.company_id IS NULL)`, `b.is_deleted = FALSE`];
   const advConds = [`a.company_id = $1`];
+  // tqs_advance_vouchers (Procurement Advance Tracker) — only disbursed advances
+  const avConds = [`av.company_id = $1`, `av.is_deleted = FALSE`, `COALESCE(av.paid_amount, 0) > 0`];
 
   if (projectId && String(projectId).trim()) {
     billConds.push(`b.project_id = $${idx}`);
     advConds.push(`a.project_id = $${idx}`);
+    avConds.push(`av.project_id = $${idx}`);
     params.push(projectId);
     idx++;
   } else if (Array.isArray(projectIds)) {
     if (projectIds.length === 0) {
       billConds.push('FALSE');
       advConds.push('FALSE');
+      avConds.push('FALSE');
     } else {
       billConds.push(`b.project_id = ANY($${idx}::uuid[])`);
       advConds.push(`a.project_id = ANY($${idx}::uuid[])`);
+      avConds.push(`av.project_id = ANY($${idx}::uuid[])`);
       params.push(projectIds);
       idx++;
     }
@@ -96,22 +101,26 @@ async function getVendorLiabilitySummary({
   if (accountType === 'po' || accountType === 'wo') {
     billConds.push(billSourceSql(accountType, 'b'));
     advConds.push(advanceSourceSql(accountType));
+    avConds.push(advanceSourceSql(accountType, 'av'));
   }
   if (fromDate) {
     billConds.push(`b.inv_date >= $${idx}`);
     advConds.push(`a.payment_date >= $${idx}`);
+    avConds.push(`av.pay_date >= $${idx}`);
     params.push(fromDate);
     idx++;
   }
   if (toDate) {
     billConds.push(`b.inv_date <= $${idx}`);
     advConds.push(`a.payment_date <= $${idx}`);
+    avConds.push(`av.pay_date <= $${idx}`);
     params.push(toDate);
     idx++;
   }
   if (vendorId && String(vendorId).trim()) {
     billConds.push(`b.vendor_id = $${idx}`);
     advConds.push(`a.vendor_id = $${idx}`);
+    avConds.push(`av.vendor_id = $${idx}`);
     params.push(vendorId);
     idx++;
   }
@@ -128,6 +137,12 @@ async function getVendorLiabilitySummary({
       OR a.po_number ILIKE $${idx}
       OR a.wo_number ILIKE $${idx}
       OR a.reference_number ILIKE $${idx}
+    )`);
+    avConds.push(`(
+      av.vendor_name ILIKE $${idx}
+      OR av.po_number ILIKE $${idx}
+      OR av.wo_number ILIKE $${idx}
+      OR av.voucher_number ILIKE $${idx}
     )`);
     params.push(`%${search}%`);
     idx++;
@@ -183,14 +198,34 @@ async function getVendorLiabilitySummary({
     ),
     advance_agg AS (
       SELECT
-        LOWER(TRIM(a.vendor_name)) AS vendor_key,
-        MAX(a.vendor_name) AS vendor_name,
-        MAX(a.vendor_id::text)::uuid AS vendor_id,
-        COALESCE(SUM(COALESCE(a.amount, 0)), 0) AS total_advance_given,
-        MAX(a.payment_date) AS last_advance_date
-      FROM tqs_advances a
-      WHERE ${advConds.filter(Boolean).join(' AND ')}
-      GROUP BY LOWER(TRIM(a.vendor_name))
+        vendor_key,
+        MAX(vendor_name) AS vendor_name,
+        MAX(vendor_id) AS vendor_id,
+        SUM(amount) AS total_advance_given,
+        MAX(last_date) AS last_advance_date
+      FROM (
+        SELECT
+          LOWER(TRIM(a.vendor_name)) AS vendor_key,
+          a.vendor_name,
+          a.vendor_id,
+          COALESCE(a.amount, 0) AS amount,
+          a.payment_date AS last_date
+        FROM tqs_advances a
+        WHERE ${advConds.filter(Boolean).join(' AND ')}
+
+        UNION ALL
+
+        -- Procurement Advance Tracker (tqs_advance_vouchers) — disbursed advances
+        SELECT
+          LOWER(TRIM(av.vendor_name)) AS vendor_key,
+          av.vendor_name,
+          av.vendor_id,
+          COALESCE(av.paid_amount, 0) AS amount,
+          av.pay_date AS last_date
+        FROM tqs_advance_vouchers av
+        WHERE ${avConds.join(' AND ')}
+      ) _adv
+      GROUP BY vendor_key
     )
     SELECT
       COALESCE(b.vendor_name, a.vendor_name) AS vendor_name,
