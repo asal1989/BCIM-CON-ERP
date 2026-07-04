@@ -15,7 +15,7 @@ import {
   CalendarOff, FileBarChart, Star, UserCheck, Fingerprint, PackageCheck, ArrowLeftRight,
   Landmark, FileSignature, CircleSlash, ShieldCheck, Clock3, Lightbulb,
   Gavel, Target, Send, Coins, Replace, Link2, Wrench, Layers, MapPin, TrendingDown, FolderOpen, Calculator, UserRound,
-  Cog, Fuel, Gauge, BarChart2, History, GitBranch, MinusCircle, FolderKanban
+  Cog, Fuel, Gauge, BarChart2, History, GitBranch, MinusCircle, FolderKanban, MessageSquare
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import CommandPalette from './CommandPalette';
@@ -33,6 +33,7 @@ const navGroups = [
     { to: '/approvals', icon: BadgeCheck,      label: 'My Approvals' },
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/projects',  icon: Building2,       label: 'Projects' },
+    { to: '/chat',      icon: MessageSquare,   label: 'Team Chat' },
   ]},
   { label: 'Planning', items: [
     { to: '/planning',              icon: GanttChartSquare, label: 'P&E Dashboard' },
