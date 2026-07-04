@@ -96,6 +96,18 @@ export default function ERPChat() {
   const searchRef  = useRef(null);
   const textRef    = useRef(null);
   const typingTimer = useRef(null);
+  // Mirrors activeChannel for use inside the socket handlers below, which are
+  // registered once (empty dep array) so their closures would otherwise only
+  // ever see the channel active at mount time.
+  const activeChannelRef = useRef(activeChannel);
+  useEffect(() => { activeChannelRef.current = activeChannel; }, [activeChannel]);
+
+  // ── Desktop notification permission ─────────────────────────────────────────
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
 
   // ── Connect Socket.IO ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -111,12 +123,31 @@ export default function ERPChat() {
     socket.on('disconnect', () => setConnected(false));
 
     socket.on('new_message', (msg) => {
-      setMessages(prev => [...prev, msg]);
+      const isOtherChannel = msg.channel !== activeChannelRef.current;
+      setMessages(prev => isOtherChannel ? prev : [...prev, msg]);
       // increment unread if not in this channel
       setUnread(prev => ({
         ...prev,
-        [msg.channel]: (msg.channel !== activeChannel) ? (prev[msg.channel] || 0) + 1 : 0,
+        [msg.channel]: isOtherChannel ? (prev[msg.channel] || 0) + 1 : 0,
       }));
+
+      // Desktop notification — only for messages from someone else, and only
+      // when you're not already looking at that channel in a focused tab.
+      const fromSomeoneElse = msg.sender_id !== user?.id;
+      if (fromSomeoneElse && 'Notification' in window && Notification.permission === 'granted'
+          && (document.hidden || isOtherChannel)) {
+        const chDef = CHANNELS.find(c => c.id === msg.channel);
+        const notif = new Notification(`${msg.sender_name} · #${chDef?.label || msg.channel}`, {
+          body: msg.text || (msg.file_name ? `📎 ${msg.file_name}` : 'New message'),
+          tag: `erp-chat-${msg.channel}`,
+          icon: '/logo192.png',
+        });
+        notif.onclick = () => {
+          window.focus();
+          setActiveChannel(msg.channel);
+          notif.close();
+        };
+      }
     });
 
     socket.on('message_pinned', ({ id, pinned }) => {

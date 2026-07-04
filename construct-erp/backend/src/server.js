@@ -517,13 +517,23 @@ io.use((socket, next) => {
   }
 });
 
+// Fixed channel list (must match CHANNELS in frontend/src/pages/ERPChat.jsx).
+// Every socket joins ALL of these on connect so unread badges and desktop
+// notifications work for channels the user isn't currently viewing — the
+// client filters by msg.channel to decide what to render vs. what to notify.
+const CHAT_CHANNELS = [
+  'general', 'finance', 'procurement', 'stores', 'qs-billing', 'tqs',
+  'hr', 'planning', 'quality', 'subcontractors', 'tender', 'it-support',
+];
+
 io.on('connection', (socket) => {
   logger.info(`💬 Chat: ${socket.user?.name || socket.user?.id} connected`);
+  CHAT_CHANNELS.forEach(ch => socket.join(ch));
 
-  // Join a channel room
+  // Tracks which channel the client is actively viewing (for future use —
+  // room membership no longer depends on this, the socket stays in every
+  // channel room for the life of the connection).
   socket.on('join_channel', (channel) => {
-    socket.rooms.forEach(r => { if (r !== socket.id) socket.leave(r); });
-    socket.join(channel);
     socket.currentChannel = channel;
   });
 
