@@ -1468,6 +1468,141 @@ function ImportBillsModal({ projects, defaultProjectId, onClose, onDone }) {
 }
 
 // â"€â"€ Edit Bill Modal â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+// ── Line item editor row (used inside EditBillModal) ────────────────────────
+function LineItemEditRow({ billId, item, boqItems }) {
+  const qc = useQueryClient();
+  const [row, setRow] = useState({
+    item_name:  item.item_name  || '',
+    unit:       item.unit       || '',
+    quantity:   String(item.quantity ?? ''),
+    rate:       String(item.rate ?? ''),
+    gst_pct:    String(item.gst_pct ?? ''),
+    cost_head:  item.cost_head  || '',
+    boq_item_id:item.boq_item_id|| '',
+  });
+  const [dirty, setDirty] = useState(false);
+  const set = (k, v) => { setRow(p => ({ ...p, [k]: v })); setDirty(true); };
+
+  const qty = parseFloat(row.quantity) || 0;
+  const rt  = parseFloat(row.rate) || 0;
+  const basic = qty * rt;
+  const gstAmt = basic * (parseFloat(row.gst_pct) || 0) / 100;
+  const total = basic + gstAmt;
+
+  const saveMut = useMutation({
+    mutationFn: () => tqsBillsAPI.updateLineItem(billId, item.id, row),
+    onSuccess: () => {
+      toast.success('Line item updated');
+      setDirty(false);
+      qc.invalidateQueries({ queryKey: ['tqs-bill-detail', billId] });
+      qc.invalidateQueries({ queryKey: ['tqs-bills'] });
+    },
+    onError: (err) => toast.error(err?.response?.data?.error || 'Failed to update line item'),
+  });
+
+  return (
+    <tr className="border-t border-slate-100">
+      <td className="px-2 py-1.5 min-w-[160px]">
+        <input className="w-full border border-slate-200 rounded px-2 py-1 text-xs"
+          value={row.item_name} onChange={e => set('item_name', e.target.value)} />
+        <div className="flex gap-1 mt-1">
+          <select className="flex-1 min-w-0 border border-slate-200 rounded px-1 py-0.5 text-[10px] bg-white"
+            value={row.boq_item_id} onChange={e => set('boq_item_id', e.target.value)} title="Link to BOQ item">
+            <option value="">No BOQ item</option>
+            {boqItems.map(b => (
+              <option key={b.id} value={b.id}>{b.item_no ? `${b.item_no} — ` : ''}{b.description}</option>
+            ))}
+          </select>
+          <select className="flex-1 min-w-0 border border-slate-200 rounded px-1 py-0.5 text-[10px] bg-white"
+            value={row.cost_head} onChange={e => set('cost_head', e.target.value)} title="Cost sub-heading">
+            <option value="">Unallocated</option>
+            {BOQ_COST_HEADS.map(h => <option key={h} value={h}>{h}</option>)}
+          </select>
+        </div>
+      </td>
+      <td className="px-2 py-1.5 w-20">
+        <input className="w-full border border-slate-200 rounded px-2 py-1 text-xs" placeholder="Nos"
+          value={row.unit} onChange={e => set('unit', e.target.value)} />
+      </td>
+      <td className="px-2 py-1.5 w-20">
+        <input type="number" step="0.01" className="w-full border border-slate-200 rounded px-2 py-1 text-xs text-right"
+          value={row.quantity} onChange={e => set('quantity', e.target.value)} />
+      </td>
+      <td className="px-2 py-1.5 w-24">
+        <input type="number" step="0.01" className="w-full border border-slate-200 rounded px-2 py-1 text-xs text-right"
+          value={row.rate} onChange={e => set('rate', e.target.value)} />
+      </td>
+      <td className="px-2 py-1.5 w-16">
+        <input type="number" step="0.5" className="w-full border border-slate-200 rounded px-2 py-1 text-xs text-right"
+          value={row.gst_pct} onChange={e => set('gst_pct', e.target.value)} />
+      </td>
+      <td className="px-2 py-1.5 w-24 text-right text-xs text-slate-600">{inr(basic)}</td>
+      <td className="px-2 py-1.5 w-28 text-right text-xs font-semibold text-slate-800">{inr(total)}</td>
+      <td className="px-2 py-1.5 w-16 text-center">
+        <button type="button" onClick={() => saveMut.mutate()} disabled={!dirty || saveMut.isPending}
+          className={`px-2 py-1 text-[10px] font-semibold rounded transition-colors ${
+            dirty ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-slate-100 text-slate-400'
+          } disabled:opacity-60`}>
+          {saveMut.isPending ? '…' : 'Save'}
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+// ── Line items section: fetches full bill detail (list rows don't include
+// items) and renders each line editable, so the Edit Bill modal shows the
+// same material/cost-head/BOQ detail as the Create form. ────────────────────
+function BillLineItemsSection({ billId, projectId }) {
+  const { data: detail, isLoading } = useQuery({
+    queryKey: ['tqs-bill-detail', billId],
+    queryFn: () => tqsBillsAPI.get(billId).then(r => r.data?.data ?? r.data),
+    enabled: !!billId,
+  });
+  const { data: boqItems = [] } = useQuery({
+    queryKey: ['tqs-boq-items', projectId],
+    queryFn: () => boqAPI.summary(projectId).then(r => r.data?.data ?? r.data ?? []).catch(() => []),
+    enabled: !!projectId,
+  });
+
+  const items = detail?.line_items || [];
+
+  return (
+    <div>
+      <p className="text-xs font-medium text-slate-900 font-medium uppercase tracking-widest mb-3">
+        Line Items {items.length > 0 && <span className="text-slate-400 normal-case font-normal">({items.length})</span>}
+      </p>
+      {isLoading ? (
+        <div className="text-xs text-slate-400 italic py-4 text-center">Loading line items…</div>
+      ) : items.length === 0 ? (
+        <div className="text-xs text-slate-400 italic py-4 text-center bg-slate-50 rounded-lg border border-slate-100">
+          No material line items on this bill — header amounts only.
+        </div>
+      ) : (
+        <div className="border border-slate-200 rounded-xl overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="px-2 py-2 text-left text-slate-500 font-medium">Item / BOQ / Cost Head</th>
+                <th className="px-2 py-2 text-left text-slate-500 font-medium">Unit</th>
+                <th className="px-2 py-2 text-right text-slate-500 font-medium">Qty</th>
+                <th className="px-2 py-2 text-right text-slate-500 font-medium">Rate</th>
+                <th className="px-2 py-2 text-right text-slate-500 font-medium">GST%</th>
+                <th className="px-2 py-2 text-right text-slate-500 font-medium">Basic</th>
+                <th className="px-2 py-2 text-right text-slate-500 font-medium">Total</th>
+                <th className="w-16"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map(it => <LineItemEditRow key={it.id} billId={billId} item={it} boqItems={boqItems} />)}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EditBillModal({ bill, projects, onClose }) {
   const qc = useQueryClient();
   const [form, setForm] = useState({
@@ -1676,6 +1811,9 @@ function EditBillModal({ bill, projects, onClose }) {
               </>)}
             </div>
           </div>
+
+          {/* ── SECTION 1B: Line Items ── */}
+          <BillLineItemsSection billId={bill.id} projectId={form.project_id} />
 
           {/* â"€â"€ SECTION 2: GST & Amounts â"€â"€ */}
           <div>

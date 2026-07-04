@@ -1712,6 +1712,7 @@ export const tqsBillsAPI = {
   updatePayment:(id, d)    => api.patch(`/tqs/bills/${id}/payment`, d),
   markPaid:    (id)        => api.patch(`/tqs/bills/${id}/mark-paid`),
   tagLineChapter: (billId, lineId, boqChapter) => api.patch(`/tqs/bills/${billId}/line-items/${lineId}/chapter`, { boq_chapter: boqChapter }),
+  updateLineItem: (billId, lineId, data) => api.patch(`/tqs/bills/${billId}/line-items/${lineId}`, data),
   uploadFile:   (id, fd)   => api.post(`/tqs/bills/${id}/files`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
   linkOneDrive: (id, data) => api.post(`/tqs/bills/${id}/files/link`, data),
   syncFileToOneDrive: (id, fid) => api.post(`/tqs/bills/${id}/files/${fid}/sync-onedrive`),

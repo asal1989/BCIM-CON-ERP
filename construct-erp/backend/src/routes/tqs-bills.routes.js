@@ -2807,6 +2807,73 @@ router.patch('/:id/line-items/:lineId/chapter', async (req, res) => {
   }
 });
 
+// ── PATCH /tqs/bills/:id/line-items/:lineId ────────────────────────────────
+// Full edit of one bill line item — item name, unit, qty, rate, GST%, cost
+// head and BOQ item/chapter tags. Recomputes that line's basic/GST/total
+// amounts from the same CGST+SGST or IGST split already stored on the line
+// (gst_mode), so editing stays consistent with how the bill was created.
+// Does not touch po_item_id/wo_item_id linkage or re-validate PO/WO
+// remaining-quantity balances — those stay as originally set.
+router.patch('/:id/line-items/:lineId', async (req, res) => {
+  try {
+    await getAccessibleBill(req, req.params.id);
+    const {
+      item_name, category, unit, quantity, rate, discount_amount,
+      gst_pct, cost_head, boq_item_id, boq_chapter,
+    } = req.body;
+
+    const existing = await query(
+      `SELECT * FROM tqs_bill_line_items WHERE id = $1 AND bill_id = $2`,
+      [req.params.lineId, req.params.id]
+    );
+    if (!existing.rows.length) return res.status(404).json({ error: 'Line item not found on this bill' });
+    const line = existing.rows[0];
+
+    const qty  = quantity      !== undefined ? parseFloat(quantity)      || 0 : parseFloat(line.quantity)      || 0;
+    const rt   = rate          !== undefined ? parseFloat(rate)          || 0 : parseFloat(line.rate)          || 0;
+    const disc = discount_amount !== undefined ? Math.abs(parseFloat(discount_amount) || 0) : parseFloat(line.discount_amount) || 0;
+    const gstP = gst_pct       !== undefined ? parseFloat(gst_pct)       || 0 : parseFloat(line.gst_pct)        || 0;
+    const gross = qty * rt;
+    const basic = gross - disc;
+    const mode  = line.gst_mode || 'intrastate';
+    let cgP = 0, sgP = 0, igP = 0, cgA = 0, sgA = 0, igA = 0;
+    if (mode === 'interstate') { igP = gstP; igA = basic * igP / 100; }
+    else { cgP = gstP / 2; sgP = gstP / 2; cgA = basic * cgP / 100; sgA = basic * sgP / 100; }
+    const gstAmt = cgA + sgA + igA;
+    const totalAmt = basic + gstAmt;
+
+    const finalCostHead = cost_head !== undefined
+      ? (BOQ_COST_HEADS.includes(cost_head) ? cost_head : null)
+      : line.cost_head;
+
+    const r = await query(`
+      UPDATE tqs_bill_line_items SET
+        item_name = $1, category = $2, unit = $3, quantity = $4, rate = $5,
+        discount_amount = $6, basic_amount = $7, gst_pct = $8,
+        cgst_pct = $9, cgst_amt = $10, sgst_pct = $11, sgst_amt = $12,
+        igst_pct = $13, igst_amt = $14, gst_amount = $15, total_amount = $16,
+        cost_head = $17, boq_item_id = $18, boq_chapter = $19
+      WHERE id = $20 AND bill_id = $21
+      RETURNING *
+    `, [
+      item_name !== undefined ? item_name : line.item_name,
+      category  !== undefined ? category  : line.category,
+      unit      !== undefined ? unit      : line.unit,
+      qty, rt, disc, basic, gstP,
+      cgP, cgA.toFixed(2), sgP, sgA.toFixed(2), igP, igA.toFixed(2),
+      gstAmt.toFixed(2), totalAmt.toFixed(2),
+      finalCostHead,
+      boq_item_id !== undefined ? (boq_item_id || null) : line.boq_item_id,
+      boq_chapter !== undefined ? (boq_chapter || null) : line.boq_chapter,
+      req.params.lineId, req.params.id,
+    ]);
+    await logHistory(req.params.id, 'system', `Line item "${r.rows[0].item_name}" updated`, req.user.id);
+    res.json({ data: r.rows[0] });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
 // ── PATCH /tqs/bills/:id/stores ────────────────────────────────────────────
 router.patch('/:id/stores', requireTqsStageAccess('stores'), async (req, res) => {
   try {
