@@ -516,7 +516,30 @@ router.get('/work-orders/:id', async (req, res) => {
              THEN ROUND((COALESCE(billed_qty,0) / COALESCE(qty,0)) * 100, 1)
              ELSE 0 END AS billed_pct
       FROM sc_wo_items WHERE wo_id=$1 ORDER BY sequence_no`, [req.params.id]);
-    res.json({ data: { ...wo.rows[0], items: items.rows } });
+
+    // Advances against this WO are frequently issued through the Advance Tracker
+    // (tqs_advance_vouchers, matched by wo_number) rather than the sc_advances
+    // module below — without this, advance_paid stays 0 here even when real
+    // money has been paid out, so the bill wizard shows no recovery reference.
+    const trackerAdv = await query(`
+      SELECT COALESCE(SUM(paid_amount), 0) AS total_paid
+      FROM tqs_advance_vouchers
+      WHERE wo_number = $1 AND project_id = $2 AND is_deleted = false
+        AND status IN ('issued', 'partial', 'recovered') AND paid_amount > 0`,
+      [wo.rows[0].wo_number, wo.rows[0].project_id]);
+    const recovered = await query(`
+      SELECT COALESCE(SUM(advance_recovery), 0) AS recovered
+      FROM sc_bills WHERE wo_id = $1 AND status NOT IN ('draft', 'rejected')`,
+      [req.params.id]);
+    const advancePaid = parseFloat(wo.rows[0].advance_paid || 0) + parseFloat(trackerAdv.rows[0].total_paid || 0);
+    const advanceRecovered = parseFloat(recovered.rows[0].recovered || 0);
+
+    res.json({ data: {
+      ...wo.rows[0], items: items.rows,
+      advance_paid: advancePaid,
+      advance_recovered: advanceRecovered,
+      advance_balance: Math.max(0, advancePaid - advanceRecovered),
+    } });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 

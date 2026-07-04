@@ -467,6 +467,7 @@ function RaiseBillModal({ wos, onClose }) {
                         { l: 'Retention',      v: `${woDetail.retention_pct}%` },
                         { l: 'TDS Rate',       v: `${woDetail.tds_pct}%` },
                         { l: 'Advance Paid',   v: fmt(woDetail.advance_paid) },
+                        { l: 'Advance Balance (Unrecovered)', v: fmt(woDetail.advance_balance), warn: num(woDetail.advance_balance) > 0 },
                         { l: 'BOQ Items',      v: woDetail.items?.length || 0 },
                       ].map(({ l, v, bold, warn }) => (
                         <div key={l}>
@@ -829,17 +830,35 @@ function RaiseBillModal({ wos, onClose }) {
                       { k:'material_recovery',l:'Material Recovery ₹', color:'text-slate-600' },
                       { k:'penalty_amount',   l:'Penalty ₹',           color:'text-red-600' },
                       { k:'other_deductions', l:'Other Deductions ₹',  color:'text-slate-600' },
-                    ].map(({ k, l, color }) => (
-                      <Field key={k} label={l}>
-                        <div className="relative">
-                          <input type="number" value={form[k]} min={0}
-                            onChange={e => set(k, parseFloat(e.target.value || 0))}
-                            className={inp + ' pr-8'} />
-                          <span className={clsx('absolute right-3 top-2.5 text-xs font-bold', color)}>₹</span>
-                        </div>
-                        <p className="text-[10px] text-slate-400 mt-1">= {fmt2(num(form[k]))}</p>
-                      </Field>
-                    ))}
+                    ].map(({ k, l, color }) => {
+                      // Advance Recovery is otherwise a blind manual entry — the WO's
+                      // real outstanding advance (from the Advance Tracker) is shown
+                      // here so the user can see, and match, what's actually owed.
+                      const isAdvance = k === 'advance_recovery';
+                      const advBalance = num(woDetail?.advance_balance);
+                      const overRecovered = isAdvance && num(form[k]) > advBalance + 0.01;
+                      return (
+                        <Field key={k} label={l}>
+                          <div className="relative">
+                            <input type="number" value={form[k]} min={0}
+                              onChange={e => set(k, parseFloat(e.target.value || 0))}
+                              className={clsx(inp, 'pr-8', overRecovered && 'border-red-400 bg-red-50 text-red-700')} />
+                            <span className={clsx('absolute right-3 top-2.5 text-xs font-bold', color)}>₹</span>
+                          </div>
+                          {isAdvance && advBalance > 0 ? (
+                            <p className={clsx('text-[10px] mt-1', overRecovered ? 'text-red-600 font-semibold' : 'text-slate-400')}>
+                              {overRecovered ? `Exceeds outstanding balance of ${fmt2(advBalance)}` : `Outstanding: ${fmt2(advBalance)}`}
+                              {!overRecovered && (
+                                <button type="button" onClick={() => set('advance_recovery', advBalance)}
+                                  className="ml-1.5 text-indigo-600 font-semibold hover:underline">Recover full</button>
+                              )}
+                            </p>
+                          ) : (
+                            <p className="text-[10px] text-slate-400 mt-1">= {fmt2(num(form[k]))}</p>
+                          )}
+                        </Field>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -1234,7 +1253,14 @@ export default function SCBillPreparation() {
   const [drawerBillId,  setDrawerBill]  = useState(null);
 
   const { data: projects = [] } = useQuery({ queryKey:['projects'], queryFn:()=>projectAPI.list().then(r=>r.data?.data??[]) });
-  const { data: wos = [] }      = useQuery({ queryKey:['sc-wo-all'], queryFn:()=>scAPI.listWO().then(r=>r.data?.data||[]), staleTime:0 });
+  // Scoped to the selected project — previously fetched with no project_id at
+  // all, so the Raise Bill wizard's WO picker showed every project's work
+  // orders mixed together (e.g. LANCO Hills WOs alongside every other project).
+  const { data: wos = [] }      = useQuery({
+    queryKey:['sc-wo-all', projectFilter],
+    queryFn:()=>scAPI.listWO({ project_id: projectFilter || undefined }).then(r=>r.data?.data||[]),
+    staleTime:0,
+  });
   const { data: bills = [], isLoading, refetch } = useQuery({
     queryKey: ['sc-bills', projectFilter, statusFilter],
     queryFn:  () => scAPI.listBills({ project_id:projectFilter||undefined, status:statusFilter||undefined }).then(r=>r.data?.data||[]),
