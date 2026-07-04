@@ -200,7 +200,7 @@ async function getVendorLiabilitySummary({
       SELECT
         vendor_key,
         MAX(vendor_name) AS vendor_name,
-        MAX(vendor_id) AS vendor_id,
+        MAX(vendor_id::text)::uuid AS vendor_id,
         SUM(amount) AS total_advance_given,
         MAX(last_date) AS last_advance_date
       FROM (
