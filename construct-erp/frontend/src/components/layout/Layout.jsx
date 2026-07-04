@@ -26,9 +26,8 @@ import { useLanguage, LANGUAGES } from '../../context/LanguageContext';
 import NotificationPanel, { useNotificationCount } from './NotificationPanel';
 import { initPushNotifications } from '../../utils/pushNotifications';
 import api from '../../api/client';
-import { io as socketIO } from 'socket.io-client';
-
-const CHAT_SOCKET_URL = process.env.REACT_APP_SOCKET_URL || window.location.origin;
+import { useChat } from '../../context/ChatContext';
+import { Av } from '../chat/chatShared';
 
 // ── Navigation data ─────────────────────────────────────────────────────────
 const navGroups = [
@@ -1996,46 +1995,23 @@ export default function Layout() {
     }
   }, [user?.id]);
 
-  // Background chat notifier — ERPChat.jsx only connects its own socket while
-  // the /chat page is mounted, so desktop notifications never fired for
-  // messages received while working anywhere else in the ERP. Layout stays
-  // mounted for the whole authenticated session (routes render inside its
-  // <Outlet/>), so a lightweight listener here keeps working regardless of
-  // which module the user is in. Suppressed while /chat is open — ERPChat's
-  // own listener already handles notifications there, and running both would
-  // fire the same notification twice.
-  const [chatUnread, setChatUnread] = useState(0);
-  const chatLocationRef = useRef(location.pathname);
-  useEffect(() => { chatLocationRef.current = location.pathname; }, [location.pathname]);
+  // Chat launcher preview dropdown — clicking the floating bubble shows recent
+  // conversations (like Facebook Messenger's chat list); clicking one opens
+  // that DM directly as a floating popup instead of navigating to /chat.
+  const { unreadTotal, previews, unread, openPopup, findEmployeeForDm } = useChat();
+  const [chatMenuOpen, setChatMenuOpen] = useState(false);
+  const chatMenuRef = useRef(null);
   useEffect(() => {
-    if (location.pathname === '/chat') setChatUnread(0);
-  }, [location.pathname]);
+    if (!chatMenuOpen) return;
+    const onClick = (e) => { if (chatMenuRef.current && !chatMenuRef.current.contains(e.target)) setChatMenuOpen(false); };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [chatMenuOpen]);
 
-  useEffect(() => {
-    if (!user?.id) return;
-    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
-    if (!token) return;
-
-    const socket = socketIO(CHAT_SOCKET_URL, { auth: { token }, transports: ['websocket', 'polling'] });
-
-    socket.on('new_message', (msg) => {
-      if (msg.sender_id === user.id) return;
-      if (chatLocationRef.current === '/chat') return; // ERPChat handles it directly
-      setChatUnread(c => c + 1);
-      if ('Notification' in window && Notification.permission === 'granted') {
-        const title = msg.channel?.startsWith('dm-') ? msg.sender_name : `${msg.sender_name} · #${msg.channel}`;
-        const n = new Notification(title, {
-          body: msg.text || (msg.file_name ? `📎 ${msg.file_name}` : 'New message'),
-          tag: `chat-${msg.channel}`,
-          icon: '/logo192.png',
-        });
-        n.onclick = () => { window.focus(); navigate('/chat'); n.close(); };
-      }
-    });
-
-    return () => socket.disconnect();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  const chatConversations = Object.entries(previews)
+    .map(([channel, preview]) => ({ channel, preview, unreadCount: unread[channel] || 0 }))
+    .sort((a, b) => new Date(b.preview.created_at) - new Date(a.preview.created_at))
+    .slice(0, 8);
 
   // Ctrl+K → command palette
   useEffect(() => {
@@ -2424,21 +2400,75 @@ export default function Layout() {
       {/* ── Floating Team Chat launcher — visible from anywhere except the chat
           page itself. Hidden on mobile widths where MobileBottomNav already
           occupies the bottom of the screen (Team Chat is reachable there via
-          the menu instead). ── */}
+          the menu instead). Clicking it shows a Messenger-style preview of
+          recent conversations; clicking a conversation opens it directly as a
+          floating popup (or jumps to /chat for a channel) instead of always
+          navigating to the full chat page. ── */}
       {location.pathname !== '/chat' && (
-        <button
-          onClick={() => navigate('/chat')}
-          title="Team Chat"
-          className="hidden md:flex fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full items-center justify-center text-white shadow-lg transition-transform hover:scale-105 print:hidden"
-          style={{ background: 'linear-gradient(135deg, #4F46E5, #4338CA)', boxShadow: '0 8px 24px rgba(79,70,229,0.4)' }}
-        >
-          <MessageSquare className="w-6 h-6" />
-          {chatUnread > 0 && (
-            <span style={{ position: 'absolute', top: -4, right: -4, minWidth: 22, height: 22, borderRadius: 999, background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px', border: '2px solid #fff' }}>
-              {chatUnread > 99 ? '99+' : chatUnread}
-            </span>
+        <div ref={chatMenuRef} className="hidden md:block fixed bottom-6 right-6 z-40 print:hidden">
+          {chatMenuOpen && (
+            <div style={{
+              position: 'absolute', bottom: 68, right: 0, width: 320, maxHeight: 420,
+              background: '#fff', borderRadius: 12, boxShadow: '0 12px 40px rgba(0,0,0,0.22)',
+              overflow: 'hidden', display: 'flex', flexDirection: 'column',
+            }}>
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid #eee', fontWeight: 700, fontSize: 14, color: '#111b21' }}>
+                Team Chat
+              </div>
+              <div style={{ overflowY: 'auto', flex: 1 }}>
+                {chatConversations.length === 0 && (
+                  <p style={{ padding: '24px 16px', textAlign: 'center', fontSize: 13, color: '#667781' }}>No conversations yet</p>
+                )}
+                {chatConversations.map(({ channel, preview, unreadCount }) => {
+                  const isDm = channel.startsWith('dm-');
+                  const emp = isDm ? findEmployeeForDm(channel) : null;
+                  const label = isDm ? (emp?.full_name || emp?.name || preview.sender_name || 'Direct message') : (`#${channel}`);
+                  const body = preview.text || (preview.file_name ? `📎 ${preview.file_name}` : 'Attachment');
+                  return (
+                    <button key={channel}
+                      onClick={() => {
+                        setChatMenuOpen(false);
+                        if (isDm && emp) openPopup(emp);
+                        else navigate(`/chat?channel=${channel}`);
+                      }}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f5f6f6'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                      <Av name={label} size={38} photo={emp?.profile_photo_url} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
+                          <span style={{ fontWeight: 600, fontSize: 13, color: '#111b21', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+                          {unreadCount > 0 && (
+                            <span style={{ background: '#25d366', color: '#fff', borderRadius: 999, fontSize: 10, fontWeight: 700, minWidth: 17, height: 17, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', flexShrink: 0 }}>{unreadCount}</span>
+                          )}
+                        </div>
+                        <p style={{ fontSize: 12, color: '#667781', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{body}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <button onClick={() => { setChatMenuOpen(false); navigate('/chat'); }}
+                style={{ padding: '10px 16px', border: 'none', borderTop: '1px solid #eee', background: '#f8fafc', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: '#4F46E5', textAlign: 'center' }}>
+                Open full chat
+              </button>
+            </div>
           )}
-        </button>
+
+          <button
+            onClick={() => setChatMenuOpen(v => !v)}
+            title="Team Chat"
+            className="flex w-14 h-14 rounded-full items-center justify-center text-white shadow-lg transition-transform hover:scale-105 relative"
+            style={{ background: 'linear-gradient(135deg, #4F46E5, #4338CA)', boxShadow: '0 8px 24px rgba(79,70,229,0.4)' }}
+          >
+            <MessageSquare className="w-6 h-6" />
+            {unreadTotal > 0 && (
+              <span style={{ position: 'absolute', top: -4, right: -4, minWidth: 22, height: 22, borderRadius: 999, background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px', border: '2px solid #fff' }}>
+                {unreadTotal > 99 ? '99+' : unreadTotal}
+              </span>
+            )}
+          </button>
+        </div>
       )}
 
       <CommandPalette
