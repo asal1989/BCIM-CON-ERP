@@ -26,6 +26,9 @@ import { useLanguage, LANGUAGES } from '../../context/LanguageContext';
 import NotificationPanel, { useNotificationCount } from './NotificationPanel';
 import { initPushNotifications } from '../../utils/pushNotifications';
 import api from '../../api/client';
+import { io as socketIO } from 'socket.io-client';
+
+const CHAT_SOCKET_URL = process.env.REACT_APP_SOCKET_URL || window.location.origin;
 
 // ── Navigation data ─────────────────────────────────────────────────────────
 const navGroups = [
@@ -1993,6 +1996,47 @@ export default function Layout() {
     }
   }, [user?.id]);
 
+  // Background chat notifier — ERPChat.jsx only connects its own socket while
+  // the /chat page is mounted, so desktop notifications never fired for
+  // messages received while working anywhere else in the ERP. Layout stays
+  // mounted for the whole authenticated session (routes render inside its
+  // <Outlet/>), so a lightweight listener here keeps working regardless of
+  // which module the user is in. Suppressed while /chat is open — ERPChat's
+  // own listener already handles notifications there, and running both would
+  // fire the same notification twice.
+  const [chatUnread, setChatUnread] = useState(0);
+  const chatLocationRef = useRef(location.pathname);
+  useEffect(() => { chatLocationRef.current = location.pathname; }, [location.pathname]);
+  useEffect(() => {
+    if (location.pathname === '/chat') setChatUnread(0);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    if (!token) return;
+
+    const socket = socketIO(CHAT_SOCKET_URL, { auth: { token }, transports: ['websocket', 'polling'] });
+
+    socket.on('new_message', (msg) => {
+      if (msg.sender_id === user.id) return;
+      if (chatLocationRef.current === '/chat') return; // ERPChat handles it directly
+      setChatUnread(c => c + 1);
+      if ('Notification' in window && Notification.permission === 'granted') {
+        const title = msg.channel?.startsWith('dm-') ? msg.sender_name : `${msg.sender_name} · #${msg.channel}`;
+        const n = new Notification(title, {
+          body: msg.text || (msg.file_name ? `📎 ${msg.file_name}` : 'New message'),
+          tag: `chat-${msg.channel}`,
+          icon: '/logo192.png',
+        });
+        n.onclick = () => { window.focus(); navigate('/chat'); n.close(); };
+      }
+    });
+
+    return () => socket.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
   // Ctrl+K → command palette
   useEffect(() => {
     const h = (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setPaletteOpen(true); } };
@@ -2389,6 +2433,11 @@ export default function Layout() {
           style={{ background: 'linear-gradient(135deg, #4F46E5, #4338CA)', boxShadow: '0 8px 24px rgba(79,70,229,0.4)' }}
         >
           <MessageSquare className="w-6 h-6" />
+          {chatUnread > 0 && (
+            <span style={{ position: 'absolute', top: -4, right: -4, minWidth: 22, height: 22, borderRadius: 999, background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px', border: '2px solid #fff' }}>
+              {chatUnread > 99 ? '99+' : chatUnread}
+            </span>
+          )}
         </button>
       )}
 
