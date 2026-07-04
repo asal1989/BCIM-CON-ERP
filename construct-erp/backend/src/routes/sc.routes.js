@@ -517,21 +517,32 @@ router.get('/work-orders/:id', async (req, res) => {
              ELSE 0 END AS billed_pct
       FROM sc_wo_items WHERE wo_id=$1 ORDER BY sequence_no`, [req.params.id]);
 
-    // Advances against this WO are frequently issued through the Advance Tracker
-    // (tqs_advance_vouchers, matched by wo_number) rather than the sc_advances
-    // module below — without this, advance_paid stays 0 here even when real
-    // money has been paid out, so the bill wizard shows no recovery reference.
+    // Advances against this WO are frequently issued through two other systems
+    // instead of the sc_advances module below, so relying on it alone leaves
+    // advance_paid at 0 even when real money has been paid out:
+    //  1. Advance Tracker (tqs_advance_vouchers), matched by wo_number.
+    //  2. Finance "Record Payment" screen (payments table), which records
+    //     vendor advances with cost_head = 'Advance — <wo_number>' — this is
+    //     actually the more commonly used path for Sub Con advances.
     const trackerAdv = await query(`
       SELECT COALESCE(SUM(paid_amount), 0) AS total_paid
       FROM tqs_advance_vouchers
       WHERE wo_number = $1 AND project_id = $2 AND is_deleted = false
         AND status IN ('issued', 'partial', 'recovered') AND paid_amount > 0`,
       [wo.rows[0].wo_number, wo.rows[0].project_id]);
+    const paymentsAdv = await query(`
+      SELECT COALESCE(SUM(amount), 0) AS total_paid
+      FROM payments
+      WHERE project_id = $1 AND cost_head = $2
+        AND status IN ('success', 'paid')`,
+      [wo.rows[0].project_id, `Advance — ${wo.rows[0].wo_number}`]);
     const recovered = await query(`
       SELECT COALESCE(SUM(advance_recovery), 0) AS recovered
       FROM sc_bills WHERE wo_id = $1 AND status NOT IN ('draft', 'rejected')`,
       [req.params.id]);
-    const advancePaid = parseFloat(wo.rows[0].advance_paid || 0) + parseFloat(trackerAdv.rows[0].total_paid || 0);
+    const advancePaid = parseFloat(wo.rows[0].advance_paid || 0)
+      + parseFloat(trackerAdv.rows[0].total_paid || 0)
+      + parseFloat(paymentsAdv.rows[0].total_paid || 0);
     const advanceRecovered = parseFloat(recovered.rows[0].recovered || 0);
 
     res.json({ data: {
