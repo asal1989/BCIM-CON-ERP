@@ -10,6 +10,7 @@ import {
   Wifi, WifiOff, Loader2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import toast from 'react-hot-toast';
 import useAuthStore from '../store/authStore';
 import api from '../api/client';
 
@@ -230,12 +231,14 @@ export default function ERPChat() {
   const sendMsg = useCallback(async () => {
     const text = inputVal.trim();
     if (!text && pendingFiles.length === 0) return;
+    if (pendingFiles.some(f => f.uploading)) return; // wait for uploads to finish
 
     const payload = {
       channel: activeChannel,
       text: text || null,
       file_name: pendingFiles[0]?.name || null,
       file_size: pendingFiles[0]?.size || null,
+      file_url:  pendingFiles[0]?.url  || null,
     };
 
     setInputVal('');
@@ -571,12 +574,22 @@ export default function ERPChat() {
                     </p>
                   )}
                   {m.file_name && FIcon && (
-                    <div className="mt-2 inline-flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs cursor-pointer hover:border-indigo-300 transition-colors">
-                      <FIcon className="w-4 h-4 text-indigo-500 flex-shrink-0" />
-                      <span className="font-medium text-slate-700">{m.file_name}</span>
-                      {m.file_size && <span className="text-slate-400">{m.file_size}</span>}
-                      <Download className="w-3.5 h-3.5 text-indigo-500 ml-1" />
-                    </div>
+                    m.file_url ? (
+                      <a href={m.file_url} target="_blank" rel="noopener noreferrer"
+                        className="mt-2 inline-flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs cursor-pointer hover:border-indigo-300 transition-colors">
+                        <FIcon className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                        <span className="font-medium text-slate-700">{m.file_name}</span>
+                        {m.file_size && <span className="text-slate-400">{m.file_size}</span>}
+                        <Download className="w-3.5 h-3.5 text-indigo-500 ml-1" />
+                      </a>
+                    ) : (
+                      <div title="Sent before file attachments were wired up — no file to open"
+                        className="mt-2 inline-flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs opacity-60 cursor-not-allowed">
+                        <FIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                        <span className="font-medium text-slate-500">{m.file_name}</span>
+                        {m.file_size && <span className="text-slate-400">{m.file_size}</span>}
+                      </div>
+                    )
                   )}
                   {(m.reactions || []).length > 0 && (
                     <div className="flex gap-1.5 mt-1.5 flex-wrap">
@@ -635,9 +648,11 @@ export default function ERPChat() {
                   const FI = fileIcon(f.name);
                   return (
                     <div key={i} className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 rounded-lg px-2.5 py-1 text-xs text-indigo-700">
-                      <FI className="w-3 h-3" />
+                      {f.uploading
+                        ? <Loader2 className="w-3 h-3 animate-spin" />
+                        : <FI className="w-3 h-3" />}
                       <span className="font-medium">{f.name}</span>
-                      <span className="text-indigo-400">{f.size}</span>
+                      <span className="text-indigo-400">{f.uploading ? 'Uploading…' : f.size}</span>
                       <button onClick={() => setPendingFiles(p => p.filter((_, j) => j !== i))} className="text-indigo-400 hover:text-indigo-600 ml-0.5">
                         <X className="w-3 h-3" />
                       </button>
@@ -666,12 +681,35 @@ export default function ERPChat() {
               </button>
               <input ref={fileRef} type="file" multiple className="hidden"
                 onChange={e => {
-                  setPendingFiles(Array.from(e.target.files).map(f => ({ name: f.name, size: `${(f.size/1024).toFixed(0)} KB` })));
+                  const files = Array.from(e.target.files);
                   e.target.value = '';
+                  if (!files.length) return;
+                  // Show each file immediately with a spinner, then swap in the
+                  // real OneDrive/local url as each upload finishes — the
+                  // message can't be sent (and file_url won't be set) until
+                  // every attached file has a real url.
+                  const placeholders = files.map(f => ({
+                    name: f.name, size: `${(f.size / 1024).toFixed(0)} KB`, url: null, uploading: true,
+                  }));
+                  setPendingFiles(prev => [...prev, ...placeholders]);
+                  files.forEach((file, idx) => {
+                    const startIdx = pendingFiles.length + idx;
+                    const fd = new FormData();
+                    fd.append('file', file);
+                    api.post('/upload/single', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+                      .then(r => {
+                        setPendingFiles(prev => prev.map((p, i) => i === startIdx ? { ...p, url: r.data.url, uploading: false } : p));
+                      })
+                      .catch(err => {
+                        toast.error(err?.response?.data?.error || `Failed to upload ${file.name}`);
+                        setPendingFiles(prev => prev.filter((_, i) => i !== startIdx));
+                      });
+                  });
                 }} />
-              <button onClick={sendMsg} disabled={!inputVal.trim() && pendingFiles.length === 0}
+              <button onClick={sendMsg}
+                disabled={(!inputVal.trim() && pendingFiles.length === 0) || pendingFiles.some(f => f.uploading)}
                 className={clsx('ml-auto flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-medium transition-all',
-                  inputVal.trim() || pendingFiles.length > 0
+                  (inputVal.trim() || pendingFiles.length > 0) && !pendingFiles.some(f => f.uploading)
                     ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm'
                     : 'bg-slate-100 text-slate-900 font-medium cursor-not-allowed')}>
                 <Send className="w-3.5 h-3.5" />
