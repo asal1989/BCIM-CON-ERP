@@ -2377,6 +2377,21 @@ export default function Layout() {
       {/* Mobile bottom navigation bar */}
       <MobileBottomNav onMenuOpen={() => setMobileOpen(true)} />
 
+      {/* ── Floating Team Chat launcher — visible from anywhere except the chat
+          page itself. Hidden on mobile widths where MobileBottomNav already
+          occupies the bottom of the screen (Team Chat is reachable there via
+          the menu instead). ── */}
+      {location.pathname !== '/chat' && (
+        <button
+          onClick={() => navigate('/chat')}
+          title="Team Chat"
+          className="hidden md:flex fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full items-center justify-center text-white shadow-lg transition-transform hover:scale-105 print:hidden"
+          style={{ background: 'linear-gradient(135deg, #4F46E5, #4338CA)', boxShadow: '0 8px 24px rgba(79,70,229,0.4)' }}
+        >
+          <MessageSquare className="w-6 h-6" />
+        </button>
+      )}
+
       <CommandPalette
         isOpen={paletteOpen}
         onClose={() => setPaletteOpen(false)}
