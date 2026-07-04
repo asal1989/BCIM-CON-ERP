@@ -6,12 +6,13 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   LayoutDashboard, FileText, FilePlus2, BarChart2, Smartphone, Settings as SettingsIcon,
-  Search, Bell, ChevronLeft, ChevronRight, Check, X, Plus, Trash2, Camera, Send, ShieldCheck,
+  Search, Bell, ChevronRight, Check, X, Plus, Trash2, Camera, Send, ShieldCheck,
   Users, Truck, Package, AlertTriangle, Calendar, MapPin, Clock, CheckCircle2, Download,
   Upload, Mic, QrCode, Wifi, WifiOff, Image as ImageIcon, ChevronUp, ChevronDown, Edit2,
   Eye, GripVertical, FileSpreadsheet, TrendingUp, TrendingDown, Building2,
 } from 'lucide-react';
 import { planningAPI, projectAPI, documentsAPI, subcontractorAPI, vendorAPI } from '../../api/client';
+import { PageHeader, Theme } from '../../theme';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
@@ -102,104 +103,100 @@ function StatusBadge({ status }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Sidebar
+// Toolbar — tab pills + project filter + search + notifications
+// (replaces the old inner sidebar/topbar: the app Layout already provides
+// global navigation, so the console only needs its own view switcher)
 // ─────────────────────────────────────────────────────────────────────────
-function Sidebar({ view, setView, collapsed, setCollapsed, counts, user }) {
-  return (
-    <div className={clsx('sidebar', collapsed && 'collapsed')}>
-      <button className="sb-toggle" onClick={() => setCollapsed(c => !c)}>
-        {collapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
-      </button>
-      <div className="sb-brand">
-        <div className="mark">DP</div>
-        <div className="txt">
-          <div className="name">DPR Console</div>
-          <div className="sub">BCIM ERP</div>
-        </div>
-      </div>
-      <div className="sb-nav">
-        <div className="sb-section-label">Overview</div>
-        {NAV.slice(0, 1).map(item => (
-          <NavItem key={item.key} item={item} view={view} setView={setView} counts={counts} />
-        ))}
-        <div className="sb-section-label">Reports</div>
-        {NAV.slice(1, 5).map(item => (
-          <NavItem key={item.key} item={item} view={view} setView={setView} counts={counts} />
-        ))}
-        <div className="sb-section-label">Insights</div>
-        {NAV.slice(5, 7).map(item => (
-          <NavItem key={item.key} item={item} view={view} setView={setView} counts={counts} />
-        ))}
-        <div className="sb-section-label">System</div>
-        {NAV.slice(7).map(item => (
-          <NavItem key={item.key} item={item} view={view} setView={setView} counts={counts} />
-        ))}
-      </div>
-      <div className="sb-foot">
-        <div className="av">{(user?.name || '?').slice(0, 1).toUpperCase()}</div>
-        <div className="txt">
-          <div className="n">{user?.name || 'User'}</div>
-          <div className="r">{(user?.role || '').replace(/_/g, ' ')}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-function NavItem({ item, view, setView, counts }) {
-  const Icon = item.icon;
-  const count = item.countKey ? counts?.[item.countKey] : null;
-  return (
-    <div className={clsx('sb-item', view === item.key && 'active')} onClick={() => setView(item.key)}>
-      <Icon />
-      <span className="lbl">{item.label}</span>
-      {!!count && <span className="count">{count}</span>}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// Topbar
-// ─────────────────────────────────────────────────────────────────────────
-function Topbar({ title, crumb, search, setSearch, notifItems, projects, projectId, setProjectId }) {
+function Toolbar({ view, setView, counts, search, setSearch, notifItems, projects, projectId, setProjectId }) {
   const [open, setOpen] = useState(false);
   const unread = notifItems.filter(n => n.unread).length;
   return (
-    <div className="topbar">
-      <div>
-        <h1>{title}</h1>
-        <div className="crumb">{crumb}</div>
-      </div>
-      <select className="btn btn-ghost btn-sm" style={{ marginLeft: 16 }} value={projectId} onChange={e => setProjectId(e.target.value)}>
-        <option value="">All Projects</option>
-        {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-      </select>
-      <div className="search-box">
-        <Search />
-        <input placeholder="Search DPRs, projects…" value={search} onChange={e => setSearch(e.target.value)}
-          style={{ border: 'none', outline: 'none', width: '100%', background: 'transparent', fontFamily: 'inherit' }} />
-      </div>
-      <div className="notif-wrap">
-        <button className="icon-btn" onClick={() => setOpen(o => !o)}>
-          <Bell />
-          {unread > 0 && <span className="count-dot">{unread}</span>}
-        </button>
-        {open && (
-          <div className="notif-panel">
-            <div className="notif-head"><h4>Notifications</h4><button onClick={() => setOpen(false)}>Close</button></div>
-            {notifItems.length === 0 ? (
-              <div className="notif-empty">No alerts right now.</div>
-            ) : notifItems.map((n, i) => (
-              <div key={i} className={clsx('notif-item', n.unread && 'unread')}>
-                <div className="notif-icon" style={{ background: n.bg, color: n.fg }}><n.Icon /></div>
-                <div className="notif-body">
-                  <b>{n.title}</b>
-                  <p>{n.body}</p>
-                  <time>{n.time}</time>
-                </div>
-              </div>
-            ))}
+    <div className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200 px-4 md:px-6 py-2.5">
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Tab pills */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {NAV.map(item => {
+            const Icon = item.icon;
+            const count = item.countKey ? counts?.[item.countKey] : null;
+            const active = view === item.key;
+            return (
+              <button
+                key={item.key}
+                onClick={() => setView(item.key)}
+                className={clsx(
+                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition whitespace-nowrap',
+                  active
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                )}
+              >
+                <Icon size={13} />
+                {item.label}
+                {!!count && (
+                  <span className={clsx(
+                    'text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none',
+                    active ? 'bg-white/20 text-white' : 'bg-indigo-50 text-indigo-600'
+                  )}>{count}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Right controls */}
+        <div className="flex items-center gap-2 ml-auto">
+          <select
+            className="h-8 text-xs font-medium border border-slate-200 rounded-lg px-2 text-slate-600 bg-white focus:border-indigo-400 focus:outline-none max-w-[180px]"
+            value={projectId} onChange={e => setProjectId(e.target.value)}
+          >
+            <option value="">All Projects</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <div className="hidden md:flex items-center gap-2 h-8 bg-white border border-slate-200 rounded-lg px-2.5 w-56">
+            <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+            <input
+              placeholder="Search DPRs…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="border-none outline-none w-full bg-transparent text-xs text-slate-700"
+            />
           </div>
-        )}
+          <div className="relative">
+            <button
+              className="w-8 h-8 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition relative"
+              onClick={() => setOpen(o => !o)}
+            >
+              <Bell className="w-4 h-4" />
+              {unread > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center border-2 border-white">
+                  {unread}
+                </span>
+              )}
+            </button>
+            {open && (
+              <div className="absolute top-10 right-0 w-80 max-h-[420px] overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl z-50">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                  <h4 className="text-xs font-bold text-slate-700">Notifications</h4>
+                  <button className="text-[11px] font-semibold text-indigo-600" onClick={() => setOpen(false)}>Close</button>
+                </div>
+                {notifItems.length === 0 ? (
+                  <div className="py-10 text-center text-xs text-slate-400">No alerts right now.</div>
+                ) : notifItems.map((n, i) => (
+                  <div key={i} className={clsx('flex gap-2.5 px-4 py-3 border-b border-slate-50', n.unread && 'bg-indigo-50/40')}>
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: n.bg, color: n.fg }}>
+                      <n.Icon size={14} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <b className="text-xs text-slate-800 block">{n.title}</b>
+                      <p className="text-[11px] text-slate-500 mt-0.5">{n.body}</p>
+                      <time className="text-[10px] text-slate-400">{n.time}</time>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1070,8 +1067,6 @@ function CreateWizard({ projects, projectId, setProjectId, setView, qc, editing,
 // ─────────────────────────────────────────────────────────────────────────
 export default function DPRConsole() {
   const qc = useQueryClient();
-  const { user } = useAuthStore();
-  const [collapsed, setCollapsed] = useState(false);
   const [view, setView] = useState('dashboard');
   const [projectId, setProjectId] = useState('');
   const [search, setSearch] = useState('');
@@ -1127,29 +1122,41 @@ export default function DPRConsole() {
   const project = projects.find(p => p.id === (detail?.project_id));
 
   return (
-    <div className="dpr-console">
-      <div className="app">
-        <Sidebar view={view} setView={(v) => { setView(v); if (v !== 'create') setEditing(null); }} collapsed={collapsed} setCollapsed={setCollapsed} counts={counts} user={user} />
-        <div className="main">
-          <Topbar
-            title={titleMap[view]}
-            crumb="Planning & Execution / Daily Progress Reports"
-            search={search} setSearch={setSearch}
-            notifItems={notifItems}
-            projects={projects} projectId={projectId} setProjectId={setProjectId}
-          />
-          {view === 'dashboard' && <DashboardView dashboard={dashboard} setView={setView} />}
-          {view === 'create' && (
-            <CreateWizard projects={projects} projectId={projectId} setProjectId={setProjectId} setView={setView} qc={qc} editing={editing} setEditing={setEditing} />
-          )}
-          {view === 'drafts' && <DPRListView title="Draft DPRs" status="draft" dprs={searched.filter(d => d.status === 'draft')} isLoading={dprsLoading} onView={setDetail} setView={setView} />}
-          {view === 'submitted' && <DPRListView title="Submitted DPRs" status="submitted" dprs={searched.filter(d => d.status === 'submitted')} isLoading={dprsLoading} onView={setDetail} setView={setView} />}
-          {view === 'approved' && <DPRListView title="Approved DPRs" status="approved" dprs={searched.filter(d => d.status === 'approved')} isLoading={dprsLoading} onView={setDetail} setView={setView} />}
-          {view === 'gallery' && <GalleryView />}
-          {view === 'reports' && <ReportsView dprs={allDprs} projects={projects} />}
-          {view === 'mobile' && <MobileView dashboard={dashboard} />}
-          {view === 'settings' && <SettingsView />}
-        </div>
+    <div className="dpr-console" style={{ background: Theme.pageBg, minHeight: '100vh' }}>
+      <PageHeader
+        title={titleMap[view] === 'Dashboard' ? 'DPR Console' : `DPR Console — ${titleMap[view]}`}
+        subtitle="Daily progress reports — create, track, approve and analyse"
+        breadcrumbs={[{ label: 'Planning' }, { label: 'DPR Console' }]}
+        actions={
+          <button
+            onClick={() => { setEditing(null); setView('create'); }}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg transition"
+            style={{ background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.25)', color: '#fff' }}
+          >
+            <Plus className="w-3.5 h-3.5" /> New DPR
+          </button>
+        }
+      />
+      <Toolbar
+        view={view}
+        setView={(v) => { setView(v); if (v !== 'create') setEditing(null); }}
+        counts={counts}
+        search={search} setSearch={setSearch}
+        notifItems={notifItems}
+        projects={projects} projectId={projectId} setProjectId={setProjectId}
+      />
+      <div className="console-main">
+        {view === 'dashboard' && <DashboardView dashboard={dashboard} setView={setView} />}
+        {view === 'create' && (
+          <CreateWizard projects={projects} projectId={projectId} setProjectId={setProjectId} setView={setView} qc={qc} editing={editing} setEditing={setEditing} />
+        )}
+        {view === 'drafts' && <DPRListView title="Draft DPRs" status="draft" dprs={searched.filter(d => d.status === 'draft')} isLoading={dprsLoading} onView={setDetail} setView={setView} />}
+        {view === 'submitted' && <DPRListView title="Submitted DPRs" status="submitted" dprs={searched.filter(d => d.status === 'submitted')} isLoading={dprsLoading} onView={setDetail} setView={setView} />}
+        {view === 'approved' && <DPRListView title="Approved DPRs" status="approved" dprs={searched.filter(d => d.status === 'approved')} isLoading={dprsLoading} onView={setDetail} setView={setView} />}
+        {view === 'gallery' && <GalleryView />}
+        {view === 'reports' && <ReportsView dprs={allDprs} projects={projects} />}
+        {view === 'mobile' && <MobileView dashboard={dashboard} />}
+        {view === 'settings' && <SettingsView />}
       </div>
       {detail && <DPRDetailDrawer dpr={detail} project={project} onClose={() => setDetail(null)} qc={qc} />}
     </div>
