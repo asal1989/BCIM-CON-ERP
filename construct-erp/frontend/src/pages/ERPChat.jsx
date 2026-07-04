@@ -162,9 +162,12 @@ export default function ERPChat() {
   }, []);
 
   // ── Load employees for DM list (no cap — show everyone) ──────────────────────
+  // Uses /users (open to any authenticated staff member) rather than
+  // /hr-admin/employees, which 403s for non-HR/admin roles and left most
+  // staff with an empty DM list.
   useEffect(() => {
-    api.get('/hr-admin/employees', { params: { employment_status: 'active', limit: 500 } })
-      .then(r => setEmployees(Array.isArray(r.data) ? r.data : r.data?.data || []))
+    api.get('/users')
+      .then(r => setEmployees((r.data?.data || []).filter(u => u.is_active !== false)))
       .catch(() => {});
   }, []);
 
