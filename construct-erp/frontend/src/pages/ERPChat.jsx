@@ -103,11 +103,17 @@ export default function ERPChat() {
   useEffect(() => { activeChannelRef.current = activeChannel; }, [activeChannel]);
 
   // ── Desktop notification permission ─────────────────────────────────────────
-  useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-  }, []);
+  // Chromium browsers (Edge, Chrome) silently ignore requestPermission() calls
+  // that aren't triggered by a genuine user gesture — calling it automatically
+  // on mount left permission stuck at 'default' forever in Edge, so no prompt
+  // ever appeared and notifications never fired. A visible button the user
+  // clicks satisfies the gesture requirement.
+  const [notifPerm, setNotifPerm]   = useState('Notification' in window ? Notification.permission : 'unsupported');
+  const [notifBannerDismissed, setNotifBannerDismissed] = useState(false);
+  const enableNotifications = () => {
+    if (!('Notification' in window)) return;
+    Notification.requestPermission().then(setNotifPerm);
+  };
 
   // ── Connect Socket.IO ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -290,7 +296,33 @@ export default function ERPChat() {
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-full bg-[#f4f6f9] overflow-hidden">
+    <div className="flex flex-col h-full bg-[#f4f6f9] overflow-hidden">
+
+      {/* ── Enable-notifications banner (needs a real click, not auto-shown) ── */}
+      {notifPerm === 'default' && !notifBannerDismissed && (
+        <div className="flex items-center gap-3 px-4 py-2 bg-indigo-600 text-white text-xs flex-shrink-0">
+          <span className="flex-1">🔔 Turn on desktop notifications to see new chat messages without keeping this tab open.</span>
+          <button onClick={enableNotifications}
+            className="px-3 py-1 bg-white text-indigo-700 font-semibold rounded-md hover:bg-indigo-50 transition-colors">
+            Enable Notifications
+          </button>
+          <button onClick={() => setNotifBannerDismissed(true)} className="text-indigo-200 hover:text-white">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+      {notifPerm === 'denied' && !notifBannerDismissed && (
+        <div className="flex items-center gap-3 px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-xs flex-shrink-0">
+          <span className="flex-1">
+            🔕 Notifications are blocked for this site in your browser. Click the lock/site-info icon in the address bar → Notifications → Allow, then reload this page.
+          </span>
+          <button onClick={() => setNotifBannerDismissed(true)} className="text-amber-400 hover:text-amber-700">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      <div className="flex flex-1 min-h-0 overflow-hidden">
 
       {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
       <aside className="w-60 flex-shrink-0 bg-white border-r border-slate-100 flex flex-col overflow-hidden">
@@ -635,6 +667,7 @@ export default function ERPChat() {
             <kbd className="border border-slate-200 rounded px-1 py-0.5 bg-white text-[9px]">Shift+Enter</kbd> for new line
           </p>
         </div>
+      </div>
       </div>
     </div>
   );
