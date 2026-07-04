@@ -15,7 +15,7 @@ const {
 const { sendMail } = require('../services/mail.service');
 const logger = require('../utils/logger');
 const { runSchemaInit } = require('../utils/schemaInit');
-const { postAutoJournalStandalone } = require('../services/journalAutoPost');
+const { postAutoJournal, postAutoJournalStandalone } = require('../services/journalAutoPost');
 const { BOQ_COST_HEADS, classifyItemCostHead } = require('../constants/boqCostHeads');
 
 
@@ -1612,6 +1612,28 @@ router.post('/advances', async (req, res) => {
         );
       }
 
+      // 3. Auto-post JV: Dr Advance to Vendors/Subcontractors (1150), Cr Bank
+      // (1010) — same treatment the Advance Tracker gives its vouchers, so the
+      // GL / Chart of Accounts sees this cash-out too. Recovery clears against
+      // AP later; this is not an expense yet.
+      const amt = parseFloat(amount || 0);
+      if (amt > 0) {
+        const ref = advance.voucher_number || advance.reference_number || `ADV-${String(advance.id).slice(0, 8)}`;
+        await postAutoJournal(client, {
+          companyId: req.user.company_id,
+          userId: req.user.id,
+          entryDate: payment_date || new Date().toISOString().slice(0, 10),
+          projectId: project_id || null,
+          reference: ref,
+          narration: `Advance paid — ${vendor_name} (${ref})`,
+          source: 'auto_tqs_advance',
+          lines: [
+            { code: '1150', debit: amt, description: `Advance to ${vendor_name} — ${ref}` },
+            { code: '1010', credit: amt, description: `Advance paid — ${ref}` },
+          ],
+        });
+      }
+
       return { ...advance, finance_payment_id };
     });
 
@@ -1662,6 +1684,12 @@ router.put('/advances/:id', async (req, res) => {
     if (!vendor_name) return res.status(400).json({ error: 'vendor_name required' });
     await getAccessibleAdvance(req, req.params.id);
 
+    // Old reference — the auto JV is keyed on it and must be replaced on edit
+    const { rows: [oldAdv] } = await query(
+      `SELECT id, voucher_number, reference_number, project_id FROM tqs_advances WHERE id = $1 AND company_id = $2`,
+      [req.params.id, req.user.company_id]
+    );
+
     const { rows } = await query(`
       UPDATE tqs_advances SET
         vendor_name       = $1,
@@ -1695,7 +1723,34 @@ router.put('/advances/:id', async (req, res) => {
     ]);
 
     if (!rows.length) return res.status(404).json({ error: 'Advance not found' });
-    res.json({ data: rows[0] });
+
+    // Replace the auto payment JV so the GL always mirrors the current values
+    const updated = rows[0];
+    const refOf = (a) => a.voucher_number || a.reference_number || `ADV-${String(a.id).slice(0, 8)}`;
+    if (oldAdv) {
+      await query(
+        `DELETE FROM journal_entries WHERE company_id = $1 AND source = 'auto_tqs_advance' AND reference = $2`,
+        [req.user.company_id, refOf(oldAdv)]
+      ).catch(() => {});
+    }
+    const newAmt = parseFloat(updated.amount || 0);
+    if (newAmt > 0) {
+      await postAutoJournalStandalone({
+        companyId: req.user.company_id,
+        userId: req.user.id,
+        entryDate: updated.payment_date || new Date().toISOString().slice(0, 10),
+        projectId: updated.project_id || null,
+        reference: refOf(updated),
+        narration: `Advance paid — ${updated.vendor_name} (${refOf(updated)})`,
+        source: 'auto_tqs_advance',
+        lines: [
+          { code: '1150', debit: newAmt, description: `Advance to ${updated.vendor_name} — ${refOf(updated)}` },
+          { code: '1010', credit: newAmt, description: `Advance paid — ${refOf(updated)}` },
+        ],
+      });
+    }
+
+    res.json({ data: updated });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
   }
@@ -1706,10 +1761,16 @@ router.delete('/advances/:id', async (req, res) => {
   try {
     await getAccessibleAdvance(req, req.params.id);
     const { rows } = await query(
-      `DELETE FROM tqs_advances WHERE id = $1 AND company_id = $2 RETURNING id`,
+      `DELETE FROM tqs_advances WHERE id = $1 AND company_id = $2 RETURNING id, voucher_number, reference_number`,
       [req.params.id, req.user.company_id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Advance not found' });
+    // Remove the auto-posted payment JV so the GL doesn't keep a phantom advance
+    const ref = rows[0].voucher_number || rows[0].reference_number || `ADV-${String(rows[0].id).slice(0, 8)}`;
+    await query(
+      `DELETE FROM journal_entries WHERE company_id = $1 AND source = 'auto_tqs_advance' AND reference = $2`,
+      [req.user.company_id, ref]
+    ).catch(() => {});
     res.json({ success: true });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });

@@ -337,6 +337,61 @@ router.get('/:project_id', async (req, res) => {
       `, [project_id]);
     } catch (_) {}
 
+    // 2b. Bill Tracker advances (tqs_advances) — same wo_number → BOQ-item
+    // routing as the Advance Tracker vouchers and Stores PC advances above.
+    const btAdvLinked = await query(`
+      WITH wo_linked AS (
+        SELECT av.id AS advance_id, wi.boq_item_id,
+               av.amount * (wi.qty * wi.rate) / NULLIF(tot.total_amount, 0) AS share
+        FROM tqs_advances av
+        JOIN sc_work_orders wo ON wo.wo_number = av.wo_number AND wo.project_id = $1
+        JOIN sc_wo_items wi ON wi.wo_id = wo.id AND wi.boq_item_id IS NOT NULL
+        JOIN (
+          SELECT wo2.wo_number, SUM(wi2.qty * wi2.rate) AS total_amount
+          FROM sc_work_orders wo2
+          JOIN sc_wo_items wi2 ON wi2.wo_id = wo2.id AND wi2.boq_item_id IS NOT NULL
+          WHERE wo2.project_id = $1
+          GROUP BY wo2.wo_number
+        ) tot ON tot.wo_number = wo.wo_number
+        WHERE av.project_id = $1 AND COALESCE(av.status,'') NOT IN ('cancelled')
+      ),
+      sc_linked AS (
+        SELECT av.id AS advance_id, m.boq_item_id,
+               av.amount * m.sc_amount / NULLIF(tot2.total_sc, 0) AS share
+        FROM tqs_advances av
+        JOIN boq_sc_mapping m ON m.sc_id = av.vendor_id AND m.project_id = $1 AND m.status != 'cancelled'
+        JOIN (
+          SELECT m2.sc_id, SUM(m2.sc_amount) AS total_sc
+          FROM boq_sc_mapping m2 WHERE m2.project_id = $1 AND m2.status != 'cancelled'
+          GROUP BY m2.sc_id
+        ) tot2 ON tot2.sc_id = m.sc_id
+        WHERE av.project_id = $1 AND COALESCE(av.status,'') NOT IN ('cancelled') AND av.vendor_id IS NOT NULL
+          AND av.id NOT IN (SELECT DISTINCT advance_id FROM wo_linked)
+      )
+      SELECT boq_item_id, 'Sub Con' AS cost_head, SUM(share) AS actual
+      FROM (
+        SELECT advance_id, boq_item_id, share FROM wo_linked
+        UNION ALL
+        SELECT advance_id, boq_item_id, share FROM sc_linked
+      ) combined
+      WHERE boq_item_id IS NOT NULL
+      GROUP BY boq_item_id
+    `, [project_id]);
+    const btAdvUnlinkable = await query(`
+      SELECT SUM(av.amount) AS actual
+      FROM tqs_advances av
+      WHERE av.project_id = $1 AND COALESCE(av.status,'') NOT IN ('cancelled')
+        AND NOT EXISTS (
+          SELECT 1 FROM sc_work_orders wo
+          JOIN sc_wo_items wi ON wi.wo_id = wo.id AND wi.boq_item_id IS NOT NULL
+          WHERE wo.wo_number = av.wo_number AND wo.project_id = $1
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM boq_sc_mapping m
+          WHERE m.sc_id = av.vendor_id AND m.project_id = $1 AND m.status != 'cancelled'
+        )
+    `, [project_id]);
+
     // 3. SC bill lines whose WO item has no BOQ link (scActuals above requires one)
     const scUnlinked = await query(`
       SELECT SUM(bi.curr_qty * bi.rate) AS actual
@@ -373,15 +428,17 @@ router.get('/:project_id', async (req, res) => {
     bumpProjectOnly('Sub Con', 'advance', unlinkableAdv.rows[0]?.actual);
     bumpProjectOnly('Sub Con', 'advance', scAdvances.rows[0]?.actual);
     bumpProjectOnly('Sub Con', 'advance', storePCAdvUnlinkable.rows[0]?.actual);
+    bumpProjectOnly('Sub Con', 'advance', btAdvUnlinkable.rows[0]?.actual);
     bumpProjectOnly('Sub Con', 'invoiced', scPayments.rows[0]?.actual);
     bumpProjectOnly('Sub Con', 'invoiced', scUnlinked.rows[0]?.actual);
     // 'Petty Cash' is not one of the 16 canonical heads — it's appended to the
     // cost_heads list in the response below so the frontend renders it.
     bumpProjectOnly('Petty Cash', 'invoiced', spcRemainder.rows[0]?.actual);
-    // The portion of stores_pc_sc_advances that DID resolve to a BOQ item via
-    // the WO (or boq_sc_mapping fallback) attaches directly, same as any other
-    // advance — not lumped into the unlinked bucket.
+    // The portion of stores_pc_sc_advances / tqs_advances that DID resolve to a
+    // BOQ item via the WO (or boq_sc_mapping fallback) attaches directly, same
+    // as any other advance — not lumped into the unlinked bucket.
     addActual(storePCAdvLinked.rows, true);
+    addActual(btAdvLinked.rows, true);
 
     // TQS-bill and PO spend — NO pro-rata anywhere. Every rupee lands exactly
     // where its PO/bill was tagged: a specific BOQ item, or (if only the PO's
@@ -699,6 +756,13 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
       WHERE project_id=$1 AND is_deleted=false
         AND status IN ('issued','partial','recovered') AND paid_amount > 0`, [project_id]);
 
+    // Paid only: advances recorded through the Bill Tracker's Advances menu
+    // (tqs_advances) — separate table from the Advance Tracker vouchers above.
+    const btAdvActuals = await query(`
+      SELECT 'Sub Con' AS cost_head, SUM(amount) AS actual
+      FROM tqs_advances
+      WHERE project_id=$1 AND COALESCE(status,'') NOT IN ('cancelled')`, [project_id]);
+
     // Paid only: petty cash — on Budget Control, the WHOLE approved petty-cash
     // total always shows under the single 'Petty Cash' row, regardless of any
     // cost head tagged on individual items. (The BOQ Item Breakdown screen still
@@ -761,7 +825,7 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
     // "Paid" = cash actually disbursed: the paid portion of those same bills,
     // plus advances/petty cash (cash out with no corresponding bill received).
     const paidMap = {};
-    for (const rows of [raPaid.rows, scPaid.rows, tqsPaid.rows, poFallbackPaid.rows, advActuals.rows, advTrackerActuals.rows, spcActuals.rows, spcRemainder.rows, storePCAdvActuals.rows]) {
+    for (const rows of [raPaid.rows, scPaid.rows, tqsPaid.rows, poFallbackPaid.rows, advActuals.rows, advTrackerActuals.rows, btAdvActuals.rows, spcActuals.rows, spcRemainder.rows, storePCAdvActuals.rows]) {
       for (const r of rows) {
         if (!r.cost_head) continue;
         paidMap[r.cost_head] = (paidMap[r.cost_head] || 0) + parseFloat(r.actual || 0);
@@ -773,7 +837,7 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
     // raPaid/scPaid/tqsPaid/poFallbackPaid since those are already inside
     // receivedMap (they're the paid subset of the same bills, not extra money).
     const actualMap = { ...receivedMap };
-    for (const rows of [advActuals.rows, advTrackerActuals.rows, spcActuals.rows, spcRemainder.rows, storePCAdvActuals.rows]) {
+    for (const rows of [advActuals.rows, advTrackerActuals.rows, btAdvActuals.rows, spcActuals.rows, spcRemainder.rows, storePCAdvActuals.rows]) {
       for (const r of rows) {
         if (!r.cost_head) continue;
         actualMap[r.cost_head] = (actualMap[r.cost_head] || 0) + parseFloat(r.actual || 0);
@@ -935,6 +999,16 @@ router.get('/:project_id/costhead-drilldown', async (req, res) => {
           AND status IN ('issued','partial','recovered') AND paid_amount > 0
         ORDER BY pay_date`, [project_id]);
       rows.push(...advTrk.rows);
+
+      // Advances recorded through the Bill Tracker's Advances menu
+      const btAdv = await query(`
+        SELECT COALESCE(voucher_number, reference_number, wo_number, po_number, 'ADV') AS reference,
+               payment_date AS date, vendor_name AS description,
+               amount, 'Bill Tracker Advance' AS source
+        FROM tqs_advances
+        WHERE project_id=$1 AND COALESCE(status,'') NOT IN ('cancelled')
+        ORDER BY payment_date`, [project_id]);
+      rows.push(...btAdv.rows);
 
       // Contractor advances given through Stores Petty Cash
       try {
@@ -1252,6 +1326,32 @@ router.get('/:project_id/items-drilldown', async (req, res) => {
       ORDER BY pay_date`, [project_id, ids]);
     rows.push(...advTrk.rows);
 
+    // Bill Tracker advances (tqs_advances) — same share logic, per advance row
+    const btAdvDrill = await query(`
+      WITH wo_linked AS (
+        SELECT av.id AS advance_id, av.voucher_number, av.reference_number, av.wo_number,
+               av.payment_date, av.vendor_name, wi.boq_item_id,
+               av.amount * (wi.qty * wi.rate) / NULLIF(tot.total_amount, 0) AS share
+        FROM tqs_advances av
+        JOIN sc_work_orders wo ON wo.wo_number = av.wo_number AND wo.project_id = $1
+        JOIN sc_wo_items wi ON wi.wo_id = wo.id AND wi.boq_item_id IS NOT NULL
+        JOIN (
+          SELECT wo2.wo_number, SUM(wi2.qty * wi2.rate) AS total_amount
+          FROM sc_work_orders wo2
+          JOIN sc_wo_items wi2 ON wi2.wo_id = wo2.id AND wi2.boq_item_id IS NOT NULL
+          WHERE wo2.project_id = $1
+          GROUP BY wo2.wo_number
+        ) tot ON tot.wo_number = wo.wo_number
+        WHERE av.project_id = $1 AND COALESCE(av.status,'') NOT IN ('cancelled')
+      )
+      SELECT COALESCE(voucher_number, reference_number, wo_number, 'ADV') AS reference,
+             payment_date AS date, vendor_name AS description,
+             'Sub Con' AS cost_head, share AS amount, 'Bill Tracker Advance' AS source
+      FROM wo_linked
+      WHERE boq_item_id = ANY($2::uuid[])
+      ORDER BY payment_date`, [project_id, ids]);
+    rows.push(...btAdvDrill.rows);
+
     // PO line items — only the invoiced (billed) portion, tagged directly to these
     // BOQ items. li.cost_head IS NULL guards against double-counting bills that
     // already carry their own cost_head tag (picked up by the TQS query above).
@@ -1446,6 +1546,14 @@ router.get('/:project_id/costhead-monthly', async (req, res) => {
         AND status IN ('issued','partial','recovered') AND paid_amount > 0
       GROUP BY 1`, [project_id]);
 
+    // Advances recorded through the Bill Tracker's Advances menu
+    const btAdvM = await query(`
+      SELECT TO_CHAR(COALESCE(payment_date, created_at), 'YYYY-MM') AS month,
+             'Sub Con' AS cost_head, SUM(amount) AS actual
+      FROM tqs_advances
+      WHERE project_id=$1 AND COALESCE(status,'') NOT IN ('cancelled')
+      GROUP BY 1`, [project_id]);
+
     const spcM = await query(`
       SELECT TO_CHAR(COALESCE(entry_date, created_at), 'YYYY-MM') AS month,
              'Petty Cash' AS cost_head, SUM(amount) AS actual
@@ -1466,7 +1574,7 @@ router.get('/:project_id/costhead-monthly', async (req, res) => {
 
     // Merge all sources into { [month]: { [cost_head]: amount } }
     const monthly = {};
-    for (const rows of [raM.rows, scM.rows, scPayM.rows, tqsM.rows, advM.rows, advTrkM.rows, spcM.rows, storePCAdvM.rows]) {
+    for (const rows of [raM.rows, scM.rows, scPayM.rows, tqsM.rows, advM.rows, advTrkM.rows, btAdvM.rows, spcM.rows, storePCAdvM.rows]) {
       for (const r of rows) {
         if (!r.month || !r.cost_head) continue;
         if (!monthly[r.month]) monthly[r.month] = {};
