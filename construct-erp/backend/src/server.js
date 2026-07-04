@@ -548,20 +548,20 @@ io.on('connection', (socket) => {
 
   // Pin toggle
   socket.on('pin_message', ({ id, channel, pinned }) => {
-    socket.to(channel).emit('message_pinned', { id, pinned });
+    socket.to(channel).emit('message_pinned', { id, channel, pinned });
   });
 
   // Reaction
   socket.on('react_message', ({ id, channel, reactions }) => {
-    socket.to(channel).emit('message_reacted', { id, reactions });
+    socket.to(channel).emit('message_reacted', { id, channel, reactions });
   });
 
   // Typing indicator
   socket.on('typing', ({ channel, name }) => {
-    socket.to(channel).emit('user_typing', { name });
+    socket.to(channel).emit('user_typing', { channel, name });
   });
   socket.on('stop_typing', ({ channel }) => {
-    socket.to(channel).emit('user_stop_typing');
+    socket.to(channel).emit('user_stop_typing', { channel });
   });
 
   socket.on('disconnect', () => {
