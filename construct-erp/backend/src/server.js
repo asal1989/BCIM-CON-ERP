@@ -530,10 +530,13 @@ io.on('connection', (socket) => {
   logger.info(`💬 Chat: ${socket.user?.name || socket.user?.id} connected`);
   CHAT_CHANNELS.forEach(ch => socket.join(ch));
 
-  // Tracks which channel the client is actively viewing (for future use —
-  // room membership no longer depends on this, the socket stays in every
-  // channel room for the life of the connection).
+  // Fixed channels are already joined above at connect time (so cross-channel
+  // notifications work); this still needs to join dynamic rooms that aren't
+  // in that fixed list — e.g. direct-message channels ("dm-<id>-<id>") —
+  // since those can't be pre-joined. Joining an already-joined room is a
+  // harmless no-op.
   socket.on('join_channel', (channel) => {
+    socket.join(channel);
     socket.currentChannel = channel;
   });
 

@@ -152,7 +152,8 @@ export default function ERPChat() {
       if (fromSomeoneElse && 'Notification' in window && Notification.permission === 'granted'
           && (document.hidden || isOtherChannel)) {
         const chDef = CHANNELS.find(c => c.id === msg.channel);
-        const notif = new Notification(`${msg.sender_name} · #${chDef?.label || msg.channel}`, {
+        const title = msg.channel.startsWith('dm-') ? msg.sender_name : `${msg.sender_name} · #${chDef?.label || msg.channel}`;
+        const notif = new Notification(title, {
           body: msg.text || (msg.file_name ? `📎 ${msg.file_name}` : 'New message'),
           tag: `erp-chat-${msg.channel}`,
           icon: '/logo192.png',
@@ -284,7 +285,18 @@ export default function ERPChat() {
     socketRef.current?.emit('react_message', { id: msgId, channel: activeChannel, reactions: updated.reactions });
   }, [activeChannel]);
 
-  const activeCh   = CHANNELS.find(c => c.id === activeChannel) || CHANNELS[0];
+  const isDm = activeChannel.startsWith('dm-');
+  const dmPartner = isDm
+    ? employees.find(emp => `dm-${[user?.id, emp.id].sort().join('-')}` === activeChannel)
+    : null;
+  const activeCh = isDm
+    ? {
+        id: activeChannel,
+        label: dmPartner?.full_name || dmPartner?.name || 'Direct Message',
+        icon: MessageSquare,
+        desc: dmPartner?.designation_name || dmPartner?.designation || 'Direct message',
+      }
+    : (CHANNELS.find(c => c.id === activeChannel) || CHANNELS[0]);
   const ChIcon     = activeCh.icon;
   const pinned     = messages.filter(m => m.pinned);
 
@@ -376,9 +388,14 @@ export default function ERPChat() {
               Direct Messages
             </button>
           </div>
-          {!collapsed.dms && employees.map(emp => {
+          {!collapsed.dms && employees.filter(emp => emp.id !== user?.id).map(emp => {
             const name  = emp.full_name || emp.name || 'Employee';
-            const dmId  = `dm-${emp.id}`;
+            // Must be the SAME string for both participants regardless of who
+            // opens the DM first — sorting the two user ids makes it symmetric.
+            // Using just `dm-${emp.id}` (the old code) meant you and the other
+            // person each computed a DIFFERENT channel name, so you were never
+            // actually in the same room — every DM looked empty forever.
+            const dmId  = `dm-${[user?.id, emp.id].sort().join('-')}`;
             const isActive = activeChannel === dmId;
             return (
               <button key={emp.id} onClick={() => setActiveChannel(dmId)}
