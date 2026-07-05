@@ -1540,6 +1540,10 @@ export const planningP6API = {
   deleteMRP:           (id)      => api.delete(`/planning-p6/mrp/${id}`),
   // P6 Dashboard
   p6Dashboard:         (p)       => api.get('/planning-p6/p6-dashboard', { params: p }),
+  // BOQ chapter link — pull activity budgets from BOQ Budget Breakdown
+  listBoqChapters:     (project_id) => api.get('/planning-p6/boq-chapters', { params: { project_id } }),
+  setActivityChapter:  (id, boq_chapter_no) => api.patch(`/planning-p6/activities/${id}/boq-chapter`, { boq_chapter_no }),
+  syncBudgetFromBoq:   (project_id) => api.post('/planning-p6/sync-budget-from-boq', { project_id }),
 };
 
 // ─── Subcontractor Module (sc) ────────────────────────────────────────────────

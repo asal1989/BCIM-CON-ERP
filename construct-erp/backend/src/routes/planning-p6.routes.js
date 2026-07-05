@@ -622,6 +622,104 @@ router.delete('/mrp/:id', authorize(...ADMINS), async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════
+// BOQ CHAPTER LINK — tag activities to a BOQ chapter, then pull budgets
+// from the BOQ Budget Breakdown chapter totals instead of re-entering them
+// ════════════════════════════════════════════════════════════════════
+
+// GET /planning-p6/boq-chapters?project_id= — chapters available to tag activities with
+router.get('/boq-chapters', async (req, res) => {
+  try {
+    const { project_id } = req.query;
+    if (!project_id) return res.status(400).json({ error: 'project_id required' });
+    const r = await db().query(`
+      SELECT chapter_no, MAX(chapter_name) AS chapter_name
+      FROM boq_items
+      WHERE project_id = $1 AND is_active = true AND chapter_no IS NOT NULL
+      GROUP BY chapter_no
+      ORDER BY chapter_no
+    `, [project_id]);
+    res.json({ data: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PATCH /planning-p6/activities/:id/boq-chapter — tag one activity to a BOQ chapter
+router.patch('/activities/:id/boq-chapter', authorize(...PLANNERS), async (req, res) => {
+  try {
+    const { boq_chapter_no } = req.body;
+    const r = await db().query(
+      `UPDATE project_activities SET boq_chapter_no = $1, updated_at = NOW() WHERE id = $2
+       RETURNING id, activity_code, boq_chapter_no`,
+      [boq_chapter_no || null, req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Activity not found' });
+    res.json({ data: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /planning-p6/sync-budget-from-boq — one-time pull: for every activity
+// tagged with a BOQ chapter, set budget_at_completion to that chapter's total
+// budget (SUM of boq_item_budget_breakdown across all items in the chapter),
+// split proportionally by each activity's planned_quantity share within the
+// chapter. Only touches budget_at_completion — leaves planned_value/
+// earned_value/actual_cost untouched (those are separate EVM inputs).
+router.post('/sync-budget-from-boq', authorize(...PLANNERS), async (req, res) => {
+  try {
+    const { project_id } = req.body;
+    if (!project_id) return res.status(400).json({ error: 'project_id required' });
+
+    const chapterBudgets = await db().query(`
+      SELECT bi.chapter_no, COALESCE(SUM(bib.budgeted_amount), 0) AS chapter_budget
+      FROM boq_items bi
+      LEFT JOIN boq_item_budget_breakdown bib ON bib.boq_item_id = bi.id AND bib.project_id = bi.project_id
+      WHERE bi.project_id = $1 AND bi.is_active = true AND bi.chapter_no IS NOT NULL
+      GROUP BY bi.chapter_no
+    `, [project_id]);
+    const budgetByChapter = {};
+    chapterBudgets.rows.forEach(r => { budgetByChapter[r.chapter_no] = parseFloat(r.chapter_budget) || 0; });
+
+    const acts = await db().query(`
+      SELECT id, boq_chapter_no, COALESCE(planned_quantity, 0) AS planned_quantity
+      FROM project_activities
+      WHERE project_id = $1 AND boq_chapter_no IS NOT NULL
+    `, [project_id]);
+
+    const byChapter = {};
+    acts.rows.forEach(a => {
+      (byChapter[a.boq_chapter_no] ||= []).push(a);
+    });
+
+    let updated = 0;
+    let skippedNoQty = 0;
+    const untaggedChapters = [];
+
+    for (const [chapterNo, chapterActs] of Object.entries(byChapter)) {
+      const chapterBudget = budgetByChapter[chapterNo];
+      if (chapterBudget === undefined) { untaggedChapters.push(chapterNo); continue; }
+
+      const totalQty = chapterActs.reduce((s, a) => s + parseFloat(a.planned_quantity || 0), 0);
+      for (const a of chapterActs) {
+        const qty = parseFloat(a.planned_quantity || 0);
+        if (totalQty <= 0 || qty <= 0) { skippedNoQty++; continue; }
+        const share = chapterBudget * (qty / totalQty);
+        await db().query(
+          `UPDATE project_activities SET budget_at_completion = $1, updated_at = NOW() WHERE id = $2`,
+          [share, a.id]
+        );
+        updated++;
+      }
+    }
+
+    res.json({
+      data: {
+        updated,
+        skipped_no_quantity: skippedNoQty,
+        chapters_not_found_in_boq: untaggedChapters,
+      },
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════════════════════════════════════════
 // P6 DASHBOARD — SPI, CPI, critical path, milestones, risks
 // ════════════════════════════════════════════════════════════════════
 router.get('/p6-dashboard', async (req, res) => {

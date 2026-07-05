@@ -5,7 +5,7 @@ import {
   ClipboardList, Plus, Search, Download, ChevronRight, X,
   Calendar, MapPin, Activity, Package, CheckCircle2,
   Clock, AlertTriangle, Zap, Trash2, Edit2, Flag,
-  GanttChartSquare, List, Upload,
+  GanttChartSquare, List, Upload, IndianRupee,
 } from 'lucide-react';
 import { planningAPI, planningP6API, projectAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
@@ -67,6 +67,12 @@ export default function ActivitiesPage() {
     enabled: !!projectId,
   });
 
+  const { data: boqChapters = [] } = useQuery({
+    queryKey: ['boq-chapters', projectId],
+    queryFn: () => planningP6API.listBoqChapters(projectId).then(r => r.data?.data ?? []),
+    enabled: !!projectId,
+  });
+
   const filtered = useMemo(() => {
     if (!search) return activities;
     const q = search.toLowerCase();
@@ -85,6 +91,23 @@ export default function ActivitiesPage() {
       setSelected(null);
     },
     onError: e => toast.error(e?.response?.data?.error || 'Delete failed'),
+  });
+
+  const syncBudgetMut = useMutation({
+    mutationFn: () => planningP6API.syncBudgetFromBoq(projectId),
+    onSuccess: (res) => {
+      const { updated, skipped_no_quantity, chapters_not_found_in_boq } = res.data.data;
+      toast.success(`Budgets synced: ${updated} activities updated`);
+      if (skipped_no_quantity > 0) {
+        toast(`${skipped_no_quantity} tagged activities skipped — no planned quantity set`, { icon: '⚠️' });
+      }
+      if (chapters_not_found_in_boq?.length) {
+        toast(`Chapters not found in BOQ: ${chapters_not_found_in_boq.join(', ')}`, { icon: '⚠️' });
+      }
+      qc.invalidateQueries({ queryKey: ['planning-activities'] });
+      qc.invalidateQueries({ queryKey: ['p6-dashboard'] });
+    },
+    onError: e => toast.error(e?.response?.data?.error || 'Sync failed'),
   });
 
   const statusCounts = useMemo(() => {
@@ -168,6 +191,14 @@ export default function ActivitiesPage() {
                 <Download className="w-4 h-4" /> Template
               </button>
               <button
+                onClick={() => syncBudgetMut.mutate()}
+                disabled={syncBudgetMut.isPending}
+                title="Pull budget_at_completion for chapter-tagged activities from BOQ Budget Breakdown chapter totals"
+                className="flex items-center gap-1.5 px-3 py-2 border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-medium rounded-lg hover:bg-emerald-100 shadow-sm disabled:opacity-50"
+              >
+                <IndianRupee className="w-4 h-4" /> {syncBudgetMut.isPending ? 'Syncing…' : 'Sync Budgets from BOQ'}
+              </button>
+              <button
                 onClick={() => setShowAdd(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-all shadow-sm"
               >
@@ -225,7 +256,7 @@ export default function ActivitiesPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-100">
-                    {['Code', 'Activity', 'Type', 'Baseline Dates', 'Duration', 'Budget (BAC)', 'Progress', 'Status', ''].map(h => (
+                    {['Code', 'Activity', 'Type', 'Baseline Dates', 'Duration', 'BOQ Chapter', 'Budget (BAC)', 'Progress', 'Status', ''].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-medium text-slate-900 font-medium uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -256,6 +287,9 @@ export default function ActivitiesPage() {
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-xs font-mono text-slate-700">{a.baseline_duration}d</td>
                         <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                          <ChapterCell activity={a} chapters={boqChapters} />
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                           <BudgetCell activity={a} />
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap w-32">
@@ -277,7 +311,7 @@ export default function ActivitiesPage() {
                     );
                   })}
                   {filtered.length === 0 && (
-                    <tr><td colSpan={9} className="py-16 text-center">
+                    <tr><td colSpan={10} className="py-16 text-center">
                       <Package className="w-8 h-8 text-slate-300 mx-auto mb-3" />
                       <p className="text-sm text-slate-400">No activities found</p>
                     </td></tr>
@@ -469,6 +503,41 @@ function ActivityDetailPanel({ activity: a, onClose, onDelete, qc }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Inline BOQ Chapter picker for the activities table ─────────────
+// Tags an activity to a BOQ chapter so "Sync Budgets from BOQ" can pull its
+// share of that chapter's budget (see planningP6API.syncBudgetFromBoq).
+function ChapterCell({ activity: a, chapters }) {
+  const qc = useQueryClient();
+
+  const mut = useMutation({
+    mutationFn: chapterNo => planningP6API.setActivityChapter(a.id, chapterNo || null),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['planning-activities'] }),
+    onError: e => toast.error(e?.response?.data?.error || 'Failed to save chapter'),
+  });
+
+  const selected = chapters.find(c => c.chapter_no === a.boq_chapter_no);
+
+  return (
+    <select
+      value={a.boq_chapter_no || ''}
+      onChange={e => mut.mutate(e.target.value)}
+      disabled={mut.isPending}
+      className={clsx(
+        'text-xs border rounded-md px-2 py-1 outline-none max-w-40 disabled:opacity-50',
+        a.boq_chapter_no ? 'border-slate-200 text-slate-700' : 'border-dashed border-slate-300 text-slate-400 italic'
+      )}
+    >
+      <option value="">— None —</option>
+      {chapters.map(c => (
+        <option key={c.chapter_no} value={c.chapter_no}>
+          {c.chapter_no}{c.chapter_name ? ` — ${c.chapter_name}` : ''}
+        </option>
+      ))}
+      {a.boq_chapter_no && !selected && <option value={a.boq_chapter_no}>{a.boq_chapter_no} (not in BOQ)</option>}
+    </select>
   );
 }
 

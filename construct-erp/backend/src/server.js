@@ -748,7 +748,10 @@ async function runAutoMigrations() {
     `);
     // 040 Menu-level permissions per user
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS accessible_menus JSONB`);
-    logger.info('✅ Auto-migrations complete (003–040)');
+    // 041 P6 activity → BOQ chapter link (for pulling activity budgets from the
+    // BOQ Budget Breakdown chapter totals instead of re-entering them)
+    await client.query(`ALTER TABLE project_activities ADD COLUMN IF NOT EXISTS boq_chapter_no VARCHAR(50)`);
+    logger.info('✅ Auto-migrations complete (003–041)');
   } catch (err) {
     logger.warn('⚠️  Auto-migration warning:', err.message);
   } finally {
