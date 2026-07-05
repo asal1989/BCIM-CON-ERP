@@ -1544,6 +1544,8 @@ export const planningP6API = {
   listBoqChapters:     (project_id) => api.get('/planning-p6/boq-chapters', { params: { project_id } }),
   setActivityChapter:  (id, boq_chapter_no) => api.patch(`/planning-p6/activities/${id}/boq-chapter`, { boq_chapter_no }),
   syncBudgetFromBoq:   (project_id) => api.post('/planning-p6/sync-budget-from-boq', { project_id }),
+  autoMatchBoqChapters:  (project_id) => api.get('/planning-p6/auto-match-boq-chapters', { params: { project_id } }),
+  applyBoqChapterMatches: (matches) => api.post('/planning-p6/apply-boq-chapter-matches', { matches }),
 };
 
 // ─── Subcontractor Module (sc) ────────────────────────────────────────────────

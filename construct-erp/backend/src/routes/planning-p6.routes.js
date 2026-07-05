@@ -627,18 +627,25 @@ router.delete('/mrp/:id', authorize(...ADMINS), async (req, res) => {
 // ════════════════════════════════════════════════════════════════════
 
 // GET /planning-p6/boq-chapters?project_id= — chapters available to tag activities with
+// NOTE: chapter_no is NOT unique on its own in this data (many BOQs re-use "01" etc.
+// for every chapter), so chapters are identified by the (chapter_no, chapter_name)
+// pair. `key` is the composite identifier stored in project_activities.boq_chapter_no.
 router.get('/boq-chapters', async (req, res) => {
   try {
     const { project_id } = req.query;
     if (!project_id) return res.status(400).json({ error: 'project_id required' });
     const r = await db().query(`
-      SELECT chapter_no, MAX(chapter_name) AS chapter_name
+      SELECT chapter_no, chapter_name, COUNT(*) AS item_count
       FROM boq_items
       WHERE project_id = $1 AND is_active = true AND chapter_no IS NOT NULL
-      GROUP BY chapter_no
-      ORDER BY chapter_no
+      GROUP BY chapter_no, chapter_name
+      ORDER BY chapter_no, chapter_name
     `, [project_id]);
-    res.json({ data: r.rows });
+    const data = r.rows.map(row => ({
+      ...row,
+      key: `${row.chapter_no}::${row.chapter_name || ''}`,
+    }));
+    res.json({ data });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -668,14 +675,17 @@ router.post('/sync-budget-from-boq', authorize(...PLANNERS), async (req, res) =>
     if (!project_id) return res.status(400).json({ error: 'project_id required' });
 
     const chapterBudgets = await db().query(`
-      SELECT bi.chapter_no, COALESCE(SUM(bib.budgeted_amount), 0) AS chapter_budget
+      SELECT bi.chapter_no, bi.chapter_name, COALESCE(SUM(bib.budgeted_amount), 0) AS chapter_budget
       FROM boq_items bi
       LEFT JOIN boq_item_budget_breakdown bib ON bib.boq_item_id = bi.id AND bib.project_id = bi.project_id
       WHERE bi.project_id = $1 AND bi.is_active = true AND bi.chapter_no IS NOT NULL
-      GROUP BY bi.chapter_no
+      GROUP BY bi.chapter_no, bi.chapter_name
     `, [project_id]);
     const budgetByChapter = {};
-    chapterBudgets.rows.forEach(r => { budgetByChapter[r.chapter_no] = parseFloat(r.chapter_budget) || 0; });
+    chapterBudgets.rows.forEach(r => {
+      const key = `${r.chapter_no}::${r.chapter_name || ''}`;
+      budgetByChapter[key] = parseFloat(r.chapter_budget) || 0;
+    });
 
     const acts = await db().query(`
       SELECT id, boq_chapter_no, COALESCE(planned_quantity, 0) AS planned_quantity
@@ -716,6 +726,149 @@ router.post('/sync-budget-from-boq', authorize(...PLANNERS), async (req, res) =>
         chapters_not_found_in_boq: untaggedChapters,
       },
     });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ════════════════════════════════════════════════════════════════════
+// AUTO-MATCH BOQ CHAPTERS — text-similarity suggestions between activity
+// names/codes and BOQ chapter vocabulary, for manual review before applying.
+// ════════════════════════════════════════════════════════════════════
+
+const STOPWORDS = new Set([
+  'and','the','for','of','at','in','on','to','with','all','a','an','as','per','etc',
+  'works','work','floor','level','st','nd','rd','th','no','ii','iii','including',
+]);
+
+// Bridges vocabulary gaps between terse activity names and broad BOQ chapter
+// names (e.g. an activity called "Debris Removal" should match a chapter
+// named "Demolition Works").
+const SYNONYM_GROUPS = [
+  ['demolition','demolish','debris','dismantle','dismantling','dismantled','removal','breaking','break'],
+  ['blockwork','block','masonry','brickwork','brick','blocks'],
+  ['plastering','plaster','rendering','render'],
+  ['waterproofing','waterproof','wp','membrane'],
+  ['screed','topping','flooring'],
+  ['scaffolding','scaffold','staging','safety','net'],
+  ['concrete','rcc','pcc','concreting','cc'],
+  ['excavation','excavate','earthwork','digging'],
+  ['electrical','wiring','conduit'],
+  ['plumbing','sanitary','drainage','pipe','piping'],
+  ['painting','paint','putty'],
+  ['tiling','tile','tiles'],
+  ['miscellaneous','other','sundry','general'],
+];
+const synonymOf = new Map();
+SYNONYM_GROUPS.forEach(group => group.forEach(w => synonymOf.set(w, group[0])));
+
+function tokenize(text) {
+  if (!text) return [];
+  return String(text)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !STOPWORDS.has(w) && isNaN(Number(w)))
+    .map(w => synonymOf.get(w) || w);
+}
+
+// GET /planning-p6/auto-match-boq-chapters?project_id= — propose BOQ chapter
+// matches for activities that don't have one yet. Preview only; nothing is
+// written. Client reviews and calls apply-boq-chapter-matches to commit.
+router.get('/auto-match-boq-chapters', async (req, res) => {
+  try {
+    const { project_id } = req.query;
+    if (!project_id) return res.status(400).json({ error: 'project_id required' });
+
+    const chapterRows = await db().query(`
+      SELECT chapter_no, chapter_name, STRING_AGG(DISTINCT description, ' ') AS item_text
+      FROM boq_items
+      WHERE project_id = $1 AND is_active = true AND chapter_no IS NOT NULL
+      GROUP BY chapter_no, chapter_name
+    `, [project_id]);
+
+    if (chapterRows.rows.length === 0) {
+      return res.json({ data: { matches: [], chapters_considered: 0 } });
+    }
+
+    const chapters = chapterRows.rows.map(row => {
+      const key = `${row.chapter_no}::${row.chapter_name || ''}`;
+      const nameTokens = new Set(tokenize(row.chapter_name));
+      // Only take the first ~40 words of item text per chapter — enough
+      // vocabulary signal without either the description dominating
+      // scoring or the query becoming expensive on very long BOQ text.
+      const itemTokens = new Set(tokenize(String(row.item_text || '').split(/\s+/).slice(0, 400).join(' ')));
+      return { key, chapter_no: row.chapter_no, chapter_name: row.chapter_name, nameTokens, itemTokens };
+    });
+
+    const acts = await db().query(`
+      SELECT id, activity_code, activity_name
+      FROM project_activities
+      WHERE project_id = $1 AND boq_chapter_no IS NULL
+      ORDER BY activity_code
+    `, [project_id]);
+
+    const matches = [];
+    for (const a of acts.rows) {
+      const actTokens = new Set([...tokenize(a.activity_name), ...tokenize(a.activity_code)]);
+      if (actTokens.size === 0) continue;
+
+      const scored = chapters.map(ch => {
+        let score = 0;
+        for (const t of actTokens) {
+          if (ch.nameTokens.has(t)) score += 3;      // chapter-name hit: strong signal
+          else if (ch.itemTokens.has(t)) score += 1;  // BOQ item vocabulary hit: weak signal
+        }
+        return { chapter: ch, score };
+      }).sort((x, y) => y.score - x.score);
+
+      const best = scored[0];
+      if (!best || best.score === 0) continue;
+      const runnerUp = scored[1];
+      const confidence = runnerUp && runnerUp.score > 0 && runnerUp.score === best.score ? 'low' : best.score >= 5 ? 'high' : best.score >= 3 ? 'medium' : 'low';
+
+      matches.push({
+        activity_id: a.id,
+        activity_code: a.activity_code,
+        activity_name: a.activity_name,
+        boq_chapter_key: best.chapter.key,
+        chapter_no: best.chapter.chapter_no,
+        chapter_name: best.chapter.chapter_name,
+        confidence,
+        score: best.score,
+        alternatives: scored.slice(1, 3).filter(s => s.score > 0).map(s => ({
+          boq_chapter_key: s.chapter.key, chapter_name: s.chapter.chapter_name, score: s.score,
+        })),
+      });
+    }
+
+    res.json({
+      data: {
+        matches,
+        chapters_considered: chapters.length,
+        unmatched_activity_count: acts.rows.length - matches.length,
+      },
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /planning-p6/apply-boq-chapter-matches — bulk-commit a reviewed set
+// of { activity_id, boq_chapter_key } pairs (as returned by auto-match above,
+// possibly edited/filtered by the user first).
+router.post('/apply-boq-chapter-matches', authorize(...PLANNERS), async (req, res) => {
+  try {
+    const { matches } = req.body;
+    if (!Array.isArray(matches) || matches.length === 0) {
+      return res.status(400).json({ error: 'matches array required' });
+    }
+    let applied = 0;
+    for (const m of matches) {
+      if (!m.activity_id || !m.boq_chapter_key) continue;
+      await db().query(
+        `UPDATE project_activities SET boq_chapter_no = $1, updated_at = NOW() WHERE id = $2`,
+        [m.boq_chapter_key, m.activity_id]
+      );
+      applied++;
+    }
+    res.json({ data: { applied } });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
