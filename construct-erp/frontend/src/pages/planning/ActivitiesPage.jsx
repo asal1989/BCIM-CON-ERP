@@ -7,7 +7,7 @@ import {
   Clock, AlertTriangle, Zap, Trash2, Edit2, Flag,
   GanttChartSquare, List, Upload,
 } from 'lucide-react';
-import { planningAPI, projectAPI } from '../../api/client';
+import { planningAPI, planningP6API, projectAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
@@ -319,12 +319,27 @@ function ActivityDetailPanel({ activity: a, onClose, onDelete, qc }) {
   const [pct, setPct]         = useState(a.progress_pct || 0);
   const [status, setStatus]   = useState(a.status);
   const [saving, setSaving]   = useState(false);
+  const [bac, setBac]         = useState(a.budget_at_completion || '');
+  const [pv, setPv]           = useState(a.planned_value || '');
+  const [ev, setEv]           = useState(a.earned_value || '');
+  const [ac, setAc]           = useState(a.actual_cost || '');
 
   const progressMut = useMutation({
     mutationFn: d => planningAPI.updateProgress(a.id, d),
     onSuccess: () => {
       toast.success('Progress updated');
       qc.invalidateQueries({ queryKey: ['planning-activities'] });
+      onClose();
+    },
+    onError: e => toast.error(e?.response?.data?.error || 'Update failed'),
+  });
+
+  const costMut = useMutation({
+    mutationFn: d => planningP6API.updateActivityEVM(a.id, d),
+    onSuccess: () => {
+      toast.success('Cost values saved');
+      qc.invalidateQueries({ queryKey: ['planning-activities'] });
+      qc.invalidateQueries({ queryKey: ['p6-dashboard'] });
       onClose();
     },
     onError: e => toast.error(e?.response?.data?.error || 'Update failed'),
@@ -402,6 +417,41 @@ function ActivityDetailPanel({ activity: a, onClose, onDelete, qc }) {
                 {progressMut.isPending ? 'Saving…' : 'Save Progress'}
               </button>
             </div>
+          </div>
+
+          {/* Cost / EVM */}
+          <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-4">
+            <div className="text-xs font-medium text-emerald-700 mb-1">Cost / EVM Values</div>
+            <p className="text-[10px] text-emerald-700/70 mb-3">
+              Feeds the P6 EVM Dashboard (SPI/CPI). For bulk entry across many activities, use
+              "Import CSV" with a budget_at_completion column instead.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Budget at Completion (BAC)">
+                <input type="number" className="inp" placeholder="0" value={bac} onChange={e => setBac(e.target.value)} />
+              </Field>
+              <Field label="Planned Value (PV)">
+                <input type="number" className="inp" placeholder="0" value={pv} onChange={e => setPv(e.target.value)} />
+              </Field>
+              <Field label="Earned Value (EV)">
+                <input type="number" className="inp" placeholder="0" value={ev} onChange={e => setEv(e.target.value)} />
+              </Field>
+              <Field label="Actual Cost (AC)">
+                <input type="number" className="inp" placeholder="0" value={ac} onChange={e => setAc(e.target.value)} />
+              </Field>
+            </div>
+            <button
+              onClick={() => costMut.mutate({
+                budget_at_completion: bac === '' ? null : Number(bac),
+                planned_value: pv === '' ? 0 : Number(pv),
+                earned_value: ev === '' ? 0 : Number(ev),
+                actual_cost: ac === '' ? 0 : Number(ac),
+              })}
+              disabled={costMut.isPending}
+              className="w-full mt-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {costMut.isPending ? 'Saving…' : 'Save Cost Values'}
+            </button>
           </div>
         </div>
 

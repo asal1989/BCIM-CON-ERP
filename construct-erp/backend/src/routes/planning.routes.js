@@ -882,12 +882,17 @@ router.post('/activities/import', authorize(...PLANNERS), async (req, res) => {
       const {
         activity_code, activity_name, activity_type,
         baseline_start_date, baseline_end_date, location,
-        is_critical_path, planned_quantity, measurement_unit, description
+        is_critical_path, planned_quantity, measurement_unit, description,
+        budget_at_completion,
       } = row;
 
       if (!activity_code || !activity_name || !baseline_start_date || !baseline_end_date) { skipped++; continue; }
 
       const dur = Math.ceil((new Date(baseline_end_date) - new Date(baseline_start_date)) / 86400000);
+      // Cost column is optional — re-importing an existing sheet without it must
+      // not wipe out budgets already entered, so fall back to the existing value.
+      const bac = budget_at_completion !== undefined && budget_at_completion !== ''
+        ? parseFloat(budget_at_completion) : null;
 
       try {
         if (overwrite) {
@@ -895,27 +900,28 @@ router.post('/activities/import', authorize(...PLANNERS), async (req, res) => {
             INSERT INTO project_activities
               (project_id, activity_code, activity_name, activity_type, description, location,
                baseline_start_date, baseline_end_date, baseline_duration,
-               is_critical_path, planned_quantity, measurement_unit, created_by)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+               is_critical_path, planned_quantity, measurement_unit, budget_at_completion, created_by)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,COALESCE($13,0),$14)
             ON CONFLICT (project_id, activity_code) DO UPDATE SET
               activity_name=$3, activity_type=$4, description=$5, location=$6,
               baseline_start_date=$7, baseline_end_date=$8, baseline_duration=$9,
               is_critical_path=$10, planned_quantity=$11, measurement_unit=$12,
+              budget_at_completion=COALESCE($13, project_activities.budget_at_completion),
               updated_at=NOW()`,
             [project_id, activity_code, activity_name, activity_type||'other',
              description||null, location||null, baseline_start_date, baseline_end_date, dur,
-             is_critical_path||false, planned_quantity||null, measurement_unit||null, req.user.id]);
+             is_critical_path||false, planned_quantity||null, measurement_unit||null, bac, req.user.id]);
           inserted++;
         } else {
           await db().query(`
             INSERT INTO project_activities
               (project_id, activity_code, activity_name, activity_type, description, location,
                baseline_start_date, baseline_end_date, baseline_duration,
-               is_critical_path, planned_quantity, measurement_unit, created_by)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+               is_critical_path, planned_quantity, measurement_unit, budget_at_completion, created_by)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,COALESCE($13,0),$14)`,
             [project_id, activity_code, activity_name, activity_type||'other',
              description||null, location||null, baseline_start_date, baseline_end_date, dur,
-             is_critical_path||false, planned_quantity||null, measurement_unit||null, req.user.id]);
+             is_critical_path||false, planned_quantity||null, measurement_unit||null, bac, req.user.id]);
           inserted++;
         }
       } catch (e) {
@@ -931,10 +937,10 @@ router.post('/activities/import', authorize(...PLANNERS), async (req, res) => {
 // GET /planning/activities/template — download import template
 router.get('/activities/template', (req, res) => {
   const csv = [
-    'activity_code,activity_name,activity_type,baseline_start_date,baseline_end_date,location,is_critical_path,planned_quantity,measurement_unit,description',
-    'ACT-001,Site Clearance,civil,2026-07-01,2026-07-07,Block A,false,1,LS,Clear and grub the site',
-    'ACT-002,Excavation,civil,2026-07-08,2026-07-20,Block A,true,500,Cum,Bulk excavation for foundations',
-    'ACT-003,PCC,structural,2026-07-21,2026-07-24,Block A,false,50,Cum,Plain cement concrete M10',
+    'activity_code,activity_name,activity_type,baseline_start_date,baseline_end_date,location,is_critical_path,planned_quantity,measurement_unit,description,budget_at_completion',
+    'ACT-001,Site Clearance,civil,2026-07-01,2026-07-07,Block A,false,1,LS,Clear and grub the site,50000',
+    'ACT-002,Excavation,civil,2026-07-08,2026-07-20,Block A,true,500,Cum,Bulk excavation for foundations,850000',
+    'ACT-003,PCC,structural,2026-07-21,2026-07-24,Block A,false,50,Cum,Plain cement concrete M10,220000',
   ].join('\n');
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename="activity-import-template.csv"');
