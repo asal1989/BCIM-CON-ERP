@@ -805,12 +805,6 @@ export const payrollAPI = {
   pay:      (id)     => api.patch(`/payroll/${id}/pay`),
 };
 
-export const dprAPI = {
-  list:   (params) => api.get('/dpr', { params }),
-  get:    (id)     => api.get(`/dpr/${id}`),
-  create: (data)   => api.post('/dpr', data),
-};
-
 export const planningAPI = {
   // DPR
   listDPRs:       (p)     => api.get('/planning/dpr', { params: p }),

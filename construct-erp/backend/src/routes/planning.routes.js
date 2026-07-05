@@ -52,6 +52,23 @@ runSchemaInit('dpr_settings', async () => {
   `);
 });
 
+// ─── DPR CONSOLE SCHEMA FIXES ───────────────────────────────────────────────
+// - updated_at: the table only had created_at, so PUT/approve/approval-action
+//   had no way to record a real "last modified" time — the API was aliasing
+//   updated_at to created_at, which never changed after the first save.
+// - uq_dpr_project_date: nothing enforced one DPR per project per day, so a
+//   double-click (or resubmission) on the create wizard could silently create
+//   duplicate DPRs for the same project/date. Added as a unique index rather
+//   than a table CHECK/CONSTRAINT so it's safely idempotent (IF NOT EXISTS) on
+//   every server start; if duplicate rows already exist in production the
+//   index creation will fail and is caught below — existing dupes must be
+//   resolved manually before the constraint can take effect, but this doesn't
+//   block server startup either way.
+runSchemaInit('dpr_schema_fixes', async () => {
+  await db().query(`ALTER TABLE daily_progress_reports ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`);
+  await db().query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_dpr_project_date ON daily_progress_reports(project_id, report_date)`);
+});
+
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 const db = () => require('../config/database').pool;
 
@@ -307,7 +324,7 @@ function buildPlanningDPRResponse(row) {
     prepared_by: equipmentStatus.prepared_by || row.submitted_by_name || '',
     approved_by: equipmentStatus.approved_by || '',
     created_at: row.created_at,
-    updated_at: row.created_at,
+    updated_at: row.updated_at || row.created_at,
     created_by_id: row.submitted_by,
     approved_at: equipmentStatus.approved_at || null,
     project_name: row.project_name,
@@ -458,6 +475,7 @@ router.post('/dpr', authorize(...PLANNERS), async (req, res) => {
 
     res.status(201).json({ data: buildPlanningDPRResponse(result.rows[0]) });
   } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'A DPR already exists for this project on this date' });
     res.status(500).json({ error: err.message });
   }
 });
@@ -597,7 +615,8 @@ router.put('/dpr/:id', authorize(...PLANNERS), async (req, res) => {
           equipment_status = $5,
           issues = $6,
           tomorrow_plan = $7,
-          status = $8
+          status = $8,
+          updated_at = NOW()
       WHERE id = $9
     `, [
       req.body.report_date || existing.rows[0].report_date,
@@ -621,6 +640,7 @@ router.put('/dpr/:id', authorize(...PLANNERS), async (req, res) => {
 
     res.json({ data: buildPlanningDPRResponse(refreshed.rows[0]) });
   } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Another DPR already exists for this project on that date' });
     res.status(500).json({ error: err.message });
   }
 });
@@ -644,7 +664,8 @@ router.patch('/dpr/:id/approve', authorize(...MANAGERS), async (req, res) => {
     await db().query(`
       UPDATE daily_progress_reports
       SET status = 'approved',
-          equipment_status = $1
+          equipment_status = $1,
+          updated_at = NOW()
       WHERE id = $2
     `, [JSON.stringify(equipmentStatus), req.params.id]);
 
@@ -1627,7 +1648,7 @@ router.patch('/dpr/:id/approval-action', authorize(...MANAGERS), async (req, res
     }
 
     await db().query(
-      `UPDATE daily_progress_reports SET status = $1, equipment_status = $2 WHERE id = $3`,
+      `UPDATE daily_progress_reports SET status = $1, equipment_status = $2, updated_at = NOW() WHERE id = $3`,
       [status, JSON.stringify(equipmentStatus), req.params.id]
     );
 

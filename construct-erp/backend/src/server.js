@@ -59,7 +59,6 @@ const inventoryRoutes = require('./routes/inventory.routes');
 const workerRoutes = require('./routes/worker.routes');
 const attendanceRoutes = require('./routes/attendance.routes');
 const payrollRoutes = require('./routes/payroll.routes');
-const dprRoutes      = require('./routes/dpr.routes');
 const planningRoutes   = require('./routes/planning.routes');
 const planningP6Routes = require('./routes/planning-p6.routes');
 const incidentRoutes = require('./routes/incident.routes');
@@ -336,7 +335,6 @@ app.use(`${API}/subcontractors`, subcontractorRoutes);
 app.use(`${API}/workers`, workerRoutes);
 app.use(`${API}/attendance`, attendanceRoutes);
 app.use(`${API}/payroll`, payrollRoutes);
-app.use(`${API}/dpr`,      dprRoutes);
 app.use(`${API}/planning`,    planningRoutes);
 app.use(`${API}/planning-p6`, planningP6Routes);
 

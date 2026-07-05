@@ -144,8 +144,6 @@ const TenderIssuanceDetailPage    = lazy(() => import('./pages/tender-mgmt/Tende
 const WorkerList          = lazy(() => import('./pages/hr/WorkerList'));
 const AttendancePage      = lazy(() => import('./pages/hr/AttendancePage'));
 const PayrollPage         = lazy(() => import('./pages/hr/PayrollPage'));
-const DPRPage             = lazy(() => import('./pages/site/DPRPage'));
-const DPRCreate           = lazy(() => import('./pages/site/DPRCreate'));
 const HSEDashboard        = lazy(() => import('./pages/hse/HSEDashboard'));
 const IncidentPage        = lazy(() => import('./pages/hse/IncidentPage'));
 const PermitPage          = lazy(() => import('./pages/hse/PermitPage'));
@@ -835,10 +833,6 @@ export default function App() {
                 <Route path="hr-admin/emp-assets"   element={<RequireModule module="HR & Admin"><HREmployeeAssetsPage /></RequireModule>} />
                 <Route path="hr-admin/travel"       element={<RequireModule module="HR & Admin"><HRTravelRequestPage /></RequireModule>} />
                 <Route path="hr-admin/recruitment"  element={<RequireModule module="HR & Admin"><HRRecruitmentPage /></RequireModule>} />
-
-                {/* Site */}
-                <Route path="site/dpr" element={<DPRPage />} />
-                <Route path="site/dpr/new" element={<DPRCreate />} />
 
                 {/* Planning */}
                 <Route path="planning" element={<RequireModule module="Planning"><PlanningDashboard /></RequireModule>} />
