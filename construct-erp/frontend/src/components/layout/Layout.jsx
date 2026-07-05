@@ -2500,6 +2500,17 @@ export default function Layout() {
         </div>
       )}
 
+      {/* ── Floating Send Drive launcher — quick access to the external large-file
+          transfer tool, stacked above the Team Chat bubble. Opens in a new tab. ── */}
+      <button
+        onClick={() => window.open('https://send-drive-production.up.railway.app/', '_blank', 'noopener,noreferrer')}
+        title="Send Drive — send large files"
+        className="hidden md:flex fixed bottom-24 right-6 z-40 w-14 h-14 rounded-full items-center justify-center text-white shadow-lg transition-transform hover:scale-105 print:hidden"
+        style={{ background: 'linear-gradient(135deg, #059669, #047857)', boxShadow: '0 8px 24px rgba(5,150,105,0.4)' }}
+      >
+        <Send className="w-5 h-5" />
+      </button>
+
       <CommandPalette
         isOpen={paletteOpen}
         onClose={() => setPaletteOpen(false)}
