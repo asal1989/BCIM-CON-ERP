@@ -4,9 +4,31 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, X, Send, AlertTriangle } from 'lucide-react';
 import { clsx } from 'clsx';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { copilotAPI } from '../../api/client';
 
 const MAX_HISTORY_SENT = 10;
+
+const MARKDOWN_COMPONENTS = {
+  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+  strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+  ul: ({ children }) => <ul className="list-disc pl-4 mb-2 last:mb-0 space-y-0.5">{children}</ul>,
+  ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 last:mb-0 space-y-0.5">{children}</ol>,
+  li: ({ children }) => <li>{children}</li>,
+  h1: ({ children }) => <div className="font-bold text-[14px] mb-1.5">{children}</div>,
+  h2: ({ children }) => <div className="font-bold text-[13.5px] mb-1.5">{children}</div>,
+  h3: ({ children }) => <div className="font-bold text-[13px] mb-1">{children}</div>,
+  code: ({ children }) => <code className="bg-slate-200 rounded px-1 py-0.5 text-[12px] font-mono">{children}</code>,
+  table: ({ children }) => (
+    <div className="overflow-x-auto mb-2 last:mb-0 -mx-1">
+      <table className="min-w-full text-[12px] border-collapse">{children}</table>
+    </div>
+  ),
+  thead: ({ children }) => <thead className="bg-slate-200/70">{children}</thead>,
+  th: ({ children }) => <th className="border border-slate-300 px-2 py-1 text-left font-bold whitespace-nowrap">{children}</th>,
+  td: ({ children }) => <td className="border border-slate-300 px-2 py-1 whitespace-nowrap">{children}</td>,
+};
 
 export default function CopilotPanel({ onClose, projectId }) {
   const [messages, setMessages] = useState([]);
@@ -100,16 +122,17 @@ export default function CopilotPanel({ onClose, projectId }) {
 
           {messages.map((m, i) => (
             <div key={i} className={clsx('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}>
-              <div
-                className={clsx(
-                  'max-w-[85%] rounded-2xl px-4 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap',
-                  m.role === 'user'
-                    ? 'bg-indigo-600 text-white rounded-br-sm'
-                    : 'bg-slate-100 text-slate-800 rounded-bl-sm'
-                )}
-              >
-                {m.content}
-              </div>
+              {m.role === 'user' ? (
+                <div className="max-w-[85%] rounded-2xl px-4 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap bg-indigo-600 text-white rounded-br-sm">
+                  {m.content}
+                </div>
+              ) : (
+                <div className="max-w-[95%] min-w-0 rounded-2xl px-4 py-2.5 text-[13px] leading-relaxed bg-slate-100 text-slate-800 rounded-bl-sm">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
+                    {m.content}
+                  </ReactMarkdown>
+                </div>
+              )}
             </div>
           ))}
 
