@@ -97,8 +97,11 @@ export default function ActivitiesPage() {
   const syncBudgetMut = useMutation({
     mutationFn: () => planningP6API.syncBudgetFromBoq(projectId),
     onSuccess: (res) => {
-      const { updated, skipped_no_quantity, chapters_not_found_in_boq } = res.data.data;
+      const { updated, skipped_no_quantity, equal_split_count, chapters_not_found_in_boq } = res.data.data;
       toast.success(`Budgets synced: ${updated} activities updated`);
+      if (equal_split_count > 0) {
+        toast(`${equal_split_count} activities got an equal split of their chapter's budget — no planned quantity was set to split proportionally`, { icon: 'ℹ️' });
+      }
       if (skipped_no_quantity > 0) {
         toast(`${skipped_no_quantity} tagged activities skipped — no planned quantity set`, { icon: '⚠️' });
       }

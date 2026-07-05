@@ -700,6 +700,7 @@ router.post('/sync-budget-from-boq', authorize(...PLANNERS), async (req, res) =>
 
     let updated = 0;
     let skippedNoQty = 0;
+    let equalSplitCount = 0;
     const untaggedChapters = [];
 
     for (const [chapterNo, chapterActs] of Object.entries(byChapter)) {
@@ -707,9 +708,23 @@ router.post('/sync-budget-from-boq', authorize(...PLANNERS), async (req, res) =>
       if (chapterBudget === undefined) { untaggedChapters.push(chapterNo); continue; }
 
       const totalQty = chapterActs.reduce((s, a) => s + parseFloat(a.planned_quantity || 0), 0);
+      // No activity in this chapter has a planned quantity to split by —
+      // fall back to an equal share per activity rather than skipping them.
+      if (totalQty <= 0) {
+        const share = chapterBudget / chapterActs.length;
+        for (const a of chapterActs) {
+          await db().query(
+            `UPDATE project_activities SET budget_at_completion = $1, updated_at = NOW() WHERE id = $2`,
+            [share, a.id]
+          );
+          updated++; equalSplitCount++;
+        }
+        continue;
+      }
+
       for (const a of chapterActs) {
         const qty = parseFloat(a.planned_quantity || 0);
-        if (totalQty <= 0 || qty <= 0) { skippedNoQty++; continue; }
+        if (qty <= 0) { skippedNoQty++; continue; }
         const share = chapterBudget * (qty / totalQty);
         await db().query(
           `UPDATE project_activities SET budget_at_completion = $1, updated_at = NOW() WHERE id = $2`,
@@ -723,6 +738,7 @@ router.post('/sync-budget-from-boq', authorize(...PLANNERS), async (req, res) =>
       data: {
         updated,
         skipped_no_quantity: skippedNoQty,
+        equal_split_count: equalSplitCount,
         chapters_not_found_in_boq: untaggedChapters,
       },
     });
