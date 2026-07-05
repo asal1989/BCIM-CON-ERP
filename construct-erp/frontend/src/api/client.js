@@ -814,7 +814,7 @@ export const planningAPI = {
   deleteDPR:      (id)    => api.delete(`/planning/dpr/${id}`),
   approveDPR:     (id)    => api.patch(`/planning/dpr/${id}/approve`),
   approvalAction: (id, d) => api.patch(`/planning/dpr/${id}/approval-action`, d),
-  dprConsoleDashboard: () => api.get('/planning/dpr-console/dashboard'),
+  dprConsoleDashboard: (p) => api.get('/planning/dpr-console/dashboard', { params: p }),
   getDPRSettings: ()      => api.get('/planning/dpr-settings'),
   updateDPRSettings: (d)  => api.put('/planning/dpr-settings', d),
   importDPR:      (file, projectId, overwrite = true) => {
