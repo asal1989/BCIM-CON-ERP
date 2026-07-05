@@ -107,6 +107,7 @@ const td = (extra = {}) => ({
   lineHeight: 1.45,
   color: '#1e293b',
   verticalAlign: 'middle',
+  wordBreak: 'break-word',
   ...extra,
 });
 
@@ -170,7 +171,9 @@ export default function DPRPrintTemplate({ dpr, project }) {
         </button>
       </div>
 
-      <div className="dpr-print-root" style={{ width: 1660, margin: '0 auto', background: '#fff', padding: '26px 34px' }}>
+      {/* 1490px ≈ A3 landscape printable width (420mm − 2×12mm margins ≈ 396mm
+          ≈ 1497 CSS px) so printing at 100% scale never clips the right edge. */}
+      <div className="dpr-print-root" style={{ width: 1490, margin: '0 auto', background: '#fff', padding: '26px 34px', boxSizing: 'border-box' }}>
 
         {/* ── LETTERHEAD ─────────────────────────────────────── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 22, paddingBottom: 18, marginBottom: 20, borderBottom: `3px solid ${NAVY}` }}>
@@ -257,10 +260,14 @@ export default function DPRPrintTemplate({ dpr, project }) {
           </tbody>
         </table>
 
-        {/* ── RESOURCES ROW ──────────────────────────────────── */}
-        <div style={{ display: 'flex', gap: 16, marginBottom: 18 }}>
+        {/* ── RESOURCES ROW ──────────────────────────────────────
+            Grid with minmax(0, fr) tracks instead of flex + width:% —
+            flex refuses to shrink tables below their content width, so a
+            single long subcontractor name pushed the whole row past the
+            page edge. Grid tracks hard-clamp each table to its column. */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,18fr) minmax(0,38fr) minmax(0,44fr)', gap: 16, marginBottom: 18 }}>
           {/* Staff */}
-          <table style={{ width: '18%', tableLayout: 'fixed' }}>
+          <table style={{ width: '100%', tableLayout: 'fixed' }}>
             <colgroup><col style={{ width: '70%' }} /><col style={{ width: '30%' }} /></colgroup>
             <thead>
               <tr><td style={sectionTitle()}>Staff</td></tr>
@@ -284,7 +291,7 @@ export default function DPRPrintTemplate({ dpr, project }) {
           </table>
 
           {/* Direct Workers */}
-          <table style={{ width: '38%', tableLayout: 'fixed' }}>
+          <table style={{ width: '100%', tableLayout: 'fixed' }}>
             <colgroup><col style={{ width: '46%' }} /><col style={{ width: '18%' }} /><col style={{ width: '18%' }} /><col style={{ width: '18%' }} /></colgroup>
             <thead>
               <tr><td colSpan={4} style={sectionTitle()}>Daily Labour Register — Direct Workers</td></tr>
@@ -315,7 +322,7 @@ export default function DPRPrintTemplate({ dpr, project }) {
           </table>
 
           {/* Subcontractors */}
-          <table style={{ width: '44%', tableLayout: 'fixed' }}>
+          <table style={{ width: '100%', tableLayout: 'fixed' }}>
             <colgroup><col style={{ width: '52%' }} /><col style={{ width: '16%' }} /><col style={{ width: '16%' }} /><col style={{ width: '16%' }} /></colgroup>
             <thead>
               <tr><td colSpan={4} style={sectionTitle()}>Subcontractor Labour</td></tr>
@@ -353,8 +360,8 @@ export default function DPRPrintTemplate({ dpr, project }) {
         </div>
 
         {/* ── PLANT & MATERIAL ROW ───────────────────────────── */}
-        <div style={{ display: 'flex', gap: 16, marginBottom: 18 }}>
-          <table style={{ width: '32%', tableLayout: 'fixed' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,32fr) minmax(0,68fr)', gap: 16, marginBottom: 18 }}>
+          <table style={{ width: '100%', tableLayout: 'fixed' }}>
             <colgroup><col style={{ width: '70%' }} /><col style={{ width: '30%' }} /></colgroup>
             <thead>
               <tr><td colSpan={2} style={sectionTitle()}>Plant &amp; Machinery</td></tr>
@@ -377,7 +384,7 @@ export default function DPRPrintTemplate({ dpr, project }) {
             </tbody>
           </table>
 
-          <table style={{ width: '68%', tableLayout: 'fixed' }}>
+          <table style={{ width: '100%', tableLayout: 'fixed' }}>
             <colgroup>
               <col style={{ width: '11%' }} /><col style={{ width: '11%' }} />
               <col style={{ width: '19.5%' }} /><col style={{ width: '19.5%' }} />
@@ -422,20 +429,20 @@ export default function DPRPrintTemplate({ dpr, project }) {
         </div>
 
         {/* ── FOOTER ─────────────────────────────────────────── */}
-        <div style={{ display: 'flex', gap: 16 }}>
-          <div style={{ width: '34%' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,34fr) minmax(0,30fr) minmax(0,36fr)', gap: 16 }}>
+          <div>
             <div style={sectionTitle()}>Constraints / Issues</div>
             <div style={{ border, borderTop: 'none', padding: '12px 14px', fontSize: 11, lineHeight: 1.55, minHeight: 76, whiteSpace: 'pre-wrap', color: '#334155' }}>
               {v.constraints || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>None reported</span>}
             </div>
           </div>
-          <div style={{ width: '30%' }}>
+          <div>
             <div style={sectionTitle()}>RFI / Open Items</div>
             <div style={{ border, borderTop: 'none', padding: '12px 14px', fontSize: 11, lineHeight: 1.55, minHeight: 76, whiteSpace: 'pre-wrap', color: '#334155' }}>
               {v.rfi || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>None</span>}
             </div>
           </div>
-          <div style={{ width: '36%' }}>
+          <div>
             <div style={sectionTitle()}>Signatures</div>
             <div style={{ border, borderTop: 'none', padding: '14px' }}>
               <table style={{ width: '100%' }}>
