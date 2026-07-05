@@ -15,7 +15,7 @@ import {
   CalendarOff, FileBarChart, Star, UserCheck, Fingerprint, PackageCheck, ArrowLeftRight,
   Landmark, FileSignature, CircleSlash, ShieldCheck, Clock3, Lightbulb,
   Gavel, Target, Send, Coins, Replace, Link2, Wrench, Layers, MapPin, TrendingDown, FolderOpen, Calculator, UserRound,
-  Cog, Fuel, Gauge, BarChart2, History, GitBranch, MinusCircle, FolderKanban, Sparkles
+  Cog, Fuel, Gauge, BarChart2, History, GitBranch, MinusCircle, FolderKanban, Sparkles, MessageSquare
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import CommandPalette from './CommandPalette';
@@ -27,6 +27,8 @@ import NotificationPanel, { useNotificationCount } from './NotificationPanel';
 import CopilotPanel from '../copilot/CopilotPanel';
 import { initPushNotifications } from '../../utils/pushNotifications';
 import api from '../../api/client';
+import { useChat } from '../../context/ChatContext';
+import { Av } from '../chat/chatShared';
 
 // ── Navigation data ─────────────────────────────────────────────────────────
 const navGroups = [
@@ -34,6 +36,7 @@ const navGroups = [
     { to: '/approvals', icon: BadgeCheck,      label: 'My Approvals' },
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/projects',  icon: Building2,       label: 'Projects' },
+    { to: '/chat',      icon: MessageSquare,   label: 'Team Chat' },
   ]},
   { label: 'Planning', items: [
     { to: '/planning',              icon: GanttChartSquare, label: 'P&E Dashboard' },
@@ -1018,6 +1021,7 @@ const MD_SHORTCUTS = [
   { label: 'GRN / IGN',         to: '/stores/ign',                            icon: ClipboardCheck },
   { label: 'DPR',               to: '/planning/dpr-console',                  icon: FileText },
   { label: 'Liability Register', to: '/tqs/liability-register',              icon: BookOpen },
+  { label: 'Team Chat',         to: '/chat',                                  icon: MessageSquare },
 ];
 
 function MDQuickAccessBar() {
@@ -1993,6 +1997,24 @@ export default function Layout() {
     }
   }, [user?.id]);
 
+  // Chat launcher preview dropdown — clicking the floating bubble shows recent
+  // conversations (like Facebook Messenger's chat list); clicking one opens
+  // that DM directly as a floating popup instead of navigating to /chat.
+  const { unreadTotal, previews, unread, openPopup, findEmployeeForDm } = useChat();
+  const [chatMenuOpen, setChatMenuOpen] = useState(false);
+  const chatMenuRef = useRef(null);
+  useEffect(() => {
+    if (!chatMenuOpen) return;
+    const onClick = (e) => { if (chatMenuRef.current && !chatMenuRef.current.contains(e.target)) setChatMenuOpen(false); };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [chatMenuOpen]);
+
+  const chatConversations = Object.entries(previews)
+    .map(([channel, preview]) => ({ channel, preview, unreadCount: unread[channel] || 0 }))
+    .sort((a, b) => new Date(b.preview.created_at) - new Date(a.preview.created_at))
+    .slice(0, 8);
+
   // Ctrl+K → command palette
   useEffect(() => {
     const h = (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setPaletteOpen(true); } };
@@ -2403,6 +2425,80 @@ export default function Layout() {
 
       {/* Mobile bottom navigation bar */}
       <MobileBottomNav onMenuOpen={() => setMobileOpen(true)} />
+
+      {/* ── Floating Team Chat launcher — visible from anywhere except the chat
+          page itself. Hidden on mobile widths where MobileBottomNav already
+          occupies the bottom of the screen (Team Chat is reachable there via
+          the menu instead). Clicking it shows a Messenger-style preview of
+          recent conversations; clicking a conversation opens it directly as a
+          floating popup (or jumps to /chat for a channel) instead of always
+          navigating to the full chat page. ── */}
+      {location.pathname !== '/chat' && (
+        <div ref={chatMenuRef} className="hidden md:block fixed bottom-6 right-6 z-40 print:hidden">
+          {chatMenuOpen && (
+            <div style={{
+              position: 'absolute', bottom: 68, right: 0, width: 320, maxHeight: 420,
+              background: '#fff', borderRadius: 12, boxShadow: '0 12px 40px rgba(0,0,0,0.22)',
+              overflow: 'hidden', display: 'flex', flexDirection: 'column',
+            }}>
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid #eee', fontWeight: 700, fontSize: 14, color: '#111b21' }}>
+                Team Chat
+              </div>
+              <div style={{ overflowY: 'auto', flex: 1 }}>
+                {chatConversations.length === 0 && (
+                  <p style={{ padding: '24px 16px', textAlign: 'center', fontSize: 13, color: '#667781' }}>No conversations yet</p>
+                )}
+                {chatConversations.map(({ channel, preview, unreadCount }) => {
+                  const isDm = channel.startsWith('dm-');
+                  const emp = isDm ? findEmployeeForDm(channel) : null;
+                  const label = isDm ? (emp?.full_name || emp?.name || preview.sender_name || 'Direct message') : (`#${channel}`);
+                  const body = preview.text || (preview.file_name ? `📎 ${preview.file_name}` : 'Attachment');
+                  return (
+                    <button key={channel}
+                      onClick={() => {
+                        setChatMenuOpen(false);
+                        if (isDm && emp) openPopup(emp);
+                        else navigate(`/chat?channel=${channel}`);
+                      }}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f5f6f6'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                      <Av name={label} size={38} photo={emp?.profile_photo_url} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
+                          <span style={{ fontWeight: 600, fontSize: 13, color: '#111b21', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+                          {unreadCount > 0 && (
+                            <span style={{ background: '#25d366', color: '#fff', borderRadius: 999, fontSize: 10, fontWeight: 700, minWidth: 17, height: 17, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', flexShrink: 0 }}>{unreadCount}</span>
+                          )}
+                        </div>
+                        <p style={{ fontSize: 12, color: '#667781', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{body}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <button onClick={() => { setChatMenuOpen(false); navigate('/chat'); }}
+                style={{ padding: '10px 16px', border: 'none', borderTop: '1px solid #eee', background: '#f8fafc', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: '#4F46E5', textAlign: 'center' }}>
+                Open full chat
+              </button>
+            </div>
+          )}
+
+          <button
+            onClick={() => setChatMenuOpen(v => !v)}
+            title="Team Chat"
+            className="flex w-14 h-14 rounded-full items-center justify-center text-white shadow-lg transition-transform hover:scale-105 relative"
+            style={{ background: 'linear-gradient(135deg, #4F46E5, #4338CA)', boxShadow: '0 8px 24px rgba(79,70,229,0.4)' }}
+          >
+            <MessageSquare className="w-6 h-6" />
+            {unreadTotal > 0 && (
+              <span style={{ position: 'absolute', top: -4, right: -4, minWidth: 22, height: 22, borderRadius: 999, background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px', border: '2px solid #fff' }}>
+                {unreadTotal > 99 ? '99+' : unreadTotal}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
 
       <CommandPalette
         isOpen={paletteOpen}

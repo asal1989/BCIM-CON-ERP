@@ -9,6 +9,7 @@ import LoadingScreen from './components/common/LoadingScreen';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import InstallBanner from './components/common/InstallBanner';
 import { LanguageProvider } from './context/LanguageContext';
+import { ChatProvider } from './context/ChatContext';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -540,6 +541,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthInitializer>
+        <ChatProvider>
           <Suspense fallback={<LoadingScreen />}>
             <Routes>
               {/* Public */}
@@ -996,6 +998,7 @@ export default function App() {
               </Route>
             </Routes>
           </Suspense>
+        </ChatProvider>
         </AuthInitializer>
         <Toaster
           position="top-right"

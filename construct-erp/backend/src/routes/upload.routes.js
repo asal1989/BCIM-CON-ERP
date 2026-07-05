@@ -17,22 +17,36 @@ const storage = multer.diskStorage({
   }
 });
 
-const ALLOWED_EXT  = new Set(['.jpg','.jpeg','.png','.pdf','.xlsx','.docx','.dwg','.dxf']);
+const ALLOWED_EXT  = new Set([
+  '.jpg','.jpeg','.png','.gif','.webp',
+  '.pdf','.xlsx','.xls','.docx','.doc','.pptx','.ppt','.txt','.csv',
+  '.dwg','.dxf','.ifc',
+  '.mp4','.mov','.avi','.mkv','.wmv',
+  '.zip','.rar','.7z',
+]);
 const ALLOWED_MIME = new Set([
-  'image/jpeg','image/png','application/pdf',
+  'image/jpeg','image/png','image/gif','image/webp',
+  'application/pdf',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/octet-stream', // dwg/dxf have no standard MIME; browsers send this
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-powerpoint',
+  'text/plain','text/csv',
+  'video/mp4','video/quicktime','video/x-msvideo','video/x-matroska','video/x-ms-wmv',
+  'application/zip','application/x-rar-compressed','application/x-7z-compressed',
+  'application/octet-stream', // dwg/dxf/ifc and unknown binary; browsers send this
 ]);
 
 const fileFilter = (req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
-  if (!ALLOWED_EXT.has(ext)) return cb(new Error('File type not allowed'), false);
+  if (!ALLOWED_EXT.has(ext)) return cb(new Error(`File type ${ext} not allowed`), false);
   if (!ALLOWED_MIME.has(file.mimetype)) return cb(new Error('File MIME type not allowed'), false);
   cb(null, true);
 };
 
-const upload = multer({ storage, fileFilter, limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB
+const upload = multer({ storage, fileFilter, limits: { fileSize: 500 * 1024 * 1024 } }); // 500MB
 
 router.post('/', upload.array('files', 10), (req, res) => {
   if (!req.files?.length) return res.status(400).json({ error: 'No files uploaded' });

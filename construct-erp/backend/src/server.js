@@ -519,12 +519,31 @@ io.use((socket, next) => {
   }
 });
 
+// Fixed channel list (must match CHANNELS in frontend/src/pages/ERPChat.jsx).
+// Every socket joins ALL of these on connect so unread badges and desktop
+// notifications work for channels the user isn't currently viewing — the
+// client filters by msg.channel to decide what to render vs. what to notify.
+const CHAT_CHANNELS = [
+  'general', 'finance', 'procurement', 'stores', 'qs-billing', 'tqs',
+  'hr', 'planning', 'quality', 'subcontractors', 'tender', 'it-support',
+];
+
 io.on('connection', (socket) => {
   logger.info(`💬 Chat: ${socket.user?.name || socket.user?.id} connected`);
+  CHAT_CHANNELS.forEach(ch => socket.join(ch));
+  // Personal room — DM delivery uses this instead of the dm-<id>-<id> channel
+  // room, since a socket only joins that room once the recipient has actually
+  // opened that specific DM. Without a personal room, a first-time DM (or one
+  // the recipient hasn't opened yet) never reaches them: no live message, no
+  // desktop notification.
+  if (socket.user?.id) socket.join(`user-${socket.user.id}`);
 
-  // Join a channel room
+  // Fixed channels are already joined above at connect time (so cross-channel
+  // notifications work); this still needs to join dynamic rooms that aren't
+  // in that fixed list — e.g. direct-message channels ("dm-<id>-<id>") —
+  // since those can't be pre-joined. Joining an already-joined room is a
+  // harmless no-op.
   socket.on('join_channel', (channel) => {
-    socket.rooms.forEach(r => { if (r !== socket.id) socket.leave(r); });
     socket.join(channel);
     socket.currentChannel = channel;
   });
@@ -532,25 +551,35 @@ io.on('connection', (socket) => {
   // New message — broadcast to everyone in the channel
   socket.on('send_message', (msg) => {
     // msg already saved via REST POST, just broadcast to others
-    socket.to(msg.channel).emit('new_message', msg);
+    if (msg.channel?.startsWith('dm-')) {
+      // DM channel id is `dm-<uuid1>-<uuid2>` (sorted) — each UUID is a fixed
+      // 36 chars, so we can split deterministically without a delimiter clash.
+      const raw = msg.channel.slice(3);
+      const id1 = raw.slice(0, 36);
+      const id2 = raw.slice(37);
+      const recipientId = id1 === String(socket.user?.id) ? id2 : id1;
+      io.to(`user-${recipientId}`).emit('new_message', msg);
+    } else {
+      socket.to(msg.channel).emit('new_message', msg);
+    }
   });
 
   // Pin toggle
   socket.on('pin_message', ({ id, channel, pinned }) => {
-    socket.to(channel).emit('message_pinned', { id, pinned });
+    socket.to(channel).emit('message_pinned', { id, channel, pinned });
   });
 
   // Reaction
   socket.on('react_message', ({ id, channel, reactions }) => {
-    socket.to(channel).emit('message_reacted', { id, reactions });
+    socket.to(channel).emit('message_reacted', { id, channel, reactions });
   });
 
   // Typing indicator
   socket.on('typing', ({ channel, name }) => {
-    socket.to(channel).emit('user_typing', { name });
+    socket.to(channel).emit('user_typing', { channel, name });
   });
   socket.on('stop_typing', ({ channel }) => {
-    socket.to(channel).emit('user_stop_typing');
+    socket.to(channel).emit('user_stop_typing', { channel });
   });
 
   socket.on('disconnect', () => {

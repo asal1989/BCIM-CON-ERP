@@ -1,601 +1,357 @@
-// src/pages/ERPChat.jsx — Real-time ERP Team Chat (Socket.IO + REST)
+// src/pages/ERPChat.jsx — WhatsApp-styled ERP Team Chat main pane (Socket.IO + REST)
+// The socket connection, employee directory, and DM floating popups all live in
+// ChatContext (mounted once at the app root) so they survive navigating away
+// from this page. This component renders only the inline channel pane + sidebar.
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { io as socketIO } from 'socket.io-client';
-import {
-  Send, Paperclip, Search, Pin, Users, Hash, MessageSquare,
-  X, Smile, Code2, Settings, ChevronDown, ChevronRight,
-  FileText, FileSpreadsheet, Image, File, Download, AtSign,
-  Building2, IndianRupee, Package, HardHat, ShieldCheck,
-  ClipboardList, Gavel, BarChart3, Truck, Layers, Flag,
-  Wifi, WifiOff, Loader2,
-} from 'lucide-react';
-import { clsx } from 'clsx';
+import { useSearchParams } from 'react-router-dom';
+import { Search, Pin, X, Hash } from 'lucide-react';
+import toast from 'react-hot-toast';
 import useAuthStore from '../store/authStore';
 import api from '../api/client';
-
-// In dev, proxy /socket.io → backend (vite.config proxy). In prod, use env var or same origin.
-const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || window.location.origin;
-
-// ── ERP Channels ──────────────────────────────────────────────────────────────
-const CHANNELS = [
-  { id: 'general',        label: 'general',        icon: MessageSquare, desc: 'Company-wide announcements' },
-  { id: 'finance',        label: 'finance',         icon: IndianRupee,  desc: 'Finance, TDS, payments, invoices' },
-  { id: 'procurement',    label: 'procurement',     icon: Truck,        desc: 'Purchase orders, vendors, quotations' },
-  { id: 'stores',         label: 'stores',          icon: Package,      desc: 'GRN, MRS, inventory, stock' },
-  { id: 'qs-billing',     label: 'qs-billing',      icon: Layers,       desc: 'BOQ, RA bills, measurements' },
-  { id: 'tqs',            label: 'dqs-tracker',     icon: ClipboardList,desc: 'Bill approvals, transmittals' },
-  { id: 'hr',             label: 'hr-admin',        icon: Users,        desc: 'Payroll, attendance, leave' },
-  { id: 'planning',       label: 'planning',        icon: Flag,         desc: 'DPR, schedules, S-curve' },
-  { id: 'quality',        label: 'quality-hse',     icon: ShieldCheck,  desc: 'QA/QC, NCR, RFI, safety' },
-  { id: 'subcontractors', label: 'subcontractors',  icon: HardHat,      desc: 'Work orders, RA bills' },
-  { id: 'tender',         label: 'tender-mgmt',     icon: Gavel,        desc: 'Tender register, bids' },
-  { id: 'it-support',     label: 'it-support',      icon: BarChart3,    desc: 'Help desk, licenses, IT assets' },
-];
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function getInitials(name = '') {
-  return name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
-}
-
-const AVATAR_COLORS = [
-  'bg-indigo-100 text-indigo-700','bg-blue-100 text-blue-700',
-  'bg-violet-100 text-violet-700','bg-emerald-100 text-emerald-700',
-  'bg-amber-100 text-amber-700',  'bg-teal-100 text-teal-700',
-  'bg-orange-100 text-orange-700','bg-pink-100 text-pink-700',
-  'bg-cyan-100 text-cyan-700',    'bg-red-100 text-red-700',
-];
-function avatarColor(name = '') {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % AVATAR_COLORS.length;
-  return AVATAR_COLORS[h];
-}
-
-function Avatar({ name = '', size = 'md', photo }) {
-  const cls = size === 'sm' ? 'w-7 h-7 text-[10px]' : size === 'lg' ? 'w-10 h-10 text-sm' : 'w-8 h-8 text-xs';
-  if (photo) return <img src={photo} alt={name} className={clsx(cls, 'rounded-full object-cover flex-shrink-0')} />;
-  return (
-    <div className={clsx(cls, 'rounded-full flex items-center justify-center font-medium flex-shrink-0', avatarColor(name))}>
-      {getInitials(name)}
-    </div>
-  );
-}
-
-function fileIcon(name = '') {
-  const ext = name.split('.').pop().toLowerCase();
-  if (['xlsx','xls','csv'].includes(ext)) return FileSpreadsheet;
-  if (['pdf'].includes(ext)) return FileText;
-  if (['png','jpg','jpeg','gif','webp'].includes(ext)) return Image;
-  return File;
-}
-
-function fmtTime(ts) {
-  return new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-}
+import { useChat, CHANNELS } from '../context/ChatContext';
+import { Av, WA, MessageThread, Composer, fmtSize, withDateDividers, downloadAttachment } from '../components/chat/chatShared';
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function ERPChat() {
   const { user } = useAuthStore();
-  const [activeChannel, setActiveChannel] = useState('general');
-  const [messages, setMessages]           = useState([]);
-  const [employees, setEmployees]         = useState([]);
-  const [inputVal, setInputVal]           = useState('');
-  const [pendingFiles, setPendingFiles]   = useState([]);
-  const [loading, setLoading]             = useState(false);
-  const [connected, setConnected]         = useState(false);
-  const [typingUser, setTypingUser]       = useState('');
+  const [searchParams] = useSearchParams();
+  const { socketRef, connected, employees, unread, typing, openPopup, markRead, registerActive } = useChat();
+
+  const [mainChannel, setMainChannel]     = useState(() => searchParams.get('channel') || 'general');
+  const [mainMessages, setMainMessages]   = useState([]);
+  const [mainLoading, setMainLoading]     = useState(false);
+  const [mainInput, setMainInput]         = useState('');
+  const [mainFiles, setMainFiles]         = useState([]);
+  const [mainHovered, setMainHovered]     = useState(null);
   const [searchOpen, setSearchOpen]       = useState(false);
   const [pinsOpen, setPinsOpen]           = useState(false);
   const [searchQuery, setSearchQuery]     = useState('');
-  const [hoveredMsg, setHoveredMsg]       = useState(null);
-  const [collapsed, setCollapsed]         = useState({});
-  const [unread, setUnread]               = useState({});
+  const [sidebarQuery, setSidebarQuery]   = useState('');
+  const [notifPerm, setNotifPerm]         = useState('Notification' in window ? Notification.permission : 'unsupported');
+  const [notifDismissed, setNotifDismissed] = useState(false);
 
-  const socketRef  = useRef(null);
-  const msgsRef    = useRef(null);
-  const fileRef    = useRef(null);
-  const searchRef  = useRef(null);
-  const textRef    = useRef(null);
-  const typingTimer = useRef(null);
+  const mainThreadRef = useRef(null);
+  const searchRef     = useRef(null);
+  const mainTextRef   = useRef(null);
+  const typingTimerRef = useRef(null);
 
-  // ── Connect Socket.IO ───────────────────────────────────────────────────────
+  // Jump to a specific channel if the bubble dropdown (Layout.jsx) navigated
+  // here with ?channel=... while this page was already mounted.
   useEffect(() => {
-    const token = sessionStorage.getItem('accessToken');
-    if (!token) return;
+    const ch = searchParams.get('channel');
+    if (ch && ch !== mainChannel) setMainChannel(ch);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
-    const socket = socketIO(SOCKET_URL, {
-      auth: { token },
-      transports: ['websocket', 'polling'],
-    });
+  const enableNotifications = () => {
+    if (!('Notification' in window)) return;
+    Notification.requestPermission().then(setNotifPerm);
+  };
 
-    socket.on('connect', () => setConnected(true));
-    socket.on('disconnect', () => setConnected(false));
-
-    socket.on('new_message', (msg) => {
-      setMessages(prev => [...prev, msg]);
-      // increment unread if not in this channel
-      setUnread(prev => ({
-        ...prev,
-        [msg.channel]: (msg.channel !== activeChannel) ? (prev[msg.channel] || 0) + 1 : 0,
-      }));
-    });
-
-    socket.on('message_pinned', ({ id, pinned }) => {
-      setMessages(prev => prev.map(m => m.id === id ? { ...m, pinned } : m));
-    });
-
-    socket.on('message_reacted', ({ id, reactions }) => {
-      setMessages(prev => prev.map(m => m.id === id ? { ...m, reactions } : m));
-    });
-
-    socket.on('user_typing', ({ name }) => {
-      setTypingUser(name);
-      clearTimeout(typingTimer.current);
-      typingTimer.current = setTimeout(() => setTypingUser(''), 3000);
-    });
-
-    socket.on('user_stop_typing', () => setTypingUser(''));
-
-    socketRef.current = socket;
-    return () => socket.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ── Load employees for DM list ──────────────────────────────────────────────
+  // Tell the shared context this channel is actively being viewed, so it
+  // doesn't count unread/fire a desktop notification for it, and re-join it
+  // whenever the socket (re)connects.
   useEffect(() => {
-    api.get('/hr-admin/employees', { params: { employment_status: 'active' } })
-      .then(r => setEmployees((Array.isArray(r.data) ? r.data : r.data?.data || []).slice(0, 10)))
-      .catch(() => {});
-  }, []);
+    registerActive(mainChannel, true);
+    if (socketRef.current?.connected) socketRef.current.emit('join_channel', mainChannel);
+    return () => registerActive(mainChannel, false);
+  }, [mainChannel, registerActive, socketRef]);
 
-  // ── Switch channel: join room + load history ────────────────────────────────
   useEffect(() => {
-    setMessages([]);
-    setLoading(true);
-    setSearchOpen(false);
-    setSearchQuery('');
-    setPinsOpen(false);
+    if (!connected) return;
+    socketRef.current?.emit('join_channel', mainChannel);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected]);
 
-    if (socketRef.current?.connected) {
-      socketRef.current.emit('join_channel', activeChannel);
-    }
-
-    api.get('/chat/messages', { params: { channel: activeChannel, limit: 100 } })
-      .then(r => setMessages(r.data?.messages || []))
-      .catch(() => setMessages([]))
-      .finally(() => setLoading(false));
-
-    setUnread(prev => ({ ...prev, [activeChannel]: 0 }));
-  }, [activeChannel]);
-
-  // ── Scroll to bottom ────────────────────────────────────────────────────────
+  // Listen for this channel's live events
   useEffect(() => {
-    if (msgsRef.current) {
-      msgsRef.current.scrollTop = msgsRef.current.scrollHeight;
-    }
-  }, [messages, typingUser]);
+    const socket = socketRef.current;
+    if (!socket) return;
+    const onMsg = (msg) => { if (msg.channel === mainChannel) setMainMessages(prev => [...prev, msg]); };
+    const onPinned = ({ id, channel, pinned }) => { if (channel === mainChannel) setMainMessages(prev => prev.map(m => m.id === id ? { ...m, pinned } : m)); };
+    const onReacted = ({ id, channel, reactions }) => { if (channel === mainChannel) setMainMessages(prev => prev.map(m => m.id === id ? { ...m, reactions } : m)); };
+    socket.on('new_message', onMsg);
+    socket.on('message_pinned', onPinned);
+    socket.on('message_reacted', onReacted);
+    return () => { socket.off('new_message', onMsg); socket.off('message_pinned', onPinned); socket.off('message_reacted', onReacted); };
+  }, [socketRef, mainChannel]);
 
-  // ── Focus search ────────────────────────────────────────────────────────────
+  // Main channel switch
   useEffect(() => {
-    if (searchOpen && searchRef.current) searchRef.current.focus();
-  }, [searchOpen]);
+    setMainMessages([]); setMainLoading(true); setSearchOpen(false); setSearchQuery(''); setPinsOpen(false);
+    api.get('/chat/messages', { params: { channel: mainChannel, limit: 100 } })
+      .then(r => setMainMessages(r.data?.messages || []))
+      .catch(() => setMainMessages([]))
+      .finally(() => setMainLoading(false));
+    markRead(mainChannel);
+  }, [mainChannel, markRead]);
 
-  // ── Send message ────────────────────────────────────────────────────────────
-  const sendMsg = useCallback(async () => {
-    const text = inputVal.trim();
-    if (!text && pendingFiles.length === 0) return;
+  useEffect(() => { if (mainThreadRef.current) mainThreadRef.current.scrollTop = mainThreadRef.current.scrollHeight; }, [mainMessages, typing[mainChannel]]);
+  useEffect(() => { if (searchOpen && searchRef.current) searchRef.current.focus(); }, [searchOpen]);
 
-    const payload = {
-      channel: activeChannel,
-      text: text || null,
-      file_name: pendingFiles[0]?.name || null,
-      file_size: pendingFiles[0]?.size || null,
-    };
-
-    setInputVal('');
-    setPendingFiles([]);
-    if (textRef.current) textRef.current.style.height = 'auto';
-
+  const sendMain = useCallback(async () => {
+    const text = mainInput.trim();
+    if (!text && mainFiles.length === 0) return;
+    if (mainFiles.some(f => f.uploading)) return;
+    const payload = { channel: mainChannel, text: text || null, file_name: mainFiles[0]?.name || null, file_size: mainFiles[0]?.size || null, file_url: mainFiles[0]?.url || null };
+    setMainInput(''); setMainFiles([]);
+    if (mainTextRef.current) mainTextRef.current.style.height = 'auto';
     try {
       const res = await api.post('/chat/messages', payload);
       const saved = res.data.message;
-      // Add to own view immediately
-      setMessages(prev => [...prev, saved]);
-      // Broadcast to others via socket
+      setMainMessages(prev => [...prev, saved]);
       socketRef.current?.emit('send_message', saved);
-    } catch (e) {
-      console.error('Send failed:', e);
-    }
+    } catch (e) { console.error('Send failed:', e); }
+    socketRef.current?.emit('stop_typing', { channel: mainChannel });
+  }, [mainInput, mainFiles, mainChannel, socketRef]);
 
-    // Stop typing
-    socketRef.current?.emit('stop_typing', { channel: activeChannel });
-  }, [inputVal, pendingFiles, activeChannel]);
-
-  // ── Typing indicator ────────────────────────────────────────────────────────
-  const handleInput = (e) => {
-    setInputVal(e.target.value);
+  const handleTyping = useCallback((e) => {
+    setMainInput(e.target.value);
     e.target.style.height = 'auto';
     e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
-    socketRef.current?.emit('typing', { channel: activeChannel, name: user?.name || 'Someone' });
-    clearTimeout(typingTimer.current);
-    typingTimer.current = setTimeout(() => {
-      socketRef.current?.emit('stop_typing', { channel: activeChannel });
-    }, 2000);
-  };
+    socketRef.current?.emit('typing', { channel: mainChannel, name: user?.name || 'Someone' });
+    clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = setTimeout(() => socketRef.current?.emit('stop_typing', { channel: mainChannel }), 2000);
+  }, [mainChannel, socketRef, user?.name]);
 
-  // ── Pin message ─────────────────────────────────────────────────────────────
+  const pickFiles = useCallback((files) => {
+    const placeholders = files.map(f => ({ name: f.name, size: fmtSize(f.size), url: null, uploading: true, progress: 0 }));
+    setMainFiles(prev => {
+      const startIdx = prev.length;
+      files.forEach((file, idx) => {
+        const targetIdx = startIdx + idx;
+        const fd = new FormData(); fd.append('file', file);
+        api.post('/upload/single', fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          onUploadProgress: pe => {
+            const pct = pe.total ? Math.round((pe.loaded * 100) / pe.total) : 0;
+            setMainFiles(p => p.map((f, i) => i === targetIdx ? { ...f, progress: pct } : f));
+          },
+        })
+          .then(r => setMainFiles(p => p.map((f, i) => i === targetIdx ? { ...f, url: r.data.url, uploading: false } : f)))
+          .catch(err => {
+            toast.error(err?.response?.data?.error || `Failed to upload ${file.name}`);
+            setMainFiles(p => p.filter((_, i) => i !== targetIdx));
+          });
+      });
+      return [...prev, ...placeholders];
+    });
+  }, []);
+
   const togglePin = useCallback(async (id) => {
     const res = await api.patch(`/chat/messages/${id}/pin`);
     const updated = res.data.message;
-    setMessages(prev => prev.map(m => m.id === id ? { ...m, pinned: updated.pinned } : m));
-    socketRef.current?.emit('pin_message', { id, channel: activeChannel, pinned: updated.pinned });
-  }, [activeChannel]);
+    setMainMessages(prev => prev.map(m => m.id === id ? { ...m, pinned: updated.pinned } : m));
+    socketRef.current?.emit('pin_message', { id, channel: mainChannel, pinned: updated.pinned });
+  }, [mainChannel, socketRef]);
 
-  // ── React ───────────────────────────────────────────────────────────────────
-  const addReaction = useCallback(async (msgId, emoji) => {
-    const res = await api.patch(`/chat/messages/${msgId}/react`, { emoji });
+  const addReaction = useCallback(async (id, emoji) => {
+    const res = await api.patch(`/chat/messages/${id}/react`, { emoji });
     const updated = res.data.message;
-    setMessages(prev => prev.map(m => m.id === msgId ? { ...m, reactions: updated.reactions } : m));
-    socketRef.current?.emit('react_message', { id: msgId, channel: activeChannel, reactions: updated.reactions });
-  }, [activeChannel]);
+    setMainMessages(prev => prev.map(m => m.id === id ? { ...m, reactions: updated.reactions } : m));
+    socketRef.current?.emit('react_message', { id, channel: mainChannel, reactions: updated.reactions });
+  }, [mainChannel, socketRef]);
 
-  const activeCh   = CHANNELS.find(c => c.id === activeChannel) || CHANNELS[0];
-  const ChIcon     = activeCh.icon;
-  const pinned     = messages.filter(m => m.pinned);
+  // ── Derived state ────────────────────────────────────────────────────────────
+  const activeCh = CHANNELS.find(c => c.id === mainChannel) || CHANNELS[0];
+  const pinned = mainMessages.filter(m => m.pinned);
 
-  const visible = useMemo(() => {
-    if (!searchQuery.trim()) return messages;
+  const visibleMain = useMemo(() => {
+    if (!searchQuery.trim()) return mainMessages;
     const q = searchQuery.toLowerCase();
-    return messages.filter(m => m.text?.toLowerCase().includes(q));
-  }, [messages, searchQuery]);
+    return mainMessages.filter(m => m.text?.toLowerCase().includes(q));
+  }, [mainMessages, searchQuery]);
 
-  // ─── Render ────────────────────────────────────────────────────────────────
+  const mainItems = useMemo(() => withDateDividers(visibleMain), [visibleMain]);
+
+  const otherEmployees = employees.filter(e => e.id !== user?.id);
+
+  const q = sidebarQuery.trim().toLowerCase();
+  const filteredChannels  = q ? CHANNELS.filter(ch => ch.label.toLowerCase().includes(q) || ch.desc.toLowerCase().includes(q)) : CHANNELS;
+  const filteredEmployees = q ? otherEmployees.filter(emp => (emp.full_name || emp.name || '').toLowerCase().includes(q) || (emp.designation_name || emp.designation || '').toLowerCase().includes(q)) : otherEmployees;
+
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-full bg-[#f4f6f9] overflow-hidden">
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', position: 'relative' }}>
 
-      {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
-      <aside className="w-60 flex-shrink-0 bg-white border-r border-slate-100 flex flex-col overflow-hidden">
-        <div className="px-4 py-3.5 border-b border-slate-100 flex items-center gap-2.5">
-          <div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
-            <MessageSquare className="w-3.5 h-3.5 text-white" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-slate-900 font-medium truncate">Construct ERP</p>
-            <p className="text-[10px] text-slate-400">Team Workspace</p>
-          </div>
-          <div className={clsx('w-2 h-2 rounded-full flex-shrink-0', connected ? 'bg-emerald-400' : 'bg-slate-300')} title={connected ? 'Connected' : 'Connecting…'} />
+      {notifPerm === 'default' && !notifDismissed && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '7px 16px', background: WA.green, color: '#fff', fontSize: 12, flexShrink: 0 }}>
+          <span style={{ flex: 1 }}>🔔 Enable desktop notifications to get chat alerts when this tab is in the background.</span>
+          <button onClick={enableNotifications} style={{ padding: '3px 12px', background: '#fff', color: WA.green, borderRadius: 6, fontWeight: 600, border: 'none', cursor: 'pointer', fontSize: 12 }}>Enable</button>
+          <button onClick={() => setNotifDismissed(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.75)', display: 'flex' }}><X size={14} /></button>
         </div>
-
-        <div className="px-3 py-2.5 border-b border-slate-100">
-          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5">
-            <Search className="w-3 h-3 text-slate-900 font-medium flex-shrink-0" />
-            <input placeholder="Jump to channel…" className="flex-1 bg-transparent text-xs text-slate-900 placeholder-slate-400 outline-none" />
-          </div>
+      )}
+      {notifPerm === 'denied' && !notifDismissed && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '7px 16px', background: '#fff8e1', borderBottom: '1px solid #ffe082', fontSize: 12, flexShrink: 0 }}>
+          <span style={{ flex: 1, color: '#6d4c00' }}>🔕 Notifications are blocked. Click the lock icon in your address bar → Notifications → Allow, then reload.</span>
+          <button onClick={() => setNotifDismissed(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#b8860b', display: 'flex' }}><X size={14} /></button>
         </div>
+      )}
 
-        <nav className="flex-1 overflow-y-auto py-2">
-          {/* Channels */}
-          <div className="px-3 mb-1">
-            <button onClick={() => setCollapsed(p => ({ ...p, channels: !p.channels }))}
-              className="flex items-center gap-1 text-[10px] font-medium text-slate-900 font-medium uppercase tracking-wider w-full hover:text-slate-600">
-              {collapsed.channels ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-              Channels
-            </button>
-          </div>
-          {!collapsed.channels && CHANNELS.map(ch => {
-            const Icon = ch.icon;
-            const isActive = activeChannel === ch.id;
-            const badge = unread[ch.id] || 0;
-            return (
-              <button key={ch.id} onClick={() => setActiveChannel(ch.id)}
-                className={clsx('w-full flex items-center gap-2 px-3 py-1.5 text-left transition-all',
-                  isActive ? 'bg-indigo-50 text-indigo-700' : 'text-slate-900 hover:bg-slate-50')}>
-                <Hash className={clsx('w-3 h-3 flex-shrink-0', isActive ? 'text-indigo-500' : 'text-slate-400')} />
-                <span className={clsx('text-xs flex-1 truncate', isActive ? 'font-semibold' : 'font-medium')}>{ch.label}</span>
-                {badge > 0 && <span className="text-[10px] font-medium bg-indigo-600 text-white px-1.5 py-0.5 rounded-full">{badge}</span>}
-              </button>
-            );
-          })}
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
-          {/* Direct Messages */}
-          <div className="px-3 mt-3 mb-1">
-            <button onClick={() => setCollapsed(p => ({ ...p, dms: !p.dms }))}
-              className="flex items-center gap-1 text-[10px] font-medium text-slate-900 font-medium uppercase tracking-wider w-full hover:text-slate-600">
-              {collapsed.dms ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-              Direct Messages
-            </button>
-          </div>
-          {!collapsed.dms && employees.map(emp => {
-            const name  = emp.full_name || emp.name || 'Employee';
-            const dmId  = `dm-${emp.id}`;
-            const isActive = activeChannel === dmId;
-            return (
-              <button key={emp.id} onClick={() => setActiveChannel(dmId)}
-                className={clsx('w-full flex items-center gap-2 px-3 py-1.5 text-left transition-all',
-                  isActive ? 'bg-indigo-50' : 'hover:bg-slate-50')}>
-                <Avatar name={name} size="sm" photo={emp.profile_photo_url} />
-                <div className="min-w-0 flex-1">
-                  <p className={clsx('text-xs truncate', isActive ? 'font-medium text-indigo-700' : 'font-medium text-slate-700')}>{name}</p>
-                  <p className="text-[10px] text-slate-900 font-medium truncate">{emp.designation_name || emp.designation || ''}</p>
-                </div>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
-              </button>
-            );
-          })}
-        </nav>
+        {/* ── SIDEBAR ───────────────────────────────────────────────────────── */}
+        <aside style={{ width: 360, flexShrink: 0, display: 'flex', flexDirection: 'column', background: WA.sidebar, borderRight: `1px solid ${WA.divider}`, overflow: 'hidden' }}>
 
-        {/* Current user footer */}
-        <div className="px-3 py-3 border-t border-slate-100 flex items-center gap-2.5">
-          <div className="relative flex-shrink-0">
-            <Avatar name={user?.name || 'You'} size="sm" />
-            <span className="absolute bottom-0 right-0 w-2 h-2 bg-emerald-400 rounded-full border border-white" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: `1px solid ${WA.divider}`, flexShrink: 0 }}>
+            <Av name={user?.name || 'Me'} size={40} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontWeight: 700, color: WA.dark, fontSize: 16 }}>Construct ERP</p>
+              <p style={{ fontSize: 11, color: WA.muted }}>Team Chat</p>
+            </div>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: connected ? WA.greenBadge : '#ccc', flexShrink: 0 }} title={connected ? 'Connected' : 'Connecting…'} />
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium text-slate-900 truncate">{user?.name || user?.username || 'You'}</p>
-            <p className="text-[10px] text-slate-900 font-medium capitalize">{(user?.role || '').replace(/_/g, ' ')}</p>
-          </div>
-          {connected
-            ? <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-            : <WifiOff className="w-3.5 h-3.5 text-slate-300" />}
-        </div>
-      </aside>
 
-      {/* ── Chat area ────────────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-
-        {/* Header */}
-        <div className="bg-white border-b border-slate-100 px-5 py-3 flex items-center gap-3 flex-shrink-0">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-indigo-50">
-            <ChIcon className="w-4 h-4 text-indigo-600" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <Hash className="w-3.5 h-3.5 text-slate-400" />
-              <span className="text-sm font-medium text-slate-800">{activeCh.label}</span>
-              {pinned.length > 0 && (
-                <span className="flex items-center gap-1 text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded-full font-semibold">
-                  <Pin className="w-2.5 h-2.5" /> {pinned.length}
-                </span>
+          <div style={{ padding: '8px 12px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderRadius: 8, padding: '7px 12px', border: `1px solid ${WA.divider}` }}>
+              <Search size={14} color={WA.muted} />
+              <input value={sidebarQuery} onChange={e => setSidebarQuery(e.target.value)}
+                placeholder="Search channels or staff…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: WA.dark }} />
+              {sidebarQuery && (
+                <button onClick={() => setSidebarQuery('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: WA.muted, display: 'flex', padding: 0 }}>
+                  <X size={13} />
+                </button>
               )}
             </div>
-            <p className="text-[11px] text-slate-900 font-medium truncate">{activeCh.desc}</p>
           </div>
-          <div className="flex items-center gap-1.5">
-            <button onClick={() => { setSearchOpen(v => !v); if (pinsOpen) setPinsOpen(false); }}
-              className={clsx('p-1.5 rounded-lg transition-all', searchOpen ? 'bg-indigo-50 text-indigo-600' : 'text-slate-900 font-medium hover:bg-slate-50')}>
-              <Search className="w-4 h-4" />
-            </button>
-            <button onClick={() => { setPinsOpen(v => !v); if (searchOpen) { setSearchOpen(false); setSearchQuery(''); } }}
-              className={clsx('p-1.5 rounded-lg transition-all', pinsOpen ? 'bg-amber-50 text-amber-600' : 'text-slate-900 font-medium hover:bg-slate-50')}>
-              <Pin className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
 
-        {/* Pinned panel */}
-        {pinsOpen && (
-          <div className="bg-amber-50 border-b border-amber-100 px-5 py-3 max-h-44 overflow-y-auto flex-shrink-0">
-            <p className="text-xs font-medium text-amber-700 mb-2 flex items-center gap-1.5">
-              <Pin className="w-3 h-3" /> Pinned Messages
-              {pinned.length === 0 && <span className="text-amber-500 font-normal">— hover a message and click the pin icon</span>}
-            </p>
-            <div className="space-y-2">
-              {pinned.map(m => (
-                <div key={m.id} className="flex items-start gap-2 bg-white border border-amber-200 rounded-xl px-3 py-2">
-                  <Avatar name={m.sender_name} size="sm" />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-xs font-medium text-slate-900 mr-1.5">{m.sender_name}</span>
-                    <span className="text-xs text-slate-500">{m.text?.slice(0, 100)}{m.text?.length > 100 ? '…' : ''}</span>
+          <nav style={{ flex: 1, overflowY: 'auto' }}>
+            {filteredChannels.length > 0 && (
+            <div style={{ padding: '8px 16px 4px', fontSize: 11, fontWeight: 700, color: WA.muted, textTransform: 'uppercase', letterSpacing: 0.8 }}>Channels</div>
+            )}
+            {filteredChannels.map(ch => {
+              const isActive = mainChannel === ch.id;
+              const badge = unread[ch.id] || 0;
+              return (
+                <button key={ch.id} onClick={() => setMainChannel(ch.id)}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '9px 16px', background: isActive ? WA.active : 'transparent', border: 'none', cursor: 'pointer', borderBottom: `1px solid ${WA.divider}`, textAlign: 'left', transition: 'background 0.1s' }}
+                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = WA.hover; }}
+                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}>
+                  <div style={{ width: 46, height: 46, borderRadius: '50%', background: isActive ? WA.green : '#dfe5e7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Hash size={19} color={isActive ? '#fff' : WA.muted} />
                   </div>
-                  <button onClick={() => togglePin(m.id)} className="text-slate-300 hover:text-slate-500">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 2 }}>
+                      <span style={{ fontWeight: 600, color: WA.dark, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{ch.label}</span>
+                      {badge > 0 && <span style={{ background: WA.greenBadge, color: '#fff', borderRadius: 999, fontSize: 11, fontWeight: 700, minWidth: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px', flexShrink: 0, marginLeft: 6 }}>{badge}</span>}
+                    </div>
+                    <p style={{ fontSize: 12, color: WA.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ch.desc}</p>
+                  </div>
+                </button>
+              );
+            })}
+
+            {filteredChannels.length === 0 && filteredEmployees.length === 0 && (
+              <p style={{ padding: '24px 16px', textAlign: 'center', fontSize: 13, color: WA.muted }}>No channels or staff match "{sidebarQuery}"</p>
+            )}
+
+            {filteredEmployees.length > 0 && (
+              <>
+                <div style={{ padding: '12px 16px 4px', fontSize: 11, fontWeight: 700, color: WA.muted, textTransform: 'uppercase', letterSpacing: 0.8 }}>Direct Messages</div>
+                {filteredEmployees.map(emp => {
+                  const name = emp.full_name || emp.name || 'Employee';
+                  const dmId = `dm-${[user?.id, emp.id].sort().join('-')}`;
+                  const badge = unread[dmId] || 0;
+                  return (
+                    <button key={emp.id} onClick={() => openPopup(emp)}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '9px 16px', background: 'transparent', border: 'none', cursor: 'pointer', borderBottom: `1px solid ${WA.divider}`, textAlign: 'left', transition: 'background 0.1s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = WA.hover}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                      <div style={{ position: 'relative', flexShrink: 0 }}>
+                        <Av name={name} size={46} photo={emp.profile_photo_url} />
+                        <span style={{ position: 'absolute', bottom: 1, right: 1, width: 11, height: 11, borderRadius: '50%', background: WA.greenBadge, border: `2px solid ${WA.sidebar}` }} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 2 }}>
+                          <span style={{ fontWeight: 600, color: WA.dark, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{name}</span>
+                          {badge > 0 && <span style={{ background: WA.greenBadge, color: '#fff', borderRadius: 999, fontSize: 11, fontWeight: 700, minWidth: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px', flexShrink: 0, marginLeft: 6 }}>{badge}</span>}
+                        </div>
+                        <p style={{ fontSize: 12, color: WA.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emp.designation_name || emp.designation || 'Direct message'}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </>
+            )}
+          </nav>
+        </aside>
+
+        {/* ── MAIN CHANNEL PANE ─────────────────────────────────────────────── */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px', background: WA.sidebar, borderBottom: `1px solid ${WA.divider}`, flexShrink: 0 }}>
+            <div style={{ width: 40, height: 40, borderRadius: '50%', background: WA.green, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Hash size={18} color="#fff" />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontWeight: 700, color: WA.dark, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>#{activeCh.label}</p>
+              <p style={{ fontSize: 12, color: WA.muted }}>{activeCh.desc}</p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <button onClick={() => { setSearchOpen(v => !v); if (pinsOpen) setPinsOpen(false); }}
+                style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: searchOpen ? WA.divider : 'none' }}>
+                <Search size={18} color={searchOpen ? WA.green : WA.muted} />
+              </button>
+              <button onClick={() => { setPinsOpen(v => !v); if (searchOpen) { setSearchOpen(false); setSearchQuery(''); } }}
+                style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: pinsOpen ? WA.divider : 'none' }}>
+                <Pin size={18} color={pinsOpen ? '#b7860b' : WA.muted} />
+              </button>
+            </div>
+          </div>
+
+          {pinsOpen && (
+            <div style={{ background: '#fffde7', borderBottom: '1px solid #ffe082', padding: '10px 16px', maxHeight: 160, overflowY: 'auto', flexShrink: 0 }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: '#b7860b', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                <Pin size={11} /> Pinned Messages
+                {pinned.length === 0 && <span style={{ fontWeight: 400, color: '#c9960c' }}>— hover a message to pin it</span>}
+              </p>
+              {pinned.map(m => (
+                <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderRadius: 8, padding: '6px 10px', marginBottom: 4, border: '1px solid #ffe082' }}>
+                  <Av name={m.sender_name} size={26} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: WA.dark, marginRight: 6 }}>{m.sender_name}</span>
+                    <span style={{ fontSize: 12, color: WA.muted }}>{m.text?.slice(0, 80)}{m.text?.length > 80 ? '…' : ''}</span>
+                  </div>
+                  <button onClick={() => togglePin(m.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: WA.muted, display: 'flex' }}><X size={14} /></button>
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Search bar */}
-        {searchOpen && (
-          <div className="bg-white border-b border-slate-100 px-5 py-2.5 flex items-center gap-2.5 flex-shrink-0">
-            <Search className="w-3.5 h-3.5 text-slate-900 font-medium flex-shrink-0" />
-            <input ref={searchRef} value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search messages…"
-              className="flex-1 text-sm text-slate-900 placeholder-slate-400 outline-none bg-transparent" />
-            {searchQuery && <span className="text-xs text-slate-400">{visible.length} result{visible.length !== 1 ? 's' : ''}</span>}
-            <button onClick={() => { setSearchOpen(false); setSearchQuery(''); }} className="text-slate-900 font-medium hover:text-slate-600">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
-        {/* Messages */}
-        <div ref={msgsRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-1">
-          {/* Date divider */}
-          <div className="flex items-center gap-3 mb-3">
-            <div className="flex-1 h-px bg-slate-100" />
-            <span className="text-[10px] font-medium text-slate-900 font-medium uppercase tracking-wider">
-              {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}
-            </span>
-            <div className="flex-1 h-px bg-slate-100" />
-          </div>
-
-          {loading && (
-            <div className="flex items-center justify-center py-16 text-slate-400">
-              <Loader2 className="w-6 h-6 animate-spin mr-2" />
-              <span className="text-sm">Loading messages…</span>
+          {searchOpen && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: '#fff', borderBottom: `1px solid ${WA.divider}`, flexShrink: 0 }}>
+              <Search size={14} color={WA.muted} />
+              <input ref={searchRef} value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search messages…"
+                style={{ flex: 1, border: 'none', outline: 'none', fontSize: 14, color: WA.dark, background: 'none' }} />
+              {searchQuery && <span style={{ fontSize: 12, color: WA.muted }}>{visibleMain.length} result{visibleMain.length !== 1 ? 's' : ''}</span>}
+              <button onClick={() => { setSearchOpen(false); setSearchQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: WA.muted, display: 'flex' }}><X size={16} /></button>
             </div>
           )}
 
-          {!loading && visible.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-              <MessageSquare className="w-10 h-10 opacity-20 mb-2" />
-              <p className="text-sm">{searchQuery ? 'No messages match your search' : 'No messages yet — be the first to say something!'}</p>
-            </div>
-          )}
+          <MessageThread
+            items={mainItems} loading={mainLoading} emptyText={searchQuery ? 'No messages match your search' : 'No messages yet — say something!'}
+            searchQuery={searchQuery} userId={user?.id} isDm={false} compact={false}
+            hoveredMsg={mainHovered} onHover={setMainHovered} onDownload={downloadAttachment}
+            onTogglePin={togglePin} onReact={addReaction}
+            typingUser={typing[mainChannel]} threadRef={mainThreadRef}
+          />
 
-          {!loading && visible.map((m, idx) => {
-            const prev = visible[idx - 1];
-            const grouped = prev && prev.sender_id === m.sender_id &&
-              (new Date(m.created_at) - new Date(prev.created_at)) < 5 * 60 * 1000;
-            const isMe = m.sender_id === user?.id;
-            const FIcon = m.file_name ? fileIcon(m.file_name) : null;
-
-            return (
-              <div key={m.id}
-                onMouseEnter={() => setHoveredMsg(m.id)}
-                onMouseLeave={() => setHoveredMsg(null)}
-                className={clsx(
-                  'flex gap-3 px-2 py-1 rounded-xl transition-colors group relative',
-                  hoveredMsg === m.id ? 'bg-slate-50' : '',
-                  grouped ? 'mt-0.5' : 'mt-3'
-                )}>
-                <div className="w-8 flex-shrink-0 mt-0.5">
-                  {!grouped && <Avatar name={m.sender_name} size="sm" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  {!grouped && (
-                    <div className="flex items-baseline gap-2 mb-0.5">
-                      <span className={clsx('text-sm font-semibold', isMe ? 'text-indigo-700' : 'text-slate-800')}>{m.sender_name}</span>
-                      {m.sender_role && (
-                        <span className="text-[10px] text-slate-900 font-medium bg-slate-100 px-1.5 py-0.5 rounded-full capitalize">
-                          {m.sender_role.replace(/_/g, ' ')}
-                        </span>
-                      )}
-                      <span className="text-[10px] text-slate-400">{fmtTime(m.created_at)}</span>
-                      {m.pinned && (
-                        <span className="flex items-center gap-0.5 text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">
-                          <Pin className="w-2.5 h-2.5" /> pinned
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  {m.text && (
-                    <p className="text-sm text-slate-900 leading-relaxed">
-                      {searchQuery
-                        ? m.text.split(new RegExp(`(${searchQuery})`, 'gi')).map((part, i) =>
-                            part.toLowerCase() === searchQuery.toLowerCase()
-                              ? <mark key={i} className="bg-amber-100 text-amber-800 rounded px-0.5">{part}</mark>
-                              : part
-                          )
-                        : m.text}
-                    </p>
-                  )}
-                  {m.file_name && FIcon && (
-                    <div className="mt-2 inline-flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs cursor-pointer hover:border-indigo-300 transition-colors">
-                      <FIcon className="w-4 h-4 text-indigo-500 flex-shrink-0" />
-                      <span className="font-medium text-slate-700">{m.file_name}</span>
-                      {m.file_size && <span className="text-slate-400">{m.file_size}</span>}
-                      <Download className="w-3.5 h-3.5 text-indigo-500 ml-1" />
-                    </div>
-                  )}
-                  {(m.reactions || []).length > 0 && (
-                    <div className="flex gap-1.5 mt-1.5 flex-wrap">
-                      {m.reactions.map((r, i) => (
-                        <span key={i} onClick={() => addReaction(m.id, r.e)}
-                          className="text-xs border border-slate-200 bg-white rounded-full px-2 py-0.5 cursor-pointer hover:border-indigo-300 transition-all">
-                          {r.e} {r.c}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Hover actions */}
-                {hoveredMsg === m.id && (
-                  <div className="absolute top-1 right-2 flex items-center gap-1 bg-white border border-slate-200 rounded-xl shadow-sm px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                    {['👍','✓','🎉'].map(e => (
-                      <button key={e} onClick={() => addReaction(m.id, e)}
-                        className="w-6 h-6 rounded-lg hover:bg-slate-100 flex items-center justify-center text-xs transition-colors">
-                        {e}
-                      </button>
-                    ))}
-                    <div className="w-px h-4 bg-slate-200 mx-0.5" />
-                    <button onClick={() => togglePin(m.id)}
-                      className="w-6 h-6 rounded-lg hover:bg-slate-100 flex items-center justify-center transition-colors" title={m.pinned ? 'Unpin' : 'Pin'}>
-                      <Pin className={clsx('w-3 h-3', m.pinned ? 'text-amber-500' : 'text-slate-400')} />
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          {/* Typing indicator */}
-          {typingUser && (
-            <div className="flex gap-3 px-2 py-1 mt-2">
-              <div className="w-8" />
-              <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                <span className="flex gap-0.5">
-                  {[0,1,2].map(i => (
-                    <span key={i} className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: `${i*0.15}s` }} />
-                  ))}
-                </span>
-                <span>{typingUser} is typing…</span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── Composer ─────────────────────────────────────────────────────── */}
-        <div className="px-5 pb-5 flex-shrink-0">
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden focus-within:border-indigo-300 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
-            {pendingFiles.length > 0 && (
-              <div className="px-3 pt-2.5 pb-1 flex flex-wrap gap-2 border-b border-slate-100">
-                {pendingFiles.map((f, i) => {
-                  const FI = fileIcon(f.name);
-                  return (
-                    <div key={i} className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 rounded-lg px-2.5 py-1 text-xs text-indigo-700">
-                      <FI className="w-3 h-3" />
-                      <span className="font-medium">{f.name}</span>
-                      <span className="text-indigo-400">{f.size}</span>
-                      <button onClick={() => setPendingFiles(p => p.filter((_, j) => j !== i))} className="text-indigo-400 hover:text-indigo-600 ml-0.5">
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            <textarea ref={textRef} value={inputVal} onChange={handleInput}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); } }}
-              placeholder={`Message #${activeCh.label}…`}
-              rows={1}
-              className="w-full px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none resize-none bg-transparent leading-relaxed"
-              style={{ minHeight: 44, maxHeight: 120 }}
-            />
-            <div className="flex items-center gap-1 px-3 pb-2.5">
-              <button onClick={() => fileRef.current?.click()}
-                className="p-1.5 rounded-lg text-slate-900 font-medium hover:bg-slate-100 hover:text-slate-900 transition-colors" title="Attach file">
-                <Paperclip className="w-4 h-4" />
-              </button>
-              <button className="p-1.5 rounded-lg text-slate-900 font-medium hover:bg-slate-100 hover:text-slate-900 transition-colors" title="Emoji">
-                <Smile className="w-4 h-4" />
-              </button>
-              <button className="p-1.5 rounded-lg text-slate-900 font-medium hover:bg-slate-100 hover:text-slate-900 transition-colors" title="Mention">
-                <AtSign className="w-4 h-4" />
-              </button>
-              <input ref={fileRef} type="file" multiple className="hidden"
-                onChange={e => {
-                  setPendingFiles(Array.from(e.target.files).map(f => ({ name: f.name, size: `${(f.size/1024).toFixed(0)} KB` })));
-                  e.target.value = '';
-                }} />
-              <button onClick={sendMsg} disabled={!inputVal.trim() && pendingFiles.length === 0}
-                className={clsx('ml-auto flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-medium transition-all',
-                  inputVal.trim() || pendingFiles.length > 0
-                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm'
-                    : 'bg-slate-100 text-slate-900 font-medium cursor-not-allowed')}>
-                <Send className="w-3.5 h-3.5" />
-                Send
-              </button>
-            </div>
-          </div>
-          <p className="text-[10px] text-slate-900 font-medium mt-1.5 px-1">
-            <kbd className="border border-slate-200 rounded px-1 py-0.5 bg-white text-[9px]">Enter</kbd> to send &nbsp;·&nbsp;
-            <kbd className="border border-slate-200 rounded px-1 py-0.5 bg-white text-[9px]">Shift+Enter</kbd> for new line
-          </p>
+          <Composer
+            inputVal={mainInput} onInputChange={handleTyping}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMain(); } }}
+            onSend={sendMain} pendingFiles={mainFiles}
+            onRemoveFile={i => setMainFiles(p => p.filter((_, j) => j !== i))}
+            onPickFiles={pickFiles}
+            disabled={(!mainInput.trim() && mainFiles.length === 0) || mainFiles.some(f => f.uploading)}
+            textRef={mainTextRef} compact={false}
+          />
         </div>
       </div>
+
+      <style>{`
+        @keyframes waTyping { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-5px); } }
+      `}</style>
     </div>
   );
 }
