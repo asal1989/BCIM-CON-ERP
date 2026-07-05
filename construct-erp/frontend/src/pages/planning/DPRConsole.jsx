@@ -640,11 +640,18 @@ function MobileView({ dashboard }) {
           <div className="card" style={{ padding: 20, marginBottom: 16 }}>
             <h3 style={{ marginBottom: 6 }}>BCIM ERP Mobile</h3>
             <p style={{ fontSize: 13, color: 'var(--gray-600)', marginBottom: 14 }}>
-              The companion mobile app (Expo / React Native, <code className="mono">mobile-app/</code>) lets site
-              engineers submit DPRs, attach photos and track approvals from the field. Scan the QR code from the
-              app's login screen or install it from your organization's distribution link.
+              A native mobile app (Expo / React Native, <code className="mono">mobile-app/</code>) is in
+              development for submitting DPRs and photos from the field. Until it's published to a distribution
+              link, scan this to open the ERP itself on your phone — it's fully usable on mobile browsers.
             </p>
-            <div className="qr-box"><QrCode size={60} color="var(--gray-400)" /></div>
+            <div className="qr-box">
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(window.location.origin)}`}
+                alt="QR code to open the ERP on your phone"
+                width={120}
+                height={120}
+              />
+            </div>
           </div>
           <div className="mobile-feature-list">
             {features.map(f => (
