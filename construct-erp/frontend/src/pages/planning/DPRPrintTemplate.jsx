@@ -159,7 +159,12 @@ export default function DPRPrintTemplate({ dpr, project }) {
           .dpr-no-print { display: none !important; }
           @page { size: A3 landscape; margin: 12mm; }
         }
-        .dpr-print-root table { border-collapse: collapse; }
+        /* The DPR detail view renders this template inside .dpr-console, whose
+           stylesheet sets min-width:900px on ALL tables (for the console's own
+           scroll-wrapped data tables). Without this override, the small
+           side-by-side tables (Staff / Labour / Subcontractors / Signatures)
+           are forced to 900px each and blow out past the page edge. */
+        .dpr-print-root table { border-collapse: collapse; min-width: 0 !important; }
       `}</style>
 
       <div className="dpr-no-print" style={{ marginBottom: 10, textAlign: 'center' }}>

@@ -1100,8 +1100,8 @@ export default function DPRConsole() {
   });
 
   const { data: dashboard } = useQuery({
-    queryKey: ['dpr-console-dashboard'],
-    queryFn: () => planningAPI.dprConsoleDashboard().then(r => r.data?.data ?? r.data ?? {}),
+    queryKey: ['dpr-console-dashboard', projectId],
+    queryFn: () => planningAPI.dprConsoleDashboard(projectId ? { project_id: projectId } : {}).then(r => r.data?.data ?? r.data ?? {}),
     refetchInterval: 60000,
   });
 

@@ -1671,40 +1671,47 @@ router.patch('/dpr/:id/approval-action', authorize(...MANAGERS), async (req, res
 router.get('/dpr-console/dashboard', async (req, res) => {
   try {
     const companyId = req.user.company_id;
+    const { project_id } = req.query;
     const today = new Date().toISOString().slice(0, 10);
     const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    // Every sub-query below is scoped to company_id; when a project is
+    // selected in the console's "All Projects" dropdown, add the same
+    // project_id filter everywhere so the dashboard KPIs/trend/charts match
+    // whatever the dropdown says instead of always showing company-wide data.
+    const projFilter = project_id ? ' AND p.id = $3' : '';
+    const projArg = project_id ? [project_id] : [];
 
     const [todayRows, yesterdayRows, recentRows, equipStats, actStats] = await Promise.all([
       db().query(`
         SELECT d.*, p.name AS project_name FROM daily_progress_reports d
         JOIN projects p ON p.id = d.project_id
-        WHERE p.company_id = $1 AND d.report_date = $2
-      `, [companyId, today]),
+        WHERE p.company_id = $1 AND d.report_date = $2${projFilter}
+      `, [companyId, today, ...projArg]),
       db().query(`
         SELECT d.id FROM daily_progress_reports d
         JOIN projects p ON p.id = d.project_id
-        WHERE p.company_id = $1 AND d.report_date = $2
-      `, [companyId, yesterday]),
+        WHERE p.company_id = $1 AND d.report_date = $2${projFilter}
+      `, [companyId, yesterday, ...projArg]),
       db().query(`
         SELECT d.*, p.name AS project_name FROM daily_progress_reports d
         JOIN projects p ON p.id = d.project_id
-        WHERE p.company_id = $1
+        WHERE p.company_id = $1${project_id ? ' AND p.id = $2' : ''}
         ORDER BY d.report_date DESC, d.created_at DESC
         LIMIT 14
-      `, [companyId]),
+      `, [companyId, ...projArg]),
       db().query(`
         SELECT COUNT(*) FILTER (WHERE status IN ('in_progress','planned')) AS active,
                COUNT(*) FILTER (WHERE status = 'delayed') AS delayed,
                COUNT(*) AS total
         FROM project_activities pa
         JOIN projects p ON p.id = pa.project_id
-        WHERE p.company_id = $1
-      `, [companyId]).catch(() => ({ rows: [{ active: 0, delayed: 0, total: 0 }] })),
+        WHERE p.company_id = $1${project_id ? ' AND p.id = $2' : ''}
+      `, [companyId, ...projArg]).catch(() => ({ rows: [{ active: 0, delayed: 0, total: 0 }] })),
       db().query(`
         SELECT COUNT(DISTINCT d.project_id) AS updated_today
         FROM daily_progress_reports d JOIN projects p ON p.id = d.project_id
-        WHERE p.company_id = $1 AND d.report_date = $2
-      `, [companyId, today]),
+        WHERE p.company_id = $1 AND d.report_date = $2${projFilter}
+      `, [companyId, today, ...projArg]),
     ]);
 
     const todayDPRs = todayRows.rows.map(buildPlanningDPRResponse);
