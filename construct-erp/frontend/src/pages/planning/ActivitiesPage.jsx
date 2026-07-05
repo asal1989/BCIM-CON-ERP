@@ -225,7 +225,7 @@ export default function ActivitiesPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-100">
-                    {['Code', 'Activity', 'Type', 'Baseline Dates', 'Duration', 'Progress', 'Status', ''].map(h => (
+                    {['Code', 'Activity', 'Type', 'Baseline Dates', 'Duration', 'Budget (BAC)', 'Progress', 'Status', ''].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-medium text-slate-900 font-medium uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -255,6 +255,9 @@ export default function ActivitiesPage() {
                           </div>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-xs font-mono text-slate-700">{a.baseline_duration}d</td>
+                        <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                          <BudgetCell activity={a} />
+                        </td>
                         <td className="px-4 py-3 whitespace-nowrap w-32">
                           <div className="flex items-center gap-2">
                             <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
@@ -274,7 +277,7 @@ export default function ActivitiesPage() {
                     );
                   })}
                   {filtered.length === 0 && (
-                    <tr><td colSpan={8} className="py-16 text-center">
+                    <tr><td colSpan={9} className="py-16 text-center">
                       <Package className="w-8 h-8 text-slate-300 mx-auto mb-3" />
                       <p className="text-sm text-slate-400">No activities found</p>
                     </td></tr>
@@ -466,6 +469,70 @@ function ActivityDetailPanel({ activity: a, onClose, onDelete, qc }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Inline-editable Budget (BAC) cell for the activities table ─────
+function BudgetCell({ activity: a }) {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue]     = useState(a.budget_at_completion || '');
+
+  const mut = useMutation({
+    mutationFn: bac => planningP6API.updateActivityEVM(a.id, {
+      budget_at_completion: bac,
+      planned_value: a.planned_value || 0,
+      earned_value: a.earned_value || 0,
+      actual_cost: a.actual_cost || 0,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['planning-activities'] });
+      qc.invalidateQueries({ queryKey: ['p6-dashboard'] });
+    },
+    onError: e => {
+      toast.error(e?.response?.data?.error || 'Failed to save budget');
+      setValue(a.budget_at_completion || '');
+    },
+  });
+
+  const save = () => {
+    setEditing(false);
+    const num = value === '' ? 0 : Number(value);
+    if (Number.isNaN(num)) { setValue(a.budget_at_completion || ''); return; }
+    if (num === Number(a.budget_at_completion || 0)) return;
+    mut.mutate(num);
+  };
+
+  if (editing) {
+    return (
+      <input
+        type="number"
+        autoFocus
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onBlur={save}
+        onKeyDown={e => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+          if (e.key === 'Escape') { setValue(a.budget_at_completion || ''); setEditing(false); }
+        }}
+        className="w-28 border border-indigo-300 rounded-md px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-indigo-400"
+      />
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setEditing(true)}
+      disabled={mut.isPending}
+      className="text-xs px-2 py-1 rounded-md text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-50"
+      title="Click to edit budget"
+    >
+      {mut.isPending
+        ? 'Saving…'
+        : a.budget_at_completion > 0
+          ? `₹${Number(a.budget_at_completion).toLocaleString('en-IN')}`
+          : <span className="text-slate-400 italic">+ Add budget</span>}
+    </button>
   );
 }
 
