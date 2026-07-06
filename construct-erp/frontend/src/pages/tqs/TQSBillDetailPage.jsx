@@ -361,41 +361,13 @@ function SigBox({ stage, label, role, upd, pcReady, isPending, onSign }) {
 }
 
 /* ─── QS Certification Tab ─── */
-function QSTab({ bill, billId }) {
-  const qc       = useQueryClient();
+// The quick-certify form (amounts/deductions/remarks + its own Save & Send to
+// Procurement action) was removed — it duplicated what the Vendor QS
+// Certification module already does properly (full RA abstract, then routes
+// the bill to Procurement itself). This tab is now just a link out to it.
+function QSTab({ bill }) {
   const navigate = useNavigate();
-  const upd      = bill.bill_updates || {};
-
-  // Default qs_gross to bill total_amount if no QS gross was previously saved
-  const defaultGross = parseFloat(upd.qs_gross || bill.total_amount || 0);
-
-  const [form, setForm] = useState({
-    qs_remarks:                upd.qs_remarks || '',
-    qs_gross:                  defaultGross || '',
-    advance_recovered:         parseFloat(upd.advance_recovered || 0) || '',
-    tds_deduction:             parseFloat(upd.tds_deduction     || 0) || '',
-    retention_money:           parseFloat(upd.retention_money   || 0) || '',
-    other_deductions:          parseFloat(upd.other_deductions  || 0) || '',
-  });
-  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
-
-  // Live certified net preview
-  const gross   = parseFloat(form.qs_gross)          || parseFloat(bill.total_amount) || 0;
-  const advRec  = parseFloat(form.advance_recovered)  || 0;
-  const tds     = parseFloat(form.tds_deduction)      || 0;
-  const ret     = parseFloat(form.retention_money)    || 0;
-  const other   = parseFloat(form.other_deductions)   || 0;
-  const totalDed = advRec + tds + ret + other;
-  const certNet  = Math.max(0, gross - totalDed);
-
-  const mutation = useMutation({
-    mutationFn: (d) => tqsBillsAPI.updateQS(billId, d),
-    onSuccess: () => {
-      refreshBillQueries(qc, billId);
-      toast.success('QS updated — bill moved to Procurement for approval');
-    },
-    onError: (e) => toast.error(e.response?.data?.error || 'Failed'),
-  });
+  const upd = bill.bill_updates || {};
 
   // Build link — opens the New Certification modal pre-filled with this bill's vendor + order
   const vendor  = bill.vendor_name  ? `&vendor_name=${encodeURIComponent(bill.vendor_name)}`  : '';
@@ -403,7 +375,7 @@ function QSTab({ bill, billId }) {
                 : bill.po_number    ? `&po_number=${encodeURIComponent(bill.po_number)}`       : '';
   const certLink = `/tqs/vendor-certifications?action=new${vendor}${order}`;
 
-  const inputCls = 'w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none';
+  const certified = !!(upd.qs_certified_date || upd.certified_net > 0);
 
   return (
     <div className="space-y-5">
@@ -414,7 +386,7 @@ function QSTab({ bill, billId }) {
         <Award className="w-5 h-5 text-emerald-600 shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-emerald-900">RA Abstract &amp; Payment Certificate</p>
-          <p className="text-xs text-emerald-700 mt-0.5">QS Received/Certified Dates are now entered on the QS Certification module (button on the right) — use this form for quick certification of PO bills without those dates.</p>
+          <p className="text-xs text-emerald-700 mt-0.5">Certify this bill (with QS Received/Certified Dates, RA abstract, and amounts) in the QS Certification module — it sends the bill straight to Procurement once saved.</p>
         </div>
         <button onClick={() => navigate(certLink)}
           className="shrink-0 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg flex items-center gap-1.5">
@@ -422,69 +394,12 @@ function QSTab({ bill, billId }) {
         </button>
       </div>
 
-      {/* Certified Amount & Deductions */}
-      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-4">
-        <p className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Certification Amounts</p>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">
-              Certified Amount (₹) <span className="text-slate-400 font-normal">— defaults to Total Invoice</span>
-            </label>
-            <input type="number" step="0.01" className={inputCls}
-              value={form.qs_gross}
-              onChange={e => set('qs_gross', e.target.value)}
-              placeholder={`${parseFloat(bill.total_amount || 0).toFixed(2)}`} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">Advance Recovered (₹)</label>
-            <input type="number" step="0.01" className={inputCls}
-              value={form.advance_recovered} onChange={e => set('advance_recovered', e.target.value)} placeholder="0" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">TDS Deduction (₹)</label>
-            <input type="number" step="0.01" className={inputCls}
-              value={form.tds_deduction} onChange={e => set('tds_deduction', e.target.value)} placeholder="0" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">Retention Money (₹)</label>
-            <input type="number" step="0.01" className={inputCls}
-              value={form.retention_money} onChange={e => set('retention_money', e.target.value)} placeholder="0" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">Other Deductions (₹)</label>
-            <input type="number" step="0.01" className={inputCls}
-              value={form.other_deductions} onChange={e => set('other_deductions', e.target.value)} placeholder="0" />
-          </div>
+      {certified && (
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center gap-4 flex-wrap text-xs text-slate-500">
+          <span>Certified Net: <span className="font-semibold text-emerald-700">₹{parseFloat(upd.certified_net || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+          {upd.qs_certified_date && <span>QS Certified Date: <span className="font-semibold text-slate-700">{new Date(upd.qs_certified_date).toLocaleDateString('en-IN')}</span></span>}
         </div>
-        {/* Live preview */}
-        <div className="flex items-center gap-4 pt-1 border-t border-slate-200 flex-wrap">
-          <div className="text-xs text-slate-500">
-            Certified Gross: <span className="font-semibold text-slate-800">₹{gross.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
-          </div>
-          <div className="text-xs text-slate-500">
-            Total Deductions: <span className="font-semibold text-orange-600">₹{totalDed.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
-          </div>
-          <div className="text-xs text-slate-500 ml-auto">
-            Certified Net: <span className={`text-base font-bold ${certNet > 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-              ₹{certNet.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-xs font-medium text-slate-700 mb-1">QS Remarks</label>
-        <textarea rows={2} className={inputCls + ' resize-none'}
-          value={form.qs_remarks} onChange={e => set('qs_remarks', e.target.value)} />
-      </div>
-
-      <button
-        onClick={() => mutation.mutate(form)}
-        disabled={mutation.isPending}
-        className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg disabled:opacity-50"
-      >
-        {mutation.isPending ? 'Saving…' : 'Save & Send to Procurement'}
-      </button>
+      )}
     </div>
   );
 }
