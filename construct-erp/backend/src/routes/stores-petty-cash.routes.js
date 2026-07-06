@@ -959,10 +959,13 @@ router.get('/summary', authenticate, async (req, res) => {
 
     const [localRes, advRes, recRes, pendRes, scRes] = await Promise.all([
       query(`SELECT COALESCE(SUM(amount),0) AS total, COUNT(*) AS count FROM stores_petty_cash_entries WHERE ${eCond.join(' AND ')} AND status='Approved'`, eP),
-      query(`SELECT COALESCE(SUM(amount),0) AS total, COUNT(*) AS count FROM stores_petty_cash_advances WHERE ${aCond.join(' AND ')}`, aP),
+      // Matches boq-budget.routes.js's exclusion of cancelled advances so this
+      // KPI and Budget Control's Sub Con/Petty Cash figures can't silently drift
+      // apart if a cancel/void action is ever added for these two tables.
+      query(`SELECT COALESCE(SUM(amount),0) AS total, COUNT(*) AS count FROM stores_petty_cash_advances WHERE ${aCond.join(' AND ')} AND COALESCE(status,'Approved') != 'cancelled'`, aP),
       query(`SELECT COALESCE(SUM(amount),0) AS total, COUNT(*) AS count FROM stores_petty_cash_receipts WHERE ${rCond.join(' AND ')}`, rP),
       query(`SELECT COUNT(*) AS count FROM stores_petty_cash_entries WHERE ${eCond.join(' AND ')} AND status='Pending'`, eP),
-      query(`SELECT COALESCE(SUM(amount),0) AS total, COUNT(*) AS count FROM stores_pc_sc_advances WHERE ${sCond.join(' AND ')}`, sP),
+      query(`SELECT COALESCE(SUM(amount),0) AS total, COUNT(*) AS count FROM stores_pc_sc_advances WHERE ${sCond.join(' AND ')} AND COALESCE(status,'issued') != 'cancelled'`, sP),
     ]);
 
     const localTotal   = parseFloat(localRes.rows[0].total);

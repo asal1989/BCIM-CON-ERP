@@ -2341,7 +2341,7 @@ export default function StoresPettyCashPage() {
                         </span>
                       )}
                     </div>
-                    <span className="text-[11px] text-slate-500">From QS → Cost Budget → Petty Cash</span>
+                    <span className="text-[11px] text-slate-500">From QS → Cost Budget → Petty Cash (excludes SC advances — those count under Sub Con)</span>
                   </div>
 
                   {noBudget ? (
@@ -2359,7 +2359,9 @@ export default function StoresPettyCashPage() {
                           <div className="text-base font-bold text-indigo-700">{inr(budget)}</div>
                         </div>
                         <div className="bg-white rounded-lg p-3 border border-red-100 text-center">
-                          <div className="text-[10px] text-slate-500 mb-1 font-medium uppercase tracking-wide">Total Spent</div>
+                          <div className="text-[10px] text-slate-500 mb-1 font-medium uppercase tracking-wide" title="Local Purchases only — SC advances paid via petty cash count against the Sub Con budget instead, not here">
+                            Spent (Petty Cash head)
+                          </div>
                           <div className={clsx('text-base font-bold', over ? 'text-red-700' : 'text-slate-800')}>{inr(spent)}</div>
                         </div>
                         <div className={clsx('rounded-lg p-3 border text-center', over ? 'bg-red-100 border-red-200' : 'bg-emerald-50 border-emerald-100')}>
