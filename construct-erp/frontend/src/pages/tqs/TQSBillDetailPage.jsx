@@ -29,23 +29,24 @@ const STATUS_COLORS = {
   paid:                'bg-emerald-100 text-emerald-700',
 };
 
+// 'accounts' and 'procurement' used to be separate tabs/routing stages; they
+// are now merged into the 'qs' tab (QS certifies, Procurement approves right
+// after, Accounts records the JV date whenever — none of it blocks the next).
 const TABS = [
-  { id: 'overview',    label: 'Overview',            icon: FileText     },
-  { id: 'stores',      label: 'Stores',              icon: Warehouse    },
-  { id: 'doc_control', label: 'Document Controller', icon: Inbox        },
-  { id: 'qs',          label: 'QS Certification',    icon: Award        },
-  { id: 'accounts',    label: 'Accounts',            icon: CreditCard   },
-  { id: 'procurement', label: 'Procurement',         icon: Inbox        },
-  { id: 'qs_sign',     label: 'QS Sign',             icon: PenLine      },
-  { id: 'payment',     label: 'Payment',             icon: IndianRupee  },
+  { id: 'overview',    label: 'Overview',                     icon: FileText     },
+  { id: 'stores',      label: 'Stores',                       icon: Warehouse    },
+  { id: 'doc_control', label: 'Document Controller',          icon: Inbox        },
+  { id: 'qs',          label: 'QS & Procurement Certification', icon: Award      },
+  { id: 'qs_sign',     label: 'QS Sign',                      icon: PenLine      },
+  { id: 'payment',     label: 'Payment',                      icon: IndianRupee  },
 ];
 
 const DEPT_TAB_MAP = [
   { match: ['store'], tabs: ['stores'] },
   { match: ['document controller', 'document', 'controller', 'doc'], tabs: ['doc_control'] },
   { match: ['qs', 'quantity'], tabs: ['qs', 'qs_sign'] },
-  { match: ['account', 'finance'], tabs: ['accounts', 'payment'] },
-  { match: ['procure', 'purchase'], tabs: ['procurement'] },
+  { match: ['account', 'finance'], tabs: ['qs', 'payment'] },
+  { match: ['procure', 'purchase'], tabs: ['qs'] },
 ];
 
 function refreshBillQueries(qc, billId) {
@@ -394,7 +395,7 @@ function QSTab({ bill, billId }) {
     mutationFn: (d) => tqsBillsAPI.updateQS(billId, d),
     onSuccess: () => {
       refreshBillQueries(qc, billId);
-      toast.success('QS updated — bill moved to Accounts');
+      toast.success('QS updated — bill moved to Procurement for approval');
     },
     onError: (e) => toast.error(e.response?.data?.error || 'Failed'),
   });
@@ -508,7 +509,7 @@ function QSTab({ bill, billId }) {
         disabled={mutation.isPending}
         className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg disabled:opacity-50"
       >
-        {mutation.isPending ? 'Saving…' : 'Save & Send to Accounts'}
+        {mutation.isPending ? 'Saving…' : 'Save & Send to Procurement'}
       </button>
     </div>
   );
@@ -657,7 +658,10 @@ function AccountsTab({ bill, billId }) {
 
   return (
     <div className="space-y-5">
-      <SectionTitle>Accounts / JV</SectionTitle>
+      <SectionTitle>Accounts JV</SectionTitle>
+      <p className="text-xs text-slate-500 -mt-3">
+        Accounts can fill this in any time after QS certification — it does not block Procurement's approval above.
+      </p>
 
       {/* Dates */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -750,7 +754,7 @@ function AccountsTab({ bill, billId }) {
         disabled={mutation.isPending}
         className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-50"
       >
-        {mutation.isPending ? 'Saving…' : 'Save & Send to Procurement'}
+        {mutation.isPending ? 'Saving…' : 'Save JV & Deductions'}
       </button>
     </div>
   );
@@ -1577,9 +1581,17 @@ export default function TQSBillDetailPage() {
                 {activeTab === 'overview'    && <OverviewTab bill={bill} />}
                 {activeTab === 'stores'      && <StoresTab bill={bill} billId={id} />}
                 {activeTab === 'doc_control' && <DocumentControlTab bill={bill} billId={id} />}
-                {activeTab === 'qs'          && <QSTab bill={bill} billId={id} />}
-                {activeTab === 'accounts'    && <AccountsTab bill={bill} billId={id} />}
-                {activeTab === 'procurement' && <ProcurementTab bill={bill} billId={id} />}
+                {activeTab === 'qs' && (
+                  <div className="space-y-8">
+                    <QSTab bill={bill} billId={id} />
+                    <div className="border-t border-slate-200 pt-8">
+                      <ProcurementTab bill={bill} billId={id} />
+                    </div>
+                    <div className="border-t border-slate-200 pt-8">
+                      <AccountsTab bill={bill} billId={id} />
+                    </div>
+                  </div>
+                )}
                 {activeTab === 'qs_sign'     && <QSSignTab bill={bill} billId={id} />}
                 {activeTab === 'payment'     && <PaymentTab bill={bill} billId={id} />}
               </div>

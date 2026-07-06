@@ -3169,7 +3169,10 @@ router.patch('/:id/qs', requireTqsStageAccess('qs'), async (req, res) => {
         ra_cgst_pct, ra_sgst_pct, ra_igst_pct,
         req.params.id]);
 
-    await query(`UPDATE tqs_bills SET workflow_status='accounts', updated_at=NOW() WHERE id=$1`, [req.params.id]);
+    // QS now routes straight to Procurement — Accounts is no longer a
+    // blocking waypoint here (they can record the JV date on /:id/accounts
+    // at any time; see that route for details).
+    await query(`UPDATE tqs_bills SET workflow_status='procurement', updated_at=NOW() WHERE id=$1`, [req.params.id]);
 
     // ── Sync advance_recovered back to advance tracker (diff-based) ──────
     // Use the DIFFERENCE between new and old advance_recovered so that
@@ -3364,7 +3367,7 @@ router.patch('/:id/accounts', requireTqsStageAccess('accounts'), async (req, res
     // Fetch bill base amounts for certified_net calculation
     const billRes = await query(
       `SELECT b.sl_number, b.bill_type, b.basic_amount, b.gst_amount, b.total_amount, b.tcs_amt,
-              b.vendor_id, b.vendor_name, b.wo_number, b.po_number, b.project_id, b.grn_id
+              b.vendor_id, b.vendor_name, b.wo_number, b.po_number, b.project_id, b.grn_id, b.workflow_status
        FROM tqs_bills b WHERE b.id = $1`,
       [req.params.id]
     );
@@ -3402,7 +3405,13 @@ router.patch('/:id/accounts', requireTqsStageAccess('accounts'), async (req, res
       totalDed, certified_net,
     ]);
 
-    await query(`UPDATE tqs_bills SET workflow_status='procurement', updated_at=NOW() WHERE id=$1`, [req.params.id]);
+    // Accounts JV entry no longer gates the workflow — QS already sends the
+    // bill straight to Procurement. Only nudge it forward if it's somehow
+    // still sitting at 'qs' (e.g. old bills mid-flight when this changed);
+    // never rewind a bill that Procurement/QS Sign has already moved past.
+    if (bill.workflow_status === 'qs') {
+      await query(`UPDATE tqs_bills SET workflow_status='procurement', updated_at=NOW() WHERE id=$1`, [req.params.id]);
+    }
 
     // ── Sync advance recovery to tracker (FIFO) ────────────────────────────
     if (n(advance_recovered) > 0 && bill.vendor_name) {
