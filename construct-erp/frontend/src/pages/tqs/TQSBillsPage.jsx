@@ -1317,6 +1317,7 @@ const ALL_COLUMNS = [
   { key: 'inv_date',        label: 'Date',         align: 'left',  w: 'w-[110px]', default: true  },
   { key: 'po_number',       label: 'PO/WO',        align: 'left',  w: 'w-[130px]', default: true  },
   { key: 'total_amount',    label: 'Total',        align: 'right', w: 'w-[150px]', default: true  },
+  { key: 'basic_amount',    label: 'Basic (excl. GST)', align: 'right', w: 'w-[150px]', default: false },
   { key: 'pc_number',       label: 'PC #',         align: 'left',  w: 'w-[150px]', default: false },
   { key: 'certified_net',   label: 'Cert',         align: 'right', w: 'w-[130px]', default: false },
   { key: 'tds_deduction',   label: 'TDS',          align: 'right', w: 'w-[130px]', default: true  },
@@ -2555,6 +2556,10 @@ export default function TQSBillsPage() {
   const kpiPending  = bills.filter(b => b.workflow_status === 'pending').length;
   const kpiPaid     = bills.filter(b => b.workflow_status === 'paid').length;
   const totalValue  = bills.reduce((s, b) => s + parseFloat(b.total_amount || 0), 0);
+  // Basic (excl. GST) — matches Budget Control's "Received" figure, which
+  // excludes GST since it's a pass-through tax, not project spend.
+  const totalBasicValue = bills.reduce((s, b) => s + parseFloat(b.basic_amount || 0), 0);
+  const totalGstValue   = totalValue - totalBasicValue;
   const paidValue   = bills.filter(b => b.workflow_status === 'paid').reduce((s, b) => s + parseFloat(b.paid_amount || 0), 0);
   const totalBalanceDue  = bills
     .reduce((s, b) => s + billBalanceDue(b), 0);
@@ -2783,6 +2788,16 @@ export default function TQSBillsPage() {
           </div>
         )}
 
+        {/* ── Basic Amount Summary (excl. GST) — reconciles with Budget Control's Received figure ── */}
+        <div className="bg-white rounded-xl px-4 py-3 shadow-sm" style={{ border: `1px solid ${BORDER}` }}>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-2">Basic Amount Summary (excl. GST) — matches Budget Control</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <KPI label="Total Basic Amount" value={inrCr(totalBasicValue)} color="slate" isAmount kpiIcon={IndianRupee} />
+            <KPI label="Total GST"          value={inrCr(totalGstValue)}   color="blue"  isAmount kpiIcon={IndianRupee} />
+            <KPI label="Total (incl. GST)"  value={inrCr(totalValue)}      color="emerald" isAmount kpiIcon={IndianRupee} />
+          </div>
+        </div>
+
         {/* ── Filters ── */}
         <div className="bg-white rounded-xl px-4 py-3 flex flex-wrap gap-3 items-center shadow-sm" style={{ border: `1px solid ${BORDER}` }}>
           <div className="flex items-center gap-2 flex-1 min-w-[200px] rounded-lg px-3 py-1.5 bg-slate-50" style={{ border: `1px solid ${BORDER}` }}>
@@ -2991,6 +3006,10 @@ export default function TQSBillsPage() {
                     case 'total_amount':
                       return <td key={col.key} className={`${cls} text-right`}>
                         <span className="font-medium text-slate-900 text-[13px]">Rs {inr(b.total_amount)}</span>
+                      </td>;
+                    case 'basic_amount':
+                      return <td key={col.key} className={`${cls} text-right`}>
+                        <span className="font-medium text-slate-600 text-[13px]" title="Excludes GST — matches Budget Control's Received figure">Rs {inr(b.basic_amount)}</span>
                       </td>;
                     case 'pc_number':
                       return <td key={col.key} className={cls}>
