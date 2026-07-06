@@ -152,9 +152,13 @@ async function main() {
   console.log(JSON.stringify({ attempted: summary.length, sent: summary.filter(r => r.sent).length, notifiedCompanies: companyIds.length }, null, 2));
 }
 
-main()
-  .catch((err) => {
-    console.error(err);
-    process.exitCode = 1;
-  })
-  .finally(() => pool.end());
+if (require.main === module) {
+  main()
+    .catch((err) => {
+      console.error(err);
+      process.exitCode = 1;
+    })
+    .finally(() => pool.end());
+}
+
+module.exports = { buildMail, SUBJECT };
