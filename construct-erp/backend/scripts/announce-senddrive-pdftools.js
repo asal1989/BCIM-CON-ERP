@@ -115,17 +115,20 @@ async function main() {
       AND BTRIM(email) <> ''
     ORDER BY name ASC
   `);
-  const users = usersRes.rows;
+  const allUsers = usersRes.rows;
+  // Users without a real company email (identified by an @hr.local placeholder
+  // keyed to their employee code) can't receive mail, but still get the bell notification.
+  const mailableUsers = allUsers.filter(u => !/@hr\.local$/i.test(u.email));
 
   if (dryRun) {
-    console.log(`[dry-run] Would email ${users.length} active users:`);
-    console.table(users.map(u => ({ name: u.name, email: u.email })));
+    console.log(`[dry-run] Would email ${mailableUsers.length} of ${allUsers.length} active users (excluding @hr.local placeholders):`);
+    console.table(mailableUsers.map(u => ({ name: u.name, email: u.email })));
     return;
   }
 
   const mail = buildMail();
   const summary = [];
-  for (const user of users) {
+  for (const user of mailableUsers) {
     const result = await sendMail({ to: user.email, subject: mail.subject, html: mail.html, text: mail.text });
     summary.push({
       name: user.name,
@@ -136,7 +139,7 @@ async function main() {
     });
   }
 
-  const companyIds = [...new Set(users.map(u => u.company_id).filter(Boolean))];
+  const companyIds = [...new Set(allUsers.map(u => u.company_id).filter(Boolean))];
   for (const companyId of companyIds) {
     await query(
       `INSERT INTO notifications (company_id, user_id, target_role, type, title, message, severity)
