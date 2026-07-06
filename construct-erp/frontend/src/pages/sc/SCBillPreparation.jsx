@@ -10,7 +10,7 @@ import {
   Plus, Search, RefreshCw, Receipt, Eye, X, ChevronRight,
   CheckCircle2, Clock, AlertTriangle, IndianRupee, FileText,
   ArrowRight, Building2, CalendarDays, Layers, Send,
-  BarChart3, Info, HardHat, Printer,
+  BarChart3, Info, HardHat, Printer, Pencil,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
@@ -1089,6 +1089,82 @@ function RaiseBillModal({ wos, onClose, initialWoId }) {
   );
 }
 
+// ─── Edit Bill Modal — correct GST/TDS/Retention/other deductions ─────────────
+function EditBillModal({ bill, onClose }) {
+  const qc = useQueryClient();
+  const [f, setF] = useState({
+    gst_pct: bill.gst_pct, tds_pct: bill.tds_pct, retention_pct: bill.retention_pct,
+    is_igst: !!bill.is_igst, labour_cess_pct: bill.gross_amount > 0 ? +(100 * bill.labour_cess_amount / bill.gross_amount).toFixed(2) : 0,
+    advance_recovery: bill.advance_recovery, material_recovery: bill.material_recovery,
+    penalty_amount: bill.penalty_amount, other_deductions: bill.other_deductions,
+    retention_release_amount: bill.retention_release_amount, credit_note_amount: bill.credit_note_amount,
+  });
+  const set = (k, v) => setF(prev => ({ ...prev, [k]: v }));
+
+  const grossAmt = num(bill.gross_amount);
+  const gst = grossAmt * num(f.gst_pct) / 100;
+  const tds = grossAmt * num(f.tds_pct) / 100;
+  const ret = grossAmt * num(f.retention_pct) / 100;
+  const labourCess = grossAmt * num(f.labour_cess_pct) / 100;
+  const net = grossAmt + gst + num(f.retention_release_amount) - num(f.credit_note_amount)
+    - tds - ret - num(f.advance_recovery) - num(f.material_recovery) - num(f.penalty_amount) - num(f.other_deductions) - labourCess;
+
+  const saveMut = useMutation({
+    mutationFn: () => scAPI.editBill(bill.id, f),
+    onSuccess: () => {
+      toast.success('Bill updated');
+      qc.invalidateQueries({ queryKey: ['sc-bills'] });
+      qc.invalidateQueries({ queryKey: ['sc-bill-detail', bill.id] });
+      onClose();
+    },
+    onError: e => toast.error(e?.response?.data?.error || 'Failed to update bill'),
+  });
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[88vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100"
+          style={{ background: `linear-gradient(135deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)` }}>
+          <div>
+            <h2 className="font-bold text-white text-sm">Edit Bill</h2>
+            <p className="text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.65)' }}>{bill.bill_number} · Gross {fmt(grossAmt)}</p>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center text-white" style={{ background: 'rgba(255,255,255,0.12)' }}>
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5 space-y-3">
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="GST %"><input type="number" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none" value={f.gst_pct} onChange={e => set('gst_pct', e.target.value)} /></Field>
+            <Field label="TDS %"><input type="number" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none" value={f.tds_pct} onChange={e => set('tds_pct', e.target.value)} /></Field>
+            <Field label="Retention %"><input type="number" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none" value={f.retention_pct} onChange={e => set('retention_pct', e.target.value)} /></Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Advance Recovery ₹"><input type="number" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none" value={f.advance_recovery} onChange={e => set('advance_recovery', e.target.value)} /></Field>
+            <Field label="Material Recovery ₹"><input type="number" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none" value={f.material_recovery} onChange={e => set('material_recovery', e.target.value)} /></Field>
+            <Field label="Penalty ₹"><input type="number" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none" value={f.penalty_amount} onChange={e => set('penalty_amount', e.target.value)} /></Field>
+            <Field label="Other Deductions ₹"><input type="number" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none" value={f.other_deductions} onChange={e => set('other_deductions', e.target.value)} /></Field>
+            <Field label="Retention Release ₹"><input type="number" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none" value={f.retention_release_amount} onChange={e => set('retention_release_amount', e.target.value)} /></Field>
+            <Field label="Credit Note ₹"><input type="number" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none" value={f.credit_note_amount} onChange={e => set('credit_note_amount', e.target.value)} /></Field>
+          </div>
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-600">Recalculated Net Payable</span>
+            <span className="text-base font-bold text-indigo-700">{fmt(net)}</span>
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 px-5 py-4 border-t bg-slate-50/60">
+          <button onClick={onClose} className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600">Cancel</button>
+          <button onClick={() => saveMut.mutate()} disabled={saveMut.isPending}
+            className="px-5 py-2 text-white text-sm font-bold rounded-lg disabled:opacity-50"
+            style={{ background: `linear-gradient(135deg, ${Theme.navyLight} 0%, ${Theme.navyDark} 100%)` }}>
+            {saveMut.isPending ? 'Saving…' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Bill Detail Drawer ───────────────────────────────────────────────────────
 function BillDetailDrawer({ billId, onClose }) {
   const qc = useQueryClient();
@@ -1119,6 +1195,8 @@ function BillDetailDrawer({ billId, onClose }) {
     contentRef: printRef,
     documentTitle: `SC_RA_Bill_${b?.bill_number || 'print'}`,
   });
+  const [showEdit, setShowEdit] = useState(false);
+  const canEdit = !['approved', 'paid'].includes(b.status);
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -1137,6 +1215,13 @@ function BillDetailDrawer({ billId, onClose }) {
                 className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition"
                 style={{ background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.22)' }}>
                 <Printer className="w-3 h-3" /> Print RA Bill
+              </button>
+            )}
+            {!isLoading && b?.id && canEdit && (
+              <button onClick={() => setShowEdit(true)}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition"
+                style={{ background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.22)' }}>
+                <Pencil className="w-3 h-3" /> Edit
               </button>
             )}
             {b.status === 'draft' && (
@@ -1292,6 +1377,9 @@ function BillDetailDrawer({ billId, onClose }) {
           </div>
         )}
       </div>
+      {showEdit && b?.id && (
+        <EditBillModal bill={b} onClose={() => setShowEdit(false)} />
+      )}
     </div>
   );
 }

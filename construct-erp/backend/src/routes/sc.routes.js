@@ -956,6 +956,72 @@ router.post('/bills', authorize(...PLANNER), async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
+// PATCH /sc/bills/:id — correct GST/TDS/retention/other deduction fields on a
+// bill that hasn't been approved/paid yet (e.g. fixing a wrong retention %
+// picked up from the WO default when the actual bill shouldn't have one).
+// Blocked once approved/paid since those have already flowed to accounting.
+router.patch('/bills/:id', authorize(...PLANNER), async (req, res) => {
+  try {
+    const existing = await query(`SELECT * FROM sc_bills WHERE id=$1 AND company_id=$2`, [req.params.id, CID(req)]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'Bill not found' });
+    const bill = existing.rows[0];
+    if (['approved', 'paid'].includes(bill.status)) {
+      return res.status(400).json({ error: `Cannot edit — bill is already ${bill.status}` });
+    }
+
+    const {
+      bill_date, period_from, period_to, description,
+      gst_pct, tds_pct, retention_pct, is_igst, labour_cess_pct,
+      advance_recovery, material_recovery, penalty_amount, other_deductions,
+      retention_release_amount, credit_note_amount,
+    } = req.body;
+
+    const grossAmt = parseFloat(bill.gross_amount);
+    const effectiveGstPct = parseFloat(gst_pct ?? bill.gst_pct);
+    const gst = grossAmt * effectiveGstPct / 100;
+    const isIgst = is_igst ?? bill.is_igst;
+    const cgst = isIgst ? 0 : Math.round(gst / 2 * 100) / 100;
+    const sgst = isIgst ? 0 : gst - cgst;
+    const igst = isIgst ? gst : 0;
+    const labourCessPct = parseFloat(labour_cess_pct ?? 0);
+    const labourCess = grossAmt * labourCessPct / 100;
+    const retRelease = parseFloat(retention_release_amount ?? bill.retention_release_amount ?? 0);
+    const creditNote = parseFloat(credit_note_amount ?? bill.credit_note_amount ?? 0);
+    const effectiveTdsPct = parseFloat(tds_pct ?? bill.tds_pct);
+    const tds = grossAmt * effectiveTdsPct / 100;
+    const effectiveRetPct = parseFloat(retention_pct ?? bill.retention_pct);
+    const ret = grossAmt * effectiveRetPct / 100;
+    const adv = parseFloat(advance_recovery ?? bill.advance_recovery ?? 0);
+    const mat = parseFloat(material_recovery ?? bill.material_recovery ?? 0);
+    const pen = parseFloat(penalty_amount ?? bill.penalty_amount ?? 0);
+    const oth = parseFloat(other_deductions ?? bill.other_deductions ?? 0);
+    const net = grossAmt + gst + retRelease - creditNote - tds - ret - adv - mat - pen - labourCess - oth;
+
+    const updated = await withTransaction(async (client) => {
+      const r = await client.query(
+        `UPDATE sc_bills SET
+           bill_date=$1, period_from=$2, period_to=$3, description=$4,
+           gst_pct=$5, gst_amount=$6, is_igst=$7, cgst_amount=$8, sgst_amount=$9, igst_amount=$10,
+           tds_pct=$11, tds_amount=$12, retention_pct=$13, retention_amount=$14,
+           advance_recovery=$15, material_recovery=$16, penalty_amount=$17, other_deductions=$18,
+           labour_cess_amount=$19, retention_release_amount=$20, credit_note_amount=$21,
+           net_payable=$22, updated_at=NOW()
+         WHERE id=$23 RETURNING *`,
+        [bill_date || bill.bill_date, period_from ?? bill.period_from, period_to ?? bill.period_to, description ?? bill.description,
+         effectiveGstPct, gst, isIgst, cgst, sgst, igst,
+         effectiveTdsPct, tds, effectiveRetPct, ret,
+         adv, mat, pen, oth,
+         labourCess, retRelease, creditNote,
+         net, req.params.id]
+      );
+      await recalculateWOConsumption(bill.wo_id, client);
+      return r.rows[0];
+    });
+
+    res.json({ data: updated });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 async function recalculateWOConsumption(woId, client = { query }) {
   await client.query(`
     UPDATE sc_wo_items wi

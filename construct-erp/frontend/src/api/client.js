@@ -1582,6 +1582,7 @@ export const scAPI = {
   listBills:          (p)       => api.get('/sc/bills', { params: p }),
   getBill:            (id)      => api.get(`/sc/bills/${id}`),
   createBill:         (d)       => api.post('/sc/bills', d),
+  editBill:           (id, d)   => api.patch(`/sc/bills/${id}`, d),
   submitBill:         (id, d)   => api.patch(`/sc/bills/${id}/submit`, d),
   approveBill:        (id, d)   => api.patch(`/sc/bills/${id}/approve`, d),
   rejectBill:         (id, d)   => api.patch(`/sc/bills/${id}/reject`, d),
