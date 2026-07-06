@@ -755,7 +755,17 @@ function ProcurementTab({ bill, billId }) {
 
   return (
     <div className="space-y-5">
-      <SectionTitle>Procurement Handoff</SectionTitle>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <SectionTitle>Procurement Handoff</SectionTitle>
+        <a
+          href={`/tqs/bills/${billId}/payment-cert`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="px-3 py-2 bg-orange-50 hover:bg-orange-100 text-orange-700 text-xs font-medium rounded-lg flex items-center gap-1.5 border border-orange-200"
+        >
+          <FileText className="w-3.5 h-3.5" /> View Certification (Claim Summary)
+        </a>
+      </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <div>
           <RequiredDateLabel>Received from Accounts Date</RequiredDateLabel>
