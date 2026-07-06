@@ -561,7 +561,7 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
               className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 flex items-center gap-2"
             >
               {createMut.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <FileCheck2 className="w-4 h-4" />}
-              Certify & Send to Accounts
+              Certify & Send to Procurement
             </button>
           </div>
         </div>
