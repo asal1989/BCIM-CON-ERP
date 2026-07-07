@@ -1093,6 +1093,43 @@ router.delete('/:id', authorize('super_admin'), async (req, res) => {
   }
 });
 
+// GET /ign/debug/by-invoice/:invoiceNo — read-only diagnostic for tracking
+// down why a specific received invoice isn't showing up in Supply Tracker's
+// received-qty figure. Returns the IGN header (status/po_id/po_number), each
+// matching line item (material_name/po_item_id), and — if po_id resolved —
+// every po_items row under that PO, so a name-matching failure is visible at
+// a glance instead of guessing blind. Authenticated (router.use(authenticate)
+// above), scoped to the caller's company, no writes.
+router.get('/debug/by-invoice/:invoiceNo', async (req, res) => {
+  try {
+    const { invoiceNo } = req.params;
+    const { rows: ignRows } = await query(
+      `SELECT DISTINCT n.id, n.ign_number, n.status, n.po_id, n.po_number, n.project_id
+       FROM ign n
+       JOIN ign_items ii ON ii.ign_id = n.id
+       WHERE n.company_id = $1 AND ii.invoice_no ILIKE $2`,
+      [req.user.company_id, `%${invoiceNo}%`]
+    );
+    if (!ignRows.length) return res.json({ found: false, message: `No IGN line item with invoice_no matching "${invoiceNo}"` });
+
+    const out = [];
+    for (const ign of ignRows) {
+      const { rows: items } = await query(
+        `SELECT id, material_name, invoice_no, qty_inspected, qty_as_per_dc, qty_rejected, po_item_id
+         FROM ign_items WHERE ign_id = $1 AND invoice_no ILIKE $2`,
+        [ign.id, `%${invoiceNo}%`]
+      );
+      let poItems = [];
+      if (ign.po_id) {
+        const { rows } = await query(`SELECT id, material_name, quantity FROM po_items WHERE po_id = $1`, [ign.po_id]);
+        poItems = rows;
+      }
+      out.push({ ign, items, po_items_available: poItems });
+    }
+    res.json({ found: true, results: out });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 async function notifyAccountsDept(companyId, subject, body, link = '/accounts') {
   try {
     const { rows } = await query(
