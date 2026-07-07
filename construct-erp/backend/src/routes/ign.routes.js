@@ -115,9 +115,12 @@ const STORES_WRITE = ['store_keeper','stores_manager','stores_officer','admin','
 // ign_items.po_item_id = po_items.id — silently counts that receipt as zero,
 // even though the goods really were received. Matches within the IGN's own
 // linked PO only (ign.po_id), so this is far safer than fuzzy cross-PO
-// matching; only links when exactly one po_items row matches by normalized
-// material name, same "no ambiguity" guard as the po_items.mrs_item_id
-// backfill in po.routes.js.
+// matching; only links when exactly one po_items row matches, same
+// "no ambiguity" guard as the po_items.mrs_item_id backfill in po.routes.js.
+// Match is prefix-tolerant in either direction (one name starts with the
+// other, after normalizing) — an exact match misses real-world cases where
+// the IGN line has extra wording ("...LED Flood Light - IP65" vs the PO's
+// plain "LED Flood Light") or is a shortened restatement of the PO name.
 runSchemaInit('ign_items_po_item_backfill', async () => {
   await query(`
     UPDATE ign_items ii
@@ -128,8 +131,14 @@ runSchemaInit('ign_items_po_item_backfill', async () => {
       JOIN ign n ON n.id = ii2.ign_id
       JOIN po_items pi
         ON pi.po_id = n.po_id
-       AND regexp_replace(lower(trim(ii2.material_name)), '[^a-z0-9]+', '', 'g')
-           = regexp_replace(lower(trim(pi.material_name)), '[^a-z0-9]+', '', 'g')
+       AND length(regexp_replace(lower(trim(ii2.material_name)), '[^a-z0-9]+', '', 'g')) >= 3
+       AND length(regexp_replace(lower(trim(pi.material_name)), '[^a-z0-9]+', '', 'g')) >= 3
+       AND (
+         regexp_replace(lower(trim(ii2.material_name)), '[^a-z0-9]+', '', 'g')
+           LIKE regexp_replace(lower(trim(pi.material_name)), '[^a-z0-9]+', '', 'g') || '%'
+         OR regexp_replace(lower(trim(pi.material_name)), '[^a-z0-9]+', '', 'g')
+           LIKE regexp_replace(lower(trim(ii2.material_name)), '[^a-z0-9]+', '', 'g') || '%'
+       )
       WHERE ii2.po_item_id IS NULL
         AND n.po_id IS NOT NULL
       GROUP BY ii2.id
