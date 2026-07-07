@@ -72,6 +72,9 @@ const initTables = async () => {
     ['pt_deduction', 'NUMERIC(12,2) DEFAULT 0'],
     ['net_pay_monthly', 'NUMERIC(12,2) DEFAULT 0'],
     ['mess_deduction', 'NUMERIC(12,2) DEFAULT 0'],
+    ['incentive', 'NUMERIC(12,2) DEFAULT 0'],
+    ['edli', 'NUMERIC(12,2) DEFAULT 0'],
+    ['epf_admin', 'NUMERIC(12,2) DEFAULT 0'],
   ];
   for (const [col, def] of breakupCols) {
     await query(`ALTER TABLE hr_employee_salaries ADD COLUMN IF NOT EXISTS ${col} ${def}`).catch(() => {});
@@ -79,66 +82,73 @@ const initTables = async () => {
 };
 runSchemaInit('hr-salary', initTables);
 
-// ─── CTC Breakup calculator — mirrors "Salary Structure.xlsx" (Part A/B/C) ────
-// Basic = max(40% of CTC, statutory floor). Every other earning is a % of
-// Basic (with a cap). Employer PF (13%) and Gratuity (4.81%) are computed on
-// (Basic+VDA), capped at the ₹15,000 PF wage ceiling. Special Allowance is
-// the balancing figure that makes the earnings total reconcile to CTC minus
-// the employer-side contributions. Net Pay reduces algebraically to
-// Gross Salary − Employee PF − PT − Employee ESIC − Employee LWF (the
-// employer PF/gratuity that get added into CTC on one side cancel out when
-// subtracted again on the other — verified against the source spreadsheet).
+// ─── CTC Breakup calculator — BCIM Salary Structure (from GreytHR extract) ───
+// Basic = max(40% of CTC, ₹15,000). Allowances are % of Basic (with caps),
+// derived from the BCIM GreytHR salary structure for site staff. Special
+// Allowance is the balancing figure: CTC − all fixed earnings − employer costs.
+// Employer side: PF 12%, EDLI ₹75, EPF Admin ₹75, Gratuity 4.81%.
+// Employee deductions: PF 12% (capped at ₹15,000 PF wage), PT ₹200.
 const PF_WAGE_CEILING = 15000;
 function calculateCTCBreakup(ctcMonthly, opts = {}) {
   const ctc = parseFloat(ctcMonthly) || 0;
-  const vda = opts.vda ?? 1592;
   const ptDeduction = opts.pt_deduction ?? 200;
   const employeeLwf = opts.employee_lwf ?? 0;
   const employerLwf = opts.employer_lwf ?? 0;
   const employerEsic = opts.employer_esic ?? 0;
   const employeeEsic = opts.employee_esic ?? 0;
 
-  const basic = Math.max(ctc * 0.4, 15000);
-  const hra = basic * 0.10;
-  const accommodationAllowance = Math.min(basic * 0.09, 50000);
-  const foodAllowance = Math.min(basic * 0.0325, 9000);
-  const transportAllowance = Math.min(basic * 0.02, 35000);
-  const educationAllowance = Math.min(basic * 0.01, 2500);
-  const washingAllowance = Math.min(basic * 0.01, 2500);
-  const medicalAllowance = Math.min(basic * 0.01, 7500);
-  const mobileAllowance = Math.min(basic * 0.01, 500);
-  const projectAllowance = Math.min(basic * 0.01, 7500);
-  const lta = basic * 0.0833;
+  // Basic: 40% of CTC, floor ₹15,000
+  const basic = Math.round(Math.max(ctc * 0.40, 15000));
 
-  const pfWage = basic + vda;
-  const employerPf = pfWage > PF_WAGE_CEILING ? PF_WAGE_CEILING * 0.13 : pfWage * 0.13;
-  const employeePf = pfWage > PF_WAGE_CEILING ? PF_WAGE_CEILING * 0.12 : pfWage * 0.12;
-  const gratuity = Math.round(basic * 0.0481);
+  // BCIM allowances (percentages calibrated to GreytHR structure for site staff)
+  const hra                    = Math.round(basic * 0.20);                      // 20% of Basic
+  const projectAllowance       = Math.round(Math.min(basic * 0.20, 7500));      // 20%, cap ₹7,500
+  const accommodationAllowance = Math.round(Math.min(basic * 0.30, 50000));     // 30%
+  const foodAllowance          = Math.round(Math.min(basic * 0.1867, 9000));    // ~18.67%, cap ₹9,000
+  const transportAllowance     = Math.round(Math.min(basic * 0.0667, 35000));   // ~6.67%
+  const lta                    = Math.round(basic * 0.0833);                    // 8.33% (annual LTA/12)
+  const medicalAllowance       = Math.round(Math.min(basic * 0.05, 7500));      // 5%, cap ₹7,500
+  const mobileAllowance        = Math.round(Math.min(basic * 0.0333, 500));     // cap ₹500
+  const incentive              = Math.round(Math.min(basic * 0.1333, 5000));    // ~13.33%, cap ₹5,000
+  const washingAllowance       = Math.round(Math.min(basic * 0.01, 2500));      // 1%
+  const educationAllowance     = 0;  // not part of BCIM site staff structure
 
-  const earningsBeforeSpecial = basic + vda + hra + educationAllowance + washingAllowance
-    + lta + medicalAllowance + mobileAllowance + projectAllowance
-    + accommodationAllowance + foodAllowance + transportAllowance;
+  // PF — capped at ₹15,000 PF wage ceiling
+  const pfWage     = Math.min(basic, PF_WAGE_CEILING);
+  const employerPf = Math.round(pfWage * 0.12);  // Employer PF 12%
+  const employeePf = Math.round(pfWage * 0.12);  // Employee PF 12%
+  const edli       = 75;                          // EDLI ₹75/month (fixed)
+  const epfAdmin   = 75;                          // EPF Admin ₹75/month (fixed)
+  const gratuity   = Math.round(basic * 0.0481);  // Gratuity 4.81%
 
+  const earningsBeforeSpecial = basic + hra + projectAllowance + accommodationAllowance
+    + foodAllowance + transportAllowance + lta + medicalAllowance
+    + mobileAllowance + incentive + washingAllowance;
+
+  // Special Allowance = CTC − fixed earnings − employer side costs
   const specialAllowance = Math.max(
     0,
-    ctc - earningsBeforeSpecial - employerPf - gratuity - employerEsic - employerLwf
+    ctc - earningsBeforeSpecial - employerPf - edli - epfAdmin - gratuity - employerEsic - employerLwf
   );
 
-  const grossSalary = earningsBeforeSpecial + specialAllowance;
+  const grossSalary   = earningsBeforeSpecial + specialAllowance;
   const netPayMonthly = grossSalary - employeePf - ptDeduction - employeeEsic - employeeLwf;
 
   return {
     ctc_monthly: ctc, ctc_annual: ctc * 12,
-    basic, vda, hra,
-    education_allowance: educationAllowance, washing_allowance: washingAllowance, lta,
-    medical_allowance: medicalAllowance, mobile_allowance: mobileAllowance, project_allowance: projectAllowance,
-    special_allowance: specialAllowance,
-    accommodation_allowance: accommodationAllowance, food_allowance: foodAllowance, transport_allowance: transportAllowance,
+    basic, vda: 0, hra,
+    project_allowance: projectAllowance, accommodation_allowance: accommodationAllowance,
+    food_allowance: foodAllowance, transport_allowance: transportAllowance,
+    lta, medical_allowance: medicalAllowance, mobile_allowance: mobileAllowance,
+    incentive, washing_allowance: washingAllowance,
+    education_allowance: 0, special_allowance: specialAllowance,
     gross_monthly: grossSalary,
-    employer_pf: employerPf, gratuity, employer_esic: employerEsic, employer_lwf: employerLwf,
-    employee_pf: employeePf, pt_deduction: ptDeduction, employee_esic: employeeEsic, employee_lwf: employeeLwf,
+    employer_pf: employerPf, edli, epf_admin: epfAdmin, gratuity,
+    employer_esic: employerEsic, employer_lwf: employerLwf,
+    employee_pf: employeePf, pt_deduction: ptDeduction,
+    employee_esic: employeeEsic, employee_lwf: employeeLwf,
     net_pay_monthly: netPayMonthly,
-    ctc_reconciled: earningsBeforeSpecial + specialAllowance + employerPf + gratuity + employerEsic + employerLwf,
+    ctc_reconciled: grossSalary + employerPf + edli + epfAdmin + gratuity + employerEsic + employerLwf,
   };
 }
 
@@ -277,6 +287,7 @@ router.post('/employee-salaries', async (req, res) => {
       vda, lta, education_allowance, washing_allowance, mobile_allowance, project_allowance,
       accommodation_allowance, food_allowance, transport_allowance,
       employer_pf, employee_pf, gratuity, pt_deduction, net_pay_monthly, mess_deduction,
+      incentive, edli, epf_admin,
     } = req.body;
 
     // Close any open salary record for this employee
@@ -295,16 +306,19 @@ router.post('/employee-salaries', async (req, res) => {
         pf_applicable, esi_applicable, pt_applicable, effective_from, effective_to,
         vda, lta, education_allowance, washing_allowance, mobile_allowance, project_allowance,
         accommodation_allowance, food_allowance, transport_allowance,
-        employer_pf, employee_pf, gratuity, pt_deduction, net_pay_monthly, mess_deduction)
+        employer_pf, employee_pf, gratuity, pt_deduction, net_pay_monthly, mess_deduction,
+        incentive, edli, epf_admin)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
-               $16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30) RETURNING *`,
+               $16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,
+               $31,$32,$33) RETURNING *`,
       [user_id, structure_id || null, ctc_annual || null, basic || 0, hra || 0,
        conveyance || 0, medical || 0, special_allowance || 0, other_allowance || 0,
        gross_monthly || 0, pf_applicable ?? true, esi_applicable ?? true,
        pt_applicable ?? true, effective_from, effective_to || null,
        vda || 0, lta || 0, education_allowance || 0, washing_allowance || 0, mobile_allowance || 0, project_allowance || 0,
        accommodation_allowance || 0, food_allowance || 0, transport_allowance || 0,
-       employer_pf || 0, employee_pf || 0, gratuity || 0, pt_deduction || 0, net_pay_monthly || 0, mess_deduction || 0]
+       employer_pf || 0, employee_pf || 0, gratuity || 0, pt_deduction || 0, net_pay_monthly || 0, mess_deduction || 0,
+       incentive || 0, edli || 0, epf_admin || 0]
     );
     res.status(201).json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }

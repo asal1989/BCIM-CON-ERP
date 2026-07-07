@@ -54,6 +54,7 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
       transport_allowance:breakup.transport_allowance,
       employer_pf:breakup.employer_pf, employee_pf:breakup.employee_pf,
       gratuity:breakup.gratuity, pt_deduction:breakup.pt_deduction,
+      incentive:breakup.incentive, edli:breakup.edli, epf_admin:breakup.epf_admin,
       mess_deduction:messDeduction, net_pay_monthly:netPayAfterMess,
     });
   };
@@ -114,12 +115,16 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
               <div className="px-4 py-2 bg-gray-100 text-xs font-black text-gray-600 uppercase tracking-wide">Part A — Earnings (Monthly)</div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-px bg-gray-100">
                 {[
-                  ['Basic', breakup.basic], ['VDA', breakup.vda], ['HRA', breakup.hra],
-                  ['LTA', breakup.lta], ['Education Allowance', breakup.education_allowance],
-                  ['Washing Allowance', breakup.washing_allowance], ['Medical Allowance', breakup.medical_allowance],
-                  ['Mobile Allowance', breakup.mobile_allowance], ['Project/Office Spl. Allowance', breakup.project_allowance],
-                  ['Accommodation Allowance', breakup.accommodation_allowance], ['Food Allowance', breakup.food_allowance],
-                  ['Transport Allowance', breakup.transport_allowance], ['Special Allowance', breakup.special_allowance],
+                  ['Basic', breakup.basic], ['HRA', breakup.hra],
+                  ['Project/Office Spl. Allow.', breakup.project_allowance],
+                  ['Accommodation Allowance', breakup.accommodation_allowance],
+                  ['Food Allowance', breakup.food_allowance],
+                  ['Transport Allowance', breakup.transport_allowance],
+                  ['LTA', breakup.lta], ['Medical Allowance', breakup.medical_allowance],
+                  ['Mobile Allowance', breakup.mobile_allowance],
+                  ['Incentive', breakup.incentive],
+                  ['Washing Allowance', breakup.washing_allowance],
+                  ['Special Allowance', breakup.special_allowance],
                 ].map(([l,v])=>(
                   <div key={l} className="bg-white px-3 py-2">
                     <div className="text-[10px] font-bold text-gray-400 uppercase">{l}</div>
@@ -129,7 +134,7 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
               </div>
               <div className="px-4 py-2 bg-gray-100 text-xs font-black text-gray-600 uppercase tracking-wide">Part B — Employer Contribution</div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-px bg-gray-100">
-                {[['Employer PF', breakup.employer_pf], ['Gratuity', breakup.gratuity]].map(([l,v])=>(
+                {[['Employer PF (12%)', breakup.employer_pf], ['EDLI', breakup.edli], ['EPF Admin', breakup.epf_admin], ['Gratuity', breakup.gratuity]].map(([l,v])=>(
                   <div key={l} className="bg-white px-3 py-2">
                     <div className="text-[10px] font-bold text-gray-400 uppercase">{l}</div>
                     <div className="text-sm font-black text-gray-900">₹{fmt(v)}</div>
