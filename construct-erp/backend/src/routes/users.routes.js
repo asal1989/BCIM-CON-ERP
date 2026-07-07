@@ -53,6 +53,15 @@ runSchemaInit('users_role_schema', ensureRoleSchema);
   const grants = [
     { email: 'bkmanjunath@bcim.in', module: 'Stores' },
     { email: 'raja@bcim.in',        module: 'HR & Admin' },
+    // prithivi is the hardcoded CERT_APPROVER_EMAIL in
+    // vendor-qs-certification.routes.js / VendorQSCertificationPage.jsx /
+    // VendorQSCertificationDetailPage.jsx (already can approve certifications
+    // and edit the sensitive cert_number/GST fields), but without these
+    // modules he can't reach the page at all — granted both since the same
+    // page is routed under /qs/vendor-certifications (QS & Billing) and
+    // /tqs/vendor-certifications (Bill Tracker).
+    { email: 'prithivi@bcim.in',    module: 'QS & Billing' },
+    { email: 'prithivi@bcim.in',    module: 'Bill Tracker' },
   ];
   for (const { email, module } of grants) {
     try {
