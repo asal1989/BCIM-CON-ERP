@@ -83,6 +83,48 @@ runSchemaInit('po_items_mrs_item_backfill', async () => {
   `);
 });
 
+// Fallback for the cases the prefix-match backfill above can't catch: when a PO
+// item's wording diverges too much from its MR item (buyer retyped/renamed it,
+// e.g. MR "M - Sand / Robo Sand" vs PO "M Sand for Block Work"), no name match
+// exists so mrs_item_id stays NULL forever — silently hiding received quantity
+// from that MR's row in Supply Tracker. Since a PO is built from a fixed set of
+// MR items, if a PO has exactly ONE item still unlinked and its MR has exactly
+// ONE item not yet claimed by any of the PO's items, they must be the same line
+// by elimination — safe to pair regardless of wording.
+runSchemaInit('po_items_mrs_item_backfill_by_elimination', async () => {
+  await query(`
+    UPDATE po_items poi
+    SET mrs_item_id = sub.mi_id
+    FROM (
+      SELECT unlinked.poi_id, unlinked.mi_id
+      FROM (
+        SELECT po.id AS po_id,
+               (ARRAY_AGG(poi2.id) FILTER (WHERE poi2.mrs_item_id IS NULL))[1] AS poi_id,
+               (ARRAY_AGG(mi.id) FILTER (
+                 WHERE mi.id NOT IN (
+                   SELECT poi3.mrs_item_id FROM po_items poi3 WHERE poi3.mrs_item_id IS NOT NULL
+                 )
+               ))[1] AS mi_id,
+               COUNT(DISTINCT poi2.id) FILTER (WHERE poi2.mrs_item_id IS NULL) AS unlinked_poi_count,
+               COUNT(DISTINCT mi.id) FILTER (
+                 WHERE mi.id NOT IN (
+                   SELECT poi3.mrs_item_id FROM po_items poi3 WHERE poi3.mrs_item_id IS NOT NULL
+                 )
+               ) AS unclaimed_mi_count
+        FROM purchase_orders po
+        JOIN po_items poi2 ON poi2.po_id = po.id
+        JOIN mrs_items mi ON (mi.mrs_id = po.mrs_id OR mi.mrs_id = ANY(po.mrs_ids))
+        WHERE po.status NOT IN ('rejected', 'cancelled')
+          AND (po.mrs_id IS NOT NULL OR po.mrs_ids IS NOT NULL)
+        GROUP BY po.id
+        HAVING COUNT(DISTINCT poi2.id) FILTER (WHERE poi2.mrs_item_id IS NULL) = 1
+       ) unlinked
+      WHERE unlinked.unclaimed_mi_count = 1
+    ) sub
+    WHERE poi.id = sub.poi_id AND poi.mrs_item_id IS NULL
+  `);
+});
+
 // One-off targeted fix: PO item "M Sand for Block Work" on POLANLH10005 never
 // got an mrs_item_id because its name doesn't share a prefix with the MR item
 // "M - Sand / Robo Sand" (the prefix-match backfill above can't catch it).
