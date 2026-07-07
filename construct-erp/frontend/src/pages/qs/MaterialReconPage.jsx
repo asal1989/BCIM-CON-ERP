@@ -1,9 +1,10 @@
 // src/pages/qs/MaterialReconPage.jsx
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { 
-  AlertTriangle, PackageSearch, Filter, 
-  CheckCircle2, Building2, Activity, Zap, Info, 
+import {
+  AlertTriangle, PackageSearch, Filter,
+  CheckCircle2, Building2, Activity, Zap, Info,
   BarChart3, ShieldCheck, ArrowRight, ShieldAlert,
   Download, RefreshCw
 } from 'lucide-react';
@@ -15,19 +16,21 @@ const inr = v => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionD
 
 export default function MaterialReconPage() {
   const [activeProject, setActiveProject] = useState('');
+  const navigate = useNavigate();
 
-  const { data: auditRes, isLoading, refetch, isRefetching } = useQuery({ 
-    queryKey: ['material-audit', activeProject], 
-    queryFn: () => materialReconAPI.audit(activeProject).then(r => r.data?.data ?? r.data ?? []).catch(() => []),
+  const { data: auditRes, isLoading, refetch, isRefetching } = useQuery({
+    queryKey: ['material-audit', activeProject],
+    queryFn: () => materialReconAPI.audit(activeProject).then(r => ({ records: r.data?.data ?? [], summary: r.data?.summary ?? null })).catch(() => ({ records: [], summary: null })),
     enabled: !!activeProject,
   });
 
-  const { data: projects = [] } = useQuery({ 
-    queryKey: ['projects'], 
-    queryFn: () => projectAPI.list().then(r => r.data?.data ?? r.data ?? []).catch(() => []) 
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => projectAPI.list().then(r => r.data?.data ?? r.data ?? []).catch(() => [])
   });
 
-  const records = auditRes || [];
+  const records = auditRes?.records || [];
+  const summary = auditRes?.summary || null;
   const statusCounts = records.reduce((acc, r) => {
     acc[r.status] = (acc[r.status] || 0) + 1;
     return acc;
@@ -94,6 +97,32 @@ export default function MaterialReconPage() {
                <p className="text-xs font-medium uppercase tracking-widest text-rose-200">
                  Critical Variance Detected in {criticalItems.length} materials. Excess consumption exceeds 1.5x allowable limits.
                </p>
+            </div>
+          )}
+
+          {/* Recovery Summary — the actual $ figure this audit exists to produce */}
+          {summary && (
+            <div className="p-6 bg-slate-900/60 border border-slate-800 rounded-3xl">
+              <div className="flex items-center gap-3 text-blue-500 uppercase text-[10px] font-medium tracking-widest mb-4">
+                <ShieldCheck size={18} /> Recovery Summary
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <p className="text-[10px] font-medium text-slate-900 uppercase tracking-widest mb-1">Total Suggested Recovery</p>
+                  <p className="text-2xl font-medium text-slate-100">{inr(summary.total_suggested_recovery)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-medium text-slate-900 uppercase tracking-widest mb-1">Previously Recovered</p>
+                  <p className="text-2xl font-medium text-slate-400">{inr(summary.previously_recovered)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-medium text-slate-900 uppercase tracking-widest mb-1">Net Recovery Due</p>
+                  <p className={clsx("text-2xl font-medium", summary.net_recovery_due > 0 ? "text-rose-500" : "text-emerald-500")}>{inr(summary.net_recovery_due)}</p>
+                </div>
+              </div>
+              {summary.reason && (
+                <p className="text-xs text-slate-400 mt-4 italic">{summary.reason}</p>
+              )}
             </div>
           )}
 
@@ -169,7 +198,10 @@ export default function MaterialReconPage() {
                 Automated auditing suggests a total recovery check for {criticalItems.length} materials. 
                 Suggested action: Link excess wastage to the next RA Bill for deduction at standard purchase rates.
               </p>
-              <button className="flex items-center gap-2 text-blue-400 font-medium text-xs uppercase tracking-widest group">
+              <button
+                onClick={() => navigate('/qs/ra-bills/new')}
+                className="flex items-center gap-2 text-blue-400 font-medium text-xs uppercase tracking-widest group"
+              >
                 Review Recovery Protocol <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
               </button>
             </div>
@@ -179,11 +211,15 @@ export default function MaterialReconPage() {
                 <Zap size={18} /> Site Level Analysis
               </div>
               <p className="text-sm font-medium text-slate-300 leading-relaxed">
-                Variance anomaly detected in high-bulk materials. Recommend immediate physical verification 
+                Variance anomaly detected in high-bulk materials. Recommend immediate physical verification
                 of on-site inventory against current Issue Notes to pinpoint handling losses.
               </p>
-              <button className="flex items-center gap-2 text-amber-500 font-medium text-xs uppercase tracking-widest group">
-                Trigger Physical Audit <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+              <button
+                onClick={() => refetch()}
+                disabled={isRefetching}
+                className="flex items-center gap-2 text-amber-500 font-medium text-xs uppercase tracking-widest group disabled:opacity-50"
+              >
+                {isRefetching ? 'Re-running…' : 'Re-run Audit'} <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
               </button>
             </div>
           </div>
