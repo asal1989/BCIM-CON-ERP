@@ -107,6 +107,39 @@ const STORES_WRITE = ['store_keeper','stores_manager','stores_officer','admin','
   console.log('[IGN] Schema migration OK');
 })();
 
+// Idempotent backfill (re-runs every boot, runs BEFORE the po_item_id backfill
+// below so a freshly-linked po_id is available in the same boot cycle): stamp
+// ign.po_id for IGN headers where only the free-text po_number was recorded.
+// Both fields are accepted independently from the request body when an IGN is
+// created, so an entry flow that only captures/selects po_number (invoice-led
+// entry, not a PO-dropdown pick) leaves po_id NULL — and everything downstream
+// (this file's own po_item_id backfill, Supply Tracker's received-qty query)
+// depends on po_id being set, so those items silently show as never received.
+// Scoped to the same project and matched against either po_number or its
+// formatted display form, only when exactly one PO matches.
+runSchemaInit('ign_po_id_backfill', async () => {
+  await query(`
+    UPDATE ign n
+    SET po_id = sub.po_id
+    FROM (
+      SELECT n2.id AS ign_id, MIN(po.id::text)::uuid AS po_id
+      FROM ign n2
+      JOIN purchase_orders po
+        ON po.project_id = n2.project_id
+       AND (
+         lower(trim(po.po_number)) = lower(trim(n2.po_number))
+         OR lower(trim(COALESCE(po.serial_no_formatted, ''))) = lower(trim(n2.po_number))
+       )
+      WHERE n2.po_id IS NULL
+        AND n2.po_number IS NOT NULL
+        AND trim(n2.po_number) <> ''
+      GROUP BY n2.id
+      HAVING COUNT(DISTINCT po.id) = 1
+    ) sub
+    WHERE n.id = sub.ign_id AND n.po_id IS NULL
+  `);
+});
+
 // Idempotent backfill (re-runs every boot): stamp ign_items.po_item_id for IGN
 // lines whose PO item link was never set (frontend supplies it per-line when
 // creating an IGN, but if a stores clerk typed the material name freehand
