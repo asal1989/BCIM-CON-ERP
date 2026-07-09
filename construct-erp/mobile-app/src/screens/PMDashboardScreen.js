@@ -58,9 +58,9 @@ export default function PMDashboardScreen() {
     staleTime: 60_000,
   });
 
-  const { data: bills = [], isLoading: loadB } = useQuery({
-    queryKey: ['pm-dash-bills'],
-    queryFn: () => billsAPI.list(null).then(r => Array.isArray(r.data) ? r.data : (r.data?.data ?? [])),
+  const { data: bills = [], isLoading: loadB, isError: errB } = useQuery({
+    queryKey: ['pm-dash-bills', selectedProject?.id],
+    queryFn: () => billsAPI.list(selectedProject?.id).then(r => Array.isArray(r.data) ? r.data : (r.data?.data ?? [])),
     staleTime: 60_000,
   });
 
@@ -153,7 +153,8 @@ export default function PMDashboardScreen() {
             <MaterialCommunityIcons name="receipt" size={14} color="#f97316" />
             <Text style={styles.cardTitle}>Bills Pending Approval ({pendingBills.length})</Text>
           </View>
-          {pendingBills.length === 0
+          {errB ? <Text style={styles.empty}>Could not load bills. Pull down to retry.</Text>
+          : pendingBills.length === 0
             ? <Text style={styles.empty}>No pending approvals ✅</Text>
             : pendingBills.slice(0, 8).map((b, i) => {
               const s = BILL_STYLE[b.workflow_status] || { bg: '#f1f5f9', text: '#475569' };

@@ -52,7 +52,7 @@ export default function QSDashboardScreen() {
   const { selectedProject } = useAuth();
   const navigation = useNavigation();
 
-  const { data: bills = [], isLoading: loadB } = useQuery({
+  const { data: bills = [], isLoading: loadB, isError: errB } = useQuery({
     queryKey: ['qs-dash-bills', selectedProject?.id],
     queryFn: () => billsAPI.list(selectedProject?.id).then(r => Array.isArray(r.data) ? r.data : (r.data?.data ?? [])),
     staleTime: 60_000,
@@ -197,7 +197,8 @@ export default function QSDashboardScreen() {
             <MaterialCommunityIcons name="file-clock-outline" size={14} color="#d97706" />
             <Text style={styles.cardTitle}>Bills Awaiting QS Cert ({pendingQS.length})</Text>
           </View>
-          {loadB ? <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginVertical: 12 }} />
+          {errB ? <Text style={styles.empty}>Could not load bills. Pull down to retry.</Text>
+          : loadB ? <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginVertical: 12 }} />
           : pendingQS.length === 0
             ? <Text style={styles.empty}>No bills awaiting certification ✅</Text>
             : pendingQS.slice(0, 8).map((b, i) => (

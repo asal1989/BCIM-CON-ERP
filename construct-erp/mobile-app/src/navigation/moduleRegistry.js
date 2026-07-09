@@ -90,7 +90,7 @@ export const MODULE_GROUPS = [
       { label: 'HR Dashboard',        screen: 'HRDashboard' },
       { label: 'Employee Directory',  screen: 'EmployeeDirectory' },
       { label: 'Attendance',          screen: 'ESS' },
-      { label: 'Leave Management',    screen: 'ESS' },
+      { label: 'Leave Management',    screen: 'ESS', params: { initialTab: 'Leave' } },
       { label: 'Payroll',             screen: 'Payroll' },
       { label: 'Performance',         screen: 'Performance' },
     ],

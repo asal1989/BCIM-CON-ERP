@@ -37,7 +37,7 @@ export default function HRDashboardScreen() {
   const month = dayjs().month() + 1;
   const year  = dayjs().year();
 
-  const { data: employees = [], isLoading: loadE } = useQuery({
+  const { data: employees = [], isLoading: loadE, isError: errE } = useQuery({
     queryKey: ['hr-dash-employees'],
     queryFn: () => hrDashAPI.employees({ employment_status: 'active' })
       .then(r => Array.isArray(r.data) ? r.data : (r.data?.data ?? [])),
@@ -91,7 +91,7 @@ export default function HRDashboardScreen() {
 
         {/* KPIs */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.kpiRow}>
-          <KpiCard icon="account-group-outline" label="Active Employees"   value={loadE ? '…' : employees.length}                          color="#2563eb" />
+          <KpiCard icon="account-group-outline" label="Active Employees"   value={errE ? '!' : loadE ? '…' : employees.length}                          color="#2563eb" />
           <KpiCard icon="calendar-check-outline" label="Pending Leaves"   value={loadL ? '…' : leaves.length}                             color="#d97706" />
           <KpiCard icon="currency-inr"           label="Payroll Pending"  value={loadP ? '…' : (payrollPending.length > 0 ? fmtLakh(payrollPendingAmt) : '0')} color="#ea580c" />
           <KpiCard icon="clock-outline"          label="OT Hours"         value={otHoursTotal.toFixed(0)}                                  color="#475569" />

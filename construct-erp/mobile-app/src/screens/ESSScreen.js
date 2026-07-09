@@ -46,11 +46,11 @@ function normalizeStatus(raw) {
 
 const DAYS_OF_WEEK = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-export default function ESSScreen() {
+export default function ESSScreen({ route }) {
   const navigation = useNavigation();
   const qc = useQueryClient();
   const { user } = useAuth();
-  const [tab, setTab] = useState('Summary');
+  const [tab, setTab] = useState(route?.params?.initialTab ?? 'Summary');
   const now = dayjs();
   const [calYear, setCalYear] = useState(now.year());
   const [calMonth, setCalMonth] = useState(now.month());

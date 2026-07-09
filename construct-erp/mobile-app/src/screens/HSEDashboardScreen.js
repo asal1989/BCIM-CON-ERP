@@ -41,7 +41,7 @@ export default function HSEDashboardScreen() {
   const navigation = useNavigation();
   const projectId = selectedProject?.id;
 
-  const { data: incidents = [] } = useQuery({
+  const { data: incidents = [], isError: errI } = useQuery({
     queryKey: ['hse-dash-incidents', projectId],
     queryFn: () => incidentAPI.list(projectId).then(r => Array.isArray(r.data) ? r.data : (r.data?.data ?? [])),
     staleTime: 60_000,
@@ -116,7 +116,8 @@ export default function HSEDashboardScreen() {
               <Text style={styles.viewAll}>All →</Text>
             </TouchableOpacity>
           </View>
-          {openIncidents.length === 0 ? (
+          {errI ? <Text style={styles.empty}>Could not load incidents. Pull down to retry.</Text>
+          : openIncidents.length === 0 ? (
             <View style={styles.safeRow}>
               <MaterialCommunityIcons name="shield-check" size={24} color="#059669" />
               <Text style={styles.safeText}>No open incidents — site is safe ✅</Text>

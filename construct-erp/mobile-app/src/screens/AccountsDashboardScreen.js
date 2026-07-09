@@ -41,7 +41,7 @@ export default function AccountsDashboardScreen() {
   const navigation = useNavigation();
   const projectId = selectedProject?.id;
 
-  const { data: bills = [], isLoading: loadB } = useQuery({
+  const { data: bills = [], isLoading: loadB, isError: errB } = useQuery({
     queryKey: ['accts-dash-bills', projectId],
     queryFn: () => billsAPI.list(projectId).then(r => Array.isArray(r.data) ? r.data : (r.data?.data ?? [])),
     staleTime: 60_000,
@@ -141,7 +141,8 @@ export default function AccountsDashboardScreen() {
             <MaterialCommunityIcons name="credit-card-outline" size={14} color="#7c3aed" />
             <Text style={styles.cardTitle}>Payment Certificates Pending ({pendingPCCount})</Text>
           </View>
-          {loadPC ? <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginVertical: 12 }} />
+          {errB ? <Text style={styles.empty}>Could not load data. Pull down to retry.</Text>
+          : loadPC ? <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginVertical: 12 }} />
           : pendingPCCount === 0
             ? <Text style={styles.empty}>No PCs pending payment 🎉</Text>
             : pcList.filter(p => parseFloat(p.balance_due) > 0).slice(0, 8).map((pc, i) => (
