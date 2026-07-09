@@ -9,7 +9,7 @@ html { scrollbar-gutter: stable; }
 @tailwind utilities;
 
 @layer base {
-  html { font-size: 14px; }
+  html { font-size: 13px; }
 
   body {
     /* text-slate-700 instead of 900 — softer base reading colour */
