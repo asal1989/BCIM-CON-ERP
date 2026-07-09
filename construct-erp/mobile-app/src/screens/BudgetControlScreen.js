@@ -63,10 +63,12 @@ export default function BudgetControlScreen() {
 
   const rows = (data?.data || []).filter(r => r.budget > 0 || r.actual > 0);
 
-  const totals = useMemo(() => rows.reduce((acc, r) => ({
+  const totals = useMemo(() => rows.filter(r => !r.derived).reduce((acc, r) => ({
     budget: acc.budget + Number(r.budget || 0),
+    received: acc.received + Number(r.received || 0),
+    paid: acc.paid + Number(r.paid || 0),
     actual: acc.actual + Number(r.actual || 0),
-  }), { budget: 0, actual: 0 }), [rows]);
+  }), { budget: 0, received: 0, paid: 0, actual: 0 }), [rows]);
 
   return (
     <Screen>
@@ -88,7 +90,11 @@ export default function BudgetControlScreen() {
               <Text style={styles.summaryTitle}>Project Totals</Text>
               <View style={styles.summaryRow}>
                 <SummaryStat label="Total Budget" value={totals.budget} />
-                <SummaryStat label="Total Spent" value={totals.actual} warn={totals.actual > totals.budget} />
+                <SummaryStat label="Bills Received" value={totals.received} />
+                <SummaryStat label="Bills Paid" value={totals.paid} />
+              </View>
+              <View style={[styles.summaryRow, { marginTop: 10 }]}>
+                <SummaryStat label="Outstanding" value={totals.received - totals.paid} warn={totals.received - totals.paid > 0} />
                 <SummaryStat label="Balance" value={totals.budget - totals.actual} warn={totals.budget - totals.actual < 0} />
               </View>
               {data?.total_boq_value ? (
@@ -99,6 +105,9 @@ export default function BudgetControlScreen() {
           renderItem={({ item }) => {
             const budget = Number(item.budget || 0);
             const actual = Number(item.actual || 0);
+            const received = Number(item.received || 0);
+            const paid = Number(item.paid || 0);
+            const outstanding = received - paid;
             const balance = Number(item.balance ?? (budget - actual));
             const pct = budget > 0 ? Math.round((actual / budget) * 100) : (actual > 0 ? 100 : 0);
             const over = balance < 0;
@@ -127,15 +136,28 @@ export default function BudgetControlScreen() {
                   <View style={styles.progressTrack}>
                     <View style={[
                       styles.progressFill,
-                      { width: `${Math.min(100, pct)}%`, backgroundColor: over ? theme.colors.danger : theme.colors.success },
+                      { width: `${Math.min(100, pct)}%`, backgroundColor: over ? theme.colors.danger : pct >= 85 ? '#F59E0B' : theme.colors.success },
                     ]} />
                   </View>
-                  <Text style={styles.pctLabel}>{pct}% of budget spent</Text>
+                  <Text style={styles.pctLabel}>{pct}% of budget used</Text>
 
                   <View style={styles.metaRow}>
                     <MetaCol label="Budget" value={budget} />
-                    <MetaCol label="Actual" value={actual} valueColor={over ? theme.colors.danger : theme.colors.text} />
+                    <MetaCol label="Received" value={received} valueColor={received > 0 ? '#059669' : undefined} />
+                    <MetaCol label="Paid" value={paid} valueColor={paid > 0 ? '#4F46E5' : undefined} />
+                  </View>
+                  <View style={[styles.metaRow, { marginTop: 6 }]}>
+                    <MetaCol label="Outstanding" value={outstanding} valueColor={outstanding > 0 ? '#D97706' : undefined} />
                     <MetaCol label="Balance" value={balance} valueColor={over ? theme.colors.danger : theme.colors.success} />
+                    {item.monthly_avg > 0 ? (
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.metaLabel}>EAC (12mo)</Text>
+                        <Text style={[styles.metaValue, { color: budget > 0 && item.monthly_avg * 12 > budget ? theme.colors.danger : '#4F46E5', marginTop: 2 }]}>
+                          {money(item.monthly_avg * 12)}
+                        </Text>
+                        <Text style={styles.metaSubLabel}>{money(item.monthly_avg)}/mo</Text>
+                      </View>
+                    ) : <View style={{ flex: 1 }} />}
                   </View>
                 </TouchableOpacity>
 
@@ -194,6 +216,7 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', marginTop: 12, gap: 8 },
   metaLabel: { fontSize: 10, color: theme.colors.muted, fontWeight: '600' },
   metaValue: { fontSize: 13, fontWeight: '700', color: theme.colors.text, marginTop: 2 },
+  metaSubLabel: { fontSize: 9, color: theme.colors.muted, marginTop: 1 },
   drillWrap: { marginTop: 12, borderTopWidth: 1, borderTopColor: theme.colors.border, paddingTop: 10 },
   drillEmpty: { fontSize: 11, color: theme.colors.muted, fontStyle: 'italic', marginTop: 10, textAlign: 'center' },
   drillRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, gap: 8 },
