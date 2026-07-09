@@ -69,6 +69,8 @@ import MeasurementBookScreen from '../screens/MeasurementBookScreen';
 import PerformanceScreen from '../screens/PerformanceScreen';
 import UsersScreen from '../screens/UsersScreen';
 import ModuleDashboardScreen from '../screens/ModuleDashboardScreen';
+import ProcurementDashboardScreen from '../screens/ProcurementDashboardScreen';
+import StoresDashboardScreen from '../screens/StoresDashboardScreen';
 import ProfitLossScreen from '../screens/ProfitLossScreen';
 import ReportsHubScreen from '../screens/ReportsHubScreen';
 import SettingsScreen from '../screens/SettingsScreen';
@@ -191,6 +193,8 @@ export default function RootNavigator() {
       <Stack.Screen name="Performance" component={PerformanceScreen} />
       <Stack.Screen name="Users" component={UsersScreen} />
       <Stack.Screen name="ModuleDashboard" component={ModuleDashboardScreen} />
+      <Stack.Screen name="ProcurementDashboard" component={ProcurementDashboardScreen} />
+      <Stack.Screen name="StoresDashboard" component={StoresDashboardScreen} />
       <Stack.Screen name="ProfitLoss" component={ProfitLossScreen} />
       <Stack.Screen name="ReportsHub" component={ReportsHubScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />

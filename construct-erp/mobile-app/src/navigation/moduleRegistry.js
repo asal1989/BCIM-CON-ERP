@@ -29,7 +29,7 @@ export const MODULE_GROUPS = [
     label: 'Procurement',
     icon: 'cart-outline',
     items: [
-      { label: 'Procurement Dashboard',  screen: 'ModuleDashboard', params: { title: 'Procurement Dashboard' } },
+      { label: 'Procurement Dashboard',  screen: 'ProcurementDashboard' },
       { label: 'Material Request (MRS)', screen: 'MaterialRequest' },
       { label: 'Vendors',                screen: 'Vendors' },
       { label: 'Purchase Orders',        screen: 'PurchaseOrders' },
@@ -44,7 +44,7 @@ export const MODULE_GROUPS = [
     label: 'Stores',
     icon: 'warehouse',
     items: [
-      { label: 'Stores Dashboard',       screen: 'Stores' },
+      { label: 'Stores Dashboard',       screen: 'StoresDashboard' },
       { label: 'Goods Receipt (GRS)',    screen: 'GRS' },
       { label: 'Material Requisition',   screen: 'MaterialRequest' },
       { label: 'IGN (Inward Goods)',     screen: 'IGN' },

@@ -173,7 +173,21 @@ export const hireRentalAPI = {
 };
 
 export const subcontractorAPI = {
-  list: () => api.get('/subcontractors/list'),
+  list:           ()          => api.get('/subcontractors/list'),
+  listWorkOrders: (projectId) => api.get('/sc/work-orders', { params: { project_id: projectId, limit: 100 } }),
+};
+
+export const quotationAPI = {
+  list: (projectId) => api.get('/quotations', { params: { project_id: projectId, limit: 100 } }),
+};
+
+export const inventoryAPI = {
+  list:     (projectId) => api.get('/inventory', { params: { project_id: projectId, limit: 200 } }),
+  lowStock: (projectId) => api.get('/inventory/low-stock', { params: { project_id: projectId } }),
+};
+
+export const minAPI = {
+  list: (projectId) => api.get('/stores/min', { params: { project_id: projectId, limit: 50 } }),
 };
 
 export const bankAccountsAPI = {
