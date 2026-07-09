@@ -54,7 +54,7 @@ export default function MoreScreen() {
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.row}
-            onPress={() => navigation.navigate(item.screen, item.path ? { path: item.path, title: item.label } : undefined)}
+            onPress={() => navigation.navigate(item.screen, item.params || (item.path ? { path: item.path, title: item.label } : undefined))}
           >
             <MaterialCommunityIcons name={item.icon || 'chevron-right-circle-outline'} size={18} color={theme.colors.textSecondary} />
             <Text style={styles.rowLabel}>{item.label}</Text>

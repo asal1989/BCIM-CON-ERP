@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, Linking } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import Screen from '../components/Screen';
 import ScreenHeader from '../components/ScreenHeader';
@@ -9,6 +10,7 @@ import Avatar from '../components/Avatar';
 import { theme } from '../theme';
 
 export default function ProfileScreen() {
+  const navigation = useNavigation();
   const { user, selectedProject, changeProject, logout } = useAuth();
 
   const confirmLogout = () => {
@@ -19,10 +21,11 @@ export default function ProfileScreen() {
   };
 
   const rows = [
-    { icon: 'office-building-outline', label: 'Change Project', onPress: changeProject },
-    { icon: 'bell-outline',            label: 'Notifications', onPress: () => {} },
-    { icon: 'shield-lock-outline',     label: 'Privacy & Security', onPress: () => {} },
-    { icon: 'help-circle-outline',     label: 'Help & Support', onPress: () => {} },
+    { icon: 'office-building-outline', label: 'Change Project',    onPress: changeProject },
+    { icon: 'account-circle-outline',  label: 'ESS Portal',        onPress: () => navigation.navigate('ESS') },
+    { icon: 'file-document-outline',   label: 'My Documents',      onPress: () => navigation.navigate('Documents') },
+    { icon: 'cog-outline',             label: 'Settings',           onPress: () => navigation.navigate('Settings') },
+    { icon: 'web',                     label: 'Open Web Dashboard', onPress: () => Linking.openURL('https://erp.bcim.in') },
   ];
 
   return (
@@ -45,6 +48,19 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        {user?.modules?.length > 0 && (
+          <View style={styles.modulesRow}>
+            <Text style={styles.modulesLabel}>Modules:</Text>
+            <View style={styles.modulesChips}>
+              {user.modules.map(m => (
+                <View key={m} style={styles.moduleChip}>
+                  <Text style={styles.moduleChipText}>{m}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
         <View style={{ marginTop: 16, gap: 1 }}>
           {rows.map(r => (
             <TouchableOpacity key={r.label} style={styles.row} onPress={r.onPress}>
@@ -59,6 +75,8 @@ export default function ProfileScreen() {
           <MaterialCommunityIcons name="logout" size={18} color={theme.colors.danger} />
           <Text style={styles.logoutText}>Sign Out</Text>
         </TouchableOpacity>
+
+        <Text style={styles.version}>BCIM ERP Mobile v1.0.0</Text>
       </View>
     </Screen>
   );
@@ -81,4 +99,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: theme.colors.danger, borderRadius: theme.radius.md, height: 48,
   },
   logoutText: { color: theme.colors.danger, fontWeight: '700', fontSize: 14 },
+  modulesRow: { marginTop: 12, paddingHorizontal: 4 },
+  modulesLabel: { fontSize: 11, fontWeight: '700', color: theme.colors.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.3 },
+  modulesChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  moduleChip: { backgroundColor: theme.colors.surface, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
+  moduleChipText: { fontSize: 11, fontWeight: '600', color: theme.colors.textSecondary },
+  version: { textAlign: 'center', fontSize: 11, color: theme.colors.muted, marginTop: 24 },
 });
