@@ -2405,9 +2405,9 @@ export default function Layout() {
           topOffset={(pageGroup ? 80 : 52) + (isMDNavUser || isProcurementUser ? 36 : 0)}
           recentPages={recentPages}
         />
-        <main style={{ flex: 1, minWidth: 0, overflow: isChatPage ? 'hidden' : 'auto', position: 'relative' }} className="print:overflow-visible print:h-auto">
+        <main style={{ flex: 1, minWidth: 0, position: 'relative', overflow: isChatPage ? 'hidden' : 'auto', ...(isChatPage ? { display: 'flex', flexDirection: 'column' } : {}) }} className="print:overflow-visible print:h-auto">
           <Suspense fallback={<LoadingScreen />}>
-            <div key={location.key} className={clsx('page-enter', isProcurementPage && 'procurement-strong-text')}>
+            <div key={location.key} className={clsx('page-enter', isProcurementPage && 'procurement-strong-text')} style={isChatPage ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } : {}}>
               <Outlet />
             </div>
           </Suspense>

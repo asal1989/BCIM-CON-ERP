@@ -172,7 +172,7 @@ export default function ERPChat() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', position: 'relative' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
 
       {notifPerm === 'default' && !notifDismissed && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '7px 16px', background: WA.green, color: '#fff', fontSize: 12, flexShrink: 0 }}>
