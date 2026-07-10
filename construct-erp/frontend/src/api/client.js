@@ -2026,10 +2026,11 @@ export const hrComplianceAPI = {
 };
 
 export const mailAPI = {
-  status:        ()        => api.get('/mail/status'),
-  test:          (to)      => api.post('/mail/test', { to }),
-  send:          (data)    => api.post('/mail/send', data),
-  resendWelcome: (to)      => api.post('/mail/welcome', { to }),
+  status:         ()     => api.get('/mail/status'),
+  test:           (to)   => api.post('/mail/test', { to }),
+  send:           (data) => api.post('/mail/send', data),
+  resendWelcome:  (to)   => api.post('/mail/welcome', { to }),
+  erpDailyReport: ()     => api.post('/mail/erp-daily-report'),
 };
 
 const multipart = { headers: { 'Content-Type': undefined } };

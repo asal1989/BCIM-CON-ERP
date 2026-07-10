@@ -1,11 +1,12 @@
 // src/pages/admin/AuditLogPage.jsx — Administration: Audit Log
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import api, { auditLogAPI } from '../../api/client';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import api, { auditLogAPI, mailAPI } from '../../api/client';
 import { PageHeader, Theme } from '../../theme';
-import { Search, ChevronDown, ChevronRight, RefreshCw, History } from 'lucide-react';
+import { Search, ChevronDown, ChevronRight, RefreshCw, History, Send } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
+import toast from 'react-hot-toast';
 
 const ACTION_COLORS = {
   create:          { bg: 'bg-emerald-50', text: 'text-emerald-700' },
@@ -104,6 +105,16 @@ export default function AuditLogPage() {
   const pagination = data?.pagination || { total: 0, page: 1, page_size: 50 };
   const totalPages = Math.max(1, Math.ceil(pagination.total / pagination.page_size));
 
+  const reportMut = useMutation({
+    mutationFn: () => mailAPI.erpDailyReport().then(r => r.data),
+    onMutate:   () => toast.loading('Sending daily report…', { id: 'erp-report' }),
+    onSuccess:  (res) => toast.success(
+      `Report sent to ${(res.sent_to || []).join(', ')} · ${res.commits ?? 0} change(s)`,
+      { id: 'erp-report', duration: 6000 }
+    ),
+    onError:    (e)  => toast.error(e?.response?.data?.error || 'Failed to send report', { id: 'erp-report' }),
+  });
+
   return (
     <div style={{ background: Theme.pageBg, minHeight: '100vh' }}>
       <PageHeader
@@ -111,10 +122,18 @@ export default function AuditLogPage() {
         subtitle="Who did what, when — sensitive actions across the system"
         breadcrumbs={[{ label: 'Administration' }, { label: 'Audit Log' }]}
         actions={
-          <button onClick={() => refetch()} className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition shadow-sm"
-            style={{ background: '#fff', color: Theme.navyDark }}>
-            <RefreshCw className={clsx('w-3.5 h-3.5', isFetching && 'animate-spin')} /> Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => reportMut.mutate()} disabled={reportMut.isPending}
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition shadow-sm disabled:opacity-60"
+              style={{ background: Theme.navy, color: '#fff' }}>
+              <Send className="w-3.5 h-3.5" />
+              {reportMut.isPending ? 'Sending…' : 'Send Daily Report'}
+            </button>
+            <button onClick={() => refetch()} className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition shadow-sm"
+              style={{ background: '#fff', color: Theme.navyDark }}>
+              <RefreshCw className={clsx('w-3.5 h-3.5', isFetching && 'animate-spin')} /> Refresh
+            </button>
+          </div>
         }
       />
 
