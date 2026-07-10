@@ -1,7 +1,7 @@
 // src/pages/projects/ProjectList.jsx
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Building2, Plus, Search, MapPin, Activity, Briefcase,
   CheckCircle2, AlertTriangle, Users, ArrowRight, RefreshCw,
@@ -307,13 +307,17 @@ export default function ProjectList() {
                             <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Contract Value</div>
                             <div className="mt-1 text-xs font-semibold text-slate-800">{inr(proj.contract_value)}</div>
                           </div>
-                          <div className={clsx('rounded-lg border p-2.5', overrun ? 'border-red-100 bg-red-50' : 'border-slate-100 bg-slate-50')}>
+                          <Link
+                            to={`/procurement/boq-budget?project_id=${proj.id}`}
+                            onClick={e => e.stopPropagation()}
+                            className={clsx('rounded-lg border p-2.5 block hover:ring-2 hover:ring-blue-300 transition-all', overrun ? 'border-red-100 bg-red-50' : 'border-slate-100 bg-slate-50')}
+                          >
                             <div className="flex items-center justify-between">
-                              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Spent</div>
+                              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Spent ↗</div>
                               {overrun && <AlertTriangle className="h-3 w-3 text-red-500" />}
                             </div>
                             <div className={clsx('mt-1 text-xs font-semibold', overrun ? 'text-red-600' : 'text-slate-800')}>{inr(proj.total_spent)}</div>
-                          </div>
+                          </Link>
                         </div>
 
                         {/* Progress */}
