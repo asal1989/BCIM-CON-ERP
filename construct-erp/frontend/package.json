@@ -68,6 +68,10 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage"
   },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "4.60.2",
+    "@rollup/rollup-linux-x64-musl": "4.60.2"
+  },
   "browserslist": {
     "production": [
       ">0.2%",
