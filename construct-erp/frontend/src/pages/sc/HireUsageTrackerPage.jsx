@@ -165,13 +165,14 @@ function EntryFilesModal({ wo, entry, onClose }) {
 }
 
 // ─── Add/Edit Entry Modal ───────────────────────────────────────────────────
-function EntryModal({ wo, equipmentGroups, onClose, entry }) {
+function EntryModal({ wo, equipmentGroups, onClose, entry, prefillHours }) {
   const isEdit = !!entry;
   const qc = useQueryClient();
   const [billNo, setBillNo]   = useState(entry?.bill_no || '');
   const [month, setMonth]     = useState(entry?.bill_month || '');
   const [date, setDate]       = useState(entry?.bill_date ? dayjs(entry.bill_date).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'));
   const [hours, setHours]     = useState(() => {
+    if (prefillHours) return prefillHours;
     if (!entry) return {};
     const init = {};
     entry.lines.forEach(l => { init[l.wo_item_id] = { invoice: l.invoice_hours || '', certified: l.certified_hours || '' }; });
@@ -458,6 +459,213 @@ function GroupTable({ wo, group, entries, totals, onRaiseBill, raisingId, onEdit
   );
 }
 
+// ─── Daily Log Section ───────────────────────────────────────────────────────
+function DailyLogSection({ wo, equipmentGroups, onCreateBill }) {
+  const qc = useQueryClient();
+  const allCats = equipmentGroups.flatMap(g => g.categories);
+
+  const [showAddRow, setShowAddRow] = useState(false);
+  const [newDate,    setNewDate]    = useState(dayjs().format('YYYY-MM-DD'));
+  const [newItemId,  setNewItemId]  = useState('');
+  const [newQty,     setNewQty]     = useState('');
+  const [newNotes,   setNewNotes]   = useState('');
+
+  const { data: raw = [] } = useQuery({
+    queryKey: ['hire-daily-log', wo.id],
+    queryFn: () => hireLogAPI.listDailyLog(wo.id).then(r => r.data?.data || []),
+    staleTime: 0,
+  });
+
+  const addMut = useMutation({
+    mutationFn: (d) => hireLogAPI.addDailyEntry(wo.id, d),
+    onSuccess: () => {
+      toast.success('Day recorded');
+      qc.invalidateQueries({ queryKey: ['hire-daily-log', wo.id] });
+      setShowAddRow(false);
+      setNewQty(''); setNewNotes('');
+    },
+    onError: e => toast.error(e?.response?.data?.error || 'Failed'),
+  });
+
+  const delMut = useMutation({
+    mutationFn: (id) => hireLogAPI.deleteDailyEntry(wo.id, id),
+    onSuccess: () => { toast.success('Deleted'); qc.invalidateQueries({ queryKey: ['hire-daily-log', wo.id] }); },
+    onError: () => toast.error('Failed to delete'),
+  });
+
+  const handleAdd = () => {
+    if (!newDate || !newItemId || !newQty) return toast.error('Date, equipment and qty are required');
+    addMut.mutate({ work_date: newDate, wo_item_id: newItemId, qty: parseFloat(newQty), notes: newNotes });
+  };
+
+  // Totals per item_id
+  const totalsPerItem = {};
+  raw.forEach(r => {
+    totalsPerItem[r.wo_item_id] = (totalsPerItem[r.wo_item_id] || 0) + parseFloat(r.qty || 0);
+  });
+
+  const handleCreateBill = () => {
+    const pf = {};
+    Object.entries(totalsPerItem).forEach(([itemId, total]) => {
+      pf[itemId] = { invoice: String(total), certified: String(total) };
+    });
+    onCreateBill(pf);
+  };
+
+  // Group by date
+  const grouped = {};
+  raw.forEach(r => {
+    const d = (r.work_date || '').split('T')[0];
+    if (!grouped[d]) grouped[d] = [];
+    grouped[d].push(r);
+  });
+  const dates = Object.keys(grouped).sort();
+  const totalDays = dates.length;
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-sm text-slate-700">Daily Usage Log</span>
+          {raw.length > 0 && (
+            <span className="text-xs bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full">
+              {raw.length} records · {totalDays} day{totalDays !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+        <div className="flex gap-2">
+          {Object.keys(totalsPerItem).length > 0 && (
+            <button onClick={handleCreateBill}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition">
+              <Receipt className="w-3.5 h-3.5" /> Create Bill from Log
+            </button>
+          )}
+          <button onClick={() => setShowAddRow(v => !v)}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold border border-slate-200 bg-white text-slate-700 rounded-lg hover:bg-slate-50 transition">
+            <Plus className="w-3.5 h-3.5" /> Add Day
+          </button>
+        </div>
+      </div>
+
+      {/* Add Row form */}
+      {showAddRow && (
+        <div className="px-4 py-3 bg-indigo-50/60 border-b border-indigo-100 flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Date *</label>
+            <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)}
+              className={inp} style={{ minWidth: 130 }} />
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Equipment / Category *</label>
+            <select value={newItemId} onChange={e => setNewItemId(e.target.value)}
+              className={inp} style={{ minWidth: 220 }}>
+              <option value="">— select —</option>
+              {equipmentGroups.map(g => (
+                <optgroup key={g.equipment_group} label={g.equipment_group}>
+                  {g.categories.map(c => (
+                    <option key={c.id} value={c.id}>{c.usage_category} ({c.unit})</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Qty *</label>
+            <input type="number" step="0.5" min="0" value={newQty} onChange={e => setNewQty(e.target.value)}
+              className={inp} style={{ width: 80 }} placeholder="1" />
+          </div>
+          <div className="flex-1" style={{ minWidth: 140 }}>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Notes</label>
+            <input type="text" value={newNotes} onChange={e => setNewNotes(e.target.value)}
+              className={inp} placeholder="e.g. Debris removal" />
+          </div>
+          <div className="flex gap-2 pb-0.5">
+            <button onClick={handleAdd} disabled={addMut.isPending}
+              className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition">
+              {addMut.isPending ? 'Saving…' : 'Save'}
+            </button>
+            <button onClick={() => setShowAddRow(false)}
+              className="px-3 py-1.5 text-xs font-bold border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Log table */}
+      {raw.length === 0 ? (
+        <div className="p-8 text-center text-slate-400 text-sm">
+          No daily records yet — click <b>Add Day</b> to record usage date by date like a log sheet.
+        </div>
+      ) : (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-slate-100 bg-white">
+                  <th className="text-left px-3 py-2 font-semibold text-slate-400 uppercase tracking-wider w-32">Date</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-400 uppercase tracking-wider">Equipment Group</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-400 uppercase tracking-wider">Category</th>
+                  <th className="text-right px-3 py-2 font-semibold text-slate-400 uppercase tracking-wider w-24">Qty</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-400 uppercase tracking-wider">Notes</th>
+                  <th className="w-8 px-2 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {dates.map(d => (
+                  grouped[d].map((r, i) => (
+                    <tr key={r.id} className={clsx('border-b border-slate-50', i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40')}>
+                      {i === 0 && (
+                        <td rowSpan={grouped[d].length}
+                          className="px-3 py-2 font-bold text-slate-800 border-r border-slate-100 align-top whitespace-nowrap">
+                          {dayjs(d).format('DD MMM YYYY')}
+                          <div className="text-[10px] font-normal text-slate-400">{dayjs(d).format('dddd')}</div>
+                        </td>
+                      )}
+                      <td className="px-3 py-2 text-slate-700 font-medium">{r.equipment_group}</td>
+                      <td className="px-3 py-2 text-slate-500">{r.usage_category}</td>
+                      <td className="px-3 py-2 text-right font-mono font-bold text-indigo-700">
+                        {num(r.qty).toFixed(2)} <span className="text-slate-400 font-normal">{r.item_unit}</span>
+                      </td>
+                      <td className="px-3 py-2 text-slate-400 italic">{r.notes || '—'}</td>
+                      <td className="px-2 py-2 text-center">
+                        <button
+                          onClick={() => { if (window.confirm('Delete this record?')) delMut.mutate(r.id); }}
+                          className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-slate-300 bg-slate-50">
+                  <td colSpan={3} className="px-3 py-2 text-right text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+                    Totals ({totalDays} days)
+                  </td>
+                  <td colSpan={3} className="px-3 py-2">
+                    <div className="flex flex-wrap gap-4">
+                      {allCats.filter(c => totalsPerItem[c.id]).map(c => (
+                        <span key={c.id} className="text-xs font-bold text-indigo-700">
+                          {c.equipment_group} — {c.usage_category}:&nbsp;
+                          {num(totalsPerItem[c.id]).toFixed(2)} {c.unit}
+                          {c.rate ? <span className="text-emerald-700"> → {fmt(num(totalsPerItem[c.id]) * num(c.rate))}</span> : ''}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Setup WO Modal — tag items with equipment_group + usage_category ──────────
 const UNIT_OPTIONS = ['Shift', 'Hours', 'Day'];
 
@@ -607,8 +815,9 @@ export default function HireUsageTrackerPage() {
   const [editingEntry, setEditingEntry] = useState(null);
   const [filesEntry, setFilesEntry] = useState(null);
   const [showSetup, setShowSetup] = useState(false);
-  const [raisingId,      setRaisingId]      = useState(null);
+  const [raisingId,       setRaisingId]      = useState(null);
   const [raisingCombined, setRaisingCombined] = useState(false);
+  const [prefillHours,    setPrefillHours]    = useState(null); // from DailyLogSection → EntryModal
 
   // Reset selected WO when project changes
   useEffect(() => { setWoId(''); }, [selectedProjectId]);
@@ -805,20 +1014,30 @@ export default function HireUsageTrackerPage() {
             This work order has no categorized items yet.
           </div>
         ) : (
-          equipmentGroups.map(g => (
-            <GroupTable
-              key={g.equipment_group}
+          <>
+            {/* Daily log sheet — enter day-by-day records */}
+            <DailyLogSection
               wo={wo}
-              group={g}
-              entries={entries.map(e => ({ ...e, lines: e.lines.filter(l => g.categories.some(c => c.id === l.wo_item_id)) }))}
-              totals={totals}
-              onRaiseBill={raiseBill}
-              raisingId={raisingId}
-              onEdit={setEditingEntry}
-              onDelete={deleteEntry}
-              onFilesClick={setFilesEntry}
+              equipmentGroups={equipmentGroups}
+              onCreateBill={(pf) => { setPrefillHours(pf); setShowAdd(true); }}
             />
-          ))
+
+            {/* Bill entries grouped by equipment */}
+            {equipmentGroups.map(g => (
+              <GroupTable
+                key={g.equipment_group}
+                wo={wo}
+                group={g}
+                entries={entries.map(e => ({ ...e, lines: e.lines.filter(l => g.categories.some(c => c.id === l.wo_item_id)) }))}
+                totals={totals}
+                onRaiseBill={raiseBill}
+                raisingId={raisingId}
+                onEdit={setEditingEntry}
+                onDelete={deleteEntry}
+                onFilesClick={setFilesEntry}
+              />
+            ))}
+          </>
         )}
       </div>
 
@@ -831,7 +1050,12 @@ export default function HireUsageTrackerPage() {
       )}
 
       {showAdd && wo && (
-        <EntryModal wo={wo} equipmentGroups={equipmentGroups} onClose={() => setShowAdd(false)} />
+        <EntryModal
+          wo={wo}
+          equipmentGroups={equipmentGroups}
+          prefillHours={prefillHours || undefined}
+          onClose={() => { setShowAdd(false); setPrefillHours(null); }}
+        />
       )}
       {showSetup && (
         <SetupWOModal

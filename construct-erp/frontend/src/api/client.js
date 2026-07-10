@@ -1672,10 +1672,13 @@ export const hireLogAPI = {
   deleteEntry:   (woId, id)   => api.delete(`/hire-log/${woId}/${id}`),
   markBilled:    (woId, id, scBillId) => api.patch(`/hire-log/${woId}/${id}/mark-billed`, { sc_bill_id: scBillId }),
   categorizeItem:(woId, itemId, d) => api.patch(`/hire-log/${woId}/items/${itemId}/categorize`, d),
-  listFiles:     (woId, id)   => api.get(`/hire-log/${woId}/${id}/files`),
-  uploadFile:    (woId, id, fd) => api.post(`/hire-log/${woId}/${id}/files`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
-  deleteFile:    (woId, id, fid) => api.delete(`/hire-log/${woId}/${id}/files/${fid}`),
-  serveFile:     (woId, id, fid) => `/api/hire-log/${woId}/${id}/files/${fid}/serve`,
+  listFiles:       (woId, id)        => api.get(`/hire-log/${woId}/${id}/files`),
+  uploadFile:      (woId, id, fd)    => api.post(`/hire-log/${woId}/${id}/files`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  deleteFile:      (woId, id, fid)   => api.delete(`/hire-log/${woId}/${id}/files/${fid}`),
+  serveFile:       (woId, id, fid)   => `/api/hire-log/${woId}/${id}/files/${fid}/serve`,
+  listDailyLog:    (woId)            => api.get(`/hire-log/${woId}/daily`),
+  addDailyEntry:   (woId, d)         => api.post(`/hire-log/${woId}/daily`, d),
+  deleteDailyEntry:(woId, id)        => api.delete(`/hire-log/${woId}/daily/${id}`),
 };
 
 export const analyticsAPI = {

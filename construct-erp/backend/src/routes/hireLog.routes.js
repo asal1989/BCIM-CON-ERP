@@ -51,6 +51,23 @@ runSchemaInit('hire_log_files_table', async () => {
   await query(`CREATE INDEX IF NOT EXISTS idx_hire_log_files_log ON wo_hire_log_files(log_id)`);
 });
 
+runSchemaInit('hire_daily_log_table', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS wo_hire_daily_log (
+      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id   UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      wo_id        UUID NOT NULL REFERENCES sc_work_orders(id) ON DELETE CASCADE,
+      work_date    DATE NOT NULL,
+      wo_item_id   UUID NOT NULL REFERENCES sc_wo_items(id),
+      qty          NUMERIC(10,3) NOT NULL DEFAULT 0,
+      notes        TEXT,
+      created_by   UUID REFERENCES users(id),
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_hire_daily_log_wo ON wo_hire_daily_log(wo_id, work_date)`);
+});
+
 runSchemaInit('hire_log_tables', async () => {
   await query(`ALTER TABLE sc_wo_items ADD COLUMN IF NOT EXISTS equipment_group VARCHAR(200)`);
   await query(`ALTER TABLE sc_wo_items ADD COLUMN IF NOT EXISTS usage_category VARCHAR(100)`);
@@ -271,6 +288,53 @@ router.patch('/:woId/items/:itemId/categorize', authorize(...PLANNER), async (re
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Item not found' });
     res.json({ data: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Daily Log CRUD ──────────────────────────────────────────────────────────
+
+// GET /:woId/daily — list daily log entries for a WO
+router.get('/:woId/daily', async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT d.*, i.description AS item_description, i.unit AS item_unit,
+              i.equipment_group, i.usage_category, i.rate
+         FROM wo_hire_daily_log d
+         JOIN sc_wo_items i ON i.id = d.wo_item_id
+        WHERE d.wo_id=$1 AND d.company_id=$2
+        ORDER BY d.work_date ASC, d.created_at ASC`,
+      [req.params.woId, CID(req)]
+    );
+    res.json({ data: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /:woId/daily — add a daily log entry
+router.post('/:woId/daily', authorize(...PLANNER), async (req, res) => {
+  try {
+    const { work_date, wo_item_id, qty, notes } = req.body;
+    if (!work_date || !wo_item_id || qty == null)
+      return res.status(400).json({ error: 'work_date, wo_item_id and qty are required' });
+    const check = await query(`SELECT id FROM sc_wo_items WHERE id=$1 AND wo_id=$2`, [wo_item_id, req.params.woId]);
+    if (!check.rows.length) return res.status(400).json({ error: 'Item not found on this WO' });
+    const r = await query(
+      `INSERT INTO wo_hire_daily_log (company_id, wo_id, work_date, wo_item_id, qty, notes, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [CID(req), req.params.woId, work_date, wo_item_id, qty, notes || null, req.user.id]
+    );
+    res.status(201).json({ data: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /:woId/daily/:dailyId — delete a daily log entry
+router.delete('/:woId/daily/:dailyId', authorize(...PLANNER), async (req, res) => {
+  try {
+    const r = await query(
+      `DELETE FROM wo_hire_daily_log WHERE id=$1 AND wo_id=$2 AND company_id=$3 RETURNING id`,
+      [req.params.dailyId, req.params.woId, CID(req)]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Entry not found' });
+    res.json({ message: 'Deleted' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
