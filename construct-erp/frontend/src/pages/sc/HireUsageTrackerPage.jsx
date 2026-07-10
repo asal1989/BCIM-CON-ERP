@@ -470,6 +470,9 @@ function DailyLogSection({ wo, equipmentGroups, onCreateBill }) {
   const [newQty,     setNewQty]     = useState('');
   const [newNotes,   setNewNotes]   = useState('');
 
+  const selectedCat = allCats.find(c => c.id === newItemId);
+  const qtyUnit = selectedCat?.unit || 'Qty';
+
   const { data: raw = [] } = useQuery({
     queryKey: ['hire-daily-log', wo.id],
     queryFn: () => hireLogAPI.listDailyLog(wo.id).then(r => r.data?.data || []),
@@ -571,9 +574,9 @@ function DailyLogSection({ wo, equipmentGroups, onCreateBill }) {
             </select>
           </div>
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Hours *</label>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">{qtyUnit} *</label>
             <input type="number" step="0.5" min="0" value={newQty} onChange={e => setNewQty(e.target.value)}
-              className={inp} style={{ width: 80 }} placeholder="e.g. 5.5" />
+              className={inp} style={{ width: 80 }} placeholder={qtyUnit === 'Day' || qtyUnit === 'Month' ? '1' : 'e.g. 5.5'} />
           </div>
           <div className="flex-1" style={{ minWidth: 140 }}>
             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Notes</label>
