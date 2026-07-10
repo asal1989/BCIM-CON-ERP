@@ -69,29 +69,36 @@ function toQSPrintBill(b) {
   const items = (b.items || []).map((it, index) => {
     const currentQty = num(it.curr_qty ?? it.current_qty);
     const rate = num(it.rate);
+    const woQty = num(it.wo_qty ?? it.wo_total_qty ?? it.qty);
+    const prevQty = num(it.cum_prev_qty ?? it.prev_qty ?? it.prev_certified_qty);
     return {
       ...it,
       id: it.id || `${b.id || b.bill_number}-${index}`,
       sr_no: it.sequence_no || index + 1,
-      item_no: it.sequence_no || index + 1,
-      chapter_no: it.chapter_no || '1',
-      chapter_name: it.chapter_name || 'Subcontractor Work',
       description: it.description || it.wo_item_desc || 'Subcontractor work item',
       unit: it.unit || 'Nos',
-      boq_qty: num(it.wo_qty ?? it.qty),
-      prev_certified_qty: num(it.prev_qty ?? it.prev_certified_qty),
+      wo_qty: woQty,
+      prev_certified_qty: prevQty,
       current_qty: currentQty,
-      qs_qty: currentQty,
-      con_qty: currentQty,
-      con_current_qty: currentQty,
+      cum_qty: prevQty + currentQty,
+      balance_qty: Math.max(0, woQty - (prevQty + currentQty)),
       rate,
+      wo_amount: woQty * rate,
+      prev_amount: prevQty * rate,
+      curr_amount: num(it.amount || currentQty * rate),
+      cum_amount: (prevQty + currentQty) * rate,
+      balance_amount: Math.max(0, woQty - (prevQty + currentQty)) * rate,
+      // legacy aliases kept for any other code
+      boq_qty: woQty,
+      qs_qty: currentQty,
       qs_amount: num(it.amount || currentQty * rate),
-      con_amount: num(it.amount || currentQty * rate),
     };
   });
 
   const gross = num(b.gross_amount);
   const gst = num(b.gst_amount);
+  const gstRate = num(b.gst_pct || b.wo_gst_pct || 18);
+  const isIgst = b.is_igst || false;
   const materialRecovery = num(b.material_recovery);
   const penalty = num(b.penalty_amount);
   const otherDeductions = num(b.other_deductions);
@@ -103,7 +110,8 @@ function toQSPrintBill(b) {
     invoice_number: b.invoice_number || b.bill_number,
     bill_period_from: b.period_from,
     bill_period_to: b.period_to,
-    gst_rate: num(b.gst_pct || b.wo_gst_pct || 18),
+    gst_rate: gstRate,
+    is_igst: isIgst,
     gross_with_gst: gross + gst,
     total_contract_value: num(b.contract_amount),
     retention_percent: num(b.retention_pct || b.wo_ret_pct),
@@ -112,6 +120,7 @@ function toQSPrintBill(b) {
     material_recovery_steel: materialRecovery,
     material_recovery_cement: 0,
     tds_amount: num(b.tds_amount),
+    tds_rate: num(b.tds_pct || b.wo_tds_pct || 2),
     other_deductions: penalty + otherDeductions,
     total_deductions:
       num(b.tds_amount) +
@@ -121,6 +130,7 @@ function toQSPrintBill(b) {
       penalty +
       otherDeductions,
     items,
+    mb_entries: b.mb_entries || [],
   };
 }
 

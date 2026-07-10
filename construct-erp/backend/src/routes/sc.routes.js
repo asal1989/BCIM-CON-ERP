@@ -783,12 +783,43 @@ router.get('/bills', async (req, res) => {
 
 router.get('/bills/:id', async (req, res) => {
   try {
-    const bill = await query(`SELECT b.*, wo.wo_number, wo.contract_amount, wo.gst_pct AS wo_gst_pct, wo.tds_pct AS wo_tds_pct, wo.retention_pct AS wo_ret_pct, sc.name AS sc_name, sc.gst_number AS sc_gst, p.name AS project_name FROM sc_bills b JOIN sc_work_orders wo ON wo.id=b.wo_id JOIN sc_subcontractors sc ON sc.id=b.sc_id JOIN projects p ON p.id=b.project_id WHERE b.id=$1 AND b.company_id=$2`, [req.params.id, CID(req)]);
+    const bill = await query(`SELECT b.*, wo.wo_number, wo.contract_amount, wo.gst_pct AS wo_gst_pct, wo.tds_pct AS wo_tds_pct, wo.retention_pct AS wo_ret_pct, sc.name AS sc_name, sc.sc_code, sc.gst_number AS sc_gstin, p.name AS project_name, uc.name AS submitted_by_name, uv.name AS verified_by_name, ua.name AS approved_by_name FROM sc_bills b JOIN sc_work_orders wo ON wo.id=b.wo_id JOIN sc_subcontractors sc ON sc.id=b.sc_id JOIN projects p ON p.id=b.project_id LEFT JOIN users uc ON uc.id=b.created_by LEFT JOIN users uv ON uv.id=b.verified_by LEFT JOIN users ua ON ua.id=b.approved_by WHERE b.id=$1 AND b.company_id=$2`, [req.params.id, CID(req)]);
     if (!bill.rows.length) return res.status(404).json({ error: 'Not found' });
-    const items = await query(`SELECT bi.*, wi.description AS wo_item_desc FROM sc_bill_items bi LEFT JOIN sc_wo_items wi ON wi.id=bi.wo_item_id WHERE bi.bill_id=$1 ORDER BY bi.sequence_no`, [req.params.id]);
+    const b = bill.rows[0];
+
+    // Items with cumulative previous qty from earlier non-rejected bills on same WO item
+    const items = await query(`
+      SELECT bi.*,
+             wi.description AS wo_item_desc,
+             wi.qty AS wo_total_qty,
+             COALESCE((
+               SELECT SUM(bi2.curr_qty)
+               FROM sc_bill_items bi2
+               JOIN sc_bills b2 ON b2.id = bi2.bill_id
+               WHERE bi2.wo_item_id = bi.wo_item_id
+                 AND b2.wo_id = $2
+                 AND b2.status NOT IN ('draft','rejected')
+                 AND b2.id != $1
+                 AND b2.created_at < (SELECT created_at FROM sc_bills WHERE id = $1)
+             ), 0) AS cum_prev_qty
+      FROM sc_bill_items bi
+      LEFT JOIN sc_wo_items wi ON wi.id = bi.wo_item_id
+      WHERE bi.bill_id = $1
+      ORDER BY bi.sequence_no
+    `, [req.params.id, b.wo_id]);
+
+    // Measurement book entries for this WO (approved), grouped by item
+    const mbEntries = await query(`
+      SELECT m.*, wi.description AS wo_item_desc
+      FROM sc_mb_entries m
+      LEFT JOIN sc_wo_items wi ON wi.id = m.wo_item_id
+      WHERE m.wo_id = $1 AND m.company_id = $2 AND m.status IN ('approved','checked')
+      ORDER BY m.mb_date, m.mb_number
+    `, [b.wo_id, CID(req)]);
+
     const approvals = await query(`SELECT a.*, u.name AS actor_name FROM sc_bill_approvals a LEFT JOIN users u ON u.id=a.actor_id WHERE a.bill_id=$1 ORDER BY a.created_at`, [req.params.id]);
     const payments  = await query(`SELECT * FROM sc_payments WHERE bill_id=$1 ORDER BY payment_date`, [req.params.id]);
-    res.json({ data: { ...bill.rows[0], items: items.rows, approvals: approvals.rows, payments: payments.rows } });
+    res.json({ data: { ...b, items: items.rows, mb_entries: mbEntries.rows, approvals: approvals.rows, payments: payments.rows } });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
