@@ -595,6 +595,18 @@ const updateWorkOrder = async (req, res) => {
     if (status && !VALID_WO_STATUSES.includes(status))
       return res.status(400).json({ error: `Invalid status. Must be one of: ${VALID_WO_STATUSES.join(', ')}` });
 
+    // Once the MD has signed off (status='approved', set only by the
+    // /work-orders/:id/md-approve stage), the WO is locked — no further
+    // edits by anyone, including procurement/admin.
+    const current = await query(
+      `SELECT status FROM work_orders WHERE id=$1 AND project_id IN (SELECT id FROM projects WHERE company_id=$2)`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!current.rows.length) return res.status(404).json({ error: 'Work order not found' });
+    if (current.rows[0].status === 'approved') {
+      return res.status(400).json({ error: 'This Work Order has been approved by the Managing Director and can no longer be edited.' });
+    }
+
     if (wo_number !== undefined) {
       const trimmed = String(wo_number).trim().toUpperCase();
       if (!trimmed) return res.status(400).json({ error: 'wo_number cannot be empty' });

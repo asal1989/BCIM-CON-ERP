@@ -10,7 +10,7 @@ import {
   ChevronRight, ChevronUp, ChevronDown, ChevronsUpDown, Upload, IndianRupee,
   AlertCircle, RefreshCw, FileSpreadsheet,
   MapPin, User, Package, Phone, Mail, Hash,
-  Activity, Check, UserCheck, Edit2, XCircle,
+  Activity, Check, UserCheck, Edit2, XCircle, Lock,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
@@ -1132,11 +1132,16 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
                 </div>
               ))}
             </div>
-            {onEdit && canManageProcurement(user) && (
+            {liveStatus !== 'approved' && onEdit && canManageProcurement(user) && (
               <button onClick={() => onEdit({ ...wo, ...(detail || {}) })}
                 className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-amber-300 bg-amber-50 text-amber-700 text-xs font-medium hover:bg-amber-100 transition-all">
                 <Edit2 className="w-3.5 h-3.5" /> Edit WO
               </button>
+            )}
+            {liveStatus === 'approved' && (
+              <span className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-slate-200 bg-slate-50 text-slate-500 text-xs font-medium">
+                <Lock className="w-3.5 h-3.5" /> MD Approved — Locked
+              </span>
             )}
             <button onClick={handlePrint}
               className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-slate-200 text-xs font-medium text-slate-900 hover:border-slate-300 transition-all">

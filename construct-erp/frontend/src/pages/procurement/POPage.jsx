@@ -10,7 +10,7 @@ import {
   Package, Building2, Calendar, BadgeCheck, FileText,
   CheckCircle2, UserCheck, Landmark, XCircle, Upload,
   Receipt, TrendingUp, IndianRupee, FileSpreadsheet,
-  Mail, Send, Edit2, ChevronsUpDown, ChevronUp, ChevronDown,
+  Mail, Send, Edit2, ChevronsUpDown, ChevronUp, ChevronDown, Lock,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
@@ -1266,11 +1266,16 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
                 </div>
               ))}
             </div>
-            {onEdit && canManageProcurement(user) && (
+            {liveStatus !== 'approved' && onEdit && canManageProcurement(user) && (
               <button onClick={() => onEdit(detailedPO ?? po)}
                 className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-amber-300 bg-amber-50 text-amber-700 text-xs font-medium hover:bg-amber-100 transition-all">
                 <Edit2 className="w-3.5 h-3.5" /> Edit PO
               </button>
+            )}
+            {liveStatus === 'approved' && (
+              <span className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-slate-200 bg-slate-50 text-slate-500 text-xs font-medium">
+                <Lock className="w-3.5 h-3.5" /> MD Approved — Locked
+              </span>
             )}
             <button onClick={handlePrint} disabled={!detailedPO}
               className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-slate-200 text-xs font-medium text-slate-900 hover:border-slate-300 disabled:opacity-40 transition-all">

@@ -1062,7 +1062,12 @@ router.patch('/:id', authorize(...PROCUREMENT_ROLES), async (req, res) => {
   try {
     const po = await getAccessiblePo(req, req.params.id);
     // Route is already restricted to procurement/super_admin (PROCUREMENT_ROLES above) —
-    // those roles may edit a PO at any status, not just 'pending'.
+    // those roles may edit a PO at any pre-MD-approval status. Once the MD has
+    // signed off (status='approved', set only by the /md-approve stage below),
+    // the PO is locked — no further edits by anyone, including procurement/admin.
+    if (po.status === 'approved') {
+      return res.status(400).json({ error: 'This PO has been approved by the Managing Director and can no longer be edited.' });
+    }
 
     const {
       vendor_id, po_date, delivery_date, payment_terms, tcs_amount,
