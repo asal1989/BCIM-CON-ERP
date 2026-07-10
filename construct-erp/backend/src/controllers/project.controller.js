@@ -14,36 +14,25 @@ const attachProjectSpend = async (projects) => {
 
   const ids = projects.map((p) => p.id);
   const spend = await query(
-    `WITH payment_spend AS (
-       SELECT project_id, COALESCE(SUM(net_amount), 0) AS amount
-       FROM payments
+    `WITH po_spend AS (
+       SELECT project_id, COALESCE(SUM(grand_total), 0) AS amount
+       FROM purchase_orders
        WHERE project_id = ANY($1::uuid[])
+         AND status NOT IN ('cancelled', 'draft')
        GROUP BY project_id
      ),
-     bill_spend AS (
-       SELECT b.project_id, COALESCE(SUM(u.paid_amount), 0) AS amount
-       FROM tqs_bill_updates u
-       JOIN tqs_bills b ON b.id = u.bill_id
-       WHERE b.project_id = ANY($1::uuid[])
-         AND COALESCE(b.is_deleted, FALSE) = FALSE
-       GROUP BY b.project_id
-     ),
-     budget_spend AS (
-       SELECT project_id, COALESCE(SUM(actual_amount), 0) AS amount
-       FROM budget_items
+     wo_spend AS (
+       SELECT project_id, COALESCE(SUM(total_value), 0) AS amount
+       FROM work_orders
        WHERE project_id = ANY($1::uuid[])
+         AND status NOT IN ('cancelled', 'draft', 'terminated')
        GROUP BY project_id
      )
      SELECT id AS project_id,
-       GREATEST(
-         COALESCE(payment_spend.amount, 0),
-         COALESCE(bill_spend.amount, 0),
-         COALESCE(budget_spend.amount, 0)
-       ) AS total_spent
+       COALESCE(po_spend.amount, 0) + COALESCE(wo_spend.amount, 0) AS total_spent
      FROM unnest($1::uuid[]) AS ids(id)
-     LEFT JOIN payment_spend ON payment_spend.project_id = ids.id
-     LEFT JOIN bill_spend ON bill_spend.project_id = ids.id
-     LEFT JOIN budget_spend ON budget_spend.project_id = ids.id`,
+     LEFT JOIN po_spend ON po_spend.project_id = ids.id
+     LEFT JOIN wo_spend ON wo_spend.project_id = ids.id`,
     [ids]
   );
 
@@ -65,14 +54,9 @@ const getProjects = async (req, res) => {
         qe.name as qs_name,
         (SELECT COUNT(*) FROM boq_items WHERE project_id = p.id) as boq_count,
         (SELECT COALESCE(SUM(total_amount), 0) FROM invoices WHERE project_id = p.id AND payment_status = 'paid') as amount_collected,
-        GREATEST(
-          (SELECT COALESCE(SUM(net_amount), 0) FROM payments WHERE project_id = p.id),
-          (SELECT COALESCE(SUM(u.paid_amount), 0)
-             FROM tqs_bill_updates u
-             JOIN tqs_bills b ON b.id = u.bill_id
-            WHERE b.project_id = p.id AND COALESCE(b.is_deleted, FALSE) = FALSE),
-          (SELECT COALESCE(SUM(actual_amount), 0) FROM budget_items WHERE project_id = p.id)
-        ) as total_spent
+        (SELECT COALESCE(SUM(grand_total), 0) FROM purchase_orders WHERE project_id = p.id AND status NOT IN ('cancelled','draft'))
+        + (SELECT COALESCE(SUM(total_value), 0) FROM work_orders WHERE project_id = p.id AND status NOT IN ('cancelled','draft','terminated'))
+        as total_spent
       FROM projects p
       LEFT JOIN users pm ON p.project_manager_id = pm.id
       LEFT JOIN users se ON p.site_engineer_id = se.id
@@ -116,14 +100,9 @@ const getProject = async (req, res) => {
         qe.name as qs_name,
         (SELECT COALESCE(SUM(amount),0) FROM boq_items WHERE project_id = p.id) as total_boq_value,
         (SELECT COALESCE(SUM(net_payable),0) FROM ra_bills WHERE project_id = p.id AND status = 'certified') as total_certified,
-        GREATEST(
-          (SELECT COALESCE(SUM(net_amount), 0) FROM payments WHERE project_id = p.id),
-          (SELECT COALESCE(SUM(u.paid_amount), 0)
-             FROM tqs_bill_updates u
-             JOIN tqs_bills b ON b.id = u.bill_id
-            WHERE b.project_id = p.id AND COALESCE(b.is_deleted, FALSE) = FALSE),
-          (SELECT COALESCE(SUM(actual_amount), 0) FROM budget_items WHERE project_id = p.id)
-        ) as total_spent,
+        (SELECT COALESCE(SUM(grand_total), 0) FROM purchase_orders WHERE project_id = p.id AND status NOT IN ('cancelled','draft'))
+        + (SELECT COALESCE(SUM(total_value), 0) FROM work_orders WHERE project_id = p.id AND status NOT IN ('cancelled','draft','terminated'))
+        as total_spent,
         (SELECT COUNT(*) FROM workers WHERE project_id = p.id AND is_active = true) as worker_count,
         (SELECT COUNT(*) FROM incidents WHERE project_id = p.id AND status != 'closed') as open_incidents
        FROM projects p
