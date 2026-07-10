@@ -1162,7 +1162,7 @@ router.patch('/bills/:id', authorize(...PLANNER), async (req, res) => {
       if (canEditItems && Array.isArray(items) && items.length > 0) {
         for (const it of items) {
           await client.query(
-            `UPDATE sc_bill_items SET curr_qty=$1, amount=curr_qty*rate, updated_at=NOW() WHERE id=$2 AND bill_id=$3`,
+            `UPDATE sc_bill_items SET curr_qty=$1, amount=curr_qty*rate WHERE id=$2 AND bill_id=$3`,
             [parseFloat(it.curr_qty), it.id, req.params.id]
           );
         }
