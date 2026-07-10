@@ -173,6 +173,15 @@ runSchemaInit('data_migration_delete_in_prefix_duplicates_2026', async () => {
   console.log(`[migration] Soft-deleted ${res.rowCount} IN/ prefix duplicate bill(s)`);
 });
 
+// Rename inv_number 00511/26-27 → IN/00511/26-27 (user correction 2026-07-10)
+runSchemaInit('data_migration_rename_00511_to_in_prefix_2026', async () => {
+  const res = await dbQuery(
+    `UPDATE tqs_bills SET inv_number = 'IN/00511/26-27', updated_at = NOW()
+     WHERE inv_number = '00511/26-27' AND is_deleted = false`
+  );
+  console.log(`[migration] Renamed 00511/26-27 → IN/00511/26-27 (${res.rowCount} row)`);
+});
+
 runSchemaInit('data_migration_bills_to_dqs_tower_2026_v2', async () => {
   const projRes = await dbQuery(
     `SELECT id, name FROM projects WHERE LOWER(name) LIKE '%dqs%' ORDER BY name LIMIT 1`
