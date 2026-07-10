@@ -59,6 +59,21 @@ router.post('/daily-activity-digest/run', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// POST /api/v1/approvals/weekly-summary/run
+// Sends a weekly activity summary email covering fromDate..toDate (defaults to Mon–today).
+router.post('/weekly-summary/run', async (req, res) => {
+  try {
+    const role = String(req.user.role || '').toLowerCase();
+    if (!['super_admin', 'admin'].includes(role)) {
+      return res.status(403).json({ error: 'Admin only' });
+    }
+    const { fromDate, toDate, recipients } = req.body;
+    const { runWeeklySummary } = require('../utils/daily-activity-digest.service');
+    const result = await runWeeklySummary({ fromDate, toDate, overrideRecipients: recipients });
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 const CID  = r => r.user.company_id;
 const UID  = r => r.user.id;
 // Roles are stored free-text and may differ in case (e.g. "Procurement_manager") —
