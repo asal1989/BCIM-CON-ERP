@@ -1980,6 +1980,7 @@ export default function Layout() {
   const location = useLocation();
   const { language, setLanguage, t } = useLanguage();
   const isProcurementPage = location.pathname.startsWith('/procurement');
+  const isChatPage = location.pathname === '/chat' || location.pathname.startsWith('/chat/');
   const currentLang = LANGUAGES.find(l => l.code === language) || LANGUAGES[0];
   const { title: pageTitle, group: pageGroup } = usePageTitle();
 
@@ -2404,7 +2405,7 @@ export default function Layout() {
           topOffset={(pageGroup ? 80 : 52) + (isMDNavUser || isProcurementUser ? 36 : 0)}
           recentPages={recentPages}
         />
-        <main style={{ flex: 1, minWidth: 0, overflow: 'auto', position: 'relative' }} className="print:overflow-visible print:h-auto">
+        <main style={{ flex: 1, minWidth: 0, overflow: isChatPage ? 'hidden' : 'auto', position: 'relative' }} className="print:overflow-visible print:h-auto">
           <Suspense fallback={<LoadingScreen />}>
             <div key={location.key} className={clsx('page-enter', isProcurementPage && 'procurement-strong-text')}>
               <Outlet />
