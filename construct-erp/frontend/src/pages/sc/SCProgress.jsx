@@ -7,7 +7,7 @@ import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import {
   Plus, Search, RefreshCw, X, Eye, CheckCircle2,
   Clock, FileText, MapPin, Layers, Send, ThumbsUp,
-  ThumbsDown, ChevronRight, BookOpen, Trash2,
+  ThumbsDown, ChevronRight, BookOpen, Trash2, ChevronLeft, Link2,
 } from 'lucide-react';
 import SCMeasurementBook from './mb/SCMeasurementBook';
 import toast from 'react-hot-toast';
@@ -183,51 +183,73 @@ function MBDrawer({ mbId, onClose }) {
 
   const sm = STATUS_META[mb?.status] || STATUS_META.draft;
 
+  const handleLinkToBill = () => {
+    if (mb?.wo_id) {
+      window.location.href = `/sc/bill-preparation?wo_id=${mb.wo_id}&open=1`;
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex">
-      <div className="flex-1 bg-black/40" onClick={onClose}/>
-      <div className="w-full max-w-md bg-white shadow-2xl flex flex-col overflow-hidden">
-        <div className="px-5 py-4 flex items-center justify-between"
-          style={{background:`linear-gradient(135deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)`}}>
+    <div className="fixed inset-0 z-50 flex flex-col" style={{background: Theme.pageBg}}>
+      {/* ── Top bar ── */}
+      <div className="flex items-center justify-between px-6 py-4 flex-shrink-0 shadow-lg"
+        style={{background:`linear-gradient(135deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)`}}>
+        <div className="flex items-center gap-3">
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-white hover:bg-white/10 transition-colors">
+            <ChevronLeft className="w-5 h-5"/>
+          </button>
           <div>
-            <p className="font-bold text-white text-sm">{mb?.mb_number||'…'}</p>
-            <p className="text-[10px] mt-0.5" style={{color:'rgba(255,255,255,0.6)'}}>{mb?.sc_name} · {mb?.project_name}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={handleDelete} disabled={deleteMut.isPending} title="Delete MB entry"
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-white disabled:opacity-50" style={{background:'rgba(239,68,68,0.25)'}}>
-              <Trash2 className="w-3.5 h-3.5"/>
-            </button>
-            <button onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center text-white" style={{background:'rgba(255,255,255,0.10)'}}>
-              <X className="w-4 h-4"/>
-            </button>
+            <p className="text-[10px] tracking-widest text-blue-300 uppercase">Measurement Book Entry</p>
+            <p className="font-bold text-white text-base leading-tight">{mb?.mb_number||'…'}</p>
+            <p className="text-[11px] mt-0.5" style={{color:'rgba(255,255,255,0.6)'}}>{mb?.sc_name} · {mb?.project_name}</p>
           </div>
         </div>
+        <div className="flex items-center gap-2">
+          {mb?.status === 'approved' && (
+            <button onClick={handleLinkToBill}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold text-white transition-colors"
+              style={{background:'#10b981'}}>
+              <Link2 className="w-4 h-4"/> Link to Bill
+            </button>
+          )}
+          <button onClick={handleDelete} disabled={deleteMut.isPending} title="Delete MB entry"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-white disabled:opacity-50 hover:bg-red-500/30 transition-colors" style={{background:'rgba(239,68,68,0.20)'}}>
+            <Trash2 className="w-4 h-4"/>
+          </button>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-white hover:bg-white/10 transition-colors">
+            <X className="w-4 h-4"/>
+          </button>
+        </div>
+      </div>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+      {/* ── Content ── */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
           {isLoading ? (
-            <div className="space-y-3">{[1,2,3].map(n=><div key={n} className="h-16 bg-slate-100 rounded-xl animate-pulse"/>)}</div>
+            <div className="space-y-4">{[1,2,3,4].map(n=><div key={n} className="h-20 bg-white rounded-2xl animate-pulse shadow-sm"/>)}</div>
           ) : mb && (
             <>
-              <div className="grid grid-cols-2 gap-3">
+              {/* Status + meta grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {[
-                  {l:'Status',   v:<span className={clsx('text-xs px-2 py-0.5 rounded-full font-bold',sm.bg,sm.text)}>{sm.label}</span>},
-                  {l:'MB Date',  v: dayjs(mb.mb_date).format('DD MMM YYYY')},
-                  {l:'WO Number',v: mb.wo_number},
-                  {l:'Project',  v: mb.project_name},
+                  {l:'Status',    v:<span className={clsx('text-xs px-2.5 py-1 rounded-full font-bold',sm.bg,sm.text)}>{sm.label}</span>},
+                  {l:'MB Date',   v: dayjs(mb.mb_date).format('DD MMM YYYY')},
+                  {l:'WO Number', v: mb.wo_number},
+                  {l:'Project',   v: mb.project_name},
                 ].map(({l,v})=>(
-                  <div key={l} className="bg-slate-50 border border-slate-100 rounded-xl p-3">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{l}</p>
-                    <p className="text-xs font-semibold text-slate-800">{v}</p>
+                  <div key={l} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">{l}</p>
+                    <p className="text-sm font-semibold text-slate-800">{v}</p>
                   </div>
                 ))}
               </div>
 
-              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                <div className="px-4 py-2.5" style={{background:`linear-gradient(90deg, ${Theme.navy}dd 0%, ${Theme.navyDark}dd 100%)`}}>
-                  <span className="text-xs font-bold text-white">Measurement Details</span>
+              {/* Measurement details card */}
+              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                <div className="px-5 py-3" style={{background:`linear-gradient(90deg, ${Theme.navy}ee 0%, ${Theme.navyDark}ee 100%)`}}>
+                  <span className="text-sm font-bold text-white">Measurement Details</span>
                 </div>
-                <div className="p-4 space-y-2">
+                <div className="p-5 space-y-3">
                   {[
                     {l:'Description',  v: mb.description},
                     {l:'Executed Qty', v:`${mb.executed_qty} ${mb.unit||''}`, bold:true, color:'text-emerald-700'},
@@ -237,52 +259,56 @@ function MBDrawer({ mbId, onClose }) {
                     mb.location_detail && {l:'Location',      v: mb.location_detail},
                     mb.drawing_ref     && {l:'Drawing Ref',   v: mb.drawing_ref},
                   ].filter(Boolean).map(({l,v,bold,color})=>(
-                    <div key={l} className="flex justify-between border-b border-slate-50 pb-2 last:border-0">
-                      <span className="text-xs text-slate-500">{l}</span>
-                      <span className={clsx('text-xs font-semibold', bold ? color||'text-indigo-700':'text-slate-800')}>{v}</span>
+                    <div key={l} className="flex justify-between border-b border-slate-50 pb-3 last:border-0 last:pb-0">
+                      <span className="text-sm text-slate-500">{l}</span>
+                      <span className={clsx('text-sm font-semibold', bold ? color||'text-indigo-700':'text-slate-800')}>{v}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
+              {/* Estimated amount */}
               {mb.wo_rate && (
-                <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 flex justify-between">
-                  <span className="text-xs text-indigo-600">Estimated Amount (Qty × Rate)</span>
-                  <span className="text-sm font-bold text-indigo-800">{fmt(num(mb.executed_qty)*num(mb.wo_rate))}</span>
+                <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-5 flex justify-between items-center shadow-sm">
+                  <span className="text-sm text-indigo-600 font-medium">Estimated Amount (Qty × Rate)</span>
+                  <span className="text-xl font-bold text-indigo-800">{fmt(num(mb.executed_qty)*num(mb.wo_rate))}</span>
                 </div>
               )}
 
+              {/* Remarks */}
               {mb.remarks && (
-                <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-xs text-slate-700 italic">{mb.remarks}</div>
+                <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 text-sm text-slate-700 italic shadow-sm">{mb.remarks}</div>
               )}
 
+              {/* Action buttons for non-approved statuses */}
               {['draft','submitted','checked'].includes(mb.status) && (
-                <div className="space-y-3">
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
+                  <p className="text-sm font-semibold text-slate-700">Actions</p>
                   <Field label="Remarks">
-                    <textarea value={comment} onChange={e=>setComment(e.target.value)} rows={2} className={inp+' resize-none'} placeholder="Add comments…"/>
+                    <textarea value={comment} onChange={e=>setComment(e.target.value)} rows={3} className={inp+' resize-none'} placeholder="Add comments…"/>
                   </Field>
-                  <div className="flex gap-2 flex-wrap">
+                  <div className="flex gap-3 flex-wrap">
                     {mb.status==='draft' && (
                       <button onClick={()=>submitMut.mutate()} disabled={submitMut.isPending}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700">
-                        <Send className="w-3 h-3"/> Submit
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors">
+                        <Send className="w-4 h-4"/> Submit
                       </button>
                     )}
                     {mb.status==='submitted' && (
                       <button onClick={()=>checkMut.mutate()} disabled={checkMut.isPending}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold hover:bg-amber-600">
-                        <CheckCircle2 className="w-3 h-3"/> Mark Checked
+                        className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-bold hover:bg-amber-600 transition-colors">
+                        <CheckCircle2 className="w-4 h-4"/> Mark Checked
                       </button>
                     )}
                     {['submitted','checked'].includes(mb.status) && (
                       <>
                         <button onClick={()=>approveMut.mutate()} disabled={approveMut.isPending}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700">
-                          <ThumbsUp className="w-3 h-3"/> Approve
+                          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700 transition-colors">
+                          <ThumbsUp className="w-4 h-4"/> Approve
                         </button>
                         <button onClick={()=>rejectMut.mutate()} disabled={rejectMut.isPending}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700">
-                          <ThumbsDown className="w-3 h-3"/> Reject
+                          className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-bold hover:bg-red-700 transition-colors">
+                          <ThumbsDown className="w-4 h-4"/> Reject
                         </button>
                       </>
                     )}
@@ -290,11 +316,24 @@ function MBDrawer({ mbId, onClose }) {
                 </div>
               )}
 
-              {mb.status==='approved' && mb.approve_remarks && (
-                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-xs text-emerald-700">✓ {mb.approve_remarks}</div>
+              {/* Approved — Link to Bill CTA */}
+              {mb.status === 'approved' && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 flex items-center justify-between shadow-sm">
+                  <div>
+                    <p className="text-sm font-bold text-emerald-800">This MB entry is Approved</p>
+                    <p className="text-xs text-emerald-600 mt-0.5">Click "Link to Bill" to raise a bill for this work order.</p>
+                    {mb.approve_remarks && <p className="text-xs text-emerald-700 mt-1 italic">✓ {mb.approve_remarks}</p>}
+                  </div>
+                  <button onClick={handleLinkToBill}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white ml-4 flex-shrink-0 transition-colors"
+                    style={{background:'#10b981'}}>
+                    <Link2 className="w-4 h-4"/> Link to Bill
+                  </button>
+                </div>
               )}
+
               {mb.status==='rejected' && mb.rejection_remarks && (
-                <div className="bg-red-50 border border-red-100 rounded-xl p-3 text-xs text-red-700">✗ {mb.rejection_remarks}</div>
+                <div className="bg-red-50 border border-red-100 rounded-2xl p-4 text-sm text-red-700 shadow-sm">✗ {mb.rejection_remarks}</div>
               )}
             </>
           )}
