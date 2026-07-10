@@ -275,11 +275,22 @@ export default function VariationPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-[#e2e6ec] bg-[#f8f9fb]">
-                    {['VO Number', 'Project', 'Description', 'Requested By', 'Date', 'Items', 'Amount', 'Status', ''].map((h, i) => (
+                    {[
+                      { h: 'VO Number',            right: false },
+                      { h: 'Project',              right: false },
+                      { h: 'Description',          right: false },
+                      { h: 'Requested By',         right: false },
+                      { h: 'Date',                 right: false },
+                      { h: 'Items',                right: true  },
+                      { h: 'Prev. Order Value',    right: true  },
+                      { h: 'Variation Amt',        right: true  },
+                      { h: 'Current Order Value',  right: true  },
+                      { h: 'Status',               right: false, center: true },
+                      { h: '',                     right: false },
+                    ].map(({ h, right, center }, i) => (
                       <th key={i} className={clsx(
-                        'py-3 px-4 text-[10px] font-medium text-[#6a6f7d] uppercase tracking-wider',
-                        i >= 5 ? 'text-right' : 'text-left',
-                        i === 7 ? 'text-center' : '',
+                        'py-3 px-4 text-[10px] font-medium text-[#6a6f7d] uppercase tracking-wider whitespace-nowrap',
+                        right ? 'text-right' : center ? 'text-center' : 'text-left',
                       )}>
                         {h}
                       </th>
@@ -322,14 +333,26 @@ export default function VariationPage() {
                           </span>
                         </div>
                       </td>
-                      {/* Items count — filled from detail */}
+                      {/* Items count */}
                       <td className="py-3 px-4 text-right">
                         <span className="text-[12px] text-[#6a6f7d]">—</span>
                       </td>
-                      {/* Amount */}
+                      {/* Previous Order Value */}
                       <td className="py-3 px-4 text-right">
-                        <span className="text-[12px] font-medium font-mono text-[#1a1c21]">
+                        <span className="text-[12px] font-mono text-[#6a6f7d]">
+                          {inr(vo.previous_order_value)}
+                        </span>
+                      </td>
+                      {/* Variation Amount */}
+                      <td className="py-3 px-4 text-right">
+                        <span className="text-[12px] font-medium font-mono text-indigo-700">
                           {inr(vo.total_variation_amount)}
+                        </span>
+                      </td>
+                      {/* Current Order Value */}
+                      <td className="py-3 px-4 text-right">
+                        <span className="text-[12px] font-bold font-mono text-emerald-700">
+                          {inr(vo.current_order_value)}
                         </span>
                       </td>
                       {/* Status */}
