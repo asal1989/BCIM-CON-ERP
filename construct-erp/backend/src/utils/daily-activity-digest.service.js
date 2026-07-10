@@ -37,7 +37,7 @@ async function fetchDailyActivity(companyId, timezone, daysAgo = 0) {
   const params = [companyId, timezone, daysAgo];
 
   const [
-    pos, wos, grns, mins, mrses, measurements, raBills, vendorBills,
+    pos, wos, grns, mins, mrses, measurements, raBills, scBills, vendorBills,
     payments, invoices, dprs, attendanceRows, incidents, permits,
     rfis, ncrs, documents, gfcRevisions, assetMoves,
   ] = await Promise.all([
@@ -108,6 +108,16 @@ async function fetchDailyActivity(companyId, timezone, daysAgo = 0) {
       LEFT JOIN users u ON u.id = COALESCE(rb.created_by, rb.submitted_by)
       WHERE p.company_id = $1 AND ${today('rb.created_at')}
       ORDER BY rb.created_at`, params),
+
+    query(`
+      SELECT sb.bill_number AS ref_no, sb.net_payable AS amount, sb.status, sb.current_stage AS detail, sb.created_at,
+             COALESCE(sc.name, '-') AS party_name, p.name AS project_name, u.name AS by_name
+      FROM sc_bills sb
+      JOIN projects p ON p.id = sb.project_id
+      LEFT JOIN sc_subcontractors sc ON sc.id = sb.sc_id
+      LEFT JOIN users u ON u.id = COALESCE(sb.submitted_by, sb.created_by)
+      WHERE sb.company_id = $1 AND ${today('sb.created_at')}
+      ORDER BY sb.created_at`, params),
 
     query(`
       SELECT b.sl_number AS ref_no, b.total_amount AS amount, UPPER(COALESCE(b.bill_type, 'po')) AS status, b.created_at,
@@ -234,7 +244,7 @@ async function fetchDailyActivity(companyId, timezone, daysAgo = 0) {
 
   return {
     pos: pos.rows, wos: wos.rows, grns: grns.rows, mins: mins.rows, mrses: mrses.rows,
-    measurements: measurements.rows, raBills: raBills.rows, vendorBills: vendorBills.rows,
+    measurements: measurements.rows, raBills: raBills.rows, scBills: scBills.rows, vendorBills: vendorBills.rows,
     payments: payments.rows, invoices: invoices.rows, dprs: dprs.rows,
     attendance: [...attendanceByProject.values()],
     incidents: incidents.rows, permits: permits.rows, rfis: rfis.rows, ncrs: ncrs.rows,
@@ -350,6 +360,20 @@ function buildMail({ companyName, data, dateLabel }) {
       <td style="${td}">${esc(r.project_name)}</td>
       <td style="${td};text-align:right;font-weight:700">Rs ${inr(r.amount)}</td>
       <td style="${td}">${esc(r.status)}</td>
+      <td style="${td}">${esc(r.by_name || '-')}</td>
+      <td style="${td}">${fmtTime(r.created_at)}</td>
+    </tr>`);
+
+  const scBillRows = section('QS &mdash; Subcontractor Bills Raised for Approval', data.scBills || [],
+    ['#', 'Bill Number', 'Subcontractor', 'Project', 'Net Payable', 'Status', 'Stage', 'Raised By', 'Time'],
+    (r, i) => `<tr>
+      <td style="${td}">${i + 1}</td>
+      <td style="${td};font-family:monospace;font-weight:700">${esc(r.ref_no)}</td>
+      <td style="${td}">${esc(r.party_name || '-')}</td>
+      <td style="${td}">${esc(r.project_name)}</td>
+      <td style="${td};text-align:right;font-weight:700">Rs ${inr(r.amount)}</td>
+      <td style="${td}">${esc(r.status)}</td>
+      <td style="${td}">${esc(r.detail || '-')}</td>
       <td style="${td}">${esc(r.by_name || '-')}</td>
       <td style="${td}">${fmtTime(r.created_at)}</td>
     </tr>`);
@@ -509,7 +533,7 @@ function buildMail({ companyName, data, dateLabel }) {
   const depts = [
     { label: 'Procurement', count: data.pos.length + data.wos.length },
     { label: 'Stores', count: data.grns.length + data.mins.length + data.mrses.length },
-    { label: 'QS & Billing', count: data.measurements.length + data.raBills.length + data.vendorBills.length },
+    { label: 'QS & Billing', count: data.measurements.length + data.raBills.length + (data.scBills?.length || 0) + data.vendorBills.length },
     { label: 'Finance', count: data.payments.length + data.invoices.length },
     { label: 'Planning / Site', count: data.dprs.length },
     { label: 'HR & Labour', count: attendanceTotal },
@@ -536,7 +560,7 @@ function buildMail({ companyName, data, dateLabel }) {
   const subject = `Daily Activity Summary - ${dateLabel} - ${totalItems} update(s) across ${activeDepts} department(s)`;
 
   const allSections = [
-    poRows, woRows, grnRows, minRows, mrsRows, measurementRows, raBillRows, vendorBillRows,
+    poRows, woRows, grnRows, minRows, mrsRows, measurementRows, raBillRows, scBillRows, vendorBillRows,
     paymentRows, invoiceRows, dprRows, attendanceRows, incidentRows, permitRows,
     rfiRows, ncrRows, documentRows, gfcRows, assetRows,
   ].join('');
@@ -622,7 +646,7 @@ async function fetchRangeActivity(companyId, timezone, fromDate, toDate) {
   const params = [companyId, timezone, fromDate, toDate];
 
   const [
-    pos, wos, grns, mins, mrses, measurements, raBills, vendorBills,
+    pos, wos, grns, mins, mrses, measurements, raBills, scBills, vendorBills,
     payments, invoices, dprs, attendanceRows, incidents, permits,
     rfis, ncrs, documents, gfcRevisions, assetMoves,
   ] = await Promise.all([
@@ -662,6 +686,12 @@ async function fetchRangeActivity(companyId, timezone, fromDate, toDate) {
            FROM ra_bills rb JOIN projects p ON p.id = rb.project_id
            LEFT JOIN users u ON u.id = COALESCE(rb.created_by, rb.submitted_by)
            WHERE p.company_id=$1 AND ${inRange('rb.created_at')} ORDER BY rb.created_at`, params),
+    query(`SELECT sb.bill_number AS ref_no, sb.net_payable AS amount, sb.status, sb.current_stage AS detail, sb.created_at,
+             COALESCE(sc.name,'-') AS party_name, p.name AS project_name, u.name AS by_name
+           FROM sc_bills sb JOIN projects p ON p.id = sb.project_id
+           LEFT JOIN sc_subcontractors sc ON sc.id = sb.sc_id
+           LEFT JOIN users u ON u.id = COALESCE(sb.submitted_by, sb.created_by)
+           WHERE sb.company_id=$1 AND ${inRange('sb.created_at')} ORDER BY sb.created_at`, params),
     query(`SELECT b.sl_number AS ref_no, b.total_amount AS amount, UPPER(COALESCE(b.bill_type,'po')) AS status, b.created_at,
              b.vendor_name AS party_name, p.name AS project_name, u.name AS by_name
            FROM tqs_bills b LEFT JOIN projects p ON p.id = b.project_id
@@ -738,7 +768,7 @@ async function fetchRangeActivity(companyId, timezone, fromDate, toDate) {
 
   return {
     pos: pos.rows, wos: wos.rows, grns: grns.rows, mins: mins.rows, mrses: mrses.rows,
-    measurements: measurements.rows, raBills: raBills.rows, vendorBills: vendorBills.rows,
+    measurements: measurements.rows, raBills: raBills.rows, scBills: scBills.rows, vendorBills: vendorBills.rows,
     payments: payments.rows, invoices: invoices.rows, dprs: dprs.rows,
     attendance: [...attendanceByProject.values()],
     incidents: incidents.rows, permits: permits.rows, rfis: rfis.rows, ncrs: ncrs.rows,
@@ -776,7 +806,7 @@ async function runWeeklySummary({ fromDate, toDate, overrideRecipients } = {}) {
     // Override subject for weekly
     const totalItems = Object.values(data).reduce((s, arr) => s + (Array.isArray(arr) ? arr.length : 0), 0);
     const activeDepts = [data.pos, data.wos, data.grns, data.mins, data.mrses, data.measurements,
-      data.raBills, data.vendorBills, data.payments, data.invoices, data.dprs, data.attendance,
+      data.raBills, data.scBills, data.vendorBills, data.payments, data.invoices, data.dprs, data.attendance,
       data.incidents, data.permits, data.rfis, data.ncrs, data.documents, data.gfcRevisions, data.assetMoves,
     ].filter(arr => arr.length > 0).length;
     mail.subject = `Weekly Activity Summary (${dateLabel}) — ${totalItems} update(s) across ${activeDepts} department(s)`;
