@@ -571,9 +571,9 @@ function DailyLogSection({ wo, equipmentGroups, onCreateBill }) {
             </select>
           </div>
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Qty *</label>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Hours *</label>
             <input type="number" step="0.5" min="0" value={newQty} onChange={e => setNewQty(e.target.value)}
-              className={inp} style={{ width: 80 }} placeholder="1" />
+              className={inp} style={{ width: 80 }} placeholder="e.g. 5.5" />
           </div>
           <div className="flex-1" style={{ minWidth: 140 }}>
             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Notes</label>
@@ -607,7 +607,7 @@ function DailyLogSection({ wo, equipmentGroups, onCreateBill }) {
                   <th className="text-left px-3 py-2 font-semibold text-slate-400 uppercase tracking-wider w-32">Date</th>
                   <th className="text-left px-3 py-2 font-semibold text-slate-400 uppercase tracking-wider">Equipment Group</th>
                   <th className="text-left px-3 py-2 font-semibold text-slate-400 uppercase tracking-wider">Category</th>
-                  <th className="text-right px-3 py-2 font-semibold text-slate-400 uppercase tracking-wider w-24">Qty</th>
+                  <th className="text-right px-3 py-2 font-semibold text-slate-400 uppercase tracking-wider w-24">Hours</th>
                   <th className="text-left px-3 py-2 font-semibold text-slate-400 uppercase tracking-wider">Notes</th>
                   <th className="w-8 px-2 py-2" />
                 </tr>
