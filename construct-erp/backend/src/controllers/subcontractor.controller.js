@@ -3,11 +3,49 @@ const { query, withTransaction } = require('../config/database');
 const { getNextDqsNumber } = require('../services/documentNumber.service');
 const { createNotification } = require('./notification.controller');
 
-function genBillNumber() {
-  const d = new Date();
-  const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-  const rand = String(Math.floor(1000 + Math.random() * 9000));
-  return `RA-${ymd}-${rand}`;
+// Build vendor short code: first 3 chars of first word + first 3 chars of last word (uppercase)
+// e.g. "SUKKALI RAMESH" → "SUKRAM", "JOHN DOE CONSTRUCTIONS" → "JOHCON"
+function vendorShort(name = '') {
+  const words = name.trim().toUpperCase().replace(/[^A-Z0-9 ]/g, '').split(/\s+/).filter(Boolean);
+  if (words.length === 0) return 'VND';
+  if (words.length === 1) return words[0].slice(0, 6);
+  return words[0].slice(0, 3) + words[words.length - 1].slice(0, 3);
+}
+
+// Build project short code: first 3 chars of first word (uppercase)
+// e.g. "LANCO Hills – LH 10" → "LAN"
+function projectShort(name = '') {
+  const first = name.trim().toUpperCase().replace(/[^A-Z0-9 ]/g, '').split(/\s+/)[0] || 'PRJ';
+  return first.slice(0, 3);
+}
+
+async function genBillNumber(wo_id, project_id) {
+  // Fetch vendor name and project code
+  const row = await query(
+    `SELECT v.name AS vendor_name, p.name AS project_name, p.project_code
+       FROM work_orders wo
+       JOIN vendors v  ON wo.vendor_id = v.id
+       JOIN projects p ON p.id = $2
+      WHERE wo.id = $1`,
+    [wo_id, project_id]
+  );
+  const vName = row.rows[0]?.vendor_name || '';
+  const pName = row.rows[0]?.project_name || '';
+  const vCode = vendorShort(vName);
+  const pCode = projectShort(pName);
+
+  // Count existing bills for this vendor+project to get next sequence
+  const countRow = await query(
+    `SELECT COUNT(*) AS cnt
+       FROM subcontractor_bills sb
+       JOIN work_orders wo ON sb.wo_id = wo.id
+      WHERE sb.project_id = $1 AND wo.vendor_id = (
+        SELECT vendor_id FROM work_orders WHERE id = $2
+      )`,
+    [project_id, wo_id]
+  );
+  const seq = String(parseInt(countRow.rows[0]?.cnt || 0) + 1).padStart(3, '0');
+  return `BCIM-${vCode}-${pCode}-RA${seq}`;
 }
 
 async function ensureLabourTables() {
@@ -410,8 +448,6 @@ const createBill = async (req, res) => {
     } = req.body;
     const billType = ['ra', 'final', 'advance', 'extra_item'].includes(bill_type) ? bill_type : 'ra';
 
-    const bill_number = req.body.bill_number || genBillNumber();
-
     // Simplified flow: bill_amount + tax_amount + retention_percent
     const bill_amount     = parseFloat(req.body.bill_amount || 0);
     const taxAmt          = parseFloat(tax_amount || 0);
@@ -430,6 +466,8 @@ const createBill = async (req, res) => {
       if (!woRow.rows[0]) return res.status(400).json({ error: 'Work order not found.' });
       project_id = woRow.rows[0].project_id;
     }
+
+    const bill_number = req.body.bill_number || await genBillNumber(wo_id, project_id);
 
     let created;
     await withTransaction(async (client) => {
