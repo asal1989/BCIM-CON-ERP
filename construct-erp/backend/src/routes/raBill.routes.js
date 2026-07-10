@@ -343,6 +343,33 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// PUT /ra-bills/:id  — update editable fields (bill_number, bill_date, work_description, amounts, etc.)
+router.put('/:id', authorize('super_admin','admin','qs_engineer','project_manager'), async (req, res) => {
+  try {
+    const allowed = [
+      'bill_number','bill_date','work_description','bill_period_from','bill_period_to',
+      'gross_amount','gst_rate','gst_amount','retention_percent',
+      'mobilization_advance_recovery','adhoc_advance_recovery',
+      'material_recovery_steel','material_recovery_cement',
+      'price_escalation','other_deductions','tds_rate','remarks',
+      'contractor_name','contractor_gstin','contractor_pan','wo_number','status',
+    ];
+    const fields = Object.keys(req.body).filter(k => allowed.includes(k));
+    if (!fields.length) return res.status(400).json({ error: 'No updatable fields provided' });
+    const sets = fields.map((f, i) => `${f} = $${i + 1}`).join(', ');
+    const vals = fields.map(f => req.body[f]);
+    vals.push(req.params.id);
+    const result = await query(
+      `UPDATE ra_bills SET ${sets}, updated_at = NOW() WHERE id = $${vals.length} RETURNING *`,
+      vals
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Bill not found' });
+    res.json({ data: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PATCH /ra-bills/:id/verify
 router.patch('/:id/verify', authorize('super_admin','admin','qs_engineer','project_manager'), async (req, res) => {
   try {
