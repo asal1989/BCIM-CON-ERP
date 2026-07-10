@@ -27,6 +27,87 @@ const scBillStorage = multer.diskStorage({
 });
 const scBillUpload = multer({ storage: scBillStorage, limits: { fileSize: 20 * 1024 * 1024 } });
 
+// Ensure the SC Measurement Book and Advances tables exist.
+// These were originally created via 025_sc_enhanced.sql (a one-time migration).
+// Adding runSchemaInit guards so they auto-create on Railway even if that file never ran.
+runSchemaInit('sc_mb_entries_table', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS sc_mb_entries (
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id      UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      project_id      UUID NOT NULL REFERENCES projects(id),
+      wo_id           UUID NOT NULL REFERENCES sc_work_orders(id),
+      wo_item_id      UUID REFERENCES sc_wo_items(id),
+      sc_id           UUID NOT NULL REFERENCES sc_subcontractors(id),
+      mb_number       VARCHAR(60) NOT NULL,
+      mb_date         DATE NOT NULL DEFAULT CURRENT_DATE,
+      tower_block     VARCHAR(100),
+      floor_number    VARCHAR(50),
+      location_detail VARCHAR(300),
+      drawing_ref     VARCHAR(200),
+      description     TEXT NOT NULL,
+      unit            VARCHAR(30),
+      executed_qty    NUMERIC(14,3) NOT NULL DEFAULT 0,
+      previous_qty    NUMERIC(14,3) DEFAULT 0,
+      site_photos     JSONB DEFAULT '[]',
+      remarks         TEXT,
+      status          VARCHAR(20) DEFAULT 'draft'
+                        CHECK (status IN ('draft','submitted','checked','approved','rejected')),
+      checked_by      UUID REFERENCES users(id),
+      checked_at      TIMESTAMPTZ,
+      check_remarks   TEXT,
+      approved_by     UUID REFERENCES users(id),
+      approved_at     TIMESTAMPTZ,
+      approve_remarks TEXT,
+      rejected_by     UUID REFERENCES users(id),
+      rejection_remarks TEXT,
+      created_by      UUID REFERENCES users(id),
+      created_at      TIMESTAMPTZ DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (company_id, mb_number)
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_sc_mb_wo     ON sc_mb_entries(wo_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_sc_mb_item   ON sc_mb_entries(wo_item_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_sc_mb_status ON sc_mb_entries(status)`);
+  await query(`ALTER TABLE sc_mb_entries ADD COLUMN IF NOT EXISTS qaqc_cleared     BOOLEAN DEFAULT FALSE`);
+  await query(`ALTER TABLE sc_mb_entries ADD COLUMN IF NOT EXISTS qaqc_cleared_by  UUID REFERENCES users(id)`);
+  await query(`ALTER TABLE sc_mb_entries ADD COLUMN IF NOT EXISTS qaqc_cleared_at  TIMESTAMPTZ`);
+  await query(`ALTER TABLE sc_mb_entries ADD COLUMN IF NOT EXISTS qaqc_remarks     TEXT`);
+});
+
+runSchemaInit('sc_advances_table', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS sc_advances (
+      id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id          UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      project_id          UUID NOT NULL REFERENCES projects(id),
+      wo_id               UUID NOT NULL REFERENCES sc_work_orders(id),
+      sc_id               UUID NOT NULL REFERENCES sc_subcontractors(id),
+      advance_number      VARCHAR(60) NOT NULL,
+      advance_date        DATE NOT NULL DEFAULT CURRENT_DATE,
+      amount              NUMERIC(18,2) NOT NULL,
+      recovery_pct        NUMERIC(5,2) DEFAULT 10,
+      recovered_amount    NUMERIC(18,2) DEFAULT 0,
+      balance_amount      NUMERIC(18,2) GENERATED ALWAYS AS (amount - recovered_amount) STORED,
+      recovery_start_bill VARCHAR(60),
+      payment_mode        VARCHAR(30) DEFAULT 'bank_transfer',
+      reference_no        VARCHAR(200),
+      remarks             TEXT,
+      status              VARCHAR(20) DEFAULT 'active'
+                            CHECK (status IN ('active','fully_recovered','cancelled')),
+      approved_by         UUID REFERENCES users(id),
+      created_by          UUID REFERENCES users(id),
+      created_at          TIMESTAMPTZ DEFAULT NOW(),
+      updated_at          TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (company_id, advance_number)
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_sc_adv_wo ON sc_advances(wo_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_sc_adv_sc ON sc_advances(sc_id)`);
+  await query(`ALTER TABLE sc_work_orders ADD COLUMN IF NOT EXISTS advance_paid NUMERIC(18,2) DEFAULT 0`);
+});
+
 runSchemaInit('sc_bill_files_table', async () => {
   await query(`
     CREATE TABLE IF NOT EXISTS sc_bill_files (
