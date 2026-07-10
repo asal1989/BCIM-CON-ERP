@@ -6,7 +6,11 @@ import clsx from 'clsx';
 import {
   Plus, X, ChevronDown, ChevronRight, CheckCircle2, Clock,
   Send, Banknote, AlertTriangle, FileCheck, Printer,
+  Download, FileSpreadsheet, FileText,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { paymentRecommendationAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
 
@@ -450,17 +454,21 @@ function PRDetailModal({ prId, onClose }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function PaymentRecommendationPage() {
   const { selectedProjectId, user } = useAuthStore();
-  const [statusFilter, setStatus] = useState('');
-  const [showCreate,  setShowCreate] = useState(false);
-  const [detailId,    setDetailId]   = useState(null);
+  const [statusFilter, setStatus]   = useState('');
+  const [dateFrom,     setDateFrom] = useState('');
+  const [dateTo,       setDateTo]   = useState('');
+  const [showCreate,   setShowCreate] = useState(false);
+  const [detailId,     setDetailId]   = useState(null);
 
   const canCreate = ['super_admin', 'admin', 'project_manager', 'qs_engineer', 'site_engineer', 'project_head'].includes(user?.role);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['payment-recommendations', selectedProjectId, statusFilter],
+    queryKey: ['payment-recommendations', selectedProjectId, statusFilter, dateFrom, dateTo],
     queryFn: () => paymentRecommendationAPI.list({
       ...(selectedProjectId ? { project_id: selectedProjectId } : {}),
       ...(statusFilter ? { status: statusFilter } : {}),
+      ...(dateFrom      ? { date_from: dateFrom } : {}),
+      ...(dateTo        ? { date_to:   dateTo }   : {}),
     }).then(r => r.data?.data || []),
     staleTime: 30_000,
   });
@@ -473,6 +481,63 @@ export default function PaymentRecommendationPage() {
     approved:  prs.filter(p => p.status === 'approved').length,
     paid:      prs.filter(p => p.status === 'paid').length,
     amount:    prs.filter(p => !['cancelled'].includes(p.status)).reduce((s, p) => s + parseFloat(p.total_amount || 0), 0),
+  };
+
+  const exportExcel = () => {
+    if (!prs.length) return toast.error('No records to export');
+    const rows = prs.map(pr => ({
+      'PR Number':       pr.pr_number,
+      'Status':          STATUS_META[pr.status]?.label || pr.status,
+      'Priority':        pr.priority === 'urgent' ? 'Urgent' : 'Normal',
+      'Project':         pr.project_name || 'All Projects',
+      'Bills Count':     pr.item_count,
+      'Total Amount':    parseFloat(pr.total_amount || 0),
+      'Recommended By':  pr.recommended_by_name || '—',
+      'Date':            dayjs(pr.created_at).format('DD-MM-YYYY'),
+      'Remarks':         pr.remarks || '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [14, 12, 10, 22, 12, 16, 20, 14, 30].map(w => ({ wch: w }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Payment Recommendations');
+    XLSX.writeFile(wb, `Payment-Recommendations-${dayjs().format('YYYY-MM-DD')}.xlsx`);
+  };
+
+  const exportPDF = () => {
+    if (!prs.length) return toast.error('No records to export');
+    const doc = new jsPDF({ orientation: 'landscape' });
+    const dateLabel = dateFrom || dateTo
+      ? ` (${dateFrom ? dayjs(dateFrom).format('DD MMM') : '…'} – ${dateTo ? dayjs(dateTo).format('DD MMM YYYY') : 'Today'})`
+      : '';
+    doc.setFontSize(14);
+    doc.text(`Payment Recommendations${dateLabel}`, 14, 15);
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(`Generated: ${dayjs().format('DD MMM YYYY HH:mm')}  ·  ${prs.length} record${prs.length !== 1 ? 's' : ''}`, 14, 21);
+    autoTable(doc, {
+      startY: 26,
+      head: [['PR Number', 'Status', 'Priority', 'Project', 'Bills', 'Total Amount', 'Recommended By', 'Date']],
+      body: prs.map(pr => [
+        pr.pr_number,
+        STATUS_META[pr.status]?.label || pr.status,
+        pr.priority === 'urgent' ? 'Urgent' : 'Normal',
+        pr.project_name || 'All Projects',
+        pr.item_count,
+        fmt(pr.total_amount),
+        pr.recommended_by_name || '—',
+        dayjs(pr.created_at).format('DD MMM YYYY'),
+      ]),
+      headStyles: { fillColor: [30, 58, 95], fontSize: 8, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 8 },
+      alternateRowStyles: { fillColor: [245, 247, 250] },
+      foot: [[
+        { content: 'TOTAL', colSpan: 5, styles: { fontStyle: 'bold', halign: 'right' } },
+        { content: fmt(summary.amount), styles: { fontStyle: 'bold' } },
+        '', '',
+      ]],
+      footStyles: { fillColor: [224, 231, 255], textColor: [55, 48, 163], fontStyle: 'bold', fontSize: 8 },
+    });
+    doc.save(`Payment-Recommendations-${dayjs().format('YYYY-MM-DD')}.pdf`);
   };
 
   return (
@@ -512,14 +577,50 @@ export default function PaymentRecommendationPage() {
         </div>
 
         {/* Filter bar */}
-        <div className="flex gap-2 flex-wrap">
-          {['', 'submitted', 'approved', 'paid', 'cancelled'].map(s => (
-            <button key={s} onClick={() => setStatus(s)}
-              className={clsx('px-4 py-1.5 rounded-full text-sm font-semibold border transition',
-                statusFilter === s ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300')}>
-              {s === '' ? 'All' : STATUS_META[s]?.label}
+        <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm space-y-3">
+          {/* Status pills */}
+          <div className="flex gap-2 flex-wrap">
+            {['', 'submitted', 'approved', 'paid', 'cancelled'].map(s => (
+              <button key={s} onClick={() => setStatus(s)}
+                className={clsx('px-4 py-1.5 rounded-full text-sm font-semibold border transition',
+                  statusFilter === s ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300')}>
+                {s === '' ? 'All' : STATUS_META[s]?.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Date range + export buttons */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <span className="font-semibold text-xs uppercase tracking-wide text-slate-400">From</span>
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50" />
+            </div>
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <span className="font-semibold text-xs uppercase tracking-wide text-slate-400">To</span>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-300 bg-slate-50" />
+            </div>
+            {(dateFrom || dateTo) && (
+              <button onClick={() => { setDateFrom(''); setDateTo(''); }}
+                className="text-xs text-slate-400 hover:text-red-500 transition font-semibold px-2 py-1 rounded-lg hover:bg-red-50">
+                Clear dates
+              </button>
+            )}
+
+            <div className="flex-1" />
+
+            <button onClick={exportExcel}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-semibold hover:bg-emerald-100 transition">
+              <FileSpreadsheet className="w-4 h-4" />
+              Excel
             </button>
-          ))}
+            <button onClick={exportPDF}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 text-sm font-semibold hover:bg-rose-100 transition">
+              <FileText className="w-4 h-4" />
+              PDF
+            </button>
+          </div>
         </div>
 
         {/* PR list */}

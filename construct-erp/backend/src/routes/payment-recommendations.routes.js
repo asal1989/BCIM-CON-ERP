@@ -153,7 +153,7 @@ router.get('/pending-bills', authorize(...RECOMMENDERS), async (req, res) => {
 // ── GET /payment-recommendations ────────────────────────────────────────────
 router.get('/', async (req, res) => {
   try {
-    const { project_id, status } = req.query;
+    const { project_id, status, date_from, date_to } = req.query;
     let sql = `
       SELECT pr.*, p.name AS project_name,
              u1.name AS recommended_by_name,
@@ -167,8 +167,10 @@ router.get('/', async (req, res) => {
     `;
     const params = [CID(req)];
     let i = 2;
-    if (project_id) { sql += ` AND pr.project_id=$${i++}`; params.push(project_id); }
-    if (status)     { sql += ` AND pr.status=$${i++}`;     params.push(status); }
+    if (project_id) { sql += ` AND pr.project_id=$${i++}`;              params.push(project_id); }
+    if (status)     { sql += ` AND pr.status=$${i++}`;                  params.push(status); }
+    if (date_from)  { sql += ` AND pr.created_at::date >= $${i++}`;     params.push(date_from); }
+    if (date_to)    { sql += ` AND pr.created_at::date <= $${i++}`;     params.push(date_to); }
     sql += ` ORDER BY pr.created_at DESC`;
     const r = await query(sql, params);
     res.json({ data: r.rows });
