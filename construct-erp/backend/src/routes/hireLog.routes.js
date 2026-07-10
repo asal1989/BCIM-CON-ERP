@@ -61,7 +61,8 @@ router.get('/work-orders', async (req, res) => {
       JOIN sc_wo_items i ON i.wo_id = wo.id
       JOIN sc_subcontractors sc ON sc.id = wo.sc_id
       JOIN projects p ON p.id = wo.project_id
-      WHERE wo.company_id = $1 AND i.usage_category IS NOT NULL${projectFilter}
+      WHERE wo.company_id = $1 AND i.usage_category IS NOT NULL
+        AND wo.status IN ('approved', 'active')${projectFilter}
       ORDER BY wo.wo_number
     `, params);
     res.json({ data: rows.rows });
