@@ -2227,4 +2227,14 @@ export const storesReportAPI = {
   get: (type, params) => api.get(`/stores-reports/${type}`, { params }),
 };
 
+export const paymentRecommendationAPI = {
+  list:         (params)   => api.get('/payment-recommendations', { params }),
+  get:          (id)       => api.get(`/payment-recommendations/${id}`),
+  pendingBills: (params)   => api.get('/payment-recommendations/pending-bills', { params }),
+  create:       (data)     => api.post('/payment-recommendations', data),
+  approve:      (id)       => api.patch(`/payment-recommendations/${id}/approve`),
+  reject:       (id)       => api.patch(`/payment-recommendations/${id}/reject`),
+  process:      (id, data) => api.patch(`/payment-recommendations/${id}/process`, data),
+};
+
 export default api;
