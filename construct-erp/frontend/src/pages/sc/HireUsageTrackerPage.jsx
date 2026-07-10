@@ -472,7 +472,8 @@ export default function HireUsageTrackerPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
   const [showSetup, setShowSetup] = useState(false);
-  const [raisingId, setRaisingId] = useState(null);
+  const [raisingId,      setRaisingId]      = useState(null);
+  const [raisingCombined, setRaisingCombined] = useState(false);
 
   // Reset selected WO when project changes
   useEffect(() => { setWoId(''); }, [selectedProjectId]);
@@ -494,13 +495,17 @@ export default function HireUsageTrackerPage() {
   const entries = data?.entries || [];
   const totals = data?.totals || {};
 
-  const raiseBill = async (entry) => {
+  const raiseBill = async (filteredEntry) => {
+    // GroupTable passes a filtered entry (only lines for that group).
+    // Look up the FULL entry so all equipment groups are included in the bill.
+    const entry = entries.find(e => e.id === filteredEntry.id) || filteredEntry;
     setRaisingId(entry.id);
     try {
+      const allCats = equipmentGroups.flatMap(g => g.categories);
       const items = entry.lines
         .filter(l => num(l.certified_hours) > 0)
         .map(l => {
-          const item = equipmentGroups.flatMap(g => g.categories).find(c => c.id === l.wo_item_id);
+          const item = allCats.find(c => c.id === l.wo_item_id);
           return {
             wo_item_id: l.wo_item_id,
             description: item ? `${item.equipment_group} — ${item.usage_category}` : 'Hire item',
@@ -531,6 +536,65 @@ export default function HireUsageTrackerPage() {
     }
   };
 
+  // Combine ALL unbilled entries for the WO into one bill
+  const raiseCombinedBill = async () => {
+    const unbilled = entries.filter(e => e.status !== 'billed');
+    if (!unbilled.length) { toast.error('All entries are already billed'); return; }
+
+    setRaisingCombined(true);
+    try {
+      const allCats = equipmentGroups.flatMap(g => g.categories);
+      // Aggregate certified hours per wo_item_id across all unbilled entries
+      const qtyMap = {};
+      for (const e of unbilled) {
+        for (const l of e.lines) {
+          const hrs = num(l.certified_hours);
+          if (hrs <= 0) continue;
+          if (!qtyMap[l.wo_item_id]) qtyMap[l.wo_item_id] = 0;
+          qtyMap[l.wo_item_id] += hrs;
+        }
+      }
+      const items = Object.entries(qtyMap).map(([wo_item_id, curr_qty]) => {
+        const item = allCats.find(c => c.id === wo_item_id);
+        return {
+          wo_item_id,
+          description: item ? `${item.equipment_group} — ${item.usage_category}` : 'Hire item',
+          unit: item?.unit, wo_qty: item?.qty, prev_qty: item?.billed_qty,
+          curr_qty, balance_qty: Math.max(0, num(item?.balance_qty) - curr_qty),
+          rate: num(item?.rate),
+        };
+      });
+      if (!items.length) { toast.error('No certified hours found in unbilled entries'); return; }
+
+      const grossAmount = items.reduce((s, it) => s + it.curr_qty * num(it.rate), 0);
+      const billDate = unbilled[unbilled.length - 1]?.bill_date || dayjs().format('YYYY-MM-DD');
+      const months = [...new Set(unbilled.map(e => e.bill_month).filter(Boolean))].join(', ');
+
+      const res = await scAPI.createBill({
+        wo_id: woId, bill_type: 'ra',
+        bill_date: billDate,
+        description: `Hire bill — Combined (${months || unbilled.length + ' entries'})`,
+        gross_amount: grossAmount,
+        gst_pct: num(wo?.gst_pct ?? 18),
+        tds_pct: num(wo?.tds_pct),
+        retention_pct: num(wo?.retention_pct),
+        items,
+      });
+      const newBill = res.data?.data;
+
+      // Mark all unbilled entries as billed against this one bill
+      await Promise.all(unbilled.map(e => hireLogAPI.markBilled(woId, e.id, newBill.id)));
+
+      toast.success(`Combined bill ${newBill.bill_number} created — ${fmt(newBill.net_payable)} (${unbilled.length} entries merged)`);
+      qc.invalidateQueries({ queryKey: ['hire-log', woId] });
+      qc.invalidateQueries({ queryKey: ['sc-bills'] });
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to raise combined bill');
+    } finally {
+      setRaisingCombined(false);
+    }
+  };
+
   const deleteEntry = async (entry) => {
     if (!window.confirm('Delete this entry?')) return;
     try {
@@ -549,12 +613,22 @@ export default function HireUsageTrackerPage() {
         subtitle="Track Invoiced vs Certified hours per usage category, then raise the bill"
         breadcrumbs={[{ label: 'Subcontractors' }, { label: 'Hire Usage Tracker' }]}
         actions={
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <button onClick={() => setShowSetup(true)}
               className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition shadow-sm"
               style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)' }}>
               <Settings className="w-3.5 h-3.5" /> Setup WO
             </button>
+            {wo && entries.some(e => e.status !== 'billed') && (
+              <button
+                onClick={raiseCombinedBill}
+                disabled={raisingCombined}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition shadow-sm disabled:opacity-60"
+                style={{ background: '#10b981', color: '#fff' }}>
+                <Receipt className="w-3.5 h-3.5" />
+                {raisingCombined ? 'Creating…' : `Raise Combined Bill (${entries.filter(e => e.status !== 'billed').length} entries)`}
+              </button>
+            )}
             {wo && (
               <button onClick={() => setShowAdd(true)}
                 className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition shadow-sm"

@@ -10,7 +10,7 @@ import {
   Plus, Search, RefreshCw, Receipt, Eye, X, ChevronRight,
   CheckCircle2, Clock, AlertTriangle, IndianRupee, FileText,
   ArrowRight, Building2, CalendarDays, Layers, Send,
-  BarChart3, Info, HardHat, Printer, Pencil,
+  BarChart3, Info, HardHat, Printer, Pencil, Trash2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
@@ -1206,7 +1206,24 @@ function BillDetailPage({ billId, onClose }) {
     documentTitle: `SC_RA_Bill_${b?.bill_number || 'print'}`,
   });
   const [showEdit, setShowEdit] = useState(false);
-  const canEdit = !['approved', 'paid'].includes(b.status);
+  const canEdit   = !['approved', 'paid'].includes(b.status);
+  const canDelete = ['draft', 'rejected'].includes(b.status);
+
+  const deleteMut = useMutation({
+    mutationFn: () => scAPI.deleteBill(billId),
+    onSuccess: () => {
+      toast.success('Bill deleted');
+      qc.invalidateQueries({ queryKey: ['sc-bills'] });
+      qc.invalidateQueries({ queryKey: ['hire-log'] });
+      onClose();
+    },
+    onError: e => toast.error(e?.response?.data?.error || 'Failed to delete'),
+  });
+
+  const handleDelete = () => {
+    if (!window.confirm(`Delete bill ${b.bill_number}? This cannot be undone.`)) return;
+    deleteMut.mutate();
+  };
 
   // Resolve rate percentages — backend aliases WO rates as wo_gst_pct etc.
   const gstPct = num(b.gst_pct || b.wo_gst_pct || 18);
@@ -1234,6 +1251,13 @@ function BillDetailPage({ billId, onClose }) {
           )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          {!isLoading && b?.id && canDelete && (
+            <button onClick={handleDelete} disabled={deleteMut.isPending}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white transition disabled:opacity-60"
+              style={{ background: 'rgba(220,38,38,0.75)', border: '1px solid rgba(255,255,255,0.22)' }}>
+              <Trash2 className="w-3.5 h-3.5" /> {deleteMut.isPending ? 'Deleting…' : 'Delete Bill'}
+            </button>
+          )}
           {!isLoading && b?.id && canEdit && (
             <button onClick={() => setShowEdit(true)}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white transition"

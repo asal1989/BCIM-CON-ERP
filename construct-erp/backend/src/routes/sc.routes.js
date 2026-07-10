@@ -1053,6 +1053,31 @@ router.patch('/bills/:id', authorize(...PLANNER), async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// DELETE /sc/bills/:id — only draft/rejected bills can be deleted
+router.delete('/bills/:id', authorize(...PLANNER), async (req, res) => {
+  try {
+    const existing = await query(`SELECT * FROM sc_bills WHERE id=$1 AND company_id=$2`, [req.params.id, CID(req)]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'Bill not found' });
+    const bill = existing.rows[0];
+    if (['approved', 'paid', 'submitted', 'under_review'].includes(bill.status)) {
+      return res.status(400).json({ error: `Cannot delete — bill is "${bill.status}". Only draft or rejected bills can be deleted.` });
+    }
+    await withTransaction(async (client) => {
+      // Reverse WO financial totals
+      await client.query(
+        `UPDATE sc_work_orders SET total_billed = GREATEST(0, total_billed - $1), retention_held = GREATEST(0, retention_held - $2), updated_at=NOW() WHERE id=$3`,
+        [bill.gross_amount, bill.retention_amount, bill.wo_id]
+      );
+      // Unlink hire log entries that point to this bill
+      await client.query(`UPDATE wo_hire_log SET status='draft', sc_bill_id=NULL, updated_at=NOW() WHERE sc_bill_id=$1`, [req.params.id]);
+      // Delete the bill (cascades to sc_bill_items and sc_bill_approvals)
+      await client.query(`DELETE FROM sc_bills WHERE id=$1`, [req.params.id]);
+      await recalculateWOConsumption(bill.wo_id, client);
+    });
+    res.json({ message: 'Bill deleted' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 async function recalculateWOConsumption(woId, client = { query }) {
   await client.query(`
     UPDATE sc_wo_items wi
