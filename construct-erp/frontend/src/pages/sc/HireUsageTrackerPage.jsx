@@ -495,13 +495,17 @@ export default function HireUsageTrackerPage() {
   const entries = data?.entries || [];
   const totals = data?.totals || {};
 
-  const raiseBill = async (entry) => {
+  const raiseBill = async (filteredEntry) => {
+    // GroupTable passes a filtered entry (only lines for that group).
+    // Look up the FULL entry so all equipment groups are included in the bill.
+    const entry = entries.find(e => e.id === filteredEntry.id) || filteredEntry;
     setRaisingId(entry.id);
     try {
+      const allCats = equipmentGroups.flatMap(g => g.categories);
       const items = entry.lines
         .filter(l => num(l.certified_hours) > 0)
         .map(l => {
-          const item = equipmentGroups.flatMap(g => g.categories).find(c => c.id === l.wo_item_id);
+          const item = allCats.find(c => c.id === l.wo_item_id);
           return {
             wo_item_id: l.wo_item_id,
             description: item ? `${item.equipment_group} — ${item.usage_category}` : 'Hire item',
