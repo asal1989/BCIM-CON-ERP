@@ -342,6 +342,7 @@ const navGroups = [
     { to: '/sc/bill-preparation', icon: Receipt,         label: 'Bill Preparation' },
     { to: '/sc/hire-usage-tracker', icon: Truck,         label: 'Hire Usage Tracker' },
     { to: '/sc/bill-approval',    icon: ShieldCheck,     label: 'Bill Approval' },
+    { to: '/sc/payment-recommendations', icon: Send,       label: 'Payment Recommendations' },
     { to: '/sc/payments',         icon: CreditCard,      label: 'Payment Tracking' },
     { to: '/sc/deductions',       icon: Calculator,      label: 'Retention / Deductions' },
     { to: '/sc/documents',        icon: FolderSearch,    label: 'Documents' },
@@ -497,7 +498,7 @@ const NAV_SECTIONS = {
     { label: 'Work Orders', paths: ['/sc/work-orders'] },
     { label: 'Site Work',   paths: ['/sc/labour','/sc/progress'] },
     { label: 'Billing',     paths: ['/sc/bill-preparation','/sc/bill-approval'] },
-    { label: 'Payments',    paths: ['/sc/payments','/sc/deductions'] },
+    { label: 'Payments',    paths: ['/sc/payment-recommendations','/sc/payments','/sc/deductions'] },
     { label: 'More',        paths: ['/sc/reports','/sc/documents','/sc/settings'] },
   ],
 };
