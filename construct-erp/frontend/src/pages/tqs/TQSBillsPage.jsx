@@ -2518,6 +2518,7 @@ export default function TQSBillsPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingBill, setEditingBill] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [moveTarget, setMoveTarget] = useState(null);
   const [showImport, setShowImport] = useState(false);
   const [showAdvance, setShowAdvance] = useState(false);
   const [showUntagged, setShowUntagged] = useState(false);
@@ -2551,6 +2552,18 @@ export default function TQSBillsPage() {
       qc.invalidateQueries({ queryKey: ['tqs-bills'] });
     },
     onError: (err) => toast.error(err?.response?.data?.error || 'Delete failed'),
+  });
+
+  const [moveProjectId, setMoveProjectId] = useState('');
+  const moveMut = useMutation({
+    mutationFn: ({ id, project_id }) => tqsBillsAPI.updateMeta(id, { project_id }),
+    onSuccess: () => {
+      toast.success('Bill moved to new project');
+      setMoveTarget(null);
+      setMoveProjectId('');
+      qc.invalidateQueries({ queryKey: ['tqs-bills'] });
+    },
+    onError: (err) => toast.error(err?.response?.data?.error || 'Move failed'),
   });
 
   const advanceStageMut = useMutation({
@@ -3244,6 +3257,13 @@ export default function TQSBillsPage() {
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
                       <button
+                        onClick={() => setMoveTarget(b)}
+                        className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                        title="Move to another project"
+                      >
+                        <Building2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
                         onClick={() => setDeleteTarget(b)}
                         className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                         title="Delete"
@@ -3305,6 +3325,58 @@ export default function TQSBillsPage() {
       )}
 
       {/* â"€â"€ Delete Confirm Modal â"€â"€ */}
+      {/* ── Move to Project Modal ── */}
+      {moveTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                <Building2 className="w-5 h-5 text-indigo-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-slate-800">Move to Another Project</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {moveTarget.inv_number || moveTarget.sl_number} · {moveTarget.vendor_name}
+                </p>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Select Project</label>
+              <select
+                value={moveProjectId}
+                onChange={e => setMoveProjectId(e.target.value)}
+                className="w-full h-10 border border-slate-200 rounded-lg px-3 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-indigo-300"
+              >
+                <option value="">— Choose project —</option>
+                {projects.filter(p => p.id !== moveTarget.project_id).map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              {moveTarget.project_id && (
+                <p className="text-xs text-slate-400 mt-1.5">
+                  Current project: <span className="font-medium text-slate-600">{projects.find(p => p.id === moveTarget.project_id)?.name || 'Unknown'}</span>
+                </p>
+              )}
+            </div>
+            <div className="flex gap-3 justify-end pt-1">
+              <button
+                onClick={() => { setMoveTarget(null); setMoveProjectId(''); }}
+                className="px-4 py-2 text-sm border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => moveMut.mutate({ id: moveTarget.id, project_id: moveProjectId })}
+                disabled={!moveProjectId || moveMut.isPending}
+                className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                {moveMut.isPending ? 'Moving…' : 'Move Bill'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {deleteTarget && canManageBillActions && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">

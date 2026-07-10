@@ -162,6 +162,17 @@ const { query: dbQuery } = require('./config/database');
 // Extract the numeric parts: ['511','516','321','534','540','607','612','623','672','673','785','796','797']
 const DQS_BILL_SERIALS = ['511','516','321','534','540','607','612','623','672','673','785','796','797'];
 
+// Delete the two duplicate bills that have 'IN/' prefix in inv_number (PO-429, PO-430)
+runSchemaInit('data_migration_delete_in_prefix_duplicates_2026', async () => {
+  const res = await dbQuery(
+    `UPDATE tqs_bills SET is_deleted = true, updated_at = NOW()
+     WHERE inv_number LIKE 'IN/%'
+       AND inv_number IN ('IN/00511/26-27','IN/00516/26-27')
+       AND is_deleted = false`
+  );
+  console.log(`[migration] Soft-deleted ${res.rowCount} IN/ prefix duplicate bill(s)`);
+});
+
 runSchemaInit('data_migration_bills_to_dqs_tower_2026_v2', async () => {
   const projRes = await dbQuery(
     `SELECT id, name FROM projects WHERE LOWER(name) LIKE '%dqs%' ORDER BY name LIMIT 1`
