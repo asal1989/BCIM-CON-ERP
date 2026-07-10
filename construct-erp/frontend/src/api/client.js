@@ -1659,7 +1659,7 @@ export const supplyTrackerAPI = {
 };
 
 export const hireLogAPI = {
-  listWOs:       ()           => api.get('/hire-log/work-orders'),
+  listWOs:       (projectId)  => api.get('/hire-log/work-orders', { params: projectId ? { project_id: projectId } : {} }),
   get:           (woId)       => api.get(`/hire-log/${woId}`),
   addEntry:      (woId, d)    => api.post(`/hire-log/${woId}`, d),
   updateEntry:   (woId, id, d)=> api.patch(`/hire-log/${woId}/${id}`, d),

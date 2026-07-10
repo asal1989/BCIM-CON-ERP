@@ -6,6 +6,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { hireLogAPI, scAPI } from '../../api/client';
+import { useAuthStore } from '../../store/authStore';
 import { PageHeader, Theme } from '../../theme';
 import { Plus, X, Receipt, Trash2, CheckCircle2, Clock, Truck, Settings, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -466,15 +467,19 @@ function SetupWOModal({ onClose, onDone }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function HireUsageTrackerPage() {
   const qc = useQueryClient();
+  const { selectedProjectId } = useAuthStore();
   const [woId, setWoId] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
   const [showSetup, setShowSetup] = useState(false);
   const [raisingId, setRaisingId] = useState(null);
 
+  // Reset selected WO when project changes
+  useEffect(() => { setWoId(''); }, [selectedProjectId]);
+
   const { data: wos = [] } = useQuery({
-    queryKey: ['hire-log-wos'],
-    queryFn: () => hireLogAPI.listWOs().then(r => r.data?.data || []),
+    queryKey: ['hire-log-wos', selectedProjectId],
+    queryFn: () => hireLogAPI.listWOs(selectedProjectId).then(r => r.data?.data || []),
   });
 
   const { data, isLoading, refetch } = useQuery({

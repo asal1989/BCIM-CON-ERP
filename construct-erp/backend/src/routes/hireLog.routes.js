@@ -51,15 +51,19 @@ runSchemaInit('hire_log_tables', async () => {
 // GET /hire-log/work-orders — WOs that have at least one categorized item (eligible for the tracker)
 router.get('/work-orders', async (req, res) => {
   try {
+    const params = [CID(req)];
+    const projectFilter = req.query.project_id
+      ? ` AND wo.project_id = $${params.push(req.query.project_id)}`
+      : '';
     const rows = await query(`
       SELECT DISTINCT wo.id, wo.wo_number, wo.subject, sc.name AS sc_name, p.name AS project_name
       FROM sc_work_orders wo
       JOIN sc_wo_items i ON i.wo_id = wo.id
       JOIN sc_subcontractors sc ON sc.id = wo.sc_id
       JOIN projects p ON p.id = wo.project_id
-      WHERE wo.company_id = $1 AND i.usage_category IS NOT NULL
+      WHERE wo.company_id = $1 AND i.usage_category IS NOT NULL${projectFilter}
       ORDER BY wo.wo_number
-    `, [CID(req)]);
+    `, params);
     res.json({ data: rows.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
