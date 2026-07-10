@@ -950,7 +950,13 @@ export default function LiabilityRegisterPage() {
                                   </button>
                                 )}
                               </div>
-                              {row.invoice_ref && <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 1 }}>Inv: {row.invoice_ref}</div>}
+                              {(row.invoice_ref || row.invoice_date) && (
+                                <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 1 }}>
+                                  {row.invoice_date && <span>Inv Date: {fmt(row.invoice_date)}</span>}
+                                  {row.invoice_ref && row.invoice_date && <span style={{ margin: '0 4px' }}>·</span>}
+                                  {row.invoice_ref && <span>Inv#: {row.invoice_ref}</span>}
+                                </div>
+                              )}
                             </td>
                             <td style={{ padding: '9px 12px', verticalAlign: 'top' }}>
                               <TxnBadge type={row.entry_type} />
