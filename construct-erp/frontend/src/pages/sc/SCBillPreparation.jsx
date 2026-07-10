@@ -1395,11 +1395,8 @@ function BillDetailPage({ billId, onClose }) {
               ))}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-
-              {/* ── Left: BOQ items + trail ── */}
-              <div className="lg:col-span-2 space-y-6">
-                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            {/* ── BOQ Items — full width so amounts never clip ── */}
+            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
                   <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
                     <Layers className="w-4 h-4 text-slate-400" />
                     <p className="text-sm font-bold text-slate-700">BOQ Items</p>
@@ -1449,8 +1446,11 @@ function BillDetailPage({ billId, onClose }) {
                       </table>
                     </div>
                   )}
-                </div>
+            </div>
 
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+              {/* ── Left: approval trail + payments ── */}
+              <div className="lg:col-span-2 space-y-6">
                 {/* Approval trail */}
                 {approvals.length > 0 && (
                   <div className="bg-white border border-slate-200 rounded-2xl shadow-sm">
