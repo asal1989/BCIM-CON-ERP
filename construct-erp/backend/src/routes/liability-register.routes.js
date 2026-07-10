@@ -88,26 +88,33 @@ router.get('/ledger', async (req, res) => {
     let billProjectFilter = '';
     let advProjectFilter = '';
     let avProjectFilter = '';
+    let scProjectFilter = '';
     if (project_id && project_id.trim()) {
       params.push(project_id);
       const pn = params.length;
       billProjectFilter = `AND b.project_id = $${pn}`;
       advProjectFilter = `AND a.project_id = $${pn}`;
       avProjectFilter = `AND av.project_id = $${pn}`;
+      scProjectFilter = `AND sb.project_id = $${pn}`;
     } else if (!req.isGlobalRole) {
       const allowed = req.allowedProjectIds || [];
       if (allowed.length === 0) {
         billProjectFilter = 'AND FALSE';
         advProjectFilter = 'AND FALSE';
         avProjectFilter = 'AND FALSE';
+        scProjectFilter = 'AND FALSE';
       } else {
         params.push(allowed);
         const pn = params.length;
         billProjectFilter = `AND b.project_id = ANY($${pn}::uuid[])`;
         advProjectFilter = `AND a.project_id = ANY($${pn}::uuid[])`;
         avProjectFilter = `AND av.project_id = ANY($${pn}::uuid[])`;
+        scProjectFilter = `AND sb.project_id = ANY($${pn}::uuid[])`;
       }
     }
+
+    // SC bills are neither PO nor WO — include only in the unfiltered "All" view
+    const scLedgerGate = accountType === 'all' ? '' : 'AND FALSE';
 
     let billTypeFilter = '';
     let advSourceFilter = '';
@@ -315,6 +322,62 @@ router.get('/ledger', async (req, res) => {
         -- the company and the tax department. The advance gross is already
         -- shown as Dr above; net cash out (gross - tds) is what actually went
         -- to the vendor. We don't post a separate TDS row here.
+
+        UNION ALL
+
+        -- Subcontractor RA bill (sc_bills) — Credit = net payable owed to the SC
+        SELECT
+          sb.bill_date,
+          'SC Bill',
+          sb.bill_number,
+          sb.bill_number,
+          'SC RA Bill: ' || sb.bill_number
+            || CASE WHEN wo.wo_number IS NOT NULL THEN ' | WO: ' || wo.wo_number ELSE '' END,
+          p.name,
+          NULL::numeric,
+          COALESCE(sb.net_payable, 0),
+          sb.status,
+          sb.id::text,
+          'sc',
+          COALESCE(sb.net_payable, 0)
+        FROM sc_bills sb
+        JOIN sc_subcontractors sc ON sc.id = sb.sc_id
+        LEFT JOIN sc_work_orders wo ON wo.id = sb.wo_id
+        LEFT JOIN projects p ON p.id = sb.project_id
+        WHERE sb.company_id = $1
+          AND LOWER(TRIM(sc.name)) = LOWER(TRIM($2))
+          AND LOWER(COALESCE(sb.status, '')) <> 'rejected'
+          ${scProjectFilter}
+          ${scLedgerGate}
+
+        UNION ALL
+
+        -- Subcontractor payments (sc_payments) — Debit = amount paid to the SC
+        SELECT
+          sp.payment_date,
+          'Payment',
+          COALESCE(sp.utr_number, sp.reference_no, sp.voucher_number, '-'),
+          sb.bill_number,
+          'Payment for SC Bill: ' || sb.bill_number
+            || CASE WHEN sp.utr_number IS NOT NULL THEN ' (UTR: ' || sp.utr_number || ')' ELSE '' END
+            || CASE WHEN sp.bank_name IS NOT NULL THEN ' | ' || sp.bank_name ELSE '' END
+            || CASE WHEN sp.payment_mode IS NOT NULL THEN ' / ' || sp.payment_mode ELSE '' END,
+          p.name,
+          sp.amount,
+          NULL::numeric,
+          sb.status,
+          sb.id::text,
+          'sc',
+          NULL::numeric
+        FROM sc_payments sp
+        JOIN sc_bills sb ON sb.id = sp.bill_id
+        JOIN sc_subcontractors sc ON sc.id = sb.sc_id
+        LEFT JOIN projects p ON p.id = sb.project_id
+        WHERE sp.company_id = $1
+          AND LOWER(TRIM(sc.name)) = LOWER(TRIM($2))
+          AND COALESCE(sp.amount, 0) > 0
+          ${scProjectFilter}
+          ${scLedgerGate}
       ) ledger
       ${dateWhere}
       ORDER BY txn_date ASC NULLS FIRST, entry_type ASC
