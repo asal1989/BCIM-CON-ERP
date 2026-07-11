@@ -257,6 +257,127 @@ router.get('/test-onedrive', authorize(...ADMINS), async (req, res) => {
   }
 });
 
+// ── ONE-TIME: migrate files from the old personal OneDrive drive to the new
+// SharePoint site drive. Safe to re-run — any row whose onedrive_id no longer
+// exists in the OLD drive (because it was already migrated, or a filename
+// legitimately fell out of storage) is skipped rather than failing the whole
+// batch. Admin-only; each call migrates ALL not-yet-moved rows across the 5
+// tables that reference onedrive_id.
+const MIGRATE_TABLES = [
+  { table: 'documents',         hasUrls: true  },
+  { table: 'document_versions', hasUrls: false },
+  { table: 'wo_hire_log_files', hasUrls: true  },
+  { table: 'sc_bill_files',     hasUrls: true  },
+  { table: 'tqs_bill_files',    hasUrls: true  },
+];
+
+async function getMigrationToken() {
+  const fetch = require('node-fetch');
+  const body = new URLSearchParams({
+    client_id:     process.env.ONEDRIVE_CLIENT_ID,
+    client_secret: process.env.ONEDRIVE_CLIENT_SECRET,
+    scope:         'https://graph.microsoft.com/.default',
+    grant_type:    'client_credentials',
+  });
+  const res = await fetch(`https://login.microsoftonline.com/${process.env.ONEDRIVE_TENANT_ID}/oauth2/v2.0/token`, {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString(),
+  });
+  const json = await res.json();
+  if (!json.access_token) throw new Error('Token error: ' + JSON.stringify(json));
+  return json.access_token;
+}
+
+async function migrateOneFile(fetch, token, oldItemId) {
+  const OLD_USER = process.env.ONEDRIVE_USER_EMAIL;
+  const SITE_ID  = process.env.SHAREPOINT_SITE_ID;
+
+  // 1. Metadata from the OLD drive — gives us name + original folder path.
+  const metaRes = await fetch(
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(OLD_USER)}/drive/items/${encodeURIComponent(oldItemId)}?$select=id,name,parentReference,size`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (metaRes.status === 404) return { status: 'skipped_missing' };
+  const meta = await metaRes.json();
+  if (!meta.id) throw new Error('metadata fetch failed: ' + JSON.stringify(meta));
+
+  const oldPath = (meta.parentReference?.path || '').replace(/^\/drive\/root:/, '') || '';
+  const destPath = `${oldPath}/${meta.name}`;
+  const encodedDestPath = encodeURIComponent(destPath).replace(/%2F/g, '/');
+
+  // 2. Bytes from the OLD drive (node-fetch follows redirects by default).
+  const contentRes = await fetch(
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(OLD_USER)}/drive/items/${encodeURIComponent(oldItemId)}/content`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!contentRes.ok) throw new Error(`content fetch failed: ${contentRes.status}`);
+  const buffer = await contentRes.buffer();
+
+  // 3. Upload into the NEW site drive at the same relative path.
+  let uploadRes;
+  if (buffer.length <= 4 * 1024 * 1024) {
+    uploadRes = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${SITE_ID}/drive/root:${encodedDestPath}:/content`,
+      { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream' }, body: buffer }
+    );
+  } else {
+    const sessionRes = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${SITE_ID}/drive/root:${encodedDestPath}:/createUploadSession`,
+      { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ item: { '@microsoft.graph.conflictBehavior': 'replace' } }) }
+    );
+    const session = await sessionRes.json();
+    if (!session.uploadUrl) throw new Error('createUploadSession failed: ' + JSON.stringify(session));
+    uploadRes = await fetch(session.uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Length': String(buffer.length), 'Content-Range': `bytes 0-${buffer.length - 1}/${buffer.length}` },
+      body: buffer,
+    });
+  }
+  if (!uploadRes.ok) throw new Error(`upload failed: ${uploadRes.status} — ${(await uploadRes.text()).slice(0, 200)}`);
+  const newItem = await uploadRes.json();
+
+  return {
+    status: 'migrated',
+    onedrive_id: newItem.id,
+    onedrive_url: newItem['@microsoft.graph.downloadUrl'] || null,
+    onedrive_web_url: newItem.webUrl || null,
+  };
+}
+
+router.post('/migrate-sharepoint', authorize(...ADMINS), async (req, res) => {
+  const fetch = require('node-fetch');
+  const summary = {};
+  try {
+    const token = await getMigrationToken();
+    for (const { table, hasUrls } of MIGRATE_TABLES) {
+      const migrated = [];
+      const skipped = [];
+      const failed = [];
+      const { rows } = await db().query(`SELECT id, onedrive_id FROM ${table} WHERE onedrive_id IS NOT NULL`);
+      for (const row of rows) {
+        try {
+          const result = await migrateOneFile(fetch, token, row.onedrive_id);
+          if (result.status === 'skipped_missing') { skipped.push(row.id); continue; }
+          if (hasUrls) {
+            await db().query(
+              `UPDATE ${table} SET onedrive_id=$1, onedrive_url=$2, onedrive_web_url=$3 WHERE id=$4`,
+              [result.onedrive_id, result.onedrive_url, result.onedrive_web_url, row.id]
+            );
+          } else {
+            await db().query(`UPDATE ${table} SET onedrive_id=$1 WHERE id=$2`, [result.onedrive_id, row.id]);
+          }
+          migrated.push(row.id);
+        } catch (e) {
+          failed.push({ id: row.id, error: e.message });
+        }
+      }
+      summary[table] = { total: rows.length, migrated: migrated.length, skipped: skipped.length, failed };
+    }
+    res.json({ ok: true, summary });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message, summary });
+  }
+});
+
 router.use(async (req, res, next) => {
   try {
     await ensureDmsSchema();
