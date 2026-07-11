@@ -217,26 +217,29 @@ function AbstractSheet({ cert }) {
       {/* colgroup sets explicit column widths so the 15-col table fills landscape A4 correctly.
           Total ≈ 281mm (A4 landscape 297mm − 8mm margins each side − 8mm sheet padding each side) */}
       <table style={T.tbl}>
+        {/* Percentage widths (sum = 100) + table-layout:fixed guarantee the
+            table always fills the printable width exactly and never overflows
+            the page horizontally, regardless of the render container width. */}
         <colgroup>
-          <col style={{width:'18px'}}/>  {/* Sl */}
-          <col style={{width:'26px'}}/>  {/* RA */}
-          <col style={{width:'14%'}}/>   {/* Description — proportional */}
-          <col style={{width:'22px'}}/>  {/* Unit */}
-          <col style={{width:'30px'}}/>  {/* Order Qty */}
-          <col style={{width:'44px'}}/>  {/* Order Rate */}
-          <col style={{width:'50px'}}/>  {/* Order Amount */}
-          <col style={{width:'30px'}}/>  {/* Inv Prev Qty */}
-          <col style={{width:'30px'}}/>  {/* Inv Pres Qty */}
-          <col style={{width:'50px'}}/>  {/* Inv Amount */}
-          <col style={{width:'32px'}}/>  {/* Weighment Qty */}
-          <col style={{width:'32px'}}/>  {/* MSB */}
-          <col style={{width:'32px'}}/>  {/* IGN */}
-          <col style={{width:'32px'}}/>  {/* GRS */}
-          <col style={{width:'30px'}}/>  {/* QS Prev Qty */}
-          <col style={{width:'30px'}}/>  {/* QS Pres Qty */}
-          <col style={{width:'50px'}}/>  {/* QS Amount */}
-          <col style={{width:'30px'}}/>  {/* Bal Qty */}
-          <col style={{width:'54px'}}/>  {/* Bal Amount */}
+          <col style={{width:'2%'}}/>    {/* Sl */}
+          <col style={{width:'3%'}}/>    {/* RA */}
+          <col style={{width:'23%'}}/>   {/* Description */}
+          <col style={{width:'3%'}}/>    {/* Unit */}
+          <col style={{width:'4%'}}/>    {/* Order Qty */}
+          <col style={{width:'5%'}}/>    {/* Order Rate */}
+          <col style={{width:'6.5%'}}/>  {/* Order Amount */}
+          <col style={{width:'4%'}}/>    {/* Inv Prev Qty */}
+          <col style={{width:'4%'}}/>    {/* Inv Pres Qty */}
+          <col style={{width:'6.5%'}}/>  {/* Inv Amount */}
+          <col style={{width:'4%'}}/>    {/* Weighment Qty */}
+          <col style={{width:'3.5%'}}/>  {/* MSB */}
+          <col style={{width:'3.5%'}}/>  {/* IGN */}
+          <col style={{width:'3.5%'}}/>  {/* GRS */}
+          <col style={{width:'4%'}}/>    {/* QS Prev Qty */}
+          <col style={{width:'4%'}}/>    {/* QS Pres Qty */}
+          <col style={{width:'6.5%'}}/>  {/* QS Amount */}
+          <col style={{width:'4%'}}/>    {/* Bal Qty */}
+          <col style={{width:'6%'}}/>    {/* Bal Amount */}
         </colgroup>
         <thead>
           <tr>
@@ -972,13 +975,25 @@ export default function VendorQSCertificationDetailPage() {
           .no-print { display: none !important; }
 
           /* ── 4. Print sheet resets ── */
+          /* Force the print chain to the full printable width and strip the
+             on-screen padding (bg-slate-200 p-4 wrapper + space-y gaps) so the
+             sheet occupies the entire page and content isn't squeezed/clipped. */
+          .bg-slate-200 { background: #fff !important; padding: 0 !important; margin: 0 !important; }
+          .print-area { width: 100% !important; margin: 0 !important; padding: 0 !important; }
+          .print-area > * + * { margin-top: 0 !important; }
           .print-sheet {
             box-shadow: none !important;
             border: none !important;
             margin: 0 !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+            width: 100% !important;
             background: #fff !important;
             page-break-after: auto;
           }
+          .print-sheet table { width: 100% !important; }
+          /* Keep the signature grid together so boxes never split across pages */
+          .print-sheet > div:last-child { page-break-inside: avoid; }
 
           /* ── 5. Table pagination ── */
           tr, .avoid-break { page-break-inside: avoid; }
