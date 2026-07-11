@@ -215,7 +215,12 @@ async function buildSummaryFromBills(executor, billIds, companyId, excludeCertif
     const effectiveRow = singleLinkedRef && !(row.po_item_id || row.wo_item_id) ? singleLinkedRow : row;
     const effectiveIsWO = effectiveRow?.wo_item_id || effectiveRow?.bill_type === 'wo';
     const orderQty = n(effectiveIsWO ? effectiveRow?.wo_ordered_qty : effectiveRow?.po_ordered_qty) || invQty;
-    const rate = n(effectiveIsWO ? (effectiveRow?.wo_ordered_rate || row.rate) : (effectiveRow?.po_ordered_rate || row.rate));
+    // Fall back to basic_amount / qty when the line isn't linked to a WO/PO
+    // item AND its own `rate` column is blank (common for lump-sum bill
+    // entries that only captured a total) — otherwise the certified amount
+    // silently comes out as qty * 0.
+    const linkedRate = n(effectiveIsWO ? (effectiveRow?.wo_ordered_rate || row.rate) : (effectiveRow?.po_ordered_rate || row.rate));
+    const rate = linkedRate || (invQty ? n(row.basic_amount) / invQty : 0);
     const qsPrevQty = n(row.qs_prev_qty);
     const qsPresQty = Math.max(0, invQty);
     const taxAmount = n(row.cgst_amt) + n(row.sgst_amt) + n(row.igst_amt) || n(row.gst_amount);
@@ -451,7 +456,12 @@ router.post('/summary-items', async (req, res) => {
       const effectiveRow = singleLinkedRef && !(row.po_item_id || row.wo_item_id) ? singleLinkedRow : row;
       const effectiveIsWO = effectiveRow?.wo_item_id || effectiveRow?.bill_type === 'wo';
       const orderQty = n(effectiveIsWO ? effectiveRow?.wo_ordered_qty : effectiveRow?.po_ordered_qty) || invQty;
-      const rate = n(effectiveIsWO ? (effectiveRow?.wo_ordered_rate || row.rate) : (effectiveRow?.po_ordered_rate || row.rate));
+      // Fall back to basic_amount / qty when the line isn't linked to a WO/PO
+      // item AND its own `rate` column is blank (common for lump-sum bill
+      // entries that only captured a total) — otherwise the certified amount
+      // silently comes out as qty * 0.
+      const linkedRate = n(effectiveIsWO ? (effectiveRow?.wo_ordered_rate || row.rate) : (effectiveRow?.po_ordered_rate || row.rate));
+      const rate = linkedRate || (invQty ? n(row.basic_amount) / invQty : 0);
       const qsPrevQty = n(row.qs_prev_qty);
       const qsPresQty = Math.max(0, invQty);
       const taxAmount = n(row.cgst_amt) + n(row.sgst_amt) + n(row.igst_amt) || n(row.gst_amount);

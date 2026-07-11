@@ -278,8 +278,8 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-[96vw] max-h-[94vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 bg-white flex items-center justify-center">
+      <div className="bg-white w-screen h-screen overflow-hidden flex flex-col">
         <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
           <div>
             <h2 className="text-base font-medium text-slate-900">New Vendor QS Certification</h2>
@@ -503,7 +503,13 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
                         <td className="px-2 py-1 border border-slate-200 text-center font-bold">{idx + 1}</td>
                         <td className="px-2 py-1 border border-slate-200 font-medium text-indigo-700">{row.source_inv_number || '-'}</td>
                         <td className="px-2 py-1 border border-slate-200">
-                          <input className="w-full bg-transparent outline-none" value={row.description || ''} onChange={e => updateSummaryRow(idx, 'description', e.target.value)} />
+                          <textarea
+                            className="w-full bg-transparent outline-none resize-y leading-snug"
+                            rows={2}
+                            style={{ minHeight: '2.5em' }}
+                            value={row.description || ''}
+                            onChange={e => updateSummaryRow(idx, 'description', e.target.value)}
+                          />
                         </td>
                         <td className="px-2 py-1 border border-slate-200">
                           <input className="w-16 bg-transparent outline-none text-center" value={row.unit || ''} onChange={e => updateSummaryRow(idx, 'unit', e.target.value)} />
