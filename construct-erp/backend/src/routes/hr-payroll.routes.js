@@ -308,8 +308,19 @@ router.post('/run', async (req, res) => {
       const conv  = Math.round(parseFloat(emp.conveyance || 0) * lopFactor);
       const med   = Math.round(parseFloat(emp.medical || 0) * lopFactor);
       const spec  = Math.round(parseFloat(emp.special_allowance || 0) * lopFactor);
-      const other = Math.round(parseFloat(emp.other_allowance || 0) * lopFactor);
-      const gross = basic + hra + conv + med + spec + other;
+      // Gross = the configured monthly gross (gross_monthly), pro-rated for
+      // attendance. gross_monthly already includes ALL BCIM earning components
+      // (project/accommodation/food/transport/LTA/incentive/etc). Summing only
+      // basic+hra+medical+special dropped those allowances and understated gross
+      // (e.g. ₹27,613 instead of the configured ₹53,886). Fall back to the
+      // component sum only when gross_monthly is unset on legacy rows.
+      const componentSum = basic + hra + conv + med + spec
+        + Math.round(parseFloat(emp.other_allowance || 0) * lopFactor);
+      const grossMonthly = Math.round(parseFloat(emp.gross_monthly || 0) * lopFactor);
+      const gross = grossMonthly > 0 ? grossMonthly : componentSum;
+      // Remaining allowances (everything beyond the itemised basic/hra/med/spec)
+      // are lumped into "other" so the stored components reconcile to gross.
+      const other = Math.max(0, gross - (basic + hra + conv + med + spec));
 
       // Statutory deductions
       const pf  = calcPF(basic, emp.pf_applicable);
