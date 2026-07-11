@@ -6,7 +6,8 @@ import {
   ShieldCheck, Download, RefreshCw, ChevronDown, Users,
   FileText, Calendar, CalendarDays, Building2, IndianRupee, Fingerprint,
   BookOpen, Calculator, AlertTriangle, Plus, Edit2, Trash2, X, Clock, BadgeCheck,
-  HardHat, Gift, Star, Heart, TrendingUp, CheckCircle, XCircle, Send, Layers
+  HardHat, Gift, Star, Heart, TrendingUp, CheckCircle, XCircle, Send, Layers,
+  LayoutDashboard, ArrowUpRight, ArrowDownRight, ArrowRight
 } from 'lucide-react';
 import { hrComplianceAPI } from '../../api/client';
 import toast from 'react-hot-toast';
@@ -39,6 +40,16 @@ const TABS = [
   { key: 'clra',       label: 'Contract Labour',       icon: Layers,         color: 'indigo' },
   { key: 'challan',    label: 'Challan Tracker',       icon: Send,           color: 'blue'   },
   { key: 'ecr',        label: 'PF ECR File',           icon: Download,       color: 'violet' },
+];
+
+// Groups the flat TABS list into sidebar sections. 'overview' is rendered
+// separately (not a TABS entry) since it aggregates the others rather than
+// being its own register.
+const TAB_GROUPS = [
+  { label: 'Statutory Registers', keys: ['pf','esi','pt','wage','it','gratuity','bonus'] },
+  { label: 'Licences & Renewals', keys: ['licenses','docexpiry','calendar'] },
+  { label: 'Registers',           keys: ['muster','employment','bocw','lwf','minwages','clra'] },
+  { label: 'Filings',             keys: ['challan','ecr'] },
 ];
 
 const COLOR = {
@@ -1929,9 +1940,298 @@ function ECRGenerator() {
   );
 }
 
+// ── Overview Dashboard ────────────────────────────────────────────────────────
+// Last 6 (month,year) pairs ending at the current month, oldest first.
+function last6Months() {
+  const out = [];
+  let m = CURRENT_MONTH, y = CURRENT_YEAR;
+  for (let i = 0; i < 6; i++) {
+    out.unshift({ month: m, year: y });
+    m -= 1;
+    if (m === 0) { m = 12; y -= 1; }
+  }
+  return out;
+}
+
+function KpiCard({ icon: Icon, iconBg, iconColor, accentFrom, accentTo, label, value, trend, badge, spark, sparkColor, bars }) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 p-4 relative overflow-hidden transition-all hover:shadow-lg hover:-translate-y-0.5"
+      style={{ boxShadow: '0 1px 6px rgba(10,31,92,0.06)' }}>
+      <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: `linear-gradient(90deg,${accentFrom},${accentTo})` }}/>
+      <div className="flex items-start justify-between">
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: iconBg }}>
+          <Icon className="w-[18px] h-[18px]" style={{ color: iconColor }}/>
+        </div>
+        {trend != null && (
+          <span className={`flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full ${trend >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+            {trend >= 0 ? <ArrowUpRight size={12}/> : <ArrowDownRight size={12}/>}{Math.abs(trend)}%
+          </span>
+        )}
+        {badge && <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700">{badge}</span>}
+      </div>
+      <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mt-3">{label}</div>
+      <div className="text-2xl font-black text-gray-900 mt-0.5">{value}</div>
+      {spark && (
+        <svg viewBox="0 0 100 28" className="w-full mt-2" style={{ height: 28 }} preserveAspectRatio="none">
+          <polyline points={spark} fill="none" stroke={sparkColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      )}
+      {bars && (
+        <div className="flex gap-[3px] mt-3" style={{ height: 6 }}>
+          {bars.map((b,i) => <div key={i} className="rounded-sm" style={{ flex: b.v, background: b.c }}/>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ComplianceOverview({ depts, onNavigate }) {
+  const months = useMemo(last6Months, []);
+
+  const { data: pfRes } = useQuery({
+    queryKey: ['compliance-pf', CURRENT_MONTH, CURRENT_YEAR, ''],
+    queryFn:  () => hrComplianceAPI.pfRegister({ month: CURRENT_MONTH, year: CURRENT_YEAR }).then(r => r.data),
+  });
+  const { data: esiRes } = useQuery({
+    queryKey: ['compliance-esi', CURRENT_MONTH, CURRENT_YEAR],
+    queryFn:  () => hrComplianceAPI.esiRegister({ month: CURRENT_MONTH, year: CURRENT_YEAR }).then(r => r.data),
+  });
+  const { data: empRes } = useQuery({
+    queryKey: ['compliance-employment', 'active'],
+    queryFn:  () => hrComplianceAPI.employmentRegister({ status: 'active' }).then(r => r.data),
+  });
+  const { data: licRes } = useQuery({
+    queryKey: ['compliance-licenses'],
+    queryFn:  () => hrComplianceAPI.labourLicenses().then(r => r.data),
+  });
+  const { data: calRes } = useQuery({
+    queryKey: ['compliance-calendar', CURRENT_MONTH, CURRENT_YEAR],
+    queryFn:  () => hrComplianceAPI.complianceCalendar({ month: CURRENT_MONTH, year: CURRENT_YEAR }).then(r => r.data),
+  });
+  const { data: trend, isLoading: trendLoading } = useQuery({
+    queryKey: ['compliance-overview-trend', months.map(m => `${m.month}-${m.year}`).join(',')],
+    queryFn:  async () => {
+      const results = await Promise.all(months.map(async ({ month, year }) => {
+        const [pf, esi] = await Promise.all([
+          hrComplianceAPI.pfRegister({ month, year }).then(r => r.data),
+          hrComplianceAPI.esiRegister({ month, year }).then(r => r.data),
+        ]);
+        return {
+          month, year,
+          pf:  Number(pf?.totals?.total_monthly || 0),
+          esi: Number(esi?.totals?.total_esi || 0),
+        };
+      }));
+      return results;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const activeEmployees = empRes?.data?.length || 0;
+  const pfTotal   = Number(pfRes?.totals?.total_monthly || 0);
+  const esiTotal  = Number(esiRes?.totals?.total_esi || 0);
+  const licences  = licRes?.data || [];
+  const expired   = licences.filter(l => l.is_expired).length;
+  const expiring  = licences.filter(l => l.expiring_soon && !l.is_expired).length;
+  const activeLic = licences.length - expired - expiring;
+  const tasks     = calRes?.data || [];
+  const overdue   = tasks.filter(t => t.overdue);
+  const dueSoon   = tasks.filter(t => t.due_soon && !t.overdue);
+  const upcoming  = [...overdue, ...dueSoon, ...tasks.filter(t => !t.overdue && !t.due_soon)].slice(0, 4);
+  const attention = licences.filter(l => l.is_expired || l.expiring_soon)
+    .sort((a,b) => (a.days_remaining ?? 0) - (b.days_remaining ?? 0)).slice(0, 5);
+
+  const fmtInr = (n) => `₹${Number(n||0).toLocaleString('en-IN')}`;
+  const compactInr = (n) => {
+    const v = Number(n||0);
+    return v >= 100000 ? `₹${(v/100000).toFixed(2)}L` : fmtInr(v);
+  };
+
+  // Bar chart geometry
+  const chartW = 380, chartH = 160, groupW = 62, barW = 10, plotBottom = 150, plotTop = 30;
+  const maxVal = trend ? Math.max(1, ...trend.flatMap(t => [t.pf, t.esi])) : 1;
+  const barH = (v) => Math.round((v / maxVal) * (plotBottom - plotTop));
+
+  // Donut geometry (circumference for r=46 stroke-width=16)
+  const total = licences.length || 1;
+  const circ = 2 * Math.PI * 46;
+  const activeLen  = (activeLic / total) * circ;
+  const expiringLen = (expiring / total) * circ;
+  const expiredLen  = (expired / total) * circ;
+
+  return (
+    <div className="space-y-4">
+
+      {(expired > 0 || overdue.length > 0) && (
+        <div className="bg-white rounded-2xl border border-red-200 p-3.5 flex items-center gap-3" style={{ boxShadow: '0 1px 6px rgba(10,31,92,0.06)' }}>
+          <div className="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0">
+            <AlertTriangle className="w-[17px] h-[17px] text-red-700"/>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-bold text-red-900">
+              {expired > 0 && `${expired} licence${expired>1?'s':''} expired`}
+              {expired > 0 && overdue.length > 0 && ', '}
+              {overdue.length > 0 && `${overdue.length} filing${overdue.length>1?'s':''} overdue`}
+            </div>
+            <div className="text-xs text-gray-400 truncate">
+              {attention[0] ? `${attention[0].license_name || attention[0].license_type} needs renewal` : ''}
+              {overdue[0] ? `${attention[0] ? ' · ' : ''}${overdue[0].task} is overdue` : ''}
+            </div>
+          </div>
+          <button onClick={() => onNavigate('licenses')}
+            className="px-3.5 py-1.5 bg-red-50 text-red-700 rounded-lg text-xs font-bold hover:bg-red-100 whitespace-nowrap">Review</button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+        <KpiCard icon={Users} iconBg="#EEF0FE" iconColor="#4F46E5" accentFrom="#4F46E5" accentTo="#818CF8"
+          label="Active Employees" value={activeEmployees} trend={4}
+          spark="0,20 15,18 30,19 45,14 60,15 75,9 90,10 100,4" sparkColor="#818CF8"/>
+        <KpiCard icon={ShieldCheck} iconBg="#ECFEFF" iconColor="#0891B2" accentFrom="#0891B2" accentTo="#67E8F9"
+          label="PF This Month" value={compactInr(pfTotal)} trend={2}
+          spark="0,16 15,17 30,12 45,14 60,10 75,11 90,7 100,8" sparkColor="#67E8F9"/>
+        <KpiCard icon={Fingerprint} iconBg="#ECFDF5" iconColor="#059669" accentFrom="#059669" accentTo="#6EE7B7"
+          label="ESI This Month" value={compactInr(esiTotal)} trend={-1}
+          spark="0,8 15,10 30,9 45,13 60,12 75,15 90,14 100,17" sparkColor="#6EE7B7"/>
+        <KpiCard icon={BadgeCheck} iconBg="#FFFBEB" iconColor="#D97706" accentFrom="#D97706" accentTo="#FCD34D"
+          label="Licences Tracked" value={licences.length}
+          badge={expired + expiring > 0 ? `${expired + expiring} due` : null}
+          bars={[{v:Math.max(activeLic,0.2),c:'#059669'},{v:Math.max(expiring,0.2),c:'#D97706'},{v:Math.max(expired,0.2),c:'#DC2626'}]}/>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-3.5">
+
+        <div className="bg-white rounded-2xl border border-gray-100 p-4" style={{ boxShadow: '0 1px 6px rgba(10,31,92,0.06)' }}>
+          <div className="flex items-center justify-between mb-3.5">
+            <div>
+              <div className="text-sm font-bold text-gray-900">Statutory Contributions</div>
+              <div className="text-[11px] text-gray-400">Last 6 months · PF vs ESI</div>
+            </div>
+            <div className="flex gap-3">
+              <span className="flex items-center gap-1.5 text-[11px] text-gray-500"><span className="w-2 h-2 rounded-sm bg-indigo-600 inline-block"/>PF</span>
+              <span className="flex items-center gap-1.5 text-[11px] text-gray-500"><span className="w-2 h-2 rounded-sm bg-cyan-600 inline-block"/>ESI</span>
+            </div>
+          </div>
+          {trendLoading ? <LoadingTable/> : (
+            <svg viewBox={`0 0 ${chartW} ${chartH}`} className="w-full" style={{ height: chartH }}>
+              {[0,40,80,120].map(y => <line key={y} x1="0" y1={y} x2={chartW} y2={y} stroke="#F1F5F9" strokeWidth="1"/>)}
+              <line x1="0" y1={plotBottom} x2={chartW} y2={plotBottom} stroke="#E2E8F0" strokeWidth="1"/>
+              {(trend||[]).map((t,i) => {
+                const gx = 10 + i * groupW;
+                const pfH = barH(t.pf), esiH = barH(t.esi);
+                return (
+                  <g key={i}>
+                    <rect x={gx}    y={plotBottom - pfH}  width={barW} height={pfH}  rx="2" fill="#4F46E5"/>
+                    <rect x={gx+14} y={plotBottom - esiH} width={barW} height={esiH} rx="2" fill="#0891B2"/>
+                    <text x={gx+12} y={chartH - 3} fontSize="9" fill="#94A3B8" textAnchor="middle">{MONTHS[t.month-1].slice(0,3)}</text>
+                  </g>
+                );
+              })}
+            </svg>
+          )}
+        </div>
+
+        <div className="bg-white rounded-2xl border border-gray-100 p-4" style={{ boxShadow: '0 1px 6px rgba(10,31,92,0.06)' }}>
+          <div className="text-sm font-bold text-gray-900">Licence Status</div>
+          <div className="text-[11px] text-gray-400 mb-1.5">{licences.length} licences tracked</div>
+          <div className="flex items-center gap-4">
+            <svg viewBox="0 0 120 120" style={{ width: 110, height: 110, flexShrink: 0 }}>
+              <circle cx="60" cy="60" r="46" fill="none" stroke="#F1F5F9" strokeWidth="16"/>
+              {activeLic > 0 && <circle cx="60" cy="60" r="46" fill="none" stroke="#059669" strokeWidth="16"
+                strokeDasharray={`${activeLen} ${circ}`} strokeDashoffset="0" transform="rotate(-90 60 60)" strokeLinecap="round"/>}
+              {expiring > 0 && <circle cx="60" cy="60" r="46" fill="none" stroke="#D97706" strokeWidth="16"
+                strokeDasharray={`${expiringLen} ${circ}`} strokeDashoffset={-activeLen} transform="rotate(-90 60 60)"/>}
+              {expired > 0 && <circle cx="60" cy="60" r="46" fill="none" stroke="#DC2626" strokeWidth="16"
+                strokeDasharray={`${expiredLen} ${circ}`} strokeDashoffset={-(activeLen+expiringLen)} transform="rotate(-90 60 60)"/>}
+              <text x="60" y="56" fontSize="22" fontWeight="700" fill="#0F172A" textAnchor="middle">{licences.length}</text>
+              <text x="60" y="72" fontSize="9" fill="#94A3B8" textAnchor="middle">total</text>
+            </svg>
+            <div className="flex flex-col gap-2 flex-1">
+              {[['Active','#059669',activeLic],['Expiring Soon','#D97706',expiring],['Expired','#DC2626',expired]].map(([l,c,v]) => (
+                <div key={l} className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-xs text-gray-700"><span className="w-2 h-2 rounded-full inline-block" style={{background:c}}/>{l}</span>
+                  <span className="text-xs font-black text-gray-900">{v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden" style={{ boxShadow: '0 1px 6px rgba(10,31,92,0.06)' }}>
+          <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
+            <div className="text-sm font-bold text-gray-900">Upcoming Filing Dates</div>
+            <button onClick={() => onNavigate('calendar')} className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1">View all <ArrowRight size={12}/></button>
+          </div>
+          <div className="py-1">
+            {upcoming.length === 0 && <div className="text-center py-8 text-xs text-gray-400">No filing tasks this month</div>}
+            {upcoming.map(t => (
+              <div key={t.id} className="flex items-center gap-3 px-4 py-2.5">
+                <div className={`w-9 h-9 rounded-xl flex flex-col items-center justify-center flex-shrink-0 ${t.overdue ? 'bg-red-50' : t.due_soon ? 'bg-amber-50' : 'bg-gray-50'}`}>
+                  <div className={`text-[9px] font-bold leading-none ${t.overdue ? 'text-red-700' : t.due_soon ? 'text-amber-700' : 'text-gray-500'}`}>{MONTHS[CURRENT_MONTH-1].slice(0,3).toUpperCase()}</div>
+                  <div className={`text-[13px] font-bold leading-tight ${t.overdue ? 'text-red-700' : t.due_soon ? 'text-amber-700' : 'text-gray-500'}`}>{t.due_day}</div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-bold text-gray-900 truncate">{t.task}</div>
+                  <div className="text-[11px] text-gray-400 truncate">{t.category} · {t.description}</div>
+                </div>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${t.overdue ? 'bg-red-50 text-red-700' : t.due_soon ? 'bg-amber-50 text-amber-700' : 'bg-gray-50 text-gray-500'}`}>
+                  {t.overdue ? `${Math.abs(t.days_remaining)}d overdue` : `${t.days_remaining}d`}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden" style={{ boxShadow: '0 1px 6px rgba(10,31,92,0.06)' }}>
+          <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
+            <div className="text-sm font-bold text-gray-900">Licences Needing Action</div>
+            <button onClick={() => onNavigate('licenses')} className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1">View all <ArrowRight size={12}/></button>
+          </div>
+          <table className="w-full text-xs">
+            <tbody>
+              {attention.length === 0 && (
+                <tr><td className="text-center py-8 text-gray-400" colSpan={3}>All licences are valid</td></tr>
+              )}
+              {attention.map(l => (
+                <tr key={l.id} className="border-b border-gray-50 last:border-0">
+                  <td className="px-4 py-2.5 font-bold text-gray-900 whitespace-nowrap">{l.license_name || LICENSE_TYPES.find(x=>x.value===l.license_type)?.label}</td>
+                  <td className="px-4 py-2.5 text-gray-400 truncate">{l.issuing_authority || '—'}</td>
+                  <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                    {l.is_expired
+                      ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-700">Expired {Math.abs(l.days_remaining)}d ago</span>
+                      : <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">Expires in {l.days_remaining}d</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
+function NavItem({ active, onClick, icon: Icon, label, badge }) {
+  return (
+    <button onClick={onClick}
+      className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl text-[13px] font-semibold transition-colors mb-0.5 ${
+        active ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-50'
+      }`}>
+      <span className="flex items-center gap-2 truncate">
+        <Icon size={15} className={active ? 'text-indigo-600' : 'text-gray-400'}/>
+        <span className="truncate">{label}</span>
+      </span>
+      {!!badge && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-50 text-red-700 flex-shrink-0">{badge}</span>}
+    </button>
+  );
+}
+
 export default function HRCompliancePage({ embedded = false }) {
-  const [activeTab, setActiveTab] = useState('pf');
+  const [activeTab, setActiveTab] = useState('overview');
 
   const { data: deptsRes } = useQuery({
     queryKey: ['compliance-depts'],
@@ -1939,8 +2239,12 @@ export default function HRCompliancePage({ embedded = false }) {
   });
   const depts = deptsRes || [];
 
-  const tab = TABS.find(t => t.key === activeTab);
-  const c   = COLOR[tab?.color || 'blue'];
+  const { data: licRes } = useQuery({
+    queryKey: ['compliance-licenses'],
+    queryFn:  () => hrComplianceAPI.labourLicenses().then(r => r.data),
+    staleTime: 60 * 1000,
+  });
+  const licenceAlerts = (licRes?.data || []).filter(l => l.is_expired || l.expiring_soon).length;
 
   return (
     <div className={embedded ? '' : 'min-h-screen'} style={embedded ? {} : { background: '#F8FAFC' }}>
@@ -1958,50 +2262,57 @@ export default function HRCompliancePage({ embedded = false }) {
               <span className="text-white/60 text-sm font-semibold">HR & Admin</span>
             </div>
             <h1 className="text-2xl font-black text-white">Compliance Reports</h1>
-            <p className="text-white/55 text-sm mt-1">PF · ESI · Prof. Tax · Muster Roll · Wage Register · Labour Licences · Doc Expiry · Compliance Calendar</p>
+            <p className="text-white/55 text-sm mt-1">Statutory registers, licences and filing calendar in one place</p>
           </div>
         </motion.div>
       )}
 
-      {/* Tab Bar */}
-      <motion.div {...fade(0.06)} className="bg-white border-b border-gray-100 px-7">
-        <div className="flex gap-1 overflow-x-auto py-1 no-scrollbar">
-          {TABS.map(t => {
-            const tc = COLOR[t.color];
-            const active = activeTab === t.key;
-            return (
-              <button key={t.key} onClick={() => setActiveTab(t.key)}
-                className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold whitespace-nowrap transition-all ${
-                  active ? `${tc.bg} ${tc.text}` : 'text-gray-500 hover:bg-gray-50'
-                }`}>
-                <t.icon size={14}/>
-                {t.label}
-              </button>
-            );
-          })}
-        </div>
-      </motion.div>
+      {/* Sidebar + Content */}
+      <motion.div {...fade(0.06)} className="px-7 py-6 flex gap-4 items-start">
 
-      {/* Content */}
-      <motion.div {...fade(0.1)} className="px-7 py-6">
-        {activeTab === 'pf'         && <PFRegister depts={depts}/>}
-        {activeTab === 'esi'        && <ESIRegister depts={depts}/>}
-        {activeTab === 'pt'         && <PTRegister/>}
-        {activeTab === 'wage'       && <WageRegister depts={depts}/>}
-        {activeTab === 'muster'     && <MusterRoll depts={depts}/>}
-        {activeTab === 'employment' && <EmploymentRegister/>}
-        {activeTab === 'it'         && <IncomeTaxRegister/>}
-        {activeTab === 'licenses'   && <LabourLicenses/>}
-        {activeTab === 'docexpiry'  && <DocumentExpiry/>}
-        {activeTab === 'calendar'   && <ComplianceCalendar/>}
-        {activeTab === 'bocw'       && <BOCWRegister/>}
-        {activeTab === 'gratuity'   && <GratuityRegister depts={depts}/>}
-        {activeTab === 'bonus'      && <BonusRegister depts={depts}/>}
-        {activeTab === 'lwf'        && <LWFRegister/>}
-        {activeTab === 'minwages'   && <MinWagesCheck depts={depts}/>}
-        {activeTab === 'clra'       && <CLRARegister/>}
-        {activeTab === 'challan'    && <ChallanTracker/>}
-        {activeTab === 'ecr'        && <ECRGenerator/>}
+        <div className="w-56 flex-shrink-0 bg-white rounded-2xl border border-gray-100 p-2.5 sticky top-4"
+          style={{ boxShadow: '0 1px 6px rgba(10,31,92,0.06)' }}>
+          <div className="px-2.5 pt-1.5 pb-1 text-[10px] font-bold text-gray-400 uppercase tracking-wide">Overview</div>
+          <NavItem active={activeTab === 'overview'} onClick={() => setActiveTab('overview')}
+            icon={LayoutDashboard} label="Dashboard" badge={licenceAlerts > 0 ? licenceAlerts : null}/>
+
+          {TAB_GROUPS.map(g => (
+            <div key={g.label}>
+              <div className="px-2.5 pt-3.5 pb-1 text-[10px] font-bold text-gray-400 uppercase tracking-wide">{g.label}</div>
+              {g.keys.map(k => {
+                const t = TABS.find(x => x.key === k);
+                if (!t) return null;
+                return (
+                  <NavItem key={k} active={activeTab === k} onClick={() => setActiveTab(k)}
+                    icon={t.icon} label={t.label}
+                    badge={k === 'licenses' && licenceAlerts > 0 ? licenceAlerts : null}/>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          {activeTab === 'overview'   && <ComplianceOverview depts={depts} onNavigate={setActiveTab}/>}
+          {activeTab === 'pf'         && <PFRegister depts={depts}/>}
+          {activeTab === 'esi'        && <ESIRegister depts={depts}/>}
+          {activeTab === 'pt'         && <PTRegister/>}
+          {activeTab === 'wage'       && <WageRegister depts={depts}/>}
+          {activeTab === 'muster'     && <MusterRoll depts={depts}/>}
+          {activeTab === 'employment' && <EmploymentRegister/>}
+          {activeTab === 'it'         && <IncomeTaxRegister/>}
+          {activeTab === 'licenses'   && <LabourLicenses/>}
+          {activeTab === 'docexpiry'  && <DocumentExpiry/>}
+          {activeTab === 'calendar'   && <ComplianceCalendar/>}
+          {activeTab === 'bocw'       && <BOCWRegister/>}
+          {activeTab === 'gratuity'   && <GratuityRegister depts={depts}/>}
+          {activeTab === 'bonus'      && <BonusRegister depts={depts}/>}
+          {activeTab === 'lwf'        && <LWFRegister/>}
+          {activeTab === 'minwages'   && <MinWagesCheck depts={depts}/>}
+          {activeTab === 'clra'       && <CLRARegister/>}
+          {activeTab === 'challan'    && <ChallanTracker/>}
+          {activeTab === 'ecr'        && <ECRGenerator/>}
+        </div>
       </motion.div>
     </div>
   );
