@@ -485,22 +485,22 @@ export default function LiabilityRegisterPage() {
     // ── Top bar ──
     topBar: {
       background: C.card, borderBottom: `1px solid ${C.line}`,
-      flexShrink: 0, padding: '0 20px',
+      flexShrink: 0, padding: '0 14px',
       boxShadow: '0 1px 2px rgba(15,23,42,.03)',
     },
     topRow: {
-      display: 'flex', alignItems: 'center', gap: 10,
-      height: 54, borderBottom: '1px solid #F1F5F9',
+      display: 'flex', alignItems: 'center', gap: 8,
+      height: 46, borderBottom: '1px solid #F1F5F9',
     },
-    pageTitle: { fontSize: 15, fontWeight: 700, color: '#0F172A', margin: 0 },
-    pageSub:   { fontSize: 11, color: '#94A3B8', margin: '1px 0 0' },
+    pageTitle: { fontSize: 13.5, fontWeight: 700, color: '#0F172A', margin: 0, whiteSpace: 'nowrap' },
+    pageSub:   { fontSize: 10, color: '#94A3B8', margin: '1px 0 0', whiteSpace: 'nowrap' },
     // ── KPI strip ──
     kpiStrip: {
-      display: 'flex', gap: 12, padding: '12px 20px',
+      display: 'flex', gap: 8, padding: '8px 14px',
       flexShrink: 0, overflowX: 'auto',
     },
     // ── Split pane ──
-    pane: { flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0, padding: '0 20px 16px', gap: 12 },
+    pane: { flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0, padding: '0 14px 10px', gap: 8 },
   };
 
   return (
@@ -509,13 +509,14 @@ export default function LiabilityRegisterPage() {
       <div style={S.topBar}>
         <div style={S.topRow}>
           {/* Icon + title */}
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: '#EFF6FF', border: '1px solid #BFDBFE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <BookOpen size={16} color="#2563EB" />
+          <div style={{ width: 26, height: 26, borderRadius: 7, background: C.blueBg, border: `1px solid ${C.blueBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <BookOpen size={13} color={C.blue} />
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={S.pageTitle}>Vendor Liability Register</p>
-            <p style={S.pageSub}>Payables ledger · Statement of accounts</p>
+          <div style={{ flexShrink: 0 }}>
+            <p style={S.pageTitle}>Liability Register</p>
+            <p style={S.pageSub}>Payables · Statement of accounts</p>
           </div>
+          <div style={{ flex: 1 }} />
 
           {/* Source segmented control */}
           <div style={{ display: 'flex', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, padding: 3, gap: 2 }}>
@@ -545,7 +546,7 @@ export default function LiabilityRegisterPage() {
           {/* Project select */}
           <div style={{ position: 'relative' }}>
             <select value={projectId} onChange={e => setProjectId(e.target.value)}
-              style={{ height: 34, padding: '0 30px 0 10px', border: '1px solid #E2E8F0', borderRadius: 7, background: '#fff', fontSize: 12, color: '#334155', outline: 'none', minWidth: 155, maxWidth: 215, appearance: 'none', fontFamily: 'inherit', cursor: 'pointer' }}>
+              style={{ height: 30, padding: '0 30px 0 10px', border: '1px solid #E2E8F0', borderRadius: 7, background: '#fff', fontSize: 12, color: '#334155', outline: 'none', minWidth: 155, maxWidth: 215, appearance: 'none', fontFamily: 'inherit', cursor: 'pointer' }}>
               <option value="">All Projects</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
@@ -555,7 +556,7 @@ export default function LiabilityRegisterPage() {
           {/* Filters toggle */}
           <button onClick={() => setShowFilters(f => !f)}
             style={{
-              display: 'flex', alignItems: 'center', gap: 5, height: 34, padding: '0 12px',
+              display: 'flex', alignItems: 'center', gap: 5, height: 30, padding: '0 12px',
               border: `1px solid ${showFilters || fromDate || toDate ? '#2563EB' : '#E2E8F0'}`,
               borderRadius: 7, background: showFilters || fromDate || toDate ? '#EFF6FF' : '#fff',
               color: showFilters || fromDate || toDate ? '#2563EB' : '#64748B',
@@ -570,7 +571,7 @@ export default function LiabilityRegisterPage() {
             disabled={automationMut.isPending}
             title="Run liability aging alerts now"
             style={{
-              display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 12px',
+              display: 'flex', alignItems: 'center', gap: 6, height: 30, padding: '0 12px',
               border: '1px solid #BFDBFE', borderRadius: 7, background: '#EFF6FF',
               color: C.red, fontSize: 12, fontWeight: 700, cursor: automationMut.isPending ? 'wait' : 'pointer',
               opacity: automationMut.isPending ? 0.65 : 1,
@@ -596,7 +597,7 @@ export default function LiabilityRegisterPage() {
               ].map(({ label, Icon, color, fn }) => (
                 <button key={label} onClick={fn} disabled={label !== 'Print' && !ledger.length}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 5, height: 34, padding: '0 11px',
+                    display: 'flex', alignItems: 'center', gap: 5, height: 30, padding: '0 11px',
                     border: '1px solid #E2E8F0', borderRadius: 7, background: '#fff',
                     color: '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer',
                     opacity: label !== 'Print' && !ledger.length ? 0.45 : 1,
@@ -645,25 +646,25 @@ export default function LiabilityRegisterPage() {
           { label: `90+ Days (${vendorsOver90})`, val: totalOver90,         isN: false, accent: C.red, light: C.redBg, border: C.redBorder, Icon: Clock },
         ].map(k => (
           <div key={k.label} style={{
-            flex: '1 1 132px', minWidth: 132, position: 'relative',
-            background: C.card, borderRadius: 14,
+            flex: '1 1 118px', minWidth: 118, position: 'relative',
+            background: C.card, borderRadius: 10,
             border: `1px solid ${C.line}`,
-            padding: '13px 15px 12px',
+            padding: '8px 11px 8px',
             boxShadow: '0 1px 2px rgba(15,23,42,.05)',
             overflow: 'hidden',
-            transition: 'transform .15s, box-shadow .15s, border-color .15s',
+            transition: 'box-shadow .15s, border-color .15s',
           }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(15,23,42,.09)'; e.currentTarget.style.borderColor = k.border; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 1px 2px rgba(15,23,42,.05)'; e.currentTarget.style.borderColor = C.line; }}
+            onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 12px rgba(15,23,42,.08)'; e.currentTarget.style.borderColor = k.border; }}
+            onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 1px 2px rgba(15,23,42,.05)'; e.currentTarget.style.borderColor = C.line; }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
-              <div style={{ width: 26, height: 26, borderRadius: 8, background: k.light, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <k.Icon size={13} color={k.accent} strokeWidth={2.4} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+              <div style={{ width: 20, height: 20, borderRadius: 6, background: k.light, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <k.Icon size={11} color={k.accent} strokeWidth={2.4} />
               </div>
-              <div style={{ fontSize: 9.5, fontWeight: 700, color: C.sub, textTransform: 'uppercase', letterSpacing: 0.6, lineHeight: 1.2 }}>{k.label}</div>
+              <div style={{ fontSize: 8.5, fontWeight: 700, color: C.sub, textTransform: 'uppercase', letterSpacing: 0.5, lineHeight: 1.2, whiteSpace: 'nowrap' }}>{k.label}</div>
             </div>
-            <div style={{ fontSize: k.isN ? 25 : 18, fontWeight: 800, color: k.isN ? C.ink : k.accent, lineHeight: 1, letterSpacing: -0.5, fontVariantNumeric: 'tabular-nums' }}>
-              {k.isN ? k.val : <><span style={{ fontSize: 13, opacity: .55, marginRight: 1, fontWeight: 700 }}>₹</span>{inr(k.val)}</>}
+            <div style={{ fontSize: k.isN ? 18 : 14, fontWeight: 800, color: k.isN ? C.ink : k.accent, lineHeight: 1, letterSpacing: -0.4, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+              {k.isN ? k.val : <><span style={{ fontSize: 11, opacity: .55, marginRight: 1, fontWeight: 700 }}>₹</span>{inr(k.val)}</>}
             </div>
           </div>
         ))}
@@ -674,7 +675,7 @@ export default function LiabilityRegisterPage() {
 
         {/* ── LEFT: Vendor list ── */}
         <div style={{
-          width: 272, flexShrink: 0,
+          width: 246, flexShrink: 0,
           display: 'flex', flexDirection: 'column',
           background: C.card, borderRadius: 14,
           border: `1px solid ${C.line}`,
@@ -705,7 +706,7 @@ export default function LiabilityRegisterPage() {
               return (
                 <button key={t.key} onClick={() => { setBalanceFilter(t.key); setSelectedVendor(null); }}
                   style={{
-                    flex: 1, height: 34, border: 'none', cursor: 'pointer',
+                    flex: 1, height: 30, border: 'none', cursor: 'pointer',
                     background: 'transparent', fontSize: 10, fontWeight: on ? 700 : 500,
                     color: on ? '#2563EB' : '#64748B',
                     borderBottom: `2px solid ${on ? '#2563EB' : 'transparent'}`,
@@ -822,12 +823,12 @@ export default function LiabilityRegisterPage() {
           ) : (
             <>
               {/* ── Account header ── */}
-              <div style={{ borderBottom: '1px solid #F1F5F9', padding: '14px 20px 12px', flexShrink: 0 }}>
+              <div style={{ borderBottom: '1px solid #F1F5F9', padding: '9px 14px 8px', flexShrink: 0 }}>
                 {/* Row 1: vendor name + balance due */}
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
                   <div>
-                    <p style={{ margin: 0, fontSize: 9, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.7 }}>Statement of Account</p>
-                    <h2 style={{ margin: '3px 0 0', fontSize: 18, fontWeight: 800, color: '#0F172A', lineHeight: 1.2 }}>{selectedVendor}</h2>
+                    <p style={{ margin: 0, fontSize: 8.5, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.7 }}>Statement of Account</p>
+                    <h2 style={{ margin: '2px 0 0', fontSize: 15, fontWeight: 800, color: '#0F172A', lineHeight: 1.2 }}>{selectedVendor}</h2>
                     {(fromDate || toDate) && (
                       <p style={{ margin: '3px 0 0', fontSize: 11, color: '#94A3B8' }}>
                         {fromDate ? fmt(fromDate) : 'All time'} &rarr; {toDate ? fmt(toDate) : 'Today'}
@@ -837,15 +838,15 @@ export default function LiabilityRegisterPage() {
 
                   {/* Balance Due — main highlight */}
                   <div style={{
-                    borderRadius: 10, padding: '10px 16px', textAlign: 'right', minWidth: 140, flexShrink: 0,
+                    borderRadius: 9, padding: '6px 12px', textAlign: 'right', minWidth: 120, flexShrink: 0,
                     background: closingBal > 0 ? C.redBg : C.slateBg,
                     border: `1.5px solid ${closingBal > 0 ? C.redBorder : C.slateBorder}`,
                   }}>
-                    <p style={{ margin: 0, fontSize: 9, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Balance Due</p>
-                    <p style={{ margin: '3px 0 0', fontSize: 22, fontWeight: 900, color: closingBal > 0 ? C.red : C.slate, lineHeight: 1, letterSpacing: -0.5, fontVariantNumeric: 'tabular-nums' }}>
+                    <p style={{ margin: 0, fontSize: 8.5, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Balance Due</p>
+                    <p style={{ margin: '2px 0 0', fontSize: 16, fontWeight: 900, color: closingBal > 0 ? C.red : C.slate, lineHeight: 1, letterSpacing: -0.4, fontVariantNumeric: 'tabular-nums' }}>
                       ₹{inr(Math.abs(closingBal), 2)}
                     </p>
-                    <p style={{ margin: '2px 0 0', fontSize: 10, fontWeight: 600, color: closingBal > 0 ? C.red : '#94A3B8' }}>
+                    <p style={{ margin: '2px 0 0', fontSize: 9, fontWeight: 600, color: closingBal > 0 ? C.red : '#94A3B8' }}>
                       {closingBal > 0 ? 'Payable to vendor' : closingBal < 0 ? 'Excess paid' : '✓ Settled'}
                     </p>
                   </div>
@@ -860,23 +861,23 @@ export default function LiabilityRegisterPage() {
                     { label: 'Advance Open', val: selRow.total_advance_open || selRow.total_advance_given, color: C.amber, bg: C.amberBg, border: C.amberBorder },
                     { label: '90+ Due',  val: selRow.payable_90_plus,     color: C.red, bg: C.redBg, border: C.redBorder },
                   ].map(s => (
-                    <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 7, background: s.bg, border: `1px solid ${s.border}`, borderRadius: 9, padding: '6px 13px' }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: C.sub, textTransform: 'uppercase', letterSpacing: 0.4 }}>{s.label}</span>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: s.color, letterSpacing: -0.3, fontVariantNumeric: 'tabular-nums' }}>₹{inr(s.val)}</span>
+                    <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 5, background: s.bg, border: `1px solid ${s.border}`, borderRadius: 7, padding: '3px 9px' }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: C.sub, textTransform: 'uppercase', letterSpacing: 0.3 }}>{s.label}</span>
+                      <span style={{ fontSize: 11.5, fontWeight: 800, color: s.color, letterSpacing: -0.2, fontVariantNumeric: 'tabular-nums' }}>₹{inr(s.val)}</span>
                     </div>
                   ))}
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(90px, 1fr))', gap: 8, marginTop: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(80px, 1fr))', gap: 6, marginTop: 7 }}>
                   {[
                     { label: '0-30 Days', val: selRow.payable_0_30, color: C.blue },
                     { label: '31-60 Days', val: selRow.payable_31_60, color: C.amber },
                     { label: '61-90 Days', val: selRow.payable_61_90, color: C.red },
                     { label: '90+ Days', val: selRow.payable_90_plus, color: C.red },
                   ].map(s => (
-                    <div key={s.label} style={{ background: C.slateBg, border: `1px solid ${C.line}`, borderRadius: 9, padding: '7px 10px' }}>
-                      <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.4 }}>{s.label}</div>
-                      <div style={{ fontSize: 13, fontWeight: 900, color: s.color, marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>₹{inr(s.val)}</div>
+                    <div key={s.label} style={{ background: C.slateBg, border: `1px solid ${C.line}`, borderRadius: 7, padding: '4px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                      <div style={{ fontSize: 8.5, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: 0.3, whiteSpace: 'nowrap' }}>{s.label}</div>
+                      <div style={{ fontSize: 11.5, fontWeight: 900, color: s.color, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>₹{inr(s.val)}</div>
                     </div>
                   ))}
                 </div>
