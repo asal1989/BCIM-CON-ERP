@@ -368,7 +368,7 @@ const ADMIN_ROLES = [
 
 // Managing-director roles get the approvals view embedded in their main dashboard.
 const MD_DASHBOARD_ROLES  = ['md', 'managing_director'];
-const MD_DASHBOARD_EMAILS = ['stephen@bcim.in', 'it@bcim.in'];
+const MD_DASHBOARD_EMAILS = ['stephen@bcim.in'];
 
 // Returns true for anyone who should land on the executive dashboard with approvals embedded.
 // Checked in routing, project-gate bypass, and dashboard render — kept in one place.
