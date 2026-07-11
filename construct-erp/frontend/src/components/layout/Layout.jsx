@@ -1023,6 +1023,8 @@ const MD_SHORTCUTS = [
   { label: 'GRN / IGN',         to: '/stores/ign',                            icon: ClipboardCheck },
   { label: 'DPR',               to: '/planning/dpr-console',                  icon: FileText },
   { label: 'Liability Register', to: '/tqs/liability-register',              icon: BookOpen },
+  { label: 'Payment Recommendations', to: '/sc/payment-recommendations',      icon: Send },
+  { label: 'Mail Center',       to: '/mail-center',                          icon: Mail },
   { label: 'Team Chat',         to: '/chat',                                  icon: MessageSquare },
 ];
 
