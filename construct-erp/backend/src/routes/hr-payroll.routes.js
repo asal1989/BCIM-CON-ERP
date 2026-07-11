@@ -227,6 +227,8 @@ router.post('/run', async (req, res) => {
     const workDays = workingDaysInMonth(m, y);
 
     // Get active employee(s) with salary — optionally scoped to one employee or project
+    // LATERAL picks the single most-recent salary row effective for this month,
+    // so a mid-month salary update never causes duplicate rows per employee.
     let employeeSql = `
       SELECT u.id as user_id,
               u.name as employee_name,
@@ -234,9 +236,16 @@ router.post('/run', async (req, res) => {
               es.special_allowance, es.other_allowance, es.gross_monthly,
               es.pf_applicable, es.esi_applicable, es.pt_applicable
        FROM users u
-       JOIN hr_employee_salaries es ON es.user_id = u.id
-         AND es.effective_from <= make_date($3,$1,1)
-         AND (es.effective_to IS NULL OR es.effective_to >= make_date($3,$1,1))
+       JOIN LATERAL (
+         SELECT basic, hra, conveyance, medical, special_allowance, other_allowance,
+                gross_monthly, pf_applicable, esi_applicable, pt_applicable
+         FROM hr_employee_salaries
+         WHERE user_id = u.id
+           AND effective_from <= make_date($3,$1,1)
+           AND (effective_to IS NULL OR effective_to >= make_date($3,$1,1))
+         ORDER BY effective_from DESC, created_at DESC, id DESC
+         LIMIT 1
+       ) es ON TRUE
        LEFT JOIN employee_profiles ep ON ep.user_id = u.id
        WHERE u.company_id = $2 AND u.is_active = TRUE`;
     const employeeParams = [m, req.user.company_id, y];
@@ -299,8 +308,19 @@ router.post('/run', async (req, res) => {
       const conv  = Math.round(parseFloat(emp.conveyance || 0) * lopFactor);
       const med   = Math.round(parseFloat(emp.medical || 0) * lopFactor);
       const spec  = Math.round(parseFloat(emp.special_allowance || 0) * lopFactor);
-      const other = Math.round(parseFloat(emp.other_allowance || 0) * lopFactor);
-      const gross = basic + hra + conv + med + spec + other;
+      // Gross = the configured monthly gross (gross_monthly), pro-rated for
+      // attendance. gross_monthly already includes ALL BCIM earning components
+      // (project/accommodation/food/transport/LTA/incentive/etc). Summing only
+      // basic+hra+medical+special dropped those allowances and understated gross
+      // (e.g. ₹27,613 instead of the configured ₹53,886). Fall back to the
+      // component sum only when gross_monthly is unset on legacy rows.
+      const componentSum = basic + hra + conv + med + spec
+        + Math.round(parseFloat(emp.other_allowance || 0) * lopFactor);
+      const grossMonthly = Math.round(parseFloat(emp.gross_monthly || 0) * lopFactor);
+      const gross = grossMonthly > 0 ? grossMonthly : componentSum;
+      // Remaining allowances (everything beyond the itemised basic/hra/med/spec)
+      // are lumped into "other" so the stored components reconcile to gross.
+      const other = Math.max(0, gross - (basic + hra + conv + med + spec));
 
       // Statutory deductions
       const pf  = calcPF(basic, emp.pf_applicable);

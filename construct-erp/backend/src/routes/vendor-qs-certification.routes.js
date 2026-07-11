@@ -76,6 +76,14 @@ async function ensureTables() {
   try { await query(`ALTER TABLE vendor_qs_certifications ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(14,2) DEFAULT 0`); } catch (_) {}
   try { await query(`ALTER TABLE vendor_qs_certifications ADD COLUMN IF NOT EXISTS payment_date DATE`); } catch (_) {}
   try { await query(`ALTER TABLE vendor_qs_certifications ADD COLUMN IF NOT EXISTS payment_mode TEXT`); } catch (_) {}
+  // ── Weighment / MSB / IGN / GRS cross-reference columns on items ────────
+  // Weighment qty is a plain cross-check quantity (weighbridge slip), no
+  // rate/amount. MSB/IGN/GRS are free-text reference numbers the QS
+  // certifier types in against their own register — not linked records.
+  try { await query(`ALTER TABLE vendor_qs_certification_items ADD COLUMN IF NOT EXISTS weighment_qty NUMERIC(14,3) DEFAULT 0`); } catch (_) {}
+  try { await query(`ALTER TABLE vendor_qs_certification_items ADD COLUMN IF NOT EXISTS msb_ref TEXT`); } catch (_) {}
+  try { await query(`ALTER TABLE vendor_qs_certification_items ADD COLUMN IF NOT EXISTS ign_ref TEXT`); } catch (_) {}
+  try { await query(`ALTER TABLE vendor_qs_certification_items ADD COLUMN IF NOT EXISTS grs_ref TEXT`); } catch (_) {}
   try { await query(`ALTER TABLE vendor_qs_certifications ADD COLUMN IF NOT EXISTS reference_number TEXT`); } catch (_) {}
   try { await query(`ALTER TABLE vendor_qs_certifications ADD COLUMN IF NOT EXISTS bank_name TEXT`); } catch (_) {}
   try { await query(`ALTER TABLE vendor_qs_certifications ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`); } catch (_) {}
@@ -215,7 +223,12 @@ async function buildSummaryFromBills(executor, billIds, companyId, excludeCertif
     const effectiveRow = singleLinkedRef && !(row.po_item_id || row.wo_item_id) ? singleLinkedRow : row;
     const effectiveIsWO = effectiveRow?.wo_item_id || effectiveRow?.bill_type === 'wo';
     const orderQty = n(effectiveIsWO ? effectiveRow?.wo_ordered_qty : effectiveRow?.po_ordered_qty) || invQty;
-    const rate = n(effectiveIsWO ? (effectiveRow?.wo_ordered_rate || row.rate) : (effectiveRow?.po_ordered_rate || row.rate));
+    // Fall back to basic_amount / qty when the line isn't linked to a WO/PO
+    // item AND its own `rate` column is blank (common for lump-sum bill
+    // entries that only captured a total) — otherwise the certified amount
+    // silently comes out as qty * 0.
+    const linkedRate = n(effectiveIsWO ? (effectiveRow?.wo_ordered_rate || row.rate) : (effectiveRow?.po_ordered_rate || row.rate));
+    const rate = linkedRate || (invQty ? n(row.basic_amount) / invQty : 0);
     const qsPrevQty = n(row.qs_prev_qty);
     const qsPresQty = Math.max(0, invQty);
     const taxAmount = n(row.cgst_amt) + n(row.sgst_amt) + n(row.igst_amt) || n(row.gst_amount);
@@ -451,7 +464,12 @@ router.post('/summary-items', async (req, res) => {
       const effectiveRow = singleLinkedRef && !(row.po_item_id || row.wo_item_id) ? singleLinkedRow : row;
       const effectiveIsWO = effectiveRow?.wo_item_id || effectiveRow?.bill_type === 'wo';
       const orderQty = n(effectiveIsWO ? effectiveRow?.wo_ordered_qty : effectiveRow?.po_ordered_qty) || invQty;
-      const rate = n(effectiveIsWO ? (effectiveRow?.wo_ordered_rate || row.rate) : (effectiveRow?.po_ordered_rate || row.rate));
+      // Fall back to basic_amount / qty when the line isn't linked to a WO/PO
+      // item AND its own `rate` column is blank (common for lump-sum bill
+      // entries that only captured a total) — otherwise the certified amount
+      // silently comes out as qty * 0.
+      const linkedRate = n(effectiveIsWO ? (effectiveRow?.wo_ordered_rate || row.rate) : (effectiveRow?.po_ordered_rate || row.rate));
+      const rate = linkedRate || (invQty ? n(row.basic_amount) / invQty : 0);
       const qsPrevQty = n(row.qs_prev_qty);
       const qsPresQty = Math.max(0, invQty);
       const taxAmount = n(row.cgst_amt) + n(row.sgst_amt) + n(row.igst_amt) || n(row.gst_amount);
@@ -626,6 +644,10 @@ router.post('/', async (req, res) => {
               amount: round2(row.amount || (qsQty * rate)),
               remarks: row.remarks || null,
               tax_amount: n(row.tax_amount),
+              weighment_qty: n(row.weighment_qty),
+              msb_ref: row.msb_ref || null,
+              ign_ref: row.ign_ref || null,
+              grs_ref: row.grs_ref || null,
             };
           })
         : systemItems;
@@ -816,11 +838,13 @@ router.post('/', async (req, res) => {
           INSERT INTO vendor_qs_certification_items (
             certification_id, bill_id, bill_line_item_id, source_inv_number, item_ref_id,
             description, unit, order_qty, order_rate, inv_prev_qty, inv_pres_qty,
-            qs_prev_qty, qs_pres_qty, amount, remarks
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+            qs_prev_qty, qs_pres_qty, amount, remarks,
+            weighment_qty, msb_ref, ign_ref, grs_ref
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
         `, [cert.rows[0].id, it.bill_id, it.bill_line_item_id, it.source_inv_number, it.item_ref_id,
           it.description, it.unit, it.order_qty, it.order_rate, it.inv_prev_qty, it.inv_pres_qty,
-          it.qs_prev_qty, it.qs_pres_qty, it.amount, it.remarks]);
+          it.qs_prev_qty, it.qs_pres_qty, it.amount, it.remarks,
+          it.weighment_qty || 0, it.msb_ref || null, it.ign_ref || null, it.grs_ref || null]);
       }
 
       return cert.rows[0];
@@ -889,21 +913,36 @@ router.post('/:id/refresh-from-bills', async (req, res) => {
       const invoiceBillTotal = round2(linkedBills.rows.reduce((s, b) => s + n(b.total_amount), 0)) || gross;
       const netPayable = round2(invoiceBillTotal - totalDed);
 
+      // weighment_qty/msb_ref/ign_ref/grs_ref are typed in manually by the QS
+      // certifier and aren't derivable from bill data — preserve them across
+      // a refresh by matching old items to the freshly-built ones on the same
+      // key (item_ref_id, else description+unit) before wiping the old rows.
+      const prevAnnotations = await client.query(
+        `SELECT item_ref_id, description, unit, weighment_qty, msb_ref, ign_ref, grs_ref
+           FROM vendor_qs_certification_items WHERE certification_id=$1`,
+        [req.params.id]
+      );
+      const annotationKey = (r) => r.item_ref_id || `${String(r.description || '').trim().toLowerCase()}|${r.unit || ''}`;
+      const annotationMap = new Map(prevAnnotations.rows.map(r => [annotationKey(r), r]));
+
       await client.query(
         `DELETE FROM vendor_qs_certification_items WHERE certification_id=$1`,
         [req.params.id]
       );
 
       for (const it of items) {
+        const carried = annotationMap.get(annotationKey(it));
         await client.query(`
           INSERT INTO vendor_qs_certification_items (
             certification_id, bill_id, bill_line_item_id, source_inv_number, item_ref_id,
             description, unit, order_qty, order_rate, inv_prev_qty, inv_pres_qty,
-            qs_prev_qty, qs_pres_qty, amount, remarks
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+            qs_prev_qty, qs_pres_qty, amount, remarks,
+            weighment_qty, msb_ref, ign_ref, grs_ref
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
         `, [req.params.id, it.bill_id, it.bill_line_item_id, it.source_inv_number, it.item_ref_id,
           it.description, it.unit, it.order_qty, it.order_rate, it.inv_prev_qty, it.inv_pres_qty,
-          it.qs_prev_qty, it.qs_pres_qty, it.amount, it.remarks]);
+          it.qs_prev_qty, it.qs_pres_qty, it.amount, it.remarks,
+          carried?.weighment_qty || 0, carried?.msb_ref || null, carried?.ign_ref || null, carried?.grs_ref || null]);
       }
 
       for (const b of linkedBills.rows) {

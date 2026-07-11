@@ -104,7 +104,7 @@ const PRESETS = [
 function Th({ children, right, center }) {
   return (
     <th className={clsx(
-      'px-3 py-2.5 text-[10px] font-medium text-slate-900 font-medium uppercase tracking-wide bg-slate-50 whitespace-nowrap sticky top-0 z-10',
+      'px-3 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider bg-slate-50 whitespace-nowrap sticky top-0 z-10 border-b-2 border-slate-200',
       right ? 'text-right' : center ? 'text-center' : 'text-left'
     )}>{children}</th>
   );
@@ -118,18 +118,20 @@ function Td({ children, right, center, bold, color, mono, small, nowrap = true }
       bold ? 'font-semibold' : '',
       mono ? 'font-mono text-xs' : small ? 'text-xs' : 'text-sm',
       color || 'text-slate-700'
-    )}>{children}</td>
+    )} style={right ? { fontVariantNumeric: 'tabular-nums' } : undefined}>{children}</td>
   );
 }
 function TotRow({ cols }) {
   return (
-    <tr className="bg-blue-50 border-t-2 border-blue-200">
+    <tr style={{ background: '#141F38' }}>
       {cols.map((c, i) => (
         <td key={i} className={clsx(
-          'px-3 py-2 text-xs font-medium whitespace-nowrap',
+          'px-3 py-2.5 text-xs font-bold whitespace-nowrap',
           c.right ? 'text-right' : '',
-          c.color || 'text-blue-700'
-        )}>{c.v}</td>
+        )} style={{
+          fontVariantNumeric: 'tabular-nums',
+          color: c.color?.includes('red') ? '#FDA4AF' : c.right ? '#A5B4FC' : '#F1F5F9',
+        }}>{c.v}</td>
       ))}
     </tr>
   );
@@ -148,10 +150,11 @@ function KpiGrid({ items }) {
   return (
     <div className={clsx('grid gap-3 mb-5', `grid-cols-2 md:grid-cols-${Math.min(items.length, 4)} lg:grid-cols-${items.length}`)}>
       {items.map((k, i) => (
-        <div key={i} className={clsx('rounded-xl border p-3', k.border || 'border-slate-200', 'bg-white shadow-sm')}>
-          <p className="text-[10px] font-medium text-slate-900 font-medium uppercase tracking-wider mb-0.5">{k.label}</p>
-          <p className={clsx('text-lg font-bold', k.color || 'text-slate-800')}>{k.value}</p>
-          {k.sub && <p className="text-[10px] text-slate-900 font-medium mt-0.5">{k.sub}</p>}
+        <div key={i} className="rounded-2xl border border-slate-200 p-3.5 bg-white shadow-sm transition-shadow hover:shadow-md">
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">{k.label}</p>
+          <p className={clsx('text-lg font-extrabold leading-tight', k.color || 'text-slate-800')}
+            style={{ fontVariantNumeric: 'tabular-nums' }}>{k.value}</p>
+          {k.sub && <p className="text-[10px] text-slate-400 font-medium mt-1">{k.sub}</p>}
         </div>
       ))}
     </div>
@@ -159,16 +162,16 @@ function KpiGrid({ items }) {
 }
 
 // ─── Section header ────────────────────────────────────────────────────────────
-function ReportHeader({ title, subtitle, icon: Icon, iconColor = 'text-blue-500', actions }) {
+function ReportHeader({ title, subtitle, icon: Icon, iconColor = 'text-indigo-600', actions }) {
   return (
     <div className="flex items-center justify-between mb-4">
       <div className="flex items-center gap-2.5">
-        <div className={clsx('w-8 h-8 rounded-lg flex items-center justify-center', 'bg-blue-50')}>
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-indigo-50 border border-indigo-100">
           <Icon className={clsx('w-4 h-4', iconColor)} />
         </div>
         <div>
-          <h2 className="text-base font-medium text-slate-800">{title}</h2>
-          {subtitle && <p className="text-xs text-slate-400">{subtitle}</p>}
+          <h2 className="text-base font-bold text-slate-900 leading-tight">{title}</h2>
+          {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
         </div>
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}
@@ -508,7 +511,7 @@ export default function TQSReportsPage() {
       }
     `}</style>
 
-    <div className="flex h-screen bg-[#f0f2f5] overflow-hidden">
+    <div className="flex h-screen bg-[#EEF1F6] overflow-hidden" style={{ fontFamily: "'Inter','Segoe UI',system-ui,sans-serif" }}>
 
       {/* ══ LEFT SIDEBAR ══════════════════════════════════════════════════════ */}
       <aside className={clsx(
@@ -519,22 +522,25 @@ export default function TQSReportsPage() {
         <div className={clsx('flex items-center border-b border-slate-100 h-12', sidebarOpen ? 'px-3 gap-2' : 'justify-center')}>
           {sidebarOpen && (
             <>
-              <BookOpen className="w-4 h-4 text-blue-600 flex-shrink-0" />
-              <span className="text-sm font-medium text-slate-900 font-medium flex-1 truncate">Bill Tracker Reports</span>
+              <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg,#4F46E5,#4338CA)' }}>
+                <BookOpen className="w-3.5 h-3.5 text-white" />
+              </div>
+              <span className="text-sm font-bold text-slate-900 flex-1 truncate">Reports</span>
             </>
           )}
           <button onClick={() => setSidebarOpen(v => !v)}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-900 font-medium hover:text-blue-600 hover:bg-blue-50 transition-all flex-shrink-0">
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all flex-shrink-0">
             {sidebarOpen ? <ChevronsLeft className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
           </button>
         </div>
 
         {/* Nav groups */}
-        <nav className="flex-1 overflow-y-auto py-2">
+        <nav className="flex-1 overflow-y-auto py-2 px-1.5">
           {SIDEBAR.map(grp => (
-            <div key={grp.group} className="mb-1">
+            <div key={grp.group} className="mb-2">
               {sidebarOpen && (
-                <p className="px-3 py-1 text-[9px] font-medium text-slate-900 font-medium uppercase tracking-widest">{grp.group}</p>
+                <p className="px-2 py-1 text-[9px] font-bold text-slate-400 uppercase tracking-widest">{grp.group}</p>
               )}
               {grp.items.map(item => {
                 const Icon = item.icon;
@@ -542,31 +548,27 @@ export default function TQSReportsPage() {
                 return (
                   <button key={item.key} onClick={() => setTab(item.key)} title={!sidebarOpen ? item.label : undefined}
                     className={clsx(
-                      'w-full flex items-center gap-2.5 transition-all',
-                      sidebarOpen ? 'px-3 py-2 text-xs' : 'px-0 py-2 justify-center',
+                      'w-full flex items-center gap-2.5 rounded-lg transition-all mb-0.5',
+                      sidebarOpen ? 'px-2.5 py-2 text-xs' : 'px-0 py-2 justify-center',
                       active
-                        ? 'bg-blue-50 text-blue-700 font-medium border-r-2 border-blue-500'
-                        : 'text-slate-900 font-medium hover:bg-slate-50 hover:text-slate-700'
+                        ? 'bg-indigo-600 text-white font-semibold shadow-sm'
+                        : 'text-slate-500 font-medium hover:bg-slate-100 hover:text-slate-800'
                     )}>
-                    <Icon className={clsx('flex-shrink-0', active ? 'w-3.5 h-3.5 text-blue-600' : 'w-3.5 h-3.5')} />
+                    <Icon className="flex-shrink-0 w-3.5 h-3.5" />
                     {sidebarOpen && <span className="truncate">{item.label}</span>}
-                    {sidebarOpen && active && <ChevronRight className="w-3 h-3 ml-auto text-blue-400" />}
                   </button>
                 );
               })}
-              {grp !== SIDEBAR[SIDEBAR.length - 1] && sidebarOpen && (
-                <div className="mx-3 my-1 border-t border-slate-100" />
-              )}
             </div>
           ))}
         </nav>
 
         {/* Bottom: total counts */}
         {sidebarOpen && (
-          <div className="border-t border-slate-100 px-3 py-2.5 space-y-0.5">
-            <p className="text-[9px] text-slate-900 font-medium uppercase tracking-wide">Loaded</p>
-            <p className="text-xs font-medium text-slate-700">{bills.length} bills{projectId ? '' : ' (all projects)'}</p>
-            {totBalance > 0 && <p className="text-[10px] text-red-500 font-semibold">{inrFmt(totBalance)} outstanding</p>}
+          <div className="border-t border-slate-100 px-3 py-2.5 space-y-0.5 bg-slate-50/60">
+            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wide">Loaded</p>
+            <p className="text-xs font-semibold text-slate-700">{bills.length} bills{projectId ? '' : ' (all projects)'}</p>
+            {totBalance > 0 && <p className="text-[10px] text-rose-600 font-bold" style={{ fontVariantNumeric: 'tabular-nums' }}>{inrFmt(totBalance)} outstanding</p>}
           </div>
         )}
       </aside>
@@ -577,41 +579,41 @@ export default function TQSReportsPage() {
         {/* ── Top filter bar ── */}
         <header className="no-print bg-white border-b border-slate-200 px-4 py-2.5 flex flex-wrap items-center gap-2 flex-shrink-0">
           {/* Breadcrumb */}
-          <div className="flex items-center gap-1.5 text-xs text-slate-900 font-medium mr-2">
-            <span className="text-slate-900 font-medium font-semibold">Bill Tracker Reports</span>
-            <ChevronRight className="w-3 h-3" />
-            <span className="text-blue-600 font-semibold">{activeItem?.label || tab}</span>
+          <div className="flex items-center gap-1.5 text-xs mr-2">
+            <span className="text-slate-400 font-semibold">Bill Tracker</span>
+            <ChevronRight className="w-3 h-3 text-slate-300" />
+            <span className="text-indigo-600 font-bold">{activeItem?.label || tab}</span>
           </div>
 
           <div className="flex-1" />
 
           {/* Project */}
           <select value={projectId} onChange={e => setProjectId(e.target.value)}
-            className="h-8 text-xs border border-slate-200 rounded-lg px-2 bg-white text-slate-900 outline-none focus:border-blue-400">
+            className="h-8 text-xs border border-slate-200 rounded-lg px-2 bg-white text-slate-700 outline-none focus:border-indigo-400">
             <option value="">All Projects</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
 
           {/* Vendor */}
           <select value={vendorQ} onChange={e => setVendorQ(e.target.value)}
-            className="h-8 text-xs border border-slate-200 rounded-lg px-2 bg-white text-slate-900 outline-none focus:border-blue-400 max-w-[150px]">
+            className="h-8 text-xs border border-slate-200 rounded-lg px-2 bg-white text-slate-700 outline-none focus:border-indigo-400 max-w-[150px]">
             <option value="">All Vendors</option>
             {vendors.map(v => <option key={v} value={v}>{v}</option>)}
           </select>
 
           {/* Status */}
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-            className="h-8 text-xs border border-slate-200 rounded-lg px-2 bg-white text-slate-900 outline-none focus:border-blue-400">
+            className="h-8 text-xs border border-slate-200 rounded-lg px-2 bg-white text-slate-700 outline-none focus:border-indigo-400">
             <option value="">All Statuses</option>
             {Object.entries(STATUS_CFG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
 
-          {/* Date presets */}
-          <div className="flex items-center gap-1">
+          {/* Date presets — segmented control */}
+          <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
             {PRESETS.map(p => (
               <button key={p.key} onClick={() => setPreset(p.key)}
-                className={clsx('h-7 px-2.5 rounded-lg text-[11px] font-medium border transition-all',
-                  preset === p.key ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-900 font-medium border-slate-200 hover:border-blue-300 hover:text-blue-600'
+                className={clsx('h-7 px-2.5 rounded-md text-[11px] font-semibold transition-all',
+                  preset === p.key ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
                 )}>{p.label}</button>
             ))}
           </div>
@@ -619,21 +621,21 @@ export default function TQSReportsPage() {
           {preset === 'custom' && (
             <>
               <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
-                className="h-8 text-xs border border-slate-200 rounded-lg px-2 bg-white outline-none focus:border-blue-400 w-32" />
+                className="h-8 text-xs border border-slate-200 rounded-lg px-2 bg-white outline-none focus:border-indigo-400 w-32" />
               <span className="text-xs text-slate-400">–</span>
               <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
-                className="h-8 text-xs border border-slate-200 rounded-lg px-2 bg-white outline-none focus:border-blue-400 w-32" />
+                className="h-8 text-xs border border-slate-200 rounded-lg px-2 bg-white outline-none focus:border-indigo-400 w-32" />
             </>
           )}
 
           {activeFilters > 0 && (
             <button onClick={clearFilters}
-              className="h-8 flex items-center gap-1 px-2.5 rounded-lg border border-red-200 bg-red-50 text-red-600 text-xs font-medium hover:bg-red-100">
+              className="h-8 flex items-center gap-1 px-2.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-600 text-xs font-bold hover:bg-rose-100">
               <X className="w-3 h-3" />{activeFilters}
             </button>
           )}
-          <button onClick={() => refetch()}
-            className="h-8 w-8 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-900 font-medium hover:text-blue-600 transition-all">
+          <button onClick={() => refetch()} title="Refresh data"
+            className="h-8 w-8 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-300 transition-all">
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
         </header>

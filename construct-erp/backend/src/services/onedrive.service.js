@@ -1,25 +1,28 @@
-// OneDrive upload via Microsoft Graph API (app-only auth)
-// Requires env vars: ONEDRIVE_CLIENT_ID, ONEDRIVE_CLIENT_SECRET, ONEDRIVE_TENANT_ID, ONEDRIVE_USER_EMAIL
+// SharePoint document library upload via Microsoft Graph API (app-only auth)
+// Requires env vars: ONEDRIVE_CLIENT_ID, ONEDRIVE_CLIENT_SECRET, ONEDRIVE_TENANT_ID, SHAREPOINT_SITE_ID
+// Files live in the "ConstructERP Documents" SharePoint site's default document
+// library — not a personal OneDrive drive — so access isn't tied to one
+// employee's mailbox, and links are org-scoped rather than anonymous.
 const https  = require('https');
 const logger = require('../utils/logger');
 const fs    = require('fs');
 
 const GRAPH = 'graph.microsoft.com';
-const TENANT  = () => process.env.ONEDRIVE_TENANT_ID;
-const CLIENT  = () => process.env.ONEDRIVE_CLIENT_ID;
-const SECRET  = () => process.env.ONEDRIVE_CLIENT_SECRET;
-const USER    = () => process.env.ONEDRIVE_USER_EMAIL;
-const FOLDER  = () => process.env.ONEDRIVE_FOLDER || 'ConstructERP';
+const TENANT   = () => process.env.ONEDRIVE_TENANT_ID;
+const CLIENT   = () => process.env.ONEDRIVE_CLIENT_ID;
+const SECRET   = () => process.env.ONEDRIVE_CLIENT_SECRET;
+const SITE_ID  = () => process.env.SHAREPOINT_SITE_ID;
+const FOLDER   = () => process.env.ONEDRIVE_FOLDER || 'ConstructERP';
 
 function isConfigured() {
   const conf = {
-    tenant: !!TENANT(),
-    client: !!CLIENT(),
-    secret: !!SECRET(),
-    user:   !!USER()
+    tenant:  !!TENANT(),
+    client:  !!CLIENT(),
+    secret:  !!SECRET(),
+    site_id: !!SITE_ID(),
   };
-  if (!conf.tenant || !conf.client || !conf.secret || !conf.user) {
-    logger.warn('⚠️ OneDrive not fully configured:', conf);
+  if (!conf.tenant || !conf.client || !conf.secret || !conf.site_id) {
+    logger.warn('⚠️ SharePoint not fully configured:', conf);
     return false;
   }
   return true;
@@ -87,6 +90,21 @@ function httpsGetBuffer(hostname, urlPath, headers, redirectsLeft = 5) {
   });
 }
 
+function httpsGetJson(hostname, urlPath, headers) {
+  return new Promise((resolve, reject) => {
+    const req = https.request({ hostname, path: urlPath, method: 'GET', headers }, res => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try { resolve({ status: res.statusCode, body: JSON.parse(data) }); }
+        catch { resolve({ status: res.statusCode, body: data }); }
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
 async function getAccessToken() {
   const body = new URLSearchParams({
     client_id:     CLIENT(),
@@ -118,7 +136,7 @@ async function uploadToOneDrive(localFilePath, originalName, module, projectName
   const remotePath  = `/${FOLDER()}/${safeProject}/${safeModule}/${safeName}`;
 
   const encodedPath = encodeURIComponent(remotePath).replace(/%2F/g, '/');
-  const apiPath = `/v1.0/users/${encodeURIComponent(USER())}/drive/root:${encodedPath}:/content`;
+  const apiPath = `/v1.0/sites/${SITE_ID()}/drive/root:${encodedPath}:/content`;
 
   const ext = originalName.split('.').pop().toLowerCase();
   const mime = {
@@ -140,17 +158,18 @@ async function uploadToOneDrive(localFilePath, originalName, module, projectName
 }
 
 /**
- * Create a permanent anonymous sharing link for a OneDrive item.
- * Returns a URL anyone can open in a browser without signing in.
+ * Create a permanent, organization-scoped sharing link for a SharePoint item.
+ * Only people signed into this Microsoft 365 tenant can open it — unlike the
+ * old anonymous links, a stray URL leak doesn't expose the file to anyone.
  */
 async function createSharingLink(itemId) {
-  if (!isConfigured()) throw new Error('OneDrive not configured');
+  if (!isConfigured()) throw new Error('SharePoint not configured');
   const token = await getAccessToken();
   const res = await httpsPost(
     GRAPH,
-    `/v1.0/users/${encodeURIComponent(USER())}/drive/items/${encodeURIComponent(itemId)}/createLink`,
+    `/v1.0/sites/${SITE_ID()}/drive/items/${encodeURIComponent(itemId)}/createLink`,
     { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    JSON.stringify({ type: 'view', scope: 'anonymous' })
+    JSON.stringify({ type: 'view', scope: 'organization' })
   );
   const link = res.body?.link?.webUrl;
   if (!link) throw new Error('createLink failed: ' + JSON.stringify(res.body));
@@ -177,12 +196,28 @@ async function uploadAndShare(localFilePath, originalName, module, projectName) 
  * every time.
  */
 async function downloadFromOneDrive(itemId) {
-  if (!isConfigured()) throw new Error('OneDrive not configured');
+  if (!isConfigured()) throw new Error('SharePoint not configured');
   const token = await getAccessToken();
-  const apiPath = `/v1.0/users/${encodeURIComponent(USER())}/drive/items/${encodeURIComponent(itemId)}/content`;
+  const apiPath = `/v1.0/sites/${SITE_ID()}/drive/items/${encodeURIComponent(itemId)}/content`;
   const result = await httpsGetBuffer(GRAPH, apiPath, { Authorization: `Bearer ${token}` });
-  if (result.status >= 400) throw new Error(`OneDrive download failed (${result.status})`);
+  if (result.status >= 400) throw new Error(`SharePoint download failed (${result.status})`);
   return { buffer: result.buffer, contentType: result.contentType || 'application/octet-stream' };
 }
 
-module.exports = { uploadToOneDrive, uploadAndShare, createSharingLink, downloadFromOneDrive, isConfigured };
+/**
+ * Returns a fresh, short-lived (~1hr) pre-signed download URL for a file by
+ * item id — used to proxy/stream a file inline without buffering the whole
+ * thing through this server. The URL captured at upload time expires, so
+ * callers must fetch a new one on every request rather than caching it.
+ */
+async function getFreshDownloadUrl(itemId) {
+  if (!isConfigured()) throw new Error('SharePoint not configured');
+  const token = await getAccessToken();
+  const apiPath = `/v1.0/sites/${SITE_ID()}/drive/items/${encodeURIComponent(itemId)}?$select=id,@microsoft.graph.downloadUrl`;
+  const res = await httpsGetJson(GRAPH, apiPath, { Authorization: `Bearer ${token}` });
+  const url = res.body?.['@microsoft.graph.downloadUrl'];
+  if (!url) throw new Error(`getFreshDownloadUrl failed (${res.status}): ${JSON.stringify(res.body)}`);
+  return url;
+}
+
+module.exports = { uploadToOneDrive, uploadAndShare, createSharingLink, downloadFromOneDrive, getFreshDownloadUrl, isConfigured };

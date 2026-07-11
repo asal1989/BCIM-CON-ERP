@@ -340,11 +340,19 @@ router.post('/employee-salaries', async (req, res) => {
       incentive, edli, epf_admin, basic_reversal,
     } = req.body;
 
-    // Close any open salary record for this employee
+    // Close any salary record that overlaps the new effective_from. Set its
+    // effective_to to the day BEFORE the new record starts, so there is never
+    // more than one salary in force on any given date. Using `effective_from <= $1`
+    // (not `<`) also supersedes a record dated the SAME day — previously a same-date
+    // update left both rows open, so payroll matched two salaries for one employee
+    // and the gross flipped between them on each run.
     if (effective_from) {
       await query(
-        `UPDATE hr_employee_salaries SET effective_to=$1
-         WHERE user_id=$2 AND effective_to IS NULL AND effective_from < $1`,
+        `UPDATE hr_employee_salaries
+            SET effective_to = ($1::date - INTERVAL '1 day')
+          WHERE user_id = $2
+            AND effective_from <= $1
+            AND (effective_to IS NULL OR effective_to >= $1)`,
         [effective_from, user_id]
       );
     }

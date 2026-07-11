@@ -1,11 +1,13 @@
-// Azure/OneDrive integration — token fetched directly via node-fetch
+// Azure/SharePoint integration — token fetched directly via node-fetch
 // (avoids @azure/identity SDK which has network issues in some Railway regions)
+// Files live in the "ConstructERP Documents" SharePoint site's document
+// library, not a personal OneDrive drive — see SHAREPOINT_SITE_ID.
 const fetch = require('node-fetch');
 
 const TENANT_ID     = process.env.ONEDRIVE_TENANT_ID;
 const CLIENT_ID     = process.env.ONEDRIVE_CLIENT_ID;
 const CLIENT_SECRET = process.env.ONEDRIVE_CLIENT_SECRET;
-const USER_EMAIL    = process.env.ONEDRIVE_USER_EMAIL;
+const SITE_ID       = process.env.SHAREPOINT_SITE_ID;
 
 let cachedToken = null;
 let tokenExpiry = 0;
@@ -47,7 +49,7 @@ async function uploadToSharePoint(fileName, fileBuffer, folderPath = 'Vendor Inv
   const sanitizedFileName = String(fileName).replace(/[<>:"|?*]/g, '_').trim();
   const sanitizedFolder   = String(folderPath).replace(/[<>:"|?*]/g, '_').trim();
 
-  const uploadUrl = `https://graph.microsoft.com/v1.0/users/${USER_EMAIL}/drive/root:/${sanitizedFolder}/${sanitizedFileName}:/content`;
+  const uploadUrl = `https://graph.microsoft.com/v1.0/sites/${SITE_ID}/drive/root:/${sanitizedFolder}/${sanitizedFileName}:/content`;
 
   const uploadRes = await fetch(uploadUrl, {
     method:  'PUT',
@@ -74,7 +76,7 @@ async function uploadToSharePoint(fileName, fileBuffer, folderPath = 'Vendor Inv
 async function deleteFromOneDrive(itemId) {
   if (!itemId) throw new Error('No OneDrive item ID');
   const token = await getAccessToken();
-  const url = `https://graph.microsoft.com/v1.0/users/${USER_EMAIL}/drive/items/${itemId}`;
+  const url = `https://graph.microsoft.com/v1.0/sites/${SITE_ID}/drive/items/${itemId}`;
   const res = await fetch(url, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
   if (!res.ok && res.status !== 404) {
     const err = await res.text();

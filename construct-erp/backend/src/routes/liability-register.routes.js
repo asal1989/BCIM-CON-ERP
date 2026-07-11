@@ -113,8 +113,9 @@ router.get('/ledger', async (req, res) => {
       }
     }
 
-    // SC bills are neither PO nor WO — include only in the unfiltered "All" view
-    const scLedgerGate = accountType === 'all' ? '' : 'AND FALSE';
+    // SC bills are neither PO nor WO — include in the unfiltered "All" view
+    // and the dedicated "SC" tab.
+    const scLedgerGate = (accountType === 'all' || accountType === 'sc') ? '' : 'AND FALSE';
 
     let billTypeFilter = '';
     let advSourceFilter = '';
@@ -123,6 +124,11 @@ router.get('/ledger', async (req, res) => {
       billTypeFilter = `AND ${billSourceSql(accountType, 'b')}`;
       advSourceFilter = `AND ${advanceSourceSql(accountType, 'a')}`;
       avSourceFilter = `AND ${advanceSourceSql(accountType, 'av')}`;
+    } else if (accountType === 'sc') {
+      // SC tab shows only subcontractor entries — exclude PO/WO bill rows.
+      billTypeFilter = 'AND FALSE';
+      advSourceFilter = 'AND FALSE';
+      avSourceFilter = 'AND FALSE';
     }
 
     const advanceCreditSql = `
@@ -158,8 +164,7 @@ router.get('/ledger', async (req, res) => {
           'Invoice' AS entry_type,
           b.sl_number AS vch_number,
           b.inv_number AS invoice_ref,
-          'Bill Received: ' || b.sl_number
-            || CASE WHEN b.po_number IS NOT NULL THEN ' | PO: ' || b.po_number ELSE '' END
+          'Invoice: ' || COALESCE(NULLIF(TRIM(b.inv_number), ''), b.sl_number)
             || CASE WHEN b.work_desc IS NOT NULL THEN ' - ' || LEFT(b.work_desc, 60) ELSE '' END AS narration,
           p.name AS project_name,
           NULL::numeric AS debit_amount,
@@ -167,7 +172,9 @@ router.get('/ledger', async (req, res) => {
           b.workflow_status,
           b.id::text AS source_id,
           b.bill_type,
-          ${billCreditSql('b', 'u', advanceCreditSql)} AS invoice_gross
+          ${billCreditSql('b', 'u', advanceCreditSql)} AS invoice_gross,
+          b.inv_date AS invoice_date,
+          b.po_number AS po_ref
         FROM tqs_bills b
         LEFT JOIN tqs_bill_updates u ON u.bill_id = b.id
         LEFT JOIN projects p ON p.id = b.project_id
@@ -192,7 +199,9 @@ router.get('/ledger', async (req, res) => {
           b.workflow_status,
           b.id::text,
           b.bill_type,
-          NULL::numeric
+          NULL::numeric,
+          b.inv_date,
+          b.po_number
         FROM tqs_bills b
         JOIN tqs_bill_updates u ON u.bill_id = b.id
         LEFT JOIN projects p ON p.id = b.project_id
@@ -217,7 +226,9 @@ router.get('/ledger', async (req, res) => {
           b.workflow_status,
           b.id::text,
           b.bill_type,
-          NULL::numeric
+          NULL::numeric,
+          b.inv_date,
+          b.po_number
         FROM tqs_bills b
         JOIN tqs_bill_updates u ON u.bill_id = b.id
         LEFT JOIN projects p ON p.id = b.project_id
@@ -249,7 +260,9 @@ router.get('/ledger', async (req, res) => {
           b.workflow_status,
           b.id::text,
           b.bill_type,
-          NULL::numeric
+          NULL::numeric,
+          b.inv_date,
+          b.po_number
         FROM tqs_bills b
         JOIN tqs_bill_updates u ON u.bill_id = b.id
         LEFT JOIN projects p ON p.id = b.project_id
@@ -280,7 +293,9 @@ router.get('/ledger', async (req, res) => {
           'advance',
           a.id::text,
           'advance',
-          NULL::numeric
+          NULL::numeric,
+          NULL::date,
+          COALESCE(a.po_number, a.wo_number)
         FROM tqs_advances a
         LEFT JOIN projects p ON p.id = a.project_id
         WHERE a.company_id = $1
@@ -308,7 +323,9 @@ router.get('/ledger', async (req, res) => {
           'advance',
           av.id::text,
           'advance',
-          NULL::numeric
+          NULL::numeric,
+          NULL::date,
+          COALESCE(av.po_number, av.wo_number)
         FROM tqs_advance_vouchers av
         LEFT JOIN projects p2 ON p2.id = av.project_id
         WHERE av.company_id = $1
@@ -339,7 +356,9 @@ router.get('/ledger', async (req, res) => {
           sb.status,
           sb.id::text,
           'sc',
-          COALESCE(sb.net_payable, 0)
+          COALESCE(sb.net_payable, 0),
+          sb.bill_date,
+          wo.wo_number
         FROM sc_bills sb
         JOIN sc_subcontractors sc ON sc.id = sb.sc_id
         LEFT JOIN sc_work_orders wo ON wo.id = sb.wo_id
@@ -368,7 +387,9 @@ router.get('/ledger', async (req, res) => {
           sb.status,
           sb.id::text,
           'sc',
-          NULL::numeric
+          NULL::numeric,
+          NULL::date,
+          NULL::text
         FROM sc_payments sp
         JOIN sc_bills sb ON sb.id = sp.bill_id
         JOIN sc_subcontractors sc ON sc.id = sb.sc_id

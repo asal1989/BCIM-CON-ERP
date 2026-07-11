@@ -4,11 +4,12 @@ import { scAPI, projectAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
 import {
   RefreshCw, ShieldCheck, CheckCircle, X,
-  MessageSquare, AlertCircle, ChevronRight,
+  MessageSquare, AlertCircle, ChevronRight, Eye,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
+import SCBillPrintTemplate from './SCBillPrintTemplate';
 
 const fmt  = v => `₹${Number(v||0).toLocaleString('en-IN',{maximumFractionDigits:0})}`;
 const fmt2 = v => `₹${Number(v||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -22,8 +23,172 @@ const STATUS_META = {
   paid:         { bg:'bg-teal-100',    text:'text-teal-700',    label:'Paid',         dot:'bg-teal-500' },
 };
 
+// ─── Bill Review Modal ────────────────────────────────────────────────────────
+function BillReviewModal({ billId, stages, onClose }) {
+  const qc = useQueryClient();
+  const [mode, setMode]         = useState('');
+  const [comments, setComments] = useState('');
+
+  const { data: billData, isLoading } = useQuery({
+    queryKey: ['sc-bill-detail', billId],
+    queryFn:  () => scAPI.getBill(billId).then(r => r.data?.data ?? r.data),
+    enabled: !!billId,
+  });
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['sc-bills-approval'] });
+    setMode(''); setComments(''); onClose();
+  };
+
+  const approveMut = useMutation({
+    mutationFn: () => scAPI.approveBill(billId, { comments }),
+    onSuccess: () => { toast.success('Bill approved ✓'); invalidate(); },
+    onError:   e  => toast.error(e?.response?.data?.error || 'Approval failed'),
+  });
+  const rejectMut = useMutation({
+    mutationFn: () => scAPI.rejectBill(billId, { comments }),
+    onSuccess: () => { toast.success('Bill rejected'); invalidate(); },
+    onError:   e  => toast.error(e?.response?.data?.error || 'Rejection failed'),
+  });
+  const queryMut = useMutation({
+    mutationFn: () => scAPI.queryBill(billId, { comments }),
+    onSuccess: () => { toast.success('Query sent to bill raiser'); invalidate(); },
+    onError:   e  => toast.error(e?.response?.data?.error || 'Failed to send query'),
+  });
+
+  const pending   = approveMut.isPending || rejectMut.isPending || queryMut.isPending;
+  const bill      = billData;
+  const status    = bill?.status;
+  const canAct    = ['submitted', 'under_review'].includes(status);
+  const stageIdx  = stages.indexOf(bill?.current_stage);
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(15,23,42,0.75)' }}>
+      {/* ── Modal shell ── */}
+      <div className="flex flex-col bg-white w-full h-full overflow-hidden">
+
+        {/* ── Sticky top bar ── */}
+        <div className="flex items-center justify-between gap-3 px-5 py-3 bg-slate-800 text-white flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <Eye className="w-5 h-5 text-blue-300" />
+            <span className="font-bold text-sm">Review Bill</span>
+            {bill && (
+              <span className="font-mono text-blue-300 text-sm">{bill.bill_number}</span>
+            )}
+            {bill && (
+              <span className="text-slate-400 text-xs">{bill.sc_name} · {bill.project_name}</span>
+            )}
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-700 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* ── Scrollable invoice content ── */}
+        <div className="flex-1 overflow-y-auto bg-slate-100 p-6">
+          {isLoading ? (
+            <div className="flex items-center justify-center h-64">
+              <RefreshCw className="w-6 h-6 animate-spin text-blue-500 mr-2" />
+              <span className="text-slate-500">Loading bill…</span>
+            </div>
+          ) : bill ? (
+            <div className="bg-white rounded-xl shadow-sm max-w-6xl mx-auto p-6">
+              <SCBillPrintTemplate ref={null} data={bill} />
+            </div>
+          ) : (
+            <div className="text-center text-slate-400 py-20">Unable to load bill details.</div>
+          )}
+        </div>
+
+        {/* ── Sticky action bar ── */}
+        {canAct && (
+          <div className="flex-shrink-0 border-t border-slate-200 bg-white px-5 py-3">
+            {mode === '' ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-slate-500 font-medium mr-2">Action:</span>
+                <button onClick={() => setMode('approve')}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors">
+                  <CheckCircle className="w-4 h-4" /> Approve
+                </button>
+                <button onClick={() => setMode('query')}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-semibold hover:bg-orange-600 transition-colors">
+                  <MessageSquare className="w-4 h-4" /> Send Query
+                </button>
+                <button onClick={() => setMode('reject')}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors">
+                  <X className="w-4 h-4" /> Reject
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className={clsx(
+                  'text-xs font-bold uppercase tracking-wide px-2 py-1 rounded inline-block',
+                  mode === 'approve' ? 'bg-emerald-100 text-emerald-700'
+                    : mode === 'query' ? 'bg-orange-100 text-orange-700'
+                    : 'bg-red-100 text-red-700'
+                )}>
+                  {mode === 'approve' ? `Confirm Approval${stageIdx < stages.length - 1 ? ` → next stage: ${(stages[stageIdx+1]||'').replace(/_/g,' ')}` : ' (Final — bill will be marked Approved)'}`
+                    : mode === 'query' ? 'Send Query to Bill Raiser'
+                    : 'Confirm Rejection'}
+                </div>
+                <div className="flex gap-2 items-end">
+                  <textarea
+                    value={comments}
+                    onChange={e => setComments(e.target.value)}
+                    rows={2}
+                    className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-indigo-200 resize-none"
+                    placeholder={
+                      mode === 'approve' ? 'Approval remarks (optional)…'
+                      : mode === 'query'  ? 'Describe what needs to be addressed…'
+                      : 'Explain why the bill is being rejected…'
+                    }
+                  />
+                  <div className="flex flex-col gap-1.5">
+                    {mode === 'approve' && (
+                      <button onClick={() => approveMut.mutate()} disabled={pending}
+                        className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 whitespace-nowrap">
+                        <CheckCircle className="w-4 h-4" />
+                        {approveMut.isPending ? 'Approving…' : 'Confirm Approve'}
+                      </button>
+                    )}
+                    {mode === 'query' && (
+                      <button onClick={() => queryMut.mutate()} disabled={!comments.trim() || pending}
+                        className="flex items-center gap-1.5 px-4 py-1.5 bg-orange-500 text-white rounded-lg text-sm font-semibold hover:bg-orange-600 disabled:opacity-50 whitespace-nowrap">
+                        <MessageSquare className="w-4 h-4" />
+                        {queryMut.isPending ? 'Sending…' : 'Send Query'}
+                      </button>
+                    )}
+                    {mode === 'reject' && (
+                      <button onClick={() => rejectMut.mutate()} disabled={!comments.trim() || pending}
+                        className="flex items-center gap-1.5 px-4 py-1.5 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 disabled:opacity-50 whitespace-nowrap">
+                        <X className="w-4 h-4" />
+                        {rejectMut.isPending ? 'Rejecting…' : 'Confirm Reject'}
+                      </button>
+                    )}
+                    <button onClick={() => { setMode(''); setComments(''); }}
+                      className="px-4 py-1.5 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-100 whitespace-nowrap">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Non-actionable footer ── */}
+        {!canAct && bill && (
+          <div className="flex-shrink-0 border-t border-slate-200 bg-slate-50 px-5 py-3 text-sm text-slate-500">
+            This bill is <span className="font-semibold capitalize">{status?.replace('_',' ')}</span> — no further action required.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Bill Approval Card ───────────────────────────────────────────────────────
-function BillApprovalCard({ bill, stages }) {
+function BillApprovalCard({ bill, stages, onReview }) {
   const qc = useQueryClient();
   const [mode, setMode] = useState('');   // '' | 'approve' | 'reject' | 'query'
   const [comments, setComments] = useState('');
@@ -156,6 +321,10 @@ function BillApprovalCard({ bill, stages }) {
         <div className="px-5 py-3 bg-slate-50">
           {mode === '' ? (
             <div className="flex flex-wrap gap-2">
+              <button onClick={() => onReview(bill.id)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 transition-colors">
+                <Eye className="w-3.5 h-3.5" /> Review Bill
+              </button>
               <button onClick={() => setMode('approve')}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-semibold hover:bg-emerald-700 transition-colors">
                 <CheckCircle className="w-3.5 h-3.5" /> Approve
@@ -264,9 +433,10 @@ const STATUS_FILTERS = [
 
 export default function SCBillApproval() {
   const { selectedProjectId } = useAuthStore();
-  const [projectFilter, setProject] = useState(selectedProjectId || '');
+  const [projectFilter, setProject]   = useState(selectedProjectId || '');
   useEffect(() => { setProject(selectedProjectId || ''); }, [selectedProjectId]);
-  const [statusFilter,  setStatus]  = useState('submitted');
+  const [statusFilter,  setStatus]    = useState('submitted');
+  const [reviewBillId,  setReviewId]  = useState(null);
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -349,9 +519,17 @@ export default function SCBillApproval() {
       ) : (
         <div className="space-y-4">
           {bills.map(b => (
-            <BillApprovalCard key={b.id} bill={b} stages={stages} />
+            <BillApprovalCard key={b.id} bill={b} stages={stages} onReview={setReviewId} />
           ))}
         </div>
+      )}
+
+      {reviewBillId && (
+        <BillReviewModal
+          billId={reviewBillId}
+          stages={stages}
+          onClose={() => setReviewId(null)}
+        />
       )}
     </div>
   );
