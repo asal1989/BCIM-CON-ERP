@@ -438,6 +438,10 @@ function HomeRedirect() {
 // Module-level route guard — redirects to home if user lacks the required module
 function RequireModule({ module, children }) {
   const { user } = useAuthStore();
+  // HR & Admin: display everything (labels, staff/worker names, values) in
+  // uppercase. Purely visual — the underlying data and form values are
+  // untouched, only how they render inside this module.
+  if (module === 'HR & Admin') children = <div className="hr-admin-uppercase">{children}</div>;
   if (!user) return <Navigate to="/login" replace />;
   if (['admin', 'super_admin'].includes(user.role)) return children;
   // Stores-floor roles always have the Stores module — their home route lives

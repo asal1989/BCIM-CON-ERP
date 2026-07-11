@@ -394,3 +394,12 @@ html { scrollbar-gutter: stable; }
   .no-print { display: none !important; }
   body { background: #fff !important; }
 }
+
+/* HR & Admin module: render all text uppercase (labels, staff/worker names,
+   values). Purely visual — form field values, API payloads and stored data
+   are untouched; only the rendered text-transform changes. Icons are SVG
+   (lucide-react) so they're unaffected by text-transform. */
+.hr-admin-uppercase,
+.hr-admin-uppercase * {
+  text-transform: uppercase;
+}
