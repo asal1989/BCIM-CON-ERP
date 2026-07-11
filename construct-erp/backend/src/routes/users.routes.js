@@ -135,6 +135,26 @@ runSchemaInit('users_role_schema', ensureRoleSchema);
   }
 })();
 
+// ── Force it@bcim.in to super_admin ──────────────────────────────────────────
+// Always ensures this account has role='super_admin' and NULL accessible_modules
+// (NULL = unrestricted; super_admin bypasses all module checks anyway).
+(async () => {
+  try {
+    const r = await query(
+      `UPDATE users
+          SET role = 'super_admin',
+              accessible_modules = NULL,
+              updated_at = NOW()
+        WHERE LOWER(email) = 'it@bcim.in'
+          AND (role <> 'super_admin' OR accessible_modules IS NOT NULL)
+        RETURNING id, role`,
+    );
+    if (r.rowCount) console.log(`[users] it@bcim.in forced to super_admin (accessible_modules cleared)`);
+  } catch (e) {
+    console.error('[users] it@bcim.in super_admin fix failed:', e.message);
+  }
+})();
+
 // ── One-time role promotions ─────────────────────────────────────────────────
 // Ensures specific users have the correct role + modules (idempotent).
 (async () => {
