@@ -11,3 +11,7 @@ ecosystem.config.js
 *.zip
 construct-erp/archive/
 construct-erp/mobile-app.rar
+
+# Compiled frontend bundle — Railway builds this from source on every deploy
+construct-erp/frontend/build/
+construct-erp/frontend/node_modules/

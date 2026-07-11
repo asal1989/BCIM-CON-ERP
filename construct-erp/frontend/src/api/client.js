@@ -1405,6 +1405,7 @@ export const dmsAPI = {
   preview:        (id, p)   => api.get(`/dms/${id}/preview`, { params: p }),
   fileBlob:       (id)      => api.get(`/dms/${id}/file`, { responseType: 'blob' }),
   docxPreviewUrl: (id)      => `/api/v1/dms/${id}/docx-preview`,
+  docxBlob:       (id)      => api.get(`/dms/${id}/docx-preview`, { responseType: 'blob' }),
   updateMetadata: (id, d)   => api.patch(`/dms/${id}/metadata`, d),
   users:          ()        => api.get('/users'),
   dashboard:      ()        => api.get('/dms/dashboard'),

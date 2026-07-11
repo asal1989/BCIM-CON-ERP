@@ -2104,7 +2104,7 @@ export default function Layout() {
   const isMDNavUser = (() => {
     const r = String(user?.role || '').toLowerCase();
     return ['md', 'managing_director'].includes(r)
-      || ['stephen@bcim.in', 'it@bcim.in'].includes(String(user?.email || '').toLowerCase());
+      || ['stephen@bcim.in'].includes(String(user?.email || '').toLowerCase());
   })();
   const isProcurementUser = (() => {
     if (isMDNavUser) return false; // MD already has its own bar

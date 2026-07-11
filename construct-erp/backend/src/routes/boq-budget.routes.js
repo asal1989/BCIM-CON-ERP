@@ -89,7 +89,7 @@ router.get('/:project_id', async (req, res) => {
       FROM sc_bill_items bi
       JOIN sc_bills sb ON sb.id = bi.bill_id
       JOIN sc_wo_items swi ON swi.id = bi.wo_item_id
-      WHERE sb.project_id = $1 AND sb.status IN ('approved','paid') AND swi.boq_item_id IS NOT NULL
+      WHERE sb.project_id = $1 AND sb.status IN ('submitted','approved','paid') AND swi.boq_item_id IS NOT NULL
       GROUP BY swi.boq_item_id, COALESCE(bi.cost_head, 'Sub Con')
     `, [project_id]);
 
@@ -402,7 +402,7 @@ router.get('/:project_id', async (req, res) => {
       FROM sc_bill_items bi
       JOIN sc_bills sb ON sb.id = bi.bill_id
       LEFT JOIN sc_wo_items swi ON swi.id = bi.wo_item_id
-      WHERE sb.project_id = $1 AND sb.status IN ('approved','paid')
+      WHERE sb.project_id = $1 AND sb.status IN ('submitted','approved','paid')
         AND (swi.id IS NULL OR swi.boq_item_id IS NULL)
     `, [project_id]);
 
@@ -729,7 +729,7 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
     const scActuals = await query(`
       SELECT COALESCE(bi.cost_head, 'Sub Con') AS cost_head, SUM(bi.curr_qty * bi.rate * (1 + COALESCE(sb.gst_pct, 18) / 100.0)) AS actual
       FROM sc_bill_items bi JOIN sc_bills sb ON sb.id = bi.bill_id
-      WHERE sb.project_id=$1 AND sb.status IN ('approved','paid')
+      WHERE sb.project_id=$1 AND sb.status IN ('submitted','approved','paid')
       GROUP BY COALESCE(bi.cost_head, 'Sub Con')`, [project_id]);
     // Paid: actual cash paid against SC bills (mapped to "Sub Con" — SC bill
     // items are essentially all Sub Con, and paid_amount isn't split by head).

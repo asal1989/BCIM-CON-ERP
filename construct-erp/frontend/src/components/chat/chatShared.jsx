@@ -8,6 +8,7 @@ import {
   Download, Loader2, CheckCheck, MessageSquare,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import api from '../../api/client';
 
 export function getInitials(name = '') {
   return name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
@@ -68,15 +69,13 @@ export async function downloadAttachment(url, filename) {
   if (!url) return;
   if (/^https?:\/\//i.test(url)) { window.open(url, '_blank', 'noopener,noreferrer'); return; }
   try {
-    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
-    const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-    if (!res.ok) throw new Error(`Download failed (${res.status})`);
-    const blob = await res.blob();
-    const bu = URL.createObjectURL(blob);
+    // Use axios so the auth interceptor handles token refresh automatically
+    const res = await api.get(url, { responseType: 'blob' });
+    const bu = URL.createObjectURL(res.data);
     const a = document.createElement('a'); a.href = bu; a.download = filename || 'file';
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(bu);
   } catch (e) {
-    toast.error(e.message || 'Failed to download');
+    toast.error(e?.response?.data?.error || e.message || 'Failed to download');
   }
 }
 

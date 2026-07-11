@@ -268,7 +268,10 @@ const isAllowedOrigin = (origin) => {
   if (extraAllowedOrigins.includes(origin)) return true;
   if (/^https?:\/\/localhost(:\d+)?\/?$/.test(origin)) return true;
   if (/^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(origin)) return true;
-  if (origin.endsWith('.vercel.app')) return true;
+  // Vercel: only allow the specific team slug or an explicit env var override
+  // (a bare *.vercel.app wildcard lets ANY Vercel deploy make credentialed requests)
+  const vercelSlug = process.env.VERCEL_DEPLOY_SLUG; // e.g. "bcim-con-erp"
+  if (vercelSlug && origin.includes(`.vercel.app`) && origin.includes(vercelSlug)) return true;
   if (origin.endsWith('.up.railway.app') || origin.endsWith('.railway.app')) return true;
   if (process.env.FRONTEND_URL && origin.startsWith(process.env.FRONTEND_URL)) return true;
   return false;
@@ -303,8 +306,9 @@ app.use(cors({
     if (/^https?:\/\/localhost(:\d+)?\/?$/.test(origin)) return cb(null, true);
     // LAN / local network IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
     if (/^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(origin)) return cb(null, true);
-    // any Vercel preview or production deploy
-    if (origin.endsWith('.vercel.app')) return cb(null, true);
+    // Vercel: only our own deploy slug (env var), not all *.vercel.app
+    const vSlug = process.env.VERCEL_DEPLOY_SLUG;
+    if (vSlug && origin.includes('.vercel.app') && origin.includes(vSlug)) return cb(null, true);
     // Railway deployments
     if (origin.endsWith('.up.railway.app') || origin.endsWith('.railway.app')) return cb(null, true);
     // explicit production frontend URL
@@ -351,7 +355,7 @@ app.use('/api/', limiter);
 // Auth-specific limiter (brute-force protection)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,  // 15 minutes
-  max: 200,                   // raised: small team + dev environment
+  max: 30,                    // 30 attempts / 15 min is plenty for a small team; blocks brute-force
   message: { error: 'Too many login attempts, try again in 15 minutes.' }
 });
 

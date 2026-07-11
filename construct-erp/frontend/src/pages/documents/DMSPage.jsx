@@ -112,12 +112,11 @@ function DocumentPreview({ doc }) {
         .then(res => { if (!alive) return; url = URL.createObjectURL(res.data); setImgBlobUrl(url); })
         .catch(e => toast.error(e?.response?.data?.error || 'Unable to load image'));
     }
-    // DOCX — fetch server-rendered HTML
+    // DOCX — fetch server-rendered HTML via axios (goes through auth interceptor)
     if (doc?.id && word) {
       setLoadingDocx(true);
-      fetch(`/api/v1/dms/${doc.id}/docx-preview`, { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.blob())
-        .then(blob => { if (!alive) return; url = URL.createObjectURL(blob); setBlobUrl(url); })
+      dmsAPI.docxBlob(doc.id)
+        .then(res => { if (!alive) return; url = URL.createObjectURL(res.data); setBlobUrl(url); })
         .catch(() => toast.error('Unable to load Word preview'))
         .finally(() => { if (alive) setLoadingDocx(false); });
     }

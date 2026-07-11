@@ -149,7 +149,10 @@ const normalizedEmail = (email || '').trim().toLowerCase();
         company_gstin: user.company_gstin,
         accessible_modules: user.accessible_modules,
         accessible_menus:   user.accessible_menus || null,
-        project_ids: user.project_ids || []
+        project_ids: user.project_ids || [],
+        // Server-derived privilege flags — never hardcoded in the frontend bundle
+        can_access_executive_dashboard: req.user?.can_access_executive_dashboard,
+        can_access_budget_breakdown:    req.user?.can_access_budget_breakdown,
       },
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken
@@ -233,7 +236,12 @@ const getMe = async (req, res) => {
        WHERE u.id = $1`,
       [req.user.id]
     );
-    res.json(result.rows[0]);
+    // Attach server-derived privilege flags (computed in auth middleware)
+    res.json({
+      ...result.rows[0],
+      can_access_executive_dashboard: req.user.can_access_executive_dashboard,
+      can_access_budget_breakdown:    req.user.can_access_budget_breakdown,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

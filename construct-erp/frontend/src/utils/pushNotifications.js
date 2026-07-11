@@ -25,7 +25,6 @@ export async function initPushNotifications(apiClient) {
 
     // 3. Save FCM token to backend when received
     await PushNotifications.addListener('registration', async (token) => {
-      console.log('[Push] FCM token received');
       try {
         await apiClient.post('/notifications/devices', {
           token: token.value,
@@ -33,7 +32,6 @@ export async function initPushNotifications(apiClient) {
           enabled: true,
         });
         _registered = true;
-        console.log('[Push] Device token registered with backend ✓');
       } catch (err) {
         console.error('[Push] Token registration failed:', err.message);
       }
@@ -58,8 +56,8 @@ export async function initPushNotifications(apiClient) {
     }).catch(() => {}); // no-op on iOS / older Android
 
     // 6. Foreground notification — bell already shows live data, no extra action needed
-    await PushNotifications.addListener('pushNotificationReceived', (notification) => {
-      console.log('[Push] Foreground notification:', notification.title);
+    await PushNotifications.addListener('pushNotificationReceived', (_notification) => {
+      // intentional no-op: in-app bell updates via socket
     });
 
     // 7. Tap on notification — navigate to the linked page

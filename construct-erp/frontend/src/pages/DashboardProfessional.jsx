@@ -32,7 +32,7 @@ const ProcurementDashboard  = lazy(() => import('./dashboards/ProcurementDashboa
 const ApprovalsPage         = lazy(() => import('./approvals/ApprovalsPage'));
 
 const MD_DASHBOARD_ROLES  = ['md', 'managing_director'];
-const MD_DASHBOARD_EMAILS = ['stephen@bcim.in', 'it@bcim.in'];
+const MD_DASHBOARD_EMAILS = ['stephen@bcim.in'];
 const isMDDashboardUser = (u) => {
   if (!u) return false;
   const r = String(u.role || '').toLowerCase();

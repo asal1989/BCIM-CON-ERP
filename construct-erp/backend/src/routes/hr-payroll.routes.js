@@ -116,12 +116,23 @@ function calcESI(gross, applicable) {
   };
 }
 
-// Professional Tax — Maharashtra slab (configurable per state)
-function calcPT(gross, month, applicable) {
+// Professional Tax — uses company's hr_pt_slabs table; falls back to Maharashtra
+// Maharashtra schedule: Mar=₹0, Feb=₹300, Apr–Jan ₹175/₹200 by slab
+function calcPT(gross, month, applicable, ptSlabs) {
   if (!applicable) return 0;
+  if (month === 3) return 0; // March exempt (Maharashtra annual cap ₹2,500 = 10×200 + 300)
   const g = parseFloat(gross);
-  if (g <= 7500) return 0;
-  // Feb = 300, rest = 200 (Maharashtra default)
+  if (ptSlabs && ptSlabs.length) {
+    // slabs are [{min_salary, max_salary, pt_amount, feb_amount}] ordered by min_salary ASC
+    const slab = ptSlabs.find(s =>
+      g > parseFloat(s.min_salary) &&
+      (s.max_salary === null || g <= parseFloat(s.max_salary))
+    );
+    if (!slab) return 0;
+    return month === 2 ? parseFloat(slab.feb_amount || slab.pt_amount) : parseFloat(slab.pt_amount);
+  }
+  // Maharashtra default
+  if (g <= 7500)  return 0;
   if (g <= 10000) return month === 2 ? 300 : 175;
   return month === 2 ? 300 : 200;
 }
@@ -262,6 +273,27 @@ router.post('/run', async (req, res) => {
       });
     }
 
+    // Load company PT slabs once for the run
+    const ptSlabsResult = await query(
+      `SELECT min_salary, max_salary, pt_amount, feb_amount FROM hr_pt_slabs
+       WHERE company_id=$1 ORDER BY min_salary ASC`,
+      [req.user.company_id]
+    );
+    const ptSlabs = ptSlabsResult.rows;
+
+    // Identify employees with no salary record (LATERAL gives us only matched ones;
+    // we do a separate check to surface missing-salary employees explicitly)
+    const allActive = await query(
+      `SELECT u.id, u.name FROM users u
+       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+       WHERE u.company_id=$1 AND u.is_active=TRUE
+       ${user_id ? 'AND u.id=$2' : ''}
+       ${project_id ? `AND ep.project_id=$${user_id ? 3 : 2}` : ''}`,
+      [req.user.company_id, ...(user_id ? [user_id] : []), ...(project_id ? [project_id] : [])]
+    );
+    const foundIds = new Set(employees.rows.map(e => e.user_id));
+    const missingSalary = allActive.rows.filter(u => !foundIds.has(u.id)).map(u => u.name);
+
     const attendanceMissing = [];
     for (const emp of employees.rows) {
       const attCheck = await query(
@@ -323,9 +355,12 @@ router.post('/run', async (req, res) => {
       const other = Math.max(0, gross - (basic + hra + conv + med + spec));
 
       // Statutory deductions
+      // ESI eligibility is assessed on configured gross_monthly (not pro-rated),
+      // per India ESI Act — eligibility is fixed at contribution period start.
+      const esiEligible = emp.esi_applicable && parseFloat(emp.gross_monthly || 0) <= ESI_CEILING;
       const pf  = calcPF(basic, emp.pf_applicable);
-      const esi = calcESI(gross, emp.esi_applicable);
-      const pt  = calcPT(gross, m, emp.pt_applicable);
+      const esi = calcESI(gross, esiEligible);
+      const pt  = calcPT(gross, m, emp.pt_applicable, ptSlabs);
 
       // Loan deduction (active loans)
       const loanQ = await query(
@@ -369,7 +404,13 @@ router.post('/run', async (req, res) => {
       generated.push(rows[0]);
     }
 
-    res.status(201).json({ data: generated, count: generated.length, month: m, year: y });
+    res.status(201).json({
+      data: generated,
+      count: generated.length,
+      month: m,
+      year: y,
+      ...(missingSalary.length ? { missing_salary_employees: missingSalary } : {}),
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -384,10 +425,10 @@ router.put('/:id', async (req, res) => {
     if (!p) return res.status(404).json({ error: 'Not found' });
     if (p.status !== 'draft') return res.status(400).json({ error: 'Can only edit draft payroll' });
 
-    const totalDed = parseFloat(p.pf_employee) + parseFloat(p.esi_employee) + parseFloat(p.pt) +
-                     parseFloat(loan_deduction ?? p.loan_deduction) + parseFloat(advance_deduction ?? p.advance_deduction) +
-                     parseFloat(tds ?? p.tds) + parseFloat(other_deductions ?? p.other_deductions);
-    const netPay = parseFloat(p.gross_earnings) - totalDed;
+    const totalDed = parseFloat(p.pf_employee || 0) + parseFloat(p.esi_employee || 0) + parseFloat(p.pt || 0) +
+                     parseFloat(loan_deduction ?? p.loan_deduction ?? 0) + parseFloat(advance_deduction ?? p.advance_deduction ?? 0) +
+                     parseFloat(tds ?? p.tds ?? 0) + parseFloat(other_deductions ?? p.other_deductions ?? 0);
+    const netPay = parseFloat(p.gross_earnings || 0) - totalDed;
 
     const { rows } = await query(
       `UPDATE hr_monthly_payroll
@@ -732,7 +773,7 @@ router.get('/reports/form16', async (req, res) => {
     );
 
     // Compute derived TDS fields
-    const STANDARD_DEDUCTION = 50000;
+    const STANDARD_DEDUCTION = 75000; // Budget 2024: raised from ₹50,000 to ₹75,000 (new tax regime)
     const data = rows.map(r => {
       const gross         = parseFloat(r.total_gross || 0);
       const pfDed         = parseFloat(r.total_pf_employee || 0);

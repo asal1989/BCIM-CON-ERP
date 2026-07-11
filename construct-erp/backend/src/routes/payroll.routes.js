@@ -37,11 +37,14 @@ const calculatePayroll = (dailyRate, daysPresent, otHours, otRate) => {
 };
 
 // GET payroll records
-router.get('/', async (req, res) => {
+router.get('/', authorize('super_admin', 'admin', 'hr', 'accountant'), async (req, res) => {
   const { project_id, period_from, period_to, payment_status } = req.query;
+  // Always scope to requesting user's company via workers → projects → company
   let sql = `SELECT pr.*,w.name as worker_name,w.skill_type,w.gang_name FROM payroll pr
-             JOIN workers w ON pr.worker_id=w.id WHERE 1=1`;
-  const params = []; let i=1;
+             JOIN workers w ON pr.worker_id=w.id
+             JOIN projects proj ON proj.id=pr.project_id
+             WHERE proj.company_id=$1`;
+  const params = [req.user.company_id]; let i=2;
   if (project_id)     { sql+=` AND pr.project_id=$${i++}`; params.push(project_id); }
   if (period_from)    { sql+=` AND pr.period_from>=$${i++}`; params.push(period_from); }
   if (period_to)      { sql+=` AND pr.period_to<=$${i++}`; params.push(period_to); }
@@ -89,6 +92,10 @@ router.post('/generate', authorize('super_admin','admin','hr','accountant'), asy
     }
     return generated;
   });
+
+  if (result.length === 0) {
+    return res.status(409).json({ error: 'Payroll already generated for this period. Delete existing records first to regenerate.' });
+  }
 
   // Summary
   const totals = result.reduce((acc, r) => ({

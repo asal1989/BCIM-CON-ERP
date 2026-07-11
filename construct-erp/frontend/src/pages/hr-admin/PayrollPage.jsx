@@ -210,12 +210,16 @@ export default function PayrollPage() {
     },
     onSuccess: (res, user_id) => {
       const first = res.data?.data?.[0];
+      const missing = res.data?.missing_salary_employees || [];
       if (user_id) {
         toast.success(first?.skipped ? `Already ${first.status} for this employee` : 'Payroll generated for this employee');
       } else {
         const proj = projects.find(p => p.id === projectId);
         const label = proj ? ` for ${proj.name}` : '';
         toast.success(`Payroll generated for ${res.data?.data?.length || 0} employees${label}`);
+      }
+      if (missing.length) {
+        toast.error(`${missing.length} employee(s) skipped — no salary record: ${missing.slice(0,3).join(', ')}${missing.length > 3 ? '…' : ''}`, { duration: 8000 });
       }
       refetch();
     },
@@ -309,7 +313,7 @@ export default function PayrollPage() {
           </select>
           <select value={year} onChange={e => setYear(parseInt(e.target.value))}
             className="px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-indigo-400 shadow-sm">
-            {[2024,2025,2026,2027].map(y => <option key={y} value={y}>{y}</option>)}
+            {Array.from({length: 6}, (_, i) => new Date().getFullYear() - 1 + i).map(y => <option key={y} value={y}>{y}</option>)}
           </select>
           <select value={projectId} onChange={e => setProjectId(e.target.value)}
             className="px-3 py-2.5 bg-white border border-indigo-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-indigo-500 shadow-sm min-w-[160px]">
@@ -375,16 +379,32 @@ export default function PayrollPage() {
               </button>
             )}
 
-            {hasPending && (
-              <button onClick={approveAll} disabled={approvingAll}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all hover:shadow-md active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
-                style={{ background: 'linear-gradient(135deg, #3B82F6, #2563EB)', color: '#FFF' }}
-              >
-                {approvingAll
-                  ? <><span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin inline-block"/> Approving…</>
-                  : <><Check className="w-4 h-4" /> Approve All</>}
-              </button>
-            )}
+            {hasPending && (() => {
+              const pendingWithZeroDeductions = records.filter(r =>
+                r.status === 'pending_approval' &&
+                parseFloat(r.advance_deduction || 0) === 0 &&
+                parseFloat(r.loan_deduction || 0) === 0 &&
+                parseFloat(r.other_deductions || 0) === 0
+              );
+              return (
+                <div className="flex flex-col items-end gap-1">
+                  {pendingWithZeroDeductions.length > 0 && (
+                    <p className="text-xs text-amber-600 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />
+                      {pendingWithZeroDeductions.length} payslip(s) have ₹0 advance/loan/other deductions — verify before approving
+                    </p>
+                  )}
+                  <button onClick={approveAll} disabled={approvingAll}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all hover:shadow-md active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                    style={{ background: 'linear-gradient(135deg, #3B82F6, #2563EB)', color: '#FFF' }}
+                  >
+                    {approvingAll
+                      ? <><span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin inline-block"/> Approving…</>
+                      : <><Check className="w-4 h-4" /> Approve All</>}
+                  </button>
+                </div>
+              );
+            })()}
 
             {hasApproved && (
               <button onClick={() => setPayModal(true)}

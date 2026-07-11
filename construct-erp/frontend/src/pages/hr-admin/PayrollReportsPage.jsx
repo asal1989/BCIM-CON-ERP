@@ -189,7 +189,7 @@ async function generateForm16PDF(r, fyYear, company, logoBase64) {
   tableRow('Provident Fund (Employee) — u/s 80C', fmt(r.total_pf_employee));
   tableRow('Professional Tax',                     fmt(r.total_pt));
   tableRow('ESI (Employee Contribution)',           fmt(r.total_esi_employee));
-  tableRow('Standard Deduction — u/s 16(ia)',      fmt(r.standard_deduction || 50000));
+  tableRow('Standard Deduction — u/s 16(ia)',      fmt(r.standard_deduction || 75000));
   doc.setFillColor(240, 253, 244);
   doc.rect(ML, y - 1, CW, 7, 'F');
   tableRow('Total Deductions (B)', fmt(r.total_deductions), true, [5, 150, 105]);

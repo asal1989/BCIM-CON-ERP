@@ -366,18 +366,12 @@ const ADMIN_ROLES = [
   'stores_manager', 'store_keeper', 'security_guard',
 ];
 
-// Managing-director roles get the approvals view embedded in their main dashboard.
-const MD_DASHBOARD_ROLES  = ['md', 'managing_director'];
-const MD_DASHBOARD_EMAILS = ['stephen@bcim.in', 'it@bcim.in'];
-
 // Returns true for anyone who should land on the executive dashboard with approvals embedded.
-// Checked in routing, project-gate bypass, and dashboard render — kept in one place.
+// The server sets can_access_executive_dashboard based on role + env-configured email list,
+// so no email addresses live in this bundle.
 function isMDDashboardUser(user) {
   if (!user) return false;
-  const role = String(user.role || '').toLowerCase();
-  return MD_DASHBOARD_ROLES.includes(role)
-    || ['admin', 'super_admin'].includes(role)
-    || MD_DASHBOARD_EMAILS.includes((user.email || '').toLowerCase());
+  return !!user.can_access_executive_dashboard;
 }
 
 function getHomeRoute(user) {
@@ -403,6 +397,9 @@ function getHomeRoute(user) {
 
 // Global roles bypass project selection (they see all projects company-wide)
 const GLOBAL_ROLES = ['super_admin', 'admin', 'managing_director', 'director', 'ceo', 'cfo', 'md'];
+
+// Budget breakdown access is server-derived (can_access_budget_breakdown flag).
+// No email addresses are hardcoded here.
 
 // Route guard — blocks access until token is verified with backend.
 // Also enforces a project selection for scoped users (anyone not in GLOBAL_ROLES).
@@ -448,7 +445,10 @@ function RequireModule({ module, children }) {
   const STORES_ROLES = ['security_guard', 'store_keeper', 'stores_manager', 'stores_officer'];
   if (module === 'Stores' && STORES_ROLES.includes(String(user.role || '').toLowerCase())) return children;
   const mods = user.accessible_modules;
-  if (!mods || mods.length === 0) return children; // unconfigured account → full access
+  // No modules assigned → deny access (redirect to home). super_admin/admin already returned above.
+  // Previously this was full-access; changed to deny-by-default so new accounts are
+  // blocked until an admin explicitly assigns modules.
+  if (!mods || mods.length === 0) return <Navigate to={getHomeRoute(user)} replace />;
   const legacyAliases = [
     ...(module === 'Reports'          ? ['CRM & Reports'] : []),
     ...(module === 'Bill Tracker'     ? ['DQS Tracker']   : []),
@@ -469,7 +469,7 @@ function RequireAnyModule({ modules, children }) {
   if (!user) return <Navigate to="/login" replace />;
   if (['admin', 'super_admin'].includes(user.role)) return children;
   const mods = user.accessible_modules;
-  if (!mods || mods.length === 0) return children;
+  if (!mods || mods.length === 0) return <Navigate to={getHomeRoute(user)} replace />;
   const expandedModules = modules.flatMap(module => {
     if (module === 'Bill Tracker') return ['Bill Tracker', 'DQS Tracker'];
     if (module === 'DQS Tracker') return ['DQS Tracker', 'Bill Tracker'];
@@ -484,15 +484,11 @@ function RequireAnyModule({ modules, children }) {
 // across three different routes, all rendering the same cost/margin data —
 // effectively open to most project staff. Locked to an explicit allow-list
 // per direct request: super_admin, the procurement team, and stephen@bcim.in.
-const BUDGET_BREAKDOWN_ROLES = ['procurement_manager', 'purchase_executive'];
-const BUDGET_BREAKDOWN_EMAILS = ['stephen@bcim.in'];
 function RequireBudgetAccess({ children }) {
   const { user } = useAuthStore();
   if (!user) return <Navigate to="/login" replace />;
-  const role = String(user.role || '').toLowerCase();
-  const email = String(user.email || '').toLowerCase();
-  const allowed = role === 'super_admin' || BUDGET_BREAKDOWN_ROLES.includes(role) || BUDGET_BREAKDOWN_EMAILS.includes(email);
-  if (allowed) return children;
+  // Access determined server-side via can_access_budget_breakdown (no emails in bundle)
+  if (user.can_access_budget_breakdown) return children;
   return <Navigate to={getHomeRoute(user)} replace />;
 }
 
