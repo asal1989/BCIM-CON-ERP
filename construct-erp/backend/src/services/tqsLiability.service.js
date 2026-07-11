@@ -29,7 +29,7 @@ const billCreditSql = (b = 'b', u = 'u', advanceCreditSql = `COALESCE(${u}.advan
 
 const normalizeAccountType = value => {
   const v = String(value || 'all').toLowerCase();
-  return v === 'po' || v === 'wo' ? v : 'all';
+  return v === 'po' || v === 'wo' || v === 'sc' ? v : 'all';
 };
 
 const advanceSourceSql = (accountType, alias = 'a') => {
@@ -102,6 +102,11 @@ async function getVendorLiabilitySummary({
     billConds.push(billSourceSql(accountType, 'b'));
     advConds.push(advanceSourceSql(accountType));
     avConds.push(advanceSourceSql(accountType, 'av'));
+  } else if (accountType === 'sc') {
+    // SC tab shows ONLY subcontractor bills — exclude all PO/WO rows.
+    billConds.push('FALSE');
+    advConds.push('FALSE');
+    avConds.push('FALSE');
   }
   if (fromDate) {
     billConds.push(`b.inv_date >= $${idx}`);
@@ -149,9 +154,10 @@ async function getVendorLiabilitySummary({
   }
 
   // ── SC-module bills (subcontractor RA bills) ────────────────────────────────
-  // Included only in the unfiltered "All" view — SC bills are neither PO nor WO,
-  // and a vendorId filter targets TQS vendor ids which SC bills don't carry.
-  const includeSc = accountType === 'all' && !(vendorId && String(vendorId).trim());
+  // Included in the unfiltered "All" view and the dedicated "SC" tab — SC bills
+  // are neither PO nor WO, and a vendorId filter targets TQS vendor ids which
+  // SC bills don't carry.
+  const includeSc = (accountType === 'all' || accountType === 'sc') && !(vendorId && String(vendorId).trim());
   const scConds = [`sb.company_id = $1`, `LOWER(COALESCE(sb.status, '')) <> 'rejected'`];
   if (includeSc) {
     if (projectId && String(projectId).trim()) {

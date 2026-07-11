@@ -8,7 +8,7 @@ import autoTable from 'jspdf-autotable';
 import { liabilityRegisterAPI, projectAPI } from '../../api/client';
 import {
   BookOpen, Search, Printer, AlertTriangle,
-  IndianRupee, X, ShoppingCart, Hammer, Layers3,
+  IndianRupee, X, ShoppingCart, Hammer, Layers3, HardHat,
   FileSpreadsheet, FileText, ChevronDown, Building2, Filter, Pencil,
   Users, Receipt, Wallet, Percent, TrendingUp, Clock,
   BellRing,
@@ -505,6 +505,7 @@ export default function LiabilityRegisterPage() {
               { key: 'all', label: 'All',  Icon: Layers3 },
               { key: 'po',  label: 'PO',   Icon: ShoppingCart },
               { key: 'wo',  label: 'WO',   Icon: Hammer },
+              { key: 'sc',  label: 'SC',   Icon: HardHat },
             ].map(({ key, label, Icon }) => {
               const on = sourceType === key;
               return (

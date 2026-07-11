@@ -113,8 +113,9 @@ router.get('/ledger', async (req, res) => {
       }
     }
 
-    // SC bills are neither PO nor WO — include only in the unfiltered "All" view
-    const scLedgerGate = accountType === 'all' ? '' : 'AND FALSE';
+    // SC bills are neither PO nor WO — include in the unfiltered "All" view
+    // and the dedicated "SC" tab.
+    const scLedgerGate = (accountType === 'all' || accountType === 'sc') ? '' : 'AND FALSE';
 
     let billTypeFilter = '';
     let advSourceFilter = '';
@@ -123,6 +124,11 @@ router.get('/ledger', async (req, res) => {
       billTypeFilter = `AND ${billSourceSql(accountType, 'b')}`;
       advSourceFilter = `AND ${advanceSourceSql(accountType, 'a')}`;
       avSourceFilter = `AND ${advanceSourceSql(accountType, 'av')}`;
+    } else if (accountType === 'sc') {
+      // SC tab shows only subcontractor entries — exclude PO/WO bill rows.
+      billTypeFilter = 'AND FALSE';
+      advSourceFilter = 'AND FALSE';
+      avSourceFilter = 'AND FALSE';
     }
 
     const advanceCreditSql = `
@@ -167,7 +173,8 @@ router.get('/ledger', async (req, res) => {
           b.workflow_status,
           b.id::text AS source_id,
           b.bill_type,
-          ${billCreditSql('b', 'u', advanceCreditSql)} AS invoice_gross
+          ${billCreditSql('b', 'u', advanceCreditSql)} AS invoice_gross,
+          b.inv_date AS invoice_date
         FROM tqs_bills b
         LEFT JOIN tqs_bill_updates u ON u.bill_id = b.id
         LEFT JOIN projects p ON p.id = b.project_id
@@ -192,7 +199,8 @@ router.get('/ledger', async (req, res) => {
           b.workflow_status,
           b.id::text,
           b.bill_type,
-          NULL::numeric
+          NULL::numeric,
+          b.inv_date
         FROM tqs_bills b
         JOIN tqs_bill_updates u ON u.bill_id = b.id
         LEFT JOIN projects p ON p.id = b.project_id
@@ -217,7 +225,8 @@ router.get('/ledger', async (req, res) => {
           b.workflow_status,
           b.id::text,
           b.bill_type,
-          NULL::numeric
+          NULL::numeric,
+          b.inv_date
         FROM tqs_bills b
         JOIN tqs_bill_updates u ON u.bill_id = b.id
         LEFT JOIN projects p ON p.id = b.project_id
@@ -249,7 +258,8 @@ router.get('/ledger', async (req, res) => {
           b.workflow_status,
           b.id::text,
           b.bill_type,
-          NULL::numeric
+          NULL::numeric,
+          b.inv_date
         FROM tqs_bills b
         JOIN tqs_bill_updates u ON u.bill_id = b.id
         LEFT JOIN projects p ON p.id = b.project_id
@@ -280,7 +290,8 @@ router.get('/ledger', async (req, res) => {
           'advance',
           a.id::text,
           'advance',
-          NULL::numeric
+          NULL::numeric,
+          NULL::date
         FROM tqs_advances a
         LEFT JOIN projects p ON p.id = a.project_id
         WHERE a.company_id = $1
