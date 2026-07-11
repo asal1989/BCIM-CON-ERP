@@ -243,7 +243,7 @@ router.get('/test-onedrive', authorize(...ADMINS), async (req, res) => {
     tenant_id:  process.env.ONEDRIVE_TENANT_ID   ? '✓ set' : '✗ MISSING',
     client_id:  process.env.ONEDRIVE_CLIENT_ID   ? '✓ set' : '✗ MISSING',
     client_secret: process.env.ONEDRIVE_CLIENT_SECRET ? '✓ set' : '✗ MISSING',
-    user_email: process.env.ONEDRIVE_USER_EMAIL  || '✗ MISSING',
+    sharepoint_site_id: process.env.SHAREPOINT_SITE_ID || '✗ MISSING',
     root_folder: process.env.ONEDRIVE_FOLDER     || '(none — files go to root)',
   };
   try {
