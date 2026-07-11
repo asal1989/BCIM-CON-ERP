@@ -343,20 +343,23 @@ async function migrateOneFile(fetch, token, oldItemId) {
   };
 }
 
-router.post('/migrate-sharepoint', authorize(...ADMINS), async (req, res) => {
+// In-memory progress state for the one-off migration job. A module-level
+// object is fine here — this is a single admin-triggered background task,
+// not something that needs to survive a restart or be queryable by anyone
+// but the admin who kicked it off.
+let migrationState = { running: false, startedAt: null, finishedAt: null, error: null, tables: {} };
+
+async function runMigrationJob() {
   const fetch = require('node-fetch');
-  const summary = {};
   try {
     const token = await getMigrationToken();
     for (const { table, hasUrls } of MIGRATE_TABLES) {
-      const migrated = [];
-      const skipped = [];
-      const failed = [];
       const { rows } = await db().query(`SELECT id, onedrive_id FROM ${table} WHERE onedrive_id IS NOT NULL`);
+      migrationState.tables[table] = { total: rows.length, migrated: 0, skipped: 0, failed: [] };
       for (const row of rows) {
         try {
           const result = await migrateOneFile(fetch, token, row.onedrive_id);
-          if (result.status === 'skipped_missing') { skipped.push(row.id); continue; }
+          if (result.status === 'skipped_missing') { migrationState.tables[table].skipped++; continue; }
           if (hasUrls) {
             await db().query(
               `UPDATE ${table} SET onedrive_id=$1, onedrive_url=$2, onedrive_web_url=$3 WHERE id=$4`,
@@ -365,17 +368,35 @@ router.post('/migrate-sharepoint', authorize(...ADMINS), async (req, res) => {
           } else {
             await db().query(`UPDATE ${table} SET onedrive_id=$1 WHERE id=$2`, [result.onedrive_id, row.id]);
           }
-          migrated.push(row.id);
+          migrationState.tables[table].migrated++;
         } catch (e) {
-          failed.push({ id: row.id, error: e.message });
+          migrationState.tables[table].failed.push({ id: row.id, error: e.message });
         }
       }
-      summary[table] = { total: rows.length, migrated: migrated.length, skipped: skipped.length, failed };
     }
-    res.json({ ok: true, summary });
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message, summary });
+    migrationState.error = err.message;
+  } finally {
+    migrationState.running = false;
+    migrationState.finishedAt = new Date().toISOString();
   }
+}
+
+// Kicks off the migration in the background and returns immediately — the
+// prior synchronous version ran the whole thing inside one HTTP request,
+// which Railway's proxy killed with a 502 once it ran past the gateway's
+// request timeout. Poll GET /migrate-sharepoint/status for progress.
+router.post('/migrate-sharepoint', authorize(...ADMINS), async (req, res) => {
+  if (migrationState.running) {
+    return res.status(409).json({ ok: false, error: 'Migration already running', state: migrationState });
+  }
+  migrationState = { running: true, startedAt: new Date().toISOString(), finishedAt: null, error: null, tables: {} };
+  runMigrationJob(); // fire-and-forget — intentionally not awaited
+  res.json({ ok: true, started: true, message: 'Migration started in background. Poll GET /api/v1/dms/migrate-sharepoint/status for progress.' });
+});
+
+router.get('/migrate-sharepoint/status', authorize(...ADMINS), (req, res) => {
+  res.json(migrationState);
 });
 
 router.use(async (req, res, next) => {
