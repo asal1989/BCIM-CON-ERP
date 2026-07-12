@@ -1312,36 +1312,69 @@ function TeamsLogo({ size = 18 }) {
 }
 
 // ── TEAMS MEETING MODAL ────────────────────────────────────────────────────────
-function TeamsMeetingModal({ onClose, onMeetingCreated }) {
+function TeamsMeetingModal({ onClose, onMeetingCreated, employees = [] }) {
   const today = new Date().toISOString().slice(0, 10);
   const defaultStart = (() => {
     const h = new Date().getHours() + 1;
     return `${String(h % 24).padStart(2, '0')}:00`;
   })();
 
-  const [subject,   setSubject]   = useState('');
-  const [dateStr,   setDateStr]   = useState(today);
-  const [startTime, setStartTime] = useState(defaultStart);
-  const [endTime,   setEndTime]   = useState(`${String((parseInt(defaultStart) + 1) % 24).padStart(2, '0')}:00`);
-  const [loading,   setLoading]   = useState(false);
-  const [result,    setResult]    = useState(null); // created meeting
-  const [copied,    setCopied]    = useState(false);
+  const [subject,    setSubject]    = useState('');
+  const [dateStr,    setDateStr]    = useState(today);
+  const [startTime,  setStartTime]  = useState(defaultStart);
+  const [endTime,    setEndTime]    = useState(`${String((parseInt(defaultStart) + 1) % 24).padStart(2, '0')}:00`);
+  const [loading,    setLoading]    = useState(false);
+  const [result,     setResult]     = useState(null);
+  const [copied,     setCopied]     = useState(false);
+  const [permError,  setPermError]  = useState(null); // permission error info
+  const [attendees,  setAttendees]  = useState([]);   // selected employees
+  const [empSearch,  setEmpSearch]  = useState('');
+  const [empOpen,    setEmpOpen]    = useState(false);
+
+  const empList = useMemo(() => {
+    const q = empSearch.toLowerCase();
+    return employees
+      .filter(e => {
+        if (attendees.find(a => a.id === e.id)) return false;
+        const name = (e.full_name || e.name || '').toLowerCase();
+        const des  = (e.designation_name || e.designation || '').toLowerCase();
+        return !q || name.includes(q) || des.includes(q);
+      })
+      .slice(0, 7);
+  }, [employees, empSearch, attendees]);
+
+  const removeAttendee = id => setAttendees(prev => prev.filter(a => a.id !== id));
+  const addAttendee    = emp => { setAttendees(prev => [...prev, emp]); setEmpSearch(''); };
+
+  // Build Teams deep-link as fallback (works without API permissions)
+  const teamsDeepLink = useMemo(() => {
+    const start = new Date(`${dateStr}T${startTime}:00`).toISOString();
+    const end   = new Date(`${dateStr}T${endTime}:00`).toISOString();
+    const emails = attendees.map(a => a.email).filter(Boolean).join(',');
+    return `https://teams.microsoft.com/l/meeting/new?subject=${encodeURIComponent(subject || 'Team Meeting')}&startTime=${encodeURIComponent(start)}&endTime=${encodeURIComponent(end)}${emails ? `&attendees=${encodeURIComponent(emails)}` : ''}`;
+  }, [subject, dateStr, startTime, endTime, attendees]);
 
   const createMeeting = async () => {
     if (!subject.trim()) { toast.error('Please enter a meeting title'); return; }
-    setLoading(true);
+    setLoading(true); setPermError(null);
     try {
       const startDT = new Date(`${dateStr}T${startTime}:00`).toISOString();
       const endDT   = new Date(`${dateStr}T${endTime}:00`).toISOString();
       const res = await api.post('/chat/teams-meeting', {
-        subject: subject.trim(),
+        subject:       subject.trim(),
         startDateTime: startDT,
         endDateTime:   endDT,
+        attendeeEmails: attendees.map(a => a.email).filter(Boolean),
       });
       setResult(res.data.meeting);
       toast.success('Teams meeting created!');
     } catch (err) {
-      toast.error(err?.response?.data?.error || 'Failed to create meeting');
+      const data = err?.response?.data || {};
+      if (data.isPermissionError || err?.response?.status === 403) {
+        setPermError(data);
+      } else {
+        toast.error(data.error || 'Failed to create meeting');
+      }
     } finally {
       setLoading(false);
     }
@@ -1349,8 +1382,7 @@ function TeamsMeetingModal({ onClose, onMeetingCreated }) {
 
   const copyLink = () => {
     navigator.clipboard.writeText(result.joinUrl).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setCopied(true); setTimeout(() => setCopied(false), 2000);
     });
   };
 
@@ -1358,120 +1390,213 @@ function TeamsMeetingModal({ onClose, onMeetingCreated }) {
     if (!result) return;
     const start = new Date(result.startDateTime);
     const end   = new Date(result.endDateTime);
-    const text = `📅 Teams Meeting: ${result.subject}\n🕐 ${start.toLocaleDateString([], { month: 'short', day: 'numeric' })} · ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n🔗 Join: ${result.joinUrl}`;
+    const attendeeNames = attendees.map(a => a.full_name || a.name).filter(Boolean).join(', ');
+    const text = [
+      `📅 Teams Meeting: ${result.subject}`,
+      `🕐 ${start.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} · ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+      attendeeNames ? `👥 ${attendeeNames}` : '',
+      `🔗 Join: ${result.joinUrl}`,
+    ].filter(Boolean).join('\n');
     onMeetingCreated(text);
     onClose();
   };
 
+  const inputStyle = {
+    width: '100%', padding: '9px 11px', borderRadius: 10,
+    border: `1.5px solid ${C.border}`, outline: 'none',
+    fontSize: 13.5, color: C.text, background: C.bg, boxSizing: 'border-box',
+  };
+
   return (
-    <AnimatePresence>
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
       <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        initial={{ scale: 0.92, opacity: 0, y: 20 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.92, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 320, damping: 26 }}
         style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 16,
+          width: '100%', maxWidth: 500, background: C.card,
+          borderRadius: 20, boxShadow: '0 28px 60px rgba(0,0,0,0.25)',
+          overflow: 'hidden', maxHeight: '90vh', overflowY: 'auto',
         }}
-        onClick={e => e.target === e.currentTarget && onClose()}
       >
-        <motion.div
-          initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }}
-          transition={{ type: 'spring', stiffness: 320, damping: 26 }}
-          style={{
-            width: '100%', maxWidth: 480,
-            background: C.card, borderRadius: 18,
-            boxShadow: '0 24px 48px rgba(0,0,0,0.2)',
-            overflow: 'hidden',
-          }}
-        >
-          {/* Header */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 12, padding: '18px 20px 14px',
-            borderBottom: `1px solid ${C.border}`,
-            background: 'linear-gradient(135deg, #4F46E5 0%, #5058E5 100%)',
-          }}>
-            <TeamsLogo size={32} />
-            <div style={{ flex: 1 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: 0 }}>New Teams Meeting</h3>
-              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 }}>Schedule a virtual meeting for your team</p>
-            </div>
-            <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8, width: 30, height: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <X size={15} color="#fff" />
-            </button>
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          padding: '18px 20px 16px',
+          background: 'linear-gradient(135deg, #4F46E5 0%, #6366F1 100%)',
+        }}>
+          <TeamsLogo size={34} />
+          <div style={{ flex: 1 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: 0 }}>New Teams Meeting</h3>
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 }}>Schedule a virtual meeting for your team</p>
           </div>
+          <button onClick={onClose}
+            style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 8, width: 30, height: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <X size={15} color="#fff" />
+          </button>
+        </div>
 
-          <div style={{ padding: '20px 20px 16px' }}>
-            {!result ? (
-              <>
-                {/* Meeting title */}
-                <div style={{ marginBottom: 14 }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: C.muted, display: 'block', marginBottom: 6 }}>MEETING TITLE</label>
-                  <input
-                    value={subject} onChange={e => setSubject(e.target.value)}
-                    placeholder="e.g. Weekly Team Standup, Project Seminar…"
-                    autoFocus
-                    style={{
-                      width: '100%', padding: '10px 13px', borderRadius: 10,
-                      border: `1.5px solid ${C.border}`, outline: 'none',
-                      fontSize: 14, color: C.text, background: C.bg,
-                      boxSizing: 'border-box',
-                    }}
-                    onFocus={e => e.target.style.borderColor = C.primary}
-                    onBlur={e => e.target.style.borderColor = C.border}
-                    onKeyDown={e => e.key === 'Enter' && !loading && createMeeting()}
-                  />
-                </div>
+        <div style={{ padding: '18px 20px 20px' }}>
+          {/* ── Permission error ── */}
+          {permError && !result && (
+            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+              style={{ background: '#FEF2F2', borderRadius: 12, border: '1px solid #FECACA', padding: '14px 16px', marginBottom: 16 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: '#991B1B', marginBottom: 6 }}>⚠️ Azure Permission Required</p>
+              <p style={{ fontSize: 12.5, color: '#B91C1C', lineHeight: 1.6, marginBottom: 12 }}>
+                Your Azure AD app needs <strong>OnlineMeetings.ReadWrite.All</strong> (Application permission) with admin consent.
+              </p>
+              <p style={{ fontSize: 12, fontWeight: 600, color: '#7F1D1D', marginBottom: 6 }}>Fix in 3 steps:</p>
+              <ol style={{ fontSize: 12, color: '#B91C1C', lineHeight: 2, paddingLeft: 18, margin: 0 }}>
+                <li>Go to <strong>Azure Portal → App registrations → your app</strong></li>
+                <li>API permissions → Add → Microsoft Graph → Application → <strong>OnlineMeetings.ReadWrite.All</strong></li>
+                <li>Click <strong>"Grant admin consent"</strong> → retry</li>
+              </ol>
+              <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <motion.button whileTap={{ scale: 0.95 }}
+                  onClick={() => window.open(teamsDeepLink, '_blank')}
+                  style={{
+                    flex: 1, padding: '9px 12px', borderRadius: 9, border: 'none',
+                    background: '#4F46E5', color: '#fff', fontSize: 12.5, fontWeight: 700,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  }}>
+                  <ExternalLink size={13} /> Open in Teams (workaround)
+                </motion.button>
+                <button onClick={() => setPermError(null)}
+                  style={{ padding: '9px 12px', borderRadius: 9, border: `1px solid #FECACA`, background: '#fff', color: '#991B1B', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+                  Retry
+                </button>
+              </div>
+            </motion.div>
+          )}
 
-                {/* Date + times */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: C.muted, display: 'block', marginBottom: 6 }}>DATE</label>
-                    <input type="date" value={dateStr} onChange={e => setDateStr(e.target.value)}
-                      style={{ width: '100%', padding: '9px 10px', borderRadius: 10, border: `1.5px solid ${C.border}`, fontSize: 13, color: C.text, background: C.bg, boxSizing: 'border-box', outline: 'none' }}
+          {/* ── Create form ── */}
+          {!result && (
+            <>
+              {/* Title */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Meeting Title</label>
+                <input value={subject} onChange={e => setSubject(e.target.value)}
+                  placeholder="e.g. Weekly Standup, Project Seminar, Site Review…"
+                  autoFocus
+                  style={inputStyle}
+                  onFocus={e => e.target.style.borderColor = C.primary}
+                  onBlur={e => e.target.style.borderColor = C.border}
+                  onKeyDown={e => e.key === 'Enter' && !loading && createMeeting()} />
+              </div>
+
+              {/* Date + times */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: 10, marginBottom: 14 }}>
+                {[
+                  { label: 'Date', type: 'date', val: dateStr, set: setDateStr },
+                  { label: 'Start', type: 'time', val: startTime, set: setStartTime },
+                  { label: 'End', type: 'time', val: endTime, set: setEndTime },
+                ].map(({ label, type, val, set }) => (
+                  <div key={label}>
+                    <label style={{ fontSize: 11.5, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</label>
+                    <input type={type} value={val} onChange={e => set(e.target.value)}
+                      style={inputStyle}
                       onFocus={e => e.target.style.borderColor = C.primary}
                       onBlur={e => e.target.style.borderColor = C.border} />
                   </div>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: C.muted, display: 'block', marginBottom: 6 }}>START</label>
-                    <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)}
-                      style={{ width: '100%', padding: '9px 10px', borderRadius: 10, border: `1.5px solid ${C.border}`, fontSize: 13, color: C.text, background: C.bg, boxSizing: 'border-box', outline: 'none' }}
-                      onFocus={e => e.target.style.borderColor = C.primary}
-                      onBlur={e => e.target.style.borderColor = C.border} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: C.muted, display: 'block', marginBottom: 6 }}>END</label>
-                    <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)}
-                      style={{ width: '100%', padding: '9px 10px', borderRadius: 10, border: `1.5px solid ${C.border}`, fontSize: 13, color: C.text, background: C.bg, boxSizing: 'border-box', outline: 'none' }}
-                      onFocus={e => e.target.style.borderColor = C.primary}
-                      onBlur={e => e.target.style.borderColor = C.border} />
-                  </div>
-                </div>
+                ))}
+              </div>
 
-                {/* Info note */}
-                <div style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px',
-                  background: '#EEF2FF', borderRadius: 10, marginBottom: 18,
-                  border: '1px solid #C7D2FE',
-                }}>
-                  <Info size={14} color="#4F46E5" style={{ flexShrink: 0, marginTop: 1 }} />
-                  <p style={{ fontSize: 12, color: '#4338CA', margin: 0, lineHeight: 1.5 }}>
-                    Meeting is created via your organisation's Microsoft Teams account. Attendees receive a join link — no Teams account needed to join.
-                  </p>
-                </div>
+              {/* Participants */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: C.muted, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Participants <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>— optional</span>
+                </label>
 
-                {/* Create button */}
-                <motion.button
-                  whileTap={{ scale: 0.96 }}
+                {/* Selected chips */}
+                {attendees.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                    {attendees.map(a => (
+                      <div key={a.id} style={{
+                        display: 'flex', alignItems: 'center', gap: 5,
+                        background: C.primaryLight, border: `1px solid ${C.primaryBorder}`,
+                        borderRadius: 999, padding: '3px 10px 3px 6px',
+                      }}>
+                        <Av name={a.full_name || a.name} size={20} photo={a.profile_photo_url} />
+                        <span style={{ fontSize: 12.5, fontWeight: 600, color: C.primary }}>
+                          {a.full_name || a.name}
+                        </span>
+                        <button onClick={() => removeAttendee(a.id)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0, color: C.primary }}>
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Search input */}
+                <div style={{ position: 'relative' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: C.bg, borderRadius: 10, padding: '8px 12px', border: `1.5px solid ${empOpen ? C.primary : C.border}`, transition: 'border-color 0.15s' }}>
+                    <Search size={13} color={C.subtle} />
+                    <input
+                      value={empSearch}
+                      onChange={e => { setEmpSearch(e.target.value); setEmpOpen(true); }}
+                      onFocus={() => setEmpOpen(true)}
+                      onBlur={() => setTimeout(() => setEmpOpen(false), 150)}
+                      placeholder="Search team members to invite…"
+                      style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13, color: C.text }}
+                    />
+                    <UserPlus size={13} color={C.muted} />
+                  </div>
+
+                  {/* Dropdown */}
+                  <AnimatePresence>
+                    {empOpen && empList.length > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                        style={{
+                          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
+                          background: C.card, borderRadius: 12, border: `1px solid ${C.border}`,
+                          boxShadow: C.shadowLg, overflow: 'hidden', marginTop: 4,
+                        }}>
+                        {empList.map(emp => (
+                          <button key={emp.id}
+                            onMouseDown={() => addAttendee(emp)}
+                            style={{
+                              width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                              padding: '9px 12px', background: 'none', border: 'none', cursor: 'pointer',
+                              textAlign: 'left', borderBottom: `1px solid ${C.borderLight}`,
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = C.bg}
+                            onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                            <Av name={emp.full_name || emp.name} size={32} photo={emp.profile_photo_url} />
+                            <div>
+                              <p style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{emp.full_name || emp.name}</p>
+                              <p style={{ fontSize: 11.5, color: C.muted }}>{emp.designation_name || emp.designation || emp.email || ''}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <motion.button whileTap={{ scale: 0.96 }}
                   onClick={createMeeting}
                   disabled={loading || !subject.trim()}
                   style={{
-                    width: '100%', padding: '12px 0', borderRadius: 11, border: 'none',
-                    background: loading || !subject.trim()
-                      ? C.border
-                      : 'linear-gradient(135deg, #4F46E5, #5058E5)',
+                    flex: 1, padding: '11px 0', borderRadius: 11, border: 'none',
+                    background: loading || !subject.trim() ? C.border : 'linear-gradient(135deg, #4F46E5, #6366F1)',
                     color: loading || !subject.trim() ? C.subtle : '#fff',
-                    fontSize: 14.5, fontWeight: 700, cursor: loading || !subject.trim() ? 'not-allowed' : 'pointer',
+                    fontSize: 14, fontWeight: 700,
+                    cursor: loading || !subject.trim() ? 'not-allowed' : 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                     boxShadow: loading || !subject.trim() ? 'none' : '0 4px 14px rgba(79,70,229,0.35)',
                     transition: 'all 0.2s',
@@ -1480,81 +1605,105 @@ function TeamsMeetingModal({ onClose, onMeetingCreated }) {
                     <>
                       <motion.div style={{ width: 16, height: 16, borderRadius: '50%', border: '2.5px solid rgba(255,255,255,0.3)', borderTop: '2.5px solid #fff' }}
                         animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.75, ease: 'linear' }} />
-                      Creating meeting…
+                      Creating…
                     </>
                   ) : (
-                    <><CalendarDays size={15} /> Create Teams Meeting</>
+                    <><CalendarDays size={15} /> Create Meeting</>
                   )}
                 </motion.button>
-              </>
-            ) : (
-              /* ── Meeting created result ── */
-              <div>
-                <div style={{ textAlign: 'center', marginBottom: 18 }}>
-                  <motion.div
-                    initial={{ scale: 0 }} animate={{ scale: 1 }}
-                    transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-                    style={{ width: 56, height: 56, borderRadius: '50%', background: '#D1FAE5', margin: '0 auto 10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Check size={26} color="#16A34A" />
-                  </motion.div>
-                  <h4 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: 0 }}>Meeting Ready!</h4>
-                  <p style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>{result.subject}</p>
-                </div>
 
-                {/* Time */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: C.bg, borderRadius: 10, border: `1px solid ${C.border}`, marginBottom: 12 }}>
-                  <Clock size={14} color={C.muted} />
-                  <span style={{ fontSize: 13, color: C.text }}>
-                    {new Date(result.startDateTime).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
-                    {' · '}
-                    {new Date(result.startDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    {' – '}
-                    {new Date(result.endDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {/* Fallback: open Teams directly */}
+                <motion.button whileTap={{ scale: 0.95 }}
+                  onClick={() => window.open(teamsDeepLink, '_blank')}
+                  title="Open Teams to schedule manually (no permission needed)"
+                  style={{
+                    padding: '11px 14px', borderRadius: 11, border: `1.5px solid #C7D2FE`,
+                    background: '#EEF2FF', color: '#4F46E5', fontSize: 13, fontWeight: 600,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
+                    whiteSpace: 'nowrap',
+                  }}>
+                  <ExternalLink size={14} /> Open Teams
+                </motion.button>
+              </div>
+
+              <p style={{ fontSize: 11.5, color: C.subtle, textAlign: 'center', marginTop: 10 }}>
+                "Open Teams" works immediately • "Create Meeting" needs Azure permission
+              </p>
+            </>
+          )}
+
+          {/* ── Result ── */}
+          {result && (
+            <div>
+              <div style={{ textAlign: 'center', marginBottom: 18 }}>
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+                  style={{ width: 56, height: 56, borderRadius: '50%', background: '#D1FAE5', margin: '0 auto 10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Check size={26} color="#16A34A" />
+                </motion.div>
+                <h4 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: 0 }}>Meeting Ready!</h4>
+                <p style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>{result.subject}</p>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: C.bg, borderRadius: 10, border: `1px solid ${C.border}`, marginBottom: 10 }}>
+                <Clock size={14} color={C.muted} />
+                <span style={{ fontSize: 13, color: C.text }}>
+                  {new Date(result.startDateTime).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
+                  {' · '}
+                  {new Date(result.startDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {' – '}
+                  {new Date(result.endDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+
+              {attendees.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: C.bg, borderRadius: 10, border: `1px solid ${C.border}`, marginBottom: 10 }}>
+                  <Users size={13} color={C.muted} />
+                  <span style={{ fontSize: 13, color: C.muted }}>
+                    {attendees.map(a => a.full_name || a.name).join(', ')}
                   </span>
                 </div>
+              )}
 
-                {/* Join URL */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 12px', background: '#EEF2FF', borderRadius: 10, border: '1px solid #C7D2FE', marginBottom: 14 }}>
-                  <span style={{ flex: 1, fontSize: 12, color: '#4338CA', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {result.joinUrl}
-                  </span>
-                  <button onClick={copyLink} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}>
-                    {copied ? <Check size={14} color="#16A34A" /> : <Copy size={14} color="#4F46E5" />}
-                  </button>
-                </div>
-
-                {/* Actions */}
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <motion.button whileTap={{ scale: 0.95 }} onClick={shareToChat}
-                    style={{
-                      flex: 1, padding: '10px 0', borderRadius: 10, border: 'none',
-                      background: 'linear-gradient(135deg, #4F46E5, #5058E5)',
-                      color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                    }}>
-                    <MessageSquare size={14} /> Share to Chat
-                  </motion.button>
-                  <motion.button whileTap={{ scale: 0.95 }}
-                    onClick={() => window.open(result.joinUrl, '_blank')}
-                    style={{
-                      padding: '10px 14px', borderRadius: 10, border: `1.5px solid ${C.border}`,
-                      background: C.bg, color: C.text, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', gap: 5,
-                    }}>
-                    <ExternalLink size={13} /> Open
-                  </motion.button>
-                </div>
-
-                <button onClick={() => { setResult(null); setSubject(''); }}
-                  style={{ width: '100%', marginTop: 10, padding: '7px 0', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12.5, color: C.muted, fontWeight: 500 }}>
-                  + Schedule another meeting
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 12px', background: '#EEF2FF', borderRadius: 10, border: '1px solid #C7D2FE', marginBottom: 14 }}>
+                <span style={{ flex: 1, fontSize: 12, color: '#4338CA', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {result.joinUrl}
+                </span>
+                <button onClick={copyLink} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 2, flexShrink: 0 }}>
+                  {copied ? <Check size={14} color="#16A34A" /> : <Copy size={14} color="#4F46E5" />}
                 </button>
               </div>
-            )}
-          </div>
-        </motion.div>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <motion.button whileTap={{ scale: 0.95 }} onClick={shareToChat}
+                  style={{
+                    flex: 1, padding: '10px 0', borderRadius: 10, border: 'none',
+                    background: 'linear-gradient(135deg, #4F46E5, #6366F1)',
+                    color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  }}>
+                  <MessageSquare size={14} /> Share to Chat
+                </motion.button>
+                <motion.button whileTap={{ scale: 0.95 }}
+                  onClick={() => window.open(result.joinUrl, '_blank')}
+                  style={{
+                    padding: '10px 14px', borderRadius: 10, border: `1.5px solid ${C.border}`,
+                    background: C.bg, color: C.text, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 5,
+                  }}>
+                  <ExternalLink size={13} /> Open
+                </motion.button>
+              </div>
+
+              <button onClick={() => { setResult(null); setSubject(''); setAttendees([]); }}
+                style={{ width: '100%', marginTop: 10, padding: '7px 0', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12.5, color: C.muted, fontWeight: 500 }}>
+                + Schedule another meeting
+              </button>
+            </div>
+          )}
+        </div>
       </motion.div>
-    </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -1947,6 +2096,7 @@ export default function ERPChat() {
         <TeamsMeetingModal
           onClose={() => setShowMeetingModal(false)}
           onMeetingCreated={shareMeetingToChat}
+          employees={employees}
         />
       )}
 

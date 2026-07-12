@@ -181,14 +181,11 @@ const { createTeamsMeeting } = require('../services/azureService');
 
 // POST /chat/teams-meeting — create a Teams meeting and optionally post to channel
 router.post('/teams-meeting', async (req, res) => {
-  const { subject, startDateTime, endDateTime } = req.body;
+  const { subject, startDateTime, endDateTime, attendeeEmails = [] } = req.body;
   if (!subject?.trim()) return res.status(400).json({ error: 'subject is required' });
 
   // Organizer: use logged-in user's email, fall back to env var
-  const organizerEmail =
-    req.user.email ||
-    process.env.TEAMS_ORGANIZER_EMAIL;
-
+  const organizerEmail = req.user.email || process.env.TEAMS_ORGANIZER_EMAIL;
   if (!organizerEmail) {
     return res.status(400).json({ error: 'No organizer email — set TEAMS_ORGANIZER_EMAIL in Railway env vars' });
   }
@@ -197,11 +194,23 @@ router.post('/teams-meeting', async (req, res) => {
   const end   = endDateTime   || new Date(Date.now() + 60 * 60 * 1000).toISOString();
 
   try {
-    const meeting = await createTeamsMeeting(subject.trim(), start, end, organizerEmail);
+    const meeting = await createTeamsMeeting(
+      subject.trim(), start, end, organizerEmail,
+      Array.isArray(attendeeEmails) ? attendeeEmails.filter(Boolean) : []
+    );
     res.json({ meeting });
   } catch (err) {
     console.error('[Teams] Route error:', err.message);
-    res.status(500).json({ error: err.message });
+    // Surface a clean, actionable error message to the frontend
+    const msg = err.message || 'Failed to create Teams meeting';
+    const isPermission = msg.toLowerCase().includes('permission') || msg.toLowerCase().includes('forbidden') || msg.includes('403');
+    res.status(isPermission ? 403 : 500).json({
+      error: msg,
+      isPermissionError: isPermission,
+      fix: isPermission
+        ? 'Grant OnlineMeetings.ReadWrite.All (Application) to your Azure AD app and click "Grant admin consent" in the Azure portal.'
+        : null,
+    });
   }
 });
 

@@ -89,7 +89,7 @@ async function deleteFromOneDrive(itemId) {
 // Requires the Azure AD app to have Application permission:
 //   OnlineMeetings.ReadWrite.All  (admin consent in Azure portal)
 // The organizer is looked up by UPN/email in Azure AD.
-async function createTeamsMeeting(subject, startDateTime, endDateTime, organizerEmail) {
+async function createTeamsMeeting(subject, startDateTime, endDateTime, organizerEmail, attendeeEmails = []) {
   const token = await getAccessToken();
 
   // Resolve organizer's Azure AD object ID from their email/UPN
@@ -105,12 +105,22 @@ async function createTeamsMeeting(subject, startDateTime, endDateTime, organizer
   const { id: userId } = await userRes.json();
 
   // Create the online meeting
+  const body = { subject, startDateTime, endDateTime };
+  if (attendeeEmails.length > 0) {
+    body.participants = {
+      attendees: attendeeEmails.map(email => ({
+        upn: email, role: 'attendee',
+        identity: { user: { displayName: email } },
+      })),
+    };
+  }
+
   const meetRes = await fetch(
     `https://graph.microsoft.com/v1.0/users/${userId}/onlineMeetings`,
     {
       method:  'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subject, startDateTime, endDateTime }),
+      body: JSON.stringify(body),
     }
   );
 
@@ -126,7 +136,7 @@ async function createTeamsMeeting(subject, startDateTime, endDateTime, organizer
   return {
     id:            m.id,
     subject:       m.subject,
-    joinUrl:       m.joinUrl,
+    joinUrl:       m.joinUrl || m.joinWebUrl,
     startDateTime: m.startDateTime,
     endDateTime:   m.endDateTime,
   };
