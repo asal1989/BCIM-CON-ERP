@@ -1977,6 +1977,7 @@ export default function Layout() {
   const [langOpen,    setLangOpen]    = useState(false);
   const [notifOpen,   setNotifOpen]   = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
+  const [activeTool,  setActiveTool]  = useState(null); // null | 'pdf' | 'senddrive'
   const [now,          setNow]         = useState(() => new Date());
   const notifCount = useNotificationCount();
   const recentPages = useRecentPages();
@@ -2506,34 +2507,88 @@ export default function Layout() {
         </div>
       )}
 
-      {/* ── Floating Send Drive launcher — quick access to the external large-file
-          transfer tool, stacked above the Team Chat bubble. Opens in a new tab.
-          Passes the logged-in user's email as ?from= so Send Drive can
-          pre-fill the sender field — Send Drive has no login of its own, this
-          just saves re-typing who you are; nothing security-sensitive rides
-          on it. ── */}
+      {/* ── Floating Send Drive launcher ── */}
       <button
-        onClick={() => window.open(
-          `https://senddrive.bcim.in/${user?.email ? `?from=${encodeURIComponent(user.email)}` : ''}`,
-          '_blank', 'noopener,noreferrer'
-        )}
+        onClick={() => setActiveTool(t => t === 'senddrive' ? null : 'senddrive')}
         title="Send Drive — send large files"
         className="hidden md:flex fixed bottom-[84px] right-6 z-40 w-11 h-11 rounded-full items-center justify-center text-white shadow-lg transition-transform hover:scale-105 print:hidden"
-        style={{ background: 'linear-gradient(135deg, #059669, #047857)', boxShadow: '0 8px 24px rgba(5,150,105,0.4)' }}
+        style={{ background: activeTool === 'senddrive' ? '#047857' : 'linear-gradient(135deg, #059669, #047857)', boxShadow: '0 8px 24px rgba(5,150,105,0.4)' }}
       >
         <Send className="w-4 h-4" />
       </button>
 
-      {/* ── Floating PDF Tool launcher — quick access to the external PDF utility
-          app, stacked above Send Drive. Opens in a new tab. ── */}
+      {/* ── Floating PDF Tool launcher ── */}
       <button
-        onClick={() => window.open('https://pdf.bcim.in/', '_blank', 'noopener,noreferrer')}
+        onClick={() => setActiveTool(t => t === 'pdf' ? null : 'pdf')}
         title="PDF Tools — merge, split, convert"
         className="hidden md:flex fixed bottom-[144px] right-6 z-40 w-11 h-11 rounded-full items-center justify-center text-white shadow-lg transition-transform hover:scale-105 print:hidden"
-        style={{ background: 'linear-gradient(135deg, #DC2626, #B91C1C)', boxShadow: '0 8px 24px rgba(220,38,38,0.4)' }}
+        style={{ background: activeTool === 'pdf' ? '#B91C1C' : 'linear-gradient(135deg, #DC2626, #B91C1C)', boxShadow: '0 8px 24px rgba(220,38,38,0.4)' }}
       >
         <FileText className="w-4 h-4" />
       </button>
+
+      {/* ── Embedded Tool Side Panel ── */}
+      {activeTool && createPortal(
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-[60] bg-black/20 backdrop-blur-[1px] print:hidden"
+            onClick={() => setActiveTool(null)}
+          />
+          {/* Panel */}
+          <div
+            className="fixed top-0 right-0 bottom-0 z-[61] flex flex-col bg-white shadow-2xl print:hidden"
+            style={{
+              width: 'min(780px, 92vw)',
+              animation: 'slideInFromRight 0.25s cubic-bezier(0.32,0.72,0,1)',
+            }}
+          >
+            {/* Panel header */}
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 flex-shrink-0"
+              style={{ background: activeTool === 'pdf' ? 'linear-gradient(135deg,#DC2626,#B91C1C)' : 'linear-gradient(135deg,#059669,#047857)' }}>
+              <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0">
+                {activeTool === 'pdf' ? <FileText className="w-4 h-4 text-white" /> : <Send className="w-4 h-4 text-white" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-white leading-none">
+                  {activeTool === 'pdf' ? 'PDF Toolkit' : 'Send Drive'}
+                </p>
+                <p className="text-xs text-white/70 mt-0.5 truncate">
+                  {activeTool === 'pdf' ? 'Merge · Split · Convert · Compress' : 'Send large files securely'}
+                </p>
+              </div>
+              <a
+                href={activeTool === 'pdf' ? 'https://pdf.bcim.in/' : `https://senddrive.bcim.in/${user?.email ? `?from=${encodeURIComponent(user.email)}` : ''}`}
+                target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-medium transition-colors flex-shrink-0"
+                title="Open in new tab"
+              >
+                <ArrowUpRight className="w-3.5 h-3.5" /> New tab
+              </a>
+              <button
+                onClick={() => setActiveTool(null)}
+                className="w-8 h-8 rounded-lg bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors flex-shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* iframe */}
+            <iframe
+              key={activeTool}
+              src={activeTool === 'pdf'
+                ? 'https://pdf.bcim.in/'
+                : `https://senddrive.bcim.in/${user?.email ? `?from=${encodeURIComponent(user.email)}` : ''}`
+              }
+              title={activeTool === 'pdf' ? 'PDF Toolkit' : 'Send Drive'}
+              className="flex-1 w-full border-0"
+              allow="clipboard-read; clipboard-write; downloads"
+            />
+          </div>
+          <style>{`@keyframes slideInFromRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`}</style>
+        </>,
+        document.body
+      )}
 
       <CommandPalette
         isOpen={paletteOpen}
