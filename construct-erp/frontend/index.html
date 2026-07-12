@@ -31,9 +31,27 @@
   <div id="root"></div>
   <script type="module" src="/src/index.jsx"></script>
   <script>
+    // PWA service worker + AUTO-UPDATE. Without the controllerchange reload
+    // below, a new deploy would keep serving the old cached bundle until the
+    // user manually cleared their cache — the recurring "my changes aren't
+    // showing in production" problem. The SW calls skipWaiting()+clients.claim(),
+    // so a new version takes control immediately; this listener then reloads
+    // the page once so the fresh assets actually render.
     if ('serviceWorker' in navigator) {
+      var hadController = !!navigator.serviceWorker.controller;
+      var swRefreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (swRefreshing) return;
+        swRefreshing = true;
+        // Reload only when REPLACING an existing controller (a real update) —
+        // not on the very first SW install for a brand-new visitor.
+        if (hadController) window.location.reload();
+      });
       window.addEventListener('load', function () {
-        navigator.serviceWorker.register('/sw.js').catch(function (e) {
+        navigator.serviceWorker.register('/sw.js').then(function (reg) {
+          // Proactively check for a newer SW on every page load.
+          reg.update();
+        }).catch(function (e) {
           console.warn('[SW] Registration failed:', e);
         });
       });

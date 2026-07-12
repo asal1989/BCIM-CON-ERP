@@ -6,9 +6,7 @@ import App from './App';
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<React.StrictMode><App /></React.StrictMode>);
 
-// Register PWA service worker (enables offline + iPhone "Add to Home Screen")
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
-  });
-}
+// PWA service worker registration + auto-update lives in index.html (single
+// source of truth, including the controllerchange auto-reload). Registering
+// again here would be redundant — the inline script handles it before this
+// bundle even parses.
