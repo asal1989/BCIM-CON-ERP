@@ -24,9 +24,9 @@ function CtrlBtn({ icon: Icon, active, danger, label, onClick }) {
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
         background: danger ? 'linear-gradient(135deg,#EF4444,#DC2626)' : active ? 'rgba(239,68,68,0.25)' : 'rgba(255,255,255,0.1)',
         border: active && !danger ? '1px solid rgba(239,68,68,0.4)' : '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 18, padding: '14px 22px', cursor: 'pointer', color: '#fff',
+        borderRadius: 18, padding: '10px 16px', cursor: 'pointer', color: '#fff',
         transition: 'opacity 0.15s, transform 0.15s, background 0.15s',
-        minWidth: 72, boxShadow: danger ? '0 6px 20px rgba(239,68,68,0.35)' : 'none',
+        minWidth: 60, boxShadow: danger ? '0 6px 20px rgba(239,68,68,0.35)' : 'none',
       }}>
       <Icon size={22} />
       <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)', fontWeight: 500 }}>{label}</span>
@@ -147,9 +147,10 @@ export default function CallWindow({
       {/* ── Controls ── */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        gap: 14, padding: '22px 24px',
+        gap: 10, padding: '16px 12px',
         background: 'rgba(5,10,20,0.88)', backdropFilter: 'blur(12px)',
         flexShrink: 0, borderTop: '1px solid rgba(255,255,255,0.05)',
+        flexWrap: 'wrap',
       }}>
         <CtrlBtn icon={isMuted ? MicOff : Mic} active={isMuted} label={isMuted ? 'Unmute' : 'Mute'} onClick={onToggleMute} />
         {isVideo && <CtrlBtn icon={isCameraOff ? VideoOff : Video} active={isCameraOff} label={isCameraOff ? 'Cam On' : 'Cam Off'} onClick={onToggleCamera} />}

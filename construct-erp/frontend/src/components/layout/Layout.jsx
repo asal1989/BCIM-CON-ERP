@@ -2441,7 +2441,7 @@ export default function Layout() {
           floating popup (or jumps to /chat for a channel) instead of always
           navigating to the full chat page. ── */}
       {location.pathname !== '/chat' && (
-        <div ref={chatMenuRef} className="hidden md:block fixed bottom-6 right-6 z-40 print:hidden">
+        <div ref={chatMenuRef} className="block fixed bottom-[58px] md:bottom-6 right-4 md:right-6 z-40 print:hidden">
           {chatMenuOpen && (
             <div style={{
               position: 'absolute', bottom: 56, right: 0, width: 320, maxHeight: 420,
@@ -2494,7 +2494,7 @@ export default function Layout() {
           <button
             onClick={() => setChatMenuOpen(v => !v)}
             title="Team Chat"
-            className="flex w-11 h-11 rounded-full items-center justify-center text-white shadow-lg transition-transform hover:scale-105 relative"
+            className="flex w-9 h-9 md:w-11 md:h-11 rounded-full items-center justify-center text-white shadow-lg transition-transform active:scale-95 hover:scale-105 relative"
             style={{ background: 'linear-gradient(135deg, #4F46E5, #4338CA)', boxShadow: '0 8px 24px rgba(79,70,229,0.4)' }}
           >
             <MessageSquare className="w-5 h-5" />
@@ -2507,27 +2507,27 @@ export default function Layout() {
         </div>
       )}
 
-      {/* ── Floating Send Drive launcher ── */}
+      {/* ── Floating Send Drive launcher — visible on all screen sizes ── */}
       <button
         onClick={() => setActiveTool(t => t === 'senddrive' ? null : 'senddrive')}
         title="Send Drive — send large files"
-        className="hidden md:flex fixed bottom-[84px] right-6 z-40 w-11 h-11 rounded-full items-center justify-center text-white shadow-lg transition-transform hover:scale-105 print:hidden"
+        className="flex fixed bottom-[108px] md:bottom-[84px] right-4 md:right-6 z-40 w-9 h-9 md:w-11 md:h-11 rounded-full items-center justify-center text-white shadow-lg transition-transform active:scale-95 hover:scale-105 print:hidden"
         style={{ background: activeTool === 'senddrive' ? '#047857' : 'linear-gradient(135deg, #059669, #047857)', boxShadow: '0 8px 24px rgba(5,150,105,0.4)' }}
       >
-        <Send className="w-4 h-4" />
+        <Send className="w-3.5 h-3.5 md:w-4 md:h-4" />
       </button>
 
-      {/* ── Floating PDF Tool launcher ── */}
+      {/* ── Floating PDF Tool launcher — visible on all screen sizes ── */}
       <button
         onClick={() => setActiveTool(t => t === 'pdf' ? null : 'pdf')}
         title="PDF Tools — merge, split, convert"
-        className="hidden md:flex fixed bottom-[144px] right-6 z-40 w-11 h-11 rounded-full items-center justify-center text-white shadow-lg transition-transform hover:scale-105 print:hidden"
+        className="flex fixed bottom-[156px] md:bottom-[144px] right-4 md:right-6 z-40 w-9 h-9 md:w-11 md:h-11 rounded-full items-center justify-center text-white shadow-lg transition-transform active:scale-95 hover:scale-105 print:hidden"
         style={{ background: activeTool === 'pdf' ? '#B91C1C' : 'linear-gradient(135deg, #DC2626, #B91C1C)', boxShadow: '0 8px 24px rgba(220,38,38,0.4)' }}
       >
-        <FileText className="w-4 h-4" />
+        <FileText className="w-3.5 h-3.5 md:w-4 md:h-4" />
       </button>
 
-      {/* ── Embedded Tool Side Panel ── */}
+      {/* ── Embedded Tool Panel — full-screen on mobile, side panel on desktop ── */}
       {activeTool && createPortal(
         <>
           {/* Backdrop */}
@@ -2537,11 +2537,8 @@ export default function Layout() {
           />
           {/* Panel */}
           <div
-            className="fixed top-0 right-0 bottom-0 z-[61] flex flex-col bg-white shadow-2xl print:hidden"
-            style={{
-              width: 'min(780px, 92vw)',
-              animation: 'slideInFromRight 0.25s cubic-bezier(0.32,0.72,0,1)',
-            }}
+            className="fixed top-0 right-0 bottom-0 z-[61] flex flex-col bg-white shadow-2xl print:hidden w-full md:w-[780px] md:max-w-[92vw]"
+            style={{ animation: 'slideInFromRight 0.25s cubic-bezier(0.32,0.72,0,1)' }}
           >
             {/* Panel header */}
             <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 flex-shrink-0"

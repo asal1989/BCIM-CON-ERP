@@ -1,7 +1,7 @@
 // src/pages/ERPChat.jsx — ERP Team Chat with separate Channels / DMs tabs
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Pin, X, Hash, MessageSquare, Users, Phone, Video } from 'lucide-react';
+import { Search, Pin, X, Hash, MessageSquare, Users, Phone, Video, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useAuthStore from '../store/authStore';
 import api from '../api/client';
@@ -155,6 +155,18 @@ export default function ERPChat() {
 
   // ── Sidebar search ────────────────────────────────────────────────────────────
   const [sidebarQ, setSidebarQ] = useState('');
+
+  // ── Mobile layout: show sidebar or main pane (not both) ──────────────────────
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  const [mobilePaneOpen, setMobilePaneOpen] = useState(false); // true = show main pane
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  // When a channel or DM is selected, open main pane on mobile
+  const openMainPane = () => { if (isMobile) setMobilePaneOpen(true); };
+  const backToSidebar = () => setMobilePaneOpen(false);
 
   // ── Notification permission ───────────────────────────────────────────────────
   const [notifPerm, setNotifPerm]           = useState('Notification' in window ? Notification.permission : 'unsupported');
@@ -392,7 +404,15 @@ export default function ERPChat() {
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
         {/* ── SIDEBAR ─────────────────────────────────────────────────────────── */}
-        <aside style={{ width: 340, flexShrink: 0, display: 'flex', flexDirection: 'column', background: WA.sidebar, borderRight: `1px solid ${WA.divider}`, overflow: 'hidden' }}>
+        <aside style={{
+          width: isMobile ? '100%' : 340,
+          flexShrink: 0,
+          display: isMobile && mobilePaneOpen ? 'none' : 'flex',
+          flexDirection: 'column',
+          background: WA.sidebar,
+          borderRight: `1px solid ${WA.divider}`,
+          overflow: 'hidden',
+        }}>
 
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: `1px solid ${WA.divider}`, flexShrink: 0 }}>
@@ -422,7 +442,7 @@ export default function ERPChat() {
                 )}
                 {filteredChannels.map(ch => (
                   <ChannelItem key={ch.id} ch={ch} isActive={channel === ch.id} badge={unread[ch.id] || 0}
-                    onClick={() => setChannel(ch.id)} />
+                    onClick={() => { setChannel(ch.id); openMainPane(); }} />
                 ))}
               </>
             )}
@@ -436,7 +456,7 @@ export default function ERPChat() {
                   const dmId = `dm-${[user?.id, emp.id].sort().join('-')}`;
                   return (
                     <DmItem key={emp.id} emp={emp} isActive={dmPeer?.id === emp.id} badge={unread[dmId] || 0}
-                      onClick={() => { setDmPeer(emp); markRead(dmId); }} />
+                      onClick={() => { setDmPeer(emp); markRead(dmId); openMainPane(); }} />
                   );
                 })}
               </>
@@ -445,13 +465,24 @@ export default function ERPChat() {
         </aside>
 
         {/* ── MAIN PANE ───────────────────────────────────────────────────────── */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+        <div style={{
+          flex: 1,
+          display: isMobile && !mobilePaneOpen ? 'none' : 'flex',
+          flexDirection: 'column',
+          minWidth: 0,
+          overflow: 'hidden',
+        }}>
 
           {/* ── CHANNELS PANE ──────────────────────────────────────────────────── */}
           {tab === 'channels' && (
             <>
               {/* Channel header */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px', background: WA.sidebar, borderBottom: `1px solid ${WA.divider}`, flexShrink: 0 }}>
+                {isMobile && (
+                  <button onClick={backToSidebar} style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', cursor: 'pointer', background: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <ArrowLeft size={20} color={WA.dark} />
+                  </button>
+                )}
                 <div style={{ width: 40, height: 40, borderRadius: '50%', background: WA.green, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <Hash size={18} color="#fff" />
                 </div>
@@ -532,6 +563,11 @@ export default function ERPChat() {
                 <>
                   {/* DM header */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px', background: WA.sidebar, borderBottom: `1px solid ${WA.divider}`, flexShrink: 0 }}>
+                    {isMobile && (
+                      <button onClick={() => { backToSidebar(); setDmPeer(null); }} style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', cursor: 'pointer', background: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <ArrowLeft size={20} color={WA.dark} />
+                      </button>
+                    )}
                     <div style={{ position: 'relative', flexShrink: 0 }}>
                       <Av name={dmPeerName} size={40} photo={dmPeer.profile_photo_url} />
                       <span style={{ position: 'absolute', bottom: 1, right: 1, width: 10, height: 10, borderRadius: '50%', background: WA.greenBadge, border: `2px solid ${WA.sidebar}` }} />
