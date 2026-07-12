@@ -131,6 +131,30 @@ router.get('/turn-credentials', (req, res) => {
   res.json({ iceServers, turnConfigured: !!(username && credential) });
 });
 
+// ── GET /chat/previews — last message per conversation for the whole sidebar ──
+// Returns a flat map: { channelId: { text, file_name, sender_name, created_at } }
+// Covers both public channels and DM channels (dm-uuid-uuid format).
+router.get('/previews', async (req, res) => {
+  await ensureTable();
+  const result = await query(`
+    SELECT DISTINCT ON (channel)
+      channel, text, file_name, sender_name, sender_id, created_at
+    FROM chat_messages
+    ORDER BY channel, created_at DESC
+  `);
+  const previews = {};
+  for (const row of result.rows) {
+    previews[row.channel] = {
+      text:        row.text,
+      file_name:   row.file_name,
+      sender_name: row.sender_name,
+      sender_id:   row.sender_id,
+      created_at:  row.created_at,
+    };
+  }
+  res.json({ previews });
+});
+
 // ── GET /chat/channels — list channels with last message + unread count ───────
 router.get('/channels', async (req, res) => {
   await ensureTable();

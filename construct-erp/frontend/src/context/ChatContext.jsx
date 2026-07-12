@@ -131,6 +131,14 @@ export function ChatProvider({ children }) {
     api.get('/users').then(r => setEmployees((r.data?.data || []).filter(u => u.is_active !== false))).catch(() => {});
   }, [user?.id]);
 
+  // Pre-load last-message previews so the sidebar sorts by recency on first render
+  useEffect(() => {
+    if (!user?.id) return;
+    api.get('/chat/previews')
+      .then(r => { if (r.data?.previews) setPreviews(r.data.previews); })
+      .catch(() => {});
+  }, [user?.id]);
+
   const findEmployeeForDm = useCallback((channel) => {
     if (!channel?.startsWith('dm-') || !user?.id) return null;
     const raw = channel.slice(3);
@@ -224,6 +232,8 @@ export function ChatProvider({ children }) {
     shareState:  ss.shareState,
     shareInfo:   ss.shareInfo,
     SHARE_STATE,
+    // previews exposed so ERPChat can show last-message in conv list
+    previews,
   };
 
   return (

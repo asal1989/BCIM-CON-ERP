@@ -144,6 +144,9 @@ function ConvCard({ name, sub, avatar, photo, isActive, badge, isOnline, isGroup
   );
 }
 
+// Width of sidebar per view
+const SIDEBAR_W = { chat: 320, calls: 380, meetings: 360 };
+
 function ConvListPanel({
   tab, setTab, sidebarQ, setSidebarQ,
   filteredChannels, filteredEmployees,
@@ -151,6 +154,8 @@ function ConvListPanel({
   unread, typing, user, connected, openMainPane, markRead,
   channelUnread, dmUnread, isMobile, mobilePaneOpen,
   previews, mainView, setMainView, onNewMeeting,
+  // Calls pane props
+  callsCurrentUserId, callsEmployees, callsStartCall,
 }) {
   const [convTab, setConvTab] = useState('all');
 
@@ -179,171 +184,183 @@ function ConvListPanel({
 
   if (isMobile && mobilePaneOpen) return null;
 
+  const sidebarWidth = isMobile ? '100%' : SIDEBAR_W[mainView] ?? 320;
+
   return (
     <div style={{
-      width: isMobile ? '100%' : 320,
-      flexShrink: 0,
+      width: sidebarWidth, flexShrink: 0,
       display: 'flex', flexDirection: 'column',
-      background: C.card,
-      borderRight: `1px solid ${C.border}`,
-      overflow: 'hidden',
+      background: C.card, borderRight: `1px solid ${C.border}`,
+      overflow: 'hidden', transition: 'width 0.2s ease',
     }}>
-      {/* Header */}
-      <div style={{ padding: '14px 16px 10px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+
+      {/* ── Sidebar header (always visible) ── */}
+      <div style={{ padding: '12px 14px 10px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: mainView === 'chat' ? 8 : 0 }}>
           <div>
-            <h2 style={{ fontSize: 17, fontWeight: 700, color: C.text, letterSpacing: '-0.02em' }}>Team Chat</h2>
-            <p style={{ fontSize: 11.5, color: C.muted, marginTop: 1 }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: connected ? C.green : C.subtle, display: 'inline-block' }} />
-                {connected ? 'Connected' : 'Connecting…'}
-              </span>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: C.text, letterSpacing: '-0.02em' }}>
+              {mainView === 'calls' ? 'Call Logs' : mainView === 'meetings' ? 'Teams Meetings' : 'Team Chat'}
+            </h2>
+            <p style={{ fontSize: 11, color: C.muted, marginTop: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: connected ? C.green : C.subtle, display: 'inline-block' }} />
+              {connected ? 'Connected' : 'Connecting…'}
             </p>
           </div>
-          {/* New Meeting button */}
-          <motion.button
-            whileTap={{ scale: 0.92 }}
-            onClick={onNewMeeting}
+          <motion.button whileTap={{ scale: 0.92 }} onClick={onNewMeeting}
             title="Schedule Teams Meeting"
             style={{
-              display: 'flex', alignItems: 'center', gap: 5,
-              padding: '5px 10px', borderRadius: 9, border: 'none',
-              background: '#5058E5', cursor: 'pointer',
-              fontSize: 12, fontWeight: 600, color: '#fff',
-              boxShadow: '0 2px 8px rgba(80,88,229,0.35)',
+              display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px',
+              borderRadius: 9, border: 'none', background: '#5058E5', cursor: 'pointer',
+              fontSize: 11.5, fontWeight: 600, color: '#fff',
+              boxShadow: '0 2px 8px rgba(80,88,229,0.3)',
             }}>
-            <CalendarDays size={13} />
-            New Meeting
+            <CalendarDays size={12} /> Meeting
           </motion.button>
         </div>
 
-        {/* Search */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          background: C.bg, borderRadius: 10, padding: '7px 12px',
-          border: `1px solid ${C.border}`,
-        }}>
-          <Search size={14} color={C.subtle} />
-          <input
-            value={sidebarQ} onChange={e => setSidebarQ(e.target.value)}
-            placeholder="Search conversations…"
-            style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13.5, color: C.text }}
-          />
-          {sidebarQ && (
-            <button onClick={() => setSidebarQ('')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0 }}>
-              <X size={13} color={C.subtle} />
-            </button>
-          )}
-        </div>
+        {/* Search bar — chat view only */}
+        {mainView === 'chat' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: C.bg, borderRadius: 10, padding: '7px 12px', border: `1px solid ${C.border}` }}>
+            <Search size={14} color={C.subtle} />
+            <input value={sidebarQ} onChange={e => setSidebarQ(e.target.value)}
+              placeholder="Search conversations…"
+              style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13.5, color: C.text }} />
+            {sidebarQ && (
+              <button onClick={() => setSidebarQ('')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0 }}>
+                <X size={13} color={C.subtle} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Main-view nav: Chat / Calls / Meetings */}
-      <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+      {/* ── Main-view tabs: Chat / Calls / Meetings ── */}
+      <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, flexShrink: 0, background: C.card }}>
         {[
-          { id: 'chat',     label: 'Chat',     Icon: MessageSquare },
-          { id: 'calls',    label: 'Calls',    Icon: Phone },
-          { id: 'meetings', label: 'Meetings', Icon: CalendarDays },
-        ].map(({ id, label, Icon }) => {
+          { id: 'chat',     label: 'Chats',    Icon: MessageSquare, badge: totalUnread },
+          { id: 'calls',    label: 'Calls',    Icon: Phone,         badge: 0 },
+          { id: 'meetings', label: 'Meetings', Icon: CalendarDays,  badge: 0 },
+        ].map(({ id, label, Icon, badge }) => {
           const active = mainView === id;
           return (
             <button key={id} onClick={() => setMainView(id)}
               style={{
                 flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-                padding: '8px 0 7px', border: 'none', cursor: 'pointer', background: 'none',
+                padding: '9px 0 8px', border: 'none', cursor: 'pointer',
+                background: active ? C.primaryLight : 'none',
                 borderBottom: active ? `2px solid ${C.primary}` : '2px solid transparent',
                 color: active ? C.primary : C.muted,
                 fontSize: 10.5, fontWeight: active ? 700 : 500, transition: 'all 0.15s',
+                position: 'relative',
               }}>
-              <Icon size={15} />
+              <Icon size={16} />
               {label}
+              {badge > 0 && (
+                <span style={{
+                  position: 'absolute', top: 6, right: '50%', marginRight: -20,
+                  background: C.red, color: '#fff', borderRadius: 999,
+                  fontSize: 9, fontWeight: 700, minWidth: 16, height: 16,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px',
+                }}>{badge > 99 ? '99+' : badge}</span>
+              )}
             </button>
           );
         })}
       </div>
 
-      {/* Conv filter tabs (only when in chat view) */}
+      {/* ── CHATS view ── */}
       {mainView === 'chat' && (
-        <div style={{
-          display: 'flex', gap: 2, padding: '6px 10px 0',
-          borderBottom: `1px solid ${C.border}`, flexShrink: 0,
-        }}>
-          {CONV_TABS.map(t => {
-            const isActive = convTab === t.id;
-            const badge = t.id === 'unread' ? totalUnread : 0;
-            return (
-              <button key={t.id} onClick={() => setConvTab(t.id)}
-                style={{
-                  padding: '4px 10px 7px', border: 'none', cursor: 'pointer',
-                  background: 'none', fontSize: 12.5, fontWeight: isActive ? 700 : 500,
-                  color: isActive ? C.primary : C.muted,
-                  borderBottom: isActive ? `2px solid ${C.primary}` : '2px solid transparent',
-                  marginBottom: -1, transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: 4,
-                }}>
-                {t.label}
-                {badge > 0 && (
-                  <span style={{ background: C.red, color: '#fff', borderRadius: 999, fontSize: 9, fontWeight: 700, minWidth: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>
-                    {badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Conv list (only when in chat view) */}
-      {mainView === 'chat' && (
-        <div style={{ flex: 1, overflowY: 'auto' }}>
-          <AnimatePresence>
-            {displayList.length === 0 && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                style={{ padding: '40px 16px', textAlign: 'center', color: C.subtle, fontSize: 13 }}>
-                No conversations found
-              </motion.div>
-            )}
-            {displayList.map(({ type, data, id: convId }) => {
-              const preview = previews?.[convId];
-              if (type === 'channel') {
-                const ch = data;
-                const badge = unread[ch.id] || 0;
-                const isActive = channel === ch.id && (!isMobile || !mobilePaneOpen);
-                const lastTyping = typing[ch.id];
-                const previewText = preview?.text
-                  ? preview.text.slice(0, 60) + (preview.text.length > 60 ? '…' : '')
-                  : ch.desc;
-                return (
-                  <ConvCard key={`ch-${ch.id}`} name={ch.label} sub={previewText}
-                    isActive={isActive} badge={badge} isGroup color={chColor(ch.id)}
-                    timestamp={preview?.created_at ? fmtTime(preview.created_at) : ''}
-                    isTyping={lastTyping}
-                    onClick={() => { setChannel(ch.id); setTab('channels'); setMainView('chat'); openMainPane(); }} />
-                );
-              } else {
-                const emp = data;
-                const name = emp.full_name || emp.name || 'Employee';
-                const dmId = convId;
-                const badge = unread[dmId] || 0;
-                const isActive = dmPeer?.id === emp.id && (!isMobile || !mobilePaneOpen);
-                const lastTyping = typing[dmId];
-                const previewText = preview?.text
-                  ? preview.text.slice(0, 60) + (preview.text.length > 60 ? '…' : '')
-                  : (emp.designation_name || emp.designation || 'Direct message');
-                return (
-                  <ConvCard key={`dm-${emp.id}`} name={name} sub={previewText}
-                    photo={emp.profile_photo_url} isActive={isActive} badge={badge}
-                    isOnline isGroup={false}
-                    timestamp={preview?.created_at ? fmtTime(preview.created_at) : ''}
-                    isTyping={lastTyping}
-                    onClick={() => { setDmPeer(emp); setTab('dms'); setMainView('chat'); markRead(dmId); openMainPane(); }} />
-                );
-              }
+        <>
+          {/* Filter tabs */}
+          <div style={{ display: 'flex', gap: 2, padding: '6px 10px 0', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+            {CONV_TABS.map(t => {
+              const isActive = convTab === t.id;
+              const badge = t.id === 'unread' ? totalUnread : 0;
+              return (
+                <button key={t.id} onClick={() => setConvTab(t.id)}
+                  style={{
+                    padding: '4px 10px 7px', border: 'none', cursor: 'pointer',
+                    background: 'none', fontSize: 12.5, fontWeight: isActive ? 700 : 500,
+                    color: isActive ? C.primary : C.muted,
+                    borderBottom: isActive ? `2px solid ${C.primary}` : '2px solid transparent',
+                    marginBottom: -1, transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: 4,
+                  }}>
+                  {t.label}
+                  {badge > 0 && (
+                    <span style={{ background: C.red, color: '#fff', borderRadius: 999, fontSize: 9, fontWeight: 700, minWidth: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>
+                      {badge}
+                    </span>
+                  )}
+                </button>
+              );
             })}
-          </AnimatePresence>
-        </div>
+          </div>
+
+          {/* Conversation list */}
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            <AnimatePresence>
+              {displayList.length === 0 && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                  style={{ padding: '40px 16px', textAlign: 'center', color: C.subtle, fontSize: 13 }}>
+                  No conversations found
+                </motion.div>
+              )}
+              {displayList.map(({ type, data, id: convId }) => {
+                const preview = previews?.[convId];
+                if (type === 'channel') {
+                  const ch = data;
+                  const badge = unread[ch.id] || 0;
+                  const isActive = channel === ch.id && (!isMobile || !mobilePaneOpen);
+                  const lastTyping = typing[ch.id];
+                  const previewText = preview?.text
+                    ? (preview.sender_name ? `${preview.sender_name}: ` : '') + preview.text.slice(0, 50)
+                    : ch.desc;
+                  return (
+                    <ConvCard key={`ch-${ch.id}`} name={ch.label} sub={previewText}
+                      isActive={isActive} badge={badge} isGroup color={chColor(ch.id)}
+                      timestamp={preview?.created_at ? fmtTime(preview.created_at) : ''}
+                      isTyping={lastTyping}
+                      onClick={() => { setChannel(ch.id); setTab('channels'); openMainPane(); }} />
+                  );
+                } else {
+                  const emp = data;
+                  const name = emp.full_name || emp.name || 'Employee';
+                  const dmId = convId;
+                  const badge = unread[dmId] || 0;
+                  const isActive = dmPeer?.id === emp.id && (!isMobile || !mobilePaneOpen);
+                  const lastTyping = typing[dmId];
+                  const previewText = preview?.text
+                    ? preview.text.slice(0, 55) + (preview.text.length > 55 ? '…' : '')
+                    : (emp.designation_name || emp.designation || 'Direct message');
+                  return (
+                    <ConvCard key={`dm-${emp.id}`} name={name} sub={previewText}
+                      photo={emp.profile_photo_url} isActive={isActive} badge={badge}
+                      isOnline isGroup={false}
+                      timestamp={preview?.created_at ? fmtTime(preview.created_at) : ''}
+                      isTyping={lastTyping}
+                      onClick={() => { setDmPeer(emp); setTab('dms'); markRead(dmId); openMainPane(); }} />
+                  );
+                }
+              })}
+            </AnimatePresence>
+          </div>
+        </>
       )}
 
-      {/* Spacer when not in chat view (list is hidden, nav fills top) */}
-      {mainView !== 'chat' && <div style={{ flex: 1 }} />}
+      {/* ── CALLS view (inline in sidebar, WhatsApp-style) ── */}
+      {mainView === 'calls' && (
+        <CallsPane
+          currentUserId={callsCurrentUserId}
+          employees={callsEmployees}
+          startCall={callsStartCall}
+          compact
+        />
+      )}
+
+      {/* ── MEETINGS view (inline in sidebar) ── */}
+      {mainView === 'meetings' && (
+        <MeetingsPane onNewMeeting={onNewMeeting} compact />
+      )}
     </div>
   );
 }
@@ -1117,7 +1134,7 @@ function CallLogRow({ log, currentUserId, onCallBack, employees }) {
   );
 }
 
-function CallsPane({ currentUserId, employees, startCall }) {
+function CallsPane({ currentUserId, employees, startCall, compact = false }) {
   const [logs, setLogs]       = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter]   = useState('all'); // all | missed | outgoing | incoming
@@ -1169,59 +1186,80 @@ function CallsPane({ currentUserId, employees, startCall }) {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bg }}>
       {/* Header */}
-      <div style={{ padding: '16px 20px 12px', background: C.card, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <div>
-            <h2 style={{ fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: '-0.02em' }}>Call Logs</h2>
-            <p style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{logs.length} call{logs.length !== 1 ? 's' : ''} total</p>
-          </div>
+      <div style={{ padding: compact ? '10px 14px 8px' : '16px 20px 12px', background: C.card, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: compact ? 8 : 12 }}>
+          <p style={{ fontSize: 12, color: C.muted }}>{logs.length} call{logs.length !== 1 ? 's' : ''} total</p>
           <motion.button whileTap={{ scale: 0.9 }} onClick={loadLogs}
             style={{
-              padding: '6px 14px', borderRadius: 9, border: `1px solid ${C.border}`,
-              background: C.bg, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: C.muted,
+              padding: '4px 10px', borderRadius: 8, border: `1px solid ${C.border}`,
+              background: C.bg, cursor: 'pointer', fontSize: 11.5, fontWeight: 600, color: C.muted,
             }}>
             Refresh
           </motion.button>
         </div>
 
         {/* Stats row */}
-        <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-          {[
-            { label: 'Total', val: logs.length, color: C.primary },
-            { label: 'Answered', val: logs.filter(l => l.status === 'answered').length, color: C.green },
-            { label: 'Missed', val: missedCount, color: '#EF4444' },
-            { label: 'Outgoing', val: logs.filter(l => l.caller_id === currentUserId).length, color: C.amber },
-          ].map(({ label, val, color }) => (
-            <div key={label} style={{
-              flex: 1, background: C.bg, borderRadius: 10, padding: '8px 10px',
-              border: `1px solid ${C.border}`, textAlign: 'center',
-            }}>
-              <p style={{ fontSize: 18, fontWeight: 700, color }}>{val}</p>
-              <p style={{ fontSize: 10.5, color: C.muted, marginTop: 1 }}>{label}</p>
-            </div>
-          ))}
-        </div>
+        {!compact && (
+          <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+            {[
+              { label: 'Total', val: logs.length, color: C.primary },
+              { label: 'Answered', val: logs.filter(l => l.status === 'answered').length, color: C.green },
+              { label: 'Missed', val: missedCount, color: '#EF4444' },
+              { label: 'Outgoing', val: logs.filter(l => l.caller_id === currentUserId).length, color: C.amber },
+            ].map(({ label, val, color }) => (
+              <div key={label} style={{ flex: 1, background: C.bg, borderRadius: 10, padding: '8px 10px', border: `1px solid ${C.border}`, textAlign: 'center' }}>
+                <p style={{ fontSize: 18, fontWeight: 700, color }}>{val}</p>
+                <p style={{ fontSize: 10.5, color: C.muted, marginTop: 1 }}>{label}</p>
+              </div>
+            ))}
+          </div>
+        )}
 
-        {/* Filter chips */}
-        <div style={{ display: 'flex', gap: 6 }}>
-          {[
-            { id: 'all', label: 'All' },
-            { id: 'missed', label: `Missed${missedCount > 0 ? ` (${missedCount})` : ''}` },
-            { id: 'incoming', label: 'Incoming' },
-            { id: 'outgoing', label: 'Outgoing' },
-          ].map(({ id, label }) => (
-            <button key={id} onClick={() => setFilter(id)}
-              style={{
-                padding: '4px 14px', borderRadius: 999, border: 'none', cursor: 'pointer',
-                background: filter === id ? C.primary : C.bg,
-                color: filter === id ? '#fff' : C.muted,
-                fontSize: 12.5, fontWeight: filter === id ? 700 : 500,
-                border: `1px solid ${filter === id ? C.primary : C.border}`,
-              }}>
-              {label}
-            </button>
-          ))}
-        </div>
+        {/* Compact stats */}
+        {compact && (
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+            {[
+              { label: 'All', val: logs.length, id: 'all', color: C.text },
+              { label: `Missed${missedCount > 0 ? ` (${missedCount})` : ''}`, val: null, id: 'missed', color: '#EF4444' },
+              { label: 'In', val: null, id: 'incoming', color: C.green },
+              { label: 'Out', val: null, id: 'outgoing', color: C.primary },
+            ].map(({ label, id, color }) => (
+              <button key={id} onClick={() => setFilter(id)}
+                style={{
+                  flex: 1, padding: '4px 6px', borderRadius: 8, cursor: 'pointer',
+                  background: filter === id ? C.primary : C.bg,
+                  color: filter === id ? '#fff' : C.muted,
+                  fontSize: 11, fontWeight: filter === id ? 700 : 500,
+                  border: `1px solid ${filter === id ? C.primary : C.border}`,
+                }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Filter chips (non-compact) */}
+        {!compact && (
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[
+              { id: 'all', label: 'All' },
+              { id: 'missed', label: `Missed${missedCount > 0 ? ` (${missedCount})` : ''}` },
+              { id: 'incoming', label: 'Incoming' },
+              { id: 'outgoing', label: 'Outgoing' },
+            ].map(({ id, label }) => (
+              <button key={id} onClick={() => setFilter(id)}
+                style={{
+                  padding: '4px 14px', borderRadius: 999, cursor: 'pointer',
+                  background: filter === id ? C.primary : C.bg,
+                  color: filter === id ? '#fff' : C.muted,
+                  fontSize: 12.5, fontWeight: filter === id ? 700 : 500,
+                  border: `1px solid ${filter === id ? C.primary : C.border}`,
+                }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Log list */}
@@ -1521,7 +1559,7 @@ function TeamsMeetingModal({ onClose, onMeetingCreated }) {
 }
 
 // ── MEETINGS PANE ─────────────────────────────────────────────────────────────
-function MeetingsPane({ onNewMeeting }) {
+function MeetingsPane({ onNewMeeting, compact = false }) {
   const TIPS = [
     { icon: '📅', title: 'Seminars', desc: 'Host company-wide seminars with up to 1,000 attendees via Teams Live Events.' },
     { icon: '👥', title: 'Team Meetings', desc: 'Virtual project sync-ups with screen sharing, chat, and recording built in.' },
@@ -1533,30 +1571,31 @@ function MeetingsPane({ onNewMeeting }) {
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bg }}>
       {/* Hero */}
       <div style={{
-        padding: '32px 32px 28px',
+        padding: compact ? '16px 16px 14px' : '32px 32px 28px',
         background: 'linear-gradient(135deg, #4F46E5 0%, #2563EB 100%)',
         flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
-          <div style={{ width: 52, height: 52, borderRadius: 16, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <TeamsLogo size={32} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: compact ? 12 : 20 }}>
+          <div style={{ width: compact ? 36 : 52, height: compact ? 36 : 52, borderRadius: 12, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <TeamsLogo size={compact ? 22 : 32} />
           </div>
           <div>
-            <h2 style={{ fontSize: 22, fontWeight: 800, color: '#fff', margin: 0, letterSpacing: '-0.03em' }}>Microsoft Teams</h2>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 3 }}>Virtual meetings, seminars & collaboration</p>
+            <h2 style={{ fontSize: compact ? 15 : 22, fontWeight: 800, color: '#fff', margin: 0, letterSpacing: '-0.02em' }}>Microsoft Teams</h2>
+            <p style={{ fontSize: compact ? 11 : 13, color: 'rgba(255,255,255,0.75)', marginTop: 2 }}>Virtual meetings & seminars</p>
           </div>
         </div>
         <motion.button
           whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
           onClick={onNewMeeting}
           style={{
-            display: 'inline-flex', alignItems: 'center', gap: 9,
-            padding: '12px 22px', borderRadius: 12, border: 'none',
+            display: 'inline-flex', alignItems: 'center', gap: 7,
+            padding: compact ? '9px 16px' : '12px 22px',
+            borderRadius: 10, border: 'none',
             background: '#fff', color: '#4F46E5',
-            fontSize: 15, fontWeight: 700, cursor: 'pointer',
+            fontSize: compact ? 13 : 15, fontWeight: 700, cursor: 'pointer',
             boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
           }}>
-          <CalendarDays size={17} />
+          <CalendarDays size={compact ? 14 : 17} />
           Schedule a Meeting
         </motion.button>
       </div>
@@ -1933,24 +1972,13 @@ export default function ERPChat() {
           isMobile={isMobile} mobilePaneOpen={mobilePaneOpen}
           mainView={mainView} setMainView={setMainView}
           onNewMeeting={() => setShowMeetingModal(true)}
+          callsCurrentUserId={user?.id} callsEmployees={employees} callsStartCall={startCall}
         />
 
-        {/* ── CALLS PANE ────────────────────────────────────────────────────── */}
-        {mainView === 'calls' && (
-          <CallsPane
-            currentUserId={user?.id} employees={employees} startCall={startCall}
-          />
-        )}
-
-        {/* ── MEETINGS PANE ─────────────────────────────────────────────────── */}
-        {mainView === 'meetings' && (
-          <MeetingsPane onNewMeeting={() => setShowMeetingModal(true)} />
-        )}
-
-        {/* ── MAIN CHAT AREA ─────────────────────────────────────────────────── */}
+        {/* ── MAIN CHAT AREA — always visible ───────────────────────────────── */}
         <div style={{
           flex: 1,
-          display: (mainView === 'calls' || mainView === 'meetings') ? 'none' : (isMobile && !mobilePaneOpen ? 'none' : 'flex'),
+          display: isMobile && !mobilePaneOpen ? 'none' : 'flex',
           flexDirection: 'column', minWidth: 0, overflow: 'hidden', background: C.bg,
         }}>
 
