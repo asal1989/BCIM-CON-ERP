@@ -1,24 +1,37 @@
 // src/screens/ChatThreadScreen.js — message thread for a channel or DM:
 // loads history via REST, listens for live messages via the shared socket
 // from ChatContext, and sends via REST + socket broadcast (same pattern as
-// the web app's ERPChat.jsx).
+// the web app's ERPChat.jsx). Includes file attachments, pin/unpin, typing
+// indicators, and in-thread search — all mirroring web's feature set (web's
+// voice/video calls and screen share are intentionally out of scope here;
+// they need react-native-webrtc and a native dev client, not Expo Go).
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
+import * as DocumentPicker from 'expo-document-picker';
 import Avatar from '../components/Avatar';
 import { useAuth } from '../context/AuthContext';
 import { useChat } from '../context/ChatContext';
-import { chatAPI } from '../api/client';
+import { chatAPI, uploadAPI } from '../api/client';
 import { chColor } from '../constants/chatChannels';
 import { theme } from '../theme';
 
 function fmtFull(ts) {
   if (!ts) return '';
   return new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function fmtSize(bytes) {
+  const n = Number(bytes);
+  if (!n) return '';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function renderMentions(text, isOwn) {
@@ -34,9 +47,10 @@ function renderMentions(text, isOwn) {
 export default function ChatThreadScreen() {
   const route = useRoute();
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { channel, title, isGroup, color, peer } = route.params;
   const { user } = useAuth();
-  const { socketRef, subscribe, joinChannel, employees, refreshPreviews } = useChat();
+  const { socketRef, subscribe, joinChannel, employees, refreshPreviews, typing, emitTyping, emitStopTyping } = useChat();
 
   const [messages, setMessages] = useState([]);
   const [loading, setLoading]   = useState(true);
@@ -44,7 +58,12 @@ export default function ChatThreadScreen() {
   const [sending, setSending]   = useState(false);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
+  const [pendingFile, setPendingFile] = useState(null); // { name, size, mimeType, uri, url, uploading, progress }
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState(null); // null = inactive
   const listRef = useRef(null);
+  const typingTimerRef = useRef(null);
 
   useEffect(() => {
     navigation.setOptions({
@@ -53,8 +72,13 @@ export default function ChatThreadScreen() {
       headerStyle: { backgroundColor: theme.colors.card },
       headerTitleStyle: { color: theme.colors.text, fontSize: 16, fontWeight: '700' },
       headerTintColor: theme.colors.text,
+      headerRight: () => (
+        <TouchableOpacity onPress={() => setSearchOpen(v => !v)} style={{ padding: 6 }}>
+          <MaterialCommunityIcons name={searchOpen ? 'close' : 'magnify'} size={22} color={theme.colors.text} />
+        </TouchableOpacity>
+      ),
     });
-  }, [navigation, title]);
+  }, [navigation, title, searchOpen]);
 
   useEffect(() => {
     setLoading(true);
@@ -67,17 +91,42 @@ export default function ChatThreadScreen() {
   }, [channel, joinChannel]);
 
   useEffect(() => {
-    const unsub = subscribe((msg) => {
-      if (msg.channel === channel) setMessages(prev => [...prev, msg]);
+    const unsub = subscribe((evt) => {
+      if (evt._type === 'message' && evt.channel === channel) {
+        setMessages(prev => [...prev, evt]);
+      } else if (evt._type === 'pin' && evt.channel === channel) {
+        setMessages(prev => prev.map(m => m.id === evt.id ? { ...m, pinned: evt.pinned } : m));
+      } else if (evt._type === 'react' && evt.channel === channel) {
+        setMessages(prev => prev.map(m => m.id === evt.id ? { ...m, reactions: evt.reactions } : m));
+      }
     });
     return unsub;
   }, [channel, subscribe]);
 
   useEffect(() => {
-    return () => { refreshPreviews(); chatAPI.markRead(channel).catch(() => {}); };
+    return () => {
+      refreshPreviews();
+      chatAPI.markRead(channel).catch(() => {});
+      emitStopTyping(channel);
+      clearTimeout(typingTimerRef.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channel]);
 
+  // ── In-thread search ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!searchQuery.trim()) { setSearchResults(null); return; }
+    const t = setTimeout(() => {
+      chatAPI.search(searchQuery, channel, 100)
+        .then(r => setSearchResults(r.data?.messages || []))
+        .catch(() => setSearchResults([]));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchQuery, channel]);
+
+  const visibleMessages = searchResults ?? messages;
+
+  // ── Mentions ───────────────────────────────────────────────────────────────
   const mentionList = useMemo(() => {
     if (!mentionOpen) return [];
     const q = mentionQuery.toLowerCase();
@@ -92,6 +141,10 @@ export default function ChatThreadScreen() {
     const match = val.match(/@([A-Za-z0-9 ]*)$/);
     if (match) { setMentionQuery(match[1]); setMentionOpen(true); }
     else { setMentionOpen(false); setMentionQuery(''); }
+
+    emitTyping(channel, user?.name || 'Someone');
+    clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = setTimeout(() => emitStopTyping(channel), 2000);
   };
 
   const selectMention = (emp) => {
@@ -100,13 +153,34 @@ export default function ChatThreadScreen() {
     setMentionOpen(false);
   };
 
+  // ── File attachment ───────────────────────────────────────────────────────
+  const pickFile = useCallback(async () => {
+    const res = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
+    if (res.canceled || !res.assets?.length) return;
+    const file = res.assets[0];
+    setPendingFile({ name: file.name, size: file.size, mimeType: file.mimeType, uri: file.uri, url: null, uploading: true, progress: 0 });
+    try {
+      const uploadRes = await uploadAPI.single(file, (pct) => {
+        setPendingFile(prev => (prev ? { ...prev, progress: pct } : prev));
+      });
+      setPendingFile(prev => (prev ? { ...prev, url: uploadRes.data.url, uploading: false } : prev));
+    } catch (err) {
+      Alert.alert('Upload failed', err?.response?.data?.error || `Could not upload ${file.name}`);
+      setPendingFile(null);
+    }
+  }, []);
+
+  // ── Send ───────────────────────────────────────────────────────────────────
   const send = useCallback(async () => {
     const text = input.trim();
-    if (!text || sending) return;
+    if ((!text && !pendingFile) || sending) return;
+    if (pendingFile?.uploading) return;
     setSending(true);
     setInput('');
+    const filePayload = pendingFile ? { file_name: pendingFile.name, file_size: pendingFile.size, file_url: pendingFile.url } : {};
+    setPendingFile(null);
     try {
-      const res = await chatAPI.send({ channel, text });
+      const res = await chatAPI.send({ channel, text: text || null, ...filePayload });
       setMessages(prev => [...prev, res.data.message]);
       socketRef.current?.emit('send_message', res.data.message);
     } catch (err) {
@@ -115,7 +189,8 @@ export default function ChatThreadScreen() {
     } finally {
       setSending(false);
     }
-  }, [input, sending, channel, socketRef]);
+    emitStopTyping(channel);
+  }, [input, pendingFile, sending, channel, socketRef, emitStopTyping]);
 
   const react = useCallback(async (id, emoji) => {
     try {
@@ -125,7 +200,31 @@ export default function ChatThreadScreen() {
     } catch {}
   }, [channel, socketRef]);
 
+  const togglePin = useCallback(async (id) => {
+    try {
+      const res = await chatAPI.pin(id);
+      const pinned = res.data.message.pinned;
+      setMessages(prev => prev.map(m => m.id === id ? { ...m, pinned } : m));
+      socketRef.current?.emit('pin_message', { id, channel, pinned });
+    } catch {}
+  }, [channel, socketRef]);
+
+  const onLongPressMessage = useCallback((item) => {
+    Alert.alert(
+      item.pinned ? 'Unpin message' : 'Pin message',
+      item.text ? item.text.slice(0, 80) : item.file_name || '',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: item.pinned ? 'Unpin' : 'Pin', onPress: () => togglePin(item.id) },
+      ]
+    );
+  }, [togglePin]);
+
+  const pinnedMessages = useMemo(() => messages.filter(m => m.pinned), [messages]);
+  const [pinsOpen, setPinsOpen] = useState(false);
+
   const headerColor = isGroup ? (color || chColor(channel)) : theme.colors.primary;
+  const typingName = typing?.[channel];
 
   return (
     <KeyboardAvoidingView
@@ -133,60 +232,113 @@ export default function ChatThreadScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
+      {searchOpen && (
+        <View style={styles.searchBar}>
+          <MaterialCommunityIcons name="magnify" size={16} color={theme.colors.muted} />
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search messages…"
+            placeholderTextColor={theme.colors.muted}
+            style={styles.searchInput}
+            autoFocus
+          />
+          {searchQuery ? <Text style={styles.searchCount}>{visibleMessages.length} result{visibleMessages.length !== 1 ? 's' : ''}</Text> : null}
+        </View>
+      )}
+
+      {!searchOpen && pinnedMessages.length > 0 && (
+        <TouchableOpacity style={styles.pinnedBanner} onPress={() => setPinsOpen(v => !v)}>
+          <MaterialCommunityIcons name="pin" size={14} color={theme.colors.warning} />
+          <Text style={styles.pinnedBannerText} numberOfLines={1}>
+            {pinnedMessages.length} pinned message{pinnedMessages.length !== 1 ? 's' : ''}
+          </Text>
+          <MaterialCommunityIcons name={pinsOpen ? 'chevron-up' : 'chevron-down'} size={16} color={theme.colors.muted} />
+        </TouchableOpacity>
+      )}
+      {pinsOpen && pinnedMessages.length > 0 && (
+        <View style={styles.pinsList}>
+          {pinnedMessages.map(m => (
+            <TouchableOpacity key={m.id} style={styles.pinRow} onPress={() => togglePin(m.id)}>
+              <Avatar name={m.sender_name} size={22} />
+              <Text style={styles.pinRowText} numberOfLines={1}>
+                <Text style={{ fontWeight: '700' }}>{m.sender_name}: </Text>
+                {m.text || m.file_name}
+              </Text>
+              <MaterialCommunityIcons name="close" size={14} color={theme.colors.muted} />
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color={theme.colors.primary} /></View>
       ) : (
         <FlatList
           ref={listRef}
-          data={messages}
+          data={visibleMessages}
           keyExtractor={m => String(m.id)}
           contentContainerStyle={{ padding: 12 }}
-          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+          onContentSizeChange={() => { if (!searchOpen) listRef.current?.scrollToEnd({ animated: true }); }}
           ListEmptyComponent={
             <View style={styles.center}>
               <MaterialCommunityIcons name="message-outline" size={40} color={theme.colors.muted} />
-              <Text style={styles.emptyText}>No messages yet — start the conversation!</Text>
+              <Text style={styles.emptyText}>{searchQuery ? 'No messages match your search' : 'No messages yet — start the conversation!'}</Text>
             </View>
           }
           renderItem={({ item, index }) => {
             const isOwn = item.sender_id === user?.id;
-            const prev = messages[index - 1];
+            const prev = visibleMessages[index - 1];
             const showName = !isOwn && (!prev || prev.sender_id !== item.sender_id);
             return (
-              <View style={[styles.msgRow, isOwn && styles.msgRowOwn]}>
-                {!isOwn && (
-                  <View style={styles.avatarSlot}>
-                    {showName ? <Avatar name={item.sender_name} size={30} /> : null}
-                  </View>
-                )}
-                <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}>
-                  {showName && !isOwn && <Text style={styles.senderName}>{item.sender_name}</Text>}
-                  {item.text ? (
-                    <Text style={[styles.msgText, isOwn && styles.msgTextOwn]}>
-                      {renderMentions(item.text, isOwn)}
-                    </Text>
-                  ) : null}
-                  {item.file_name ? (
-                    <View style={styles.fileChip}>
-                      <MaterialCommunityIcons name="file-outline" size={14} color={isOwn ? '#fff' : theme.colors.primary} />
-                      <Text style={[styles.fileChipText, isOwn && { color: '#fff' }]} numberOfLines={1}>{item.file_name}</Text>
-                    </View>
-                  ) : null}
-                  <Text style={[styles.msgTime, isOwn && styles.msgTimeOwn]}>{fmtFull(item.created_at)}</Text>
-                  {(item.reactions || []).length > 0 && (
-                    <View style={styles.reactionsRow}>
-                      {item.reactions.map(r => (
-                        <TouchableOpacity key={r.e} style={styles.reactionChip} onPress={() => react(item.id, r.e)}>
-                          <Text style={styles.reactionText}>{r.e} {r.c}</Text>
-                        </TouchableOpacity>
-                      ))}
+              <TouchableOpacity activeOpacity={0.85} onLongPress={() => onLongPressMessage(item)}>
+                <View style={[styles.msgRow, isOwn && styles.msgRowOwn]}>
+                  {!isOwn && (
+                    <View style={styles.avatarSlot}>
+                      {showName ? <Avatar name={item.sender_name} size={30} /> : null}
                     </View>
                   )}
+                  <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}>
+                    {showName && !isOwn && <Text style={styles.senderName}>{item.sender_name}</Text>}
+                    {item.pinned ? (
+                      <View style={styles.pinnedTag}>
+                        <MaterialCommunityIcons name="pin" size={10} color={isOwn ? '#BFDBFE' : theme.colors.warning} />
+                        <Text style={[styles.pinnedTagText, isOwn && { color: '#BFDBFE' }]}>Pinned</Text>
+                      </View>
+                    ) : null}
+                    {item.text ? (
+                      <Text style={[styles.msgText, isOwn && styles.msgTextOwn]}>
+                        {renderMentions(item.text, isOwn)}
+                      </Text>
+                    ) : null}
+                    {item.file_name ? (
+                      <View style={styles.fileChip}>
+                        <MaterialCommunityIcons name="file-outline" size={14} color={isOwn ? '#fff' : theme.colors.primary} />
+                        <Text style={[styles.fileChipText, isOwn && { color: '#fff' }]} numberOfLines={1}>{item.file_name}</Text>
+                      </View>
+                    ) : null}
+                    <Text style={[styles.msgTime, isOwn && styles.msgTimeOwn]}>{fmtFull(item.created_at)}</Text>
+                    {(item.reactions || []).length > 0 && (
+                      <View style={styles.reactionsRow}>
+                        {item.reactions.map(r => (
+                          <TouchableOpacity key={r.e} style={styles.reactionChip} onPress={() => react(item.id, r.e)}>
+                            <Text style={styles.reactionText}>{r.e} {r.c}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           }}
         />
+      )}
+
+      {typingName && !searchOpen && (
+        <View style={styles.typingRow}>
+          <Text style={styles.typingText}>{typingName} is typing…</Text>
+        </View>
       )}
 
       {mentionOpen && mentionList.length > 0 && (
@@ -200,7 +352,23 @@ export default function ChatThreadScreen() {
         </View>
       )}
 
-      <View style={styles.composer}>
+      {pendingFile && (
+        <View style={styles.pendingFile}>
+          <MaterialCommunityIcons name="file-outline" size={16} color={theme.colors.primary} />
+          <Text style={styles.pendingFileName} numberOfLines={1}>{pendingFile.name}</Text>
+          <Text style={styles.pendingFileMeta}>
+            {pendingFile.uploading ? `Uploading ${pendingFile.progress}%…` : fmtSize(pendingFile.size)}
+          </Text>
+          <TouchableOpacity onPress={() => setPendingFile(null)}>
+            <MaterialCommunityIcons name="close" size={16} color={theme.colors.muted} />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <View style={[styles.composer, { paddingBottom: Math.max(10, insets.bottom) }]}>
+        <TouchableOpacity style={styles.attachBtn} onPress={pickFile}>
+          <MaterialCommunityIcons name="paperclip" size={20} color={theme.colors.muted} />
+        </TouchableOpacity>
         <TextInput
           value={input}
           onChangeText={handleChangeText}
@@ -210,9 +378,9 @@ export default function ChatThreadScreen() {
           multiline
         />
         <TouchableOpacity
-          style={[styles.sendBtn, (!input.trim() || sending) && styles.sendBtnDisabled]}
+          style={[styles.sendBtn, (!input.trim() && !pendingFile || sending || pendingFile?.uploading) && styles.sendBtnDisabled]}
           onPress={send}
-          disabled={!input.trim() || sending}
+          disabled={(!input.trim() && !pendingFile) || sending || pendingFile?.uploading}
         >
           <MaterialCommunityIcons name="send" size={18} color="#fff" />
         </TouchableOpacity>
@@ -224,6 +392,22 @@ export default function ChatThreadScreen() {
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 48 },
   emptyText: { fontSize: 14, color: theme.colors.muted },
+  searchBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 8,
+    backgroundColor: theme.colors.card, borderBottomWidth: 1, borderColor: theme.colors.border,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: theme.colors.text },
+  searchCount: { fontSize: 11, color: theme.colors.muted },
+  pinnedBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8,
+    backgroundColor: '#FFFBEB', borderBottomWidth: 1, borderColor: '#FDE68A',
+  },
+  pinnedBannerText: { flex: 1, fontSize: 12.5, fontWeight: '600', color: '#92400E' },
+  pinsList: { backgroundColor: '#FFFBEB', borderBottomWidth: 1, borderColor: '#FDE68A', maxHeight: 160, paddingBottom: 4 },
+  pinRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 6 },
+  pinRowText: { flex: 1, fontSize: 12.5, color: theme.colors.text },
+  pinnedTag: { flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 3 },
+  pinnedTagText: { fontSize: 10, fontWeight: '700', color: theme.colors.warning, textTransform: 'uppercase' },
   msgRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginBottom: 6, paddingRight: 40 },
   msgRowOwn: { flexDirection: 'row-reverse', paddingRight: 0, paddingLeft: 40 },
   avatarSlot: { width: 30 },
@@ -240,16 +424,25 @@ const styles = StyleSheet.create({
   reactionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
   reactionChip: { backgroundColor: '#fff', borderWidth: 1, borderColor: theme.colors.border, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
   reactionText: { fontSize: 11, color: theme.colors.text },
+  typingRow: { paddingHorizontal: 16, paddingBottom: 4 },
+  typingText: { fontSize: 12, color: theme.colors.muted, fontStyle: 'italic' },
   mentionBox: {
     backgroundColor: theme.colors.card, borderTopWidth: 1, borderColor: theme.colors.border,
     maxHeight: 200, paddingVertical: 4,
   },
   mentionRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 8 },
   mentionName: { fontSize: 13.5, fontWeight: '600', color: theme.colors.text },
+  pendingFile: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 8,
+    backgroundColor: theme.colors.surface, borderTopWidth: 1, borderColor: theme.colors.border,
+  },
+  pendingFileName: { flex: 1, fontSize: 12.5, color: theme.colors.text },
+  pendingFileMeta: { fontSize: 11, color: theme.colors.muted },
   composer: {
     flexDirection: 'row', alignItems: 'flex-end', gap: 8, padding: 10,
     backgroundColor: theme.colors.card, borderTopWidth: 1, borderColor: theme.colors.border,
   },
+  attachBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   input: {
     flex: 1, maxHeight: 100, fontSize: 14, color: theme.colors.text,
     backgroundColor: theme.colors.surface, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10,

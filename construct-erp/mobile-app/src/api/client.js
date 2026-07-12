@@ -379,4 +379,17 @@ export const chatAPI = {
   meetings:   (limit = 30)                 => api.get('/chat/meetings', { params: { limit } }),
 };
 
+export const uploadAPI = {
+  // React Native FormData file entries take a {uri, name, type} object rather
+  // than a browser File — see expo-document-picker's DocumentPickerAsset shape.
+  single: (file, onProgress) => {
+    const fd = new FormData();
+    fd.append('file', { uri: file.uri, name: file.name, type: file.mimeType || 'application/octet-stream' });
+    return api.post('/upload/single', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: onProgress ? (e) => onProgress(e.total ? Math.round((e.loaded * 100) / e.total) : 0) : undefined,
+    });
+  },
+};
+
 export default api;

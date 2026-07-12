@@ -9,13 +9,17 @@
     "splash": {
       "backgroundColor": "#0F172A"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "android": {
       "package": "com.bcim.erp",
       "adaptiveIcon": {
         "backgroundColor": "#0F172A"
       },
-      "permissions": ["NOTIFICATIONS"],
+      "permissions": [
+        "NOTIFICATIONS"
+      ],
       "googleServicesFile": "./google-services.json"
     },
     "plugins": [
@@ -25,10 +29,15 @@
           "icon": "./assets/notification-icon.png",
           "color": "#0F172A"
         }
-      ]
+      ],
+      "expo-font",
+      "expo-secure-store"
     ],
     "extra": {
-      "eas": {}
-    }
+      "eas": {
+        "projectId": "8c02ba7f-2bd0-4b1b-9327-481f1e69fc00"
+      }
+    },
+    "owner": "asal1989"
   }
 }

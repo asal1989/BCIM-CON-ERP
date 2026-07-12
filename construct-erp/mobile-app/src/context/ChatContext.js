@@ -21,8 +21,10 @@ export function ChatProvider({ children }) {
   const [connected, setConnected] = useState(false);
   const [previews, setPreviews]   = useState({});
   const [employees, setEmployees] = useState([]);
+  const [typing, setTyping]       = useState({}); // { [channel]: name | null }
   const socketRef = useRef(null);
   const listenersRef = useRef(new Set()); // per-screen 'new_message' subscribers
+  const typingTimersRef = useRef({}); // per-channel auto-clear timers
 
   const loadPreviews = useCallback(() => {
     chatAPI.previews().then(r => setPreviews(r.data?.previews || {})).catch(() => {});
@@ -59,11 +61,49 @@ export function ChatProvider({ children }) {
             created_at: msg.created_at,
           },
         }));
-        listenersRef.current.forEach(fn => fn(msg));
+        // A new message implies the sender stopped typing — clear it immediately
+        // rather than waiting for their stop_typing event to arrive.
+        setTyping(prev => (prev[msg.channel] ? { ...prev, [msg.channel]: null } : prev));
+        listenersRef.current.forEach(fn => fn({ _type: 'message', ...msg }));
+      });
+
+      // Pin/reaction updates made by OTHER users in the same channel — relayed
+      // through the same per-screen subscribe() mechanism as new_message,
+      // tagged with _type so ChatThreadScreen can branch on it. (The user who
+      // performed the action already updates their own state optimistically;
+      // this is what makes it show up live for everyone else viewing the
+      // channel.)
+      socket.on('message_pinned', (data) => {
+        listenersRef.current.forEach(fn => fn({ _type: 'pin', ...data }));
+      });
+      socket.on('message_reacted', (data) => {
+        listenersRef.current.forEach(fn => fn({ _type: 'react', ...data }));
+      });
+
+      // The server relays our 'typing'/'stop_typing' emits back to other
+      // clients in the room as 'user_typing'/'user_stop_typing' — see
+      // socket.on('typing', ...) in backend/src/server.js.
+      socket.on('user_typing', ({ channel, name }) => {
+        setTyping(prev => ({ ...prev, [channel]: name }));
+        clearTimeout(typingTimersRef.current[channel]);
+        // Safety auto-clear in case a stop_typing event never arrives (e.g.
+        // sender's app backgrounds mid-type).
+        typingTimersRef.current[channel] = setTimeout(() => {
+          setTyping(prev => ({ ...prev, [channel]: null }));
+        }, 4000);
+      });
+      socket.on('user_stop_typing', ({ channel }) => {
+        clearTimeout(typingTimersRef.current[channel]);
+        setTyping(prev => ({ ...prev, [channel]: null }));
       });
     })();
 
-    return () => { socket?.disconnect(); socketRef.current = null; };
+    return () => {
+      socket?.disconnect();
+      socketRef.current = null;
+      Object.values(typingTimersRef.current).forEach(clearTimeout);
+      typingTimersRef.current = {};
+    };
   }, [user?.id, loadPreviews]);
 
   // Screens (ChatThreadScreen) subscribe here to get live messages for the
@@ -78,7 +118,18 @@ export function ChatProvider({ children }) {
     socketRef.current?.emit('join_channel', channel);
   }, []);
 
-  const value = { connected, previews, employees, socketRef, subscribe, joinChannel, refreshPreviews: loadPreviews };
+  const emitTyping = useCallback((channel, name) => {
+    socketRef.current?.emit('typing', { channel, name });
+  }, []);
+  const emitStopTyping = useCallback((channel) => {
+    socketRef.current?.emit('stop_typing', { channel });
+  }, []);
+
+  const value = {
+    connected, previews, employees, typing, socketRef,
+    subscribe, joinChannel, refreshPreviews: loadPreviews,
+    emitTyping, emitStopTyping,
+  };
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
 }
 

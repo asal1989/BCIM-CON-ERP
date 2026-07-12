@@ -2,6 +2,7 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../theme';
 
 import DashboardScreen from '../screens/DashboardScreen';
@@ -114,13 +115,23 @@ const TAB_ICONS = {
 };
 
 function TabNavigator() {
+  // Android 15+ enforces edge-to-edge (mandatory as of Expo SDK 54 / RN 0.81),
+  // so the system gesture-navigation strip can overlap a fixed-height tab bar
+  // and swallow taps meant for it. Add the real bottom inset instead of a
+  // hardcoded paddingBottom so the tab bar's touchable area sits above it.
+  const insets = useSafeAreaInsets();
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.muted,
-        tabBarStyle: { borderTopColor: theme.colors.border, height: 58, paddingBottom: 6, paddingTop: 6 },
+        tabBarStyle: {
+          borderTopColor: theme.colors.border,
+          height: 52 + insets.bottom,
+          paddingBottom: 6 + insets.bottom,
+          paddingTop: 6,
+        },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         tabBarIcon: ({ color, size }) => (
           <MaterialCommunityIcons name={TAB_ICONS[route.name]} color={color} size={size ?? 22} />
