@@ -1,5 +1,5 @@
 // src/pages/hr-admin/PayrollPage.jsx  — Modern redesign
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -79,6 +79,70 @@ function WorkflowStepper({ step }) {
           </React.Fragment>
         );
       })}
+    </div>
+  );
+}
+
+// ── Salary Breakup donut (Zoho People / GreytHR style detail panel) ───────────
+function SalaryBreakupPanel({ record }) {
+  if (!record) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-100 p-5 flex flex-col items-center justify-center text-center gap-2" style={{ minHeight: 220 }}>
+        <Users className="w-6 h-6 text-gray-300" />
+        <p className="text-xs text-gray-400">Select an employee to see their salary breakup</p>
+      </div>
+    );
+  }
+  const basic   = parseFloat(record.basic || 0) + parseFloat(record.hra || 0);
+  const allow   = parseFloat(record.conveyance || 0) + parseFloat(record.medical || 0) + parseFloat(record.special_allowance || 0);
+  const other   = Math.max(0, parseFloat(record.gross_earnings || 0) - basic - allow);
+  const gross   = parseFloat(record.gross_earnings || 0) || 1;
+  const circ    = 2 * Math.PI * 46;
+  const basicLen = (basic / gross) * circ;
+  const allowLen = (allow / gross) * circ;
+  const otherLen = (other / gross) * circ;
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 p-4">
+      <p className="text-sm font-bold text-gray-900">Salary Breakup</p>
+      <p className="text-xs text-gray-400 mb-3 truncate">{record.employee_name}</p>
+      <svg viewBox="0 0 120 120" className="mx-auto block" style={{ width: 110, height: 110 }}>
+        <circle cx="60" cy="60" r="46" fill="none" stroke="#F1F5F9" strokeWidth="16" />
+        {basic > 0 && <circle cx="60" cy="60" r="46" fill="none" stroke="#4F46E5" strokeWidth="16"
+          strokeDasharray={`${basicLen} ${circ}`} strokeDashoffset="0" transform="rotate(-90 60 60)" strokeLinecap="round" />}
+        {allow > 0 && <circle cx="60" cy="60" r="46" fill="none" stroke="#0891B2" strokeWidth="16"
+          strokeDasharray={`${allowLen} ${circ}`} strokeDashoffset={-basicLen} transform="rotate(-90 60 60)" />}
+        {other > 0 && <circle cx="60" cy="60" r="46" fill="none" stroke="#F59E0B" strokeWidth="16"
+          strokeDasharray={`${otherLen} ${circ}`} strokeDashoffset={-(basicLen + allowLen)} transform="rotate(-90 60 60)" />}
+        <text x="60" y="56" fontSize="15" fontWeight="700" fill="#0F172A" textAnchor="middle">{fmt(gross === 1 ? 0 : gross).replace('.00','')}</text>
+        <text x="60" y="72" fontSize="9" fill="#94A3B8" textAnchor="middle">gross</text>
+      </svg>
+      <div className="flex flex-col gap-2 mt-3.5">
+        {[['Basic + HRA', '#4F46E5', basic], ['Allowances', '#0891B2', allow], ['Other Earnings', '#F59E0B', other]].map(([label, color, val]) => (
+          <div key={label} className="flex justify-between items-center">
+            <span className="flex items-center gap-1.5 text-xs text-gray-700">
+              <span className="w-2 h-2 rounded-sm inline-block" style={{ background: color }} />{label}
+            </span>
+            <span className="text-xs font-bold text-gray-900">{fmt(val)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ComplianceSnapshot({ totals }) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 p-4">
+      <p className="text-sm font-bold text-gray-900 mb-3">Compliance Snapshot</p>
+      <div className="flex flex-col gap-2.5">
+        {[['Employee PF', totals.pf_employee], ['ESI', totals.esi_employee], ['TDS', totals.tds]].map(([label, val]) => (
+          <div key={label} className="flex justify-between">
+            <span className="text-xs text-gray-500">{label}</span>
+            <span className="text-xs font-bold text-gray-900">{fmt(val)}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -183,6 +247,8 @@ export default function PayrollPage() {
   const [projectId,  setProjectId]  = useState('');
   const [payModal,   setPayModal]   = useState(false);
   const [singleEmpId, setSingleEmpId] = useState('');
+  const [selectedId, setSelectedId] = useState(null);
+  const [rowSearch,  setRowSearch]  = useState('');
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['hr-payroll', month, year, projectId],
@@ -195,6 +261,10 @@ export default function PayrollPage() {
   });
   const records = data?.data   || [];
   const totals  = data?.totals || {};
+
+  useEffect(() => {
+    if (records.length && !records.some(r => r.id === selectedId)) setSelectedId(records[0].id);
+  }, [records, selectedId]);
 
   const { data: employees = [] } = useQuery({
     queryKey: ['hr-employees-active'],
@@ -440,96 +510,76 @@ export default function PayrollPage() {
         </motion.div>
       )}
 
-      {/* ── Payroll Table ───────────────────────────────────────────────────── */}
-      <motion.div {...fade(0.14)} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      {/* ── Payslips (master-detail, Zoho People / GreytHR style) ────────────── */}
+      {isLoading ? (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center py-16 gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-emerald-200 border-t-emerald-600 animate-spin" />
+          <p className="text-sm text-gray-400">Loading payroll…</p>
+        </div>
+      ) : records.length === 0 ? (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center py-16 gap-4">
+          <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center">
+            <CreditCard className="w-8 h-8 text-gray-300" />
+          </div>
+          <div className="text-center">
+            <p className="font-medium text-gray-700">No payroll for {MONTHS[month]} {year}</p>
+            <p className="text-sm text-slate-900 font-medium mt-1 max-w-xs">Click "Generate Payroll" to create draft payslips for all active employees</p>
+          </div>
+          <button onClick={() => runMut.mutate()} disabled={runMut.isPending}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-medium disabled:opacity-50"
+            style={{ background: 'linear-gradient(135deg, #6366F1, #4F46E5)' }}>
+            <Play className="w-4 h-4" />
+            {runMut.isPending ? 'Generating…' : 'Generate Payroll'}
+          </button>
+        </div>
+      ) : (
+        <motion.div {...fade(0.14)} className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4 items-start">
 
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <div className="w-8 h-8 rounded-full border-2 border-emerald-200 border-t-emerald-600 animate-spin" />
-            <p className="text-sm text-gray-400">Loading payroll…</p>
-          </div>
-        ) : records.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center">
-              <CreditCard className="w-8 h-8 text-gray-300" />
-            </div>
-            <div className="text-center">
-              <p className="font-medium text-gray-700">No payroll for {MONTHS[month]} {year}</p>
-              <p className="text-sm text-slate-900 font-medium mt-1 max-w-xs">Click "Generate Payroll" to create draft payslips for all active employees</p>
-            </div>
-            <button onClick={() => runMut.mutate()} disabled={runMut.isPending}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-medium disabled:opacity-50"
-              style={{ background: 'linear-gradient(135deg, #6366F1, #4F46E5)' }}>
-              <Play className="w-4 h-4" />
-              {runMut.isPending ? 'Generating…' : 'Generate Payroll'}
-            </button>
-          </div>
-        ) : (
-          <>
-            {/* Table header */}
-            <div className="grid grid-cols-12 px-5 py-3 bg-gray-50 border-b border-gray-100 text-[11px] font-medium text-slate-900 font-medium uppercase tracking-wider">
-              <div className="col-span-3">Employee</div>
-              <div className="col-span-1 text-center">Days</div>
-              <div className="col-span-1 text-center">LOP</div>
-              <div className="col-span-2 text-right">Gross</div>
-              <div className="col-span-1 text-right">PF</div>
-              <div className="col-span-1 text-right">ESI</div>
-              <div className="col-span-1 text-right">TDS</div>
-              <div className="col-span-1 text-right font-medium text-gray-600">Net Pay</div>
-              <div className="col-span-1 text-center">Status</div>
+          {/* List */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50">
+              <p className="text-sm font-bold text-gray-900">Employee Payslips</p>
+              <div className="flex items-center gap-1.5 bg-gray-50 rounded-lg px-3 py-1.5">
+                <FileText className="w-3.5 h-3.5 text-gray-400" />
+                <input value={rowSearch} onChange={e => setRowSearch(e.target.value)} placeholder="Search"
+                  className="bg-transparent text-xs text-gray-700 focus:outline-none w-24" />
+              </div>
             </div>
 
-            <div className="divide-y divide-gray-50">
-              {records.map(r => {
+            <div className="divide-y divide-gray-50 max-h-[560px] overflow-y-auto">
+              {records
+                .filter(r => !rowSearch.trim() || r.employee_name?.toLowerCase().includes(rowSearch.trim().toLowerCase()))
+                .map(r => {
                 const [g1, g2] = avatarGrad(r.employee_name);
                 const st = STATUS_CFG[r.status] || STATUS_CFG.draft;
+                const active = selectedId === r.id;
                 return (
-                  <motion.div
+                  <div
                     key={r.id}
-                    whileHover={{ backgroundColor: '#FAFAFA' }}
-                    className="grid grid-cols-12 px-5 py-3.5 items-center transition-colors"
+                    onClick={() => setSelectedId(r.id)}
+                    className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${active ? 'bg-indigo-50/60' : 'hover:bg-gray-50'}`}
                   >
-                    {/* Employee */}
-                    <div className="col-span-3 flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center text-white text-xs font-bold"
-                        style={{ background: `linear-gradient(135deg, ${g1}, ${g2})` }}>
-                        {initials(r.employee_name)}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{r.employee_name}</p>
-                        <p className="text-xs text-gray-400">{r.employee_code} · {r.department_name || '—'}</p>
-                      </div>
+                    <div className="w-10 h-10 rounded-[11px] flex-shrink-0 flex items-center justify-center text-white text-xs font-bold"
+                      style={{ background: `linear-gradient(135deg, ${g1}, ${g2})` }}>
+                      {initials(r.employee_name)}
                     </div>
-
-                    <div className="col-span-1 text-center">
-                      <p className="text-sm text-gray-700">{parseFloat(r.paid_days || 0).toFixed(1)}</p>
-                      <p className="text-[10px] text-gray-400">of {r.working_days}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13.5px] font-bold text-gray-900 truncate">{r.employee_name}</p>
+                      <p className="text-[11.5px] text-gray-400 truncate">{r.department_name || '—'} · {r.employee_code}</p>
                     </div>
-
-                    <div className="col-span-1 text-center">
-                      <span className={`text-xs font-medium ${parseFloat(r.lop_days || 0) > 0 ? 'text-red-500' : 'text-gray-400'}`}>
-                        {parseFloat(r.lop_days || 0).toFixed(1)}
-                      </span>
+                    <div className="text-right w-24 flex-shrink-0 hidden sm:block">
+                      <p className="text-[10px] text-gray-400 font-semibold">GROSS</p>
+                      <p className="text-[13px] font-bold text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(r.gross_earnings)}</p>
                     </div>
-
-                    <div className="col-span-2 text-right">
-                      <p className="text-sm font-medium text-gray-800">{fmt(r.gross_earnings)}</p>
+                    <div className="text-right w-24 flex-shrink-0 hidden md:block">
+                      <p className="text-[10px] text-gray-400 font-semibold">NET PAY</p>
+                      <p className="text-[13px] font-bold text-emerald-600" style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(r.net_pay)}</p>
                     </div>
-
-                    <div className="col-span-1 text-right text-xs text-gray-500">{fmt(r.pf_employee)}</div>
-                    <div className="col-span-1 text-right text-xs text-gray-500">{fmt(r.esi_employee)}</div>
-                    <div className="col-span-1 text-right text-xs text-gray-500">{fmt(r.tds)}</div>
-
-                    <div className="col-span-1 text-right">
-                      <p className="text-sm font-medium text-emerald-600">{fmt(r.net_pay)}</p>
-                    </div>
-
-                    {/* Status + Actions */}
-                    <div className="col-span-1 flex items-center justify-center gap-1.5">
-                      <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full ${st.bg} ${st.text}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
-                        {st.label}
-                      </span>
+                    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full flex-shrink-0 ${st.bg} ${st.text}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
+                      {st.label}
+                    </span>
+                    <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
                       {r.status === 'draft' && (
                         <button onClick={() => submitMut.mutate(r.id)} title="Submit for review"
                           className="w-6 h-6 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-600 flex items-center justify-center transition-colors">
@@ -567,32 +617,34 @@ export default function PayrollPage() {
                         <Download className="w-3 h-3" />
                       </button>
                     </div>
-                  </motion.div>
+                  </div>
                 );
               })}
             </div>
 
             {/* Footer totals */}
-            <div className="px-5 py-4 bg-gray-50 border-t border-gray-100 grid grid-cols-12 items-center">
-              <div className="col-span-3">
-                <p className="text-sm font-medium text-gray-700">{records.length} employees</p>
+            <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-t border-gray-100">
+              <p className="text-sm font-bold text-gray-700">{records.length} employees</p>
+              <div className="flex items-center gap-5">
+                <div className="text-right">
+                  <p className="text-[10px] text-gray-400 font-semibold">GROSS</p>
+                  <p className="text-sm font-bold text-gray-800">{fmt(totals.gross_earnings)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] text-gray-400 font-semibold">NET PAY</p>
+                  <p className="text-sm font-bold text-emerald-700">{fmt(totals.net_pay)}</p>
+                </div>
               </div>
-              <div className="col-span-1" />
-              <div className="col-span-1" />
-              <div className="col-span-2 text-right">
-                <p className="text-sm font-medium text-gray-800">{fmt(totals.gross_earnings)}</p>
-              </div>
-              <div className="col-span-1 text-right text-xs font-medium text-gray-600">{fmt(totals.pf_employee)}</div>
-              <div className="col-span-1 text-right text-xs font-medium text-gray-600">{fmt(totals.esi_employee)}</div>
-              <div className="col-span-1 text-right text-xs font-medium text-gray-600">{fmt(totals.tds)}</div>
-              <div className="col-span-1 text-right">
-                <p className="text-sm font-medium text-emerald-700">{fmt(totals.net_pay)}</p>
-              </div>
-              <div className="col-span-1" />
             </div>
-          </>
-        )}
-      </motion.div>
+          </div>
+
+          {/* Detail panel */}
+          <div className="flex flex-col gap-4">
+            <SalaryBreakupPanel record={records.find(r => r.id === selectedId) || null} />
+            <ComplianceSnapshot totals={totals} />
+          </div>
+        </motion.div>
+      )}
 
       {/* ── Pay Modal ───────────────────────────────────────────────────────── */}
       <AnimatePresence>
