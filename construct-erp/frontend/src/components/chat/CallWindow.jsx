@@ -42,15 +42,20 @@ export default function CallWindow({
   isMuted, isCameraOff, isScreenSharing, duration,
   onToggleMute, onToggleCamera, onScreenShare, onEnd,
 }) {
-  const localRef  = useRef(null);
-  const remoteRef = useRef(null);
+  const localRef      = useRef(null);
+  const remoteRef     = useRef(null);
+  const remoteAudioRef = useRef(null); // always-on audio element for remote stream
 
   useEffect(() => {
-    if (localRef.current  && localStream)  localRef.current.srcObject  = localStream;
+    if (localRef.current && localStream) localRef.current.srcObject = localStream;
   }, [localStream]);
 
   useEffect(() => {
     if (remoteRef.current && remoteStream) remoteRef.current.srcObject = remoteStream;
+    // Also wire the dedicated audio element — covers audio-only calls where
+    // the <video> element is not rendered, and acts as a safety net for video
+    // calls in case the video element isn't mounted yet.
+    if (remoteAudioRef.current && remoteStream) remoteAudioRef.current.srcObject = remoteStream;
   }, [remoteStream]);
 
   const isVideo   = callInfo?.callType === 'video';
@@ -62,12 +67,17 @@ export default function CallWindow({
       position: 'fixed', inset: 0, zIndex: 200,
       background: '#050a14', display: 'flex', flexDirection: 'column',
     }}>
+      {/* Hidden audio element — plays remote audio for BOTH audio-only and
+          video calls. The <video> element handles video track visually but
+          this element guarantees audio is always routed to speakers. */}
+      <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />
+
       {/* ── Main area ── */}
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
 
         {/* Remote video */}
         {isVideo && remoteStream ? (
-          <video ref={remoteRef} autoPlay playsInline
+          <video ref={remoteRef} autoPlay playsInline muted
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
           /* Audio-only or waiting — avatar placeholder */
