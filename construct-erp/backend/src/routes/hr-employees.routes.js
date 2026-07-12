@@ -502,10 +502,25 @@ router.put('/:id', async (req, res) => {
       desigName = dr.rows[0]?.name || '';
     }
 
+    // Guard: never let an HR employee-record edit silently downgrade a
+    // super_admin. Editing it@bcim.in's (or any super_admin's) profile here
+    // used to overwrite users.role with `role || 'viewer'`, stripping their
+    // access until the next server restart re-ran the boot-time super_admin
+    // self-heal. Protect the top-admin account (and any current super_admin)
+    // by preserving super_admin regardless of the submitted role.
+    const cur = await client.query(
+      `SELECT email, role FROM users WHERE id=$1 AND company_id=$2`,
+      [req.params.id, req.user.company_id]
+    );
+    const curEmail = String(cur.rows[0]?.email || '').toLowerCase();
+    const isProtectedAdmin = curEmail === 'it@bcim.in' || cur.rows[0]?.role === 'super_admin';
+    const effectiveRole = isProtectedAdmin ? 'super_admin' : (role || 'viewer');
+    const effectiveEmail = curEmail === 'it@bcim.in' ? cur.rows[0].email : email;
+
     await client.query(
       `UPDATE users SET name=$1, email=$2, phone=$3, role=$4, designation=$5, department=$6
        WHERE id=$7 AND company_id=$8`,
-      [name, email, phone || null, role || 'viewer', desigName, deptName,
+      [name, effectiveEmail, phone || null, effectiveRole, desigName, deptName,
        req.params.id, req.user.company_id]
     );
 
