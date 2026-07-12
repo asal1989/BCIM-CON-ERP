@@ -1,7 +1,7 @@
 // src/pages/ERPChat.jsx — ERP Team Chat with separate Channels / DMs tabs
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Pin, X, Hash, MessageSquare, Users } from 'lucide-react';
+import { Search, Pin, X, Hash, MessageSquare, Users, Phone, Video } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useAuthStore from '../store/authStore';
 import api from '../api/client';
@@ -122,7 +122,7 @@ function EmptyPane({ tab }) {
 export default function ERPChat() {
   const { user } = useAuthStore();
   const [searchParams] = useSearchParams();
-  const { socketRef, connected, employees, unread, typing, markRead, registerActive } = useChat();
+  const { socketRef, connected, employees, unread, typing, markRead, registerActive, startCall, callState } = useChat();
 
   // ── Tab state ────────────────────────────────────────────────────────────────
   const [tab, setTab] = useState('channels');
@@ -540,6 +540,25 @@ export default function ERPChat() {
                       <p style={{ fontWeight: 700, color: WA.dark, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dmPeerName}</p>
                       <p style={{ fontSize: 12, color: WA.muted }}>{dmPeer.designation_name || dmPeer.designation || 'Direct message'}</p>
                     </div>
+                    {/* Call buttons */}
+                    <button
+                      onClick={() => startCall(dmPeer, 'audio').catch(e => toast.error(e.message || 'Could not start call'))}
+                      disabled={callState !== 'idle'}
+                      title="Voice call"
+                      style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: callState !== 'idle' ? '#e5e7eb' : '#f0fdf4', cursor: callState !== 'idle' ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 0.15s' }}
+                      onMouseEnter={e => { if (callState === 'idle') e.currentTarget.style.background = '#dcfce7'; }}
+                      onMouseLeave={e => { if (callState === 'idle') e.currentTarget.style.background = '#f0fdf4'; }}>
+                      <Phone size={16} color={callState !== 'idle' ? '#9ca3af' : '#16a34a'} />
+                    </button>
+                    <button
+                      onClick={() => startCall(dmPeer, 'video').catch(e => toast.error(e.message || 'Could not start call'))}
+                      disabled={callState !== 'idle'}
+                      title="Video call"
+                      style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: callState !== 'idle' ? '#e5e7eb' : '#eff6ff', cursor: callState !== 'idle' ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 0.15s' }}
+                      onMouseEnter={e => { if (callState === 'idle') e.currentTarget.style.background = '#dbeafe'; }}
+                      onMouseLeave={e => { if (callState === 'idle') e.currentTarget.style.background = '#eff6ff'; }}>
+                      <Video size={16} color={callState !== 'idle' ? '#9ca3af' : '#2563eb'} />
+                    </button>
                   </div>
 
                   <MessageThread

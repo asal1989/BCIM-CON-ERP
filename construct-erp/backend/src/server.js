@@ -687,6 +687,42 @@ io.on('connection', (socket) => {
     socket.to(channel).emit('user_stop_typing', { channel });
   });
 
+  // ── WebRTC call signaling ──────────────────────────────────────────────────
+  // All events are routed via the user-{id} room so they reach the target
+  // regardless of which socket instance is connected. The server acts purely
+  // as a relay — no media flows through here, only SDP offers/answers and
+  // ICE candidates.
+
+  socket.on('call:offer', ({ to, offer, callerName, callerPhoto, callType }) => {
+    io.to(`user-${to}`).emit('call:offer', {
+      from: socket.user.id,
+      callerName: callerName || socket.user.name,
+      callerPhoto: callerPhoto || null,
+      callType: callType || 'video',
+      offer,
+    });
+  });
+
+  socket.on('call:answer', ({ to, answer }) => {
+    io.to(`user-${to}`).emit('call:answer', { from: socket.user.id, answer });
+  });
+
+  socket.on('call:ice-candidate', ({ to, candidate }) => {
+    io.to(`user-${to}`).emit('call:ice-candidate', { from: socket.user.id, candidate });
+  });
+
+  socket.on('call:end', ({ to }) => {
+    io.to(`user-${to}`).emit('call:end', { from: socket.user.id });
+  });
+
+  socket.on('call:reject', ({ to }) => {
+    io.to(`user-${to}`).emit('call:reject', { from: socket.user.id });
+  });
+
+  socket.on('call:busy', ({ to }) => {
+    io.to(`user-${to}`).emit('call:busy', { from: socket.user.id });
+  });
+
   socket.on('disconnect', () => {
     logger.info(`💬 Chat: ${socket.user?.name || socket.user?.id} disconnected`);
   });

@@ -11,6 +11,9 @@ import api from '../api/client';
 import {
   Av, WA, MessageThread, Composer, fmtSize, withDateDividers, downloadAttachment,
 } from '../components/chat/chatShared';
+import { useWebRTC, CALL_STATE } from '../hooks/useWebRTC';
+import IncomingCallModal from '../components/chat/IncomingCallModal';
+import CallWindow from '../components/chat/CallWindow';
 
 const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || window.location.origin;
 const MAX_OPEN_POPUPS = 3;
@@ -197,9 +200,17 @@ export function ChatProvider({ children }) {
 
   const unreadTotal = Object.values(unread).reduce((a, b) => a + b, 0);
 
+  // ── WebRTC calls ─────────────────────────────────────────────────────────────
+  const webrtc = useWebRTC({ socketRef, currentUser: user });
+
   const value = {
     socketRef, connected, employees, unread, unreadTotal, previews, popups, typing,
     openPopup, closePopup, toggleMinimize, markRead, registerActive, findEmployeeForDm,
+    // Call API — consumers (ERPChat, DmPopup) use these
+    startCall:   webrtc.startCall,
+    endCall:     webrtc.endCall,
+    callState:   webrtc.callState,
+    callInfo:    webrtc.callInfo,
   };
 
   return (
@@ -207,6 +218,31 @@ export function ChatProvider({ children }) {
       {children}
       <PopupStack popups={popups} socketRef={socketRef} typing={typing} unread={unread}
         currentUserId={user?.id} onClose={closePopup} onToggleMinimize={toggleMinimize} />
+
+      {/* ── Incoming call overlay ── */}
+      <IncomingCallModal
+        callInfo={webrtc.callState === CALL_STATE.INCOMING ? webrtc.callInfo : null}
+        onAccept={webrtc.answerCall}
+        onReject={webrtc.rejectCall}
+      />
+
+      {/* ── Active / outgoing call window ── */}
+      {(webrtc.callState === CALL_STATE.ACTIVE || webrtc.callState === CALL_STATE.CALLING) && (
+        <CallWindow
+          localStream={webrtc.localStream}
+          remoteStream={webrtc.remoteStream}
+          callInfo={webrtc.callInfo}
+          callState={webrtc.callState}
+          isMuted={webrtc.isMuted}
+          isCameraOff={webrtc.isCameraOff}
+          isScreenSharing={webrtc.isScreenSharing}
+          duration={webrtc.duration}
+          onToggleMute={webrtc.toggleMute}
+          onToggleCamera={webrtc.toggleCamera}
+          onScreenShare={webrtc.isScreenSharing ? webrtc.stopScreenShare : webrtc.startScreenShare}
+          onEnd={webrtc.endCall}
+        />
+      )}
     </ChatContext.Provider>
   );
 }
