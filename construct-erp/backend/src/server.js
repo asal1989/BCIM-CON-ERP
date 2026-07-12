@@ -657,15 +657,48 @@ io.on('connection', (socket) => {
   socket.on('send_message', (msg) => {
     // msg already saved via REST POST, just broadcast to others
     if (msg.channel?.startsWith('dm-')) {
-      // DM channel id is `dm-<uuid1>-<uuid2>` (sorted) — each UUID is a fixed
-      // 36 chars, so we can split deterministically without a delimiter clash.
       const raw = msg.channel.slice(3);
       const id1 = raw.slice(0, 36);
       const id2 = raw.slice(37);
       const recipientId = id1 === String(socket.user?.id) ? id2 : id1;
       io.to(`user-${recipientId}`).emit('new_message', msg);
+      // Push notification for DM
+      try {
+        const { sendPushToUser } = require('./services/fcm.service');
+        const senderName = socket.user?.name || socket.user?.username || 'Someone';
+        sendPushToUser(recipientId, {
+          title: `💬 ${senderName}`,
+          body: msg.text || (msg.file_name ? `📎 ${msg.file_name}` : 'New message'),
+          data: { type: 'dm', channel: msg.channel, senderId: String(socket.user?.id) },
+        });
+      } catch (_) {}
     } else {
       socket.to(msg.channel).emit('new_message', msg);
+      // Push for @mentions in channel messages
+      try {
+        const mentionRegex = /@([A-Za-z0-9 _]+)/g;
+        const text = msg.text || '';
+        let match;
+        const mentionedNames = new Set();
+        while ((match = mentionRegex.exec(text)) !== null) mentionedNames.add(match[1].trim().toLowerCase());
+        if (mentionedNames.size > 0) {
+          const { query: dbQ } = require('./config/database');
+          const { sendPushToUser } = require('./services/fcm.service');
+          const senderName = socket.user?.name || 'Someone';
+          dbQ(`SELECT id, full_name, name FROM users WHERE is_active = TRUE`).then(({ rows }) => {
+            rows.forEach(u => {
+              const uname = (u.full_name || u.name || '').toLowerCase();
+              if (mentionedNames.has(uname) && String(u.id) !== String(socket.user?.id)) {
+                sendPushToUser(u.id, {
+                  title: `🔔 ${senderName} mentioned you`,
+                  body: text.slice(0, 100),
+                  data: { type: 'mention', channel: msg.channel },
+                });
+              }
+            });
+          }).catch(() => {});
+        }
+      } catch (_) {}
     }
   });
 

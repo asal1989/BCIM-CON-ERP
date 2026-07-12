@@ -176,6 +176,77 @@ router.get('/channels', async (req, res) => {
   res.json({ channels: result.rows });
 });
 
+// ── GET /chat/search — full-text search across messages ──────────────────────
+router.get('/search', async (req, res) => {
+  await ensureTable();
+  const { q, channel, limit = 50 } = req.query;
+  if (!q?.trim()) return res.json({ messages: [] });
+  const params = [`%${q.trim()}%`, Math.min(parseInt(limit) || 50, 200)];
+  let sql = `SELECT * FROM chat_messages WHERE (text ILIKE $1 OR file_name ILIKE $1)`;
+  if (channel) { sql += ` AND channel = $${params.length + 1}`; params.push(channel); }
+  sql += ` ORDER BY created_at DESC LIMIT $2`;
+  const result = await query(sql, params);
+  res.json({ messages: result.rows });
+});
+
+// ── Read receipts — read_by is a JSONB array of user-id strings ──────────────
+let readByReady = false;
+async function ensureReadBy() {
+  if (readByReady) return;
+  await query(`ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS read_by JSONB DEFAULT '[]'`);
+  readByReady = true;
+}
+
+// POST /chat/messages/mark-read { channel } — mark all unread in channel
+router.post('/messages/mark-read', async (req, res) => {
+  await ensureReadBy();
+  const { channel } = req.body;
+  if (!channel) return res.status(400).json({ error: 'channel required' });
+  const uid = req.user.id;
+  await query(
+    `UPDATE chat_messages
+     SET read_by = COALESCE(read_by, '[]'::jsonb) || $1::jsonb
+     WHERE channel = $2 AND sender_id != $3
+       AND NOT (COALESCE(read_by,'[]'::jsonb) @> $1::jsonb)`,
+    [JSON.stringify([uid]), channel, uid]
+  );
+  res.json({ ok: true });
+});
+
+// ── Teams Meeting History ─────────────────────────────────────────────────────
+let meetHistReady = false;
+async function ensureMeetHistory() {
+  if (meetHistReady) return;
+  await query(`
+    CREATE TABLE IF NOT EXISTS teams_meetings (
+      id              SERIAL PRIMARY KEY,
+      organizer_id    UUID REFERENCES users(id) ON DELETE SET NULL,
+      organizer_name  VARCHAR(200) NOT NULL,
+      subject         VARCHAR(500) NOT NULL,
+      join_url        TEXT NOT NULL,
+      start_dt        TIMESTAMPTZ NOT NULL,
+      end_dt          TIMESTAMPTZ NOT NULL,
+      attendee_emails JSONB DEFAULT '[]',
+      teams_id        TEXT,
+      created_at      TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_tmeet_org ON teams_meetings(organizer_id);
+    CREATE INDEX IF NOT EXISTS idx_tmeet_start ON teams_meetings(start_dt DESC);
+  `);
+  meetHistReady = true;
+}
+
+// GET /chat/meetings
+router.get('/meetings', async (req, res) => {
+  await ensureMeetHistory();
+  const { limit = 30 } = req.query;
+  const result = await query(
+    `SELECT * FROM teams_meetings ORDER BY start_dt DESC LIMIT $1`,
+    [Math.min(parseInt(limit) || 30, 100)]
+  );
+  res.json({ meetings: result.rows });
+});
+
 // ── Teams Online Meetings ─────────────────────────────────────────────────────
 const { createTeamsMeeting } = require('../services/azureService');
 
@@ -198,6 +269,14 @@ router.post('/teams-meeting', async (req, res) => {
       subject.trim(), start, end, organizerEmail,
       Array.isArray(attendeeEmails) ? attendeeEmails.filter(Boolean) : []
     );
+    // Save to meeting history (fire-and-forget)
+    ensureMeetHistory().then(() => query(
+      `INSERT INTO teams_meetings (organizer_id, organizer_name, subject, join_url, start_dt, end_dt, attendee_emails, teams_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [req.user.id, req.user.full_name || req.user.name || organizerEmail,
+       meeting.subject, meeting.joinUrl, meeting.startDateTime, meeting.endDateTime,
+       JSON.stringify(attendeeEmails), meeting.id]
+    ).catch(() => {}));
     res.json({ meeting });
   } catch (err) {
     console.error('[Teams] Route error:', err.message);

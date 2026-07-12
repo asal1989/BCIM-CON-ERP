@@ -399,7 +399,18 @@ function FileBubble({ fileName, fileSize, fileUrl, onDownload }) {
   );
 }
 
-function MsgBubble({ msg, isOwn, showAvatar, showName, onReact, onPin }) {
+// Highlight @mentions in message text
+function renderMentionText(text) {
+  if (!text) return null;
+  const parts = text.split(/(@[A-Za-z][A-Za-z0-9 _]*)/g);
+  return parts.map((p, i) =>
+    p.startsWith('@')
+      ? <span key={i} style={{ color: '#60A5FA', fontWeight: 600, background: 'rgba(96,165,250,0.15)', borderRadius: 4, padding: '0 3px' }}>{p}</span>
+      : p
+  );
+}
+
+function MsgBubble({ msg, isOwn, showAvatar, showName, onReact, onPin, isDm, currentUserId }) {
   const [hovered, setHovered]  = useState(false);
   const [showReact, setShowReact] = useState(false);
 
@@ -455,21 +466,25 @@ function MsgBubble({ msg, isOwn, showAvatar, showName, onReact, onPin }) {
           wordBreak: 'break-word',
         }}>
           {msg.text && (
-            <p style={{ fontSize: 14, lineHeight: 1.55, whiteSpace: 'pre-wrap', margin: 0 }}>{msg.text}</p>
+            <p style={{ fontSize: 14, lineHeight: 1.55, whiteSpace: 'pre-wrap', margin: 0 }}>
+              {renderMentionText(msg.text)}
+            </p>
           )}
           {hasFile && (
             <FileBubble fileName={msg.file_name} fileSize={msg.file_size} fileUrl={msg.file_url} onDownload={downloadAttachment} />
           )}
 
           {/* Timestamp + status */}
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: isOwn ? 'flex-end' : 'flex-end',
-            gap: 4, marginTop: 5,
-          }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 5 }}>
             <span style={{ fontSize: 10.5, color: isOwn ? 'rgba(255,255,255,0.6)' : C.subtle }}>
               {fmtFull(msg.created_at)}
             </span>
-            {isOwn && <CheckCheck size={13} color="rgba(255,255,255,0.7)" />}
+            {isOwn && isDm && (
+              (msg.read_by && Array.isArray(msg.read_by) && msg.read_by.some(id => id !== currentUserId))
+                ? <CheckCheck size={13} color="#34D399" title="Read" />
+                : <CheckCheck size={13} color="rgba(255,255,255,0.5)" title="Delivered" />
+            )}
+            {isOwn && !isDm && <CheckCheck size={13} color="rgba(255,255,255,0.7)" />}
           </div>
         </div>
 
@@ -556,7 +571,7 @@ function TypingIndicator({ name }) {
   );
 }
 
-function PremiumMessageList({ items, loading, emptyText, userId, onReact, onPin, threadRef, typingUser }) {
+function PremiumMessageList({ items, loading, emptyText, userId, onReact, onPin, threadRef, typingUser, isDm }) {
   return (
     <div ref={threadRef} style={{ flex: 1, overflowY: 'auto', padding: '8px 12px', background: C.bg }}>
       {loading && (
@@ -582,7 +597,8 @@ function PremiumMessageList({ items, loading, emptyText, userId, onReact, onPin,
         return (
           <MsgBubble key={msg.id} msg={msg} isOwn={isOwn}
             showAvatar={showAvatar} showName={showName}
-            onReact={onReact} onPin={onPin} />
+            onReact={onReact} onPin={onPin}
+            isDm={isDm} currentUserId={userId} />
         );
       })}
       {typingUser && <TypingIndicator name={typingUser} />}
@@ -592,8 +608,39 @@ function PremiumMessageList({ items, loading, emptyText, userId, onReact, onPin,
 
 // ── PREMIUM COMPOSER ──────────────────────────────────────────────────────────
 
-function PremiumComposer({ value, onChange, onKeyDown, onSend, files, onRemoveFile, onPickFiles, disabled, textRef, placeholder }) {
-  const fileInputRef = useRef(null);
+function PremiumComposer({ value, onChange, onKeyDown, onSend, files, onRemoveFile, onPickFiles, disabled, textRef, placeholder, employees = [] }) {
+  const fileInputRef   = useRef(null);
+  const [mentionOpen,  setMentionOpen]  = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
+
+  const mentionList = useMemo(() => {
+    if (!mentionQuery && !mentionOpen) return [];
+    const q = mentionQuery.toLowerCase();
+    return employees.filter(e => {
+      const n = (e.full_name || e.name || '').toLowerCase();
+      return !q || n.includes(q);
+    }).slice(0, 6);
+  }, [mentionQuery, mentionOpen, employees]);
+
+  const handleChange = useCallback((e) => {
+    onChange(e);
+    const val = e.target.value;
+    const cursor = e.target.selectionStart;
+    const textBefore = val.slice(0, cursor);
+    const match = textBefore.match(/@([A-Za-z0-9 ]*)$/);
+    if (match) { setMentionQuery(match[1]); setMentionOpen(true); }
+    else { setMentionOpen(false); setMentionQuery(''); }
+  }, [onChange]);
+
+  const selectMention = useCallback((emp) => {
+    const name = emp.full_name || emp.name;
+    const cursor = textRef.current?.selectionStart ?? value.length;
+    const before = value.slice(0, cursor).replace(/@([A-Za-z0-9 ]*)$/, `@${name} `);
+    const after  = value.slice(cursor);
+    onChange({ target: { value: before + after } });
+    setMentionOpen(false);
+    setTimeout(() => { textRef.current?.focus(); textRef.current && (textRef.current.selectionStart = textRef.current.selectionEnd = before.length); }, 10);
+  }, [value, onChange, textRef]);
 
   const handleDrop = useCallback((e) => {
     e.preventDefault();
@@ -609,10 +656,41 @@ function PremiumComposer({ value, onChange, onKeyDown, onSend, files, onRemoveFi
 
   return (
     <div
-      style={{ padding: '10px 16px 14px', background: C.card, borderTop: `1px solid ${C.border}`, flexShrink: 0 }}
+      style={{ padding: '10px 16px 14px', background: C.card, borderTop: `1px solid ${C.border}`, flexShrink: 0, position: 'relative' }}
       onDragOver={e => e.preventDefault()}
       onDrop={handleDrop}
     >
+      {/* @mention dropdown */}
+      <AnimatePresence>
+        {mentionOpen && mentionList.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
+            style={{
+              position: 'absolute', bottom: '100%', left: 16, right: 16, zIndex: 50,
+              background: C.card, borderRadius: 12, border: `1px solid ${C.border}`,
+              boxShadow: C.shadowLg, overflow: 'hidden', marginBottom: 6,
+            }}>
+            <div style={{ padding: '6px 12px 4px', borderBottom: `1px solid ${C.borderLight}` }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: C.subtle }}>Mention someone</span>
+            </div>
+            {mentionList.map(emp => (
+              <button key={emp.id} onMouseDown={() => selectMention(emp)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
+                  borderBottom: `1px solid ${C.borderLight}`,
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = C.bg}
+                onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                <Av name={emp.full_name || emp.name} size={28} photo={emp.profile_photo_url} />
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: C.text, margin: 0 }}>{emp.full_name || emp.name}</p>
+                  <p style={{ fontSize: 11, color: C.muted, margin: 0 }}>{emp.designation_name || emp.designation || ''}</p>
+                </div>
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Pending files */}
       {files.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
@@ -661,10 +739,10 @@ function PremiumComposer({ value, onChange, onKeyDown, onSend, files, onRemoveFi
         <textarea
           ref={textRef}
           value={value}
-          onChange={onChange}
-          onKeyDown={onKeyDown}
+          onChange={handleChange}
+          onKeyDown={e => { if (e.key === 'Escape') setMentionOpen(false); onKeyDown(e); }}
           onPaste={handlePaste}
-          placeholder={placeholder || 'Type your message…'}
+          placeholder={placeholder || 'Type a message… use @ to mention someone'}
           rows={1}
           style={{
             flex: 1, background: 'none', border: 'none', outline: 'none',
@@ -1703,6 +1781,11 @@ function TeamsMeetingModal({ onClose, onMeetingCreated, employees = [] }) {
 
 // ── MEETINGS PANE ─────────────────────────────────────────────────────────────
 function MeetingsPane({ onNewMeeting, compact = false }) {
+  const [meetings, setMeetings] = useState([]);
+  useEffect(() => {
+    api.get('/chat/meetings').then(r => setMeetings(r.data?.meetings || [])).catch(() => {});
+  }, []);
+
   const TIPS = [
     { icon: '📅', title: 'Seminars', desc: 'Host company-wide seminars with up to 1,000 attendees via Teams Live Events.' },
     { icon: '👥', title: 'Team Meetings', desc: 'Virtual project sync-ups with screen sharing, chat, and recording built in.' },
@@ -1789,20 +1872,41 @@ function MeetingsPane({ onNewMeeting, compact = false }) {
           ))}
         </div>
 
-        {/* Admin note */}
-        <div style={{
-          marginTop: 20, padding: '12px 14px', background: '#FFF7ED',
-          borderRadius: 12, border: '1px solid #FED7AA',
-          display: 'flex', gap: 10, alignItems: 'flex-start',
-        }}>
-          <span style={{ fontSize: 16, flexShrink: 0 }}>⚙️</span>
-          <div>
-            <p style={{ fontSize: 12.5, fontWeight: 700, color: '#92400E', marginBottom: 3 }}>Admin Setup Required</p>
-            <p style={{ fontSize: 12, color: '#B45309', lineHeight: 1.5, margin: 0 }}>
-              Ensure the Azure AD app registration has <strong>OnlineMeetings.ReadWrite.All</strong> (Application) permission granted by an admin. Set <code style={{ background: '#FEF3C7', borderRadius: 3, padding: '0 4px' }}>TEAMS_ORGANIZER_EMAIL</code> in Railway env vars if users don't have Azure AD accounts.
+        {/* Meeting history */}
+        {meetings.length > 0 && (
+          <>
+            <p style={{ fontSize: 12, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 28, marginBottom: 12 }}>
+              Recent Meetings
             </p>
-          </div>
-        </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {meetings.slice(0, 10).map(m => (
+                <div key={m.id} style={{
+                  background: C.card, borderRadius: 12, border: `1px solid ${C.border}`,
+                  padding: '12px 14px', display: 'flex', alignItems: 'flex-start', gap: 12,
+                }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <CalendarDays size={17} color="#4F46E5" />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 13.5, fontWeight: 700, color: C.text, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.subject}</p>
+                    <p style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
+                      {new Date(m.start_dt).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
+                      {' · '}
+                      {new Date(m.start_dt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {' – '}
+                      {new Date(m.end_dt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                    <p style={{ fontSize: 11.5, color: C.subtle, marginTop: 1 }}>{m.organizer_name}</p>
+                  </div>
+                  <button onClick={() => window.open(m.join_url, '_blank')}
+                    style={{ background: '#EEF2FF', border: 'none', borderRadius: 8, padding: '5px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#4F46E5', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <ExternalLink size={11} /> Join
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1924,6 +2028,7 @@ export default function ERPChat() {
       .catch(() => setChMessages([]))
       .finally(() => setChLoading(false));
     markRead(channel);
+    api.post('/chat/messages/mark-read', { channel }).catch(() => {});
   }, [channel, markRead]);
 
   useEffect(() => {
@@ -1934,6 +2039,7 @@ export default function ERPChat() {
       .catch(() => setDmMessages([]))
       .finally(() => setDmLoading(false));
     markRead(dmChannel);
+    api.post('/chat/messages/mark-read', { channel: dmChannel }).catch(() => {});
   }, [dmChannel, markRead]);
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────────
@@ -2045,11 +2151,18 @@ export default function ERPChat() {
   // ── Derived ───────────────────────────────────────────────────────────────────
   const activeCh  = CHANNELS.find(c => c.id === channel) || CHANNELS[0];
   const pinned    = chMessages.filter(m => m.pinned);
-  const visibleCh = useMemo(() => {
-    if (!chSearch.trim()) return chMessages;
-    const q = chSearch.toLowerCase();
-    return chMessages.filter(m => m.text?.toLowerCase().includes(q));
-  }, [chMessages, chSearch]);
+  const [chSearchResults, setChSearchResults] = useState(null); // null = no search active
+  useEffect(() => {
+    if (!chSearch.trim()) { setChSearchResults(null); return; }
+    const t = setTimeout(() => {
+      api.get('/chat/search', { params: { q: chSearch, channel, limit: 100 } })
+        .then(r => setChSearchResults(r.data?.messages || []))
+        .catch(() => {});
+    }, 300);
+    return () => clearTimeout(t);
+  }, [chSearch, channel]);
+
+  const visibleCh = chSearchResults ?? chMessages;
   const chItems = useMemo(() => withDateDividers(visibleCh), [visibleCh]);
   const dmItems = useMemo(() => withDateDividers(dmMessages), [dmMessages]);
 
@@ -2187,7 +2300,8 @@ export default function ERPChat() {
                 onRemoveFile={i => setChFiles(p => p.filter((_, j) => j !== i))}
                 onPickFiles={pickChFiles}
                 disabled={(!chInput.trim() && chFiles.length === 0) || chFiles.some(f => f.uploading)}
-                textRef={chTextRef} placeholder={`Message #${activeCh.label}`} />
+                textRef={chTextRef} placeholder={`Message #${activeCh.label}`}
+                employees={employees} />
             </>
           )}
 
@@ -2220,7 +2334,8 @@ export default function ERPChat() {
                   <PremiumMessageList items={dmItems} loading={dmLoading}
                     emptyText="No messages yet — say hello!"
                     userId={user?.id} onReact={addDmReaction} onPin={null}
-                    threadRef={dmThreadRef} typingUser={typing[dmChannel]} />
+                    threadRef={dmThreadRef} typingUser={typing[dmChannel]}
+                    isDm={true} />
 
                   <PremiumComposer value={dmInput} onChange={handleDmTyping}
                     onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendDm(); } }}
@@ -2228,7 +2343,8 @@ export default function ERPChat() {
                     onRemoveFile={i => setDmFiles(p => p.filter((_, j) => j !== i))}
                     onPickFiles={pickDmFiles}
                     disabled={(!dmInput.trim() && dmFiles.length === 0) || dmFiles.some(f => f.uploading)}
-                    textRef={dmTextRef} placeholder={`Message ${dmPeerName}`} />
+                    textRef={dmTextRef} placeholder={`Message ${dmPeerName}`}
+                    employees={employees} />
                 </>
               )}
             </>
