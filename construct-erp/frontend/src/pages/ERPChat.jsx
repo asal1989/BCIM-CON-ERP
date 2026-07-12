@@ -1326,10 +1326,11 @@ function TeamsMeetingModal({ onClose, onMeetingCreated, employees = [] }) {
   const [loading,    setLoading]    = useState(false);
   const [result,     setResult]     = useState(null);
   const [copied,     setCopied]     = useState(false);
-  const [permError,  setPermError]  = useState(null); // permission error info
-  const [attendees,  setAttendees]  = useState([]);   // selected employees
+  const [permError,  setPermError]  = useState(null);
+  const [attendees,  setAttendees]  = useState([]);
   const [empSearch,  setEmpSearch]  = useState('');
   const [empOpen,    setEmpOpen]    = useState(false);
+  const [opened,     setOpened]     = useState(false);
 
   const empList = useMemo(() => {
     const q = empSearch.toLowerCase();
@@ -1449,32 +1450,10 @@ function TeamsMeetingModal({ onClose, onMeetingCreated, employees = [] }) {
           {/* ── Permission error ── */}
           {permError && !result && (
             <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
-              style={{ background: '#FEF2F2', borderRadius: 12, border: '1px solid #FECACA', padding: '14px 16px', marginBottom: 16 }}>
-              <p style={{ fontSize: 13, fontWeight: 700, color: '#991B1B', marginBottom: 6 }}>⚠️ Azure Permission Required</p>
-              <p style={{ fontSize: 12.5, color: '#B91C1C', lineHeight: 1.6, marginBottom: 12 }}>
-                Your Azure AD app needs <strong>OnlineMeetings.ReadWrite.All</strong> (Application permission) with admin consent.
+              style={{ background: '#FEF9F0', borderRadius: 12, border: '1px solid #FCD34D', padding: '12px 14px', marginBottom: 14 }}>
+              <p style={{ fontSize: 12.5, color: '#92400E', margin: 0 }}>
+                ⚠️ API permission not set up yet — use <strong>Open in Teams</strong> below to create the meeting now.
               </p>
-              <p style={{ fontSize: 12, fontWeight: 600, color: '#7F1D1D', marginBottom: 6 }}>Fix in 3 steps:</p>
-              <ol style={{ fontSize: 12, color: '#B91C1C', lineHeight: 2, paddingLeft: 18, margin: 0 }}>
-                <li>Go to <strong>Azure Portal → App registrations → your app</strong></li>
-                <li>API permissions → Add → Microsoft Graph → Application → <strong>OnlineMeetings.ReadWrite.All</strong></li>
-                <li>Click <strong>"Grant admin consent"</strong> → retry</li>
-              </ol>
-              <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <motion.button whileTap={{ scale: 0.95 }}
-                  onClick={() => window.open(teamsDeepLink, '_blank')}
-                  style={{
-                    flex: 1, padding: '9px 12px', borderRadius: 9, border: 'none',
-                    background: '#4F46E5', color: '#fff', fontSize: 12.5, fontWeight: 700,
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                  }}>
-                  <ExternalLink size={13} /> Open in Teams (workaround)
-                </motion.button>
-                <button onClick={() => setPermError(null)}
-                  style={{ padding: '9px 12px', borderRadius: 9, border: `1px solid #FECACA`, background: '#fff', color: '#991B1B', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
-                  Retry
-                </button>
-              </div>
             </motion.div>
           )}
 
@@ -1586,49 +1565,64 @@ function TeamsMeetingModal({ onClose, onMeetingCreated, employees = [] }) {
                 </div>
               </div>
 
-              {/* Actions */}
-              <div style={{ display: 'flex', gap: 8 }}>
-                <motion.button whileTap={{ scale: 0.96 }}
-                  onClick={createMeeting}
-                  disabled={loading || !subject.trim()}
-                  style={{
-                    flex: 1, padding: '11px 0', borderRadius: 11, border: 'none',
-                    background: loading || !subject.trim() ? C.border : 'linear-gradient(135deg, #4F46E5, #6366F1)',
-                    color: loading || !subject.trim() ? C.subtle : '#fff',
-                    fontSize: 14, fontWeight: 700,
-                    cursor: loading || !subject.trim() ? 'not-allowed' : 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                    boxShadow: loading || !subject.trim() ? 'none' : '0 4px 14px rgba(79,70,229,0.35)',
-                    transition: 'all 0.2s',
-                  }}>
-                  {loading ? (
-                    <>
-                      <motion.div style={{ width: 16, height: 16, borderRadius: '50%', border: '2.5px solid rgba(255,255,255,0.3)', borderTop: '2.5px solid #fff' }}
-                        animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.75, ease: 'linear' }} />
-                      Creating…
-                    </>
-                  ) : (
-                    <><CalendarDays size={15} /> Create Meeting</>
-                  )}
-                </motion.button>
+              {/* Primary action — Open in Teams */}
+              <motion.button whileTap={{ scale: 0.97 }}
+                onClick={() => {
+                  if (!subject.trim()) { toast.error('Please enter a meeting title'); return; }
+                  window.open(teamsDeepLink, '_blank');
+                  setOpened(true);
+                }}
+                disabled={!subject.trim()}
+                style={{
+                  width: '100%', padding: '13px 0', borderRadius: 12, border: 'none',
+                  background: !subject.trim() ? C.border : 'linear-gradient(135deg, #4F46E5, #6366F1)',
+                  color: !subject.trim() ? C.subtle : '#fff',
+                  fontSize: 15, fontWeight: 700,
+                  cursor: !subject.trim() ? 'not-allowed' : 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  boxShadow: !subject.trim() ? 'none' : '0 4px 16px rgba(79,70,229,0.4)',
+                  transition: 'all 0.2s', marginBottom: 10,
+                }}>
+                <ExternalLink size={16} />
+                {opened ? 'Open in Teams Again' : 'Open in Microsoft Teams'}
+              </motion.button>
 
-                {/* Fallback: open Teams directly */}
-                <motion.button whileTap={{ scale: 0.95 }}
-                  onClick={() => window.open(teamsDeepLink, '_blank')}
-                  title="Open Teams to schedule manually (no permission needed)"
-                  style={{
-                    padding: '11px 14px', borderRadius: 11, border: `1.5px solid #C7D2FE`,
-                    background: '#EEF2FF', color: '#4F46E5', fontSize: 13, fontWeight: 600,
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
-                    whiteSpace: 'nowrap',
-                  }}>
-                  <ExternalLink size={14} /> Open Teams
-                </motion.button>
+              {opened && (
+                <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+                  style={{ background: '#F0FDF4', borderRadius: 10, border: '1px solid #BBF7D0', padding: '10px 14px', marginBottom: 10, textAlign: 'center' }}>
+                  <p style={{ fontSize: 13, color: '#166534', margin: 0 }}>
+                    ✅ Teams opened — click <strong>Send</strong> inside Teams to confirm the meeting.
+                  </p>
+                </motion.div>
+              )}
+
+              {/* Secondary — create via API */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <div style={{ flex: 1, height: 1, background: C.border }} />
+                <span style={{ fontSize: 11, color: C.subtle }}>or create via API (needs Azure setup)</span>
+                <div style={{ flex: 1, height: 1, background: C.border }} />
               </div>
-
-              <p style={{ fontSize: 11.5, color: C.subtle, textAlign: 'center', marginTop: 10 }}>
-                "Open Teams" works immediately • "Create Meeting" needs Azure permission
-              </p>
+              <motion.button whileTap={{ scale: 0.96 }}
+                onClick={createMeeting}
+                disabled={loading || !subject.trim()}
+                style={{
+                  width: '100%', padding: '9px 0', borderRadius: 10, border: `1.5px solid ${C.border}`,
+                  background: C.bg, color: C.muted,
+                  fontSize: 13, fontWeight: 600,
+                  cursor: loading || !subject.trim() ? 'not-allowed' : 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                  transition: 'all 0.2s',
+                }}>
+                {loading ? (
+                  <>
+                    <motion.div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid rgba(0,0,0,0.15)', borderTop: `2px solid ${C.muted}` }}
+                      animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.75, ease: 'linear' }} />
+                    Creating…
+                  </>
+                ) : (
+                  <><CalendarDays size={13} /> Create Meeting Link (API)</>
+                )}
+              </motion.button>
             </>
           )}
 
