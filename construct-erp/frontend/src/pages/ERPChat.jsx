@@ -1,4 +1,4 @@
-// src/pages/ERPChat.jsx — Premium Team Chat UI
+﻿// src/pages/ERPChat.jsx — Premium Team Chat UI
 // Microsoft Teams + Slack + Discord inspired enterprise design
 // Built with Framer Motion + Tailwind CSS + Lucide icons
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
@@ -6,10 +6,10 @@ import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Pin, X, Hash, MessageSquare, Users, Phone, Video, ArrowLeft,
-  Monitor, Send, Paperclip, Smile, Bell, BellOff, Info, MoreVertical,
-  Plus, ChevronDown, Mic, Image, FileText, Check, CheckCheck,
-  ThumbsUp, Heart, Zap, Star, Flame, PartyPopper, Filter,
-  UserPlus, Settings, ChevronRight, File, Download, Clock,
+  Monitor, Send, Paperclip, Smile, Bell, Info,
+  Plus, ChevronDown, FileText, Check, CheckCheck,
+  UserPlus, Settings, Download, PhoneIncoming, PhoneOutgoing,
+  PhoneMissed, PhoneOff, VideoIcon, Voicemail, CalendarDays, Copy, ExternalLink, Clock,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useAuthStore from '../store/authStore';
@@ -150,23 +150,28 @@ function ConvListPanel({
   channel, setChannel, dmPeer, setDmPeer,
   unread, typing, user, connected, openMainPane, markRead,
   channelUnread, dmUnread, isMobile, mobilePaneOpen,
+  previews, mainView, setMainView, onNewMeeting,
 }) {
   const [convTab, setConvTab] = useState('all');
 
-  // Build unified list for "all" tab
+  // Build unified list sorted by most recent message
   const allConvs = useMemo(() => {
     const chs = filteredChannels.map(c => ({ type: 'channel', data: c, id: c.id }));
-    const dms = filteredEmployees.map(e => ({ type: 'dm', data: e, id: e.id }));
-    return [...chs, ...dms];
-  }, [filteredChannels, filteredEmployees]);
+    const dms = filteredEmployees.map(e => ({
+      type: 'dm', data: e,
+      id: `dm-${[user?.id, e.id].sort().join('-')}`,
+    }));
+    return [...chs, ...dms].sort((a, b) => {
+      const ta = previews?.[a.id]?.created_at ? new Date(previews[a.id].created_at) : new Date(0);
+      const tb = previews?.[b.id]?.created_at ? new Date(previews[b.id].created_at) : new Date(0);
+      return tb - ta;
+    });
+  }, [filteredChannels, filteredEmployees, previews, user?.id]);
 
   const displayList = useMemo(() => {
-    if (convTab === 'channels') return filteredChannels.map(c => ({ type: 'channel', data: c }));
-    if (convTab === 'direct')   return filteredEmployees.map(e => ({ type: 'dm', data: e }));
-    if (convTab === 'unread')   return allConvs.filter(({ type, data }) => {
-      const id = type === 'channel' ? data.id : `dm-${[user?.id, data.id].sort().join('-')}`;
-      return (unread[id] || 0) > 0;
-    });
+    if (convTab === 'channels') return filteredChannels.map(c => ({ type: 'channel', data: c, id: c.id }));
+    if (convTab === 'direct')   return filteredEmployees.map(e => ({ type: 'dm', data: e, id: `dm-${[user?.id, e.id].sort().join('-')}` }));
+    if (convTab === 'unread')   return allConvs.filter(({ id }) => (unread[id] || 0) > 0);
     return allConvs;
   }, [convTab, filteredChannels, filteredEmployees, allConvs, unread, user?.id]);
 
@@ -184,38 +189,39 @@ function ConvListPanel({
       overflow: 'hidden',
     }}>
       {/* Header */}
-      <div style={{ padding: '18px 16px 12px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+      <div style={{ padding: '14px 16px 10px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <div>
-            <h2 style={{ fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: '-0.02em' }}>Team Chat</h2>
-            <p style={{ fontSize: 12, color: C.muted, marginTop: 1 }}>
+            <h2 style={{ fontSize: 17, fontWeight: 700, color: C.text, letterSpacing: '-0.02em' }}>Team Chat</h2>
+            <p style={{ fontSize: 11.5, color: C.muted, marginTop: 1 }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: connected ? C.green : C.subtle, display: 'inline-block' }} />
                 {connected ? 'Connected' : 'Connecting…'}
               </span>
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button style={{
-              width: 34, height: 34, borderRadius: 10, border: `1px solid ${C.border}`,
-              background: C.bg, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }} title="New chat">
-              <Plus size={16} color={C.muted} />
-            </button>
-            <button style={{
-              width: 34, height: 34, borderRadius: 10, border: 'none',
-              background: C.primary, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }} title="Create group">
-              <Users size={15} color="#fff" />
-            </button>
-          </div>
+          {/* New Meeting button */}
+          <motion.button
+            whileTap={{ scale: 0.92 }}
+            onClick={onNewMeeting}
+            title="Schedule Teams Meeting"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '5px 10px', borderRadius: 9, border: 'none',
+              background: '#5058E5', cursor: 'pointer',
+              fontSize: 12, fontWeight: 600, color: '#fff',
+              boxShadow: '0 2px 8px rgba(80,88,229,0.35)',
+            }}>
+            <CalendarDays size={13} />
+            New Meeting
+          </motion.button>
         </div>
 
         {/* Search */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
-          background: C.bg, borderRadius: 10, padding: '8px 12px',
-          border: `1px solid ${C.border}`, marginTop: 10,
+          background: C.bg, borderRadius: 10, padding: '7px 12px',
+          border: `1px solid ${C.border}`,
         }}>
           <Search size={14} color={C.subtle} />
           <input
@@ -231,73 +237,113 @@ function ConvListPanel({
         </div>
       </div>
 
-      {/* Tabs */}
-      <div style={{
-        display: 'flex', gap: 4, padding: '8px 12px 0',
-        borderBottom: `1px solid ${C.border}`, flexShrink: 0,
-      }}>
-        {CONV_TABS.map(t => {
-          const isActive = convTab === t.id;
-          const badge = t.id === 'unread' ? totalUnread : 0;
+      {/* Main-view nav: Chat / Calls / Meetings */}
+      <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+        {[
+          { id: 'chat',     label: 'Chat',     Icon: MessageSquare },
+          { id: 'calls',    label: 'Calls',    Icon: Phone },
+          { id: 'meetings', label: 'Meetings', Icon: CalendarDays },
+        ].map(({ id, label, Icon }) => {
+          const active = mainView === id;
           return (
-            <button key={t.id} onClick={() => setConvTab(t.id)}
+            <button key={id} onClick={() => setMainView(id)}
               style={{
-                padding: '5px 12px 8px', border: 'none', cursor: 'pointer',
-                background: 'none', fontSize: 13, fontWeight: isActive ? 700 : 500,
-                color: isActive ? C.primary : C.muted,
-                borderBottom: isActive ? `2px solid ${C.primary}` : '2px solid transparent',
-                marginBottom: -1, transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: 5,
+                flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                padding: '8px 0 7px', border: 'none', cursor: 'pointer', background: 'none',
+                borderBottom: active ? `2px solid ${C.primary}` : '2px solid transparent',
+                color: active ? C.primary : C.muted,
+                fontSize: 10.5, fontWeight: active ? 700 : 500, transition: 'all 0.15s',
               }}>
-              {t.label}
-              {badge > 0 && (
-                <span style={{ background: C.red, color: '#fff', borderRadius: 999, fontSize: 9, fontWeight: 700, minWidth: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>
-                  {badge}
-                </span>
-              )}
+              <Icon size={15} />
+              {label}
             </button>
           );
         })}
       </div>
 
-      {/* List */}
-      <div style={{ flex: 1, overflowY: 'auto' }}>
-        <AnimatePresence>
-          {displayList.length === 0 && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-              style={{ padding: '40px 16px', textAlign: 'center', color: C.subtle, fontSize: 13 }}>
-              No conversations found
-            </motion.div>
-          )}
-          {displayList.map(({ type, data }) => {
-            if (type === 'channel') {
-              const ch = data;
-              const badge = unread[ch.id] || 0;
-              const isActive = channel === ch.id && (!isMobile || !mobilePaneOpen);
-              const lastTyping = typing[ch.id];
-              return (
-                <ConvCard key={`ch-${ch.id}`} name={ch.label} sub={ch.desc}
-                  isActive={isActive} badge={badge} isGroup color={chColor(ch.id)}
-                  timestamp="" isTyping={lastTyping}
-                  onClick={() => { setChannel(ch.id); setTab('channels'); openMainPane(); }} />
-              );
-            } else {
-              const emp = data;
-              const name = emp.full_name || emp.name || 'Employee';
-              const dmId = `dm-${[user?.id, emp.id].sort().join('-')}`;
-              const badge = unread[dmId] || 0;
-              const isActive = dmPeer?.id === emp.id && (!isMobile || !mobilePaneOpen);
-              const lastTyping = typing[dmId];
-              return (
-                <ConvCard key={`dm-${emp.id}`} name={name}
-                  sub={emp.designation_name || emp.designation || 'Direct message'}
-                  photo={emp.profile_photo_url} isActive={isActive} badge={badge}
-                  isOnline isGroup={false} timestamp="" isTyping={lastTyping}
-                  onClick={() => { setDmPeer(emp); setTab('dms'); markRead(dmId); openMainPane(); }} />
-              );
-            }
+      {/* Conv filter tabs (only when in chat view) */}
+      {mainView === 'chat' && (
+        <div style={{
+          display: 'flex', gap: 2, padding: '6px 10px 0',
+          borderBottom: `1px solid ${C.border}`, flexShrink: 0,
+        }}>
+          {CONV_TABS.map(t => {
+            const isActive = convTab === t.id;
+            const badge = t.id === 'unread' ? totalUnread : 0;
+            return (
+              <button key={t.id} onClick={() => setConvTab(t.id)}
+                style={{
+                  padding: '4px 10px 7px', border: 'none', cursor: 'pointer',
+                  background: 'none', fontSize: 12.5, fontWeight: isActive ? 700 : 500,
+                  color: isActive ? C.primary : C.muted,
+                  borderBottom: isActive ? `2px solid ${C.primary}` : '2px solid transparent',
+                  marginBottom: -1, transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: 4,
+                }}>
+                {t.label}
+                {badge > 0 && (
+                  <span style={{ background: C.red, color: '#fff', borderRadius: 999, fontSize: 9, fontWeight: 700, minWidth: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>
+                    {badge}
+                  </span>
+                )}
+              </button>
+            );
           })}
-        </AnimatePresence>
-      </div>
+        </div>
+      )}
+
+      {/* Conv list (only when in chat view) */}
+      {mainView === 'chat' && (
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <AnimatePresence>
+            {displayList.length === 0 && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                style={{ padding: '40px 16px', textAlign: 'center', color: C.subtle, fontSize: 13 }}>
+                No conversations found
+              </motion.div>
+            )}
+            {displayList.map(({ type, data, id: convId }) => {
+              const preview = previews?.[convId];
+              if (type === 'channel') {
+                const ch = data;
+                const badge = unread[ch.id] || 0;
+                const isActive = channel === ch.id && (!isMobile || !mobilePaneOpen);
+                const lastTyping = typing[ch.id];
+                const previewText = preview?.text
+                  ? preview.text.slice(0, 60) + (preview.text.length > 60 ? '…' : '')
+                  : ch.desc;
+                return (
+                  <ConvCard key={`ch-${ch.id}`} name={ch.label} sub={previewText}
+                    isActive={isActive} badge={badge} isGroup color={chColor(ch.id)}
+                    timestamp={preview?.created_at ? fmtTime(preview.created_at) : ''}
+                    isTyping={lastTyping}
+                    onClick={() => { setChannel(ch.id); setTab('channels'); setMainView('chat'); openMainPane(); }} />
+                );
+              } else {
+                const emp = data;
+                const name = emp.full_name || emp.name || 'Employee';
+                const dmId = convId;
+                const badge = unread[dmId] || 0;
+                const isActive = dmPeer?.id === emp.id && (!isMobile || !mobilePaneOpen);
+                const lastTyping = typing[dmId];
+                const previewText = preview?.text
+                  ? preview.text.slice(0, 60) + (preview.text.length > 60 ? '…' : '')
+                  : (emp.designation_name || emp.designation || 'Direct message');
+                return (
+                  <ConvCard key={`dm-${emp.id}`} name={name} sub={previewText}
+                    photo={emp.profile_photo_url} isActive={isActive} badge={badge}
+                    isOnline isGroup={false}
+                    timestamp={preview?.created_at ? fmtTime(preview.created_at) : ''}
+                    isTyping={lastTyping}
+                    onClick={() => { setDmPeer(emp); setTab('dms'); setMainView('chat'); markRead(dmId); openMainPane(); }} />
+                );
+              }
+            })}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Spacer when not in chat view (list is hidden, nav fills top) */}
+      {mainView !== 'chat' && <div style={{ flex: 1 }} />}
     </div>
   );
 }
@@ -951,6 +997,635 @@ function NotifBanner({ perm, onEnable, onDismiss }) {
   return null;
 }
 
+// ── CALLS PANE ────────────────────────────────────────────────────────────────
+
+function fmtDur(secs) {
+  if (!secs) return '';
+  const m = Math.floor(secs / 60), s = secs % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function fmtCallTime(ts) {
+  if (!ts) return '';
+  const d   = new Date(ts);
+  const now = new Date();
+  const diff = Math.floor((now - d) / 86400000);
+  if (diff === 0) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (diff === 1) return 'Yesterday';
+  if (diff < 7)  return d.toLocaleDateString([], { weekday: 'short' });
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+const CALL_STATUS_META = {
+  answered:  { label: 'Answered',  color: C.green,   Icon: null },
+  cancelled: { label: 'Cancelled', color: C.muted,   Icon: null },
+  missed:    { label: 'Missed',    color: '#EF4444', Icon: null },
+  rejected:  { label: 'Declined',  color: '#EF4444', Icon: null },
+  busy:      { label: 'Busy',      color: C.amber,   Icon: null },
+  failed:    { label: 'Failed',    color: '#EF4444', Icon: null },
+};
+
+function CallLogRow({ log, currentUserId, onCallBack, employees }) {
+  const isOutgoing = log.caller_id === currentUserId;
+  const peerName   = isOutgoing ? log.callee_name : log.caller_name;
+  const peerId     = isOutgoing ? log.callee_id   : log.caller_id;
+  const peer       = employees.find(e => e.id === peerId);
+  const meta       = CALL_STATUS_META[log.status] || CALL_STATUS_META.answered;
+  const isMissed   = log.status === 'missed' || log.status === 'rejected';
+
+  const DirectionIcon = isOutgoing
+    ? PhoneOutgoing
+    : isMissed ? PhoneMissed : PhoneIncoming;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '12px 20px', borderBottom: `1px solid ${C.borderLight}`,
+        background: C.card,
+      }}
+      onMouseEnter={e => e.currentTarget.style.background = C.bg}
+      onMouseLeave={e => e.currentTarget.style.background = C.card}
+    >
+      {/* Avatar */}
+      <div style={{ position: 'relative', flexShrink: 0 }}>
+        <Av name={peerName} size={44} photo={peer?.profile_photo_url} />
+        <div style={{
+          position: 'absolute', bottom: 0, right: -2,
+          width: 18, height: 18, borderRadius: '50%',
+          background: isMissed ? '#FEE2E2' : C.greenBg,
+          border: `2px solid ${C.card}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <DirectionIcon size={9} color={isMissed ? '#EF4444' : C.green} strokeWidth={2.5} />
+        </div>
+      </div>
+
+      {/* Info */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+          <span style={{
+            fontWeight: 600, fontSize: 14, color: isMissed ? '#EF4444' : C.text,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>{peerName}</span>
+          {log.call_type === 'video' && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 3,
+              fontSize: 10.5, color: C.muted, background: C.bg,
+              border: `1px solid ${C.border}`, borderRadius: 5, padding: '1px 6px',
+            }}>
+              <VideoIcon size={9} /> Video
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 12, color: meta.color, fontWeight: 500 }}>{meta.label}</span>
+          {log.duration_secs > 0 && (
+            <span style={{ fontSize: 12, color: C.subtle }}>· {fmtDur(log.duration_secs)}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Time + call-back */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+        <span style={{ fontSize: 11.5, color: C.subtle }}>{fmtCallTime(log.started_at)}</span>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <motion.button
+            whileTap={{ scale: 0.88 }}
+            onClick={() => onCallBack(peer || { id: peerId, full_name: peerName }, 'audio')}
+            style={{
+              width: 30, height: 30, borderRadius: '50%', border: 'none',
+              background: C.greenBg, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }} title="Voice call">
+            <Phone size={13} color={C.green} />
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.88 }}
+            onClick={() => onCallBack(peer || { id: peerId, full_name: peerName }, 'video')}
+            style={{
+              width: 30, height: 30, borderRadius: '50%', border: 'none',
+              background: C.primaryLight, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }} title="Video call">
+            <Video size={13} color={C.primary} />
+          </motion.button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function CallsPane({ currentUserId, employees, startCall }) {
+  const [logs, setLogs]       = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter]   = useState('all'); // all | missed | outgoing | incoming
+
+  const loadLogs = useCallback(() => {
+    setLoading(true);
+    api.get('/chat/call-logs', { params: { limit: 200 } })
+      .then(r => setLogs(r.data?.logs || []))
+      .catch(() => setLogs([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { loadLogs(); }, [loadLogs]);
+
+  const filtered = useMemo(() => {
+    if (filter === 'all')      return logs;
+    if (filter === 'missed')   return logs.filter(l => l.status === 'missed' || l.status === 'rejected');
+    if (filter === 'outgoing') return logs.filter(l => l.caller_id === currentUserId);
+    if (filter === 'incoming') return logs.filter(l => l.callee_id === currentUserId);
+    return logs;
+  }, [logs, filter, currentUserId]);
+
+  // Group by date
+  const grouped = useMemo(() => {
+    const groups = [];
+    let lastDate = '';
+    for (const log of filtered) {
+      const d = new Date(log.started_at);
+      const label = (() => {
+        const diff = Math.floor((Date.now() - d) / 86400000);
+        if (diff === 0) return 'Today';
+        if (diff === 1) return 'Yesterday';
+        if (diff < 7)  return d.toLocaleDateString([], { weekday: 'long' });
+        return d.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
+      })();
+      if (label !== lastDate) { groups.push({ type: 'date', label }); lastDate = label; }
+      groups.push({ type: 'log', log });
+    }
+    return groups;
+  }, [filtered]);
+
+  const missedCount = logs.filter(l => l.status === 'missed' || l.status === 'rejected').length;
+
+  const onCallBack = useCallback((peer, callType) => {
+    if (!peer?.id) return toast.error('Cannot call — user not found');
+    startCall(peer, callType).catch(e => toast.error(e.message || 'Could not start call'));
+  }, [startCall]);
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bg }}>
+      {/* Header */}
+      <div style={{ padding: '16px 20px 12px', background: C.card, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: C.text, letterSpacing: '-0.02em' }}>Call Logs</h2>
+            <p style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{logs.length} call{logs.length !== 1 ? 's' : ''} total</p>
+          </div>
+          <motion.button whileTap={{ scale: 0.9 }} onClick={loadLogs}
+            style={{
+              padding: '6px 14px', borderRadius: 9, border: `1px solid ${C.border}`,
+              background: C.bg, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: C.muted,
+            }}>
+            Refresh
+          </motion.button>
+        </div>
+
+        {/* Stats row */}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+          {[
+            { label: 'Total', val: logs.length, color: C.primary },
+            { label: 'Answered', val: logs.filter(l => l.status === 'answered').length, color: C.green },
+            { label: 'Missed', val: missedCount, color: '#EF4444' },
+            { label: 'Outgoing', val: logs.filter(l => l.caller_id === currentUserId).length, color: C.amber },
+          ].map(({ label, val, color }) => (
+            <div key={label} style={{
+              flex: 1, background: C.bg, borderRadius: 10, padding: '8px 10px',
+              border: `1px solid ${C.border}`, textAlign: 'center',
+            }}>
+              <p style={{ fontSize: 18, fontWeight: 700, color }}>{val}</p>
+              <p style={{ fontSize: 10.5, color: C.muted, marginTop: 1 }}>{label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Filter chips */}
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[
+            { id: 'all', label: 'All' },
+            { id: 'missed', label: `Missed${missedCount > 0 ? ` (${missedCount})` : ''}` },
+            { id: 'incoming', label: 'Incoming' },
+            { id: 'outgoing', label: 'Outgoing' },
+          ].map(({ id, label }) => (
+            <button key={id} onClick={() => setFilter(id)}
+              style={{
+                padding: '4px 14px', borderRadius: 999, border: 'none', cursor: 'pointer',
+                background: filter === id ? C.primary : C.bg,
+                color: filter === id ? '#fff' : C.muted,
+                fontSize: 12.5, fontWeight: filter === id ? 700 : 500,
+                border: `1px solid ${filter === id ? C.primary : C.border}`,
+              }}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Log list */}
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {loading && (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
+            <motion.div style={{ width: 28, height: 28, borderRadius: '50%', border: `3px solid ${C.border}`, borderTop: `3px solid ${C.primary}` }}
+              animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }} />
+          </div>
+        )}
+        {!loading && grouped.length === 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60%', gap: 14, opacity: 0.5 }}>
+            <PhoneOff size={48} color={C.muted} />
+            <p style={{ fontSize: 14, color: C.muted, fontWeight: 500 }}>
+              {filter === 'missed' ? 'No missed calls' : 'No call history yet'}
+            </p>
+            <p style={{ fontSize: 12.5, color: C.subtle }}>
+              Voice and video calls appear here after they end
+            </p>
+          </div>
+        )}
+        {!loading && grouped.map((item, i) => {
+          if (item.type === 'date') return (
+            <div key={`d-${i}`} style={{
+              padding: '10px 20px 4px', fontSize: 11.5, fontWeight: 700,
+              color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em',
+              background: C.bg,
+            }}>{item.label}</div>
+          );
+          return (
+            <CallLogRow key={item.log.id} log={item.log}
+              currentUserId={currentUserId} onCallBack={onCallBack} employees={employees} />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── TEAMS LOGO (inline SVG) ───────────────────────────────────────────────────
+function TeamsLogo({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <rect width="24" height="24" rx="5" fill="#5058E5"/>
+      <text x="4" y="17" fontFamily="Arial,sans-serif" fontWeight="800" fontSize="13" fill="#fff">T</text>
+      <circle cx="17" cy="7" r="3.5" fill="#fff"/>
+      <rect x="12.5" y="11" width="9" height="7" rx="2" fill="#fff"/>
+    </svg>
+  );
+}
+
+// ── TEAMS MEETING MODAL ────────────────────────────────────────────────────────
+function TeamsMeetingModal({ onClose, onMeetingCreated }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const defaultStart = (() => {
+    const h = new Date().getHours() + 1;
+    return `${String(h % 24).padStart(2, '0')}:00`;
+  })();
+
+  const [subject,   setSubject]   = useState('');
+  const [dateStr,   setDateStr]   = useState(today);
+  const [startTime, setStartTime] = useState(defaultStart);
+  const [endTime,   setEndTime]   = useState(`${String((parseInt(defaultStart) + 1) % 24).padStart(2, '0')}:00`);
+  const [loading,   setLoading]   = useState(false);
+  const [result,    setResult]    = useState(null); // created meeting
+  const [copied,    setCopied]    = useState(false);
+
+  const createMeeting = async () => {
+    if (!subject.trim()) { toast.error('Please enter a meeting title'); return; }
+    setLoading(true);
+    try {
+      const startDT = new Date(`${dateStr}T${startTime}:00`).toISOString();
+      const endDT   = new Date(`${dateStr}T${endTime}:00`).toISOString();
+      const res = await api.post('/chat/teams-meeting', {
+        subject: subject.trim(),
+        startDateTime: startDT,
+        endDateTime:   endDT,
+      });
+      setResult(res.data.meeting);
+      toast.success('Teams meeting created!');
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Failed to create meeting');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(result.joinUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const shareToChat = () => {
+    if (!result) return;
+    const start = new Date(result.startDateTime);
+    const end   = new Date(result.endDateTime);
+    const text = `📅 Teams Meeting: ${result.subject}\n🕐 ${start.toLocaleDateString([], { month: 'short', day: 'numeric' })} · ${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n🔗 Join: ${result.joinUrl}`;
+    onMeetingCreated(text);
+    onClose();
+  };
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 16,
+        }}
+        onClick={e => e.target === e.currentTarget && onClose()}
+      >
+        <motion.div
+          initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }}
+          transition={{ type: 'spring', stiffness: 320, damping: 26 }}
+          style={{
+            width: '100%', maxWidth: 480,
+            background: C.card, borderRadius: 18,
+            boxShadow: '0 24px 48px rgba(0,0,0,0.2)',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Header */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12, padding: '18px 20px 14px',
+            borderBottom: `1px solid ${C.border}`,
+            background: 'linear-gradient(135deg, #4F46E5 0%, #5058E5 100%)',
+          }}>
+            <TeamsLogo size={32} />
+            <div style={{ flex: 1 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: 0 }}>New Teams Meeting</h3>
+              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 }}>Schedule a virtual meeting for your team</p>
+            </div>
+            <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8, width: 30, height: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <X size={15} color="#fff" />
+            </button>
+          </div>
+
+          <div style={{ padding: '20px 20px 16px' }}>
+            {!result ? (
+              <>
+                {/* Meeting title */}
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: C.muted, display: 'block', marginBottom: 6 }}>MEETING TITLE</label>
+                  <input
+                    value={subject} onChange={e => setSubject(e.target.value)}
+                    placeholder="e.g. Weekly Team Standup, Project Seminar…"
+                    autoFocus
+                    style={{
+                      width: '100%', padding: '10px 13px', borderRadius: 10,
+                      border: `1.5px solid ${C.border}`, outline: 'none',
+                      fontSize: 14, color: C.text, background: C.bg,
+                      boxSizing: 'border-box',
+                    }}
+                    onFocus={e => e.target.style.borderColor = C.primary}
+                    onBlur={e => e.target.style.borderColor = C.border}
+                    onKeyDown={e => e.key === 'Enter' && !loading && createMeeting()}
+                  />
+                </div>
+
+                {/* Date + times */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: C.muted, display: 'block', marginBottom: 6 }}>DATE</label>
+                    <input type="date" value={dateStr} onChange={e => setDateStr(e.target.value)}
+                      style={{ width: '100%', padding: '9px 10px', borderRadius: 10, border: `1.5px solid ${C.border}`, fontSize: 13, color: C.text, background: C.bg, boxSizing: 'border-box', outline: 'none' }}
+                      onFocus={e => e.target.style.borderColor = C.primary}
+                      onBlur={e => e.target.style.borderColor = C.border} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: C.muted, display: 'block', marginBottom: 6 }}>START</label>
+                    <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)}
+                      style={{ width: '100%', padding: '9px 10px', borderRadius: 10, border: `1.5px solid ${C.border}`, fontSize: 13, color: C.text, background: C.bg, boxSizing: 'border-box', outline: 'none' }}
+                      onFocus={e => e.target.style.borderColor = C.primary}
+                      onBlur={e => e.target.style.borderColor = C.border} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: C.muted, display: 'block', marginBottom: 6 }}>END</label>
+                    <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)}
+                      style={{ width: '100%', padding: '9px 10px', borderRadius: 10, border: `1.5px solid ${C.border}`, fontSize: 13, color: C.text, background: C.bg, boxSizing: 'border-box', outline: 'none' }}
+                      onFocus={e => e.target.style.borderColor = C.primary}
+                      onBlur={e => e.target.style.borderColor = C.border} />
+                  </div>
+                </div>
+
+                {/* Info note */}
+                <div style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px',
+                  background: '#EEF2FF', borderRadius: 10, marginBottom: 18,
+                  border: '1px solid #C7D2FE',
+                }}>
+                  <Info size={14} color="#4F46E5" style={{ flexShrink: 0, marginTop: 1 }} />
+                  <p style={{ fontSize: 12, color: '#4338CA', margin: 0, lineHeight: 1.5 }}>
+                    Meeting is created via your organisation's Microsoft Teams account. Attendees receive a join link — no Teams account needed to join.
+                  </p>
+                </div>
+
+                {/* Create button */}
+                <motion.button
+                  whileTap={{ scale: 0.96 }}
+                  onClick={createMeeting}
+                  disabled={loading || !subject.trim()}
+                  style={{
+                    width: '100%', padding: '12px 0', borderRadius: 11, border: 'none',
+                    background: loading || !subject.trim()
+                      ? C.border
+                      : 'linear-gradient(135deg, #4F46E5, #5058E5)',
+                    color: loading || !subject.trim() ? C.subtle : '#fff',
+                    fontSize: 14.5, fontWeight: 700, cursor: loading || !subject.trim() ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    boxShadow: loading || !subject.trim() ? 'none' : '0 4px 14px rgba(79,70,229,0.35)',
+                    transition: 'all 0.2s',
+                  }}>
+                  {loading ? (
+                    <>
+                      <motion.div style={{ width: 16, height: 16, borderRadius: '50%', border: '2.5px solid rgba(255,255,255,0.3)', borderTop: '2.5px solid #fff' }}
+                        animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.75, ease: 'linear' }} />
+                      Creating meeting…
+                    </>
+                  ) : (
+                    <><CalendarDays size={15} /> Create Teams Meeting</>
+                  )}
+                </motion.button>
+              </>
+            ) : (
+              /* ── Meeting created result ── */
+              <div>
+                <div style={{ textAlign: 'center', marginBottom: 18 }}>
+                  <motion.div
+                    initial={{ scale: 0 }} animate={{ scale: 1 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+                    style={{ width: 56, height: 56, borderRadius: '50%', background: '#D1FAE5', margin: '0 auto 10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Check size={26} color="#16A34A" />
+                  </motion.div>
+                  <h4 style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: 0 }}>Meeting Ready!</h4>
+                  <p style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>{result.subject}</p>
+                </div>
+
+                {/* Time */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: C.bg, borderRadius: 10, border: `1px solid ${C.border}`, marginBottom: 12 }}>
+                  <Clock size={14} color={C.muted} />
+                  <span style={{ fontSize: 13, color: C.text }}>
+                    {new Date(result.startDateTime).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
+                    {' · '}
+                    {new Date(result.startDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {' – '}
+                    {new Date(result.endDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+
+                {/* Join URL */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 12px', background: '#EEF2FF', borderRadius: 10, border: '1px solid #C7D2FE', marginBottom: 14 }}>
+                  <span style={{ flex: 1, fontSize: 12, color: '#4338CA', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {result.joinUrl}
+                  </span>
+                  <button onClick={copyLink} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}>
+                    {copied ? <Check size={14} color="#16A34A" /> : <Copy size={14} color="#4F46E5" />}
+                  </button>
+                </div>
+
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <motion.button whileTap={{ scale: 0.95 }} onClick={shareToChat}
+                    style={{
+                      flex: 1, padding: '10px 0', borderRadius: 10, border: 'none',
+                      background: 'linear-gradient(135deg, #4F46E5, #5058E5)',
+                      color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    }}>
+                    <MessageSquare size={14} /> Share to Chat
+                  </motion.button>
+                  <motion.button whileTap={{ scale: 0.95 }}
+                    onClick={() => window.open(result.joinUrl, '_blank')}
+                    style={{
+                      padding: '10px 14px', borderRadius: 10, border: `1.5px solid ${C.border}`,
+                      background: C.bg, color: C.text, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: 5,
+                    }}>
+                    <ExternalLink size={13} /> Open
+                  </motion.button>
+                </div>
+
+                <button onClick={() => { setResult(null); setSubject(''); }}
+                  style={{ width: '100%', marginTop: 10, padding: '7px 0', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12.5, color: C.muted, fontWeight: 500 }}>
+                  + Schedule another meeting
+                </button>
+              </div>
+            )}
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+// ── MEETINGS PANE ─────────────────────────────────────────────────────────────
+function MeetingsPane({ onNewMeeting }) {
+  const TIPS = [
+    { icon: '📅', title: 'Seminars', desc: 'Host company-wide seminars with up to 1,000 attendees via Teams Live Events.' },
+    { icon: '👥', title: 'Team Meetings', desc: 'Virtual project sync-ups with screen sharing, chat, and recording built in.' },
+    { icon: '🖥️', title: 'Screen Share', desc: 'Present drawings, BOQ sheets, or site plans directly in the call.' },
+    { icon: '🔗', title: 'Join Link', desc: 'Share the join link in any chat channel — no Teams account required for guests.' },
+  ];
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bg }}>
+      {/* Hero */}
+      <div style={{
+        padding: '32px 32px 28px',
+        background: 'linear-gradient(135deg, #4F46E5 0%, #2563EB 100%)',
+        flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+          <div style={{ width: 52, height: 52, borderRadius: 16, background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <TeamsLogo size={32} />
+          </div>
+          <div>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: '#fff', margin: 0, letterSpacing: '-0.03em' }}>Microsoft Teams</h2>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 3 }}>Virtual meetings, seminars & collaboration</p>
+          </div>
+        </div>
+        <motion.button
+          whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+          onClick={onNewMeeting}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 9,
+            padding: '12px 22px', borderRadius: 12, border: 'none',
+            background: '#fff', color: '#4F46E5',
+            fontSize: 15, fontWeight: 700, cursor: 'pointer',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+          }}>
+          <CalendarDays size={17} />
+          Schedule a Meeting
+        </motion.button>
+      </div>
+
+      {/* Tips grid */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 24px 32px' }}>
+        <p style={{ fontSize: 12, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>
+          What you can do
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+          {TIPS.map(({ icon, title, desc }) => (
+            <motion.div key={title}
+              whileHover={{ y: -2, boxShadow: C.shadowMd }}
+              style={{
+                background: C.card, borderRadius: 14, padding: '16px 14px',
+                border: `1px solid ${C.border}`, boxShadow: C.shadow,
+                transition: 'box-shadow 0.2s',
+              }}>
+              <div style={{ fontSize: 24, marginBottom: 8 }}>{icon}</div>
+              <p style={{ fontSize: 13.5, fontWeight: 700, color: C.text, marginBottom: 5 }}>{title}</p>
+              <p style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.55 }}>{desc}</p>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* How it works */}
+        <p style={{ fontSize: 12, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 28, marginBottom: 14 }}>
+          How it works
+        </p>
+        <div style={{ background: C.card, borderRadius: 14, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+          {[
+            { step: '1', text: 'Click "Schedule a Meeting" and fill in the title, date & time.' },
+            { step: '2', text: "A Teams meeting is created instantly using your organisation's Microsoft 365 account." },
+            { step: '3', text: 'Share the join link in any channel or DM — teammates can join with one click.' },
+            { step: '4', text: 'The meeting opens directly in Microsoft Teams with full audio, video & screen share.' },
+          ].map(({ step, text }, i) => (
+            <div key={step} style={{
+              display: 'flex', alignItems: 'flex-start', gap: 12, padding: '13px 16px',
+              borderTop: i > 0 ? `1px solid ${C.borderLight}` : 'none',
+            }}>
+              <div style={{
+                width: 24, height: 24, borderRadius: '50%', flexShrink: 0, marginTop: 1,
+                background: C.primaryLight, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 11.5, fontWeight: 800, color: C.primary,
+              }}>{step}</div>
+              <p style={{ fontSize: 13, color: C.text, lineHeight: 1.55, margin: 0 }}>{text}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Admin note */}
+        <div style={{
+          marginTop: 20, padding: '12px 14px', background: '#FFF7ED',
+          borderRadius: 12, border: '1px solid #FED7AA',
+          display: 'flex', gap: 10, alignItems: 'flex-start',
+        }}>
+          <span style={{ fontSize: 16, flexShrink: 0 }}>⚙️</span>
+          <div>
+            <p style={{ fontSize: 12.5, fontWeight: 700, color: '#92400E', marginBottom: 3 }}>Admin Setup Required</p>
+            <p style={{ fontSize: 12, color: '#B45309', lineHeight: 1.5, margin: 0 }}>
+              Ensure the Azure AD app registration has <strong>OnlineMeetings.ReadWrite.All</strong> (Application) permission granted by an admin. Set <code style={{ background: '#FEF3C7', borderRadius: 3, padding: '0 4px' }}>TEAMS_ORGANIZER_EMAIL</code> in Railway env vars if users don't have Azure AD accounts.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN EXPORT
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -958,7 +1633,9 @@ function NotifBanner({ perm, onEnable, onDismiss }) {
 export default function ERPChat() {
   const { user } = useAuthStore();
   const [searchParams] = useSearchParams();
-  const { socketRef, connected, employees, unread, typing, markRead, registerActive, startCall, callState, startShare, shareState, SHARE_STATE } = useChat();
+  const { socketRef, connected, employees, unread, typing, markRead, registerActive, startCall, callState, startShare, shareState, SHARE_STATE, previews } = useChat();
+  const [mainView, setMainView] = useState('chat'); // 'chat' | 'calls' | 'meetings'
+  const [showMeetingModal, setShowMeetingModal] = useState(false);
 
   const [tab, setTab] = useState('channels');
   const [channel, setChannel]             = useState(() => searchParams.get('channel') || 'general');
@@ -1209,9 +1886,30 @@ export default function ERPChat() {
   const isChannelView = tab === 'channels';
   const showDetails   = detailsOpen && !isMobile;
 
+  // ── Share meeting link to current active channel ──────────────────────────────
+  const shareMeetingToChat = useCallback((text) => {
+    if (tab === 'dms' && dmChannel) {
+      setDmInput(text);
+      setMainView('chat');
+      if (dmTextRef.current) { dmTextRef.current.focus(); }
+    } else {
+      setChInput(text);
+      setMainView('chat');
+      if (chTextRef.current) { chTextRef.current.focus(); }
+    }
+  }, [tab, dmChannel]);
+
   // ── RENDER ────────────────────────────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden', background: C.bg }}>
+
+      {/* Teams Meeting Modal */}
+      {showMeetingModal && (
+        <TeamsMeetingModal
+          onClose={() => setShowMeetingModal(false)}
+          onMeetingCreated={shareMeetingToChat}
+        />
+      )}
 
       {/* Notification banner */}
       {!notifDismissed && (
@@ -1229,15 +1927,30 @@ export default function ERPChat() {
           filteredChannels={filteredChannels} filteredEmployees={filteredEmployees}
           channel={channel} setChannel={setChannel}
           dmPeer={dmPeer} setDmPeer={setDmPeer}
-          unread={unread} typing={typing} user={user}
+          unread={unread} typing={typing} user={user} previews={previews}
           connected={connected} openMainPane={openMainPane} markRead={markRead}
           channelUnread={channelUnread} dmUnread={dmUnread}
           isMobile={isMobile} mobilePaneOpen={mobilePaneOpen}
+          mainView={mainView} setMainView={setMainView}
+          onNewMeeting={() => setShowMeetingModal(true)}
         />
+
+        {/* ── CALLS PANE ────────────────────────────────────────────────────── */}
+        {mainView === 'calls' && (
+          <CallsPane
+            currentUserId={user?.id} employees={employees} startCall={startCall}
+          />
+        )}
+
+        {/* ── MEETINGS PANE ─────────────────────────────────────────────────── */}
+        {mainView === 'meetings' && (
+          <MeetingsPane onNewMeeting={() => setShowMeetingModal(true)} />
+        )}
 
         {/* ── MAIN CHAT AREA ─────────────────────────────────────────────────── */}
         <div style={{
-          flex: 1, display: isMobile && !mobilePaneOpen ? 'none' : 'flex',
+          flex: 1,
+          display: (mainView === 'calls' || mainView === 'meetings') ? 'none' : (isMobile && !mobilePaneOpen ? 'none' : 'flex'),
           flexDirection: 'column', minWidth: 0, overflow: 'hidden', background: C.bg,
         }}>
 
@@ -1369,3 +2082,4 @@ export default function ERPChat() {
     </div>
   );
 }
+

@@ -152,4 +152,95 @@ router.get('/channels', async (req, res) => {
   res.json({ channels: result.rows });
 });
 
+// ── Teams Online Meetings ─────────────────────────────────────────────────────
+const { createTeamsMeeting } = require('../services/azureService');
+
+// POST /chat/teams-meeting — create a Teams meeting and optionally post to channel
+router.post('/teams-meeting', async (req, res) => {
+  const { subject, startDateTime, endDateTime } = req.body;
+  if (!subject?.trim()) return res.status(400).json({ error: 'subject is required' });
+
+  // Organizer: use logged-in user's email, fall back to env var
+  const organizerEmail =
+    req.user.email ||
+    process.env.TEAMS_ORGANIZER_EMAIL;
+
+  if (!organizerEmail) {
+    return res.status(400).json({ error: 'No organizer email — set TEAMS_ORGANIZER_EMAIL in Railway env vars' });
+  }
+
+  const start = startDateTime || new Date().toISOString();
+  const end   = endDateTime   || new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+  try {
+    const meeting = await createTeamsMeeting(subject.trim(), start, end, organizerEmail);
+    res.json({ meeting });
+  } catch (err) {
+    console.error('[Teams] Route error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Call Logs ─────────────────────────────────────────────────────────────────
+
+let callLogsReady = false;
+async function ensureCallLogs() {
+  if (callLogsReady) return;
+  await query(`
+    CREATE TABLE IF NOT EXISTS call_logs (
+      id            SERIAL PRIMARY KEY,
+      caller_id     UUID REFERENCES users(id) ON DELETE SET NULL,
+      callee_id     UUID REFERENCES users(id) ON DELETE SET NULL,
+      caller_name   VARCHAR(200) NOT NULL,
+      callee_name   VARCHAR(200) NOT NULL,
+      call_type     VARCHAR(10)  NOT NULL DEFAULT 'audio',
+      status        VARCHAR(20)  NOT NULL DEFAULT 'answered',
+      duration_secs INT          NOT NULL DEFAULT 0,
+      started_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+      ended_at      TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS idx_call_logs_caller ON call_logs(caller_id);
+    CREATE INDEX IF NOT EXISTS idx_call_logs_callee ON call_logs(callee_id);
+    CREATE INDEX IF NOT EXISTS idx_call_logs_started ON call_logs(started_at DESC);
+  `);
+  callLogsReady = true;
+}
+
+// POST /chat/call-logs — save a completed call record
+router.post('/call-logs', async (req, res) => {
+  await ensureCallLogs();
+  const { callee_id, callee_name, call_type, status, duration_secs, started_at } = req.body;
+  if (!callee_id || !callee_name) return res.status(400).json({ error: 'callee_id and callee_name required' });
+
+  const caller_name = req.user.full_name || req.user.name || req.user.username || 'Unknown';
+  const result = await query(
+    `INSERT INTO call_logs
+       (caller_id, callee_id, caller_name, callee_name, call_type, status, duration_secs, started_at, ended_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+     RETURNING *`,
+    [
+      req.user.id, callee_id, caller_name, callee_name,
+      call_type || 'audio',
+      status    || 'answered',
+      duration_secs || 0,
+      started_at || new Date().toISOString(),
+    ]
+  );
+  res.json({ log: result.rows[0] });
+});
+
+// GET /chat/call-logs — return calls where I am caller or callee, newest first
+router.get('/call-logs', async (req, res) => {
+  await ensureCallLogs();
+  const { limit = 100 } = req.query;
+  const result = await query(
+    `SELECT * FROM call_logs
+     WHERE caller_id = $1 OR callee_id = $1
+     ORDER BY started_at DESC
+     LIMIT $2`,
+    [req.user.id, Math.min(parseInt(limit) || 100, 500)]
+  );
+  res.json({ logs: result.rows });
+});
+
 module.exports = router;

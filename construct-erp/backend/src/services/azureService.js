@@ -85,4 +85,51 @@ async function deleteFromOneDrive(itemId) {
   console.log(`[OneDrive] Deleted item ${itemId}`);
 }
 
-module.exports = { uploadToSharePoint, deleteFromOneDrive };
+// ── Teams Online Meetings ─────────────────────────────────────────────────────
+// Requires the Azure AD app to have Application permission:
+//   OnlineMeetings.ReadWrite.All  (admin consent in Azure portal)
+// The organizer is looked up by UPN/email in Azure AD.
+async function createTeamsMeeting(subject, startDateTime, endDateTime, organizerEmail) {
+  const token = await getAccessToken();
+
+  // Resolve organizer's Azure AD object ID from their email/UPN
+  const userRes = await fetch(
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(organizerEmail)}`,
+    { headers: { 'Authorization': `Bearer ${token}` } }
+  );
+  if (!userRes.ok) {
+    const errBody = await userRes.text();
+    console.error('[Teams] User lookup failed:', userRes.status, errBody.slice(0, 200));
+    throw new Error(`Organizer "${organizerEmail}" not found in Azure AD (status ${userRes.status}). Check TEAMS_ORGANIZER_EMAIL env var.`);
+  }
+  const { id: userId } = await userRes.json();
+
+  // Create the online meeting
+  const meetRes = await fetch(
+    `https://graph.microsoft.com/v1.0/users/${userId}/onlineMeetings`,
+    {
+      method:  'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subject, startDateTime, endDateTime }),
+    }
+  );
+
+  if (!meetRes.ok) {
+    const errBody = await meetRes.json().catch(() => ({}));
+    const msg = errBody?.error?.message || `HTTP ${meetRes.status}`;
+    console.error('[Teams] Meeting creation failed:', msg);
+    throw new Error(`Teams meeting creation failed: ${msg}`);
+  }
+
+  const m = await meetRes.json();
+  console.log('[Teams] Meeting created:', m.id, m.joinUrl?.slice(0, 60));
+  return {
+    id:            m.id,
+    subject:       m.subject,
+    joinUrl:       m.joinUrl,
+    startDateTime: m.startDateTime,
+    endDateTime:   m.endDateTime,
+  };
+}
+
+module.exports = { uploadToSharePoint, deleteFromOneDrive, createTeamsMeeting };
