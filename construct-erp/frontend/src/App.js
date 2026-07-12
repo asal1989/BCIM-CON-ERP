@@ -1,8 +1,9 @@
 // src/App.js
 import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, QueryCache } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 import useAuthStore from './store/authStore';
 import Layout from './components/layout/Layout';
 import LoadingScreen from './components/common/LoadingScreen';
@@ -11,7 +12,22 @@ import InstallBanner from './components/common/InstallBanner';
 import { LanguageProvider } from './context/LanguageContext';
 import { ChatProvider } from './context/ChatContext';
 
+// Many pages call useQuery and only read {data, isLoading} — a failed
+// request then renders as an empty list or an infinite spinner with no
+// indication anything went wrong. react-query v5 dropped per-query onError,
+// so a QueryCache-level handler is the systemic fix: any query error surfaces
+// a toast unless the page opts out with `meta: { silent: true }`. 401/403 are
+// skipped here since the axios interceptor already handles auth redirects.
 const queryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: (error, query) => {
+      if (query.meta?.silent) return;
+      const status = error?.response?.status;
+      if (status === 401 || status === 403) return;
+      const message = error?.response?.data?.error || error?.message || 'Failed to load data';
+      toast.error(message, { id: `query-error-${query.queryKey.join('-')}` });
+    },
+  }),
   defaultOptions: {
     queries: {
       retry: 1,

@@ -339,7 +339,16 @@ app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 // Static file serving (uploads) — authenticated only
 // Requires a valid JWT so private documents cannot be hot-linked
 const { authenticate } = require('./middleware/auth');
-app.use('/uploads', authenticate, express.static(path.join(__dirname, '../uploads')));
+// /uploads sits outside the /api/ prefix so the general limiter below never
+// covered it — an authenticated client could otherwise hammer disk reads
+// with no throttle at all. Generous limit since legit DMS/document pages can
+// legitimately load many attachments in a normal session.
+const uploadsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
+  message: { error: 'Too many file requests, please try again later.' }
+});
+app.use('/uploads', uploadsLimiter, authenticate, express.static(path.join(__dirname, '../uploads')));
 // If express.static didn't find the file it calls next() — catch it here so
 // the React catch-all doesn't return index.html with a 200 status
 app.use('/uploads', (req, res) => res.status(404).json({ error: 'File not found or has been deleted' }));
@@ -633,6 +642,22 @@ const CHAT_CHANNELS = [
   'hr', 'planning', 'quality', 'subcontractors', 'tender', 'it-support',
 ];
 
+// Minimal per-socket flood guard. The REST POST that persists a chat message
+// sits behind the general /api/ limiter, but `send_message` itself is only a
+// broadcast — a raw socket client could emit it directly (bypassing REST
+// entirely) and spam every channel member with no throttle at all. Same risk
+// applies to call signaling. This tracks a rolling window per socket+event.
+const socketRateState = new WeakMap();
+function isRateLimited(socket, event, max, windowMs) {
+  let state = socketRateState.get(socket);
+  if (!state) { state = {}; socketRateState.set(socket, state); }
+  const now = Date.now();
+  const hits = (state[event] || []).filter(t => now - t < windowMs);
+  hits.push(now);
+  state[event] = hits;
+  return hits.length > max;
+}
+
 io.on('connection', (socket) => {
   logger.info(`💬 Chat: ${socket.user?.name || socket.user?.id} connected`);
   CHAT_CHANNELS.forEach(ch => socket.join(ch));
@@ -655,6 +680,7 @@ io.on('connection', (socket) => {
 
   // New message — broadcast to everyone in the channel
   socket.on('send_message', (msg) => {
+    if (isRateLimited(socket, 'send_message', 30, 10_000)) return; // >30 broadcasts/10s — drop silently
     // msg already saved via REST POST, just broadcast to others
     if (msg.channel?.startsWith('dm-')) {
       const raw = msg.channel.slice(3);
@@ -727,6 +753,7 @@ io.on('connection', (socket) => {
   // ICE candidates.
 
   socket.on('call:offer', ({ to, offer, callerName, callerPhoto, callType }) => {
+    if (isRateLimited(socket, 'call:offer', 10, 60_000)) return; // >10 call attempts/min — drop (prevents ring-spam)
     io.to(`user-${to}`).emit('call:offer', {
       from: socket.user.id,
       callerName: callerName || socket.user.name,
