@@ -77,14 +77,42 @@ const performBackup = () => {
     });
 
     dump.on('close', (code) => {
-      if (code === 0) {
-        logger.info(`✅ Backup successful: ${filePath}`);
-        rotateBackups();
-        resolve(filePath);
-      } else {
+      if (code !== 0) {
         logger.error(`❌ pg_dump process exited with code ${code}`);
         reject(new Error(`pg_dump failed with code ${code}`));
+        return;
       }
+
+      // A zero exit code doesn't guarantee a usable dump — a disk-full or
+      // network drop mid-dump can still produce a truncated/empty file with
+      // exit code 0. Verify the file exists, has real content, and ends with
+      // pg_dump's standard footer before trusting it.
+      let stats;
+      try {
+        stats = fs.statSync(filePath);
+      } catch (err) {
+        logger.error(`❌ Backup file missing after pg_dump reported success: ${filePath}`);
+        reject(new Error('Backup file missing after pg_dump reported success'));
+        return;
+      }
+
+      const MIN_BACKUP_BYTES = 1024; // a real dump of this schema is always far larger than 1KB
+      if (stats.size < MIN_BACKUP_BYTES) {
+        logger.error(`❌ Backup file suspiciously small (${stats.size} bytes): ${filePath}`);
+        reject(new Error(`Backup file too small (${stats.size} bytes) — likely truncated`));
+        return;
+      }
+
+      const tail = fs.readFileSync(filePath, 'utf8').slice(-2000);
+      if (!tail.includes('PostgreSQL database dump complete')) {
+        logger.error(`❌ Backup file missing completion footer — dump likely truncated: ${filePath}`);
+        reject(new Error('Backup file missing pg_dump completion footer — likely truncated'));
+        return;
+      }
+
+      logger.info(`✅ Backup successful and verified (${(stats.size / 1024).toFixed(1)} KB): ${filePath}`);
+      rotateBackups();
+      resolve(filePath);
     });
   });
 };

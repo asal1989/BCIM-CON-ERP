@@ -5,6 +5,7 @@ import { Plus, X, Pencil, FileText, Printer, Eye } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
 import toast from 'react-hot-toast';
+import DOMPurify from 'dompurify';
 import { hrLettersAPI } from '../../api/client';
 import { PageHeader } from '../../theme';
 import { FIELD_HL } from '../../constants/fieldStyles';
@@ -131,7 +132,7 @@ function LetterPrintView({ letter, onClose }) {
     const win = window.open('','_blank','width=900,height=700');
     win.document.write(`<!DOCTYPE html><html><head><title>${letter.subject||'Letter'}</title>
       <style>body{font-family:'Times New Roman',serif;padding:20mm 25mm;color:#000;font-size:12pt;line-height:1.6}p{margin:0 0 12pt}</style>
-      </head><body>${letter.content_html}</body></html>`);
+      </head><body>${DOMPurify.sanitize(letter.content_html)}</body></html>`);
     win.document.close();
     setTimeout(()=>win.print(),300);
   };
@@ -150,7 +151,7 @@ function LetterPrintView({ letter, onClose }) {
             <button onClick={onClose}><X size={16}/></button>
           </div>
         </div>
-        <div className="overflow-y-auto flex-1 p-8" dangerouslySetInnerHTML={{ __html: letter.content_html }} />
+        <div className="overflow-y-auto flex-1 p-8" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(letter.content_html) }} />
       </div>
     </div>
   );
