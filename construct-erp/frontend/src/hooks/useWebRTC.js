@@ -2,7 +2,10 @@
 // The server acts as a pure signaling relay (call:offer / call:answer /
 // call:ice-candidate) via Socket.io user-rooms; no media ever hits the server.
 import { useRef, useState, useCallback, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import api from '../api/client';
+
+const CALL_TIMEOUT_MS = 60_000; // auto-end outgoing call if no answer within 60 s
 
 // Base STUN servers — always used.
 // TURN credentials are fetched from the backend on mount (Railway env vars).
@@ -30,7 +33,9 @@ export function useWebRTC({ socketRef, connected, currentUser }) {
 
   const pcRef              = useRef(null);
   const localStreamRef     = useRef(null);
+  const screenTrackRef     = useRef(null); // screen share track for explicit stop
   const durationTimerRef   = useRef(null);
+  const callTimeoutRef     = useRef(null); // auto-end if no answer
   const pendingCandidates  = useRef([]);
   const callStateRef       = useRef(CALL_STATE.IDLE);
   const callInfoRef        = useRef(null);
@@ -53,6 +58,12 @@ export function useWebRTC({ socketRef, connected, currentUser }) {
   // ── Cleanup: stop streams, close PC, reset all state ────────────────────────
   const cleanup = useCallback(() => {
     clearInterval(durationTimerRef.current);
+    clearTimeout(callTimeoutRef.current);
+    // Stop the screen track if an in-call screen share is active
+    if (screenTrackRef.current) {
+      screenTrackRef.current.stop();
+      screenTrackRef.current = null;
+    }
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(t => t.stop());
     }
@@ -124,11 +135,21 @@ export function useWebRTC({ socketRef, connected, currentUser }) {
     socketRef.current?.emit('call:offer', {
       to: peer.id,
       offer,
-      callerName:  currentUser?.name || currentUser?.full_name,
+      callerName:  currentUser?.full_name || currentUser?.name,
       callerPhoto: currentUser?.profile_photo_url,
       callType,
     });
-  }, [getUserMedia, createPC, socketRef, currentUser]);
+
+    // Auto-end after CALL_TIMEOUT_MS if the callee never answers
+    callTimeoutRef.current = setTimeout(() => {
+      if (callStateRef.current === CALL_STATE.CALLING) {
+        toast.error('No answer — call ended');
+        const info = callInfoRef.current;
+        if (info?.peerId) socketRef.current?.emit('call:end', { to: info.peerId });
+        cleanup();
+      }
+    }, CALL_TIMEOUT_MS);
+  }, [getUserMedia, createPC, socketRef, currentUser, cleanup]);
 
   // ── Accept incoming call ─────────────────────────────────────────────────────
   const answerCall = useCallback(async () => {
@@ -190,14 +211,22 @@ export function useWebRTC({ socketRef, connected, currentUser }) {
     try {
       const screen = await navigator.mediaDevices.getDisplayMedia({ video: true });
       const track  = screen.getVideoTracks()[0];
+      screenTrackRef.current = track; // store so stopScreenShare can explicitly stop it
       const sender = pcRef.current?.getSenders().find(s => s.track?.kind === 'video');
       if (sender) await sender.replaceTrack(track);
       setIsScreenSharing(true);
-      track.onended = () => stopScreenShare();
+      // Browser native "Stop sharing" button — restore camera automatically
+      track.onended = () => stopScreenShareInternal();
     } catch { /* user cancelled */ }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const stopScreenShare = useCallback(async () => {
+  // Internal helper used by both the button and track.onended
+  const stopScreenShareInternal = useCallback(async () => {
+    // Explicitly stop the screen track so the browser removes the capture indicator
+    if (screenTrackRef.current) {
+      screenTrackRef.current.stop();
+      screenTrackRef.current = null;
+    }
     const stream = localStreamRef.current;
     if (!stream) return;
     const camTrack = stream.getVideoTracks()[0];
@@ -205,6 +234,8 @@ export function useWebRTC({ socketRef, connected, currentUser }) {
     if (sender && camTrack) await sender.replaceTrack(camTrack).catch(() => {});
     setIsScreenSharing(false);
   }, []);
+
+  const stopScreenShare = stopScreenShareInternal;
 
   // ── Socket signaling listeners ───────────────────────────────────────────────
   // IMPORTANT: depend on `connected` (reactive boolean state from ChatContext),
@@ -226,6 +257,7 @@ export function useWebRTC({ socketRef, connected, currentUser }) {
 
     const onAnswer = async ({ answer }) => {
       try {
+        clearTimeout(callTimeoutRef.current); // got an answer — cancel the timeout
         await pcRef.current?.setRemoteDescription(new RTCSessionDescription(answer));
         for (const c of pendingCandidates.current) {
           await pcRef.current?.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
@@ -245,8 +277,8 @@ export function useWebRTC({ socketRef, connected, currentUser }) {
     };
 
     const onEnd    = () => cleanup();
-    const onReject = () => cleanup();
-    const onBusy   = () => cleanup();
+    const onReject = () => { toast('Call declined', { icon: '📵' }); cleanup(); };
+    const onBusy   = () => { toast.error('User is busy on another call'); cleanup(); };
 
     socket.on('call:offer',         onOffer);
     socket.on('call:answer',        onAnswer);

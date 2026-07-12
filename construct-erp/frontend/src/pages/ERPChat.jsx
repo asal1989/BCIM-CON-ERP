@@ -1324,7 +1324,8 @@ export default function ERPChat() {
                     onVoiceCall={() => startCall(dmPeer, 'audio').catch(e => toast.error(e.message || 'Could not start call'))}
                     onVideoCall={() => startCall(dmPeer, 'video').catch(e => toast.error(e.message || 'Could not start call'))}
                     onScreenShare={() => startShare(dmPeer).catch(e => toast.error(e.message || 'Could not start screen share'))}
-                    callState={callState} shareState={shareState}
+                    callState={callState}
+                    shareState={callState !== 'idle' ? 'active' : shareState}
                     onToggleSearch={() => {}} onTogglePin={() => {}}
                     searchOpen={false} pinsOpen={false}
                     onToggleDetails={() => setDetailsOpen(v => !v)} detailsOpen={detailsOpen}

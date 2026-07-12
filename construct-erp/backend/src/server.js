@@ -724,11 +724,14 @@ io.on('connection', (socket) => {
   });
 
   // ── Screen share signaling ────────────────────────────────────────────────────
-  socket.on('screenshare:offer', ({ to, offer }) => {
+  // Pass sharerName/sharerPhoto through from the client (like call:offer does) —
+  // profile_photo_url is NOT in the JWT payload so socket.user.profile_photo_url
+  // is always undefined, which would break the avatar in IncomingShareModal.
+  socket.on('screenshare:offer', ({ to, offer, sharerName, sharerPhoto }) => {
     io.to(`user-${to}`).emit('screenshare:offer', {
       from: socket.user.id,
-      sharerName:  socket.user.name || socket.user.username,
-      sharerPhoto: socket.user.profile_photo_url,
+      sharerName:  sharerName || socket.user.name || socket.user.username,
+      sharerPhoto: sharerPhoto || null,
       offer,
     });
   });
