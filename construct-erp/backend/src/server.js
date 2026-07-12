@@ -258,9 +258,16 @@ const jwt    = require('jsonwebtoken');
 const app    = express();
 const server = http.createServer(app);
 const PORT   = process.env.PORT || 5000;
+// erp.bcim.in is the only production frontend (confirmed 2026-07 — nothing
+// else calls this backend from a raw *.railway.app URL), so the blanket
+// *.up.railway.app / *.railway.app wildcard below was broader than needed:
+// with credentials:true, ANY tenant's free Railway deploy could otherwise
+// issue a matching-origin credentialed request. Prod + dev/LAN access is now
+// via this explicit allowlist instead of a wildcard.
 const extraAllowedOrigins = [
   'http://bcim.ddns.net:3000',
   'https://bcim.ddns.net:3000',
+  'https://erp.bcim.in',
 ];
 
 const isAllowedOrigin = (origin) => {
@@ -272,7 +279,6 @@ const isAllowedOrigin = (origin) => {
   // (a bare *.vercel.app wildcard lets ANY Vercel deploy make credentialed requests)
   const vercelSlug = process.env.VERCEL_DEPLOY_SLUG; // e.g. "bcim-con-erp"
   if (vercelSlug && origin.includes(`.vercel.app`) && origin.includes(vercelSlug)) return true;
-  if (origin.endsWith('.up.railway.app') || origin.endsWith('.railway.app')) return true;
   if (process.env.FRONTEND_URL && origin.startsWith(process.env.FRONTEND_URL)) return true;
   return false;
 };
@@ -297,22 +303,13 @@ app.use(helmet({
 }));
 
 // CORS
+// (This callback used to re-list every localhost/LAN/Vercel/Railway/
+// FRONTEND_URL check a second time below isAllowedOrigin(origin) — all dead
+// code, since isAllowedOrigin already covers each of those cases and returns
+// early. isAllowedOrigin is the single source of truth now.)
 app.use(cors({
   origin: (origin, cb) => {
     if (isAllowedOrigin(origin)) return cb(null, true);
-    // no origin = same-origin requests (production), curl, mobile apps
-    if (!origin) return cb(null, true);
-    // any localhost port — allow in dev
-    if (/^https?:\/\/localhost(:\d+)?\/?$/.test(origin)) return cb(null, true);
-    // LAN / local network IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
-    if (/^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(origin)) return cb(null, true);
-    // Vercel: only our own deploy slug (env var), not all *.vercel.app
-    const vSlug = process.env.VERCEL_DEPLOY_SLUG;
-    if (vSlug && origin.includes('.vercel.app') && origin.includes(vSlug)) return cb(null, true);
-    // Railway deployments
-    if (origin.endsWith('.up.railway.app') || origin.endsWith('.railway.app')) return cb(null, true);
-    // explicit production frontend URL
-    if (process.env.FRONTEND_URL && origin.startsWith(process.env.FRONTEND_URL)) return cb(null, true);
     cb(new Error(`CORS: ${origin} not allowed`));
   },
   credentials: true,
