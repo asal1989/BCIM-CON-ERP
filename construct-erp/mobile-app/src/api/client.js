@@ -360,4 +360,17 @@ export const notificationsAPI = {
   registerDevice: (token, platform) => api.post('/notifications/devices', { token, platform, enabled: true }),
 };
 
+// ── Team Chat ─────────────────────────────────────────────────────────────────
+export const chatAPI = {
+  previews:   ()                          => api.get('/chat/previews'),
+  messages:   (channel, limit = 100)      => api.get('/chat/messages', { params: { channel, limit } }),
+  send:       (payload)                    => api.post('/chat/messages', payload),
+  react:      (id, emoji)                  => api.patch(`/chat/messages/${id}/react`, { emoji }),
+  pin:        (id)                         => api.patch(`/chat/messages/${id}/pin`),
+  search:     (q, channel, limit = 100)    => api.get('/chat/search', { params: { q, channel, limit } }),
+  markRead:   (channel)                    => api.post('/chat/messages/mark-read', { channel }),
+  callLogs:   (limit = 100)                => api.get('/chat/call-logs', { params: { limit } }),
+  meetings:   (limit = 30)                 => api.get('/chat/meetings', { params: { limit } }),
+};
+
 export default api;

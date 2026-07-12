@@ -8,6 +8,8 @@ import DashboardScreen from '../screens/DashboardScreen';
 import ApprovalsScreen from '../screens/ApprovalsScreen';
 import MoreScreen from '../screens/MoreScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import ChatListScreen from '../screens/ChatListScreen';
+import ChatThreadScreen from '../screens/ChatThreadScreen';
 import StoresScreen from '../screens/StoresScreen';
 import IGNScreen from '../screens/IGNScreen';
 import GRSScreen from '../screens/GRSScreen';
@@ -101,6 +103,7 @@ const Stack = createNativeStackNavigator();
 
 const TAB_ICONS = {
   Home:      'view-dashboard-outline',
+  Chat:      'chat-processing-outline',
   Approvals: 'check-decagram-outline',
   Stores:    'warehouse',
   Menu:      'view-grid-outline',
@@ -122,6 +125,7 @@ function TabNavigator() {
       })}
     >
       <Tab.Screen name="Home" component={DashboardScreen} options={{ title: 'Dashboard' }} />
+      <Tab.Screen name="Chat" component={ChatListScreen} options={{ title: 'Chat' }} />
       <Tab.Screen name="Approvals" component={ApprovalsScreen} />
       <Tab.Screen name="Stores" component={StoresScreen} />
       <Tab.Screen name="Menu" component={MoreScreen} />
@@ -137,6 +141,7 @@ export default function RootNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Tabs" component={TabNavigator} />
+      <Stack.Screen name="ChatThread" component={ChatThreadScreen} options={{ headerShown: true }} />
       <Stack.Screen name="Dashboard" component={DashboardScreen} />
       <Stack.Screen name="IGN" component={IGNScreen} />
       <Stack.Screen name="GRS" component={GRSScreen} />

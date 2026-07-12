@@ -50,3 +50,17 @@ export function addNotificationResponseListener(onNavigate) {
     if (link) onNavigate(link);
   });
 }
+
+// Chat-specific push taps (DM / @mention) carry { type, channel } instead of
+// a generic `link` — the backend's fcm.service.js sends these from the
+// server.js socket handler when a DM or mention lands. Separate from
+// addNotificationResponseListener above since it needs to know the CHANNELS
+// list to build a sensible screen title, not just a raw route name.
+export function addChatNotificationListener(onOpenChat) {
+  return Notifications.addNotificationResponseReceivedListener((response) => {
+    const data = response.notification.request.content.data;
+    if (data?.type === 'dm' || data?.type === 'mention') {
+      onOpenChat(data);
+    }
+  });
+}
