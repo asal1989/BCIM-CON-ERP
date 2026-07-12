@@ -211,7 +211,12 @@ export const pettyCashAPI = {
 };
 
 export const gatePassAPI = {
-  list: (projectId) => api.get('/gate-passes', { params: { project_id: projectId } }),
+  list:   (projectId) => api.get('/gate-passes', { params: { project_id: projectId } }),
+  detail: (id)         => api.get(`/gate-passes/${id}`),
+  create: (data)       => api.post('/gate-passes', data),
+  return: (id)         => api.patch(`/gate-passes/${id}/return`),
+  close:  (id)         => api.patch(`/gate-passes/${id}/close`),
+  cancel: (id)         => api.patch(`/gate-passes/${id}/cancel`),
 };
 
 export const payrollAPI = {

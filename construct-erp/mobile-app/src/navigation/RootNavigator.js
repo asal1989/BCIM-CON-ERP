@@ -56,6 +56,8 @@ import VendorPaymentsScreen from '../screens/VendorPaymentsScreen';
 import StoreLedgerScreen from '../screens/StoreLedgerScreen';
 import PettyCashScreen from '../screens/PettyCashScreen';
 import GatePassScreen from '../screens/GatePassScreen';
+import GatePassDetailScreen from '../screens/GatePassDetailScreen';
+import CreateGatePassScreen from '../screens/CreateGatePassScreen';
 import PayrollScreen from '../screens/PayrollScreen';
 import EmployeeDirectoryScreen from '../screens/EmployeeDirectoryScreen';
 import QualityITPScreen from '../screens/QualityITPScreen';
@@ -188,6 +190,8 @@ export default function RootNavigator() {
       <Stack.Screen name="StoreLedger" component={StoreLedgerScreen} />
       <Stack.Screen name="PettyCash" component={PettyCashScreen} />
       <Stack.Screen name="GatePass" component={GatePassScreen} />
+      <Stack.Screen name="GatePassDetail" component={GatePassDetailScreen} />
+      <Stack.Screen name="CreateGatePass" component={CreateGatePassScreen} />
       <Stack.Screen name="Payroll" component={PayrollScreen} />
       <Stack.Screen name="EmployeeDirectory" component={EmployeeDirectoryScreen} />
       <Stack.Screen name="QualityITP" component={QualityITPScreen} />
