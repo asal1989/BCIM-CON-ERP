@@ -900,6 +900,16 @@ export default function VendorQSCertificationDetailPage() {
     deleteMut.mutate();
   };
 
+  const revertToQSMut = useMutation({
+    mutationFn: () => vendorQSCertificationAPI.updateStatus(id, { status: 'certified' }),
+    onSuccess: () => {
+      toast.success('Certification sent back to QS for editing');
+      qc.invalidateQueries({ queryKey: ['vendor-qs-certification', id] });
+      qc.invalidateQueries({ queryKey: ['vendor-qs-certifications'] });
+    },
+    onError: err => toast.error(err?.response?.data?.error || 'Revert failed'),
+  });
+
   const refreshMut = useMutation({
     mutationFn: () => vendorQSCertificationAPI.refreshFromBills(id),
     onSuccess: (res) => {
@@ -1051,6 +1061,19 @@ export default function VendorQSCertificationDetailPage() {
           ) : null}
         </div>
         <div className="flex items-center gap-2">
+          {/* Revert to QS — admin/super_admin only, when status is 'accounts' */}
+          {cert.status === 'accounts' && canEditSensitive && (
+            <button
+              onClick={() => {
+                if (!window.confirm('Send this certification back to QS for editing?\nThe "Approved → Accounts" status will be cleared.')) return;
+                revertToQSMut.mutate();
+              }}
+              disabled={revertToQSMut.isPending}
+              className="px-4 py-2 bg-amber-50 border border-amber-300 text-amber-700 rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-50 shadow-sm hover:bg-amber-100"
+            >
+              ↩ {revertToQSMut.isPending ? 'Reverting…' : 'Revert to QS'}
+            </button>
+          )}
           <button
             onClick={() => refreshMut.mutate()}
             disabled={refreshMut.isPending || cert.status === 'paid' || cert.status === 'cancelled'}
