@@ -15,6 +15,7 @@ import {
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
 import { subcontractorAPI, vendorAPI, projectAPI, companySettingsAPI, mrsAPI } from '../../api/client';
+import { PageHeader, Theme } from '../../theme';
 import { FIELD_HL } from '../../constants/fieldStyles';
 import SearchableSelect from '../../components/shared/SearchableSelect';
 import VendorSelect from '../../components/shared/VendorSelect';
@@ -1589,37 +1590,29 @@ export default function WorkOrderPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#f5f6fa]">
+    <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
 
-      {/* ── Page Header ── */}
-      <div className="bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
-        <div className="max-w-[1400px] mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium mb-1.5">
-              <Hammer className="w-3 h-3" />
-              <span>Procurement</span>
-              <ChevronRight className="w-3 h-3" />
-              <span className="text-slate-500 font-semibold">Work Orders</span>
-            </div>
-            <h1 className="text-[22px] font-bold text-slate-900 tracking-tight">Work Orders</h1>
-            <p className="text-xs text-slate-400 mt-0.5">Subcontractor & labour work order management</p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
+      <PageHeader
+        title="Work Orders"
+        subtitle="Subcontractor & labour work order management"
+        breadcrumbs={[{ label: 'Procurement' }, { label: 'Work Orders' }]}
+        actions={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button onClick={() => setShowPdfImport(true)}
-              className="flex items-center gap-1.5 px-3 h-8 bg-white border border-slate-200 text-slate-600 text-xs font-medium rounded-lg hover:bg-slate-50 transition-colors">
-              <FileText className="w-3.5 h-3.5" /> Import PDF
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              <FileText size={13} /> Import PDF
             </button>
             <button onClick={() => setShowExcelImport(true)}
-              className="flex items-center gap-1.5 px-3 h-8 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium rounded-lg hover:bg-emerald-100 transition-colors">
-              <FileSpreadsheet className="w-3.5 h-3.5" /> Import Excel
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              <FileSpreadsheet size={13} /> Import Excel
             </button>
             <button onClick={() => setShowCreate(true)}
-              className="flex items-center gap-1.5 px-4 h-8 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm">
-              <Plus className="w-3.5 h-3.5" /> New Work Order
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 9, background: '#fff', color: Theme.navyDark, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
+              <Plus size={13} /> New Work Order
             </button>
           </div>
-        </div>
-      </div>
+        }
+      />
 
       <div className="max-w-[1400px] mx-auto px-6 py-5 space-y-5">
 
