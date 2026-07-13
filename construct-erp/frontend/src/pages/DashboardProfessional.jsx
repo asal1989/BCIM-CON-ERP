@@ -1,24 +1,21 @@
 // src/pages/DashboardProfessional.jsx
-// Enterprise-style executive dashboard organised by department.
-// Neutral palette, dense KPI strip, section-based layout with tables + charts per department.
-import React, { Suspense, lazy, useMemo, useState, useEffect, useCallback, useRef } from 'react';
-import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
+import React, { Suspense, lazy, useMemo, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  ResponsiveContainer, AreaChart, Area, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, Legend,
+  LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, CartesianGrid,
 } from 'recharts';
 import {
-  Building2, Wallet, Receipt, Clock, ShieldCheck, HardHat,
+  Building2, Wallet, Receipt, Clock, ShieldCheck,
   Package, FileText, AlertTriangle, RefreshCw, ChevronRight,
-  TrendingUp, FileWarning, ClipboardList, Users, CheckCircle2,
-  ArrowUpRight, ArrowDownRight, Activity, FileSpreadsheet,
-  Search, LayoutGrid, List, Upload, Calendar as CalendarIcon, UserCircle2,
+  FileWarning, ClipboardList, CheckCircle2, Activity,
+  FileSpreadsheet, Search, LayoutGrid, List, Upload,
+  IndianRupee, HardHat, TrendingUp, Plus,
 } from 'lucide-react';
 import { projectAPI, analyticsAPI, tqsBillsAPI, procurementAdvanceAPI } from '../api/client';
 import useAuthStore from '../store/authStore';
-import { useLanguage } from '../context/LanguageContext';
+import { PageHeader, Theme } from '../theme';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
 
@@ -42,74 +39,158 @@ const isMDDashboardUser = (u) => {
     || MD_DASHBOARD_EMAILS.includes((u.email || '').toLowerCase());
 };
 
-const STATUS_COLORS = ['#1e40af', '#0e7490', '#16a34a', '#b45309', '#b91c1c'];
-
-// ─── Helpers ───────────────────────────────────────────────────────────────
-const inr = (v) => `₹${(parseFloat(v) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-const inrCompact = (v) => {
+/* ── Helpers ──────────────────────────────────────────────────────── */
+const inrCr = (v) => {
   const n = Math.abs(parseFloat(v) || 0);
   const sign = (parseFloat(v) || 0) < 0 ? '-' : '';
-  if (n >= 1e7)  return `${sign}₹${(n / 1e7).toFixed(n >= 1e8 ? 1 : 2)} Cr`;
-  if (n >= 1e5)  return `${sign}₹${(n / 1e5).toFixed(n >= 1e6 ? 1 : 2)} L`;
-  if (n >= 1e3)  return `${sign}₹${(n / 1e3).toFixed(1)} K`;
+  if (n >= 1e7) return `${sign}₹${(n / 1e7).toFixed(n >= 1e8 ? 1 : 2)} Cr`;
+  if (n >= 1e5) return `${sign}₹${(n / 1e5).toFixed(1)} L`;
+  if (n >= 1e3) return `${sign}₹${(n / 1e3).toFixed(1)} K`;
   return `${sign}₹${n.toFixed(0)}`;
 };
+const inrFull = (v) => `₹ ${parseFloat(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+const pct = (a, b) => (b > 0 ? ((a / b) * 100).toFixed(1) : '0.0');
+const fmtDate = (d) => d && dayjs(d).isValid() ? dayjs(d).format('DD MMM YYYY') : '—';
 
-const num = (v) => (parseFloat(v) || 0).toLocaleString('en-IN');
+const AVATAR_COLORS = ['#4f46e5','#0891b2','#059669','#d97706','#dc2626','#7c3aed','#db2777','#ea580c'];
+const avatarBg  = (n) => AVATAR_COLORS[(n || '').charCodeAt(0) % AVATAR_COLORS.length];
+const initials2 = (n) => (n || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+const toArray   = (r) => Array.isArray(r?.data) ? r.data : (Array.isArray(r?.data?.data) ? r.data.data : []);
 
-const relTime = (date) => {
-  if (!date) return '—';
-  const diff = Math.max(0, (Date.now() - new Date(date).getTime()) / 1000);
-  if (diff < 5)    return 'just now';
-  if (diff < 60)   return `${Math.floor(diff)}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
-  return `${Math.floor(diff / 86400)} d ago`;
-};
-
-const toArray = (r) => Array.isArray(r?.data) ? r.data : (Array.isArray(r?.data?.data) ? r.data?.data : []);
-
-const fmtDate = (d) => {
-  if (!d) return '—';
-  try { return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); }
-  catch { return '—'; }
-};
-
-const getRangeBounds = (range) => {
-  if (range === 'all') return { dateFrom: null, dateTo: null };
-  const now = dayjs();
-  const map = { '7d': 6, '30d': 29, '90d': 89, '1y': 364 };
-  const days = map[range] ?? 29;
-  return { dateFrom: now.subtract(days, 'day').format('YYYY-MM-DD'), dateTo: now.format('YYYY-MM-DD') };
-};
-
-function DashLoader() {
+/* ── Sparkline ────────────────────────────────────────────────────── */
+function Sparkline({ data, color, fill }) {
+  if (!data?.length) return null;
+  const w = 90, h = 36;
+  const vals = data.map(Number);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const range = max - min || 1;
+  const pts = vals.map((v, i) => `${(i / (vals.length - 1)) * w},${h - ((v - min) / range) * (h - 4) - 2}`).join(' ');
   return (
-    <div className="prof-loader">
-      <div className="prof-spinner" />
-      <span>Loading dashboard…</span>
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ overflow: 'visible' }}>
+      {fill && <polyline points={`0,${h} ${pts} ${w},${h}`} fill={fill} stroke="none" opacity={0.15} />}
+      <polyline points={pts} fill="none" stroke={color} strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/* ── KPI Spark Card ───────────────────────────────────────────────── */
+function KpiSparkCard({ icon: Icon, label, value, sub, color, accentBg, sparkData, trendLabel, trendUp, to }) {
+  const inner = (
+    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '16px 18px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: 2, height: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 10, background: accentBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Icon size={15} style={{ color }} />
+            </div>
+            <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#94a3b8' }}>{label}</span>
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+          {trendLabel && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: trendUp ? '#16a34a' : '#dc2626' }}>
+                {trendUp ? '↑' : '↓'} {trendLabel}
+              </span>
+            </div>
+          )}
+          {!trendLabel && sub && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 5 }}>{sub}</div>}
+        </div>
+        <Sparkline data={sparkData} color={color} fill={color} />
+      </div>
+    </div>
+  );
+  return to
+    ? <Link to={to} style={{ textDecoration: 'none', display: 'block' }}>{inner}</Link>
+    : inner;
+}
+
+/* ── Status bar row ───────────────────────────────────────────────── */
+function StatusBar({ label, count, total, color, bg }) {
+  const w = total > 0 ? (count / total) * 100 : 0;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #f8fafc' }}>
+      <div style={{ width: 28, height: 28, borderRadius: 8, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 3 }}>{label}</div>
+        <div style={{ height: 4, borderRadius: 999, background: '#f1f5f9' }}>
+          <div style={{ height: '100%', borderRadius: 999, background: color, width: `${w}%`, transition: 'width .4s ease' }} />
+        </div>
+      </div>
+      <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', minWidth: 24, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{count}</span>
+      <span style={{ fontSize: 10, color: '#94a3b8', minWidth: 36, textAlign: 'right' }}>{pct(count, total)}%</span>
     </div>
   );
 }
 
-const CustomTooltip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null;
+/* ── Finance Donut ────────────────────────────────────────────────── */
+function FinanceDonut({ segments, total }) {
+  const size = 160, stroke = 32;
+  const r = (size - stroke) / 2;
+  const circ = 2 * Math.PI * r;
+  const sum = segments.reduce((s, x) => s + x.value, 0) || 1;
+  let offset = 0;
   return (
-    <div className="prof-tooltip">
-      {label && <div className="prof-tooltip-label">{label}</div>}
-      {payload.map((p, i) => (
-        <div key={i} className="prof-tooltip-row">
-          <span className="prof-tooltip-dot" style={{ background: p.color }} />
-          <span className="prof-tooltip-name">{p.name}</span>
-          <span className="prof-tooltip-val">{typeof p.value === 'number' && Math.abs(p.value) >= 1000 ? inrCompact(p.value) : p.value}</span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+      <div style={{ position: 'relative', flexShrink: 0 }}>
+        <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#f1f5f9" strokeWidth={stroke - 3} />
+          {segments.map((seg, i) => {
+            const dash = (seg.value / sum) * circ;
+            const gap  = circ - dash;
+            const el = <circle key={i} cx={size/2} cy={size/2} r={r} fill="none"
+              stroke={seg.color} strokeWidth={stroke - 3}
+              strokeDasharray={`${dash} ${gap}`} strokeDashoffset={-offset} strokeLinecap="butt" />;
+            offset += dash;
+            return el;
+          })}
+        </svg>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ fontSize: 15, fontWeight: 900, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{inrCr(total)}</span>
+          <span style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Portfolio</span>
         </div>
-      ))}
+      </div>
+      <div style={{ flex: 1, minWidth: 140, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {segments.map(seg => (
+          <div key={seg.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: seg.color, flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: '#374151', fontWeight: 500 }}>{seg.label}</span>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a' }}>{inrCr(seg.value)}</div>
+              <div style={{ fontSize: 10, color: '#94a3b8' }}>{pct(seg.value, sum)}%</div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
-};
+}
 
-// ─── Project Cards Section ──────────────────────────────────────────────────
+/* ── Project rank row ─────────────────────────────────────────────── */
+function ProjectRankRow({ rank, name, value, max, pctVal }) {
+  const w = max > 0 ? (value / max) * 100 : 0;
+  const barColor = pctVal < 30 ? '#ef4444' : pctVal < 60 ? '#f59e0b' : '#22c55e';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: '1px solid #f8fafc' }}>
+      <span style={{ width: 18, fontSize: 11, fontWeight: 700, color: '#94a3b8', textAlign: 'center', flexShrink: 0 }}>{rank}</span>
+      <div style={{ width: 30, height: 30, borderRadius: 8, background: avatarBg(name), color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        {initials2(name)}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+        <div style={{ height: 3, borderRadius: 999, background: '#f1f5f9', marginTop: 4 }}>
+          <div style={{ height: '100%', borderRadius: 999, background: barColor, width: `${w}%` }} />
+        </div>
+      </div>
+      <span style={{ fontSize: 12, fontWeight: 800, color: '#0f172a', minWidth: 60, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{inrCr(value)}</span>
+    </div>
+  );
+}
+
+/* ── Project Cards ────────────────────────────────────────────────── */
 const PROJ_STATUS_CFG = {
   active:    { label: 'Active',    bg: '#f0fdf4', text: '#16a34a', border: '#bbf7d0', dot: '#16a34a' },
   delayed:   { label: 'Delayed',   bg: '#fff1f2', text: '#e11d48', border: '#fecdd3', dot: '#e11d48' },
@@ -118,25 +199,28 @@ const PROJ_STATUS_CFG = {
   completed: { label: 'Completed', bg: '#f0fdf4', text: '#15803d', border: '#86efac', dot: '#15803d' },
 };
 
-const AVATAR_BG = ['#4f46e5','#0891b2','#059669','#d97706','#dc2626','#7c3aed','#db2777','#ea580c'];
-const avatarBg  = n => AVATAR_BG[(n||'').charCodeAt(0) % AVATAR_BG.length];
-const initials2 = n => (n||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
-
-function ProjectCards({ projects, allCount, activeCount, planningCount, delayedCount, completedCount }) {
-  const [search, setSearch]   = useState('');
-  const [tab, setTab]         = useState('all');
+function ProjectCards({ projects }) {
+  const [search, setSearch] = useState('');
+  const [tab, setTab]       = useState('all');
   const [gridView, setGridView] = useState(true);
 
-  const onHoldCount = projects.filter(p => (p.status||'').toLowerCase() === 'on_hold').length;
+  const counts = useMemo(() => {
+    const c = { all: projects.length };
+    for (const p of projects) {
+      const s = (p.status || 'active').toLowerCase();
+      c[s] = (c[s] || 0) + 1;
+    }
+    return c;
+  }, [projects]);
 
   const TABS = [
-    { key: 'all',       label: 'All',       count: allCount || projects.length },
-    { key: 'active',    label: 'Active',    count: activeCount    || 0 },
-    { key: 'planning',  label: 'Planning',  count: planningCount  || 0 },
-    { key: 'delayed',   label: 'Delayed',   count: delayedCount   || 0 },
-    { key: 'on_hold',   label: 'On Hold',   count: onHoldCount },
-    { key: 'completed', label: 'Completed', count: completedCount || 0 },
-  ];
+    { key: 'all',       label: 'All' },
+    { key: 'active',    label: 'Active' },
+    { key: 'planning',  label: 'Planning' },
+    { key: 'delayed',   label: 'Delayed' },
+    { key: 'on_hold',   label: 'On Hold' },
+    { key: 'completed', label: 'Completed' },
+  ].filter(t => t.key === 'all' || counts[t.key] > 0);
 
   const visible = projects.filter(p => {
     const s = (p.status || '').toLowerCase();
@@ -146,317 +230,170 @@ function ProjectCards({ projects, allCount, activeCount, planningCount, delayedC
       .some(v => (v || '').toLowerCase().includes(search.toLowerCase()));
   });
 
-  const fmtDate = d => d && dayjs(d).isValid() ? dayjs(d).format('DD MMM YYYY') : '—';
-  const inrCr   = v => { const n = Number(v||0); if(n>=1e7) return `₹${(n/1e7).toFixed(2)} Cr`; if(n>=1e5) return `₹${(n/1e5).toFixed(2)} L`; return `₹${n.toLocaleString('en-IN')}`; };
+  const inrCrP = v => { const n = Number(v||0); if(n>=1e7) return `₹${(n/1e7).toFixed(2)} Cr`; if(n>=1e5) return `₹${(n/1e5).toFixed(1)} L`; return `₹${n.toLocaleString('en-IN')}`; };
 
   return (
-    <div style={{ marginBottom: 24 }}>
+    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
       {/* Header */}
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14, flexWrap:'wrap', gap:10 }}>
+      <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
         <div>
-          <h2 style={{ fontSize:18, fontWeight:800, color:'#0f172a', margin:0, letterSpacing:'-0.01em' }}>Projects</h2>
-          <p style={{ fontSize:12, color:'#64748b', margin:'2px 0 0', fontWeight:500 }}>{allCount || projects.length} Projects</p>
+          <h3 style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', margin: 0 }}>Projects Portfolio <span style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8', marginLeft: 6 }}>{counts.all} projects</span></h3>
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-          <div style={{ position:'relative' }}>
-            <Search size={13} style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:'#94a3b8' }} />
-            <input
-              value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search projects..."
-              style={{ height:34, border:'1px solid #e2e8f0', borderRadius:10, background:'#f8fafc', paddingLeft:28, paddingRight:12, fontSize:12, color:'#374151', outline:'none', width:190 }}
-            />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ position: 'relative' }}>
+            <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search projects..."
+              style={{ height: 32, border: '1px solid #e2e8f0', borderRadius: 9, background: '#f8fafc', paddingLeft: 28, paddingRight: 12, fontSize: 12, color: '#374151', outline: 'none', width: 180 }} />
           </div>
-          <button onClick={() => setGridView(true)}  style={{ width:34, height:34, borderRadius:8, border:`1px solid ${gridView?'#4f46e5':'#e2e8f0'}`, background:gridView?'#4f46e5':'#fff', color:gridView?'#fff':'#64748b', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}><LayoutGrid size={14}/></button>
-          <button onClick={() => setGridView(false)} style={{ width:34, height:34, borderRadius:8, border:`1px solid ${!gridView?'#4f46e5':'#e2e8f0'}`, background:!gridView?'#4f46e5':'#fff', color:!gridView?'#fff':'#64748b', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}><List size={14}/></button>
+          <button onClick={() => setGridView(true)}  style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${gridView ? '#4f46e5' : '#e2e8f0'}`, background: gridView ? '#4f46e5' : '#fff', color: gridView ? '#fff' : '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><LayoutGrid size={13} /></button>
+          <button onClick={() => setGridView(false)} style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${!gridView ? '#4f46e5' : '#e2e8f0'}`, background: !gridView ? '#4f46e5' : '#fff', color: !gridView ? '#fff' : '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><List size={13} /></button>
+          <Link to="/projects" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 9, background: '#ede9fe', color: '#4f46e5', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+            View All <ChevronRight size={12} />
+          </Link>
         </div>
       </div>
 
       {/* Status tabs */}
-      <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:16, flexWrap:'wrap' }}>
+      <div style={{ padding: '10px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            style={{ height:30, padding:'0 12px', borderRadius:999, border:'none', fontSize:12, fontWeight:700, cursor:'pointer', transition:'all .15s',
-              background: tab===t.key ? '#4f46e5' : '#f1f5f9',
-              color: tab===t.key ? '#fff' : '#475569' }}>
-            {t.label} <span style={{ opacity:.75 }}>{t.count}</span>
+            style={{ height: 28, padding: '0 12px', borderRadius: 999, border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', background: tab === t.key ? '#4f46e5' : '#f1f5f9', color: tab === t.key ? '#fff' : '#475569' }}>
+            {t.label} <span style={{ opacity: .75 }}>{counts[t.key] || 0}</span>
           </button>
         ))}
       </div>
 
-      {visible.length === 0 ? (
-        <div style={{ textAlign:'center', padding:'40px 0', color:'#94a3b8', fontSize:13 }}>No projects found</div>
-      ) : gridView ? (
-        /* Grid view */
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:14 }}>
-          {visible.map(p => {
-            const st   = (p.status||'active').toLowerCase();
-            const cfg  = PROJ_STATUS_CFG[st] || PROJ_STATUS_CFG.active;
-            const pct  = Math.max(0, Math.min(100, parseFloat(p.progress_pct || 0)));
-            const bar  = pct < 30 ? '#ef4444' : pct < 60 ? '#f59e0b' : '#22c55e';
-            return (
-              <Link key={p.id} to={`/projects/${p.id}`} style={{ textDecoration:'none' }}>
-                <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:16, padding:'16px', boxShadow:'0 1px 4px rgba(0,0,0,0.05)', transition:'box-shadow .15s, transform .15s', cursor:'pointer' }}
-                  onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.10)';e.currentTarget.style.transform='translateY(-1px)';}}
-                  onMouseLeave={e=>{e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.05)';e.currentTarget.style.transform='translateY(0)';}}>
-
-                  {/* Top row */}
-                  <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8, marginBottom:10 }}>
-                    <div style={{ minWidth:0 }}>
-                      <div style={{ fontSize:14, fontWeight:800, color:'#0f172a', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:180 }}>{p.name}</div>
-                      <div style={{ fontSize:11, color:'#94a3b8', fontWeight:500, marginTop:2 }}>{p.type || p.project_code || '—'}</div>
+      <div style={{ padding: '16px 20px' }}>
+        {visible.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8', fontSize: 13 }}>No projects found</div>
+        ) : gridView ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+            {visible.map(p => {
+              const st  = (p.status || 'active').toLowerCase();
+              const cfg = PROJ_STATUS_CFG[st] || PROJ_STATUS_CFG.active;
+              const pctN = Math.max(0, Math.min(100, parseFloat(p.progress_pct || 0)));
+              const bar  = pctN < 30 ? '#ef4444' : pctN < 60 ? '#f59e0b' : '#22c55e';
+              return (
+                <Link key={p.id} to={`/projects/${p.id}`} style={{ textDecoration: 'none' }}>
+                  <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 14, transition: 'box-shadow .15s, transform .15s' }}
+                    onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.10)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.boxShadow = ''; e.currentTarget.style.transform = ''; }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 170 }}>{p.name}</div>
+                        <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>{p.type || p.project_code || '—'}</div>
+                      </div>
+                      <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 700, background: cfg.bg, color: cfg.text, border: `1px solid ${cfg.border}` }}>
+                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: cfg.dot, display: 'inline-block' }} />
+                        {cfg.label}
+                      </span>
                     </div>
-                    <span style={{ flexShrink:0, display:'inline-flex', alignItems:'center', gap:4, padding:'3px 9px', borderRadius:999, fontSize:11, fontWeight:700, background:cfg.bg, color:cfg.text, border:`1px solid ${cfg.border}` }}>
-                      <span style={{ width:5, height:5, borderRadius:'50%', background:cfg.dot, display:'inline-block' }} />
-                      {cfg.label}
-                    </span>
-                  </div>
-
-                  {/* Contract + Spent */}
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:12 }}>
-                    {[['CONTRACT VALUE', inrCr(p.contract_value)],['SPENT', inrCr(p.total_spent)]].map(([l,v]) => (
-                      <div key={l}>
-                        <div style={{ fontSize:9, fontWeight:700, color:'#94a3b8', letterSpacing:'0.1em', marginBottom:2 }}>{l}</div>
-                        <div style={{ fontSize:13, fontWeight:800, color:'#0f172a', fontVariantNumeric:'tabular-nums' }}>{v}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Progress */}
-                  <div style={{ marginBottom:12 }}>
-                    <div style={{ fontSize:9, fontWeight:700, color:'#94a3b8', letterSpacing:'0.1em', marginBottom:5 }}>PROGRESS</div>
-                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                      <div style={{ flex:1, height:6, borderRadius:999, background:'#f1f5f9', overflow:'hidden' }}>
-                        <div style={{ width:`${pct}%`, height:'100%', borderRadius:999, background:bar, transition:'width .4s ease' }} />
-                      </div>
-                      <span style={{ fontSize:12, fontWeight:800, color:'#374151', minWidth:30, textAlign:'right', fontVariantNumeric:'tabular-nums' }}>{pct}%</span>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                      {[['CONTRACT', inrCrP(p.contract_value)], ['SPENT', inrCrP(p.total_spent)]].map(([l, v]) => (
+                        <div key={l}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.1em', marginBottom: 2 }}>{l}</div>
+                          <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{v}</div>
+                        </div>
+                      ))}
                     </div>
-                  </div>
-
-                  {/* Dates */}
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:12 }}>
-                    {[['START DATE', fmtDate(p.start_date)],['END DATE', fmtDate(p.end_date)]].map(([l,v]) => (
-                      <div key={l}>
-                        <div style={{ fontSize:9, fontWeight:700, color:'#94a3b8', letterSpacing:'0.1em', marginBottom:2 }}>{l}</div>
-                        <div style={{ fontSize:11, fontWeight:600, color:'#374151' }}>{v}</div>
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ flex: 1, height: 5, borderRadius: 999, background: '#f1f5f9', overflow: 'hidden' }}>
+                          <div style={{ width: `${pctN}%`, height: '100%', borderRadius: 999, background: bar }} />
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: '#374151', minWidth: 28, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{pctN}%</span>
                       </div>
-                    ))}
-                  </div>
-
-                  {/* PM + share */}
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', borderTop:'1px solid #f1f5f9', paddingTop:10 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:7 }}>
-                      <div style={{ width:28, height:28, borderRadius:14, background:avatarBg(p.pm_name||p.name), color:'#fff', fontSize:10, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', borderTop: '1px solid #f1f5f9', paddingTop: 8 }}>
+                      <div style={{ width: 24, height: 24, borderRadius: 12, background: avatarBg(p.pm_name || p.name), color: '#fff', fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginRight: 7 }}>
                         {initials2(p.pm_name || p.name)}
                       </div>
                       <div>
-                        <div style={{ fontSize:11, fontWeight:700, color:'#374151' }}>{p.pm_name || 'Unassigned'}</div>
-                        <div style={{ fontSize:10, color:'#94a3b8', fontWeight:500 }}>Project Manager</div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#374151' }}>{p.pm_name || 'Unassigned'}</div>
+                        <div style={{ fontSize: 10, color: '#94a3b8' }}>PM · Ends {fmtDate(p.end_date)}</div>
                       </div>
-                    </div>
-                    <div style={{ width:28, height:28, borderRadius:8, background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', color:'#64748b' }}>
-                      <Upload size={12} />
                     </div>
                   </div>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      ) : (
-        /* List view */
-        <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:16, overflow:'hidden' }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-            <thead>
-              <tr style={{ background:'#f8fafc', borderBottom:'1px solid #e2e8f0' }}>
-                {['Project','Type','Status','Contract Value','Spent','Progress','End Date','PM'].map(h => (
-                  <th key={h} style={{ padding:'10px 14px', fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.1em', color:'#94a3b8', textAlign:'left', whiteSpace:'nowrap' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((p,i) => {
-                const st  = (p.status||'active').toLowerCase();
-                const cfg = PROJ_STATUS_CFG[st] || PROJ_STATUS_CFG.active;
-                const pct = Math.max(0, Math.min(100, parseFloat(p.progress_pct||0)));
-                const bar = pct<30?'#ef4444':pct<60?'#f59e0b':'#22c55e';
-                return (
-                  <tr key={p.id} style={{ borderBottom: i < visible.length-1 ? '1px solid #f1f5f9' : 'none' }}>
-                    <td style={{ padding:'12px 14px' }}>
-                      <Link to={`/projects/${p.id}`} style={{ fontWeight:700, color:'#0f172a', textDecoration:'none', fontSize:13 }}>{p.name}</Link>
-                      {p.project_code && <div style={{ fontSize:10, color:'#94a3b8', marginTop:1 }}>{p.project_code}</div>}
-                    </td>
-                    <td style={{ padding:'12px 14px', fontSize:12, color:'#64748b' }}>{p.type||'—'}</td>
-                    <td style={{ padding:'12px 14px' }}>
-                      <span style={{ padding:'3px 9px', borderRadius:999, fontSize:11, fontWeight:700, background:cfg.bg, color:cfg.text, border:`1px solid ${cfg.border}` }}>{cfg.label}</span>
-                    </td>
-                    <td style={{ padding:'12px 14px', fontWeight:700, color:'#0f172a', fontVariantNumeric:'tabular-nums' }}>{inrCr(p.contract_value)}</td>
-                    <td style={{ padding:'12px 14px', fontVariantNumeric:'tabular-nums', color:'#374151' }}>{inrCr(p.total_spent)}</td>
-                    <td style={{ padding:'12px 14px', minWidth:120 }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                        <div style={{ flex:1, height:5, borderRadius:999, background:'#f1f5f9' }}>
-                          <div style={{ width:`${pct}%`, height:'100%', borderRadius:999, background:bar }} />
+                </Link>
+              );
+            })}
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                  {['Project', 'Type', 'Status', 'Contract Value', 'Spent', 'Progress', 'End Date', 'PM'].map(h => (
+                    <th key={h} style={{ padding: '9px 12px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((p, i) => {
+                  const st  = (p.status || 'active').toLowerCase();
+                  const cfg = PROJ_STATUS_CFG[st] || PROJ_STATUS_CFG.active;
+                  const pctN = Math.max(0, Math.min(100, parseFloat(p.progress_pct || 0)));
+                  const bar = pctN < 30 ? '#ef4444' : pctN < 60 ? '#f59e0b' : '#22c55e';
+                  return (
+                    <tr key={p.id} style={{ borderBottom: i < visible.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
+                      <td style={{ padding: '11px 12px' }}>
+                        <Link to={`/projects/${p.id}`} style={{ fontWeight: 700, color: '#4f46e5', textDecoration: 'none' }}>{p.name}</Link>
+                        {p.project_code && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>{p.project_code}</div>}
+                      </td>
+                      <td style={{ padding: '11px 12px', color: '#64748b' }}>{p.type || '—'}</td>
+                      <td style={{ padding: '11px 12px' }}>
+                        <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 700, background: cfg.bg, color: cfg.text, border: `1px solid ${cfg.border}` }}>{cfg.label}</span>
+                      </td>
+                      <td style={{ padding: '11px 12px', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{inrCrP(p.contract_value)}</td>
+                      <td style={{ padding: '11px 12px', fontVariantNumeric: 'tabular-nums', color: '#374151' }}>{inrCrP(p.total_spent)}</td>
+                      <td style={{ padding: '11px 12px', minWidth: 120 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                          <div style={{ flex: 1, height: 4, borderRadius: 999, background: '#f1f5f9' }}>
+                            <div style={{ width: `${pctN}%`, height: '100%', borderRadius: 999, background: bar }} />
+                          </div>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#374151', minWidth: 28 }}>{pctN}%</span>
                         </div>
-                        <span style={{ fontSize:11, fontWeight:700, color:'#374151', minWidth:28, textAlign:'right' }}>{pct}%</span>
-                      </div>
-                    </td>
-                    <td style={{ padding:'12px 14px', fontSize:12, color:'#64748b' }}>{fmtDate(p.end_date)}</td>
-                    <td style={{ padding:'12px 14px' }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                        <div style={{ width:24, height:24, borderRadius:12, background:avatarBg(p.pm_name||p.name), color:'#fff', fontSize:9, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center' }}>{initials2(p.pm_name||p.name)}</div>
-                        <span style={{ fontSize:12, color:'#374151', fontWeight:500 }}>{p.pm_name||'—'}</span>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Small components ──────────────────────────────────────────────────────
-const KPI_TONES = {
-  default: { c: '#0f172a', accent: '#475569', glow: 'rgba(71,85,105,0.15)' },
-  primary: { c: '#1e40af', accent: '#1e40af', glow: 'rgba(30,64,175,0.18)' },
-  success: { c: '#15803d', accent: '#15803d', glow: 'rgba(21,128,61,0.18)' },
-  warning: { c: '#b45309', accent: '#b45309', glow: 'rgba(180,83,9,0.18)' },
-  danger:  { c: '#b91c1c', accent: '#b91c1c', glow: 'rgba(185,28,28,0.18)' },
-  neutral: { c: '#475569', accent: '#94a3b8', glow: 'rgba(148,163,184,0.15)' },
-};
-
-function KPI({ label, value, sub, tone = 'default', icon: Icon, to, isCurrency = false, deltaPct, loading = false }) {
-  const t = KPI_TONES[tone] || KPI_TONES.default;
-  const ref = useRef(null);
-  const rotX = useMotionValue(0);
-  const rotY = useMotionValue(0);
-  const shadowX = useMotionValue(0);
-  const shadowY = useMotionValue(8);
-  const springX = useSpring(rotX, { stiffness: 250, damping: 22 });
-  const springY = useSpring(rotY, { stiffness: 250, damping: 22 });
-  const shX = useSpring(shadowX, { stiffness: 250, damping: 22 });
-  const shY = useSpring(shadowY, { stiffness: 250, damping: 22 });
-
-  const handleMove = (e) => {
-    const el = ref.current; if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const px = (e.clientX - rect.left) / rect.width;  // 0..1
-    const py = (e.clientY - rect.top)  / rect.height; // 0..1
-    rotX.set((py - 0.5) * -6);   // tilt up/down
-    rotY.set((px - 0.5) *  6);   // tilt left/right
-    shadowX.set((px - 0.5) * -10);
-    shadowY.set(14 + (py - 0.5) * 4);
-  };
-  const handleLeave = () => { rotX.set(0); rotY.set(0); shadowX.set(0); shadowY.set(8); };
-
-  const inner = (
-    <motion.div
-      ref={ref}
-      onMouseMove={handleMove}
-      onMouseLeave={handleLeave}
-      className="prof-kpi-3d"
-      style={{
-        rotateX: springX,
-        rotateY: springY,
-        boxShadow: useTransform([shX, shY], ([x, y]) =>
-          `${x}px ${y}px 24px -8px ${t.glow}, 0 1px 2px rgba(15,23,42,0.06), 0 0 0 1px rgba(15,23,42,0.04)`
-        ),
-        transformStyle: 'preserve-3d',
-      }}
-    >
-      {/* Top highlight line for "etched" look */}
-      <div className="prof-kpi-3d-highlight" />
-      {/* Bottom accent bar (tone color) */}
-      <div className="prof-kpi-3d-accent" style={{ background: `linear-gradient(90deg, ${t.accent}, ${t.accent}66)` }} />
-
-      <div className="prof-kpi" style={{ transform: 'translateZ(0)' }}>
-        <div className="prof-kpi-head">
-          <span className="prof-kpi-label">{label}</span>
-          {Icon && (
-            <div className="prof-kpi-icon" style={{ background: `${t.accent}15`, color: t.accent }}>
-              <Icon size={12} strokeWidth={2.2} />
-            </div>
-          )}
-        </div>
-        {loading ? <div className="prof-kpi-skeleton" /> : (
-          <>
-            <div className="prof-kpi-value" style={{ color: t.c }} title={isCurrency && typeof value === 'number' ? inr(value) : undefined}>
-              {isCurrency && typeof value === 'number' ? inrCompact(value) : (typeof value === 'number' ? num(value) : value)}
-            </div>
-            {(sub || deltaPct != null) && (
-              <div className="prof-kpi-sub">
-                {deltaPct != null && (
-                  <span className={`prof-delta ${deltaPct >= 0 ? 'up' : 'down'}`}>
-                    {deltaPct >= 0 ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
-                    {Math.abs(deltaPct).toFixed(1)}%
-                  </span>
-                )}
-                {sub && <span>{sub}</span>}
-              </div>
-            )}
-          </>
+                      </td>
+                      <td style={{ padding: '11px 12px', color: '#64748b', whiteSpace: 'nowrap' }}>{fmtDate(p.end_date)}</td>
+                      <td style={{ padding: '11px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ width: 22, height: 22, borderRadius: 11, background: avatarBg(p.pm_name || p.name), color: '#fff', fontSize: 8, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initials2(p.pm_name || p.name)}</div>
+                          <span style={{ color: '#374151', fontWeight: 500 }}>{p.pm_name || '—'}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
-    </motion.div>
-  );
-  return to ? <Link to={to} className="prof-kpi-link">{inner}</Link> : <div className="prof-kpi-link">{inner}</div>;
-}
-
-function SectionHeader({ kicker, title, count, action, to }) {
-  return (
-    <div className="prof-section-header">
-      <div>
-        <div className="prof-section-kicker">{kicker}</div>
-        <div className="prof-section-title">
-          {title}
-          {count != null && <span className="prof-section-count">{count}</span>}
-        </div>
-      </div>
-      {action && to && (
-        <Link to={to} className="prof-section-action">
-          {action} <ChevronRight size={13} />
-        </Link>
-      )}
     </div>
   );
 }
 
-function Panel({ title, action, to, children, className = '' }) {
+/* ── DashLoader ───────────────────────────────────────────────────── */
+function DashLoader() {
   return (
-    <div className={`prof-panel ${className}`}>
-      {(title || action) && (
-        <div className="prof-panel-header">
-          {title && <span className="prof-panel-title">{title}</span>}
-          {action && to && (
-            <Link to={to} className="prof-panel-action">
-              {action} <ChevronRight size={11} />
-            </Link>
-          )}
-        </div>
-      )}
-      <div className="prof-panel-body">{children}</div>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, minHeight: '60vh', color: '#64748b', fontSize: 13 }}>
+      <div style={{ width: 24, height: 24, border: '3px solid #e2e8f0', borderTopColor: '#4f46e5', borderRadius: '50%', animation: 'exec-spin .8s linear infinite' }} />
+      Loading dashboard…
+      <style>{`@keyframes exec-spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
 
-function EmptyRow({ text }) {
-  return <div className="prof-empty">{text}</div>;
-}
-
-// ─── Main ──────────────────────────────────────────────────────────────────
+/* ── Main ─────────────────────────────────────────────────────────── */
 export default function Dashboard() {
   const { user } = useAuthStore();
   const role = user?.role || '';
   const dept = (user?.department || '').toLowerCase();
-
-  // Managing director, admins, and specific users see approvals embedded on dashboard.
   const isMdRole = isMDDashboardUser(user);
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  // Role-based routing — skip for admin/super_admin/md/named emails
+  // Role-based routing
   if (!['super_admin', 'admin'].includes(role) && !isMdRole) {
     let RoleDash = null;
     if (role === 'project_manager')      RoleDash = PMDashboard;
@@ -470,67 +407,26 @@ export default function Dashboard() {
     if (RoleDash) return <Suspense fallback={<DashLoader />}><RoleDash /></Suspense>;
   }
 
-  // ── State ──
   const [refreshKey, setRefreshKey] = useState(0);
-  const [selectedProjectId, setSelectedProjectId] = useState('all');
-  const [selectedDateRange, setSelectedDateRange] = useState('30d');
-  const [selectedBusinessUnit, setSelectedBusinessUnit] = useState('all');
-  const [lastRefreshed, setLastRefreshed] = useState(() => new Date());
-  const [, forceTick] = useState(0);
 
-  const handleRefresh = useCallback(() => {
-    setRefreshKey(k => k + 1);
-    setLastRefreshed(new Date());
-  }, []);
+  const executiveParams = useMemo(() => ({}), [refreshKey]);
 
-  useEffect(() => {
-    const id = setInterval(() => forceTick(t => t + 1), 30000);
-    return () => clearInterval(id);
-  }, []);
-
-  useEffect(() => {
-    const onKey = (e) => {
-      const tag = e.target.tagName;
-      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-      if (e.key === 'r' || e.key === 'R') { e.preventDefault(); handleRefresh(); }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [handleRefresh]);
-
-  const dateBounds = useMemo(() => getRangeBounds(selectedDateRange), [selectedDateRange]);
-  const executiveParams = useMemo(() => ({
-    project_id: selectedProjectId !== 'all' ? selectedProjectId : undefined,
-    business_unit: selectedBusinessUnit !== 'all' ? selectedBusinessUnit : undefined,
-    date_from: dateBounds.dateFrom || undefined,
-    date_to: dateBounds.dateTo || undefined,
-  }), [selectedProjectId, selectedBusinessUnit, dateBounds.dateFrom, dateBounds.dateTo]);
-
-  const tqsBillsParams = useMemo(() => ({
-    project_id: selectedProjectId !== 'all' ? selectedProjectId : undefined,
-    from_date:  dateBounds.dateFrom || undefined,
-    to_date:    dateBounds.dateTo   || undefined,
-    limit:      500,
-  }), [selectedProjectId, dateBounds.dateFrom, dateBounds.dateTo]);
-
-  // ── Data ──
-  const { data: dashboard, isLoading: dashboardLoading } = useQuery({
-    queryKey: ['analytics-executive', refreshKey, executiveParams],
-    queryFn: () => analyticsAPI.executive(executiveParams).then(r => r.data?.data || null).catch(() => null),
+  const { data: dashboard, isLoading: dashLoading } = useQuery({
+    queryKey: ['analytics-executive', refreshKey],
+    queryFn: () => analyticsAPI.executive({}).then(r => r.data?.data || null).catch(() => null),
     staleTime: 0,
     refetchOnMount: 'always',
-    refetchOnWindowFocus: true,
   });
 
   const { data: companyProjects = [] } = useQuery({
-    queryKey: ['dashboard-projects-fallback'],
+    queryKey: ['dashboard-projects-main'],
     queryFn: () => projectAPI.list().then(toArray).catch(() => []),
     staleTime: 5 * 60 * 1000,
   });
 
   const { data: tqsBills = [] } = useQuery({
-    queryKey: ['dashboard-tqs-bills', refreshKey, tqsBillsParams],
-    queryFn: () => tqsBillsAPI.list(tqsBillsParams).then(r => Array.isArray(r.data) ? r.data : (r.data?.data ?? [])).catch(() => []),
+    queryKey: ['dashboard-tqs-bills-main'],
+    queryFn: () => tqsBillsAPI.list({ limit: 500 }).then(r => Array.isArray(r.data) ? r.data : (r.data?.data ?? [])).catch(() => []),
     staleTime: 60 * 1000,
   });
 
@@ -539,7 +435,6 @@ export default function Dashboard() {
     queryFn: () => procurementAdvanceAPI.list({ approval_status: 'procurement_approved' }).then(r => r.data?.data ?? []),
     enabled: isMdRole,
     staleTime: 0,
-    refetchOnMount: 'always',
   });
 
   const advanceMDMut = useMutation({
@@ -547,910 +442,571 @@ export default function Dashboard() {
     onSuccess: () => {
       toast.success('Advance voucher authorized');
       qc.invalidateQueries({ queryKey: ['md-pending-advances'] });
-      qc.invalidateQueries({ queryKey: ['procurement-advances'] });
     },
     onError: (e) => toast.error(e?.response?.data?.message || 'Authorization failed'),
   });
 
-  // ── Derived ──
-  const filterOptions       = dashboard?.filters?.options || {};
-  const projectOptions      = filterOptions.projects?.length ? filterOptions.projects : companyProjects.map(p => ({ id: p.id, name: p.name, project_code: p.project_code, type: p.type }));
-  const businessUnitOptions = filterOptions.business_units?.length ? filterOptions.business_units : [...new Set(companyProjects.map(p => p.type).filter(Boolean))].sort();
-  const dashboardKpis       = dashboard?.kpis || {};
-  const dashboardCharts     = dashboard?.charts || {};
-  const dashboardRecent     = dashboard?.recent || {};
-  const dashboardWatchlists = dashboard?.watchlists || {};
-  const dashboardPulse      = dashboard?.pulse || {};
-  const dashboardExceptions = dashboard?.exceptions || [];
+  /* ── Derived ── */
+  const kpis    = dashboard?.kpis    || {};
+  const charts  = dashboard?.charts  || {};
+  const recent  = dashboard?.recent  || {};
+  const pulse   = dashboard?.pulse   || {};
+  const watch   = dashboard?.watchlists || {};
 
-  const safeProjects = Array.isArray(dashboard?.projects) ? dashboard.projects : [];
-  const safePayments = Array.isArray(dashboardRecent.payments)       ? dashboardRecent.payments       : [];
-  const safeBills    = Array.isArray(dashboardRecent.ra_bills)       ? dashboardRecent.ra_bills       : [];
-  const safeDocs     = Array.isArray(dashboardRecent.documents)      ? dashboardRecent.documents      : [];
-  const safeRecentPOs  = Array.isArray(dashboardRecent.purchase_orders) ? dashboardRecent.purchase_orders : [];
-  const safeIncidents  = Array.isArray(dashboardRecent.incidents)    ? dashboardRecent.incidents      : [];
-  const safeRFIs       = Array.isArray(dashboardRecent.rfis)         ? dashboardRecent.rfis           : [];
-  const safeNCRs       = Array.isArray(dashboardRecent.ncrs)         ? dashboardRecent.ncrs           : [];
-  const safeLowStock   = Array.isArray(dashboardPulse?.procurement_stores?.low_stock_items)
-                          ? dashboardPulse.procurement_stores.low_stock_items : [];
-
-  // Finance / QS
-  const totalContractValue = dashboardKpis.total_contract_value ?? 0;
-  const totalCertified     = dashboardKpis.total_certified ?? 0;
-  const totalCollections   = dashboardKpis.total_collections ?? 0;
-  const receivables        = dashboardKpis.receivables ?? (totalCertified - totalCollections);
-  const pendingRABillCount = dashboardKpis.pending_ra_bills ?? 0;
-  const pendingRAValue     = dashboardKpis.pending_ra_value ?? 0;
+  const totalContractValue = kpis.total_contract_value ?? 0;
+  const totalCertified     = kpis.total_certified      ?? 0;
+  const totalCollections   = kpis.total_collections    ?? 0;
+  const receivables        = kpis.receivables           ?? 0;
+  const activeProjects     = kpis.active_projects       ?? 0;
+  const delayedProjects    = kpis.delayed_projects      ?? 0;
+  const completedProjects  = kpis.completed_projects    ?? 0;
+  const planningProjects   = kpis.planning_projects     ?? 0;
+  const safetyScore        = kpis.safety_score;
+  const openIncidents      = kpis.open_incidents        ?? 0;
+  const openRFIs           = kpis.open_rfis             ?? 0;
+  const openNCRs           = kpis.open_ncrs             ?? 0;
+  const expiringPermits    = kpis.expiring_permits      ?? 0;
+  const lowStockCount      = kpis.low_stock_count       ?? 0;
+  const workforceCount     = kpis.workforce_count       ?? 0;
   const collectionRate     = totalCertified > 0 ? Math.round((totalCollections / totalCertified) * 100) : 0;
-  const financeTrend       = dashboardCharts.finance_trend || [];
 
-  // Projects
-  const activeProjects    = dashboardKpis.active_projects ?? 0;
-  const delayedProjects   = dashboardKpis.delayed_projects ?? 0;
-  const completedProjects = dashboardKpis.completed_projects ?? 0;
-  const planningProjects  = dashboardKpis.planning_projects ?? 0;
-  const projectStatus     = dashboardCharts.project_status || [];
-  const delayedWatchlist  = [...(dashboardWatchlists.delayed_projects || [])].slice(0, 6);
+  const financeTrend   = charts.finance_trend  || [];
+  const projectStatus  = charts.project_status || [];
+  const totalProjects  = activeProjects + delayedProjects + completedProjects + planningProjects;
 
-  // Procurement / Stores
-  const lowStockCount       = dashboardKpis.low_stock_count ?? dashboardPulse?.procurement_stores?.low_stock_materials ?? 0;
-  const overduePOCount      = dashboardPulse?.procurement_stores?.pos_requiring_attention ?? 0;
-  const totalPOs            = dashboardPulse?.procurement_stores?.total_pos ?? 0;
-  const pendingVendorBills  = dashboardPulse?.procurement_stores?.pending_vendor_bills ?? pendingRABillCount;
-  const pendingVendorBillVal= dashboardPulse?.procurement_stores?.pending_vendor_bill_value ?? pendingRAValue;
-  const topLowStock         = dashboardPulse?.procurement_stores?.top_low_stock_material || '—';
+  // TQS
+  const tqsTotalInvoice   = tqsBills.reduce((s, b) => s + parseFloat(b.total_amount || 0), 0);
+  const tqsTotalCertified = tqsBills.reduce((s, b) => s + parseFloat(b.certified_net || 0), 0);
+  const tqsTotalPaid      = tqsBills.reduce((s, b) => s + parseFloat(b.paid_amount   || 0), 0);
+  const tqsBalance        = tqsTotalCertified - tqsTotalPaid;
 
-  // Quality / Safety / HR
-  const safetyScore   = dashboardKpis.safety_score;
-  const openIncidents = dashboardKpis.open_incidents ?? 0;
-  const openRFIs      = dashboardKpis.open_rfis ?? 0;
-  const openNCRs      = dashboardKpis.open_ncrs ?? 0;
-  const expiringPermits = dashboardKpis.expiring_permits ?? 0;
-  const totalPermits  = dashboardPulse?.quality_safety?.permits_count ?? expiringPermits;
-  const workforceCount = dashboardKpis.workforce_count ?? 0;
-  const documentsCount = dashboardKpis.documents_count ?? safeDocs.length;
+  // Sparklines from finance trend
+  const billedSpark    = financeTrend.map(m => m.billed    || 0);
+  const collectedSpark = financeTrend.map(m => m.collected || 0);
 
-  // DQS Bills
-  const tqsTotalBills      = tqsBills.length;
-  const tqsTotalInvoice    = tqsBills.reduce((s, b) => s + parseFloat(b.total_amount   || 0), 0);
-  const tqsTotalCertified  = tqsBills.reduce((s, b) => s + parseFloat(b.certified_net  || 0), 0);
-  const tqsTotalPaid       = tqsBills.reduce((s, b) => s + parseFloat(b.paid_amount    || 0), 0);
-  const tqsBalance         = tqsTotalCertified - tqsTotalPaid;
-  const tqsPaidCount       = tqsBills.filter(b => b.workflow_status === 'paid').length;
-  const tqsPendingCount    = tqsBills.filter(b => b.workflow_status !== 'paid').length;
-  const tqsRecent          = [...tqsBills].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)).slice(0, 5);
+  // Finance donut segments
+  const financeSegments = [
+    { label: 'Collected',    value: totalCollections,             color: '#22c55e' },
+    { label: 'Receivables',  value: Math.max(0, receivables),     color: '#ef4444' },
+    { label: 'Uncertified',  value: Math.max(0, totalContractValue - totalCertified), color: '#94a3b8' },
+  ].filter(s => s.value > 0);
+
+  // Project status bars
+  const projStatusRows = [
+    { label: 'Active',    count: activeProjects,    color: '#22c55e', bg: '#f0fdf4' },
+    { label: 'Delayed',   count: delayedProjects,   color: '#ef4444', bg: '#fff1f2' },
+    { label: 'Planning',  count: planningProjects,  color: '#3b82f6', bg: '#eff6ff' },
+    { label: 'Completed', count: completedProjects, color: '#8b5cf6', bg: '#f5f3ff' },
+  ].filter(r => r.count > 0);
+
+  // Top projects by contract value
+  const topProjects = useMemo(() =>
+    [...companyProjects].sort((a, b) => parseFloat(b.contract_value || 0) - parseFloat(a.contract_value || 0)).slice(0, 5),
+    [companyProjects]
+  );
+  const maxProjValue = topProjects[0] ? parseFloat(topProjects[0].contract_value || 0) : 1;
+
+  // Recent data
+  const safePayments  = Array.isArray(recent.payments)        ? recent.payments.slice(0, 6)  : [];
+  const safeBills     = Array.isArray(recent.ra_bills)        ? recent.ra_bills.slice(0, 6)  : [];
+  const safePOs       = Array.isArray(recent.purchase_orders) ? recent.purchase_orders.slice(0, 6) : [];
+  const safeIncidents = Array.isArray(recent.incidents)       ? recent.incidents.slice(0, 5) : [];
+  const safeRFIs      = Array.isArray(recent.rfis)            ? recent.rfis.slice(0, 4)      : [];
+  const safeNCRs      = Array.isArray(recent.ncrs)            ? recent.ncrs.slice(0, 4)      : [];
+  const safeDocs      = Array.isArray(recent.documents)       ? recent.documents.slice(0, 5) : [];
+  const safeLowStock  = Array.isArray(pulse.procurement_stores?.low_stock_items) ? pulse.procurement_stores.low_stock_items.slice(0, 6) : [];
+  const delayedWatch  = Array.isArray(watch.delayed_projects)  ? watch.delayed_projects.slice(0, 5) : [];
+
+  const overduePOs = pulse.procurement_stores?.pos_requiring_attention ?? 0;
+  const totalPOs   = pulse.procurement_stores?.total_pos ?? 0;
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-  const dateRangeLabel = ({ all: 'All time', '7d': 'Last 7 days', '30d': 'Last 30 days', '90d': 'Last 90 days', '1y': 'Last 1 year' })[selectedDateRange];
 
-  // ─── RENDER ───
+  /* ── Render ── */
   return (
-    <div className="prof-dashboard">
+    <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
 
-      {/* ════════════════════ HEADER BAR ════════════════════ */}
-      <header className="prof-header">
-        <div className="prof-header-inner">
-          <div className="prof-brand">
-            <div className="prof-brand-mark">BCIM</div>
-            <div className="prof-brand-text">
-              <div className="prof-brand-title">Executive Dashboard</div>
-              <div className="prof-brand-sub">{greeting}, {user?.name?.split(' ')[0] || 'Admin'} · {dayjs().format('dddd, D MMMM YYYY')}</div>
-            </div>
-          </div>
-
-          <div className="prof-header-actions">
-            <div className="prof-refresh-meta">
-              {dashboardLoading && <span className="prof-mini-spinner" />}
-              <span title={lastRefreshed.toLocaleString('en-IN')}>Updated {relTime(lastRefreshed)}</span>
-            </div>
-            <button onClick={handleRefresh} className="prof-refresh-btn" title="Refresh (R)">
+      <PageHeader
+        title="Executive Dashboard"
+        subtitle={`${greeting}, ${user?.name?.split(' ')[0] || 'Admin'} · ${dayjs().format('dddd, D MMMM YYYY')}`}
+        breadcrumbs={[{ label: 'BCIM ERP' }, { label: 'Executive Dashboard' }]}
+        actions={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={() => setRefreshKey(k => k + 1)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
               <RefreshCw size={13} /> Refresh
             </button>
+            <Link to="/projects/new" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 9, background: '#fff', color: Theme.navyDark, fontSize: 12, fontWeight: 800, textDecoration: 'none' }}>
+              <Plus size={13} /> New Project
+            </Link>
           </div>
+        }
+      />
+
+      <div style={{ padding: '20px 24px', maxWidth: 1400, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+        {/* Last updated */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, fontSize: 11, color: '#94a3b8' }}>
+          <Clock size={12} />
+          {dashLoading ? 'Loading data…' : `Updated: ${dayjs().format('hh:mm A, DD MMM YYYY')}`}
         </div>
 
-        {/* Filter strip */}
-        <div className="prof-filter-strip">
-          <div className="prof-filter-group">
-            <label>Project</label>
-            <select value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
-              <option value="all">All Projects ({projectOptions.length})</option>
-              {projectOptions.map(p => <option key={p.id} value={p.id}>{p.project_code ? `${p.name} (${p.project_code})` : p.name}</option>)}
-            </select>
+        {/* ── KPI Cards ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
+          <KpiSparkCard icon={Building2}    label="Portfolio Value"   value={inrCr(totalContractValue)} sub={`${totalProjects} projects total`}                       color="#4f46e5" accentBg="#ede9fe" sparkData={billedSpark}                         to="/projects" />
+          <KpiSparkCard icon={Receipt}      label="Certified Billing" value={inrCr(totalCertified)}     sub={`${kpis.pending_ra_bills ?? 0} bills pending`}          color="#0891b2" accentBg="#e0f2fe" sparkData={billedSpark}                         to="/qs/ra-bills" />
+          <KpiSparkCard icon={Wallet}       label="Collections (YTD)" value={inrCr(totalCollections)}   sub={`${collectionRate}% collection rate`}                   color="#22c55e" accentBg="#dcfce7" sparkData={collectedSpark}                      to="/finance/payments" />
+          <KpiSparkCard icon={IndianRupee}  label="Receivables"       value={inrCr(receivables)}        sub={receivables > 0 ? 'Outstanding from clients' : 'Fully collected'} color="#ef4444" accentBg="#fee2e2" sparkData={collectedSpark.map(v => Math.max(0, (billedSpark[0]||0) - v))} to="/finance/payments" />
+          <KpiSparkCard icon={Activity}     label="Active Projects"   value={activeProjects}            sub={`${delayedProjects} delayed · ${planningProjects} planning`} color="#f59e0b" accentBg="#fef3c7" sparkData={[...Array(7)].map(() => activeProjects)} to="/projects" />
+          <KpiSparkCard icon={ShieldCheck}  label="Safety Score"      value={safetyScore != null ? `${Math.round(safetyScore)}/100` : 'N/A'} sub={`${openIncidents} open incidents`} color={safetyScore != null && safetyScore < 70 ? '#f59e0b' : '#22c55e'} accentBg={safetyScore != null && safetyScore < 70 ? '#fef3c7' : '#dcfce7'} sparkData={[...Array(7)].map(() => safetyScore ?? 100)} to="/hse" />
+        </div>
+
+        {/* ── Alert banners ── */}
+        {(delayedProjects > 0 || lowStockCount > 0 || overduePOs > 0 || pendingMDAdvances.length > 0) && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {pendingMDAdvances.length > 0 && (
+              <div style={{ background: '#faf5ff', border: '1px solid #d8b4fe', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Wallet size={14} style={{ color: '#7c3aed', flexShrink: 0 }} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#5b21b6' }}>{pendingMDAdvances.length} advance voucher{pendingMDAdvances.length > 1 ? 's' : ''} awaiting your authorization</span>
+                <button onClick={() => navigate('/procurement/advances')} style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#7c3aed', background: 'none', border: 'none', cursor: 'pointer' }}>Review →</button>
+              </div>
+            )}
+            {delayedProjects > 0 && (
+              <div style={{ background: '#fff1f2', border: '1px solid #fca5a5', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <AlertTriangle size={14} style={{ color: '#dc2626', flexShrink: 0 }} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#7f1d1d' }}>{delayedProjects} project{delayedProjects > 1 ? 's' : ''} are behind schedule</span>
+                <Link to="/projects" style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#dc2626', textDecoration: 'none' }}>View →</Link>
+              </div>
+            )}
+            {lowStockCount > 0 && (
+              <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Package size={14} style={{ color: '#d97706', flexShrink: 0 }} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#92400e' }}>{lowStockCount} inventory item{lowStockCount > 1 ? 's' : ''} below reorder level</span>
+                <Link to="/procurement/inventory" style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#d97706', textDecoration: 'none' }}>View Inventory →</Link>
+              </div>
+            )}
           </div>
-          <div className="prof-filter-group">
-            <label>Date Range</label>
-            <select value={selectedDateRange} onChange={e => setSelectedDateRange(e.target.value)}>
-              <option value="all">All Time</option>
-              <option value="7d">Last 7 Days</option>
-              <option value="30d">Last 30 Days</option>
-              <option value="90d">Last 90 Days</option>
-              <option value="1y">Last 1 Year</option>
-            </select>
-          </div>
-          {businessUnitOptions.length > 0 && (
-            <div className="prof-filter-group">
-              <label>Business Unit</label>
-              <select value={selectedBusinessUnit} onChange={e => setSelectedBusinessUnit(e.target.value)}>
-                <option value="all">All Units</option>
-                {businessUnitOptions.map(u => <option key={u} value={u}>{u}</option>)}
-              </select>
+        )}
+
+        {/* ── Pending MD Approvals ── */}
+        {isMdRole && (
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+            <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9' }}>
+              <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>Pending Approvals</h3>
             </div>
-          )}
-          <div className="prof-filter-spacer" />
-          <div className="prof-filter-meta">Showing data for: <strong>{dateRangeLabel}</strong></div>
-        </div>
-      </header>
+            <div style={{ padding: '4px 0' }}>
+              <Suspense fallback={<DashLoader />}>
+                <ApprovalsPage embedded mdMode />
+              </Suspense>
+            </div>
+          </div>
+        )}
 
-      {/* ════════════════════ EXCEPTIONS BAR ════════════════════ */}
-      {dashboardExceptions.length > 0 && (
-        <div className="prof-alerts">
-          <AlertTriangle size={13} color="#b45309" />
-          <span className="prof-alerts-label">Items needing attention:</span>
-          <div className="prof-alerts-list">
-            {dashboardExceptions.slice(0, 4).map(card => (
-              <Link key={card.label} to={card.to} className="prof-alert-chip" style={{ borderColor: `${card.tone}66`, color: card.tone }}>
-                {card.label} <strong style={{ marginLeft: 6 }}>{card.value}</strong>
-              </Link>
+        {/* ── 3-col analytics ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+
+          {/* Finance Overview donut */}
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>Finance Overview</h3>
+              <Link to="/finance" style={{ fontSize: 11, fontWeight: 700, color: '#4f46e5', textDecoration: 'none' }}>Details →</Link>
+            </div>
+            {financeSegments.length === 0
+              ? <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>No financial data</div>
+              : <FinanceDonut segments={financeSegments} total={totalContractValue} />
+            }
+            <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
+              {[
+                { label: 'Collection Rate', value: `${collectionRate}%`, color: collectionRate >= 70 ? '#22c55e' : '#ef4444' },
+                { label: 'DQS Balance',     value: inrCr(tqsBalance),  color: '#ef4444' },
+              ].map(({ label, value, color }) => (
+                <div key={label}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 3 }}>{label}</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color }}>{value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Project Status bars */}
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>Project Status</h3>
+              <Link to="/projects" style={{ fontSize: 11, fontWeight: 700, color: '#4f46e5', textDecoration: 'none' }}>View All</Link>
+            </div>
+            {projStatusRows.length === 0
+              ? <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>No projects</div>
+              : projStatusRows.map(r => <StatusBar key={r.label} label={r.label} count={r.count} total={totalProjects} color={r.color} bg={r.bg} />)
+            }
+            {delayedWatch.length > 0 && (
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#ef4444', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Delayed Projects</div>
+                {delayedWatch.map(p => (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #f8fafc' }}>
+                    <Link to={`/projects/${p.id}`} style={{ fontSize: 12, fontWeight: 600, color: '#374151', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>{p.name}</Link>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#ef4444', flexShrink: 0 }}>{parseFloat(p.progress_pct || 0).toFixed(0)}%</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Top Projects by Value */}
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>Top Projects by Value</h3>
+              <Link to="/projects" style={{ fontSize: 11, fontWeight: 700, color: '#4f46e5', textDecoration: 'none' }}>View All</Link>
+            </div>
+            {topProjects.length === 0
+              ? <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>No projects</div>
+              : topProjects.map((p, i) => (
+                <ProjectRankRow key={p.id} rank={i + 1} name={p.name} value={parseFloat(p.contract_value || 0)} max={maxProjValue} pctVal={parseFloat(p.progress_pct || 0)} />
+              ))
+            }
+          </div>
+        </div>
+
+        {/* ── Billing vs Collections Trend ── */}
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', margin: 0 }}>Billing vs Collections Trend</h3>
+            <Link to="/finance/reports" style={{ fontSize: 11, fontWeight: 700, color: '#4f46e5', textDecoration: 'none' }}>View Report →</Link>
+          </div>
+          <div style={{ height: 220 }}>
+            {financeTrend.length === 0 || financeTrend.every(m => !m.billed && !m.collected)
+              ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', fontSize: 13 }}>No billing data for selected range</div>
+              : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={financeTrend} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                    <defs>
+                      <linearGradient id="execBill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%"  stopColor="#4f46e5" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#4f46e5" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="execColl" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%"  stopColor="#22c55e" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={v => `₹${v}L`} />
+                    <Tooltip formatter={(v, n) => [`₹ ${v} L`, n === 'billed' ? 'Billed' : 'Collected']} labelStyle={{ fontSize: 12, fontWeight: 700 }} contentStyle={{ border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 12 }} />
+                    <Area type="monotone" dataKey="billed"    stroke="#4f46e5" strokeWidth={2.5} fill="url(#execBill)" dot={{ r: 3, fill: '#4f46e5', strokeWidth: 2, stroke: '#fff' }} />
+                    <Area type="monotone" dataKey="collected" stroke="#22c55e" strokeWidth={2.5} fill="url(#execColl)" dot={{ r: 3, fill: '#22c55e', strokeWidth: 2, stroke: '#fff' }} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )
+            }
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
+            {[
+              { label: 'Total Certified',    value: inrCr(totalCertified),   color: '#4f46e5' },
+              { label: 'Total Collected',    value: inrCr(totalCollections),  color: '#22c55e' },
+              { label: 'Receivables',        value: inrCr(receivables),       color: '#ef4444' },
+              { label: 'DQS Vendor Balance', value: inrCr(tqsBalance),        color: '#f59e0b' },
+            ].map(({ label, value, color }) => (
+              <div key={label}>
+                <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#94a3b8', marginBottom: 4 }}>{label}</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color }}>{value}</div>
+              </div>
             ))}
           </div>
         </div>
-      )}
 
-      <main className="prof-main">
+        {/* ── Projects Portfolio ── */}
+        {companyProjects.length > 0 && <ProjectCards projects={companyProjects} />}
 
-        {/* ════════════════════ PENDING APPROVALS ════════════════════ */}
-        {isMdRole && (
-          <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', padding: '16px 18px', marginBottom: 18, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-            <Suspense fallback={<DashLoader />}>
-              <ApprovalsPage embedded mdMode />
-            </Suspense>
+        {/* ── Procurement & Stores ── */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: 0 }}>Procurement & Stores</h2>
+            <Link to="/procurement/po" style={{ fontSize: 12, fontWeight: 700, color: '#4f46e5', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>View Procurement <ChevronRight size={13} /></Link>
           </div>
-        )}
 
-        {/* ════════════════════ ADVANCE VOUCHERS — AWAITING MD APPROVAL ════════════════════ */}
-        {isMdRole && pendingMDAdvances.length > 0 && (
-          <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', padding: '16px 18px', marginBottom: 18, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                  <Wallet className="w-4 h-4 text-indigo-600" />
-                  Advance Vouchers — Awaiting Your Authorization
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {pendingMDAdvances.length} voucher{pendingMDAdvances.length !== 1 ? 's' : ''} approved by Procurement · pending your sign-off
-                </p>
+          {/* Procurement KPI mini row */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 16 }}>
+            {[
+              { label: 'Total POs',        value: totalPOs,        color: '#4f46e5', bg: '#ede9fe', icon: ClipboardList },
+              { label: 'POs Pending',      value: overduePOs,      color: '#f59e0b', bg: '#fef3c7', icon: Clock },
+              { label: 'Low Stock Items',  value: lowStockCount,   color: '#ef4444', bg: '#fee2e2', icon: Package },
+              { label: 'Workforce',        value: workforceCount,  color: '#0891b2', bg: '#e0f2fe', icon: HardHat },
+              { label: 'DQS Bills',        value: tqsBills.length, color: '#7c3aed', bg: '#f5f3ff', icon: Receipt },
+            ].map(({ label, value, color, bg, icon: Icon }) => (
+              <div key={label} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon size={13} style={{ color }} />
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</span>
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
               </div>
-              <Link to="/procurement/advances" className="prof-panel-action" style={{ fontSize: 11 }}>
-                View all <ChevronRight size={11} />
-              </Link>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="prof-table">
-                <thead>
-                  <tr>
-                    <th>Voucher #</th>
-                    <th>Vendor</th>
-                    <th>Project</th>
-                    <th className="num">Advance Amount</th>
-                    <th>Proc. Approved By</th>
-                    <th>Created</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pendingMDAdvances.map(av => (
-                    <tr key={av.id}>
-                      <td className="font-medium text-slate-800">{av.sl_number || av.voucher_number || '—'}</td>
-                      <td>{av.vendor_name}</td>
-                      <td>{av.project_name || '—'}</td>
-                      <td className="num font-semibold text-slate-800">{inr(av.advance_value)}</td>
-                      <td>{av.procurement_approved_by_name || '—'}</td>
-                      <td>{fmtDate(av.created_at)}</td>
-                      <td>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => navigate(`/procurement/advances/${av.id}`)}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors"
-                            style={{ background: '#f1f5f9', color: '#475569' }}
-                            onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
-                            onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}
-                          >
-                            <FileText className="w-3 h-3" /> Review
-                          </button>
-                          <button
-                            onClick={() => advanceMDMut.mutate(av.id)}
-                            disabled={advanceMDMut.isPending}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-white transition-colors disabled:opacity-50"
-                            style={{ background: '#15803d' }}
-                            onMouseEnter={e => { if (!advanceMDMut.isPending) e.currentTarget.style.background = '#166534'; }}
-                            onMouseLeave={e => e.currentTarget.style.background = '#15803d'}
-                          >
-                            <CheckCircle2 className="w-3 h-3" /> Authorize
-                          </button>
+            ))}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            {/* Low Stock */}
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>Low Stock Alerts <span style={{ fontSize: 11, fontWeight: 600, color: '#ef4444', marginLeft: 6 }}>{lowStockCount} items</span></h3>
+                <Link to="/procurement/inventory" style={{ fontSize: 11, fontWeight: 700, color: '#4f46e5', textDecoration: 'none' }}>Inventory →</Link>
+              </div>
+              <div style={{ padding: 16 }}>
+                {safeLowStock.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                    <CheckCircle2 size={28} style={{ color: '#22c55e', margin: '0 auto 8px', display: 'block' }} />
+                    <p style={{ fontSize: 13, color: '#64748b', fontWeight: 600, margin: 0 }}>All stock levels healthy</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {safeLowStock.map((item, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <AlertTriangle size={13} style={{ color: '#ef4444', flexShrink: 0 }} />
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.material_name}</div>
+                            <div style={{ fontSize: 10, color: '#94a3b8' }}>{item.project_name || '—'}</div>
+                          </div>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* ════════════════════ TOP KPI STRIP ════════════════════ */}
-        <div className="prof-kpi-strip">
-          <KPI label="Portfolio Value"   value={totalContractValue} isCurrency tone="primary" icon={Building2} to="/projects" sub={`${safeProjects.length} projects`} loading={dashboardLoading} />
-          <KPI label="Certified Billing" value={totalCertified}     isCurrency icon={Receipt}    to="/qs/ra-bills" sub={`${pendingRABillCount} pending`} loading={dashboardLoading} />
-          <KPI label="Collections"       value={totalCollections}   isCurrency tone="success" icon={Wallet}      to="/finance/payments" sub={`${collectionRate}% of certified`} loading={dashboardLoading} />
-          <KPI label="Receivables"       value={receivables}        isCurrency tone={receivables > 0 ? 'danger' : 'success'} icon={Clock} to="/finance/payments" sub={receivables < 0 ? 'over-collected' : 'outstanding'} loading={dashboardLoading} />
-          <KPI label="Active Projects"   value={activeProjects}     tone="default" icon={Activity} to="/projects" sub={`${delayedProjects} delayed`} loading={dashboardLoading} />
-          <KPI label="Safety Score"      value={safetyScore != null ? `${Math.round(safetyScore)}/100` : 'N/A'} tone={safetyScore != null && safetyScore < 70 ? 'warning' : 'success'} icon={ShieldCheck} to="/hse" sub={`${openIncidents} incidents`} loading={dashboardLoading} />
-        </div>
-
-        {/* ════════════════════ PROJECTS ════════════════════ */}
-        {companyProjects.length > 0 && (
-          <section className="prof-section">
-            <ProjectCards
-              projects={companyProjects}
-              allCount={companyProjects.length}
-              activeCount={activeProjects}
-              planningCount={dashboardKpis.planning_projects ?? 0}
-              delayedCount={delayedProjects}
-              completedCount={dashboardKpis.completed_projects ?? 0}
-            />
-          </section>
-        )}
-
-        {/* ════════════════════ FINANCE & QS ════════════════════ */}
-        <section className="prof-section">
-          <SectionHeader kicker="Department 01" title="Finance & Quantity Survey" action="Open Finance" to="/finance" />
-          <div className="prof-section-grid prof-grid-2-1">
-            {/* Chart */}
-            <Panel title="Billing vs Collections trend" action="View report" to="/finance/reports">
-              {financeTrend.length === 0 || financeTrend.every(i => !i.billed && !i.collected) ? (
-                <EmptyRow text="No billing or collection data for the selected range" />
-              ) : (
-                <ResponsiveContainer width="100%" height={220}>
-                  <AreaChart data={financeTrend} margin={{ top: 8, right: 14, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="profBill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#1e40af" stopOpacity={0.30} />
-                        <stop offset="95%" stopColor="#1e40af" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="profCollect" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#15803d" stopOpacity={0.30} />
-                        <stop offset="95%" stopColor="#15803d" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="month" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={{ stroke: '#cbd5e1' }} tickLine={false} />
-                    <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={v => inrCompact(v).replace('₹','')} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Legend wrapperStyle={{ fontSize: 11, color: '#475569' }} iconType="square" />
-                    <Area type="monotone" dataKey="billed"    stroke="#1e40af" strokeWidth={2} fill="url(#profBill)"    name="Billed" />
-                    <Area type="monotone" dataKey="collected" stroke="#15803d" strokeWidth={2} fill="url(#profCollect)" name="Collected" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              )}
-            </Panel>
-
-            {/* Summary stats */}
-            <Panel title="Financial summary">
-              <table className="prof-table prof-table-stat">
-                <tbody>
-                  <tr><td>Pending RA Bills</td><td className="num">{pendingRABillCount}</td></tr>
-                  <tr><td>Pending RA Value</td><td className="num">{inrCompact(pendingRAValue)}</td></tr>
-                  <tr><td>Collection rate</td><td className="num"><strong style={{ color: collectionRate >= 70 ? '#15803d' : collectionRate >= 50 ? '#b45309' : '#b91c1c' }}>{collectionRate}%</strong></td></tr>
-                  <tr><td>DQS Invoice value</td><td className="num">{inrCompact(tqsTotalInvoice)}</td></tr>
-                  <tr><td>DQS Certified</td><td className="num">{inrCompact(tqsTotalCertified)}</td></tr>
-                  <tr><td>DQS Paid</td><td className="num">{inrCompact(tqsTotalPaid)}</td></tr>
-                  <tr className="highlight"><td>DQS Balance to pay</td><td className="num"><strong style={{ color: '#b91c1c' }}>{inrCompact(tqsBalance)}</strong></td></tr>
-                </tbody>
-              </table>
-            </Panel>
-          </div>
-
-          {/* DQS recent bills */}
-          <Panel title={`Recent DQS Vendor Bills (${tqsTotalBills} total · ${tqsPaidCount} paid · ${tqsPendingCount} pending)`} action="Open DQS" to="/tqs/bills">
-            {tqsRecent.length === 0 ? <EmptyRow text="No recent vendor bills" /> : (
-              <table className="prof-table">
-                <thead>
-                  <tr>
-                    <th>Bill No.</th>
-                    <th>Vendor</th>
-                    <th>Project</th>
-                    <th className="num">Invoice</th>
-                    <th className="num">Certified</th>
-                    <th className="num">Paid</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tqsRecent.map(b => (
-                    <tr key={b.id}>
-                      <td><Link to={`/tqs/bills/${b.id}`} className="prof-link">{b.sl_number || b.bill_number || b.id?.slice(0,8)}</Link></td>
-                      <td className="truncate">{b.vendor_name || '—'}</td>
-                      <td className="truncate">{b.project_name || '—'}</td>
-                      <td className="num">{inrCompact(b.total_amount)}</td>
-                      <td className="num">{inrCompact(b.certified_net)}</td>
-                      <td className="num">{inrCompact(b.paid_amount)}</td>
-                      <td><span className={`prof-status prof-status-${b.workflow_status || 'pending'}`}>{b.workflow_status || 'pending'}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </Panel>
-        </section>
-
-        {/* ════════════════════ PROJECTS ════════════════════ */}
-        <section className="prof-section">
-          <SectionHeader kicker="Department 02" title="Projects & Planning" action="All Projects" to="/projects" />
-
-          <div className="prof-mini-kpi-row">
-            <KPI label="Active"     value={activeProjects}    tone="primary" />
-            <KPI label="Delayed"    value={delayedProjects}   tone="danger" />
-            <KPI label="Planning"   value={planningProjects}  tone="neutral" />
-            <KPI label="Completed"  value={completedProjects} tone="success" />
-          </div>
-
-          <div className="prof-section-grid prof-grid-1-2">
-            {/* Status pie */}
-            <Panel title="Project status breakdown">
-              {projectStatus.length === 0 ? <EmptyRow text="No project data" /> : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <ResponsiveContainer width="50%" height={170}>
-                    <PieChart>
-                      <Pie data={projectStatus} dataKey="value" innerRadius={36} outerRadius={62} paddingAngle={2}>
-                        {projectStatus.map((_, i) => <Cell key={i} fill={STATUS_COLORS[i % STATUS_COLORS.length]} stroke="none" />)}
-                      </Pie>
-                      <Tooltip content={<CustomTooltip />} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div style={{ flex: 1, display: 'grid', gap: 6 }}>
-                    {projectStatus.map((it, i) => (
-                      <div key={it.name} className="prof-legend-row">
-                        <span style={{ width: 9, height: 9, borderRadius: 2, background: STATUS_COLORS[i % STATUS_COLORS.length] }} />
-                        <span style={{ flex: 1, color: '#475569' }}>{it.name}</span>
-                        <strong>{it.value}</strong>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <span style={{ fontSize: 13, fontWeight: 800, color: '#ef4444' }}>{parseFloat(item.closing_stock || 0).toFixed(1)}</span>
+                          <span style={{ fontSize: 11, color: '#94a3b8' }}> / {parseFloat(item.reorder_level || 0).toFixed(1)}</span>
+                        </div>
                       </div>
                     ))}
                   </div>
+                )}
+              </div>
+            </div>
+
+            {/* Recent POs */}
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>Recent Purchase Orders</h3>
+                <Link to="/procurement/po" style={{ fontSize: 11, fontWeight: 700, color: '#4f46e5', textDecoration: 'none' }}>View All →</Link>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                      {['PO No.', 'Project', 'Date', 'Value', 'Status'].map(h => (
+                        <th key={h} style={{ padding: '9px 14px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {safePOs.length === 0
+                      ? <tr><td colSpan={5} style={{ padding: '30px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>No purchase orders</td></tr>
+                      : safePOs.map((po, i) => {
+                        const s = String(po.status || 'pending').toLowerCase();
+                        const sc = s === 'approved' || s === 'received' || s === 'fully_received' ? '#22c55e' : s === 'rejected' || s === 'cancelled' ? '#ef4444' : '#f59e0b';
+                        return (
+                          <tr key={po.id} style={{ borderBottom: i < safePOs.length - 1 ? '1px solid #f8fafc' : 'none' }}>
+                            <td style={{ padding: '11px 14px', fontSize: 12, fontWeight: 700, color: '#4f46e5' }}>{po.po_number || '—'}</td>
+                            <td style={{ padding: '11px 14px', fontSize: 12, color: '#64748b', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{po.project_name || '—'}</td>
+                            <td style={{ padding: '11px 14px', fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap' }}>{po.po_date ? dayjs(po.po_date).format('DD MMM') : '—'}</td>
+                            <td style={{ padding: '11px 14px', fontSize: 12, fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{inrCr(po.order_value)}</td>
+                            <td style={{ padding: '11px 14px' }}>
+                              <span style={{ padding: '2px 9px', borderRadius: 999, fontSize: 10, fontWeight: 700, background: `${sc}18`, color: sc, textTransform: 'capitalize' }}>{s}</span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Quality, Safety & HSE ── */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: 0 }}>Quality, Safety & HSE</h2>
+            <Link to="/hse" style={{ fontSize: 12, fontWeight: 700, color: '#4f46e5', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>HSE Dashboard <ChevronRight size={13} /></Link>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 16 }}>
+            {[
+              { label: 'Safety Score',   value: safetyScore != null ? `${Math.round(safetyScore)}/100` : 'N/A', color: safetyScore != null && safetyScore < 70 ? '#f59e0b' : '#22c55e', bg: safetyScore != null && safetyScore < 70 ? '#fef3c7' : '#dcfce7', icon: ShieldCheck },
+              { label: 'Open Incidents', value: openIncidents, color: openIncidents > 0 ? '#ef4444' : '#22c55e', bg: openIncidents > 0 ? '#fee2e2' : '#dcfce7', icon: AlertTriangle },
+              { label: 'Expiring Permits',value: expiringPermits, color: '#f59e0b', bg: '#fef3c7', icon: FileWarning },
+              { label: 'Open RFIs',      value: openRFIs,      color: '#0891b2', bg: '#e0f2fe', icon: FileText },
+              { label: 'Open NCRs',      value: openNCRs,      color: openNCRs > 0 ? '#ef4444' : '#22c55e', bg: openNCRs > 0 ? '#fee2e2' : '#dcfce7', icon: FileWarning },
+              { label: 'Documents',      value: kpis.documents_count ?? 0, color: '#7c3aed', bg: '#f5f3ff', icon: FileSpreadsheet },
+            ].map(({ label, value, color, bg, icon: Icon }) => (
+              <div key={label} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon size={13} style={{ color }} />
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</span>
                 </div>
-              )}
-            </Panel>
-
-            {/* Delayed projects table */}
-            <Panel title="Delayed projects watchlist" action="View all" to="/projects?filter=delayed">
-              {delayedWatchlist.length === 0 ? <EmptyRow text="No delayed projects" /> : (
-                <table className="prof-table">
-                  <thead>
-                    <tr><th>Project</th><th>City</th><th className="num">Contract</th><th className="num">Progress</th></tr>
-                  </thead>
-                  <tbody>
-                    {delayedWatchlist.map(p => {
-                      const pct = Math.max(0, Math.min(100, parseFloat(p.progress_pct || 0)));
-                      return (
-                        <tr key={p.id}>
-                          <td><Link to={`/projects/${p.id}`} className="prof-link">{p.name}</Link></td>
-                          <td>{p.city || '—'}</td>
-                          <td className="num">{inrCompact(p.contract_value)}</td>
-                          <td className="num">
-                            <div className="prof-progress">
-                              <div className="prof-progress-fill" style={{ width: `${pct}%`, background: pct < 30 ? '#b91c1c' : pct < 60 ? '#b45309' : '#15803d' }} />
-                            </div>
-                            <span style={{ fontSize: 10, fontWeight: 700, color: '#475569' }}>{pct}%</span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </Panel>
-          </div>
-        </section>
-
-        {/* ════════════════════ PROCUREMENT & STORES ════════════════════ */}
-        <section className="prof-section">
-          <SectionHeader kicker="Department 03" title="Procurement & Stores" action="View Inventory" to="/procurement/inventory" />
-
-          <div className="prof-mini-kpi-row">
-            <KPI label="Total POs"                 value={totalPOs}             tone="primary"  icon={ClipboardList} to="/procurement/po" />
-            <KPI label="POs Needing Attention"     value={overduePOCount}       tone="warning"  icon={AlertTriangle} to="/procurement/po" />
-            <KPI label="Low-Stock Materials"       value={lowStockCount}        tone="danger"   icon={Package}       to="/procurement/inventory" />
-            <KPI label="Pending Vendor Bills"      value={pendingVendorBills}   tone="default"  icon={Receipt}       to="/tqs/bills" />
-            <KPI label="Pending Bill Value"        value={pendingVendorBillVal} isCurrency tone="default" icon={Wallet} to="/tqs/bills" />
-            <KPI label="Workforce On Site"         value={workforceCount}       tone="primary"  icon={HardHat}       to="/hr/workers" />
+                <div style={{ fontSize: 22, fontWeight: 900, color, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+              </div>
+            ))}
           </div>
 
-          <div className="prof-section-grid prof-grid-1-1">
-            {/* Low Stock Items */}
-            <Panel title="Low Stock Alert" action="View all" to="/procurement/inventory">
-              {safeLowStock.length === 0 ? <EmptyRow text="No low-stock items" /> : (
-                <table className="prof-table">
-                  <thead>
-                    <tr>
-                      <th>Material</th>
-                      <th>Project</th>
-                      <th className="num">Current Stock</th>
-                      <th className="num">Reorder Level</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {safeLowStock.map(item => {
-                      const pct = item.reorder_level > 0 ? Math.min(100, Math.round((item.closing_stock / item.reorder_level) * 100)) : 0;
-                      return (
-                        <tr key={item.id}>
-                          <td className="truncate" style={{ fontWeight: 600 }}>{item.material_name}</td>
-                          <td className="truncate muted">{item.project_name || '—'}</td>
-                          <td className="num">
-                            <span style={{ color: pct < 30 ? '#b91c1c' : '#b45309', fontWeight: 700 }}>{(+item.closing_stock||0).toFixed(1)}</span>
-                          </td>
-                          <td className="num muted">{(+item.reorder_level||0).toFixed(1)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </Panel>
-
-            {/* Recent Purchase Orders */}
-            <Panel title="Recent Purchase Orders" action="View all" to="/procurement/po">
-              {safeRecentPOs.length === 0 ? <EmptyRow text="No purchase orders" /> : (
-                <table className="prof-table">
-                  <thead>
-                    <tr>
-                      <th>PO No.</th>
-                      <th>Project</th>
-                      <th>Date</th>
-                      <th>Status</th>
-                      <th className="num">Value</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {safeRecentPOs.map(po => {
-                      const s = String(po.status || 'pending').toLowerCase();
-                      const statusClass = s === 'approved' || s === 'received' || s === 'fully_received' ? 'paid'
-                        : s === 'rejected' ? 'rejected' : 'pending';
-                      return (
-                        <tr key={po.id}>
-                          <td style={{ fontWeight: 600, color: '#1e40af' }}>{po.po_number || po.id?.slice(0,8)}</td>
-                          <td className="truncate muted">{po.project_name || '—'}</td>
-                          <td className="muted">{po.po_date ? dayjs(po.po_date).format('DD MMM') : '—'}</td>
-                          <td><span className={`prof-tag prof-tag-${statusClass}`}>{s}</span></td>
-                          <td className="num">{inrCompact(po.order_value)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </Panel>
-          </div>
-        </section>
-
-        {/* ════════════════════ QUALITY & SAFETY ════════════════════ */}
-        <section className="prof-section">
-          <SectionHeader kicker="Department 04" title="Quality, Safety & HSE" action="HSE Dashboard" to="/hse" />
-
-          <div className="prof-mini-kpi-row">
-            <KPI label="Safety Score"     value={safetyScore != null ? `${Math.round(safetyScore)}/100` : 'N/A'} tone={safetyScore != null && safetyScore < 70 ? 'warning' : 'success'} icon={ShieldCheck} to="/hse" />
-            <KPI label="Open Incidents"   value={openIncidents}    tone={openIncidents > 0 ? 'warning' : 'success'} icon={AlertTriangle} to="/hse/incidents" />
-            <KPI label="Expiring Permits" value={expiringPermits}  tone="warning" icon={FileWarning} to="/hse/permits" sub={`${totalPermits} on record`} />
-            <KPI label="Open RFIs"        value={openRFIs}         tone="default" icon={FileText}    to="/quality/rfi" />
-            <KPI label="Open NCRs"        value={openNCRs}         tone={openNCRs > 0 ? 'danger' : 'success'} icon={FileWarning} to="/quality/ncr" />
-            <KPI label="Documents"        value={documentsCount}   tone="default" icon={FileSpreadsheet} to="/documents" />
-          </div>
-
-          <div className="prof-section-grid prof-grid-1-1">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             {/* Recent Incidents */}
-            <Panel title="Recent HSE Incidents" action="View all" to="/hse/incidents">
-              {safeIncidents.length === 0 ? <EmptyRow text="No incidents recorded" /> : (
-                <table className="prof-table">
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>Recent HSE Incidents</h3>
+                <Link to="/hse/incidents" style={{ fontSize: 11, fontWeight: 700, color: '#4f46e5', textDecoration: 'none' }}>View All →</Link>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr><th>Date</th><th>Project</th><th>Type</th><th>Severity</th><th>Status</th></tr>
+                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                      {['Date', 'Project', 'Type', 'Severity', 'Status'].map(h => (
+                        <th key={h} style={{ padding: '9px 14px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
                   </thead>
                   <tbody>
-                    {safeIncidents.map(inc => {
-                      const sev = String(inc.severity || '').toLowerCase();
-                      const sevClass = sev === 'high' || sev === 'critical' ? 'rejected' : sev === 'medium' ? 'pending' : 'paid';
-                      return (
-                        <tr key={inc.id}>
-                          <td className="muted">{inc.incident_date ? dayjs(inc.incident_date).format('DD MMM') : '—'}</td>
-                          <td className="truncate">{inc.project_name || '—'}</td>
-                          <td className="truncate muted">{inc.incident_type?.replace(/_/g,' ') || '—'}</td>
-                          <td><span className={`prof-tag prof-tag-${sevClass}`}>{inc.severity || '—'}</span></td>
-                          <td><span className={`prof-tag prof-tag-${inc.status === 'closed' || inc.status === 'resolved' ? 'paid' : 'pending'}`}>{inc.status || 'open'}</span></td>
-                        </tr>
-                      );
-                    })}
+                    {safeIncidents.length === 0
+                      ? <tr><td colSpan={5} style={{ padding: '30px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>No incidents recorded</td></tr>
+                      : safeIncidents.map((inc, i) => {
+                        const sev = String(inc.severity || '').toLowerCase();
+                        const sc  = sev === 'high' || sev === 'critical' ? '#ef4444' : sev === 'medium' ? '#f59e0b' : '#22c55e';
+                        const open = !['closed','resolved'].includes(String(inc.status||'').toLowerCase());
+                        return (
+                          <tr key={inc.id} style={{ borderBottom: i < safeIncidents.length - 1 ? '1px solid #f8fafc' : 'none' }}>
+                            <td style={{ padding: '10px 14px', fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap' }}>{inc.incident_date ? dayjs(inc.incident_date).format('DD MMM') : '—'}</td>
+                            <td style={{ padding: '10px 14px', fontSize: 12, color: '#374151', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inc.project_name || '—'}</td>
+                            <td style={{ padding: '10px 14px', fontSize: 11, color: '#64748b', textTransform: 'capitalize' }}>{(inc.incident_type || '').replace(/_/g,' ') || '—'}</td>
+                            <td style={{ padding: '10px 14px' }}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 700, background: `${sc}18`, color: sc }}>{inc.severity || '—'}</span></td>
+                            <td style={{ padding: '10px 14px' }}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 700, background: open ? '#fef3c7' : '#dcfce7', color: open ? '#d97706' : '#15803d' }}>{inc.status || 'open'}</span></td>
+                          </tr>
+                        );
+                      })
+                    }
                   </tbody>
                 </table>
-              )}
-            </Panel>
+              </div>
+            </div>
 
             {/* Open RFIs & NCRs */}
-            <Panel title={`Open Quality Items (${safeRFIs.length} RFIs · ${safeNCRs.length} NCRs)`} action="View RFIs" to="/quality/rfi">
-              {safeRFIs.length === 0 && safeNCRs.length === 0 ? <EmptyRow text="No open quality items" /> : (
-                <table className="prof-table">
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>Open Quality Items <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginLeft: 6 }}>{safeRFIs.length} RFIs · {safeNCRs.length} NCRs</span></h3>
+                <Link to="/quality/rfi" style={{ fontSize: 11, fontWeight: 700, color: '#4f46e5', textDecoration: 'none' }}>RFIs →</Link>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr><th>Type</th><th>Number</th><th>Project</th><th>Activity / Description</th><th>Status</th></tr>
+                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                      {['Type', 'Number', 'Project', 'Activity', 'Status'].map(h => (
+                        <th key={h} style={{ padding: '9px 14px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
                   </thead>
                   <tbody>
-                    {[...safeRFIs.map(r => ({ ...r, _type: 'RFI' })), ...safeNCRs.map(n => ({ ...n, _type: 'NCR' }))].slice(0,8).map(item => (
-                      <tr key={item.id}>
-                        <td><span className={`prof-tag ${item._type === 'RFI' ? 'prof-tag-qs' : 'prof-tag-rejected'}`}>{item._type}</span></td>
-                        <td style={{ fontWeight: 600 }}>{item.rfi_number || item.ncr_number || '—'}</td>
-                        <td className="truncate muted">{item.project_name || '—'}</td>
-                        <td className="truncate">{item.activity_name || item.title || '—'}</td>
-                        <td><span className="prof-tag prof-tag-pending">{item.status || 'open'}</span></td>
-                      </tr>
-                    ))}
+                    {safeRFIs.length === 0 && safeNCRs.length === 0
+                      ? <tr><td colSpan={5} style={{ padding: '30px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>No open quality items</td></tr>
+                      : [...safeRFIs.map(r => ({ ...r, _type: 'RFI' })), ...safeNCRs.map(n => ({ ...n, _type: 'NCR' }))].slice(0, 8).map((item, i, arr) => (
+                        <tr key={item.id} style={{ borderBottom: i < arr.length - 1 ? '1px solid #f8fafc' : 'none' }}>
+                          <td style={{ padding: '10px 14px' }}>
+                            <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 700, background: item._type === 'RFI' ? '#dbeafe' : '#fee2e2', color: item._type === 'RFI' ? '#1e40af' : '#b91c1c' }}>{item._type}</span>
+                          </td>
+                          <td style={{ padding: '10px 14px', fontSize: 12, fontWeight: 700, color: '#4f46e5' }}>{item.rfi_number || item.ncr_number || '—'}</td>
+                          <td style={{ padding: '10px 14px', fontSize: 11, color: '#64748b', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.project_name || '—'}</td>
+                          <td style={{ padding: '10px 14px', fontSize: 11, color: '#374151', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.activity_name || item.title || '—'}</td>
+                          <td style={{ padding: '10px 14px' }}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 700, background: '#fef3c7', color: '#d97706' }}>{item.status || 'open'}</span></td>
+                        </tr>
+                      ))
+                    }
                   </tbody>
                 </table>
-              )}
-            </Panel>
+              </div>
+            </div>
           </div>
-        </section>
-
-        {/* ════════════════════ RECENT ACTIVITY ════════════════════ */}
-        <section className="prof-section">
-          <SectionHeader kicker="Activity" title="Recent activity across departments" />
-
-          <div className="prof-section-grid prof-grid-1-1" style={{ marginBottom: 14 }}>
-            <Panel title="Recent Payments" action="View all" to="/finance/payments">
-              {safePayments.length === 0 ? <EmptyRow text="No payments recorded" /> : (
-                <table className="prof-table">
-                  <thead><tr><th>Date</th><th>Beneficiary</th><th>Type</th><th className="num">Amount</th></tr></thead>
-                  <tbody>
-                    {safePayments.slice(0, 5).map(p => (
-                      <tr key={p.id}>
-                        <td className="muted">{dayjs(p.payment_date || p.created_at).format('DD MMM')}</td>
-                        <td className="truncate">{p.entity_name || p.project_name || 'Payment'}</td>
-                        <td><span className="prof-tag prof-tag-success">{(p.payment_type || 'payment').toLowerCase()}</span></td>
-                        <td className="num" title={inr(p.net_amount || p.amount)}>{inrCompact(p.net_amount || p.amount)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </Panel>
-
-            <Panel title="Recent RA Bills" action="View all" to="/qs/ra-bills">
-              {safeBills.length === 0 ? <EmptyRow text="No RA bills" /> : (
-                <table className="prof-table">
-                  <thead><tr><th>Date</th><th>Project</th><th>Status</th><th className="num">Value</th></tr></thead>
-                  <tbody>
-                    {safeBills.slice(0, 5).map(b => (
-                      <tr key={b.id}>
-                        <td className="muted">{dayjs(b.bill_date || b.created_at).format('DD MMM')}</td>
-                        <td className="truncate">{b.project_name || '—'}</td>
-                        <td><span className={`prof-tag prof-tag-${b.status || 'pending'}`}>{b.status || 'pending'}</span></td>
-                        <td className="num">{inrCompact(b.bill_value || b.net_payable || b.gross_amount)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </Panel>
-          </div>
-
-          {safeDocs.length > 0 && (
-            <Panel title="Recent Documents" action="View all" to="/documents">
-              <table className="prof-table">
-                <thead><tr><th>File</th><th>Module</th><th>Project</th><th>Uploaded</th></tr></thead>
-                <tbody>
-                  {safeDocs.slice(0, 5).map(d => (
-                    <tr key={d.id}>
-                      <td className="truncate" style={{ fontWeight: 600 }}>{d.file_name || '—'}</td>
-                      <td><span className="prof-tag prof-tag-qs">{d.module || 'general'}</span></td>
-                      <td className="truncate muted">{d.project_name || 'Company-wide'}</td>
-                      <td className="muted">{dayjs(d.created_at).format('DD MMM')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </Panel>
-          )}
-        </section>
-
-        <div className="prof-footer">
-          <span>BCIM Engineering ERP · v1.0 · Refreshed {relTime(lastRefreshed)}</span>
-          <span>Press <kbd>R</kbd> to refresh</span>
         </div>
-      </main>
 
-      {/* ════════════════════ STYLES ════════════════════ */}
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-        * { box-sizing: border-box; }
+        {/* ── Recent Activity ── */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: 0 }}>Recent Activity</h2>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            {/* Recent Payments */}
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>Recent Payments</h3>
+                <Link to="/finance/payments" style={{ fontSize: 11, fontWeight: 700, color: '#4f46e5', textDecoration: 'none' }}>View All →</Link>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                      {['Date', 'Beneficiary', 'Type', 'Amount'].map(h => (
+                        <th key={h} style={{ padding: '9px 14px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8', textAlign: h === 'Amount' ? 'right' : 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {safePayments.length === 0
+                      ? <tr><td colSpan={4} style={{ padding: '30px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>No payments recorded</td></tr>
+                      : safePayments.map((p, i) => (
+                        <tr key={p.id} style={{ borderBottom: i < safePayments.length - 1 ? '1px solid #f8fafc' : 'none' }}>
+                          <td style={{ padding: '10px 14px', fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap' }}>{dayjs(p.payment_date || p.created_at).format('DD MMM')}</td>
+                          <td style={{ padding: '10px 14px', fontSize: 12, color: '#374151', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.entity_name || p.project_name || 'Payment'}</td>
+                          <td style={{ padding: '10px 14px' }}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 700, background: '#dcfce7', color: '#15803d' }}>{(p.payment_type || 'payment').replace(/_/g,' ')}</span></td>
+                          <td style={{ padding: '10px 14px', fontSize: 12, fontWeight: 800, color: '#22c55e', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{inrCr(p.net_amount || p.amount)}</td>
+                        </tr>
+                      ))
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-        .prof-dashboard {
-          background: #f8fafc; min-height: 100vh;
-          font-family: 'Inter','Segoe UI',-apple-system,sans-serif;
-          color: #0f172a; font-size: 13px;
-        }
+            {/* Recent RA Bills */}
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>Recent RA Bills</h3>
+                <Link to="/qs/ra-bills" style={{ fontSize: 11, fontWeight: 700, color: '#4f46e5', textDecoration: 'none' }}>View All →</Link>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                      {['Date', 'Project', 'Status', 'Value'].map(h => (
+                        <th key={h} style={{ padding: '9px 14px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8', textAlign: h === 'Value' ? 'right' : 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {safeBills.length === 0
+                      ? <tr><td colSpan={4} style={{ padding: '30px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>No RA bills</td></tr>
+                      : safeBills.map((b, i) => {
+                        const s = String(b.status || 'pending').toLowerCase();
+                        const sc = s === 'paid' || s === 'certified' ? '#22c55e' : s === 'rejected' ? '#ef4444' : '#f59e0b';
+                        return (
+                          <tr key={b.id} style={{ borderBottom: i < safeBills.length - 1 ? '1px solid #f8fafc' : 'none' }}>
+                            <td style={{ padding: '10px 14px', fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap' }}>{dayjs(b.bill_date || b.created_at).format('DD MMM')}</td>
+                            <td style={{ padding: '10px 14px', fontSize: 12, color: '#374151', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.project_name || '—'}</td>
+                            <td style={{ padding: '10px 14px' }}><span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 700, background: `${sc}18`, color: sc }}>{s}</span></td>
+                            <td style={{ padding: '10px 14px', fontSize: 12, fontWeight: 800, color: '#0f172a', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{inrCr(b.bill_value || b.net_payable || b.gross_amount)}</td>
+                          </tr>
+                        );
+                      })
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
 
-        /* ── HEADER ── */
-        .prof-header {
-          background: #fff; border-bottom: 1px solid #e2e8f0;
-          position: sticky; top: 0; z-index: 30;
-        }
-        .prof-header-inner {
-          padding: 14px 28px; display: flex; align-items: center; justify-content: space-between;
-          border-bottom: 1px solid #f1f5f9;
-        }
-        .prof-brand { display: flex; align-items: center; gap: 14px; }
-        .prof-brand-mark {
-          width: 42px; height: 42px; border-radius: 6px;
-          background: #1e293b; color: #fff;
-          display: flex; align-items: center; justify-content: center;
-          font-weight: 900; font-size: 13px; letter-spacing: 0.5px;
-        }
-        .prof-brand-title { font-size: 16px; font-weight: 700; color: #0f172a; line-height: 1.1; }
-        .prof-brand-sub   { font-size: 11px; color: #64748b; margin-top: 2px; }
-
-        .prof-header-actions { display: flex; align-items: center; gap: 12px; }
-        .prof-refresh-meta { font-size: 11px; color: #64748b; display: flex; align-items: center; gap: 6px; }
-        .prof-mini-spinner {
-          width: 12px; height: 12px; border: 2px solid #cbd5e1; border-top-color: #1e40af;
-          border-radius: 50%; animation: prof-spin 1s linear infinite; display: inline-block;
-        }
-        .prof-refresh-btn {
-          display: flex; align-items: center; gap: 5px;
-          padding: 6px 14px; border: 1px solid #cbd5e1; background: #fff;
-          border-radius: 4px; font-size: 12px; font-weight: 600; color: #334155; cursor: pointer;
-          transition: all .12s;
-        }
-        .prof-refresh-btn:hover { border-color: #1e40af; color: #1e40af; }
-
-        /* ── FILTER STRIP ── */
-        .prof-filter-strip {
-          padding: 10px 28px; display: flex; align-items: center; gap: 16px;
-          background: #f8fafc; border-top: 1px solid #f1f5f9;
-        }
-        .prof-filter-group { display: flex; align-items: center; gap: 8px; }
-        .prof-filter-group label { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
-        .prof-filter-group select {
-          height: 30px; min-width: 160px; padding: 0 26px 0 10px; border: 1px solid #cbd5e1;
-          border-radius: 4px; background: #fff; font-size: 12px; color: #0f172a; font-family: inherit;
-          outline: none; cursor: pointer;
-        }
-        .prof-filter-group select:focus { border-color: #1e40af; }
-        .prof-filter-spacer { flex: 1; }
-        .prof-filter-meta { font-size: 11px; color: #64748b; }
-        .prof-filter-meta strong { color: #0f172a; font-weight: 700; }
-
-        /* ── ALERTS ── */
-        .prof-alerts {
-          background: #fffbeb; border-bottom: 1px solid #fef3c7;
-          padding: 8px 28px; display: flex; align-items: center; gap: 10px;
-          font-size: 12px; flex-wrap: wrap;
-        }
-        .prof-alerts-label { font-weight: 700; color: #92400e; }
-        .prof-alerts-list { display: flex; gap: 6px; flex-wrap: wrap; }
-        .prof-alert-chip {
-          padding: 3px 10px; border: 1px solid; border-radius: 999px;
-          background: #fff; font-size: 11px; font-weight: 600; text-decoration: none;
-        }
-        .prof-alert-chip strong { font-weight: 800; }
-
-        /* ── MAIN ── */
-        .prof-main { padding: 20px 28px 40px; max-width: 1600px; margin: 0 auto; }
-
-        /* ── TOP KPI STRIP — 3D cards with breathing room ── */
-        .prof-kpi-strip {
-          display: grid; grid-template-columns: repeat(6, minmax(0,1fr));
-          gap: 12px; margin-bottom: 24px;
-          perspective: 1200px;
-        }
-        @media (max-width: 1280px) { .prof-kpi-strip { grid-template-columns: repeat(3, minmax(0,1fr)); } }
-        @media (max-width: 720px)  { .prof-kpi-strip { grid-template-columns: repeat(2, minmax(0,1fr)); } }
-        @media (max-width: 480px)  { .prof-kpi-strip { grid-template-columns: 1fr; } }
-
-        .prof-kpi-link { text-decoration: none; color: inherit; display: block; }
-
-        /* 3D wrapper */
-        .prof-kpi-3d {
-          position: relative;
-          background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-          border-radius: 10px;
-          overflow: hidden;
-          transform-origin: center center;
-          will-change: transform, box-shadow;
-          transition: background .15s;
-        }
-        .prof-kpi-3d::before {
-          /* Glossy top sheen */
-          content: '';
-          position: absolute; top: 0; left: 0; right: 0; height: 40%;
-          background: linear-gradient(180deg, rgba(255,255,255,0.7), rgba(255,255,255,0) 100%);
-          pointer-events: none;
-          border-radius: 10px 10px 0 0;
-        }
-        .prof-kpi-3d-highlight {
-          position: absolute; top: 0; left: 8%; right: 8%; height: 1px;
-          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.9), transparent);
-          pointer-events: none;
-        }
-        .prof-kpi-3d-accent {
-          position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
-          pointer-events: none;
-          opacity: 0.85;
-        }
-        .prof-kpi-link:hover .prof-kpi-3d { background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%); }
-
-        .prof-kpi { padding: 14px 14px 16px; position: relative; }
-        .prof-kpi-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-        .prof-kpi-label {
-          font-size: 10px; font-weight: 700; color: #64748b;
-          text-transform: uppercase; letter-spacing: 0.06em;
-        }
-        .prof-kpi-icon {
-          width: 22px; height: 22px; border-radius: 6px;
-          display: flex; align-items: center; justify-content: center;
-          box-shadow: inset 0 -1px 0 rgba(0,0,0,0.05), 0 1px 0 rgba(255,255,255,0.6);
-        }
-        .prof-kpi-value {
-          font-size: 22px; font-weight: 800; letter-spacing: -0.4px; line-height: 1.1;
-          text-shadow: 0 1px 0 rgba(255,255,255,0.7);
-        }
-        .prof-kpi-sub { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 11px; color: #64748b; }
-        .prof-delta { display: inline-flex; align-items: center; gap: 2px; font-weight: 700; font-size: 10px; padding: 1px 5px; border-radius: 3px; }
-        .prof-delta.up   { color: #15803d; background: #dcfce7; }
-        .prof-delta.down { color: #b91c1c; background: #fee2e2; }
-        .prof-kpi-skeleton { height: 22px; width: 70%; background: linear-gradient(90deg,#e2e8f0 25%,#f1f5f9 50%,#e2e8f0 75%); background-size: 200% 100%; animation: prof-shimmer 1.4s infinite; border-radius: 3px; }
-
-        /* ── SECTION ── */
-        .prof-section { margin-bottom: 28px; }
-        .prof-section-header {
-          display: flex; align-items: flex-end; justify-content: space-between;
-          margin-bottom: 12px; padding-bottom: 10px; border-bottom: 2px solid #e2e8f0;
-        }
-        .prof-section-kicker {
-          font-size: 10px; font-weight: 800; color: #1e40af;
-          text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 3px;
-        }
-        .prof-section-title { font-size: 17px; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 10px; }
-        .prof-section-count {
-          background: #1e293b; color: #fff; font-size: 11px; font-weight: 700;
-          padding: 1px 8px; border-radius: 999px;
-        }
-        .prof-section-action {
-          font-size: 11px; font-weight: 700; color: #1e40af; text-decoration: none;
-          display: flex; align-items: center; gap: 2px;
-        }
-        .prof-section-action:hover { text-decoration: underline; }
-
-        .prof-section-grid { display: grid; gap: 14px; margin-bottom: 14px; }
-        .prof-grid-2-1 { grid-template-columns: 2fr 1fr; }
-        .prof-grid-1-2 { grid-template-columns: 1fr 2fr; }
-        .prof-grid-1-1 { grid-template-columns: 1fr 1fr; }
-        @media (max-width: 1024px) {
-          .prof-grid-2-1, .prof-grid-1-2, .prof-grid-1-1 { grid-template-columns: 1fr; }
-        }
-
-        /* ── MINI KPI ROW (inside dept sections) — 3D too ── */
-        .prof-mini-kpi-row {
-          display: grid; grid-template-columns: repeat(6, minmax(0,1fr));
-          gap: 10px; margin-bottom: 14px;
-          perspective: 1200px;
-        }
-        @media (max-width: 1024px) { .prof-mini-kpi-row { grid-template-columns: repeat(3, minmax(0,1fr)); } }
-        @media (max-width: 560px)  { .prof-mini-kpi-row { grid-template-columns: repeat(2, minmax(0,1fr)); } }
-
-        /* ── PANEL ── */
-        .prof-panel {
-          background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;
-          box-shadow: 0 1px 2px rgba(15,23,42,0.04);
-        }
-        .prof-panel-header {
-          padding: 10px 14px; border-bottom: 1px solid #f1f5f9;
-          display: flex; align-items: center; justify-content: space-between;
-          background: #fafbfc;
-        }
-        .prof-panel-title {
-          font-size: 11px; font-weight: 800; color: #334155;
-          text-transform: uppercase; letter-spacing: 0.06em;
-        }
-        .prof-panel-action {
-          font-size: 11px; color: #1e40af; text-decoration: none; font-weight: 600;
-          display: flex; align-items: center; gap: 2px;
-        }
-        .prof-panel-action:hover { text-decoration: underline; }
-        .prof-panel-body { padding: 12px 14px; }
-
-        /* ── TABLES ── */
-        .prof-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        .prof-table thead th {
-          text-align: left; padding: 6px 10px; border-bottom: 1px solid #cbd5e1;
-          font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;
-          background: #f8fafc;
-        }
-        .prof-table thead th.num,
-        .prof-table tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
-        .prof-table tbody td {
-          padding: 8px 10px; border-bottom: 1px solid #f1f5f9; color: #0f172a; vertical-align: middle;
-        }
-        .prof-table tbody tr:last-child td { border-bottom: none; }
-        .prof-table tbody tr:hover { background: #f8fafc; }
-        .prof-table .truncate { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .prof-table .muted { color: #94a3b8; font-size: 11px; }
-        .prof-table-stat tbody td { padding: 6px 10px; font-size: 12px; }
-        .prof-table-stat tbody td:first-child { color: #64748b; font-weight: 500; }
-        .prof-table-stat tbody tr.highlight td { background: #f8fafc; font-weight: 700; }
-
-        /* ── STATUS / TAGS ── */
-        .prof-status, .prof-tag {
-          display: inline-block; padding: 1px 8px; border-radius: 3px;
-          font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
-        }
-        .prof-status-pending,   .prof-tag-pending   { background: #fef3c7; color: #92400e; }
-        .prof-status-qs,        .prof-tag-qs        { background: #dbeafe; color: #1e40af; }
-        .prof-status-accounts,  .prof-tag-accounts  { background: #ede9fe; color: #6d28d9; }
-        .prof-status-paid,      .prof-tag-paid,
-        .prof-tag-success                          { background: #dcfce7; color: #15803d; }
-        .prof-status-rejected,  .prof-tag-rejected  { background: #fee2e2; color: #b91c1c; }
-        .prof-status-procurement,
-        .prof-status-qs_sign                       { background: #f1f5f9; color: #334155; }
-
-        .prof-link { color: #1e40af; text-decoration: none; font-weight: 600; }
-        .prof-link:hover { text-decoration: underline; }
-
-        .prof-progress {
-          display: inline-block; vertical-align: middle; width: 60px; height: 6px;
-          background: #e2e8f0; border-radius: 999px; overflow: hidden; margin-right: 6px;
-        }
-        .prof-progress-fill { height: 100%; border-radius: 999px; }
-
-        .prof-legend-row { display: flex; align-items: center; gap: 8px; font-size: 11px; }
-        .prof-legend-row strong { color: #0f172a; font-weight: 700; }
-
-        .prof-empty { padding: 24px 0; text-align: center; color: #94a3b8; font-size: 11px; font-style: italic; }
-
-        /* ── FOOTER ── */
-        .prof-footer {
-          display: flex; justify-content: space-between; align-items: center;
-          padding: 16px 0 0; margin-top: 12px; border-top: 1px solid #e2e8f0;
-          font-size: 11px; color: #94a3b8;
-        }
-        .prof-footer kbd {
-          padding: 1px 5px; border: 1px solid #cbd5e1; border-radius: 3px;
-          background: #f1f5f9; font-family: inherit; font-size: 10px; font-weight: 700; color: #475569;
-        }
-
-        /* ── TOOLTIP ── */
-        .prof-tooltip {
-          background: #fff; border: 1px solid #cbd5e1; border-radius: 6px;
-          padding: 8px 12px; box-shadow: 0 6px 18px rgba(15,23,42,0.12);
-          font-size: 11px; min-width: 150px;
-        }
-        .prof-tooltip-label { font-weight: 700; color: #0f172a; margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid #f1f5f9; }
-        .prof-tooltip-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
-        .prof-tooltip-dot { width: 8px; height: 8px; border-radius: 2px; }
-        .prof-tooltip-name { color: #64748b; flex: 1; }
-        .prof-tooltip-val { color: #0f172a; font-weight: 700; font-variant-numeric: tabular-nums; }
-
-        /* ── LOADER ── */
-        .prof-loader { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 60vh; color: #64748b; font-size: 13px; }
-        .prof-spinner { width: 24px; height: 24px; border: 3px solid #cbd5e1; border-top-color: #1e40af; border-radius: 50%; animation: prof-spin 0.8s linear infinite; }
-
-        @keyframes prof-spin { to { transform: rotate(360deg); } }
-        @keyframes prof-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-
-        select option { background: #fff; color: #0f172a; }
-
-        /* Print friendly */
-        @media print {
-          .prof-header-actions, .prof-refresh-btn, .prof-section-action, .prof-panel-action { display: none !important; }
-          .prof-dashboard { background: #fff; }
-          .prof-panel { box-shadow: none; }
-        }
-      `}</style>
+        {/* Footer */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, borderTop: '1px solid #e2e8f0', fontSize: 11, color: '#94a3b8' }}>
+          <span>BCIM Engineering ERP · Executive Dashboard · {dayjs().format('D MMMM YYYY')}</span>
+          <span>Press <kbd style={{ padding: '1px 5px', border: '1px solid #cbd5e1', borderRadius: 3, background: '#f1f5f9', fontSize: 10 }}>R</kbd> to refresh</span>
+        </div>
+      </div>
     </div>
   );
 }
