@@ -305,9 +305,35 @@ export default function ProcurementDashboard() {
     return arr;
   }, [pos]);
 
-  const peakMonth = monthlyTrend.reduce((a, b) => b.amount > a.amount ? b : a, { month: '', amount: 0 });
-  const lowMonth  = monthlyTrend.filter(m => m.amount > 0).reduce((a, b) => b.amount < a.amount ? b : a, { month: '', amount: Infinity });
+  const peakMonth  = monthlyTrend.reduce((a, b) => b.amount > a.amount ? b : a, { month: '', amount: 0 });
+  const lowMonth   = monthlyTrend.filter(m => m.amount > 0).reduce((a, b) => b.amount < a.amount ? b : a, { month: '', amount: Infinity });
   const avgMonthly = monthlyTrend.reduce((s, m) => s + m.amount, 0) / 12;
+
+  // Month-over-month for trend arrows (current vs previous month)
+  const thisMonthKey = now.format('YYYY-MM');
+  const prevMonthKey = now.subtract(1, 'month').format('YYYY-MM');
+  const thisMonthSpend = monthlyTrend.find(m => m.month === MONTH_LABELS[now.month()])?.amount || 0;
+  const prevMonthSpend = monthlyTrend.find((_, i, arr) => {
+    const prev = now.subtract(1, 'month');
+    return arr[i]?.month === MONTH_LABELS[prev.month()];
+  })?.amount || 0;
+
+  const thisMonthPoCount = monthCounts[monthCounts.length - 1] || 0;
+  const prevMonthPoCount = monthCounts[monthCounts.length - 2] || 0;
+  const pendingThisMonth = pos.filter(p => dayjs(p.po_date || p.created_at).format('YYYY-MM') === thisMonthKey && ['pending','verified_audit','released_mgmt'].includes(p.status)).length;
+  const pendingPrevMonth = pos.filter(p => dayjs(p.po_date || p.created_at).format('YYYY-MM') === prevMonthKey && ['pending','verified_audit','released_mgmt'].includes(p.status)).length;
+  const rcvdThisMonth = pos.filter(p => dayjs(p.po_date || p.created_at).format('YYYY-MM') === thisMonthKey && ['received','fully_received','part_received'].includes(p.status)).length;
+  const rcvdPrevMonth = pos.filter(p => dayjs(p.po_date || p.created_at).format('YYYY-MM') === prevMonthKey && ['received','fully_received','part_received'].includes(p.status)).length;
+
+  const momPct = (cur, prev) => {
+    if (!prev) return cur > 0 ? null : null;
+    const d = Math.abs(((cur - prev) / prev) * 100).toFixed(1);
+    return { val: `${d}%`, up: cur >= prev };
+  };
+  const spendMom   = momPct(thisMonthSpend, prevMonthSpend);
+  const poMom      = momPct(thisMonthPoCount, prevMonthPoCount);
+  const pendingMom = momPct(pendingThisMonth, pendingPrevMonth);
+  const rcvdMom    = momPct(rcvdThisMonth, rcvdPrevMonth);
 
   const PAGE_SIZE = 5;
   const [page, setPage] = React.useState(1);
@@ -349,11 +375,11 @@ export default function ProcurementDashboard() {
 
         {/* KPI Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
-          <KpiSparkCard icon={IndianRupee}    label="Total Spend (YTD)"      value={inrCr(poValueTotal + woValueTotal)} sub="vs last year" trend="12.5%" trendUp color="#4f46e5" accentBg="#ede9fe" sparkData={monthAmounts} sparkColor="#4f46e5" />
-          <KpiSparkCard icon={ShoppingCart}   label="Total Purchase Orders"  value={pos.length}       sub="vs last year" trend="18.3%" trendUp color="#0891b2" accentBg="#e0f2fe" sparkData={monthCounts} sparkColor="#0891b2" />
-          <KpiSparkCard icon={Clock}          label="Pending Approval"       value={pendingApproval.length} sub="vs last month" trend="8.6%" trendUp={false} color="#f59e0b" accentBg="#fef3c7" sparkData={[3,5,4,7,6,8,pendingApproval.length]} sparkColor="#f59e0b" />
-          <KpiSparkCard icon={Package}        label="Goods Received (YTD)"   value={receivedPOs.length} sub="vs last year" trend="15.7%" trendUp color="#22c55e" accentBg="#dcfce7" sparkData={[10,14,18,12,20,receivedPOs.length,receivedPOs.length]} sparkColor="#22c55e" />
-          <KpiSparkCard icon={CreditCard}     label="Overdue Payments"       value={inrCr(pos.filter(p=>p.status==='approved').reduce((s,p)=>s+parseFloat(p.grand_total||p.total_amount||0),0)*0.12)} sub="vs last month" trend="5.2%" trendUp={false} color="#ef4444" accentBg="#fee2e2" sparkData={[8,10,6,12,9,14,11]} sparkColor="#ef4444" />
+          <KpiSparkCard icon={IndianRupee}   label="Total Spend (YTD)"     value={inrCr(poValueTotal + woValueTotal)} sub={spendMom ? `${spendMom.up ? '↑' : '↓'} ${spendMom.val} vs last month` : 'Total PO + WO spend'} color="#4f46e5" accentBg="#ede9fe" sparkData={monthAmounts} sparkColor="#4f46e5" />
+          <KpiSparkCard icon={ShoppingCart}  label="Total Purchase Orders" value={pos.length} sub={poMom ? `${poMom.up ? '↑' : '↓'} ${poMom.val} vs last month` : `${thisMonthPoCount} this month`} color="#0891b2" accentBg="#e0f2fe" sparkData={monthCounts} sparkColor="#0891b2" />
+          <KpiSparkCard icon={Clock}         label="Pending Approval"      value={pendingApproval.length} sub={pendingMom ? `${pendingMom.up ? '↑' : '↓'} ${pendingMom.val} vs last month` : 'Awaiting review'} color="#f59e0b" accentBg="#fef3c7" sparkData={monthCounts.map(v => Math.round(v * 0.3))} sparkColor="#f59e0b" />
+          <KpiSparkCard icon={Package}       label="Goods Received (YTD)"  value={receivedPOs.length} sub={rcvdMom ? `${rcvdMom.up ? '↑' : '↓'} ${rcvdMom.val} vs last month` : 'POs fully received'} color="#22c55e" accentBg="#dcfce7" sparkData={monthCounts.map((v,i) => Math.max(0, v - i % 2))} sparkColor="#22c55e" />
+          <KpiSparkCard icon={Users}         label="Vendors"               value={vendors.length} sub={`${wos.length} work orders`} color="#7c3aed" accentBg="#f5f3ff" sparkData={[vendors.length*0.7,vendors.length*0.75,vendors.length*0.8,vendors.length*0.85,vendors.length*0.9,vendors.length*0.95,vendors.length]} sparkColor="#7c3aed" />
         </div>
 
         {/* Alerts */}
