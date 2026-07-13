@@ -18,7 +18,12 @@
         "backgroundColor": "#0F172A"
       },
       "permissions": [
-        "NOTIFICATIONS"
+        "NOTIFICATIONS",
+        "CAMERA",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
+        "BLUETOOTH",
+        "BLUETOOTH_CONNECT"
       ],
       "googleServicesFile": "./google-services.json"
     },
@@ -31,7 +36,8 @@
         }
       ],
       "expo-font",
-      "expo-secure-store"
+      "expo-secure-store",
+      "react-native-webrtc"
     ],
     "extra": {
       "eas": {

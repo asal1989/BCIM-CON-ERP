@@ -3,7 +3,7 @@
 // For incoming calls, receives the offer + from so answerCall() can be triggered immediately.
 import React, { useEffect, useRef } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, StatusBar, Platform,
+  View, Text, TouchableOpacity, StyleSheet, StatusBar, Platform, Alert, PermissionsAndroid,
 } from 'react-native';
 import { RTCView } from 'react-native-webrtc';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -53,17 +53,36 @@ export default function CallScreen() {
     toggleMute, toggleVideo, toggleSpeaker,
   } = useWebRTC({ socketRef, user, onCallEnded: handleCallEnded });
 
-  // Kick off the call when the screen mounts
+  // Request Android permissions before accessing camera/mic, then start the call
   useEffect(() => {
-    if (incoming) {
-      // Pass the offer explicitly — this hook instance is fresh and hasn't received
-      // the socket 'call:offer' event (the global ChatContext already handled it).
-      answerCall({ from: peerId, callType, offer: incomingOffer, callerName: peerName });
-    } else if (callType === 'screen') {
-      startScreenShare({ peerId, peerName });
-    } else {
-      startCall({ peerId, peerName, callType });
-    }
+    const requestAndStart = async () => {
+      if (Platform.OS === 'android') {
+        const perms = [PermissionsAndroid.PERMISSIONS.RECORD_AUDIO];
+        if (callType === 'video') perms.push(PermissionsAndroid.PERMISSIONS.CAMERA);
+        const results = await PermissionsAndroid.requestMultiple(perms);
+        const denied = Object.values(results).some(
+          v => v !== PermissionsAndroid.RESULTS.GRANTED
+        );
+        if (denied) {
+          Alert.alert(
+            'Permissions required',
+            callType === 'video'
+              ? 'Camera and microphone access are needed for video calls.'
+              : 'Microphone access is needed for voice calls.',
+            [{ text: 'OK', onPress: handleCallEnded }]
+          );
+          return;
+        }
+      }
+      if (incoming) {
+        answerCall({ from: peerId, callType, offer: incomingOffer, callerName: peerName });
+      } else if (callType === 'screen') {
+        startScreenShare({ peerId, peerName });
+      } else {
+        startCall({ peerId, peerName, callType });
+      }
+    };
+    requestAndStart();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
