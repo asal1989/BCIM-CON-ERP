@@ -3352,6 +3352,63 @@ export default function StoresPettyCashPage() {
                 </div>
               </div>
 
+              {/* Supplier-wise breakdown */}
+              {rEntries.length > 0 && (() => {
+                const supMap = {};
+                rEntries.forEach(e => {
+                  const key = (e.supplier || '—').trim();
+                  if (!supMap[key]) supMap[key] = { count: 0, total: 0, lastDate: e.entry_date, materials: new Set() };
+                  supMap[key].count++;
+                  supMap[key].total += Number(e.amount);
+                  if (e.entry_date > supMap[key].lastDate) supMap[key].lastDate = e.entry_date;
+                  (e.items || []).forEach(it => { if (it.material_name) supMap[key].materials.add(it.material_name); });
+                });
+                const rows = Object.entries(supMap).sort((a, b) => b[1].total - a[1].total);
+                return (
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+                      <p className="text-sm font-semibold text-slate-700">Supplier-wise Summary</p>
+                      <span className="text-xs text-slate-400">{rows.length} supplier{rows.length !== 1 ? 's' : ''} · {rEntries.length} voucher{rEntries.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-100">
+                            {['#', 'Supplier', 'Vouchers', 'Materials Purchased', 'Last Purchase', 'Total Amount'].map(h => (
+                              <th key={h} className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {rows.map(([sup, { count, total, lastDate, materials }], i) => (
+                            <tr key={sup} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                              <td className="px-4 py-2.5 text-slate-400 text-xs">{i + 1}</td>
+                              <td className="px-4 py-2.5 font-medium text-slate-800">
+                                {sup}
+                                {count >= 4 && <span className="ml-2 text-[10px] text-amber-600 font-semibold bg-amber-50 px-1.5 py-0.5 rounded-full">⚠ high freq</span>}
+                              </td>
+                              <td className="px-4 py-2.5 text-center text-slate-600">{count}</td>
+                              <td className="px-4 py-2.5 text-slate-500 text-xs max-w-[260px]">
+                                {[...materials].slice(0, 4).join(', ')}
+                                {materials.size > 4 && <span className="text-slate-400"> +{materials.size - 4} more</span>}
+                              </td>
+                              <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">{dayjs(lastDate).format('DD-MM-YYYY')}</td>
+                              <td className="px-4 py-2.5 font-semibold text-slate-800 text-right">{inr(total)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-slate-50 border-t border-slate-200">
+                            <td colSpan={5} className="px-4 py-2.5 text-xs font-bold text-slate-600 uppercase">Total</td>
+                            <td className="px-4 py-2.5 font-bold text-slate-800 text-right">{inr(totalLP)}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Advances summary */}
               {(rAdvances.length > 0 || rScAdv.length > 0) && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
