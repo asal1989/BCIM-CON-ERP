@@ -1,7 +1,7 @@
 // src/screens/CallScreen.js — full-screen call UI for voice, video, and screen share.
 // Receives callType ('audio'|'video'|'screen'), peerId, peerName from route params.
 // For incoming calls, receives the offer + from so answerCall() can be triggered immediately.
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, StatusBar, Platform, Alert, PermissionsAndroid,
 } from 'react-native';
@@ -67,6 +67,11 @@ export default function CallScreen() {
     startScreenShare,
     toggleMute, toggleVideo, toggleSpeaker,
   } = useWebRTC({ socketRef, user, onCallEnded: () => handleCallEnded() });
+
+  // Track answered state
+  useEffect(() => {
+    if (callState === 'connected') callStatus.current = 'answered';
+  }, [callState]);
 
   // Request Android permissions before accessing camera/mic, then start the call
   useEffect(() => {

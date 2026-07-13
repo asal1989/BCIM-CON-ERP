@@ -1,6 +1,6 @@
 // src/screens/ChatListScreen.js — unified conversation list (channels + DMs),
 // sorted by most recent message, mirroring the web app's sidebar.
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -11,11 +11,13 @@ import { useAuth } from '../context/AuthContext';
 import { useChat } from '../context/ChatContext';
 import { CHANNELS, chColor, dmChannelId } from '../constants/chatChannels';
 import { theme } from '../theme';
+import { chatAPI } from '../api/client';
 
 const TABS = [
   { id: 'all',      label: 'All' },
   { id: 'channels', label: 'Channels' },
   { id: 'direct',   label: 'Direct' },
+  { id: 'calls',    label: 'Calls' },
 ];
 
 function fmtTime(ts) {
@@ -28,12 +30,59 @@ function fmtTime(ts) {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
+function fmtDuration(secs) {
+  if (!secs) return '';
+  const m = Math.floor(secs / 60), s = secs % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function CallLogItem({ log, currentUserId }) {
+  const isCaller   = log.caller_id === currentUserId;
+  const otherName  = isCaller ? (log.callee_name || 'Unknown') : (log.caller_name || 'Unknown');
+  const icon =
+    log.call_type === 'video'  ? 'video' :
+    log.call_type === 'screen' ? 'monitor-share' : 'phone';
+  const statusColor =
+    log.status === 'answered' ? theme.colors.success :
+    log.status === 'missed'   ? '#EF4444' : theme.colors.muted;
+  const statusIcon =
+    log.status === 'answered' ? (isCaller ? 'phone-outgoing' : 'phone-incoming') :
+    log.status === 'missed'   ? 'phone-missed' : 'phone-remove';
+
+  return (
+    <View style={styles.callRow}>
+      <Avatar name={otherName} size={46} />
+      <View style={styles.rowContent}>
+        <View style={styles.rowTop}>
+          <Text style={styles.rowName} numberOfLines={1}>{otherName}</Text>
+          <Text style={styles.rowTime}>{fmtTime(log.started_at)}</Text>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
+          <MaterialCommunityIcons name={statusIcon} size={14} color={statusColor} />
+          <MaterialCommunityIcons name={icon} size={13} color={theme.colors.muted} />
+          <Text style={[styles.rowSub, { color: statusColor }]}>
+            {log.status === 'answered' ? fmtDuration(log.duration_secs) || log.status : log.status}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export default function ChatListScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
   const { previews, employees, connected } = useChat();
   const [tab, setTab] = useState('all');
   const [search, setSearch] = useState('');
+  const [callLogs, setCallLogs]   = useState([]);
+  const [callsLoading, setCallsLoading] = useState(false);
+
+  useEffect(() => {
+    if (tab !== 'calls') return;
+    setCallsLoading(true);
+    chatAPI.callLogs(50).then(r => setCallLogs(r.data || [])).catch(() => {}).finally(() => setCallsLoading(false));
+  }, [tab]);
 
   const q = search.trim().toLowerCase();
 
@@ -91,6 +140,19 @@ export default function ChatListScreen() {
         </View>
       </View>
 
+      {tab === 'calls' ? (
+        <FlatList
+          data={callLogs}
+          keyExtractor={item => String(item.id)}
+          contentContainerStyle={{ paddingBottom: 24 }}
+          ListEmptyComponent={
+            callsLoading
+              ? <Text style={styles.loadingText}>Loading…</Text>
+              : <EmptyState icon="phone-outline" title="No call history yet" />
+          }
+          renderItem={({ item }) => <CallLogItem log={item} currentUserId={user?.id} />}
+        />
+      ) : (
       <FlatList
         data={items}
         keyExtractor={item => item.id}
@@ -122,6 +184,7 @@ export default function ChatListScreen() {
           );
         }}
       />
+      )}
     </Screen>
   );
 }
@@ -156,4 +219,10 @@ const styles = StyleSheet.create({
   rowName: { fontSize: 14.5, fontWeight: '700', color: theme.colors.text, flex: 1 },
   rowTime: { fontSize: 11, color: theme.colors.muted, marginLeft: 6 },
   rowSub: { fontSize: 12.5, color: theme.colors.textSecondary, marginTop: 2 },
+  callRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: theme.spacing.md, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: theme.colors.border, backgroundColor: theme.colors.card,
+  },
+  loadingText: { textAlign: 'center', color: theme.colors.muted, marginTop: 40, fontSize: 14 },
 });
