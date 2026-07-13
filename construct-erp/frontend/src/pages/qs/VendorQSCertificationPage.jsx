@@ -442,7 +442,7 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
                     <tr key={b.id} className={selectedBillIds.includes(b.id) ? 'bg-emerald-50' : 'hover:bg-slate-50'}>
                       <td className="px-3 py-2"><input type="checkbox" className="accent-emerald-600" checked={selectedBillIds.includes(b.id)} onChange={() => toggleBill(b.id)} /></td>
                       <td className="px-3 py-2 font-medium text-indigo-700">{b.sl_number}</td>
-                      <td className="px-3 py-2 font-medium text-slate-800">{b.inv_number || '-'}</td>
+                      <td className="px-3 py-2 font-medium text-slate-800">{(b.inv_number || '-').toUpperCase()}</td>
                       <td className="px-3 py-2 text-slate-500">{fmtDate(b.inv_date)}</td>
                       <td className="px-3 py-2 text-slate-500">{b.order_number || '-'}</td>
                       <td className="px-3 py-2 text-right font-bold">Rs {inr(b.total_amount)}</td>

@@ -1139,7 +1139,7 @@ export default function TQSBillDetailPage() {
             <p className="text-xs mt-1 truncate" style={{ color: 'rgba(255,255,255,0.65)' }}>
               <span className="font-medium text-white">{bill.vendor_name}</span>
               <span className="mx-2" style={{ color: 'rgba(255,255,255,0.30)' }}>·</span>
-              <span>{bill.inv_number}</span>
+              <span>{(bill.inv_number || '').toUpperCase()}</span>
             </p>
           </div>
 
@@ -1223,7 +1223,7 @@ export default function TQSBillDetailPage() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-5 pb-5 border-b border-slate-200">
                   {[
                     { label: 'PO / WO #',      value: bill.po_number,  mono: true },
-                    { label: 'Invoice #',       value: bill.inv_number, mono: true },
+                    { label: 'Invoice #',       value: (bill.inv_number || '').toUpperCase(), mono: true },
                     { label: 'Invoice Date',    value: fmt(bill.inv_date) },
                     { label: 'Received Date',   value: fmt(bill.received_date) },
                   ].map(f => (

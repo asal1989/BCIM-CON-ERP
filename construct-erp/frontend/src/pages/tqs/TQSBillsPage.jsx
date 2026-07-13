@@ -893,7 +893,7 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
               <div>
                 <Lbl req>Invoice Number</Lbl>
                 <input className={F} placeholder="INV-001"
-                  value={form.inv_number} onChange={e => set('inv_number', e.target.value)} required />
+                  value={form.inv_number} onChange={e => set('inv_number', e.target.value.toUpperCase())} required style={{ textTransform: 'uppercase' }} />
               </div>
 
               {/* Invoice Date - auto-derives Invoice Month */}
@@ -1907,7 +1907,7 @@ function EditBillModal({ bill, projects, onClose }) {
               </div>
               <div>
                 <Lbl req>Invoice Number</Lbl>
-                <input className={F} value={form.inv_number} onChange={e => set('inv_number', e.target.value)} />
+                <input className={F} value={form.inv_number} onChange={e => set('inv_number', e.target.value.toUpperCase())} style={{ textTransform: 'uppercase' }} />
               </div>
               <div>
                 <Lbl req>Invoice Date</Lbl>
@@ -3134,7 +3134,7 @@ export default function TQSBillsPage() {
                       </td>;
                     case 'inv_number':
                       return <td key={col.key} className={cls}>
-                        <span className="font-mono text-slate-900 text-[12px] font-medium whitespace-normal break-words block" title={b.inv_number}>{b.inv_number}</span>
+                        <span className="font-mono text-slate-900 text-[12px] font-medium whitespace-normal break-words block" title={b.inv_number}>{(b.inv_number || '').toUpperCase()}</span>
                       </td>;
                     case 'inv_date':
                       return <td key={col.key} className={cls}>
