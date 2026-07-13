@@ -101,6 +101,8 @@ import HRRequestsScreen from '../screens/HRRequestsScreen';
 import HolidaysScreen from '../screens/HolidaysScreen';
 import CurrentSalaryScreen from '../screens/CurrentSalaryScreen';
 import ITDeclarationScreen from '../screens/ITDeclarationScreen';
+import VendorPaymentDetailScreen from '../screens/VendorPaymentDetailScreen';
+import CreateVendorPaymentScreen from '../screens/CreateVendorPaymentScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -199,6 +201,8 @@ export default function RootNavigator() {
       <Stack.Screen name="TDS" component={TDSScreen} />
       <Stack.Screen name="Projects" component={ProjectsScreen} />
       <Stack.Screen name="VendorPayments" component={VendorPaymentsScreen} />
+      <Stack.Screen name="VendorPaymentDetail" component={VendorPaymentDetailScreen} />
+      <Stack.Screen name="CreateVendorPayment" component={CreateVendorPaymentScreen} />
       <Stack.Screen name="StoreLedger" component={StoreLedgerScreen} />
       <Stack.Screen name="StoreLedgerDetail" component={StoreLedgerDetailScreen} />
       <Stack.Screen name="PettyCash" component={PettyCashScreen} />

@@ -275,6 +275,23 @@ router.post('/', authorize('super_admin', 'admin', 'accountant'), async (req, re
   }
 });
 
+// ── GET /payments/:id ────────────────────────────────────────────────────
+router.get('/:id', async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT pay.*, p.name AS project_name
+       FROM payments pay
+       JOIN projects p ON pay.project_id = p.id
+       WHERE pay.id = $1 AND p.company_id = $2`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Payment not found' });
+    res.json({ data: r.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── DELETE /payments/:id ──────────────────────────────────────────────────
 router.delete('/:id', authorize('super_admin', 'admin'), async (req, res) => {
   try {

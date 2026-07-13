@@ -199,7 +199,9 @@ export const projectsAPI = {
 };
 
 export const vendorPaymentsAPI = {
-  list: (projectId) => api.get('/payments', { params: { project_id: projectId } }),
+  list:   (projectId) => api.get('/payments', { params: { project_id: projectId } }),
+  detail: (id)        => api.get(`/payments/${id}`),
+  create: (data)      => api.post('/payments', data),
 };
 
 export const storeLedgerAPI = {
