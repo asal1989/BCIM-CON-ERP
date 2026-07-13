@@ -70,8 +70,6 @@ export function addNotificationResponseListener(onNavigate) {
 export function addChatNotificationListener(onOpenChat) {
   return Notifications.addNotificationResponseReceivedListener((response) => {
     const data = response.notification.request.content.data;
-    if (data?.type === 'dm' || data?.type === 'mention') {
-      onOpenChat(data);
-    }
+    if (data?.type) onOpenChat(data);
   });
 }

@@ -1,12 +1,13 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { View, ActivityIndicator } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
-import { ChatProvider, ChatContext } from './src/context/ChatContext';
+import { ChatProvider, useChat } from './src/context/ChatContext';
 import { addChatNotificationListener } from './src/utils/pushNotifications';
 import { CHANNELS } from './src/constants/chatChannels';
 import LoginScreen from './src/screens/LoginScreen';
@@ -24,44 +25,49 @@ const queryClient = new QueryClient({
 
 const navigationRef = createNavigationContainerRef();
 
-// Tapping a DM or @mention push notification opens that conversation
-// directly instead of just bringing the app to the foreground. For a channel
-// mention we already know the label from CHANNELS; for a DM we only have the
-// sender's id at tap time (no guarantee ChatContext's employee list has
-// loaded yet on a cold start), so it opens with a generic title — the thread
-// itself still loads correctly since it's keyed by channel id, not title.
-//
-// Tapping an incoming_call push notification fetches the stored call offer
-// from the backend (set when the call:offer socket event arrived) and shows
-// the IncomingCallModal so the user can accept or decline.
-function useChatNotificationNavigation() {
-  const chatCtx = React.useContext(ChatContext);
+// Handles the notification data payload, shared between tap-listener and cold-start.
+function handleNotificationData(data, setIncomingCall) {
+  if (!data?.type) return;
+  if (!navigationRef.isReady()) return;
+
+  if (data.type === 'mention') {
+    const ch = CHANNELS.find(c => c.id === data.channel);
+    navigationRef.navigate('ChatThread', { channel: data.channel, title: ch?.label || 'Chat', isGroup: true });
+  } else if (data.type === 'dm') {
+    navigationRef.navigate('ChatThread', { channel: data.channel, title: 'Chat', isGroup: false });
+  } else if (data.type === 'incoming_call') {
+    // App woke from a call FCM tap — fetch the stored offer from backend and show modal.
+    chatAPI.pendingCall().then(r => {
+      const pending = r.data?.pending;
+      if (pending && setIncomingCall) setIncomingCall(pending);
+    }).catch(() => {});
+  }
+}
+
+// Rendered INSIDE ChatProvider so useChat() returns the real context.
+function ChatNotificationHandler() {
+  const { setIncomingCall } = useChat();
 
   useEffect(() => {
-    const sub = addChatNotificationListener((data) => {
-      if (!navigationRef.isReady()) return;
-      if (data.type === 'mention') {
-        const ch = CHANNELS.find(c => c.id === data.channel);
-        navigationRef.navigate('ChatThread', { channel: data.channel, title: ch?.label || 'Chat', isGroup: true });
-      } else if (data.type === 'dm') {
-        navigationRef.navigate('ChatThread', { channel: data.channel, title: 'Chat', isGroup: false });
-      } else if (data.type === 'incoming_call') {
-        // App woke from a call FCM tap — fetch the pending offer from backend
-        chatAPI.pendingCall().then(r => {
-          const pending = r.data?.pending;
-          if (pending && chatCtx?.setIncomingCall) {
-            chatCtx.setIncomingCall(pending);
-          }
-        }).catch(() => {});
-      }
-    });
+    // Listener for notification taps while the app is running (foreground or background).
+    const sub = addChatNotificationListener(data => handleNotificationData(data, setIncomingCall));
+
+    // Cold-start: app was killed, user tapped the notification → listener above
+    // isn't registered yet when the tap fires, so check the last response on mount.
+    Notifications.getLastNotificationResponseAsync().then(response => {
+      if (!response) return;
+      const data = response.notification.request.content.data;
+      handleNotificationData(data, setIncomingCall);
+    }).catch(() => {});
+
     return () => sub.remove();
-  }, [chatCtx]);
+  }, [setIncomingCall]);
+
+  return null;
 }
 
 function AppContent() {
   const { booting, user, selectedProject } = useAuth();
-  useChatNotificationNavigation();
 
   if (booting) {
     return (
@@ -75,6 +81,8 @@ function AppContent() {
   if (!selectedProject) return <ProjectSelectScreen />;
   return (
     <ChatProvider>
+      {/* Handler is inside ChatProvider so useChat() has access to setIncomingCall */}
+      <ChatNotificationHandler />
       <RootNavigator />
       <IncomingCallModal />
     </ChatProvider>
