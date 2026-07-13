@@ -1,24 +1,51 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
+import * as TaskManager from 'expo-task-manager';
 import { notificationsAPI } from '../api/client';
 
+// ── Foreground notification handler ──────────────────────────────────────
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
+  handleNotification: async (notification) => {
+    const type = notification.request.content.data?.type;
+    // Always show call notifications even in foreground as a banner
+    return {
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: type !== 'incoming_call',
+    };
+  },
 });
 
-// The backend sends push via the Firebase Admin SDK directly to raw FCM/APNs
-// device tokens — it does NOT go through Expo's push relay. So this MUST
-// request the native device token (getDevicePushTokenAsync), not an Expo
-// push token. On Android this requires google-services.json and an EAS/dev
-// build (this does not work inside Expo Go).
+// ── Background notification task ─────────────────────────────────────────
+// This task fires when an FCM notification arrives while the app is
+// backgrounded OR killed. It runs in a headless JS context — no React UI
+// available, but we can schedule a local follow-up notification.
+const CALL_BG_TASK = 'INCOMING-CALL-BG-TASK';
+
+TaskManager.defineTask(CALL_BG_TASK, ({ data, error }) => {
+  if (error) { console.warn('[call-bg]', error); return; }
+  const notifData = data?.notification?.request?.content?.data;
+  if (notifData?.type !== 'incoming_call') return;
+
+  // Schedule an immediate local notification so Android shows a heads-up
+  // even if the system already dismissed the FCM one.
+  Notifications.scheduleNotificationAsync({
+    content: {
+      title: `📞 Incoming Call`,
+      body:  `${notifData.caller_name || 'Someone'} is calling you — tap to answer`,
+      data:  notifData,
+      sound: 'default',
+      priority: Notifications.AndroidNotificationPriority.MAX,
+    },
+    trigger: null, // show immediately
+  }).catch(() => {});
+});
+
+// ── Channel setup & device token registration ─────────────────────────────
 export async function registerForPushNotifications() {
   try {
-    if (!Device.isDevice) return; // push tokens aren't available on simulators
+    if (!Device.isDevice) return;
 
     const { status: existing } = await Notifications.getPermissionsAsync();
     let status = existing;
@@ -29,14 +56,17 @@ export async function registerForPushNotifications() {
     if (status !== 'granted') return;
 
     if (Platform.OS === 'android') {
+      // Regular alerts channel
       await Notifications.setNotificationChannelAsync('erp-alerts', {
         name: 'ERP Alerts',
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#2563EB',
       });
-      // Separate high-importance channel for incoming calls so they ring
-      // at max volume and show as heads-up even in DND (user must grant DND access).
+
+      // Calls channel — MAX importance, bypasses DND, shows on lock screen.
+      // Combined with USE_FULL_SCREEN_INTENT permission this triggers a
+      // full-screen popup on Android instead of just a banner.
       await Notifications.setNotificationChannelAsync('erp-calls', {
         name: 'Incoming Calls',
         importance: Notifications.AndroidImportance.MAX,
@@ -45,7 +75,16 @@ export async function registerForPushNotifications() {
         sound: 'default',
         bypassDnd: true,
         lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        enableLights: true,
+        enableVibrate: true,
+        showBadge: false,
       });
+    }
+
+    // Register background task for call notifications
+    const alreadyRegistered = await TaskManager.isTaskRegisteredAsync(CALL_BG_TASK).catch(() => false);
+    if (!alreadyRegistered) {
+      await Notifications.registerTaskAsync(CALL_BG_TASK).catch(() => {});
     }
 
     const { data: token } = await Notifications.getDevicePushTokenAsync();
@@ -55,6 +94,7 @@ export async function registerForPushNotifications() {
   }
 }
 
+// ── Listeners ─────────────────────────────────────────────────────────────
 export function addNotificationResponseListener(onNavigate) {
   return Notifications.addNotificationResponseReceivedListener((response) => {
     const link = response.notification.request.content.data?.link;
@@ -62,11 +102,7 @@ export function addNotificationResponseListener(onNavigate) {
   });
 }
 
-// Chat-specific push taps (DM / @mention) carry { type, channel } instead of
-// a generic `link` — the backend's fcm.service.js sends these from the
-// server.js socket handler when a DM or mention lands. Separate from
-// addNotificationResponseListener above since it needs to know the CHANNELS
-// list to build a sensible screen title, not just a raw route name.
+// Forwards ALL notification tap types (dm, mention, incoming_call) to handler
 export function addChatNotificationListener(onOpenChat) {
   return Notifications.addNotificationResponseReceivedListener((response) => {
     const data = response.notification.request.content.data;
