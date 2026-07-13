@@ -272,19 +272,18 @@ export default function ProcurementDashboard() {
     return months;
   }, [pos]);
 
-  // Spend overview by category (PO vs WO)
+  // Spend overview by category — PO spend only, grouped by item_category
   const spendSegments = useMemo(() => {
     const categories = {};
     for (const p of pos) {
       const cat = p.item_category || p.category || 'Materials';
       categories[cat] = (categories[cat] || 0) + parseFloat(p.grand_total || p.total_amount || 0);
     }
-    if (woValueTotal > 0) categories['Subcontracting'] = (categories['Subcontracting'] || 0) + woValueTotal;
     const colors = ['#4f46e5','#06b6d4','#f59e0b','#22c55e','#94a3b8'];
     const entries = Object.entries(categories).sort((a, b) => b[1] - a[1]).slice(0, 5);
     if (!entries.length) return [{ label: 'Materials', value: poValueTotal, color: '#4f46e5' }];
     return entries.map(([label, value], i) => ({ label, value, color: colors[i] || '#94a3b8' }));
-  }, [pos, woValueTotal]);
+  }, [pos, poValueTotal]);
 
   // Sparkline: monthly PO counts (last 7 months)
   const monthCounts = useMemo(() => {
@@ -375,7 +374,7 @@ export default function ProcurementDashboard() {
 
         {/* KPI Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
-          <KpiSparkCard icon={IndianRupee}   label="Total Spend (YTD)"     value={inrCr(poValueTotal + woValueTotal)} sub={spendMom ? `${spendMom.up ? '↑' : '↓'} ${spendMom.val} vs last month` : 'Total PO + WO spend'} color="#4f46e5" accentBg="#ede9fe" sparkData={monthAmounts} sparkColor="#4f46e5" />
+          <KpiSparkCard icon={IndianRupee}   label="Total Spend (YTD)"     value={inrCr(poValueTotal)} sub={spendMom ? `${spendMom.up ? '↑' : '↓'} ${spendMom.val} vs last month` : `${pos.length} purchase orders`} color="#4f46e5" accentBg="#ede9fe" sparkData={monthAmounts} sparkColor="#4f46e5" />
           <KpiSparkCard icon={ShoppingCart}  label="Total Purchase Orders" value={pos.length} sub={poMom ? `${poMom.up ? '↑' : '↓'} ${poMom.val} vs last month` : `${thisMonthPoCount} this month`} color="#0891b2" accentBg="#e0f2fe" sparkData={monthCounts} sparkColor="#0891b2" />
           <KpiSparkCard icon={Clock}         label="Pending Approval"      value={pendingApproval.length} sub={pendingMom ? `${pendingMom.up ? '↑' : '↓'} ${pendingMom.val} vs last month` : 'Awaiting review'} color="#f59e0b" accentBg="#fef3c7" sparkData={monthCounts.map(v => Math.round(v * 0.3))} sparkColor="#f59e0b" />
           <KpiSparkCard icon={Package}       label="Goods Received (YTD)"  value={receivedPOs.length} sub={rcvdMom ? `${rcvdMom.up ? '↑' : '↓'} ${rcvdMom.val} vs last month` : 'POs fully received'} color="#22c55e" accentBg="#dcfce7" sparkData={monthCounts.map((v,i) => Math.max(0, v - i % 2))} sparkColor="#22c55e" />
@@ -411,7 +410,7 @@ export default function ProcurementDashboard() {
               <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>Spend Overview</h3>
               <button style={{ padding: '4px 10px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 11, color: '#64748b', background: '#f8fafc', cursor: 'pointer' }}>This Year ▾</button>
             </div>
-            <SpendDonut segments={spendSegments} total={poValueTotal + woValueTotal} />
+            <SpendDonut segments={spendSegments} total={poValueTotal} />
             {avgMonthly > 0 && (
               <div style={{ marginTop: 14, padding: '10px 12px', background: '#f0fdf4', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <TrendingUp size={13} style={{ color: '#16a34a' }} />
