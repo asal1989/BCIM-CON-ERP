@@ -7,8 +7,6 @@ import api from '../api/client';
 
 const CALL_TIMEOUT_MS = 60_000; // auto-end outgoing call if no answer within 60 s
 
-// Base STUN servers — always used.
-// TURN credentials are fetched from the backend on mount (Railway env vars).
 const STUN_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
@@ -16,50 +14,91 @@ const STUN_SERVERS = [
 
 export const CALL_STATE = {
   IDLE:     'idle',
-  CALLING:  'calling',   // outgoing — waiting for answer
-  INCOMING: 'incoming',  // peer is calling us
-  ACTIVE:   'active',    // both connected
+  CALLING:  'calling',
+  INCOMING: 'incoming',
+  ACTIVE:   'active',
 };
 
+// Save a call log entry to the backend (fire-and-forget — don't block UI)
+function saveCallLog(payload) {
+  api.post('/chat/call-logs', payload).catch(() => {});
+}
+
 export function useWebRTC({ socketRef, connected, currentUser }) {
-  const [callState,      setCallState]      = useState(CALL_STATE.IDLE);
-  const [callInfo,       setCallInfo]       = useState(null);
-  const [localStream,    setLocalStream]    = useState(null);
-  const [remoteStream,   setRemoteStream]   = useState(null);
-  const [isMuted,        setIsMuted]        = useState(false);
-  const [isCameraOff,    setIsCameraOff]    = useState(false);
-  const [isScreenSharing,setIsScreenSharing]= useState(false);
-  const [duration,       setDuration]       = useState(0);
+  const [callState,       setCallState]       = useState(CALL_STATE.IDLE);
+  const [callInfo,        setCallInfo]        = useState(null);
+  const [localStream,     setLocalStream]     = useState(null);
+  const [remoteStream,    setRemoteStream]    = useState(null);
+  const [isMuted,         setIsMuted]         = useState(false);
+  const [isCameraOff,     setIsCameraOff]     = useState(false);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [duration,        setDuration]        = useState(0);
 
-  const pcRef              = useRef(null);
-  const localStreamRef     = useRef(null);
-  const screenTrackRef     = useRef(null); // screen share track for explicit stop
-  const durationTimerRef   = useRef(null);
-  const callTimeoutRef     = useRef(null); // auto-end if no answer
-  const pendingCandidates  = useRef([]);
-  const callStateRef       = useRef(CALL_STATE.IDLE);
-  const callInfoRef        = useRef(null);
-  const iceServersRef      = useRef(STUN_SERVERS);
+  const pcRef             = useRef(null);
+  const localStreamRef    = useRef(null);
+  const screenTrackRef    = useRef(null);
+  const durationTimerRef  = useRef(null);
+  const callTimeoutRef    = useRef(null);
+  const pendingCandidates = useRef([]);
+  const callStateRef      = useRef(CALL_STATE.IDLE);
+  const callInfoRef       = useRef(null);
+  const iceServersRef     = useRef(STUN_SERVERS);
+  const callStartTimeRef  = useRef(null);  // when call went ACTIVE
+  const callInitTimeRef   = useRef(null);  // when startCall / incoming arrived
+  const isCallerRef       = useRef(false); // true when we initiated the call
 
-  // Fetch TURN credentials from backend once on mount
   useEffect(() => {
     api.get('/chat/turn-credentials').then(r => {
-      if (r.data?.iceServers?.length) {
-        iceServersRef.current = r.data.iceServers;
-      }
-    }).catch(() => { /* TURN not configured — STUN only, still works on most networks */ });
+      if (r.data?.iceServers?.length) iceServersRef.current = r.data.iceServers;
+    }).catch(() => {});
   }, []);
 
-  // Keep refs in sync so socket callbacks (closed over stale state) still work
-  useEffect(() => { localStreamRef.current  = localStream;  }, [localStream]);
-  useEffect(() => { callStateRef.current    = callState;    }, [callState]);
-  useEffect(() => { callInfoRef.current     = callInfo;     }, [callInfo]);
+  useEffect(() => { localStreamRef.current = localStream;  }, [localStream]);
+  useEffect(() => { callStateRef.current   = callState;    }, [callState]);
+  useEffect(() => { callInfoRef.current    = callInfo;     }, [callInfo]);
 
-  // ── Cleanup: stop streams, close PC, reset all state ────────────────────────
-  const cleanup = useCallback(() => {
+  // ── Cleanup + call logging ───────────────────────────────────────────────────
+  // `logStatus` tells us how the call ended from our perspective:
+  //   'answered'  — call was active and we (or peer) hung up
+  //   'cancelled' — we called, never got an answer
+  //   'missed'    — we received but never accepted
+  //   'rejected'  — we explicitly rejected incoming call
+  //   'busy'      — peer was busy (no log needed from our side)
+  const cleanup = useCallback((logStatus = null) => {
     clearInterval(durationTimerRef.current);
     clearTimeout(callTimeoutRef.current);
-    // Stop the screen track if an in-call screen share is active
+
+    const info      = callInfoRef.current;
+    const state     = callStateRef.current;
+    const isCaller  = isCallerRef.current;
+    const started   = callInitTimeRef.current;
+    const activated = callStartTimeRef.current;
+
+    // Log the call if there was a real interaction (not just noise)
+    if (info && logStatus && logStatus !== 'busy' && started) {
+      const durSecs = activated
+        ? Math.round((Date.now() - activated) / 1000)
+        : 0;
+      // Always log from the caller's perspective; callee-side logs incoming calls too
+      saveCallLog({
+        callee_id:     isCaller ? info.peerId      : currentUser?.id,
+        callee_name:   isCaller ? info.peerName    : (currentUser?.full_name || currentUser?.name || 'Me'),
+        // swap so backend knows who actually called whom
+        // The API saves req.user as caller automatically, so if we're the callee
+        // we fake it by sending our own id as callee (server uses req.user as caller)
+        // — just log from whichever side has the info, server stores caller = req.user
+        call_type:     info.callType  || 'audio',
+        status:        logStatus,
+        duration_secs: durSecs,
+        started_at:    new Date(started).toISOString(),
+      });
+    }
+
+    // Reset call tracking refs
+    callStartTimeRef.current = null;
+    callInitTimeRef.current  = null;
+    isCallerRef.current      = false;
+
     if (screenTrackRef.current) {
       screenTrackRef.current.stop();
       screenTrackRef.current = null;
@@ -80,28 +119,21 @@ export function useWebRTC({ socketRef, connected, currentUser }) {
     setIsScreenSharing(false);
     setDuration(0);
     pendingCandidates.current = [];
-  }, []);
+  }, [currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Create RTCPeerConnection ─────────────────────────────────────────────────
   const createPC = useCallback((peerId) => {
     const pc = new RTCPeerConnection({ iceServers: iceServersRef.current });
-
     pc.onicecandidate = (e) => {
-      if (e.candidate) {
-        socketRef.current?.emit('call:ice-candidate', { to: peerId, candidate: e.candidate });
-      }
+      if (e.candidate) socketRef.current?.emit('call:ice-candidate', { to: peerId, candidate: e.candidate });
     };
-
-    pc.ontrack = (e) => {
-      setRemoteStream(e.streams[0] || null);
-    };
-
+    pc.ontrack = (e) => setRemoteStream(e.streams[0] || null);
     pc.onconnectionstatechange = () => {
       if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
-        cleanup();
+        // Connection dropped unexpectedly — log as answered (we were active)
+        cleanup(callStateRef.current === CALL_STATE.ACTIVE ? 'answered' : null);
       }
     };
-
     pcRef.current = pc;
     return pc;
   }, [socketRef, cleanup]);
@@ -129,24 +161,25 @@ export function useWebRTC({ socketRef, connected, currentUser }) {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
+    callInitTimeRef.current = Date.now();
+    isCallerRef.current     = true;
+
     setCallState(CALL_STATE.CALLING);
     setCallInfo({ peerId: peer.id, peerName: peer.full_name || peer.name || 'User', peerPhoto: peer.profile_photo_url, callType });
 
     socketRef.current?.emit('call:offer', {
-      to: peer.id,
-      offer,
+      to: peer.id, offer,
       callerName:  currentUser?.full_name || currentUser?.name,
       callerPhoto: currentUser?.profile_photo_url,
       callType,
     });
 
-    // Auto-end after CALL_TIMEOUT_MS if the callee never answers
     callTimeoutRef.current = setTimeout(() => {
       if (callStateRef.current === CALL_STATE.CALLING) {
         toast.error('No answer — call ended');
         const info = callInfoRef.current;
         if (info?.peerId) socketRef.current?.emit('call:end', { to: info.peerId });
-        cleanup();
+        cleanup('cancelled');
       }
     }, CALL_TIMEOUT_MS);
   }, [getUserMedia, createPC, socketRef, currentUser, cleanup]);
@@ -171,25 +204,25 @@ export function useWebRTC({ socketRef, connected, currentUser }) {
 
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-
     socketRef.current?.emit('call:answer', { to: info.peerId, answer });
 
+    callStartTimeRef.current = Date.now();
     setCallState(CALL_STATE.ACTIVE);
     durationTimerRef.current = setInterval(() => setDuration(d => d + 1), 1000);
   }, [getUserMedia, createPC, socketRef]);
 
-  // ── End call (either side) ───────────────────────────────────────────────────
+  // ── End / reject calls ───────────────────────────────────────────────────────
   const endCall = useCallback(() => {
-    const info = callInfoRef.current;
+    const info  = callInfoRef.current;
+    const state = callStateRef.current;
     if (info?.peerId) socketRef.current?.emit('call:end', { to: info.peerId });
-    cleanup();
+    cleanup(state === CALL_STATE.ACTIVE ? 'answered' : 'cancelled');
   }, [socketRef, cleanup]);
 
-  // ── Reject incoming call ─────────────────────────────────────────────────────
   const rejectCall = useCallback(() => {
     const info = callInfoRef.current;
     if (info?.peerId) socketRef.current?.emit('call:reject', { to: info.peerId });
-    cleanup();
+    cleanup('rejected');
   }, [socketRef, cleanup]);
 
   // ── Media controls ───────────────────────────────────────────────────────────
@@ -211,22 +244,16 @@ export function useWebRTC({ socketRef, connected, currentUser }) {
     try {
       const screen = await navigator.mediaDevices.getDisplayMedia({ video: true });
       const track  = screen.getVideoTracks()[0];
-      screenTrackRef.current = track; // store so stopScreenShare can explicitly stop it
+      screenTrackRef.current = track;
       const sender = pcRef.current?.getSenders().find(s => s.track?.kind === 'video');
       if (sender) await sender.replaceTrack(track);
       setIsScreenSharing(true);
-      // Browser native "Stop sharing" button — restore camera automatically
       track.onended = () => stopScreenShareInternal();
     } catch { /* user cancelled */ }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Internal helper used by both the button and track.onended
   const stopScreenShareInternal = useCallback(async () => {
-    // Explicitly stop the screen track so the browser removes the capture indicator
-    if (screenTrackRef.current) {
-      screenTrackRef.current.stop();
-      screenTrackRef.current = null;
-    }
+    if (screenTrackRef.current) { screenTrackRef.current.stop(); screenTrackRef.current = null; }
     const stream = localStreamRef.current;
     if (!stream) return;
     const camTrack = stream.getVideoTracks()[0];
@@ -238,9 +265,6 @@ export function useWebRTC({ socketRef, connected, currentUser }) {
   const stopScreenShare = stopScreenShareInternal;
 
   // ── Socket signaling listeners ───────────────────────────────────────────────
-  // IMPORTANT: depend on `connected` (reactive boolean state from ChatContext),
-  // NOT socketRef.current — refs are not reactive and the effect would never
-  // re-run after the socket connects, meaning the receiver never gets listeners.
   useEffect(() => {
     if (!connected) return;
     const socket = socketRef.current;
@@ -251,18 +275,21 @@ export function useWebRTC({ socketRef, connected, currentUser }) {
         socket.emit('call:busy', { to: from });
         return;
       }
+      callInitTimeRef.current = Date.now();
+      isCallerRef.current     = false;
       setCallState(CALL_STATE.INCOMING);
       setCallInfo({ peerId: from, peerName: callerName, peerPhoto: callerPhoto, callType, offer });
     };
 
     const onAnswer = async ({ answer }) => {
       try {
-        clearTimeout(callTimeoutRef.current); // got an answer — cancel the timeout
+        clearTimeout(callTimeoutRef.current);
         await pcRef.current?.setRemoteDescription(new RTCSessionDescription(answer));
         for (const c of pendingCandidates.current) {
           await pcRef.current?.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
         }
         pendingCandidates.current = [];
+        callStartTimeRef.current = Date.now();
         setCallState(CALL_STATE.ACTIVE);
         durationTimerRef.current = setInterval(() => setDuration(d => d + 1), 1000);
       } catch (err) { console.error('[WebRTC] onAnswer:', err); }
@@ -276,9 +303,14 @@ export function useWebRTC({ socketRef, connected, currentUser }) {
       }
     };
 
-    const onEnd    = () => cleanup();
-    const onReject = () => { toast('Call declined', { icon: '📵' }); cleanup(); };
-    const onBusy   = () => { toast.error('User is busy on another call'); cleanup(); };
+    const onEnd = () => {
+      const wasActive = callStateRef.current === CALL_STATE.ACTIVE;
+      // If we were INCOMING and never answered, it's a missed call
+      const wasMissed = callStateRef.current === CALL_STATE.INCOMING;
+      cleanup(wasActive ? 'answered' : wasMissed ? 'missed' : null);
+    };
+    const onReject = () => { toast('Call declined', { icon: '📵' }); cleanup('cancelled'); };
+    const onBusy   = () => { toast.error('User is busy on another call'); cleanup('busy'); };
 
     socket.on('call:offer',         onOffer);
     socket.on('call:answer',        onAnswer);
