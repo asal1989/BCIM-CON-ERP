@@ -99,6 +99,7 @@ import PayslipDetailScreen from '../screens/PayslipDetailScreen';
 import PlaceholderScreen from '../screens/PlaceholderScreen';
 import CreateMaterialRequestScreen from '../screens/CreateMaterialRequestScreen';
 import CreateIGNScreen from '../screens/CreateIGNScreen';
+import CallScreen from '../screens/CallScreen';
 import CreateDPRScreen from '../screens/CreateDPRScreen';
 import AttendanceCorrectionScreen from '../screens/AttendanceCorrectionScreen';
 import HRRequestsScreen from '../screens/HRRequestsScreen';
@@ -164,6 +165,7 @@ export default function RootNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Tabs" component={TabNavigator} />
       <Stack.Screen name="ChatThread" component={ChatThreadScreen} options={{ headerShown: true }} />
+      <Stack.Screen name="Call" component={CallScreen} options={{ headerShown: false, presentation: 'fullScreenModal' }} />
       <Stack.Screen name="Dashboard" component={DashboardScreen} />
       <Stack.Screen name="IGN" component={IGNScreen} />
       <Stack.Screen name="GRS" component={GRSScreen} />

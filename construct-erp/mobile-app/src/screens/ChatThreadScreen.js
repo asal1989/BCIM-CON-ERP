@@ -1,10 +1,4 @@
-// src/screens/ChatThreadScreen.js — message thread for a channel or DM:
-// loads history via REST, listens for live messages via the shared socket
-// from ChatContext, and sends via REST + socket broadcast (same pattern as
-// the web app's ERPChat.jsx). Includes file attachments, pin/unpin, typing
-// indicators, and in-thread search — all mirroring web's feature set (web's
-// voice/video calls and screen share are intentionally out of scope here;
-// they need react-native-webrtc and a native dev client, not Expo Go).
+// src/screens/ChatThreadScreen.js — message thread for a channel or DM.
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet,
@@ -73,12 +67,33 @@ export default function ChatThreadScreen() {
       headerTitleStyle: { color: theme.colors.text, fontSize: 16, fontWeight: '700' },
       headerTintColor: theme.colors.text,
       headerRight: () => (
-        <TouchableOpacity onPress={() => setSearchOpen(v => !v)} style={{ padding: 6 }}>
-          <MaterialCommunityIcons name={searchOpen ? 'close' : 'magnify'} size={22} color={theme.colors.text} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          {!isGroup && peer?.id && (
+            <>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Call', { peerId: peer.id, peerName: peer.name || title, callType: 'audio' })}
+                style={{ padding: 6 }}>
+                <MaterialCommunityIcons name="phone" size={20} color={theme.colors.text} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Call', { peerId: peer.id, peerName: peer.name || title, callType: 'video' })}
+                style={{ padding: 6 }}>
+                <MaterialCommunityIcons name="video" size={22} color={theme.colors.text} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Call', { peerId: peer.id, peerName: peer.name || title, callType: 'screen' })}
+                style={{ padding: 6 }}>
+                <MaterialCommunityIcons name="monitor-share" size={20} color={theme.colors.text} />
+              </TouchableOpacity>
+            </>
+          )}
+          <TouchableOpacity onPress={() => setSearchOpen(v => !v)} style={{ padding: 6 }}>
+            <MaterialCommunityIcons name={searchOpen ? 'close' : 'magnify'} size={22} color={theme.colors.text} />
+          </TouchableOpacity>
+        </View>
       ),
     });
-  }, [navigation, title, searchOpen]);
+  }, [navigation, title, searchOpen, isGroup, peer]);
 
   useEffect(() => {
     setLoading(true);

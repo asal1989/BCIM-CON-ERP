@@ -12,6 +12,7 @@ import { CHANNELS } from './src/constants/chatChannels';
 import LoginScreen from './src/screens/LoginScreen';
 import ProjectSelectScreen from './src/screens/ProjectSelectScreen';
 import RootNavigator from './src/navigation/RootNavigator';
+import IncomingCallModal from './src/components/IncomingCallModal';
 import { theme } from './src/theme';
 
 const queryClient = new QueryClient({
@@ -60,6 +61,7 @@ function AppContent() {
   return (
     <ChatProvider>
       <RootNavigator />
+      <IncomingCallModal />
     </ChatProvider>
   );
 }

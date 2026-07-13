@@ -1,8 +1,5 @@
 // src/context/ChatContext.js — app-wide chat socket connection + shared
-// conversation previews (last message per channel/DM), mirroring the web
-// app's ChatContext.jsx but without the WebRTC call/screen-share pieces
-// (native voice/video calling needs react-native-webrtc + a custom dev
-// client — a separate follow-up, not part of this text-chat build).
+// conversation previews and incoming call notifications.
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { io } from 'socket.io-client';
@@ -22,6 +19,7 @@ export function ChatProvider({ children }) {
   const [previews, setPreviews]   = useState({});
   const [employees, setEmployees] = useState([]);
   const [typing, setTyping]       = useState({}); // { [channel]: name | null }
+  const [incomingCall, setIncomingCall] = useState(null); // { from, callerName, callerPhoto, callType, offer }
   const socketRef = useRef(null);
   const listenersRef = useRef(new Set()); // per-screen 'new_message' subscribers
   const typingTimersRef = useRef({}); // per-channel auto-clear timers
@@ -83,6 +81,14 @@ export function ChatProvider({ children }) {
       // The server relays our 'typing'/'stop_typing' emits back to other
       // clients in the room as 'user_typing'/'user_stop_typing' — see
       // socket.on('typing', ...) in backend/src/server.js.
+      // Incoming call — surface to the whole app via context so any screen can show the modal
+      socket.on('call:offer', (payload) => {
+        setIncomingCall(payload);
+      });
+      socket.on('call:end',    () => setIncomingCall(null));
+      socket.on('call:reject', () => setIncomingCall(null));
+      socket.on('call:busy',   () => setIncomingCall(null));
+
       socket.on('user_typing', ({ channel, name }) => {
         setTyping(prev => ({ ...prev, [channel]: name }));
         clearTimeout(typingTimersRef.current[channel]);
@@ -125,8 +131,11 @@ export function ChatProvider({ children }) {
     socketRef.current?.emit('stop_typing', { channel });
   }, []);
 
+  const dismissIncomingCall = useCallback(() => setIncomingCall(null), []);
+
   const value = {
     connected, previews, employees, typing, socketRef,
+    incomingCall, dismissIncomingCall,
     subscribe, joinChannel, refreshPreviews: loadPreviews,
     emitTyping, emitStopTyping,
   };
