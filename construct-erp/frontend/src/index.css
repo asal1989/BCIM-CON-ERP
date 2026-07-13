@@ -403,3 +403,27 @@ html { scrollbar-gutter: stable; }
 .hr-admin-uppercase * {
   text-transform: uppercase;
 }
+
+/* HR & Admin sizing: the module's pages were designed at a larger scale than
+   the rest of the ERP and read as "overzoomed" on laptop screens. zoom scales
+   the entire subtree (text, paddings, icons, tables) uniformly — cleaner than
+   chasing hundreds of individual px values across ~40 pages. */
+.hr-admin-uppercase {
+  zoom: 0.85;
+}
+
+/* Wide register tables: keep horizontal scroll inside the table card (visible
+   scrollbar), and cap very long tables to the viewport with their own vertical
+   scrollbar so the page itself doesn't become one endless scroll. */
+.hr-admin-uppercase .overflow-x-auto {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 72vh;
+  scrollbar-width: thin;
+}
+.hr-admin-uppercase .overflow-x-auto thead {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #F9FAFB;
+}
