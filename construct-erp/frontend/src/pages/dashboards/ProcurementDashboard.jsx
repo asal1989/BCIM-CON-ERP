@@ -4,13 +4,14 @@ import { Link } from 'react-router-dom';
 import {
   ShoppingCart, Users, Hammer, TrendingUp, ClipboardList, IndianRupee,
   CheckCircle2, ChevronRight, AlertTriangle, Clock, RefreshCw,
-  Download, Upload, Plus, MoreVertical, Package, CreditCard,
+  Download, Upload, Plus, MoreVertical, Package, CreditCard, Building2,
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid,
 } from 'recharts';
 import { poAPI, quotationAPI, vendorAPI, subcontractorAPI, mrsAPI, inventoryAPI } from '../../api/client';
+import useAuthStore from '../../store/authStore';
 import { PageHeader, Theme } from '../../theme';
 import dayjs from 'dayjs';
 import { clsx } from 'clsx';
@@ -208,26 +209,28 @@ const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct
 
 export default function ProcurementDashboard() {
   const now = dayjs();
+  const { selectedProjectId, selectedProjectName } = useAuthStore();
+  const projFilter = selectedProjectId ? { project_id: selectedProjectId } : {};
 
   const { data: pos = [], isLoading: loadP, refetch } = useQuery({
-    queryKey: ['proc-dash-pos'],
-    queryFn: () => poAPI.list().then(r => { const d = r.data; return Array.isArray(d) ? d : (d?.data ?? []); }),
+    queryKey: ['proc-dash-pos', selectedProjectId],
+    queryFn: () => poAPI.list(projFilter).then(r => { const d = r.data; return Array.isArray(d) ? d : (d?.data ?? []); }),
   });
   const { data: vendors = [] } = useQuery({
-    queryKey: ['proc-dash-vendors'],
-    queryFn: () => vendorAPI.list().then(r => { const d = r.data; return Array.isArray(d) ? d : (d?.data ?? []); }),
+    queryKey: ['proc-dash-vendors', selectedProjectId],
+    queryFn: () => vendorAPI.list(projFilter).then(r => { const d = r.data; return Array.isArray(d) ? d : (d?.data ?? []); }),
   });
   const { data: wos = [] } = useQuery({
-    queryKey: ['proc-dash-wos'],
-    queryFn: () => subcontractorAPI.listWorkOrders().then(r => r.data?.data ?? []),
+    queryKey: ['proc-dash-wos', selectedProjectId],
+    queryFn: () => subcontractorAPI.listWorkOrders(projFilter).then(r => r.data?.data ?? []),
   });
   const { data: mrsList = [] } = useQuery({
-    queryKey: ['proc-dash-mrs'],
-    queryFn: () => mrsAPI.list().then(r => { const d = r.data; return Array.isArray(d) ? d : (d?.data ?? []); }),
+    queryKey: ['proc-dash-mrs', selectedProjectId],
+    queryFn: () => mrsAPI.list(projFilter).then(r => { const d = r.data; return Array.isArray(d) ? d : (d?.data ?? []); }),
   });
   const { data: lowStock = [] } = useQuery({
-    queryKey: ['proc-dash-low-stock'],
-    queryFn: () => inventoryAPI.lowStock().then(r => { const d = r.data; return Array.isArray(d) ? d : (d?.data ?? []); }),
+    queryKey: ['proc-dash-low-stock', selectedProjectId],
+    queryFn: () => inventoryAPI.lowStock(projFilter).then(r => { const d = r.data; return Array.isArray(d) ? d : (d?.data ?? []); }),
   });
 
   const poValueTotal = useMemo(() => pos.reduce((s, p) => s + parseFloat(p.grand_total || p.total_amount || 0), 0), [pos]);
@@ -365,6 +368,17 @@ export default function ProcurementDashboard() {
       />
 
       <div style={{ padding: '20px 24px', maxWidth: 1400, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+        {/* Project filter banner */}
+        {selectedProjectId && (
+          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '9px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Building2 size={14} style={{ color: '#2563eb', flexShrink: 0 }} />
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#1d4ed8' }}>
+              Showing data for: {selectedProjectName}
+            </span>
+            <span style={{ fontSize: 12, color: '#64748b', marginLeft: 4 }}>— Switch the project from the top bar to view other projects</span>
+          </div>
+        )}
 
         {/* Last updated */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, fontSize: 11, color: '#94a3b8' }}>
