@@ -209,7 +209,7 @@ function VendorCard({ vendor, onEdit, onDelete }) {
       <div className="flex items-start justify-between p-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-medium text-slate-900 font-medium text-sm">{vendor.name}</h3>
+            <h3 className="font-medium text-slate-900 font-medium text-sm">{(vendor.name || '').toUpperCase()}</h3>
             {vendor.vendor_type && (
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${tc}`}>{vendor.vendor_type}</span>
             )}

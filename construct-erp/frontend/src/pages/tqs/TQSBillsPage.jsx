@@ -3169,7 +3169,7 @@ export default function TQSBillsPage() {
                       </td>;
                     case 'project_name':
                       return <td key={col.key} className={cls}>
-                        <span className="text-slate-900 text-[11px] font-medium whitespace-normal leading-snug block" title={b.project_name || ''}>{b.project_name || '—'}</span>
+                        <span className="text-slate-900 text-[11px] font-medium whitespace-normal leading-snug block" title={(b.project_name || '').toUpperCase()}>{(b.project_name || '').toUpperCase() || '—'}</span>
                       </td>;
                     case 'inv_number':
                       return <td key={col.key} className={cls}>
