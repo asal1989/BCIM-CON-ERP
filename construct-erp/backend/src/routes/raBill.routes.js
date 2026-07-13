@@ -471,6 +471,33 @@ router.patch('/:id/reject', authorize('super_admin','admin','qs_engineer','proje
   }
 });
 
+// PATCH /ra-bills/:id/revert — super_admin/admin only: send certified bill back to QS (verified)
+// Reverses the auto GL journal so accounts are clean before re-certification.
+router.patch('/:id/revert', authorize('super_admin','admin'), async (req, res) => {
+  try {
+    const result = await query(
+      `UPDATE ra_bills rb
+       SET status='verified', certified_by=NULL, certified_date=NULL, updated_at=NOW()
+       FROM projects p
+       WHERE rb.id=$1 AND rb.project_id=p.id AND p.company_id=$2 AND rb.status='certified'
+       RETURNING rb.*`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!result.rows.length) return res.status(400).json({ error: 'Bill not found or not in certified status' });
+    const bill = result.rows[0];
+    const ref  = bill.bill_number || bill.id;
+    // Delete the auto GL journal that was posted on certification
+    await query(
+      `DELETE FROM journal_entries WHERE company_id=$1 AND source='auto_ra_bill' AND reference=$2`,
+      [req.user.company_id, ref]
+    ).catch(() => {});
+    await logAudit(req, { action: 'revert', tableName: 'ra_bills', recordId: req.params.id, newValues: { bill_number: ref, status: 'verified' } });
+    res.json({ data: bill });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PATCH /ra-bills/:id/pay — Finance marks certified bill as paid
 router.patch('/:id/pay', authorize('super_admin','admin','accountant'), async (req, res) => {
   try {
