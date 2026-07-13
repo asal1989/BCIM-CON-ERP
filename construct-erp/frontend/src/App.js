@@ -642,6 +642,8 @@ export default function App() {
                 <Route path="qs/variations" element={<RequireModule module="QS & Billing"><VariationPage /></RequireModule>} />
                 <Route path="qs/norms" element={<RequireModule module="QS & Billing"><ConsumptionNormsPage /></RequireModule>} />
                 <Route path="qs/reports" element={<RequireModule module="QS & Billing"><QSReportsPage /></RequireModule>} />
+                <Route path="qs/advance-tracker"  element={<RequireModule module="QS & Billing"><ProcurementAdvanceTrackerPage /></RequireModule>} />
+                <Route path="qs/advances/:id"     element={<RequireModule module="QS & Billing"><ProcurementAdvanceVoucherDetailPage /></RequireModule>} />
 
                 {/* Accounts (Zoho Books style) */}
                 <Route path="accounts" element={<RequireModule module="Finance"><AccountsDashboard /></RequireModule>} />

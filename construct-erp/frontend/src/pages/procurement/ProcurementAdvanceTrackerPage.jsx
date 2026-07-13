@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import * as XLSX from 'xlsx';
 import { procurementAdvanceAPI, projectAPI } from '../../api/client';
@@ -657,6 +657,8 @@ function ImportExcelModal({ onClose, projects, defaultProjectId }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function ProcurementAdvanceTrackerPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const advanceBasePath = location.pathname.startsWith('/qs/') ? '/qs/advances' : '/procurement/advances';
   const [searchParams, setSearchParams] = useSearchParams();
   const qc = useQueryClient();
 
@@ -940,7 +942,7 @@ export default function ProcurementAdvanceTrackerPage() {
                 <tbody>
                   {vouchers.map((v, i) => (
                     <tr key={v.id}
-                      onClick={() => navigate(`/procurement/advances/${v.id}`)}
+                      onClick={() => navigate(`${advanceBasePath}/${v.id}`)}
                       className="bg-white cursor-pointer hover:bg-blue-50/40 transition-colors border-b border-gray-100 last:border-0"
                     >
                       <td className="px-3 py-2.5 text-[13px] text-gray-400">{i + 1}</td>

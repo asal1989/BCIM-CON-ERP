@@ -465,7 +465,7 @@ const NAV_SECTIONS = {
     { label: 'Purchase Orders',      paths: ['/qs/po','/qs/po-register'] },
     { label: 'Work Orders',          paths: ['/qs/work-orders','/qs/wo-register'] },
     { label: 'Vendor Certification', paths: ['/qs/vendor-certifications','/qs/retention-releases'] },
-    { label: 'Advance Vouchers',     paths: ['/procurement/advance-tracker'] },
+    { label: 'Advance Vouchers',     paths: ['/qs/advance-tracker'] },
     { label: 'Controls',             paths: ['/qs/variations','/qs/material-recon','/qs/norms','/qs/reports'] },
     { label: 'Documents',            paths: ['/qs/documents'] },
   ],
