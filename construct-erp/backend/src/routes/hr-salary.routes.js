@@ -2,9 +2,45 @@
 // Salary structures, component templates, employee salary assignment
 const express = require('express');
 const router = express.Router();
+const multer  = require('multer');
+const { parse } = require('csv-parse');
+const XLSX = require('xlsx');
 const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ok = file.mimetype === 'text/csv'
+      || file.originalname.endsWith('.csv')
+      || file.originalname.endsWith('.xlsx')
+      || file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    ok ? cb(null, true) : cb(new Error('Only CSV or XLSX files are supported'));
+  },
+});
+
+function parseCsvBuffer(buffer) {
+  return new Promise((resolve, reject) => {
+    parse(buffer, { columns: true, skip_empty_lines: true, trim: true, bom: true },
+      (err, records) => err ? reject(err) : resolve(records));
+  });
+}
+
+function parseSalaryImportFile(file) {
+  if (file.originalname.endsWith('.xlsx')) {
+    const wb = XLSX.read(file.buffer, { type: 'buffer', cellDates: true });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    return XLSX.utils.sheet_to_json(ws, { raw: false, defval: '' })
+      .map(row => {
+        const clean = {};
+        for (const [k, v] of Object.entries(row)) clean[k.trim().replace(/\s+/g, ' ')] = typeof v === 'string' ? v.trim() : String(v ?? '').trim();
+        return clean;
+      });
+  }
+  return parseCsvBuffer(file.buffer);
+}
 
 router.use(authenticate);
 router.use(authorize('super_admin', 'admin', 'hr_admin', 'hr_manager'));
@@ -419,6 +455,93 @@ router.put('/employee-salaries/:id', async (req, res) => {
        req.params.id]
     );
     res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /hr-admin/salary/import — bulk salary import from CSV/XLSX.
+// Columns (case-insensitive): "Employee Code" OR "Email" to identify the
+// employee, "Monthly CTC" (required), optional "Effective From" (DD-MM-YYYY or
+// YYYY-MM-DD, defaults to today). The full component breakup is computed
+// server-side with the same calculateCTCBreakup used by the Assign modal, and
+// any overlapping salary record is closed exactly like single assignment.
+router.post('/import', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const rows = await parseSalaryImportFile(req.file);
+    if (!rows.length) return res.status(400).json({ error: 'File has no data rows' });
+
+    const col = (row, ...names) => {
+      for (const key of Object.keys(row)) {
+        if (names.includes(key.trim().toLowerCase())) return row[key];
+      }
+      return '';
+    };
+    const normDate = (val) => {
+      const v = String(val || '').trim();
+      if (!v) return new Date().toISOString().slice(0, 10);
+      const dmy = v.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+      if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+      if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
+      return null;
+    };
+
+    let imported = 0;
+    const skipped = [];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNo = i + 2; // 1-based + header row
+      try {
+        const code  = String(col(row, 'employee code', 'emp code', 'employee_code', 'employee id') || '').trim();
+        const email = String(col(row, 'email', 'email id') || '').trim().toLowerCase();
+        const ctcMonthly = parseFloat(String(col(row, 'monthly ctc', 'ctc monthly', 'ctc', 'monthly salary', 'salary') || '').replace(/[₹,\s]/g, ''));
+        const effectiveFrom = normDate(col(row, 'effective from', 'effective_from', 'effective date'));
+
+        if (!code && !email) { skipped.push({ row: rowNo, reason: 'No Employee Code or Email' }); continue; }
+        if (!ctcMonthly || ctcMonthly <= 0) { skipped.push({ row: rowNo, reason: 'Missing/invalid Monthly CTC' }); continue; }
+        if (!effectiveFrom) { skipped.push({ row: rowNo, reason: 'Invalid Effective From date' }); continue; }
+
+        const user = await query(
+          `SELECT id, name FROM users
+           WHERE company_id = $1 AND (
+             ($2 <> '' AND LOWER(TRIM(employee_code)) = LOWER($2))
+             OR ($3 <> '' AND LOWER(email) = $3)
+           ) LIMIT 1`,
+          [req.user.company_id, code, email]
+        );
+        if (!user.rows.length) { skipped.push({ row: rowNo, reason: `No employee matches "${code || email}"` }); continue; }
+        const userId = user.rows[0].id;
+
+        const bk = calculateCTCBreakup(ctcMonthly);
+
+        await query(
+          `UPDATE hr_employee_salaries
+              SET effective_to = ($1::date - INTERVAL '1 day')
+            WHERE user_id = $2 AND effective_from <= $1
+              AND (effective_to IS NULL OR effective_to >= $1)`,
+          [effectiveFrom, userId]
+        );
+        await query(
+          `INSERT INTO hr_employee_salaries
+           (user_id, ctc_annual, basic, hra, special_allowance, gross_monthly,
+            pf_applicable, esi_applicable, pt_applicable, effective_from,
+            vda, lta, education_allowance, washing_allowance, mobile_allowance, project_allowance,
+            accommodation_allowance, food_allowance, transport_allowance,
+            employer_pf, employee_pf, gratuity, pt_deduction, net_pay_monthly,
+            incentive, edli, epf_admin)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
+          [userId, bk.ctc_annual, bk.basic, bk.hra, bk.special_allowance, bk.gross_monthly,
+           true, false, true, effectiveFrom,
+           bk.vda, bk.lta, bk.education_allowance, bk.washing_allowance, bk.mobile_allowance, bk.project_allowance,
+           bk.accommodation_allowance, bk.food_allowance, bk.transport_allowance,
+           bk.employer_pf, bk.employee_pf, bk.gratuity, bk.pt_deduction, bk.net_pay_monthly,
+           bk.incentive, bk.edli, bk.epf_admin]
+        );
+        imported++;
+      } catch (e) {
+        skipped.push({ row: rowNo, reason: e.message });
+      }
+    }
+    res.json({ data: { total: rows.length, imported, skipped } });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
