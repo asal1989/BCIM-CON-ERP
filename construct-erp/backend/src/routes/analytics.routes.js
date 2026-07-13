@@ -557,6 +557,10 @@ router.get('/executive', async (req, res) => {
           ra_bills: recentBills,
           payments: recentPayments,
           documents: recentDocuments,
+          purchase_orders: purchaseOrders.slice(0, 6),
+          incidents: incidents.slice(0, 5),
+          rfis: rfis.filter(r => !['closed','approved','completed'].includes(String(r.status||'').toLowerCase())).slice(0, 5),
+          ncrs: ncrs.filter(n => !['verified','closed','completed'].includes(String(n.status||'').toLowerCase())).slice(0, 5),
         },
         pulse: {
           procurement_stores: {
@@ -568,6 +572,8 @@ router.get('/executive', async (req, res) => {
             pending_vendor_bill_value: pendingRAValue,
             open_documents: documents.length,
             recent_documents: recentDocuments.length,
+            low_stock_items: lowStock.slice(0, 8),
+            recent_purchase_orders: [...purchaseOrders].slice(0, 6),
           },
           quality_safety: {
             safety_score: safetyScore,

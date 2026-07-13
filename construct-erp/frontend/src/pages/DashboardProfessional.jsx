@@ -564,9 +564,15 @@ export default function Dashboard() {
   const dashboardExceptions = dashboard?.exceptions || [];
 
   const safeProjects = Array.isArray(dashboard?.projects) ? dashboard.projects : [];
-  const safePayments = Array.isArray(dashboardRecent.payments)   ? dashboardRecent.payments   : [];
-  const safeBills    = Array.isArray(dashboardRecent.ra_bills)   ? dashboardRecent.ra_bills   : [];
-  const safeDocs     = Array.isArray(dashboardRecent.documents)  ? dashboardRecent.documents  : [];
+  const safePayments = Array.isArray(dashboardRecent.payments)       ? dashboardRecent.payments       : [];
+  const safeBills    = Array.isArray(dashboardRecent.ra_bills)       ? dashboardRecent.ra_bills       : [];
+  const safeDocs     = Array.isArray(dashboardRecent.documents)      ? dashboardRecent.documents      : [];
+  const safeRecentPOs  = Array.isArray(dashboardRecent.purchase_orders) ? dashboardRecent.purchase_orders : [];
+  const safeIncidents  = Array.isArray(dashboardRecent.incidents)    ? dashboardRecent.incidents      : [];
+  const safeRFIs       = Array.isArray(dashboardRecent.rfis)         ? dashboardRecent.rfis           : [];
+  const safeNCRs       = Array.isArray(dashboardRecent.ncrs)         ? dashboardRecent.ncrs           : [];
+  const safeLowStock   = Array.isArray(dashboardPulse?.procurement_stores?.low_stock_items)
+                          ? dashboardPulse.procurement_stores.low_stock_items : [];
 
   // Finance / QS
   const totalContractValue = dashboardKpis.total_contract_value ?? 0;
@@ -949,29 +955,145 @@ export default function Dashboard() {
 
         {/* ════════════════════ PROCUREMENT & STORES ════════════════════ */}
         <section className="prof-section">
-          <SectionHeader kicker="Department 03" title="Procurement & Stores" action="Inventory" to="/procurement/inventory" />
+          <SectionHeader kicker="Department 03" title="Procurement & Stores" action="View Inventory" to="/procurement/inventory" />
 
           <div className="prof-mini-kpi-row">
-            <KPI label="Total Purchase Orders"     value={totalPOs}            tone="primary" icon={ClipboardList} />
-            <KPI label="POs Needing Attention"     value={overduePOCount}      tone="warning" icon={AlertTriangle} to="/procurement/po" />
-            <KPI label="Low-Stock Materials"       value={lowStockCount}       tone="danger"  icon={Package}       to="/procurement/inventory" />
-            <KPI label="Pending Vendor Bills"      value={pendingVendorBills}  tone="default" icon={Receipt}       to="/tqs/bills" />
-            <KPI label="Pending Vendor Bill Value" value={pendingVendorBillVal} isCurrency tone="default" icon={Wallet} to="/tqs/bills" />
-            <KPI label="Top Low-Stock Item"        value={topLowStock}         tone="neutral" />
+            <KPI label="Total POs"                 value={totalPOs}             tone="primary"  icon={ClipboardList} to="/procurement/po" />
+            <KPI label="POs Needing Attention"     value={overduePOCount}       tone="warning"  icon={AlertTriangle} to="/procurement/po" />
+            <KPI label="Low-Stock Materials"       value={lowStockCount}        tone="danger"   icon={Package}       to="/procurement/inventory" />
+            <KPI label="Pending Vendor Bills"      value={pendingVendorBills}   tone="default"  icon={Receipt}       to="/tqs/bills" />
+            <KPI label="Pending Bill Value"        value={pendingVendorBillVal} isCurrency tone="default" icon={Wallet} to="/tqs/bills" />
+            <KPI label="Workforce On Site"         value={workforceCount}       tone="primary"  icon={HardHat}       to="/hr/workers" />
+          </div>
+
+          <div className="prof-section-grid prof-grid-1-1">
+            {/* Low Stock Items */}
+            <Panel title="Low Stock Alert" action="View all" to="/procurement/inventory">
+              {safeLowStock.length === 0 ? <EmptyRow text="No low-stock items" /> : (
+                <table className="prof-table">
+                  <thead>
+                    <tr>
+                      <th>Material</th>
+                      <th>Project</th>
+                      <th className="num">Current Stock</th>
+                      <th className="num">Reorder Level</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {safeLowStock.map(item => {
+                      const pct = item.reorder_level > 0 ? Math.min(100, Math.round((item.closing_stock / item.reorder_level) * 100)) : 0;
+                      return (
+                        <tr key={item.id}>
+                          <td className="truncate" style={{ fontWeight: 600 }}>{item.material_name}</td>
+                          <td className="truncate muted">{item.project_name || '—'}</td>
+                          <td className="num">
+                            <span style={{ color: pct < 30 ? '#b91c1c' : '#b45309', fontWeight: 700 }}>{(+item.closing_stock||0).toFixed(1)}</span>
+                          </td>
+                          <td className="num muted">{(+item.reorder_level||0).toFixed(1)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </Panel>
+
+            {/* Recent Purchase Orders */}
+            <Panel title="Recent Purchase Orders" action="View all" to="/procurement/po">
+              {safeRecentPOs.length === 0 ? <EmptyRow text="No purchase orders" /> : (
+                <table className="prof-table">
+                  <thead>
+                    <tr>
+                      <th>PO No.</th>
+                      <th>Project</th>
+                      <th>Date</th>
+                      <th>Status</th>
+                      <th className="num">Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {safeRecentPOs.map(po => {
+                      const s = String(po.status || 'pending').toLowerCase();
+                      const statusClass = s === 'approved' || s === 'received' || s === 'fully_received' ? 'paid'
+                        : s === 'rejected' ? 'rejected' : 'pending';
+                      return (
+                        <tr key={po.id}>
+                          <td style={{ fontWeight: 600, color: '#1e40af' }}>{po.po_number || po.id?.slice(0,8)}</td>
+                          <td className="truncate muted">{po.project_name || '—'}</td>
+                          <td className="muted">{po.po_date ? dayjs(po.po_date).format('DD MMM') : '—'}</td>
+                          <td><span className={`prof-tag prof-tag-${statusClass}`}>{s}</span></td>
+                          <td className="num">{inrCompact(po.order_value)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </Panel>
           </div>
         </section>
 
         {/* ════════════════════ QUALITY & SAFETY ════════════════════ */}
         <section className="prof-section">
-          <SectionHeader kicker="Department 04" title="Quality, Safety & Documents" action="HSE" to="/hse" />
+          <SectionHeader kicker="Department 04" title="Quality, Safety & HSE" action="HSE Dashboard" to="/hse" />
 
           <div className="prof-mini-kpi-row">
-            <KPI label="Open Incidents"     value={openIncidents}                 tone={openIncidents > 0 ? 'warning' : 'success'} icon={AlertTriangle} to="/hse/incidents" />
-            <KPI label="Expiring Permits"   value={expiringPermits}               tone="warning" icon={FileWarning} to="/hse/permits"   sub={`${totalPermits} permits on record`} />
-            <KPI label="Open RFIs"          value={openRFIs}                      tone="default" icon={FileText}    to="/quality/rfi" />
-            <KPI label="Open NCRs"          value={openNCRs}                      tone={openNCRs > 0 ? 'danger' : 'success'} icon={FileWarning} to="/quality/ncr" />
-            <KPI label="Documents"          value={documentsCount}                tone="default" icon={FileSpreadsheet} to="/documents" />
-            <KPI label="Workforce"          value={workforceCount}                tone="primary" icon={HardHat}      to="/hr/workers" />
+            <KPI label="Safety Score"     value={safetyScore != null ? `${Math.round(safetyScore)}/100` : 'N/A'} tone={safetyScore != null && safetyScore < 70 ? 'warning' : 'success'} icon={ShieldCheck} to="/hse" />
+            <KPI label="Open Incidents"   value={openIncidents}    tone={openIncidents > 0 ? 'warning' : 'success'} icon={AlertTriangle} to="/hse/incidents" />
+            <KPI label="Expiring Permits" value={expiringPermits}  tone="warning" icon={FileWarning} to="/hse/permits" sub={`${totalPermits} on record`} />
+            <KPI label="Open RFIs"        value={openRFIs}         tone="default" icon={FileText}    to="/quality/rfi" />
+            <KPI label="Open NCRs"        value={openNCRs}         tone={openNCRs > 0 ? 'danger' : 'success'} icon={FileWarning} to="/quality/ncr" />
+            <KPI label="Documents"        value={documentsCount}   tone="default" icon={FileSpreadsheet} to="/documents" />
+          </div>
+
+          <div className="prof-section-grid prof-grid-1-1">
+            {/* Recent Incidents */}
+            <Panel title="Recent HSE Incidents" action="View all" to="/hse/incidents">
+              {safeIncidents.length === 0 ? <EmptyRow text="No incidents recorded" /> : (
+                <table className="prof-table">
+                  <thead>
+                    <tr><th>Date</th><th>Project</th><th>Type</th><th>Severity</th><th>Status</th></tr>
+                  </thead>
+                  <tbody>
+                    {safeIncidents.map(inc => {
+                      const sev = String(inc.severity || '').toLowerCase();
+                      const sevClass = sev === 'high' || sev === 'critical' ? 'rejected' : sev === 'medium' ? 'pending' : 'paid';
+                      return (
+                        <tr key={inc.id}>
+                          <td className="muted">{inc.incident_date ? dayjs(inc.incident_date).format('DD MMM') : '—'}</td>
+                          <td className="truncate">{inc.project_name || '—'}</td>
+                          <td className="truncate muted">{inc.incident_type?.replace(/_/g,' ') || '—'}</td>
+                          <td><span className={`prof-tag prof-tag-${sevClass}`}>{inc.severity || '—'}</span></td>
+                          <td><span className={`prof-tag prof-tag-${inc.status === 'closed' || inc.status === 'resolved' ? 'paid' : 'pending'}`}>{inc.status || 'open'}</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </Panel>
+
+            {/* Open RFIs & NCRs */}
+            <Panel title={`Open Quality Items (${safeRFIs.length} RFIs · ${safeNCRs.length} NCRs)`} action="View RFIs" to="/quality/rfi">
+              {safeRFIs.length === 0 && safeNCRs.length === 0 ? <EmptyRow text="No open quality items" /> : (
+                <table className="prof-table">
+                  <thead>
+                    <tr><th>Type</th><th>Number</th><th>Project</th><th>Activity / Description</th><th>Status</th></tr>
+                  </thead>
+                  <tbody>
+                    {[...safeRFIs.map(r => ({ ...r, _type: 'RFI' })), ...safeNCRs.map(n => ({ ...n, _type: 'NCR' }))].slice(0,8).map(item => (
+                      <tr key={item.id}>
+                        <td><span className={`prof-tag ${item._type === 'RFI' ? 'prof-tag-qs' : 'prof-tag-rejected'}`}>{item._type}</span></td>
+                        <td style={{ fontWeight: 600 }}>{item.rfi_number || item.ncr_number || '—'}</td>
+                        <td className="truncate muted">{item.project_name || '—'}</td>
+                        <td className="truncate">{item.activity_name || item.title || '—'}</td>
+                        <td><span className="prof-tag prof-tag-pending">{item.status || 'open'}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </Panel>
           </div>
         </section>
 
@@ -979,7 +1101,7 @@ export default function Dashboard() {
         <section className="prof-section">
           <SectionHeader kicker="Activity" title="Recent activity across departments" />
 
-          <div className="prof-section-grid prof-grid-1-1">
+          <div className="prof-section-grid prof-grid-1-1" style={{ marginBottom: 14 }}>
             <Panel title="Recent Payments" action="View all" to="/finance/payments">
               {safePayments.length === 0 ? <EmptyRow text="No payments recorded" /> : (
                 <table className="prof-table">
@@ -1001,14 +1123,14 @@ export default function Dashboard() {
             <Panel title="Recent RA Bills" action="View all" to="/qs/ra-bills">
               {safeBills.length === 0 ? <EmptyRow text="No RA bills" /> : (
                 <table className="prof-table">
-                  <thead><tr><th>Date</th><th>Project / Vendor</th><th>Status</th><th className="num">Amount</th></tr></thead>
+                  <thead><tr><th>Date</th><th>Project</th><th>Status</th><th className="num">Value</th></tr></thead>
                   <tbody>
                     {safeBills.slice(0, 5).map(b => (
                       <tr key={b.id}>
-                        <td className="muted">{dayjs(b.created_at).format('DD MMM')}</td>
-                        <td className="truncate">{b.project_name || b.vendor_name || '—'}</td>
+                        <td className="muted">{dayjs(b.bill_date || b.created_at).format('DD MMM')}</td>
+                        <td className="truncate">{b.project_name || '—'}</td>
                         <td><span className={`prof-tag prof-tag-${b.status || 'pending'}`}>{b.status || 'pending'}</span></td>
-                        <td className="num">{inrCompact(b.amount || b.total_amount)}</td>
+                        <td className="num">{inrCompact(b.bill_value || b.net_payable || b.gross_amount)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1016,6 +1138,24 @@ export default function Dashboard() {
               )}
             </Panel>
           </div>
+
+          {safeDocs.length > 0 && (
+            <Panel title="Recent Documents" action="View all" to="/documents">
+              <table className="prof-table">
+                <thead><tr><th>File</th><th>Module</th><th>Project</th><th>Uploaded</th></tr></thead>
+                <tbody>
+                  {safeDocs.slice(0, 5).map(d => (
+                    <tr key={d.id}>
+                      <td className="truncate" style={{ fontWeight: 600 }}>{d.file_name || '—'}</td>
+                      <td><span className="prof-tag prof-tag-qs">{d.module || 'general'}</span></td>
+                      <td className="truncate muted">{d.project_name || 'Company-wide'}</td>
+                      <td className="muted">{dayjs(d.created_at).format('DD MMM')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Panel>
+          )}
         </section>
 
         <div className="prof-footer">
