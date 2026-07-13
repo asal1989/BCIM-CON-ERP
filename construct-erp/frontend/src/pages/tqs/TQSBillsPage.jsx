@@ -790,7 +790,7 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
               </div>
 
               {/* Vendor outstanding summary card */}
-              {vendorOutstanding && vendorOutstanding.bill_count > 0 && (
+              {vendorOutstanding && vendorOutstanding.bill_count > 0 && vendorOutstanding.total_outstanding > 0 && (
                 <div className="col-span-2 md:col-span-3 flex items-center gap-3 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs">
                   <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
                   <span className="text-amber-800">
