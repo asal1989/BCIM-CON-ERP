@@ -14,6 +14,7 @@ import {
   Package, FileText, AlertTriangle, RefreshCw, ChevronRight,
   TrendingUp, FileWarning, ClipboardList, Users, CheckCircle2,
   ArrowUpRight, ArrowDownRight, Activity, FileSpreadsheet,
+  Search, LayoutGrid, List, Upload, Calendar as CalendarIcon, UserCircle2,
 } from 'lucide-react';
 import { projectAPI, analyticsAPI, tqsBillsAPI, procurementAdvanceAPI } from '../api/client';
 import useAuthStore from '../store/authStore';
@@ -107,6 +108,214 @@ const CustomTooltip = ({ active, payload, label }) => {
     </div>
   );
 };
+
+// ─── Project Cards Section ──────────────────────────────────────────────────
+const PROJ_STATUS_CFG = {
+  active:    { label: 'Active',    bg: '#f0fdf4', text: '#16a34a', border: '#bbf7d0', dot: '#16a34a' },
+  delayed:   { label: 'Delayed',   bg: '#fff1f2', text: '#e11d48', border: '#fecdd3', dot: '#e11d48' },
+  planning:  { label: 'Planning',  bg: '#eff6ff', text: '#2563eb', border: '#bfdbfe', dot: '#2563eb' },
+  on_hold:   { label: 'On Hold',   bg: '#fafafa', text: '#737373', border: '#e5e5e5', dot: '#a3a3a3' },
+  completed: { label: 'Completed', bg: '#f0fdf4', text: '#15803d', border: '#86efac', dot: '#15803d' },
+};
+
+const AVATAR_BG = ['#4f46e5','#0891b2','#059669','#d97706','#dc2626','#7c3aed','#db2777','#ea580c'];
+const avatarBg  = n => AVATAR_BG[(n||'').charCodeAt(0) % AVATAR_BG.length];
+const initials2 = n => (n||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+
+function ProjectCards({ projects, allCount, activeCount, planningCount, delayedCount, completedCount }) {
+  const [search, setSearch]   = useState('');
+  const [tab, setTab]         = useState('all');
+  const [gridView, setGridView] = useState(true);
+
+  const onHoldCount = projects.filter(p => (p.status||'').toLowerCase() === 'on_hold').length;
+
+  const TABS = [
+    { key: 'all',       label: 'All',       count: allCount || projects.length },
+    { key: 'active',    label: 'Active',    count: activeCount    || 0 },
+    { key: 'planning',  label: 'Planning',  count: planningCount  || 0 },
+    { key: 'delayed',   label: 'Delayed',   count: delayedCount   || 0 },
+    { key: 'on_hold',   label: 'On Hold',   count: onHoldCount },
+    { key: 'completed', label: 'Completed', count: completedCount || 0 },
+  ];
+
+  const visible = projects.filter(p => {
+    const s = (p.status || '').toLowerCase();
+    if (tab !== 'all' && s !== tab) return false;
+    if (!search) return true;
+    return [p.name, p.project_code, p.city, p.type, p.pm_name]
+      .some(v => (v || '').toLowerCase().includes(search.toLowerCase()));
+  });
+
+  const fmtDate = d => d && dayjs(d).isValid() ? dayjs(d).format('DD MMM YYYY') : '—';
+  const inrCr   = v => { const n = Number(v||0); if(n>=1e7) return `₹${(n/1e7).toFixed(2)} Cr`; if(n>=1e5) return `₹${(n/1e5).toFixed(2)} L`; return `₹${n.toLocaleString('en-IN')}`; };
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      {/* Header */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14, flexWrap:'wrap', gap:10 }}>
+        <div>
+          <h2 style={{ fontSize:18, fontWeight:800, color:'#0f172a', margin:0, letterSpacing:'-0.01em' }}>Projects</h2>
+          <p style={{ fontSize:12, color:'#64748b', margin:'2px 0 0', fontWeight:500 }}>{allCount || projects.length} Projects</p>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <div style={{ position:'relative' }}>
+            <Search size={13} style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:'#94a3b8' }} />
+            <input
+              value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search projects..."
+              style={{ height:34, border:'1px solid #e2e8f0', borderRadius:10, background:'#f8fafc', paddingLeft:28, paddingRight:12, fontSize:12, color:'#374151', outline:'none', width:190 }}
+            />
+          </div>
+          <button onClick={() => setGridView(true)}  style={{ width:34, height:34, borderRadius:8, border:`1px solid ${gridView?'#4f46e5':'#e2e8f0'}`, background:gridView?'#4f46e5':'#fff', color:gridView?'#fff':'#64748b', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}><LayoutGrid size={14}/></button>
+          <button onClick={() => setGridView(false)} style={{ width:34, height:34, borderRadius:8, border:`1px solid ${!gridView?'#4f46e5':'#e2e8f0'}`, background:!gridView?'#4f46e5':'#fff', color:!gridView?'#fff':'#64748b', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}><List size={14}/></button>
+        </div>
+      </div>
+
+      {/* Status tabs */}
+      <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:16, flexWrap:'wrap' }}>
+        {TABS.map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            style={{ height:30, padding:'0 12px', borderRadius:999, border:'none', fontSize:12, fontWeight:700, cursor:'pointer', transition:'all .15s',
+              background: tab===t.key ? '#4f46e5' : '#f1f5f9',
+              color: tab===t.key ? '#fff' : '#475569' }}>
+            {t.label} <span style={{ opacity:.75 }}>{t.count}</span>
+          </button>
+        ))}
+      </div>
+
+      {visible.length === 0 ? (
+        <div style={{ textAlign:'center', padding:'40px 0', color:'#94a3b8', fontSize:13 }}>No projects found</div>
+      ) : gridView ? (
+        /* Grid view */
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:14 }}>
+          {visible.map(p => {
+            const st   = (p.status||'active').toLowerCase();
+            const cfg  = PROJ_STATUS_CFG[st] || PROJ_STATUS_CFG.active;
+            const pct  = Math.max(0, Math.min(100, parseFloat(p.progress_pct || 0)));
+            const bar  = pct < 30 ? '#ef4444' : pct < 60 ? '#f59e0b' : '#22c55e';
+            return (
+              <Link key={p.id} to={`/projects/${p.id}`} style={{ textDecoration:'none' }}>
+                <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:16, padding:'16px', boxShadow:'0 1px 4px rgba(0,0,0,0.05)', transition:'box-shadow .15s, transform .15s', cursor:'pointer' }}
+                  onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.10)';e.currentTarget.style.transform='translateY(-1px)';}}
+                  onMouseLeave={e=>{e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.05)';e.currentTarget.style.transform='translateY(0)';}}>
+
+                  {/* Top row */}
+                  <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8, marginBottom:10 }}>
+                    <div style={{ minWidth:0 }}>
+                      <div style={{ fontSize:14, fontWeight:800, color:'#0f172a', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:180 }}>{p.name}</div>
+                      <div style={{ fontSize:11, color:'#94a3b8', fontWeight:500, marginTop:2 }}>{p.type || p.project_code || '—'}</div>
+                    </div>
+                    <span style={{ flexShrink:0, display:'inline-flex', alignItems:'center', gap:4, padding:'3px 9px', borderRadius:999, fontSize:11, fontWeight:700, background:cfg.bg, color:cfg.text, border:`1px solid ${cfg.border}` }}>
+                      <span style={{ width:5, height:5, borderRadius:'50%', background:cfg.dot, display:'inline-block' }} />
+                      {cfg.label}
+                    </span>
+                  </div>
+
+                  {/* Contract + Spent */}
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:12 }}>
+                    {[['CONTRACT VALUE', inrCr(p.contract_value)],['SPENT', inrCr(p.total_spent)]].map(([l,v]) => (
+                      <div key={l}>
+                        <div style={{ fontSize:9, fontWeight:700, color:'#94a3b8', letterSpacing:'0.1em', marginBottom:2 }}>{l}</div>
+                        <div style={{ fontSize:13, fontWeight:800, color:'#0f172a', fontVariantNumeric:'tabular-nums' }}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Progress */}
+                  <div style={{ marginBottom:12 }}>
+                    <div style={{ fontSize:9, fontWeight:700, color:'#94a3b8', letterSpacing:'0.1em', marginBottom:5 }}>PROGRESS</div>
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                      <div style={{ flex:1, height:6, borderRadius:999, background:'#f1f5f9', overflow:'hidden' }}>
+                        <div style={{ width:`${pct}%`, height:'100%', borderRadius:999, background:bar, transition:'width .4s ease' }} />
+                      </div>
+                      <span style={{ fontSize:12, fontWeight:800, color:'#374151', minWidth:30, textAlign:'right', fontVariantNumeric:'tabular-nums' }}>{pct}%</span>
+                    </div>
+                  </div>
+
+                  {/* Dates */}
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:12 }}>
+                    {[['START DATE', fmtDate(p.start_date)],['END DATE', fmtDate(p.end_date)]].map(([l,v]) => (
+                      <div key={l}>
+                        <div style={{ fontSize:9, fontWeight:700, color:'#94a3b8', letterSpacing:'0.1em', marginBottom:2 }}>{l}</div>
+                        <div style={{ fontSize:11, fontWeight:600, color:'#374151' }}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* PM + share */}
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', borderTop:'1px solid #f1f5f9', paddingTop:10 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                      <div style={{ width:28, height:28, borderRadius:14, background:avatarBg(p.pm_name||p.name), color:'#fff', fontSize:10, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                        {initials2(p.pm_name || p.name)}
+                      </div>
+                      <div>
+                        <div style={{ fontSize:11, fontWeight:700, color:'#374151' }}>{p.pm_name || 'Unassigned'}</div>
+                        <div style={{ fontSize:10, color:'#94a3b8', fontWeight:500 }}>Project Manager</div>
+                      </div>
+                    </div>
+                    <div style={{ width:28, height:28, borderRadius:8, background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', color:'#64748b' }}>
+                      <Upload size={12} />
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      ) : (
+        /* List view */
+        <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:16, overflow:'hidden' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+            <thead>
+              <tr style={{ background:'#f8fafc', borderBottom:'1px solid #e2e8f0' }}>
+                {['Project','Type','Status','Contract Value','Spent','Progress','End Date','PM'].map(h => (
+                  <th key={h} style={{ padding:'10px 14px', fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.1em', color:'#94a3b8', textAlign:'left', whiteSpace:'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((p,i) => {
+                const st  = (p.status||'active').toLowerCase();
+                const cfg = PROJ_STATUS_CFG[st] || PROJ_STATUS_CFG.active;
+                const pct = Math.max(0, Math.min(100, parseFloat(p.progress_pct||0)));
+                const bar = pct<30?'#ef4444':pct<60?'#f59e0b':'#22c55e';
+                return (
+                  <tr key={p.id} style={{ borderBottom: i < visible.length-1 ? '1px solid #f1f5f9' : 'none' }}>
+                    <td style={{ padding:'12px 14px' }}>
+                      <Link to={`/projects/${p.id}`} style={{ fontWeight:700, color:'#0f172a', textDecoration:'none', fontSize:13 }}>{p.name}</Link>
+                      {p.project_code && <div style={{ fontSize:10, color:'#94a3b8', marginTop:1 }}>{p.project_code}</div>}
+                    </td>
+                    <td style={{ padding:'12px 14px', fontSize:12, color:'#64748b' }}>{p.type||'—'}</td>
+                    <td style={{ padding:'12px 14px' }}>
+                      <span style={{ padding:'3px 9px', borderRadius:999, fontSize:11, fontWeight:700, background:cfg.bg, color:cfg.text, border:`1px solid ${cfg.border}` }}>{cfg.label}</span>
+                    </td>
+                    <td style={{ padding:'12px 14px', fontWeight:700, color:'#0f172a', fontVariantNumeric:'tabular-nums' }}>{inrCr(p.contract_value)}</td>
+                    <td style={{ padding:'12px 14px', fontVariantNumeric:'tabular-nums', color:'#374151' }}>{inrCr(p.total_spent)}</td>
+                    <td style={{ padding:'12px 14px', minWidth:120 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <div style={{ flex:1, height:5, borderRadius:999, background:'#f1f5f9' }}>
+                          <div style={{ width:`${pct}%`, height:'100%', borderRadius:999, background:bar }} />
+                        </div>
+                        <span style={{ fontSize:11, fontWeight:700, color:'#374151', minWidth:28, textAlign:'right' }}>{pct}%</span>
+                      </div>
+                    </td>
+                    <td style={{ padding:'12px 14px', fontSize:12, color:'#64748b' }}>{fmtDate(p.end_date)}</td>
+                    <td style={{ padding:'12px 14px' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        <div style={{ width:24, height:24, borderRadius:12, background:avatarBg(p.pm_name||p.name), color:'#fff', fontSize:9, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center' }}>{initials2(p.pm_name||p.name)}</div>
+                        <span style={{ fontSize:12, color:'#374151', fontWeight:500 }}>{p.pm_name||'—'}</span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Small components ──────────────────────────────────────────────────────
 const KPI_TONES = {
@@ -573,6 +782,20 @@ export default function Dashboard() {
           <KPI label="Active Projects"   value={activeProjects}     tone="default" icon={Activity} to="/projects" sub={`${delayedProjects} delayed`} loading={dashboardLoading} />
           <KPI label="Safety Score"      value={safetyScore != null ? `${Math.round(safetyScore)}/100` : 'N/A'} tone={safetyScore != null && safetyScore < 70 ? 'warning' : 'success'} icon={ShieldCheck} to="/hse" sub={`${openIncidents} incidents`} loading={dashboardLoading} />
         </div>
+
+        {/* ════════════════════ PROJECTS ════════════════════ */}
+        {companyProjects.length > 0 && (
+          <section className="prof-section">
+            <ProjectCards
+              projects={companyProjects}
+              allCount={companyProjects.length}
+              activeCount={activeProjects}
+              planningCount={dashboardKpis.planning_projects ?? 0}
+              delayedCount={delayedProjects}
+              completedCount={dashboardKpis.completed_projects ?? 0}
+            />
+          </section>
+        )}
 
         {/* ════════════════════ FINANCE & QS ════════════════════ */}
         <section className="prof-section">
