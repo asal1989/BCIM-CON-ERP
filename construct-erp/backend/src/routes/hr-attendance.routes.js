@@ -376,13 +376,7 @@ router.get('/timesheet-report', async (req, res) => {
     const cid = req.user.company_id;
 
     let roleFilter = '';
-    if (category === 'staff') {
-      roleFilter = `AND u.role IN ('hr','hr_admin','hr_manager','admin','manager','project_manager',
-        'project_head','department_head','site_engineer','qs_engineer','procurement_manager',
-        'purchase_executive','store_keeper','stores_manager','stores_officer','accountant',
-        'security_guard','supervisor','foreman','safety_officer','surveyor','operator',
-        'employee','viewer','accounts')`;
-    }
+    // No role filter — all active employees appear in the timesheet regardless of system role
 
     // For project-scoped roles use their project; for HR roles use explicit filter if provided
     const scopeProjectId = await getProjectScope(req);
