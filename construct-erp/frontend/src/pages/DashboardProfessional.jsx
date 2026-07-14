@@ -641,15 +641,28 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* ── Pending MD Approvals (right after KPI cards) ── */}
+        {/* ── Pending Approvals (right after KPI cards) ── */}
         {isMdRole && (
-          <div style={{ background: '#fff', border: '3px solid #3b82f6', borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 8px rgba(59,130,246,0.12)' }}>
-            <div style={{ padding: '14px 20px', borderBottom: '2px solid #e2e8f0', background: '#f8faff' }}>
-              <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>Pending Approvals</h3>
+          <div style={{ background: '#fff', border: '2px solid #3b82f6', borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 16px rgba(59,130,246,0.10)' }}>
+            {/* Card header */}
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid #e2e8f0', background: 'linear-gradient(90deg,#eff6ff 0%,#fff 100%)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <ClipboardList size={18} style={{ color: '#fff' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>Pending Approvals</div>
+                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Items awaiting your review & action</div>
+                </div>
+              </div>
+              <Link to="/approvals" style={{ fontSize: 12, fontWeight: 700, color: '#3b82f6', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+                View All <ChevronRight size={14} />
+              </Link>
             </div>
-            <div style={{ padding: '4px 0' }}>
+            {/* Embedded approvals list — inner header suppressed */}
+            <div style={{ padding: '0 8px 8px' }}>
               <Suspense fallback={<DashLoader />}>
-                <ApprovalsPage embedded mdMode={false} />
+                <ApprovalsPage embedded mdMode={false} hideHeader />
               </Suspense>
             </div>
           </div>
