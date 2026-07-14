@@ -1160,62 +1160,65 @@ router.patch('/service-requests/:id', async (req, res) => {
 });
 
 router.get('/analytics/summary', async (req, res) => {
-  const [
-    employees,
-    recruitment,
-    attendanceCorrections,
-    training,
-    cases,
-    exits,
-    goals,
-    letters,
-    policies,
-    serviceRequests,
-  ] = await Promise.all([
-    query(`SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE is_active=TRUE)::int AS active FROM users WHERE company_id=$1`, [companyId(req)]),
-    query(`SELECT COUNT(*)::int AS open_jobs FROM hr_job_openings WHERE company_id=$1 AND status='open'`, [companyId(req)]),
-    query(`SELECT COUNT(*)::int AS pending FROM hr_attendance_correction_requests WHERE company_id=$1 AND status='pending'`, [companyId(req)]),
-    query(`SELECT COUNT(*)::int AS planned FROM hr_training_programs WHERE company_id=$1 AND status IN ('planned','scheduled')`, [companyId(req)]),
-    query(`SELECT COUNT(*)::int AS open_cases FROM hr_employee_cases WHERE company_id=$1 AND status='open'`, [companyId(req)]),
-    query(`SELECT COUNT(*)::int AS active_exits FROM hr_exit_cases WHERE company_id=$1 AND status NOT IN ('closed','cancelled')`, [companyId(req)]),
-    query(`SELECT COUNT(*)::int AS goals, COALESCE(AVG(rating),0)::numeric(5,2) AS avg_rating FROM hr_performance_goals WHERE company_id=$1`, [companyId(req)]),
-    query(`SELECT COUNT(*)::int AS issued_letters FROM hr_letter_issues WHERE company_id=$1`, [companyId(req)]),
-    query(`
-      SELECT COUNT(*)::int AS published_policies,
-             COUNT(a.id)::int AS acknowledgements
-      FROM hr_policy_documents p
-      LEFT JOIN hr_policy_acknowledgements a ON a.policy_id = p.id
-      WHERE p.company_id=$1 AND p.status='published'`,
-    [companyId(req)]),
-    query(`SELECT COUNT(*)::int AS open_requests FROM hr_service_requests WHERE company_id=$1 AND status IN ('open','in_progress')`, [companyId(req)]),
-  ]);
+  try {
+    const safe = (q, params, fallback) => query(q, params).catch(() => ({ rows: [fallback] }));
+    const cid = companyId(req);
 
-  const departments = await query(
-    `SELECT COALESCE(d.name,'Unassigned') AS department, COUNT(u.id)::int AS headcount
-     FROM users u
-     LEFT JOIN employee_profiles ep ON ep.user_id = u.id
-     LEFT JOIN hr_departments d ON d.id = ep.department_id
-     WHERE u.company_id=$1 AND u.is_active=TRUE
-     GROUP BY COALESCE(d.name,'Unassigned')
-     ORDER BY headcount DESC`,
-    [companyId(req)]
-  );
+    const [
+      employees,
+      recruitment,
+      attendanceCorrections,
+      training,
+      cases,
+      exits,
+      goals,
+      letters,
+      policies,
+      serviceRequests,
+    ] = await Promise.all([
+      query(`SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE is_active=TRUE)::int AS active FROM users WHERE company_id=$1`, [cid]),
+      safe(`SELECT COUNT(*)::int AS open_jobs FROM hr_job_openings WHERE company_id=$1 AND status='open'`, [cid], { open_jobs: 0 }),
+      safe(`SELECT COUNT(*)::int AS pending FROM hr_attendance_correction_requests WHERE company_id=$1 AND status='pending'`, [cid], { pending: 0 }),
+      safe(`SELECT COUNT(*)::int AS planned FROM hr_training_programs WHERE company_id=$1 AND status IN ('planned','scheduled')`, [cid], { planned: 0 }),
+      safe(`SELECT COUNT(*)::int AS open_cases FROM hr_employee_cases WHERE company_id=$1 AND status='open'`, [cid], { open_cases: 0 }),
+      safe(`SELECT COUNT(*)::int AS active_exits FROM hr_exit_cases WHERE company_id=$1 AND status NOT IN ('closed','cancelled')`, [cid], { active_exits: 0 }),
+      safe(`SELECT COUNT(*)::int AS goals, COALESCE(AVG(rating),0)::numeric(5,2) AS avg_rating FROM hr_performance_goals WHERE company_id=$1`, [cid], { goals: 0, avg_rating: 0 }),
+      safe(`SELECT COUNT(*)::int AS issued_letters FROM hr_letter_issues WHERE company_id=$1`, [cid], { issued_letters: 0 }),
+      safe(`
+        SELECT COUNT(*)::int AS published_policies, COUNT(a.id)::int AS acknowledgements
+        FROM hr_policy_documents p
+        LEFT JOIN hr_policy_acknowledgements a ON a.policy_id = p.id
+        WHERE p.company_id=$1 AND p.status='published'`, [cid], { published_policies: 0, acknowledgements: 0 }),
+      safe(`SELECT COUNT(*)::int AS open_requests FROM hr_service_requests WHERE company_id=$1 AND status IN ('open','in_progress')`, [cid], { open_requests: 0 }),
+    ]);
 
-  res.json({
-    data: {
-      employees: employees.rows[0],
-      recruitment: recruitment.rows[0],
-      attendanceCorrections: attendanceCorrections.rows[0],
-      training: training.rows[0],
-      cases: cases.rows[0],
-      exits: exits.rows[0],
-      goals: goals.rows[0],
-      letters: letters.rows[0],
-      policies: policies.rows[0],
-      serviceRequests: serviceRequests.rows[0],
-      departments: departments.rows,
-    },
-  });
+    const departments = await query(
+      `SELECT COALESCE(d.name,'Unassigned') AS department, COUNT(u.id)::int AS headcount
+       FROM users u
+       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+       LEFT JOIN hr_departments d ON d.id = ep.department_id
+       WHERE u.company_id=$1 AND u.is_active=TRUE
+       GROUP BY COALESCE(d.name,'Unassigned')
+       ORDER BY headcount DESC`,
+      [cid]
+    );
+
+    res.json({
+      data: {
+        employees: employees.rows[0],
+        recruitment: recruitment.rows[0],
+        attendanceCorrections: attendanceCorrections.rows[0],
+        training: training.rows[0],
+        cases: cases.rows[0],
+        exits: exits.rows[0],
+        goals: goals.rows[0],
+        letters: letters.rows[0],
+        policies: policies.rows[0],
+        serviceRequests: serviceRequests.rows[0],
+        departments: departments.rows,
+      },
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── HR Analytics Charts ───────────────────────────────────────────────────────
