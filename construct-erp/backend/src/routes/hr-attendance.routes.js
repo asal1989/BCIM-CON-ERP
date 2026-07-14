@@ -371,7 +371,7 @@ router.delete('/month-baseline', async (req, res) => {
 // ═══════════════════════════════════════════════════════════
 router.get('/timesheet-report', async (req, res) => {
   try {
-    const { date, category = 'staff', department_id } = req.query;
+    const { date, category = 'staff', department_id, project_id } = req.query;
     const reportDate = date || new Date().toISOString().slice(0, 10);
     const cid = req.user.company_id;
 
@@ -383,7 +383,10 @@ router.get('/timesheet-report', async (req, res) => {
         'security_guard','supervisor','foreman','safety_officer','surveyor','operator')`;
     }
 
-    const projectId = await getProjectScope(req);
+    // For project-scoped roles use their project; for HR roles use explicit filter if provided
+    const scopeProjectId = await getProjectScope(req);
+    const effectiveProjectId = scopeProjectId !== null ? scopeProjectId : (project_id || null);
+
     let deptFilter = '';
     let projectFilter = '';
     const params = [cid, reportDate];
@@ -393,11 +396,22 @@ router.get('/timesheet-report', async (req, res) => {
       params.push(department_id);
       idx++;
     }
-    if (projectId !== null) {
+    if (effectiveProjectId) {
       projectFilter = ` AND ep.project_id = $${idx}`;
-      params.push(projectId);
+      params.push(effectiveProjectId);
       idx++;
     }
+
+    // Fetch company name and project name for the print header
+    const [companyRes, projectRes] = await Promise.all([
+      query(`SELECT name FROM companies WHERE id=$1`, [cid]),
+      effectiveProjectId
+        ? query(`SELECT name, project_code FROM projects WHERE id=$1`, [effectiveProjectId])
+        : Promise.resolve({ rows: [] }),
+    ]);
+    const companyName  = companyRes.rows[0]?.name  || 'BCIM';
+    const projectName  = projectRes.rows[0]?.name  || null;
+    const projectCode  = projectRes.rows[0]?.project_code || null;
 
     const { rows } = await query(`
       SELECT
@@ -438,8 +452,11 @@ router.get('/timesheet-report', async (req, res) => {
     const leave   = rows.filter(r => r.attendance_status === 'leave').length;
 
     res.json({
-      data:    rows,
-      date:    reportDate,
+      data:        rows,
+      date:        reportDate,
+      companyName,
+      projectName,
+      projectCode,
       summary: { total: rows.length, present, absent, leave },
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
