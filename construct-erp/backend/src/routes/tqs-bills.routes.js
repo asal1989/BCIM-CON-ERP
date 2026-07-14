@@ -614,6 +614,66 @@ const inrText = (value) =>
   Math.round(Number(value || 0)).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
 
 const numValue = (v) => parseFloat(v || 0) || 0;
+
+// Fixed recipients always notified on bill payment
+const BILL_PAID_FIXED_EMAILS = ['it@bcim.in'];
+
+// Roles whose members are notified on bill payment
+const BILL_PAID_NOTIFY_ROLES = ['qs_engineer', 'procurement_manager', 'purchase_manager', 'procurement_officer'];
+
+async function sendBillPaidEmail({ bill, paidAmount, paymentDate, paymentMode, referenceNumber, actorName, companyId }) {
+  try {
+    // Fetch role-based recipients (procurement + QS teams)
+    const roleRows = await query(
+      `SELECT DISTINCT email, name FROM users
+       WHERE company_id = $1
+         AND role = ANY($2::text[])
+         AND is_active = TRUE
+         AND email IS NOT NULL`,
+      [companyId, BILL_PAID_NOTIFY_ROLES]
+    );
+    const roleEmails = roleRows.rows.map(r => r.email);
+    const toList = [...new Set([...BILL_PAID_FIXED_EMAILS, ...roleEmails])];
+
+    const billRef  = bill.sl_number || bill.inv_number || bill.id;
+    const vendor   = bill.vendor_name || '—';
+    const project  = bill.project_name || bill.project_id || '—';
+    const amount   = inrText(paidAmount || bill.total_amount);
+    const pDate    = paymentDate ? new Date(paymentDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+    const mode     = paymentMode || '—';
+    const ref      = referenceNumber || '—';
+    const actor    = actorName || 'System';
+
+    const subject = `✅ Bill Paid — ${billRef} | ${vendor} | ${amount}`;
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#0f172a">
+        <div style="background:#15803d;padding:18px 28px;border-radius:8px 8px 0 0">
+          <h2 style="color:#fff;margin:0;font-size:18px">✅ Bill Payment Confirmed</h2>
+        </div>
+        <div style="background:#f8fafc;padding:24px 28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px">
+          <table style="width:100%;border-collapse:collapse;font-size:14px">
+            <tr><td style="padding:8px 0;color:#64748b;width:140px">Bill Reference</td><td style="padding:8px 0;font-weight:700">${billRef}</td></tr>
+            <tr><td style="padding:8px 0;color:#64748b">Vendor</td><td style="padding:8px 0">${vendor}</td></tr>
+            <tr><td style="padding:8px 0;color:#64748b">Project</td><td style="padding:8px 0">${project}</td></tr>
+            <tr><td style="padding:8px 0;color:#64748b">Amount Paid</td><td style="padding:8px 0;font-weight:700;color:#15803d;font-size:16px">${amount}</td></tr>
+            <tr><td style="padding:8px 0;color:#64748b">Payment Date</td><td style="padding:8px 0">${pDate}</td></tr>
+            <tr><td style="padding:8px 0;color:#64748b">Payment Mode</td><td style="padding:8px 0">${mode}</td></tr>
+            <tr><td style="padding:8px 0;color:#64748b">Reference No.</td><td style="padding:8px 0">${ref}</td></tr>
+            <tr><td style="padding:8px 0;color:#64748b">Actioned By</td><td style="padding:8px 0">${actor}</td></tr>
+          </table>
+          <hr style="border:none;border-top:1px solid #e2e8f0;margin:18px 0">
+          <p style="font-size:11px;color:#94a3b8;margin:0">
+            This is an automated notification from BCIM ConstructERP – Bill Tracker.
+          </p>
+        </div>
+      </div>`;
+
+    await sendMail({ to: toList, subject, html });
+    console.log(`[bill-paid-email] Sent to: ${toList.join(', ')}`);
+  } catch (err) {
+    console.error('[bill-paid-email] Failed to send:', err.message);
+  }
+}
 const roundMoney = (v) => Math.round(numValue(v) * 100) / 100;
 const billPayableCap = (bill = {}) => {
   const gross = numValue(bill.total_amount);
@@ -3790,6 +3850,24 @@ router.patch('/:id/mark-paid', requireTqsStageAccess('payment'), async (req, res
     `, [req.params.id]);
     await query(`UPDATE tqs_bills SET workflow_status='paid', updated_at=NOW() WHERE id=$1`, [req.params.id]);
     await logHistory(req.params.id, 'accounts', 'Manually marked as Fully Paid', req.user.id);
+
+    // Send payment notification email
+    const billRow = await query(
+      `SELECT b.*, p.name AS project_name FROM tqs_bills b LEFT JOIN projects p ON p.id = b.project_id WHERE b.id=$1`,
+      [req.params.id]
+    );
+    if (billRow.rows[0]) {
+      sendBillPaidEmail({
+        bill: billRow.rows[0],
+        paidAmount: billRow.rows[0].total_amount,
+        paymentDate: new Date().toISOString(),
+        paymentMode: 'Manual mark',
+        referenceNumber: null,
+        actorName: req.user.name || req.user.email,
+        companyId: req.user.company_id,
+      }).catch(() => {});
+    }
+
     res.json({ data: { workflow_status: 'paid', payment_status: 'paid' } });
   } catch (err) {
     console.error(err);
@@ -3822,7 +3900,10 @@ router.patch('/:id/payment', requireTqsStageAccess('payment'), async (req, res) 
     const status    = balance <= 0 ? 'paid' : new_paid > 0 ? 'partial' : 'pending';
 
     // Fetch the parent bill for project + vendor info
-    const billRow = await query(`SELECT * FROM tqs_bills WHERE id=$1`, [req.params.id]);
+    const billRow = await query(
+      `SELECT b.*, p.name AS project_name FROM tqs_bills b LEFT JOIN projects p ON p.id = b.project_id WHERE b.id=$1`,
+      [req.params.id]
+    );
     if (!billRow.rows.length) return res.status(404).json({ error: 'Bill not found' });
     const bill = billRow.rows[0];
 
@@ -3884,6 +3965,20 @@ router.patch('/:id/payment', requireTqsStageAccess('payment'), async (req, res) 
     await logHistory(req.params.id, 'accounts',
       `Payment recorded ₹${new_paid} (${status})${result.finance_payment_id ? ' → Finance entry created' : ''}`,
       req.user.id);
+
+    // Send notification email when bill is fully paid
+    if (status === 'paid') {
+      sendBillPaidEmail({
+        bill: { ...bill, project_name: bill.project_name || bill.project_id },
+        paidAmount: new_paid,
+        paymentDate: payment_date,
+        paymentMode: payment_mode,
+        referenceNumber: reference_number,
+        actorName: req.user.name || req.user.email,
+        companyId: req.user.company_id,
+      }).catch(() => {});
+    }
+
     res.json({ data: result });
   } catch (err) {
     console.error(err);
