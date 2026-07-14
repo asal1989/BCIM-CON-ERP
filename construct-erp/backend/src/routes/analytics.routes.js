@@ -301,6 +301,7 @@ router.get('/executive', async (req, res) => {
       documentsRes,
       allTimeBillsRes,
       budgetSpentRes,
+      allTimeCollectionsRes,
     ] = await Promise.all([
       safeQuery(
         `SELECT p.id, p.name, p.project_code, p.type, p.status
@@ -423,22 +424,53 @@ router.get('/executive', async (req, res) => {
          WHERE ${projectScopedClause('rb')}`,
         scope.params
       ),
-      // Budget vs Spent: total budget from costhead budgets, total spent from TQS bills + petty cash
+      // Budget vs Spent across all company projects
       safeQuery(
         `SELECT
-           COALESCE(SUM(pcb.budget_amount), 0) AS total_budget,
+           -- Total budget: sum of all cost-head budgets across projects
            COALESCE((
-             SELECT SUM(tb.net_payable)
+             SELECT SUM(pcb.budget_amount)
+             FROM project_costhead_budgets pcb
+             JOIN projects pp ON pp.id = pcb.project_id
+             WHERE pp.company_id = $1
+           ), 0) AS total_budget,
+
+           -- Total spent: TQS bills (approved/under_review) + SC bills (paid) + RA bills (certified/paid)
+           COALESCE((
+             SELECT SUM(tb.total_amount)
              FROM tqs_bills tb
-             JOIN projects p2 ON p2.id = tb.project_id
-             WHERE p2.company_id = $1
+             JOIN projects pp ON pp.id = tb.project_id
+             WHERE pp.company_id = $1
                AND tb.is_deleted = FALSE
-               AND tb.workflow_status NOT IN ('rejected','draft')
-           ), 0) AS total_spent
-         FROM project_costhead_budgets pcb
-         JOIN projects p ON p.id = pcb.project_id
-         WHERE p.company_id = $1`,
+               AND tb.workflow_status NOT IN ('rejected','draft','pending')
+           ), 0)
+           +
+           COALESCE((
+             SELECT SUM(sb.net_payable)
+             FROM sc_bills sb
+             JOIN projects pp ON pp.id = sb.project_id
+             WHERE pp.company_id = $1
+               AND sb.status IN ('submitted','approved','paid')
+           ), 0)
+           +
+           COALESCE((
+             SELECT SUM(rb.net_payable)
+             FROM ra_bills rb
+             JOIN projects pp ON pp.id = rb.project_id
+             WHERE pp.company_id = $1
+               AND rb.status IN ('certified','authorized','verified','paid')
+           ), 0)
+           AS total_spent`,
         [scope.params[0]]
+      ),
+      // All-time collections (not date-filtered) for correct receivables calculation
+      safeQuery(
+        `SELECT COALESCE(SUM(pay.net_amount), 0) AS total_collections
+         FROM payments pay
+         JOIN projects p ON pay.project_id = p.id
+         WHERE ${withProjectScope('pay', scope)}
+           AND LOWER(pay.payment_type) = 'customer_receipt'`,
+        scope.params
       ),
     ]);
 
@@ -457,13 +489,14 @@ router.get('/executive', async (req, res) => {
     const documents = documentsRes.rows;
 
     // All-time billing KPIs (not date-filtered)
-    const billKpis      = allTimeBillsRes.rows[0] || {};
-    const budgetSpentKpi = budgetSpentRes.rows[0] || {};
-    const totalBudget = toNumber(budgetSpentKpi.total_budget);
-    const totalSpent  = toNumber(budgetSpentKpi.total_spent);
-    const totalCertified  = toNumber(billKpis.total_certified);
-    const pendingRAValue  = toNumber(billKpis.pending_value);
-    const pendingRACount  = parseInt(billKpis.pending_count || 0, 10);
+    const billKpis          = allTimeBillsRes.rows[0] || {};
+    const budgetSpentKpi    = budgetSpentRes.rows[0] || {};
+    const totalBudget       = toNumber(budgetSpentKpi.total_budget);
+    const totalSpent        = toNumber(budgetSpentKpi.total_spent);
+    const totalCertified    = toNumber(billKpis.total_certified);
+    const pendingRAValue    = toNumber(billKpis.pending_value);
+    const pendingRACount    = parseInt(billKpis.pending_count || 0, 10);
+    const allTimeCollections = toNumber(allTimeCollectionsRes.rows[0]?.total_collections);
 
     const activeProjects = projects.filter((project) => project.status === 'active');
     const delayedProjects = projects.filter((project) => project.status === 'delayed');
@@ -472,7 +505,7 @@ router.get('/executive', async (req, res) => {
 
     const totalContractValue = projects.reduce((sum, project) => sum + toNumber(project.contract_value), 0);
     const pendingRABills    = raBills.filter((bill) => ['draft', 'submitted'].includes(String(bill.status || '').toLowerCase()));
-    const totalCollections  = collections.reduce((sum, payment) => sum + toNumber(payment.net_amount || payment.amount), 0);
+    const totalCollections  = allTimeCollections;
     const receivables       = Math.max(totalCertified - totalCollections, 0);
 
     const openIncidents = incidents.filter((incident) => isOpenStatus(incident.status, ['closed', 'resolved'])).length;
