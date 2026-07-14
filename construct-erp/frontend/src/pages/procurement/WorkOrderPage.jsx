@@ -1614,7 +1614,7 @@ export default function WorkOrderPage() {
         }
       />
 
-      <div className="max-w-[1400px] mx-auto px-6 py-5 space-y-5">
+      <div className="max-w-[1600px] mx-auto px-6 py-6 space-y-5">
 
         {/* ── KPI Cards ── */}
         {(() => {
@@ -1766,9 +1766,9 @@ export default function WorkOrderPage() {
         {/* ── Table ── */}
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
+            <table className="w-full text-sm">
+            <thead>
+                <tr className="border-b border-slate-100 bg-slate-50">
                   {[
                     { label: 'WO Number',     key: 'wo_number',    w: 'w-[130px]' },
                     { label: 'Subject / Scope', key: 'subject',    w: 'min-w-[180px]' },
@@ -1780,7 +1780,7 @@ export default function WorkOrderPage() {
                     { label: 'Status',        key: 'status',       w: 'w-[140px]' },
                     { label: '',              key: null,           w: 'w-[80px]' },
                   ].map(h => (
-                    <th key={h.label || 'act'} className={clsx('px-4 py-3 text-left font-semibold text-[10px] uppercase tracking-wider text-slate-500 whitespace-nowrap', h.w)}>
+                    <th key={h.label || 'act'} className={clsx('px-5 py-3.5 text-left font-medium text-xs uppercase tracking-wider text-slate-400 whitespace-nowrap', h.w)}>
                       {h.key ? (
                         <button onClick={() => toggleSort(h.key)} className="inline-flex items-center gap-1 hover:text-indigo-600 transition-colors group">
                           {h.label} <SortIcon col={h.key} />
@@ -1816,7 +1816,7 @@ export default function WorkOrderPage() {
                               'hover:bg-indigo-50/30'
                             )}>
                             {/* WO Number */}
-                            <td className="px-4 py-3">
+                            <td className="px-5 py-3.5">
                               <div className="flex items-center gap-2">
                                 <div className={clsx(
                                   'w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0',
@@ -1831,27 +1831,27 @@ export default function WorkOrderPage() {
                               </div>
                             </td>
                             {/* Subject */}
-                            <td className="px-4 py-3 max-w-[220px]">
-                              <p className="text-xs font-medium text-slate-800 truncate leading-tight">{wo.subject || '—'}</p>
+                            <td className="px-5 py-3.5 max-w-[220px]">
+                              <p className="text-sm font-medium text-slate-800 truncate leading-tight">{wo.subject || '—'}</p>
                               {wo.tower_block && <p className="text-[10px] text-slate-400 truncate mt-0.5">{wo.tower_block}</p>}
                             </td>
                             {/* Contractor */}
-                            <td className="px-4 py-3">
+                            <td className="px-5 py-3.5">
                               <p className="font-semibold text-slate-800 truncate max-w-[140px]">{(wo.vendor_name || '—').toUpperCase()}</p>
                               {wo.vendor_type && <p className="text-[10px] text-slate-400 capitalize mt-0.5">{wo.vendor_type.replace(/_/g,' ')}</p>}
                             </td>
                             {/* Project */}
-                            <td className="px-4 py-3">
+                            <td className="px-5 py-3.5">
                               <p className="text-slate-600 truncate max-w-[130px]">{(wo.project_name || '—').toUpperCase()}</p>
                             </td>
                             {/* Category */}
-                            <td className="px-4 py-3">
+                            <td className="px-5 py-3.5">
                               {wo.work_category
                                 ? <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-semibold">{wo.work_category}</span>
                                 : <span className="text-slate-300">—</span>}
                             </td>
                             {/* Period */}
-                            <td className="px-4 py-3 whitespace-nowrap">
+                            <td className="px-5 py-3.5 whitespace-nowrap">
                               <div className="text-[11px] text-slate-600">
                                 {wo.start_date ? dayjs(wo.start_date).format('DD MMM YY') : '—'}
                                 {wo.end_date && <span className="text-slate-400"> → {dayjs(wo.end_date).format('DD MMM YY')}</span>}
@@ -1870,12 +1870,12 @@ export default function WorkOrderPage() {
                               )}
                             </td>
                             {/* Value */}
-                            <td className="px-4 py-3 whitespace-nowrap">
+                            <td className="px-5 py-3.5 whitespace-nowrap">
                               <span className="font-bold font-mono text-slate-800 text-xs">₹{inr(wo.total_value)}</span>
                               {wo.cost_head && <div className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[120px]">{wo.cost_head}</div>}
                             </td>
                             {/* Status */}
-                            <td className="px-4 py-3 whitespace-nowrap">
+                            <td className="px-5 py-3.5 whitespace-nowrap">
                               <StatusBadge status={wo.status} />
                               {wo.mrs_number && (
                                 <div className="flex items-center gap-1 mt-1">
@@ -1885,7 +1885,7 @@ export default function WorkOrderPage() {
                               )}
                             </td>
                             {/* Actions */}
-                            <td className="px-4 py-3 whitespace-nowrap text-right" onClick={e => e.stopPropagation()}>
+                            <td className="px-5 py-3.5 whitespace-nowrap text-right" onClick={e => e.stopPropagation()}>
                               <div className="flex items-center justify-end gap-1">
                                 <button
                                   onClick={() => setAttachWOId(attachWOId === wo.id ? null : wo.id)}
@@ -1894,9 +1894,10 @@ export default function WorkOrderPage() {
                                     'flex items-center gap-1 px-2 py-1 rounded-md border text-[10px] font-semibold transition-all',
                                     attachWOId === wo.id
                                       ? 'bg-indigo-600 text-white border-indigo-600'
-                                      : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600 opacity-0 group-hover:opacity-100'
+                                      : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 opacity-0 group-hover:opacity-100'
                                   )}>
                                   <Upload className="w-2.5 h-2.5" />
+                                  {attachWOId === wo.id ? 'Close' : 'Attach'}
                                 </button>
                                 <div className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-indigo-100 transition-colors">
                                   <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-indigo-500 transition-colors" />
