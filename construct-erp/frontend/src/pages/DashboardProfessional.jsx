@@ -481,6 +481,8 @@ export default function Dashboard() {
 
   const financeTrend   = charts.finance_trend  || [];
   const projectStatus  = charts.project_status || [];
+  const totalBudget    = kpis.total_budget ?? 0;
+  const totalSpent     = kpis.total_spent  ?? 0;
   const totalProjects  = activeProjects + delayedProjects + completedProjects + planningProjects;
 
   // TQS
@@ -710,32 +712,49 @@ export default function Dashboard() {
 
           {/* Budget vs Cost Line Chart */}
           <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.05)', padding: 20, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>Budget vs Cost Overview</h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>Budget vs Spent</h3>
               <Link to="/procurement/budget-control" style={{ fontSize: 12, fontWeight: 600, color: '#3b82f6', textDecoration: 'none' }}>Report →</Link>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 14, fontSize: 11, color: '#64748b' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 24, height: 2, background: '#3b82f6', display: 'inline-block', borderRadius: 1 }} /> Budget</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 24, height: 2, background: '#22c55e', display: 'inline-block', borderRadius: 1 }} /> Cost Incurred</span>
+
+            {/* Big number comparison */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+              <div style={{ background: '#eff6ff', borderRadius: 10, padding: '14px 16px' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#3b82f6', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Total Budget</div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: '#1e40af', fontVariantNumeric: 'tabular-nums' }}>{inrCr(totalBudget)}</div>
+              </div>
+              <div style={{ background: '#f0fdf4', borderRadius: 10, padding: '14px 16px' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Total Spent</div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: '#15803d', fontVariantNumeric: 'tabular-nums' }}>{inrCr(totalSpent)}</div>
+              </div>
             </div>
-            <div style={{ flex: 1, minHeight: 200 }}>
-              {financeTrend.length === 0
-                ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, color: '#94a3b8', fontSize: 13 }}>No data available</div>
-                : (
-                  <ResponsiveContainer width="100%" height={220}>
-                    <LineChart data={financeTrend} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                      <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={v => `₹${v}Cr`} />
-                      <Tooltip formatter={(v, n) => [`₹${v} Cr`, n === 'budget' ? 'Budget' : 'Cost Incurred']} contentStyle={{ border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12 }} />
-                      <Line type="monotone" dataKey="budget" stroke="#3b82f6" strokeWidth={2.5} strokeDasharray="5 4" dot={false} name="budget" />
-                      <Line type="monotone" dataKey="cost"   stroke="#22c55e" strokeWidth={2.5} dot={{ r: 4, fill: '#22c55e', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 5 }} name="cost" />
-                    </LineChart>
-                  </ResponsiveContainer>
-                )
-              }
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14, paddingTop: 14, borderTop: '1px solid #f1f5f9' }}>
+
+            {/* Progress bar */}
+            {(() => {
+              const spentPct = totalBudget > 0 ? Math.min(100, Math.round((totalSpent / totalBudget) * 100)) : 0;
+              const remaining = Math.max(0, totalBudget - totalSpent);
+              const overBudget = totalSpent > totalBudget;
+              return (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 11, fontWeight: 600 }}>
+                    <span style={{ color: '#64748b' }}>Utilisation</span>
+                    <span style={{ color: overBudget ? '#dc2626' : '#0f172a' }}>{spentPct}%</span>
+                  </div>
+                  <div style={{ height: 10, background: '#e2e8f0', borderRadius: 999, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${spentPct}%`, background: overBudget ? '#ef4444' : spentPct > 80 ? '#f59e0b' : '#22c55e', borderRadius: 999, transition: 'width .4s' }} />
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 11, color: '#64748b' }}>
+                    {overBudget
+                      ? <span style={{ color: '#dc2626', fontWeight: 600 }}>Over budget by {inrCr(totalSpent - totalBudget)}</span>
+                      : <span>Remaining: <strong style={{ color: '#0f172a' }}>{inrCr(remaining)}</strong></span>
+                    }
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Bottom stats */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, paddingTop: 14, borderTop: '1px solid #f1f5f9', marginTop: 'auto' }}>
               {[
                 { label: 'Total Certified', value: inrCr(totalCertified),  color: '#3b82f6' },
                 { label: 'Collections',     value: inrCr(totalCollections), color: '#22c55e' },

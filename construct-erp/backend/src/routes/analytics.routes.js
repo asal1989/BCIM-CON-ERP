@@ -300,6 +300,7 @@ router.get('/executive', async (req, res) => {
       ncrsRes,
       documentsRes,
       allTimeBillsRes,
+      budgetSpentRes,
     ] = await Promise.all([
       safeQuery(
         `SELECT p.id, p.name, p.project_code, p.type, p.status
@@ -422,6 +423,23 @@ router.get('/executive', async (req, res) => {
          WHERE ${projectScopedClause('rb')}`,
         scope.params
       ),
+      // Budget vs Spent: total budget from costhead budgets, total spent from TQS bills + petty cash
+      safeQuery(
+        `SELECT
+           COALESCE(SUM(pcb.budget_amount), 0) AS total_budget,
+           COALESCE((
+             SELECT SUM(tb.net_payable)
+             FROM tqs_bills tb
+             JOIN projects p2 ON p2.id = tb.project_id
+             WHERE p2.company_id = $1
+               AND tb.is_deleted = FALSE
+               AND tb.workflow_status NOT IN ('rejected','draft')
+           ), 0) AS total_spent
+         FROM project_costhead_budgets pcb
+         JOIN projects p ON p.id = pcb.project_id
+         WHERE p.company_id = $1`,
+        [scope.params[0]]
+      ),
     ]);
 
     const projectOptions = projectOptionsRes.rows;
@@ -440,6 +458,9 @@ router.get('/executive', async (req, res) => {
 
     // All-time billing KPIs (not date-filtered)
     const billKpis      = allTimeBillsRes.rows[0] || {};
+    const budgetSpentKpi = budgetSpentRes.rows[0] || {};
+    const totalBudget = toNumber(budgetSpentKpi.total_budget);
+    const totalSpent  = toNumber(budgetSpentKpi.total_spent);
     const totalCertified  = toNumber(billKpis.total_certified);
     const pendingRAValue  = toNumber(billKpis.pending_value);
     const pendingRACount  = parseInt(billKpis.pending_count || 0, 10);
@@ -540,6 +561,8 @@ router.get('/executive', async (req, res) => {
           low_stock_count: lowStock.length,
           workforce_count: workers.length,
           documents_count: documents.length,
+          total_budget: totalBudget,
+          total_spent:  totalSpent,
         },
         charts: {
           finance_trend: financeTrend,
