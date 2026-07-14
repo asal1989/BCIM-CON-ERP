@@ -301,7 +301,10 @@ export default function AttendancePage() {
   const { data: deptData } = useQuery({ queryKey:['hr-departments'], queryFn:()=>hrMastersAPI.listDepts().then(r=>r.data) });
   const { data: empData  } = useQuery({ queryKey:['hr-employees-all'], queryFn:()=>hrEmployeesAPI.list({}).then(r=>r.data) });
 
-  const allEmployees = useMemo(() => empData?.data || [], [empData]);
+  const allEmployees = useMemo(() => (summaryData?.data || []).map(s => ({
+    id: s.user_id, name: s.name, employee_code: s.employee_code,
+    department_id: s.department_id, department_name: s.department_name,
+  })), [summaryData]);
 
   const { data: attData, isLoading } = useQuery({
     queryKey:['hr-attendance-grid', month, year, deptFilter],
