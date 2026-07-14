@@ -95,8 +95,9 @@ export default function TimesheetReportPage() {
       <style>{`
         @media print {
           html, body { margin:0; padding:0; background:#fff !important; }
-          body > * { display:none !important; }
-          #ts-print-root { display:block !important; }
+          body * { visibility:hidden !important; }
+          #ts-print-root, #ts-print-root * { visibility:visible !important; }
+          #ts-print-root { position:absolute !important; left:0; top:0; width:100%; background:#fff; }
           @page { size: A3 landscape; margin: 8mm 10mm; }
           #ts-print-root { font-family: Arial, sans-serif; font-size: 10pt; color: #000; }
           .no-print { display:none !important; }
