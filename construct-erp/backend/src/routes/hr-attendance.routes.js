@@ -494,5 +494,23 @@ router.post('/', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ═══════════════════════════════════════════════════════════
+// LATE ARRIVAL EMAIL ALERTS
+// POST /hr-admin/attendance/late-alerts/run
+// ═══════════════════════════════════════════════════════════
+router.post('/late-alerts/run', async (req, res) => {
+  try {
+    const { sendLateArrivalAlerts } = require('../utils/late-arrival-alert.service');
+    const { date, minLateMinutes, dryRun } = req.body;
+    const result = await sendLateArrivalAlerts({
+      date,
+      companyId: req.user.company_id,
+      minLateMinutes: minLateMinutes ?? 5,
+      dryRun: dryRun ?? false,
+    });
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;
 
