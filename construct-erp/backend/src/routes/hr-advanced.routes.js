@@ -20,8 +20,22 @@ const HR_ACCESS_ROLES = new Set([
   'department_head',
 ]);
 
+const FULL_HR_ROLES = new Set(['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager']);
+
 function hasHrAccess(req) {
   return HR_ACCESS_ROLES.has(String(req.user?.role || '').trim().toLowerCase());
+}
+
+// Returns null for full HR admins (no restriction); returns the caller's
+// project_id for project/dept roles so all queries scope to their project.
+async function getProjectScope(req) {
+  const role = String(req.user?.role || '').toLowerCase();
+  if (FULL_HR_ROLES.has(role)) return null;
+  const r = await query(
+    `SELECT project_id FROM employee_profiles WHERE user_id=$1`,
+    [req.user.id]
+  );
+  return r.rows[0]?.project_id || null;
 }
 
 // ESS-facing paths that any authenticated employee may call (self-service only).
@@ -1188,6 +1202,14 @@ router.get('/analytics/summary', async (req, res) => {
   try {
     const safe = (q, params, fallback) => query(q, params).catch(() => ({ rows: [fallback] }));
     const cid = companyId(req);
+    const projectId = await getProjectScope(req);
+
+    // For project-scoped roles, count only employees in their project
+    const empFilter = projectId !== null
+      ? `SELECT COUNT(u.*)::int AS total, COUNT(u.*) FILTER (WHERE u.is_active=TRUE)::int AS active
+         FROM users u JOIN employee_profiles ep ON ep.user_id=u.id
+         WHERE u.company_id=$1 AND ep.project_id=$2`
+      : `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE is_active=TRUE)::int AS active FROM users WHERE company_id=$1`;
 
     const [
       employees,
@@ -1201,7 +1223,9 @@ router.get('/analytics/summary', async (req, res) => {
       policies,
       serviceRequests,
     ] = await Promise.all([
-      query(`SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE is_active=TRUE)::int AS active FROM users WHERE company_id=$1`, [cid]),
+      projectId !== null
+        ? query(empFilter, [cid, projectId])
+        : query(empFilter, [cid]),
       safe(`SELECT COUNT(*)::int AS open_jobs FROM hr_job_openings WHERE company_id=$1 AND status='open'`, [cid], { open_jobs: 0 }),
       safe(`SELECT COUNT(*)::int AS pending FROM hr_attendance_correction_requests WHERE company_id=$1 AND status='pending'`, [cid], { pending: 0 }),
       safe(`SELECT COUNT(*)::int AS planned FROM hr_training_programs WHERE company_id=$1 AND status IN ('planned','scheduled')`, [cid], { planned: 0 }),
@@ -1217,15 +1241,17 @@ router.get('/analytics/summary', async (req, res) => {
       safe(`SELECT COUNT(*)::int AS open_requests FROM hr_service_requests WHERE company_id=$1 AND status IN ('open','in_progress')`, [cid], { open_requests: 0 }),
     ]);
 
+    const deptParams = projectId !== null ? [cid, projectId] : [cid];
+    const deptExtra  = projectId !== null ? ` AND ep.project_id=$2` : '';
     const departments = await query(
       `SELECT COALESCE(d.name,'Unassigned') AS department, COUNT(u.id)::int AS headcount
        FROM users u
        LEFT JOIN employee_profiles ep ON ep.user_id = u.id
        LEFT JOIN hr_departments d ON d.id = ep.department_id
-       WHERE u.company_id=$1 AND u.is_active=TRUE
+       WHERE u.company_id=$1 AND u.is_active=TRUE${deptExtra}
        GROUP BY COALESCE(d.name,'Unassigned')
        ORDER BY headcount DESC`,
-      [cid]
+      deptParams
     );
 
     res.json({

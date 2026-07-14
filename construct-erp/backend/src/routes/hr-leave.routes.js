@@ -10,6 +10,14 @@ const { notifyLeaveRequested, notifyLeaveApproved, notifyLeaveRejected } = requi
 router.use(authenticate);
 router.use(authorize('super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager', 'manager', 'department_head'));
 
+const FULL_HR_ROLES_LEAVE = new Set(['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager']);
+async function getProjectScopeLeave(req) {
+  const role = String(req.user?.role || '').toLowerCase();
+  if (FULL_HR_ROLES_LEAVE.has(role)) return null;
+  const r = await query(`SELECT project_id FROM employee_profiles WHERE user_id=$1`, [req.user.id]);
+  return r.rows[0]?.project_id || null;
+}
+
 // ─── Auto-create tables ───────────────────────────────────────────────────────
 const initTables = async () => {
   await query(`
@@ -124,12 +132,14 @@ router.put('/balances/:id', async (req, res) => {
 router.get('/requests', async (req, res) => {
   try {
     const { user_id, status, from_date, to_date } = req.query;
+    const projectId = await getProjectScopeLeave(req);
     let sql = `
       SELECT lr.*, u.name as employee_name, u.employee_code,
              lt.name as leave_type_name, lt.code as leave_code,
              ab.name as actioned_by_name
       FROM hr_leave_requests lr
       JOIN users u ON u.id = lr.user_id
+      LEFT JOIN employee_profiles ep ON ep.user_id = u.id
       JOIN hr_leave_types lt ON lt.id = lr.leave_type_id
       LEFT JOIN users ab ON ab.id = lr.actioned_by
       WHERE lr.company_id = $1`;
@@ -140,6 +150,7 @@ router.get('/requests', async (req, res) => {
     if (status)  { sql += ` AND lr.status=$${idx}`;  params.push(status);  idx++; }
     if (from_date) { sql += ` AND lr.from_date >= $${idx}`; params.push(from_date); idx++; }
     if (to_date)   { sql += ` AND lr.to_date <= $${idx}`;   params.push(to_date);   idx++; }
+    if (projectId !== null) { sql += ` AND ep.project_id=$${idx}`; params.push(projectId); idx++; }
 
     sql += ' ORDER BY lr.applied_at DESC';
     const { rows } = await query(sql, params);

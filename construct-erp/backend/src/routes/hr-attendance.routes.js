@@ -9,6 +9,20 @@ const { runSchemaInit } = require('../utils/schemaInit');
 router.use(authenticate);
 router.use(authorize('super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager', 'manager', 'department_head', 'project_manager', 'project_head'));
 
+// Full HR roles see all employees; project/dept roles see only their project
+const FULL_HR_ROLES = new Set(['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager']);
+
+async function getProjectScope(req) {
+  const role = String(req.user?.role || '').toLowerCase();
+  if (FULL_HR_ROLES.has(role)) return null; // no restriction
+  // Look up the caller's own project_id from their employee profile
+  const r = await query(
+    `SELECT project_id FROM employee_profiles WHERE user_id=$1`,
+    [req.user.id]
+  );
+  return r.rows[0]?.project_id || null; // null = unassigned, still restrict to NULL
+}
+
 // ─── Auto-create table ────────────────────────────────────────────────────────
 const initTable = async () => {
   await query(`
@@ -45,6 +59,7 @@ runSchemaInit('hr-attendance', initTable);
 router.get('/', async (req, res) => {
   try {
     const { user_id, month, year, department_id, date } = req.query;
+    const projectId = await getProjectScope(req);
 
     let sql = `
       SELECT a.*, u.name as employee_name, u.employee_code,
@@ -58,7 +73,6 @@ router.get('/', async (req, res) => {
     let idx = 2;
 
     if (date) {
-      // single-date mode for daily punch view
       sql += ` AND a.attendance_date = $${idx}`; params.push(date); idx++;
     } else {
       const m = parseInt(month) || new Date().getMonth() + 1;
@@ -69,6 +83,7 @@ router.get('/', async (req, res) => {
 
     if (user_id)      { sql += ` AND a.user_id=$${idx}`;       params.push(user_id);      idx++; }
     if (department_id){ sql += ` AND ep.department_id=$${idx}`; params.push(department_id); idx++; }
+    if (projectId !== null) { sql += ` AND ep.project_id=$${idx}`; params.push(projectId); idx++; }
 
     sql += ' ORDER BY u.name, a.attendance_date';
     const { rows } = await query(sql, params);
@@ -84,6 +99,7 @@ router.get('/summary', async (req, res) => {
     const { month, year, department_id } = req.query;
     const m = parseInt(month) || new Date().getMonth() + 1;
     const y = parseInt(year)  || new Date().getFullYear();
+    const projectId = await getProjectScope(req);
 
     let sql = `
       SELECT u.id as user_id, u.name, u.employee_code,
@@ -107,6 +123,7 @@ router.get('/summary', async (req, res) => {
     let idx = 4;
 
     if (department_id) { sql += ` AND ep.department_id=$${idx}`; params.push(department_id); idx++; }
+    if (projectId !== null) { sql += ` AND ep.project_id=$${idx}`; params.push(projectId); idx++; }
 
     sql += ' GROUP BY u.id, u.name, u.employee_code, ep.department_id, dep.name ORDER BY u.name';
     const { rows } = await query(sql, params);
@@ -122,19 +139,36 @@ router.get('/daily-trend', async (req, res) => {
     const { month, year } = req.query;
     const m = parseInt(month) || new Date().getMonth() + 1;
     const y = parseInt(year)  || new Date().getFullYear();
-    const { rows } = await query(
-      `SELECT attendance_date,
-              COUNT(*) FILTER (WHERE status='present')  AS present,
-              COUNT(*) FILTER (WHERE status='absent')   AS absent,
-              COUNT(*) FILTER (WHERE status='leave')    AS on_leave
-       FROM hr_attendance
-       WHERE company_id=$1
-         AND EXTRACT(MONTH FROM attendance_date)=$2
-         AND EXTRACT(YEAR  FROM attendance_date)=$3
-       GROUP BY attendance_date
-       ORDER BY attendance_date`,
-      [req.user.company_id, m, y]
-    );
+    const projectId = await getProjectScope(req);
+
+    let sql, params;
+    if (projectId !== null) {
+      // scoped: join employee_profiles to filter by project
+      sql = `SELECT a.attendance_date,
+                    COUNT(*) FILTER (WHERE a.status='present') AS present,
+                    COUNT(*) FILTER (WHERE a.status='absent')  AS absent,
+                    COUNT(*) FILTER (WHERE a.status='leave')   AS on_leave
+             FROM hr_attendance a
+             JOIN employee_profiles ep ON ep.user_id = a.user_id
+             WHERE a.company_id=$1
+               AND EXTRACT(MONTH FROM a.attendance_date)=$2
+               AND EXTRACT(YEAR  FROM a.attendance_date)=$3
+               AND ep.project_id=$4
+             GROUP BY a.attendance_date ORDER BY a.attendance_date`;
+      params = [req.user.company_id, m, y, projectId];
+    } else {
+      sql = `SELECT attendance_date,
+                    COUNT(*) FILTER (WHERE status='present') AS present,
+                    COUNT(*) FILTER (WHERE status='absent')  AS absent,
+                    COUNT(*) FILTER (WHERE status='leave')   AS on_leave
+             FROM hr_attendance
+             WHERE company_id=$1
+               AND EXTRACT(MONTH FROM attendance_date)=$2
+               AND EXTRACT(YEAR  FROM attendance_date)=$3
+             GROUP BY attendance_date ORDER BY attendance_date`;
+      params = [req.user.company_id, m, y];
+    }
+    const { rows } = await query(sql, params);
     res.json({ data: rows });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -147,23 +181,26 @@ router.get('/department-summary', async (req, res) => {
     const { month, year } = req.query;
     const m = parseInt(month) || new Date().getMonth() + 1;
     const y = parseInt(year)  || new Date().getFullYear();
-    const { rows } = await query(
-      `SELECT COALESCE(dep.name, 'Unassigned') AS department_name,
-              COUNT(DISTINCT u.id)                                       AS headcount,
-              COUNT(a.id) FILTER (WHERE a.status='present')              AS present,
-              COUNT(a.id) FILTER (WHERE a.status='absent')               AS absent,
-              COUNT(a.id) FILTER (WHERE a.status='leave')                AS on_leave
-       FROM users u
-       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
-       LEFT JOIN hr_departments dep ON dep.id = ep.department_id
-       LEFT JOIN hr_attendance a ON a.user_id = u.id
-         AND EXTRACT(MONTH FROM a.attendance_date)=$2
-         AND EXTRACT(YEAR  FROM a.attendance_date)=$3
-       WHERE u.company_id=$1 AND u.is_active=TRUE
-       GROUP BY dep.name
-       ORDER BY headcount DESC`,
-      [req.user.company_id, m, y]
-    );
+    const projectId = await getProjectScope(req);
+
+    let sql = `
+      SELECT COALESCE(dep.name, 'Unassigned') AS department_name,
+             COUNT(DISTINCT u.id)                                      AS headcount,
+             COUNT(a.id) FILTER (WHERE a.status='present')             AS present,
+             COUNT(a.id) FILTER (WHERE a.status='absent')              AS absent,
+             COUNT(a.id) FILTER (WHERE a.status='leave')               AS on_leave
+      FROM users u
+      LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+      LEFT JOIN hr_departments dep ON dep.id = ep.department_id
+      LEFT JOIN hr_attendance a ON a.user_id = u.id
+        AND EXTRACT(MONTH FROM a.attendance_date)=$2
+        AND EXTRACT(YEAR  FROM a.attendance_date)=$3
+      WHERE u.company_id=$1 AND u.is_active=TRUE`;
+    const params = [req.user.company_id, m, y];
+    if (projectId !== null) { sql += ` AND ep.project_id=$4`; params.push(projectId); }
+    sql += ' GROUP BY dep.name ORDER BY headcount DESC';
+
+    const { rows } = await query(sql, params);
     res.json({ data: rows });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -345,12 +382,19 @@ router.get('/timesheet-report', async (req, res) => {
         'security_guard','supervisor','foreman','safety_officer','surveyor','operator')`;
     }
 
+    const projectId = await getProjectScope(req);
     let deptFilter = '';
+    let projectFilter = '';
     const params = [cid, reportDate];
     let idx = 3;
     if (department_id) {
       deptFilter = ` AND ep.department_id = $${idx}`;
       params.push(department_id);
+      idx++;
+    }
+    if (projectId !== null) {
+      projectFilter = ` AND ep.project_id = $${idx}`;
+      params.push(projectId);
       idx++;
     }
 
@@ -383,6 +427,7 @@ router.get('/timesheet-report', async (req, res) => {
         AND u.is_active = TRUE
         ${roleFilter}
         ${deptFilter}
+        ${projectFilter}
       ORDER BY dep.name NULLS LAST, u.name
     `, params);
 
