@@ -192,6 +192,7 @@ async function nextBillNumber(client, cid, projId) {
 
 function normalizeContractorType(vendorType) {
   const t = String(vendorType || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (t.includes('labour') || t.includes('labor')) return 'labour_contractor';
   if (t.includes('llp')) return 'llp';
   if (t.includes('partnership')) return 'partnership';
   if (t.includes('proprietor')) return 'proprietorship';
@@ -245,14 +246,9 @@ async function syncLegacyWorkOrdersToSC(req, filters = {}) {
       const woNumber = String(row.wo_number || '').trim();
       if (!woNumber || !row.project_id || !row.vendor_id) continue;
 
-      const existingWO = await client.query(
-        `SELECT id FROM sc_work_orders WHERE company_id=$1 AND UPPER(TRIM(wo_number))=UPPER(TRIM($2))`,
-        [cid, woNumber]
-      );
-      if (existingWO.rows.length) continue;
-
+      // Find or create the SC subcontractor first (before WO existence check)
       let sc = await client.query(
-        `SELECT id FROM sc_subcontractors
+        `SELECT id, contractor_type FROM sc_subcontractors
          WHERE company_id=$1
            AND (
              LOWER(TRIM(name)) = LOWER(TRIM($2))
@@ -264,6 +260,7 @@ async function syncLegacyWorkOrdersToSC(req, filters = {}) {
       );
 
       let scId = sc.rows[0]?.id;
+      const correctContractorType = normalizeContractorType(row.vendor_type);
       if (!scId) {
         const count = await client.query(`SELECT COUNT(*) FROM sc_subcontractors WHERE company_id=$1`, [cid]);
         const scCode = `SC-${String(parseInt(count.rows[0].count, 10) + 1).padStart(3, '0')}`;
@@ -277,13 +274,26 @@ async function syncLegacyWorkOrdersToSC(req, filters = {}) {
         `, [
           cid, scCode, row.vendor_name, row.contact_person || null, row.phone || null, row.email || null,
           row.gst_number || null, row.pan_number || null, row.address || null, row.city || null, row.state || null,
-          row.pincode || null, row.trade_category || row.work_category || null, normalizeContractorType(row.vendor_type),
+          row.pincode || null, row.trade_category || row.work_category || null, correctContractorType,
           row.bank_name || null, row.account_number || null, row.ifsc_code || null, row.bank_branch || null,
           `Synced from vendor master (${row.vendor_code || row.vendor_id})`, req.user.id
         ]);
         scId = inserted.rows[0].id;
         createdSubs++;
+      } else if (sc.rows[0].contractor_type !== correctContractorType) {
+        // Fix contractor_type if it was set incorrectly on a previous sync
+        await client.query(
+          `UPDATE sc_subcontractors SET contractor_type=$1 WHERE id=$2`,
+          [correctContractorType, scId]
+        );
       }
+
+      // Skip WO creation if already synced, but subcontractor type is already updated above
+      const existingWO = await client.query(
+        `SELECT id FROM sc_work_orders WHERE company_id=$1 AND UPPER(TRIM(wo_number))=UPPER(TRIM($2))`,
+        [cid, woNumber]
+      );
+      if (existingWO.rows.length) continue;
 
       const contractAmount = Number(row.contract_amount || row.total_value || 0);
       const insertedWO = await client.query(`
