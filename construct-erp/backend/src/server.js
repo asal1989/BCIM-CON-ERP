@@ -359,11 +359,7 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 // Auth-specific limiter (brute-force protection)
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,  // 15 minutes
-  max: 30,                    // 30 attempts / 15 min is plenty for a small team; blocks brute-force
-  message: { error: 'Too many login attempts, try again in 15 minutes.' }
-});
+// Auth rate limiter removed — private office ERP, shared IP causes false lockouts
 
 // ============================================
 // HEALTH CHECK
@@ -391,7 +387,7 @@ app.get('/health', async (req, res) => {
 const API = '/api/v1';
 
 // Auth
-app.use(`${API}/auth`, authLimiter, authRoutes);
+app.use(`${API}/auth`, authRoutes);
 
 // Core
 app.use(`${API}/projects`, projectRoutes);
@@ -1020,7 +1016,22 @@ async function runAutoMigrations() {
     // 041 P6 activity → BOQ chapter link (for pulling activity budgets from the
     // BOQ Budget Breakdown chapter totals instead of re-entering them)
     await client.query(`ALTER TABLE project_activities ADD COLUMN IF NOT EXISTS boq_chapter_no VARCHAR(50)`);
-    logger.info('✅ Auto-migrations complete (003–041)');
+    // 042 Add labour_contractor to sc_subcontractors.contractor_type check constraint
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.check_constraints
+          WHERE constraint_schema = current_schema()
+            AND constraint_name = 'sc_subcontractors_contractor_type_check'
+            AND check_clause LIKE '%labour_contractor%'
+        ) THEN
+          ALTER TABLE sc_subcontractors DROP CONSTRAINT IF EXISTS sc_subcontractors_contractor_type_check;
+          ALTER TABLE sc_subcontractors ADD CONSTRAINT sc_subcontractors_contractor_type_check
+            CHECK (contractor_type IN ('company','individual','partnership','llp','proprietorship','labour_contractor'));
+        END IF;
+      END $$`);
+    logger.info('✅ Auto-migrations complete (003–042)');
   } catch (err) {
     logger.warn('⚠️  Auto-migration warning:', err.message);
   } finally {
