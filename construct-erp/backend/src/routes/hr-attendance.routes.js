@@ -87,7 +87,7 @@ router.get('/summary', async (req, res) => {
 
     let sql = `
       SELECT u.id as user_id, u.name, u.employee_code,
-             dep.name as department_name,
+             ep.department_id, dep.name as department_name,
              COUNT(a.id) as total_marked,
              COUNT(a.id) FILTER (WHERE a.status='present')   as present,
              COUNT(a.id) FILTER (WHERE a.status='absent')    as absent,

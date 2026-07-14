@@ -317,11 +317,15 @@ export default function AttendancePage() {
     enabled: view === 'daily',
   });
 
+  // For the grid, derive employees from summaryData (all active users, always works)
   const employees = useMemo(() => {
-    const emps = empData?.data || [];
+    const emps = (summaryData?.data || []).map(s => ({
+      id: s.user_id, name: s.name, employee_code: s.employee_code,
+      department_id: s.department_id, department_name: s.department_name,
+    }));
     if (!deptFilter) return emps;
     return emps.filter(e => e.department_id === deptFilter);
-  }, [empData, deptFilter]);
+  }, [summaryData, deptFilter]);
 
   const attMap = useMemo(() => {
     const map = {};
