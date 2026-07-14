@@ -24,6 +24,31 @@ function hasHrAccess(req) {
   return HR_ACCESS_ROLES.has(String(req.user?.role || '').trim().toLowerCase());
 }
 
+// ESS-facing paths that any authenticated employee may call (self-service only).
+// Everything else in this router is HR-admin-only.
+const ESS_OPEN = [
+  { path: '/policies',               method: 'GET'  },  // read published policies
+  { path: '/policies/',              method: 'POST' },  // acknowledge a policy
+  { path: '/service-requests',       method: 'GET'  },  // employee views own requests
+  { path: '/service-requests',       method: 'POST' },  // employee creates request
+  { path: '/regularizations',        method: 'POST' },  // employee submits correction
+  { path: '/payroll-compliance/tax-declarations', method: 'GET'  }, // employee reads own decl.
+  { path: '/payroll-compliance/tax-declarations', method: 'POST' }, // employee submits decl.
+  { path: '/performance/goals',      method: 'GET'  },  // employee views own goals
+];
+
+router.use((req, res, next) => {
+  if (hasHrAccess(req)) return next();
+  const role = String(req.user?.role || '').trim().toLowerCase();
+  const isEssAllowed = ESS_OPEN.some(
+    ({ path, method }) => req.path.startsWith(path) && req.method === method
+  );
+  if (isEssAllowed) return next();
+  return res.status(403).json({
+    error: `HR Admin access denied. Your role (${req.user?.role}) does not have permission.`,
+  });
+});
+
 const initTables = async () => {
   await query(`
     CREATE TABLE IF NOT EXISTS hr_job_openings (

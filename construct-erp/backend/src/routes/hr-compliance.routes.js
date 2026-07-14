@@ -5,10 +5,13 @@
 'use strict';
 const express = require('express');
 const router  = express.Router();
-const { authenticate }  = require('../middleware/auth');
-const { query }         = require('../config/database');
+const { authenticate, authorize }  = require('../middleware/auth');
+const { query }                    = require('../config/database');
+
+const HR_ROLES = ['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager'];
 
 router.use(authenticate);
+router.use(authorize(...HR_ROLES));
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 const PF_WAGE_CEILING = 15000;   // PF applies on basic up to ₹15,000
