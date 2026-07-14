@@ -107,6 +107,7 @@ const NAV_MENUS = [
       {
         heading: 'Reports',
         items: [
+          { label: 'Timesheet Report',       to: '/hr-admin/attendance/timesheet' },
           { label: 'Monthly Attendance',    to: '/hr-admin/attendance' },
           { label: 'Daily Attendance',      to: '/hr-admin/attendance' },
           { label: 'Dept Attendance',       to: '/hr-admin/attendance' },
@@ -194,6 +195,13 @@ function MegaMenu({ menu, isActive, onClose }) {
           className="text-[12px] font-black text-blue-700 bg-white border border-blue-200 px-3 py-1 rounded-lg hover:bg-blue-700 hover:text-white transition-colors"
         >
           ESSL Sync
+        </button>
+        <button
+          data-to="/hr-admin/attendance/timesheet"
+          onClick={onClose}
+          className="text-[12px] font-black text-blue-700 bg-white border border-blue-200 px-3 py-1 rounded-lg hover:bg-blue-700 hover:text-white transition-colors"
+        >
+          Timesheet Report
         </button>
         <button
           data-to="/hr-admin/shifts"

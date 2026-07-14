@@ -1906,6 +1906,7 @@ export const hrAttendanceAPI = {
   baseline:(data)   => api.post('/hr-admin/attendance/month-baseline', data),
   upsert:  (data)   => api.post('/hr-admin/attendance', data),
   update:  (id, d)  => api.put(`/hr-admin/attendance/${id}`, d),
+  timesheetReport: (params) => api.get('/hr-admin/attendance/timesheet-report', { params }),
 };
 
 export const hrSalaryAPI = {

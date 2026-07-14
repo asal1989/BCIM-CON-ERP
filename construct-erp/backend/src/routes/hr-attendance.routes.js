@@ -327,6 +327,77 @@ router.delete('/month-baseline', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ═══════════════════════════════════════════════════════════
+// GET /timesheet-report — Daily site timesheet (Overall sheet format)
+// ?date=YYYY-MM-DD&category=staff|labour|all&department_id=
+// ═══════════════════════════════════════════════════════════
+router.get('/timesheet-report', async (req, res) => {
+  try {
+    const { date, category = 'staff', department_id } = req.query;
+    const reportDate = date || new Date().toISOString().slice(0, 10);
+    const cid = req.user.company_id;
+
+    let roleFilter = '';
+    if (category === 'staff') {
+      roleFilter = `AND u.role IN ('hr','hr_admin','hr_manager','admin','manager','project_manager',
+        'project_head','department_head','site_engineer','qs_engineer','procurement_manager',
+        'purchase_executive','store_keeper','stores_manager','stores_officer','accountant',
+        'security_guard','supervisor','foreman','safety_officer','surveyor','operator')`;
+    }
+
+    let deptFilter = '';
+    const params = [cid, reportDate];
+    let idx = 3;
+    if (department_id) {
+      deptFilter = ` AND ep.department_id = $${idx}`;
+      params.push(department_id);
+      idx++;
+    }
+
+    const { rows } = await query(`
+      SELECT
+        ROW_NUMBER() OVER (ORDER BY u.name) AS sno,
+        u.employee_code                     AS emp_id,
+        u.name,
+        COALESCE(ep.designation_name, u.designation, '—')  AS designation,
+        COALESCE(dep.name, u.department, '—')              AS department,
+        COALESCE(dep.name, u.department, '—')              AS trade,
+        'BCIM STAFF'                        AS company,
+        COALESCE(a.status, 'absent')        AS attendance_status,
+        TO_CHAR(a.in_time,  'HH12:MI AM')  AS in_time,
+        TO_CHAR(a.out_time, 'HH12:MI AM')  AS out_time,
+        a.late_minutes,
+        a.remarks                           AS reason,
+        COALESCE(ep.work_location, '—')    AS location,
+        'DAY'                               AS shift,
+        CASE WHEN COALESCE(ep.employment_status,'active') = 'active'
+             THEN 'ACTIVE' ELSE 'INACTIVE' END AS status,
+        u.id                                AS user_id
+      FROM users u
+      LEFT JOIN employee_profiles ep  ON ep.user_id = u.id
+      LEFT JOIN hr_departments dep    ON dep.id = ep.department_id
+      LEFT JOIN hr_attendance a       ON a.user_id = u.id
+                                     AND a.attendance_date = $2
+                                     AND a.company_id = $1
+      WHERE u.company_id = $1
+        AND u.is_active = TRUE
+        ${roleFilter}
+        ${deptFilter}
+      ORDER BY dep.name NULLS LAST, u.name
+    `, params);
+
+    const present = rows.filter(r => r.attendance_status === 'present').length;
+    const absent  = rows.filter(r => r.attendance_status === 'absent').length;
+    const leave   = rows.filter(r => r.attendance_status === 'leave').length;
+
+    res.json({
+      data:    rows,
+      date:    reportDate,
+      summary: { total: rows.length, present, absent, leave },
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.put('/:id', async (req, res) => {
   try {
     const { status, in_time, out_time, late_minutes, remarks } = req.body;
