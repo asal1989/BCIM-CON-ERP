@@ -414,7 +414,7 @@ router.post('/', async (req, res) => {
 
     const {
       // User fields
-      name, email, phone, role, employee_code,
+      name, phone, role, employee_code,
       // Profile fields
       department_id, designation_id, date_of_joining, date_of_birth, gender,
       father_name, mother_name, marital_status, blood_group, nationality,
@@ -425,6 +425,12 @@ router.post('/', async (req, res) => {
       employment_type, probation_end_date, notice_period_days,
       reporting_manager_id, work_location, project_id,
     } = req.body;
+
+    const isWorker = req.body.employee_category === 'workman';
+    // Workers may have no email; normalize empty string to null to avoid UNIQUE conflicts
+    const email = req.body.email?.trim() || null;
+    if (!isWorker && !email) return res.status(400).json({ error: 'Email is required for BCIM Staff' });
+    if (!name) return res.status(400).json({ error: 'Name is required' });
 
     // Generate employee code if not provided
     const code = employee_code || await generateEmpCode(req.user.company_id);

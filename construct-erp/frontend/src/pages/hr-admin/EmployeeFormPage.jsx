@@ -162,7 +162,9 @@ export default function EmployeeFormPage() {
   });
 
   const handleSubmit = () => {
-    if(!form.name||!form.email) { toast.error('Name and email are required'); setStep(0); return; }
+    const isWorker = form.employee_category === 'workman';
+    if (!form.name) { toast.error('Name is required'); setStep(0); return; }
+    if (!isWorker && !form.email) { toast.error('Email is required for BCIM Staff'); setStep(0); return; }
     saveMut.mutate(form);
   };
 
@@ -215,7 +217,7 @@ export default function EmployeeFormPage() {
             <div className="grid grid-cols-2 gap-4">
               <Field label="Full Name" required><input className={inp} value={form.name} onChange={e=>set('name',e.target.value)} placeholder="Full name"/></Field>
               <Field label="Employee Code"><input className={inp} value={form.employee_code} onChange={e=>set('employee_code',e.target.value)} placeholder="Auto-generated if empty"/></Field>
-              <Field label="Email Address" required><input className={inp} type="email" value={form.email} onChange={e=>set('email',e.target.value)} placeholder="employee@company.com"/></Field>
+              <Field label="Email Address" required={form.employee_category !== 'workman'}><input className={inp} type="email" value={form.email} onChange={e=>set('email',e.target.value)} placeholder={form.employee_category === 'workman' ? 'Optional for workers' : 'employee@company.com'}/></Field>
               <Field label="Phone"><input className={inp} value={form.phone} onChange={e=>set('phone',e.target.value)} placeholder="Mobile number"/></Field>
               <Field label="Date of Birth"><input className={inp} type="date" value={form.date_of_birth} onChange={e=>set('date_of_birth',e.target.value)}/></Field>
               <Field label="Gender">
