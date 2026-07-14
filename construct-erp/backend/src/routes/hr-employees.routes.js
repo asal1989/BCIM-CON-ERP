@@ -156,6 +156,12 @@ runSchemaInit('hr-employees-cols-v2', async () => {
   await q(`ALTER TABLE employee_profiles ADD COLUMN IF NOT EXISTS notice_period_days INT DEFAULT 30`);
 });
 
+runSchemaInit('hr-employees-docs-sharepoint', async () => {
+  const { query: q } = require('../config/database');
+  await q(`ALTER TABLE employee_documents ADD COLUMN IF NOT EXISTS sharepoint_id TEXT`);
+  await q(`ALTER TABLE employee_documents ADD COLUMN IF NOT EXISTS sharepoint_url TEXT`);
+});
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const employeeSelect = `
   SELECT u.id, u.employee_code, u.name, u.email, u.phone, u.role, u.designation,
