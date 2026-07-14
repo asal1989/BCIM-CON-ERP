@@ -555,5 +555,86 @@ router.get('/agent-key', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+/* ── sync log table ──────────────────────────────────────────────────────── */
+(async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS hr_essl_sync_log (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id    UUID REFERENCES companies(id),
+      synced_at     TIMESTAMPTZ DEFAULT NOW(),
+      from_date     DATE, to_date DATE,
+      records_count INT DEFAULT 0,
+      source        TEXT DEFAULT 'manual',
+      status        TEXT DEFAULT 'success',
+      error_msg     TEXT
+    )
+  `).catch(() => {});
+})();
+
+/* GET /hr-admin/essl/devices */
+router.get('/devices', async (req, res) => {
+  try {
+    const r = await query(`SELECT id,host,port,database,instance,last_sync FROM hr_essl_config WHERE company_id=$1`, [req.user.company_id]);
+    if (!r.rows.length) return res.json({ data: [] });
+    const cfg = r.rows[0];
+    let online = false;
+    try { const c = await sql.connect({ ...buildMssqlConfig(cfg), connectionTimeout: 4000 }); await c.close().catch(()=>{}); online = true; } catch(_) {}
+    res.json({ data: [{ id: cfg.id, name: `ESSL (${cfg.host})`, ip: cfg.host, port: cfg.port||1433, online, last_sync: cfg.last_sync }] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* GET /hr-admin/essl/sync-history */
+router.get('/sync-history', async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit||20), 100);
+    const r = await query(`SELECT id,synced_at,from_date,to_date,records_count,source,status,error_msg FROM hr_essl_sync_log WHERE company_id=$1 ORDER BY synced_at DESC LIMIT $2`, [req.user.company_id, limit]);
+    const rows = r.rows;
+    if (!rows.length) {
+      const cfg = await query(`SELECT last_sync FROM hr_essl_config WHERE company_id=$1`, [req.user.company_id]);
+      if (cfg.rows[0]?.last_sync) rows.push({ synced_at: cfg.rows[0].last_sync, source: 'essl_agent', status: 'success' });
+    }
+    res.json({ data: rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* POST /hr-admin/essl/trigger-sync */
+router.post('/trigger-sync', async (req, res) => {
+  const today = new Date().toISOString().slice(0,10);
+  const from  = req.body.from || today;
+  const to    = req.body.to   || today;
+  try {
+    const cfgRow = await query(`SELECT * FROM hr_essl_config WHERE company_id=$1`, [req.user.company_id]);
+    if (!cfgRow.rows.length) return res.status(400).json({ error: 'ESSL not configured' });
+    const cfg  = cfgRow.rows[0];
+    const conn = await sql.connect(buildMssqlConfig(cfg));
+    const r = await conn.request().input('from',sql.Date,new Date(from)).input('to',sql.Date,new Date(to))
+      .query(`SELECT l.EmployeeCode,l.LogDate,l.Direction FROM DeviceLogs l WHERE CAST(l.LogDate AS DATE) BETWEEN @from AND @to ORDER BY l.EmployeeCode,l.LogDate`);
+    const logs = r.recordset;
+    await conn.close().catch(()=>{});
+    const byKey = {};
+    for (const row of logs) {
+      const key = `${String(row.EmployeeCode||'').trim()}|${new Date(row.LogDate).toISOString().slice(0,10)}`;
+      if (!byKey[key]) byKey[key] = { empCode: String(row.EmployeeCode||'').trim(), date: new Date(row.LogDate).toISOString().slice(0,10), times: [] };
+      byKey[key].times.push(new Date(row.LogDate));
+    }
+    let count = 0;
+    for (const { empCode, date, times } of Object.values(byKey)) {
+      const emp = await query(`SELECT id FROM users WHERE company_id=$1 AND employee_code=$2 AND is_active=true LIMIT 1`, [req.user.company_id, empCode]);
+      if (!emp.rows.length) continue;
+      times.sort((a,b)=>a-b);
+      const checkIn  = times[0].toTimeString().slice(0,5);
+      const checkOut = times.length>1 ? times[times.length-1].toTimeString().slice(0,5) : null;
+      await query(`INSERT INTO hr_attendance (user_id,company_id,attendance_date,check_in,check_out,status,source) VALUES ($1,$2,$3,$4,$5,'present','essl') ON CONFLICT (user_id,attendance_date) DO UPDATE SET check_in=EXCLUDED.check_in,check_out=EXCLUDED.check_out,status='present',source='essl'`, [emp.rows[0].id, req.user.company_id, date, checkIn, checkOut]);
+      count++;
+    }
+    await query(`INSERT INTO hr_essl_sync_log (company_id,from_date,to_date,records_count,source,status) VALUES ($1,$2,$3,$4,'manual','success')`, [req.user.company_id, from, to, count]);
+    await query(`UPDATE hr_essl_config SET last_sync=NOW() WHERE company_id=$1`, [req.user.company_id]);
+    res.json({ success: true, synced: count, from, to });
+  } catch (e) {
+    await query(`INSERT INTO hr_essl_sync_log (company_id,from_date,to_date,records_count,source,status,error_msg) VALUES ($1,$2,$3,0,'manual','error',$4)`, [req.user.company_id, from, to, e.message]).catch(()=>{});
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
 

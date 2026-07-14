@@ -1998,6 +1998,11 @@ export const hrEsslAPI = {
   sync:           (from, to)   => api.post('/hr-admin/essl/sync', { from, to }),
   unmatched:      ()           => api.get('/hr-admin/essl/unmatched'),
   agentKey:       ()           => api.get('/hr-admin/essl/agent-key'),
+  getDevices:     ()           => api.get('/hr-admin/essl/devices'),
+  getSyncHistory: (limit = 20) => api.get('/hr-admin/essl/sync-history', { params: { limit } }),
+  triggerSync:    (from, to)   => api.post('/hr-admin/essl/trigger-sync', { from, to }),
+  getUnmatched:   ()           => api.get('/hr-admin/essl/unmatched'),
+  importLogs:     (formData)   => api.post('/hr-admin/essl/import-logs', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
 };
 
 export const hrComplianceAPI = {
