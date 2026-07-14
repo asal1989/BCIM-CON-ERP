@@ -556,7 +556,8 @@ router.put('/subcontractors/:id', authorize(...PLANNER), async (req, res) => {
 router.get('/work-orders', async (req, res) => {
   try {
     const { project_id, sc_id, status } = req.query;
-    const sync = await syncLegacyWorkOrdersToSC(req, { project_id, status });
+    // Sync without status filter so contractor_type is corrected for all vendors
+    const sync = await syncLegacyWorkOrdersToSC(req, { project_id });
     const { contractor_type: ctFilter } = req.query;
     let sql = `SELECT wo.*, sc.name AS sc_name, sc.sc_code, sc.contractor_type,
       sc.trade_type, p.name AS project_name, p.project_code, u.name AS created_by_name,
