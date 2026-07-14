@@ -77,10 +77,10 @@ const NAV_MENUS = [
       {
         heading: 'Attendance Approvals',
         items: [
+          { label: 'Regularization',        to: '/hr-admin/attendance/regularization' },
           { label: 'Manager Approval',      to: '/hr-admin/advanced' },
           { label: 'HR Approval',           to: '/hr-admin/advanced' },
           { label: 'Attendance Lock',       to: '/hr-admin/attendance' },
-          { label: 'Attendance Reopen',     to: '/hr-admin/attendance' },
         ],
       },
       {
@@ -173,6 +173,20 @@ function MegaMenu({ menu, isActive, onClose }) {
           className="text-[12px] font-black text-blue-700 bg-white border border-blue-200 px-3 py-1 rounded-lg hover:bg-blue-700 hover:text-white transition-colors"
         >
           Attendance Grid
+        </button>
+        <button
+          data-to="/hr-admin/attendance/dashboard"
+          onClick={onClose}
+          className="text-[12px] font-black text-blue-700 bg-white border border-blue-200 px-3 py-1 rounded-lg hover:bg-blue-700 hover:text-white transition-colors"
+        >
+          Dashboard
+        </button>
+        <button
+          data-to="/hr-admin/attendance/regularization"
+          onClick={onClose}
+          className="text-[12px] font-black text-blue-700 bg-white border border-blue-200 px-3 py-1 rounded-lg hover:bg-blue-700 hover:text-white transition-colors"
+        >
+          Regularization
         </button>
         <button
           data-to="/hr-admin/essl-sync"
