@@ -14,16 +14,21 @@ const HR_ALL   = [...HR_ROLES, 'hr', 'manager', 'department_head'];
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL,
     name VARCHAR(100) NOT NULL,
-    code VARCHAR(20),
+    shift_code VARCHAR(20),
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
     break_minutes INT DEFAULT 30,
     is_night_shift BOOLEAN DEFAULT FALSE,
     grace_minutes INT DEFAULT 10,
     ot_after_minutes INT DEFAULT 0,
-    active BOOLEAN DEFAULT TRUE,
+    is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW()
   )`);
+  // Add columns that may be missing on existing deployments
+  await safe(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS break_minutes INT DEFAULT 30`);
+  await safe(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS is_night_shift BOOLEAN DEFAULT FALSE`);
+  await safe(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS ot_after_minutes INT DEFAULT 0`);
+  await safe(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS grace_minutes INT DEFAULT 10`);
   await safe(`CREATE TABLE IF NOT EXISTS hr_employee_shifts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL,
@@ -70,7 +75,10 @@ router.use(authenticate);
 router.get('/shifts', authorize(...HR_ALL), async (req, res) => {
   try {
     const { rows } = await query(
-      `SELECT * FROM hr_shifts WHERE company_id=$1 ORDER BY name`,
+      `SELECT id, company_id, name, shift_code AS code, start_time, end_time,
+              break_minutes, is_night_shift, grace_minutes, ot_after_minutes,
+              is_active AS active, created_at
+       FROM hr_shifts WHERE company_id=$1 ORDER BY name`,
       [req.user.company_id]
     );
     res.json({ data: rows });
@@ -83,21 +91,6 @@ router.post('/shifts', authorize(...HR_ROLES), async (req, res) => {
   try {
     const { name, code, start_time, end_time, break_minutes, is_night_shift, grace_minutes, ot_after_minutes } = req.body;
     if (!name || !start_time || !end_time) return res.status(400).json({ error: 'name, start_time and end_time are required' });
-    // Ensure tables exist (guard against silent migration failure on first deploy)
-    await query(`CREATE TABLE IF NOT EXISTS hr_shifts (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      company_id UUID NOT NULL,
-      name VARCHAR(100) NOT NULL,
-      code VARCHAR(20),
-      start_time TIME NOT NULL,
-      end_time TIME NOT NULL,
-      break_minutes INT DEFAULT 30,
-      is_night_shift BOOLEAN DEFAULT FALSE,
-      grace_minutes INT DEFAULT 10,
-      ot_after_minutes INT DEFAULT 0,
-      active BOOLEAN DEFAULT TRUE,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )`);
     const { rows } = await query(
       `INSERT INTO hr_shifts(company_id,name,shift_code,start_time,end_time,break_minutes,is_night_shift,grace_minutes,ot_after_minutes)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
