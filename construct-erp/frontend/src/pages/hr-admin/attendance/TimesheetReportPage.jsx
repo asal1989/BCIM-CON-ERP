@@ -257,6 +257,7 @@ export default function TimesheetReportPage() {
         <select value={projectFilter} onChange={e=>setProject(e.target.value)}
           style={{ border:'1px solid #D1D5DB', borderRadius:6, padding:'5px 10px', fontSize:13, minWidth:160 }}>
           <option value="">All Projects</option>
+          <option value="HEAD_OFFICE">🏢 Head Office</option>
           {projects.map(p=>(
             <option key={p.id} value={p.id}>
               {p.project_code ? `[${p.project_code}] ` : ''}{p.name}

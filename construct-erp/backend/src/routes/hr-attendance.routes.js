@@ -533,7 +533,9 @@ router.get('/timesheet-report', async (req, res) => {
       params.push(department_id);
       idx++;
     }
-    if (effectiveProjectId) {
+    if (effectiveProjectId === 'HEAD_OFFICE') {
+      projectFilter = ` AND ep.project_id IS NULL`;
+    } else if (effectiveProjectId) {
       projectFilter = ` AND ep.project_id = $${idx}`;
       params.push(effectiveProjectId);
       idx++;
@@ -542,13 +544,13 @@ router.get('/timesheet-report', async (req, res) => {
     // Fetch company name and project name for the print header
     const [companyRes, projectRes] = await Promise.all([
       query(`SELECT name FROM companies WHERE id=$1`, [cid]),
-      effectiveProjectId
+      effectiveProjectId && effectiveProjectId !== 'HEAD_OFFICE'
         ? query(`SELECT name, project_code FROM projects WHERE id=$1`, [effectiveProjectId])
         : Promise.resolve({ rows: [] }),
     ]);
     const companyName  = companyRes.rows[0]?.name  || 'BCIM';
-    const projectName  = projectRes.rows[0]?.name  || null;
-    const projectCode  = projectRes.rows[0]?.project_code || null;
+    const projectName  = effectiveProjectId === 'HEAD_OFFICE' ? 'Head Office' : (projectRes.rows[0]?.name || null);
+    const projectCode  = effectiveProjectId === 'HEAD_OFFICE' ? 'HO' : (projectRes.rows[0]?.project_code || null);
 
     // ── Staff query ─────────────────────────────────────────────────────────────
     const staffParams = [...params];
