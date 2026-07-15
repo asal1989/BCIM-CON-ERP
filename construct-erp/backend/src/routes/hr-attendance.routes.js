@@ -501,6 +501,60 @@ router.get('/timesheet-report', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ═══════════════════════════════════════════════════════════
+// GET /monthly-report  ?year=2026&month=7&project_id=&department_id=
+// Returns one row per (employee, date) for the whole month
+// ═══════════════════════════════════════════════════════════
+router.get('/monthly-report', async (req, res) => {
+  try {
+    const { year, month, project_id, department_id } = req.query;
+    const cid = req.user.company_id;
+    if (!year || !month) return res.status(400).json({ error: 'year and month required' });
+
+    const y = parseInt(year), m = parseInt(month);
+    const from = `${y}-${String(m).padStart(2,'0')}-01`;
+    const lastDay = new Date(y, m, 0).getDate();
+    const to = `${y}-${String(m).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+
+    const scopeProjectId = await getProjectScope(req);
+    const effProject = scopeProjectId !== null ? scopeProjectId : (project_id || null);
+
+    const params = [cid, from, to];
+    let deptFilter = '', projFilter = '';
+    let idx = 4;
+    if (department_id) { deptFilter = ` AND ep.department_id=$${idx++}`; params.push(department_id); }
+    if (effProject)    { projFilter = ` AND ep.project_id=$${idx++}`;    params.push(effProject); }
+
+    const { rows } = await query(`
+      SELECT
+        u.employee_code                        AS emp_id,
+        u.name,
+        COALESCE(des.name, u.designation, '—') AS designation,
+        COALESCE(dep.name, u.department, '—')  AS department,
+        a.attendance_date::text                AS attendance_date,
+        COALESCE(a.status, 'absent')           AS attendance_status,
+        TO_CHAR(a.in_time,  'HH12:MI AM')     AS in_time,
+        TO_CHAR(a.out_time, 'HH12:MI AM')     AS out_time,
+        COALESCE(a.late_minutes, 0)            AS late_minutes
+      FROM users u
+      LEFT JOIN employee_profiles ep  ON ep.user_id = u.id
+      LEFT JOIN hr_departments dep    ON dep.id = ep.department_id
+      LEFT JOIN hr_designations des   ON des.id = ep.designation_id
+      JOIN hr_attendance a
+        ON a.user_id = u.id
+       AND a.company_id = $1
+       AND a.attendance_date BETWEEN $2 AND $3
+      WHERE u.company_id = $1
+        AND u.is_active = TRUE
+        ${deptFilter}
+        ${projFilter}
+      ORDER BY dep.name NULLS LAST, u.name, a.attendance_date
+    `, params);
+
+    res.json({ data: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.put('/:id', async (req, res) => {
   try {
     const { status, in_time, out_time, late_minutes, remarks } = req.body;
