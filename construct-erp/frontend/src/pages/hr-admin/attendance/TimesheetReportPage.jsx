@@ -49,6 +49,112 @@ const COL_KEYS = {
   'Reason':      'reason',
 };
 
+const PRINT_CSS = `
+@media print {
+  @page { size: A3 landscape; margin: 8mm 10mm; }
+  html, body {
+    margin:0 !important; padding:0 !important;
+    background:#fff !important;
+    overflow:visible !important;
+    -webkit-print-color-adjust:exact !important;
+    print-color-adjust:exact !important;
+  }
+  /* Hide everything except print root */
+  nav, header, footer, aside,
+  .no-print,
+  .sidebar, .topbar, .app-header, .app-sidebar,
+  [class*="sidebar"], [class*="Sidebar"],
+  [class*="topbar"], [class*="Topbar"],
+  [class*="navbar"], [class*="Navbar"] {
+    display:none !important;
+    width:0 !important; height:0 !important;
+    overflow:hidden !important;
+  }
+  .print-only { display:block !important; }
+
+  /* Make all ancestors of print root visible and static */
+  #ts-print-root,
+  #ts-print-root * {
+    visibility:visible !important;
+  }
+  #ts-print-root {
+    display:block !important;
+    position:static !important;
+    overflow:visible !important;
+    width:100% !important;
+    margin:0 !important; padding:4px !important;
+    background:#fff !important;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 9pt;
+    color: #000;
+  }
+  /* Ensure parent containers don't clip */
+  #ts-print-root .ts-table-wrap,
+  #ts-print-root .ts-table-wrap > * {
+    overflow:visible !important;
+    width:100% !important;
+    position:static !important;
+    max-height:none !important;
+    height:auto !important;
+  }
+  .print-table {
+    width:100% !important;
+    border-collapse:collapse !important;
+    font-size: 7.5pt !important;
+    table-layout:auto !important;
+    page-break-inside:auto !important;
+    box-shadow:none !important;
+    border-radius:0 !important;
+  }
+  .print-table thead {
+    display:table-header-group !important;
+  }
+  .print-table tfoot {
+    display:table-footer-group !important;
+  }
+  .print-table tbody {
+    display:table-row-group !important;
+  }
+  .print-table tr {
+    page-break-inside:avoid !important;
+    page-break-after:auto !important;
+  }
+  .print-table th {
+    background:#1B3A6B !important; color:#fff !important;
+    padding:4px 4px !important; border:1px solid #1B3A6B !important;
+    text-align:left !important; font-size:7pt !important; font-weight:700 !important;
+    white-space:nowrap !important;
+    -webkit-print-color-adjust:exact !important;
+    print-color-adjust:exact !important;
+  }
+  .print-table td {
+    padding:3px 4px !important;
+    border:1px solid #bbb !important;
+    vertical-align:middle !important;
+    font-size:7.5pt !important;
+    white-space:nowrap !important;
+  }
+  .print-table tr:nth-child(even) td {
+    background:#F0F4FF !important;
+    -webkit-print-color-adjust:exact !important;
+    print-color-adjust:exact !important;
+  }
+  .sig-section {
+    page-break-inside:avoid !important;
+    margin-top:16px !important;
+  }
+  /* Shrink pills for print */
+  .print-table span {
+    font-size:7pt !important;
+    padding:0px 4px !important;
+  }
+}
+@media screen {
+  .print-only { display:none !important; }
+  #ts-print-root { display:block; }
+}
+`;
+
 export default function TimesheetReportPage() {
   const [date, setDate]             = useState(today());
   const [category, setCategory]     = useState('staff');
@@ -123,62 +229,12 @@ export default function TimesheetReportPage() {
     URL.revokeObjectURL(a.href);
   };
 
-  const selProject = projects.find(p => p.id === projectFilter);
-
   return (
     <div style={{ background:'#F8FAFC', minHeight:'100vh' }}>
 
-      {/* ── PRINT STYLES ──────────────────────────────── */}
-      <style>{`
-        @media print {
-          @page { size: A3 landscape; margin: 10mm 12mm; }
-          html, body { margin:0; padding:0; background:#fff !important; }
-          body > * { display:none !important; }
-          body > div:has(#ts-print-root) { display:block !important; }
-          .no-print { display:none !important; }
-          .print-only { display:block !important; }
-          #ts-print-root {
-            display:block !important;
-            visibility:visible !important;
-            position:static !important;
-            overflow:visible !important;
-            width:100% !important;
-            background:#fff;
-            font-family: Arial, sans-serif;
-            font-size: 10pt;
-            color: #000;
-          }
-          #ts-print-root * { visibility:visible !important; overflow:visible !important; }
-          #ts-print-root .ts-table-wrap { overflow:visible !important; }
-          .print-table {
-            width:100%;
-            border-collapse:collapse;
-            font-size:8.5pt;
-            page-break-inside:auto;
-          }
-          .print-table thead { display:table-header-group; }
-          .print-table tfoot { display:table-footer-group; }
-          .print-table tr { page-break-inside:avoid; page-break-after:auto; }
-          .print-table th {
-            background:#1B3A6B !important; color:#fff !important;
-            padding:5px 6px; border:1px solid #1B3A6B;
-            text-align:left; font-size:8pt;
-            -webkit-print-color-adjust:exact; print-color-adjust:exact;
-          }
-          .print-table td { padding:4px 6px; border:1px solid #ccc; vertical-align:middle; }
-          .print-table tr:nth-child(even) td {
-            background:#F0F4FF !important;
-            -webkit-print-color-adjust:exact; print-color-adjust:exact;
-          }
-          .sig-section { page-break-inside:avoid; margin-top:20px; }
-        }
-        @media screen {
-          .print-only { display:none !important; }
-          #ts-print-root { display:block; }
-        }
-      `}</style>
+      <style>{PRINT_CSS}</style>
 
-      {/* ── SCREEN TOOLBAR ────────────────────────────── */}
+      {/* SCREEN TOOLBAR */}
       <div className="no-print" style={{
         background:'#fff', borderBottom:'1px solid #E5E7EB',
         padding:'12px 24px', display:'flex', alignItems:'center', gap:10, flexWrap:'wrap',
@@ -230,7 +286,7 @@ export default function TimesheetReportPage() {
         </button>
       </div>
 
-      {/* ── SCREEN KPI CARDS ──────────────────────────── */}
+      {/* SCREEN KPI CARDS */}
       <div className="no-print" style={{ padding:'16px 24px 0', display:'flex', gap:12, flexWrap:'wrap' }}>
         {[
           { label:'Total',    val:summary.total,   bg:'#F0F9FF', border:'#BAE6FD', text:'#0369A1' },
@@ -249,14 +305,13 @@ export default function TimesheetReportPage() {
         ))}
       </div>
 
-      {/* ── PRINTABLE DOCUMENT ────────────────────────── */}
+      {/* PRINTABLE DOCUMENT */}
       <div id="ts-print-root" style={{ padding:'16px 24px 32px' }}>
 
-        {/* ─── PRINT HEADER (hidden on screen, shown on print) ─── */}
+        {/* PRINT HEADER */}
         <div className="print-only" style={{
           borderBottom:'3px solid #1B3A6B', paddingBottom:10, marginBottom:12,
         }}>
-          {/* Top row: Logo | Title | Company */}
           <div style={{ display:'flex', alignItems:'center', gap:16 }}>
             <img src="/bcim-logo.png" alt="BCIM Logo"
               style={{ height:60, width:'auto', objectFit:'contain', flexShrink:0 }}/>
@@ -275,7 +330,6 @@ export default function TimesheetReportPage() {
                 Category: <strong>{category === 'staff' ? 'STAFF ONLY' : category === 'labour' ? 'LABOUR / SC WORKERS' : 'ALL (STAFF + LABOUR)'}</strong>
               </div>
             </div>
-            {/* Summary box */}
             <table style={{ border:'1px solid #1B3A6B', borderCollapse:'collapse', fontSize:8, flexShrink:0 }}>
               <tbody>
                 {[
@@ -295,9 +349,9 @@ export default function TimesheetReportPage() {
           </div>
         </div>
 
-        {/* ─── LOADING / ERROR (screen only) ─── */}
+        {/* LOADING / ERROR */}
         {loading && (
-          <div className="no-print" style={{ textAlign:'center', padding:48, color:'#6B7280' }}>Loading…</div>
+          <div className="no-print" style={{ textAlign:'center', padding:48, color:'#6B7280' }}>Loading...</div>
         )}
         {error && (
           <div style={{
@@ -308,7 +362,7 @@ export default function TimesheetReportPage() {
           </div>
         )}
 
-        {/* ─── TABLE ─── */}
+        {/* TABLE */}
         {!loading && !error && (
           <div className="ts-table-wrap" style={{ overflowX:'auto' }}>
             <table className="print-table" style={{
@@ -348,7 +402,7 @@ export default function TimesheetReportPage() {
               <tbody>
                 {sortedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={14} style={{ textAlign:'center', padding:40, color:'#6B7280', fontSize:13 }}>
+                    <td colSpan={16} style={{ textAlign:'center', padding:40, color:'#6B7280', fontSize:13 }}>
                       No records found for {date}
                     </td>
                   </tr>
@@ -406,16 +460,16 @@ export default function TimesheetReportPage() {
           </div>
         )}
 
-        {/* ─── SIGNATURE SECTION (shown on print, hidden on screen) ─── */}
+        {/* SIGNATURE SECTION */}
         <div className="print-only sig-section" style={{
           marginTop:40, borderTop:'1px solid #ccc', paddingTop:16,
         }}>
           <div style={{ display:'flex', justifyContent:'space-between', gap:20 }}>
             {[
-              { role:'Prepared By', name:'HR Executive', line:true },
-              { role:'Verified By', name:'HR Manager / Admin', line:true },
-              { role:'Site Incharge', name:'Project Manager', line:true },
-              { role:'Approved By', name:'Management / Director', line:true },
+              { role:'Prepared By', name:'HR Executive' },
+              { role:'Verified By', name:'HR Manager / Admin' },
+              { role:'Site Incharge', name:'Project Manager' },
+              { role:'Approved By', name:'Management / Director' },
             ].map(sig=>(
               <div key={sig.role} style={{ flex:1, textAlign:'center' }}>
                 <div style={{
@@ -429,7 +483,7 @@ export default function TimesheetReportPage() {
             ))}
           </div>
           <div style={{ textAlign:'center', marginTop:12, fontSize:8, color:'#888' }}>
-            This is a system-generated report — {meta.companyName} &nbsp;|&nbsp; Printed on: {new Date().toLocaleString('en-IN')}
+            This is a system-generated report - {meta.companyName} | Printed on: {new Date().toLocaleString('en-IN')}
           </div>
         </div>
 
