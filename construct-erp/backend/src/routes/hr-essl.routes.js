@@ -721,25 +721,46 @@ router.post('/trigger-sync', async (req, res) => {
 /* ═══════════════════════════════════════════════════════════
    GET /hr-admin/essl/device-logs
    Query raw swipes from Postgres essl_device_logs
-   ?from=YYYY-MM-DD&to=YYYY-MM-DD&emp_code=XXX&limit=500
+   ?from=YYYY-MM-DD&to=YYYY-MM-DD&emp_code=XXX&search=&limit=500&page=1
 ══════════════════════════════════════════════════════════════ */
 router.get('/device-logs', async (req, res) => {
   try {
-    const { from, to, emp_code, limit = 500 } = req.query;
-    const cid = req.user.company_id;
+    const { from, to, emp_code, search, limit = 500, page = 1 } = req.query;
+    const cid    = req.user.company_id;
+    const lim    = Math.min(Number(limit), 5000);
+    const offset = (Math.max(Number(page), 1) - 1) * lim;
     const params = [cid];
     let idx = 2;
+
     let sql2 = `
-      SELECT emp_code, swipe_time, direction, source
-      FROM essl_device_logs
-      WHERE company_id = $1`;
-    if (from) { sql2 += ` AND swipe_time >= $${idx}`; params.push(from + ' 00:00:00'); idx++; }
-    if (to)   { sql2 += ` AND swipe_time <= $${idx}`; params.push(to   + ' 23:59:59'); idx++; }
-    if (emp_code) { sql2 += ` AND emp_code = $${idx}`; params.push(String(emp_code).trim()); idx++; }
-    sql2 += ` ORDER BY swipe_time DESC LIMIT $${idx}`;
-    params.push(Math.min(Number(limit), 5000));
+      SELECT
+        dl.emp_code,
+        dl.swipe_time,
+        dl.direction,
+        dl.source,
+        u.name            AS employee_name,
+        u.id              AS user_id,
+        ep.department_id,
+        dep.name          AS department_name,
+        ep.designation
+      FROM essl_device_logs dl
+      LEFT JOIN users u
+        ON u.company_id = dl.company_id
+       AND LOWER(TRIM(u.employee_code)) = LOWER(TRIM(dl.emp_code))
+      LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+      LEFT JOIN hr_departments dep  ON dep.id = ep.department_id
+      WHERE dl.company_id = $1`;
+
+    if (from)     { sql2 += ` AND dl.swipe_time >= $${idx}`; params.push(from + ' 00:00:00'); idx++; }
+    if (to)       { sql2 += ` AND dl.swipe_time <= $${idx}`; params.push(to   + ' 23:59:59'); idx++; }
+    if (emp_code) { sql2 += ` AND LOWER(TRIM(dl.emp_code)) = LOWER($${idx})`; params.push(String(emp_code).trim()); idx++; }
+    if (search)   { sql2 += ` AND (u.name ILIKE $${idx} OR dl.emp_code ILIKE $${idx})`; params.push(`%${search}%`); idx++; }
+
+    sql2 += ` ORDER BY dl.swipe_time DESC LIMIT $${idx} OFFSET $${idx+1}`;
+    params.push(lim, offset);
+
     const r = await query(sql2, params);
-    res.json({ data: r.rows, total: r.rows.length });
+    res.json({ data: r.rows, total: r.rows.length, page: Number(page), limit: lim });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

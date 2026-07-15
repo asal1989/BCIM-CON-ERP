@@ -2005,6 +2005,7 @@ export const hrEsslAPI = {
   getSyncHistory: (limit = 20) => api.get('/hr-admin/essl/sync-history', { params: { limit } }),
   triggerSync:    (from, to)   => api.post('/hr-admin/essl/trigger-sync', { from, to }),
   getUnmatched:   ()           => api.get('/hr-admin/essl/unmatched'),
+  deviceLogs:     (params)     => api.get('/hr-admin/essl/device-logs', { params }),
   importLogs:     (formData)   => api.post('/hr-admin/essl/import-logs', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
 };
 
