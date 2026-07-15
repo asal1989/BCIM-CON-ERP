@@ -593,7 +593,9 @@ router.get('/timesheet-report', async (req, res) => {
       const scParams = [cid, reportDate];
       let scProjectFilter = '';
       let scPIdx = 3;
-      if (effectiveProjectId) {
+      if (effectiveProjectId === 'HEAD_OFFICE') {
+        scProjectFilter = ' AND 1=0'; // no SC workers in head office
+      } else if (effectiveProjectId) {
         scProjectFilter = ` AND w.project_id = $${scPIdx++}`;
         scParams.push(effectiveProjectId);
       }
