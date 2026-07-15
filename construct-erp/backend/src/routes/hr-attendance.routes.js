@@ -791,6 +791,64 @@ router.post('/late-alerts/run', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// POST /hr-admin/attendance/late-alerts/test
+// Sends ONE sample late-arrival email to the logged-in user, using their own
+// most recent late record (or representative sample data if they have none) —
+// purely to preview the alert in your inbox. Never emails anyone else.
+router.post('/late-alerts/test', async (req, res) => {
+  try {
+    const { buildLateEmail } = require('../utils/late-arrival-alert.service');
+    const { sendMail } = require('../services/mail.service');
+
+    if (!req.user.email) return res.status(400).json({ error: 'Your account has no email address on file.' });
+
+    // Most recent real late record for the caller, if any.
+    const { rows } = await query(`
+      SELECT a.attendance_date, a.in_time, a.late_minutes,
+             u.name AS employee_name, u.employee_code, c.name AS company_name
+      FROM hr_attendance a
+      JOIN users u ON u.id = a.user_id
+      LEFT JOIN companies c ON c.id = a.company_id
+      WHERE a.user_id = $1 AND COALESCE(a.late_minutes, 0) > 0
+      ORDER BY a.attendance_date DESC
+      LIMIT 1
+    `, [req.user.id]);
+
+    const rec = rows[0];
+    const usedRealRecord = !!rec;
+
+    // Fall back to a representative sample so the preview always renders.
+    const companyRes = rec ? null : await query(`SELECT name FROM companies WHERE id = $1`, [req.user.company_id]);
+    const data = rec ? {
+      employeeName: rec.employee_name,
+      employeeCode: rec.employee_code,
+      date:         rec.attendance_date,
+      checkInTime:  rec.in_time,
+      lateMinutes:  rec.late_minutes,
+      companyName:  rec.company_name || 'BCIM',
+    } : {
+      employeeName: req.user.name || 'Employee',
+      employeeCode: req.user.employee_code || '—',
+      date:         new Date().toISOString().slice(0, 10),
+      checkInTime:  '09:55',
+      lateMinutes:  25,
+      companyName:  companyRes?.rows?.[0]?.name || 'BCIM',
+    };
+
+    const mail = buildLateEmail(data);
+    await sendMail({ to: req.user.email, subject: `[TEST] ${mail.subject}`, html: mail.html, text: mail.text });
+
+    res.json({
+      ok: true,
+      sentTo: req.user.email,
+      usedRealRecord,
+      basedOn: usedRealRecord
+        ? { date: data.date, lateMinutes: data.lateMinutes, checkIn: data.checkInTime }
+        : 'sample data (no late record found on your attendance)',
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ═══════════════════════════════════════════════════════════
 // RECALCULATE ATTENDANCE
 // POST /hr-admin/attendance/recalculate  { from, to }

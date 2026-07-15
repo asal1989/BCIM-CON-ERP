@@ -1910,6 +1910,8 @@ export const hrAttendanceAPI = {
   timesheetReport: (params) => api.get('/hr-admin/attendance/timesheet-report', { params }),
   monthlyReport:  (params) => api.get('/hr-admin/attendance/monthly-report', { params }),
   yearlySummary:  (params) => api.get('/hr-admin/attendance/yearly-summary', { params }),
+  runLateAlerts:  (data)   => api.post('/hr-admin/attendance/late-alerts/run', data || {}),
+  testLateAlert:  ()       => api.post('/hr-admin/attendance/late-alerts/test', {}),
 };
 
 export const hrSalaryAPI = {

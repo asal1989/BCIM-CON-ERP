@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Calendar, Fingerprint, RefreshCw, CheckCircle, AlertTriangle, CalendarCheck, Clock, Download } from 'lucide-react';
+import { Calendar, Fingerprint, RefreshCw, CheckCircle, AlertTriangle, CalendarCheck, Clock, Download, Mail } from 'lucide-react';
 import { hrAttendanceAPI, hrMastersAPI, hrEmployeesAPI, hrEsslAPI, projectAPI } from '../../api/client';
 import toast from 'react-hot-toast';
 
@@ -359,6 +359,20 @@ export default function AttendancePage() {
     onError:e=>toast.error(e.response?.data?.error||'Failed to mark baseline'),
   });
 
+  const testMailMut = useMutation({
+    mutationFn:()=>hrAttendanceAPI.testLateAlert(),
+    onSuccess:(res)=>{
+      const d = res.data || {};
+      toast.success(
+        d.usedRealRecord
+          ? `Test late-arrival email sent to ${d.sentTo}`
+          : `Test email sent to ${d.sentTo} (sample data — no late record found)`,
+        { duration: 6000 }
+      );
+    },
+    onError:e=>toast.error(e.response?.data?.error||'Failed to send test email'),
+  });
+
   const toggleStatus = (userId, day) => {
     const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     const current = attMap[userId]?.[day]?.status || null;
@@ -412,6 +426,13 @@ export default function AttendancePage() {
               style={{background:'rgba(255,255,255,0.15)',color:'#fff',border:'1px solid rgba(255,255,255,0.2)'}}>
               {baselineMut.isPending ? <RefreshCw className="w-4 h-4 animate-spin"/> : <CalendarCheck className="w-4 h-4"/>}
               {baselineMut.isPending ? 'Marking…' : 'Mark Month Present'}
+            </button>
+            <button onClick={()=>testMailMut.mutate()} disabled={testMailMut.isPending}
+              title="Send a sample late-arrival email to your own inbox"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 hover:opacity-90"
+              style={{background:'rgba(255,255,255,0.15)',color:'#fff',border:'1px solid rgba(255,255,255,0.2)'}}>
+              {testMailMut.isPending ? <RefreshCw className="w-4 h-4 animate-spin"/> : <Mail className="w-4 h-4"/>}
+              {testMailMut.isPending ? 'Sending…' : 'Email me test late notice'}
             </button>
             <button onClick={handleEsslSync} disabled={syncing}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-black disabled:opacity-50 hover:opacity-90"
