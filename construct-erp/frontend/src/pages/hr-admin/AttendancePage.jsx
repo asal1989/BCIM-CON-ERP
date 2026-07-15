@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Calendar, Fingerprint, RefreshCw, CheckCircle, AlertTriangle, CalendarCheck, Clock, Download, Mail } from 'lucide-react';
+import { Calendar, Fingerprint, RefreshCw, CheckCircle, AlertTriangle, CalendarCheck, Clock, Download, Mail, Send } from 'lucide-react';
 import { hrAttendanceAPI, hrMastersAPI, hrEmployeesAPI, hrEsslAPI, projectAPI } from '../../api/client';
 import toast from 'react-hot-toast';
 
@@ -373,6 +373,22 @@ export default function AttendancePage() {
     onError:e=>toast.error(e.response?.data?.error||'Failed to send test email'),
   });
 
+  const [alertResult, setAlertResult] = useState(null);
+  const runAlertsMut = useMutation({
+    mutationFn: () => {
+      const today = new Date().toISOString().slice(0,10);
+      return hrAttendanceAPI.runLateAlerts({ date: today, minLateMinutes: 5 });
+    },
+    onSuccess: (res) => {
+      const d = res.data || {};
+      const total = (d.results||[]).reduce((s,x)=>s+(x.sent||0),0);
+      const names = (d.results||[]).flatMap(x=>(x.employees||[]).map(e=>e.employee));
+      setAlertResult({ total, names, date: d.date });
+      toast.success(`Late alerts sent to ${total} employee(s)`, { duration: 6000 });
+    },
+    onError:e=>toast.error(e.response?.data?.error||'Failed to run late alerts'),
+  });
+
   const toggleStatus = (userId, day) => {
     const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     const current = attMap[userId]?.[day]?.status || null;
@@ -427,12 +443,19 @@ export default function AttendancePage() {
               {baselineMut.isPending ? <RefreshCw className="w-4 h-4 animate-spin"/> : <CalendarCheck className="w-4 h-4"/>}
               {baselineMut.isPending ? 'Marking…' : 'Mark Month Present'}
             </button>
+            <button onClick={()=>runAlertsMut.mutate()} disabled={runAlertsMut.isPending}
+              title="Send late-arrival emails to all employees who came in late today"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 hover:opacity-90"
+              style={{background:'rgba(239,68,68,0.25)',color:'#fff',border:'1px solid rgba(239,68,68,0.4)'}}>
+              {runAlertsMut.isPending ? <RefreshCw className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>}
+              {runAlertsMut.isPending ? 'Sending alerts…' : 'Send Late Alerts Today'}
+            </button>
             <button onClick={()=>testMailMut.mutate()} disabled={testMailMut.isPending}
               title="Send a sample late-arrival email to your own inbox"
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 hover:opacity-90"
               style={{background:'rgba(255,255,255,0.15)',color:'#fff',border:'1px solid rgba(255,255,255,0.2)'}}>
               {testMailMut.isPending ? <RefreshCw className="w-4 h-4 animate-spin"/> : <Mail className="w-4 h-4"/>}
-              {testMailMut.isPending ? 'Sending…' : 'Email me test late notice'}
+              {testMailMut.isPending ? 'Sending…' : 'Test Email'}
             </button>
             <button onClick={handleEsslSync} disabled={syncing}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-black disabled:opacity-50 hover:opacity-90"
@@ -466,6 +489,26 @@ export default function AttendancePage() {
         <motion.div {...fade(0)} className="bg-red-50 border border-red-200 rounded-2xl px-5 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2 text-red-600 text-sm"><AlertTriangle className="w-4 h-4"/> {syncResult.error}</div>
           <button onClick={()=>setSyncResult(null)} className="text-gray-400 hover:text-gray-600 text-sm">✕</button>
+        </motion.div>
+      )}
+
+      {/* Late Alerts Result Banner */}
+      {alertResult && (
+        <motion.div {...fade(0)} className="bg-red-50 border border-red-200 rounded-2xl px-5 py-3 flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <Send className="w-5 h-5 text-red-500 shrink-0 mt-0.5"/>
+            <div className="text-sm">
+              <span className="text-red-900 font-bold">Late alerts sent for {alertResult.date}</span>
+              {alertResult.total === 0
+                ? <span className="text-red-600 ml-2">No latecomers found (or no ESSL punch data yet for today)</span>
+                : <><span className="text-red-600 ml-2">{alertResult.total} employee(s) notified</span>
+                  {alertResult.names.length > 0 && (
+                    <div className="mt-1 text-red-700 font-medium">{alertResult.names.join(' · ')}</div>
+                  )}</>
+              }
+            </div>
+          </div>
+          <button onClick={()=>setAlertResult(null)} className="text-gray-400 hover:text-gray-600 text-sm shrink-0">✕</button>
         </motion.div>
       )}
 

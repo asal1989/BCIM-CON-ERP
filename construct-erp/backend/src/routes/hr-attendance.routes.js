@@ -877,7 +877,18 @@ router.post('/recalculate', async (req, res) => {
         late_minutes = CASE
           WHEN ha.status IN ('leave','holiday','week_off') THEN ha.late_minutes
           WHEN ha.in_time IS NOT NULL THEN
-            GREATEST(0, EXTRACT(EPOCH FROM (ha.in_time - '09:30:00'::time)) / 60)::int
+            GREATEST(0, EXTRACT(EPOCH FROM (
+              ha.in_time::time - COALESCE(
+                (SELECT (hs.start_time + (COALESCE(hs.grace_minutes,0) * INTERVAL '1 minute'))::time
+                 FROM hr_employee_shifts es
+                 JOIN hr_shifts hs ON hs.id = es.shift_id
+                 WHERE es.employee_id = ha.user_id
+                   AND es.effective_from <= ha.attendance_date
+                   AND (es.effective_to IS NULL OR es.effective_to >= ha.attendance_date)
+                 ORDER BY es.effective_from DESC LIMIT 1),
+                '09:30:00'::time
+              )
+            )) / 60)::int
           ELSE 0
         END
       FROM users u
