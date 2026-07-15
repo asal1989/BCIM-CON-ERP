@@ -802,6 +802,14 @@ router.patch('/work-orders/:id/approve', authorize(...ADMIN,'project_manager'), 
 // ════════════════════════════════════════════════════════════════════
 // 4. WORKERS & ATTENDANCE
 // ════════════════════════════════════════════════════════════════════
+// essl_emp_code links a worker to their ESSL/biometric device EmployeeCode,
+// since worker_code (WKR-0001) is an internal ERP id and never matches ESSL's
+// own numeric employee codes — without this, ESSL sync can never find labour.
+(async () => {
+  await query(`ALTER TABLE sc_workers ADD COLUMN IF NOT EXISTS essl_emp_code VARCHAR(50)`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_sc_workers_essl_emp_code ON sc_workers(company_id, essl_emp_code)`).catch(() => {});
+})();
+
 router.get('/workers', async (req, res) => {
   try {
     const { project_id, sc_id, wo_id } = req.query;
@@ -817,13 +825,32 @@ router.get('/workers', async (req, res) => {
 
 router.post('/workers', authorize(...PLANNER), async (req, res) => {
   try {
-    const { project_id, sc_id, wo_id, worker_name, skill_type, daily_rate, mobile, aadhar_number } = req.body;
+    const { project_id, sc_id, wo_id, worker_name, skill_type, daily_rate, mobile, aadhar_number, essl_emp_code } = req.body;
     if (!worker_name) return res.status(400).json({ error: 'worker_name required' });
     const cnt = (await query(`SELECT COUNT(*) FROM sc_workers WHERE company_id=$1`, [CID(req)])).rows[0].count;
     const worker_code = `WKR-${String(parseInt(cnt)+1).padStart(4,'0')}`;
-    const r = await query(`INSERT INTO sc_workers (company_id,project_id,sc_id,wo_id,worker_code,worker_name,skill_type,daily_rate,mobile,aadhar_number,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-      [CID(req),project_id||null,sc_id||null,wo_id||null,worker_code,worker_name,skill_type||'Unskilled',daily_rate||0,mobile||null,aadhar_number||null,req.user.id]);
+    const r = await query(`INSERT INTO sc_workers (company_id,project_id,sc_id,wo_id,worker_code,worker_name,skill_type,daily_rate,mobile,aadhar_number,essl_emp_code,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [CID(req),project_id||null,sc_id||null,wo_id||null,worker_code,worker_name,skill_type||'Unskilled',daily_rate||0,mobile||null,aadhar_number||null,essl_emp_code||null,req.user.id]);
     res.status(201).json({ data: r.rows[0] });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+router.put('/workers/:id', authorize(...PLANNER), async (req, res) => {
+  try {
+    const { project_id, sc_id, wo_id, worker_name, skill_type, daily_rate, mobile, aadhar_number, essl_emp_code, status } = req.body;
+    const r = await query(
+      `UPDATE sc_workers SET
+         project_id=COALESCE($1,project_id), sc_id=COALESCE($2,sc_id), wo_id=COALESCE($3,wo_id),
+         worker_name=COALESCE($4,worker_name), skill_type=COALESCE($5,skill_type),
+         daily_rate=COALESCE($6,daily_rate), mobile=COALESCE($7,mobile),
+         aadhar_number=COALESCE($8,aadhar_number), essl_emp_code=$9, status=COALESCE($10,status)
+       WHERE id=$11 AND company_id=$12 RETURNING *`,
+      [project_id||null, sc_id||null, wo_id||null, worker_name||null, skill_type||null,
+       daily_rate ?? null, mobile||null, aadhar_number||null, essl_emp_code||null, status||null,
+       req.params.id, CID(req)]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Worker not found' });
+    res.json({ data: r.rows[0] });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 

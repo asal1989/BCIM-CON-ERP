@@ -33,14 +33,19 @@ router.post('/agent-push', async (req, res) => {
     const empMap = {};
     erpEmps.rows.forEach(r => { empMap[String(r.employee_code).trim().toLowerCase()] = r.id; });
 
-    // Also load SC workers so their swipes go to sc_attendance
+    // Also load SC workers so their swipes go to sc_attendance.
+    // worker_code (WKR-0001) is an internal ERP id and never matches ESSL's own
+    // numeric employee codes — match on essl_emp_code first, worker_code as fallback.
     const scWorkers = await query(
-      `SELECT id, worker_code, sc_id, project_id, wo_id FROM sc_workers
+      `SELECT id, worker_code, essl_emp_code, sc_id, project_id, wo_id FROM sc_workers
        WHERE company_id=$1 AND status='active'`,
       [company_id]
     );
     const scMap = {};
-    scWorkers.rows.forEach(r => { scMap[String(r.worker_code).trim().toLowerCase()] = r; });
+    scWorkers.rows.forEach(r => {
+      if (r.essl_emp_code) scMap[String(r.essl_emp_code).trim().toLowerCase()] = r;
+      if (r.worker_code)    scMap[String(r.worker_code).trim().toLowerCase()] ??= r;
+    });
 
     // Per-employee late cutoff from their assigned shift (site / head office etc.)
     const cutoffMap = await buildShiftCutoffMap(company_id);
@@ -817,8 +822,9 @@ router.get('/preview-sc', async (req, res) => {
     const cfg = cfgRow.rows[0];
     const companyId = req.user.company_id;
 
-    let workerSql = `SELECT id, worker_code, worker_name, daily_rate, sc_id, project_id, wo_id
-      FROM sc_workers WHERE company_id=$1 AND status='active' AND worker_code IS NOT NULL AND worker_code != ''`;
+    let workerSql = `SELECT id, worker_code, essl_emp_code, worker_name, daily_rate, sc_id, project_id, wo_id
+      FROM sc_workers WHERE company_id=$1 AND status='active'
+      AND (COALESCE(essl_emp_code,'') != '' OR COALESCE(worker_code,'') != '')`;
     const params = [companyId];
     if (sc_id) { workerSql += ` AND sc_id=$2`; params.push(sc_id); }
     const scWorkers = await query(workerSql, params);
@@ -826,8 +832,8 @@ router.get('/preview-sc', async (req, res) => {
     const workerMap = {};
     const workerCodes = [];
     scWorkers.rows.forEach(w => {
-      workerMap[String(w.worker_code).trim().toLowerCase()] = w;
-      workerCodes.push(String(w.worker_code).trim());
+      if (w.essl_emp_code) { workerMap[String(w.essl_emp_code).trim().toLowerCase()] = w; workerCodes.push(String(w.essl_emp_code).trim()); }
+      if (w.worker_code)    { workerMap[String(w.worker_code).trim().toLowerCase()]    ??= w; workerCodes.push(String(w.worker_code).trim()); }
     });
 
     const conn = await sql.connect(buildMssqlConfig(cfg));
@@ -917,20 +923,21 @@ router.post('/sync-sc', async (req, res) => {
     const cfg = cfgRow.rows[0];
     const companyId = req.user.company_id;
 
-    let workerSql = `SELECT id, worker_code, worker_name, daily_rate, sc_id, project_id, wo_id
-      FROM sc_workers WHERE company_id=$1 AND status='active' AND worker_code IS NOT NULL AND worker_code != ''`;
+    let workerSql = `SELECT id, worker_code, essl_emp_code, worker_name, daily_rate, sc_id, project_id, wo_id
+      FROM sc_workers WHERE company_id=$1 AND status='active'
+      AND (COALESCE(essl_emp_code,'') != '' OR COALESCE(worker_code,'') != '')`;
     const params = [companyId];
     if (sc_id) { workerSql += ` AND sc_id=$2`; params.push(sc_id); }
     const scWorkers = await query(workerSql, params);
 
     if (!scWorkers.rows.length)
-      return res.status(400).json({ error: 'No active SC workers with worker codes found. Set Worker Code in Workers Registry.' });
+      return res.status(400).json({ error: 'No active SC workers with a Biometric Code set. Set it in the Workers Registry.' });
 
     const workerMap = {};
     const workerCodes = [];
     scWorkers.rows.forEach(w => {
-      workerMap[String(w.worker_code).trim().toLowerCase()] = w;
-      workerCodes.push(String(w.worker_code).trim());
+      if (w.essl_emp_code) { workerMap[String(w.essl_emp_code).trim().toLowerCase()] = w; workerCodes.push(String(w.essl_emp_code).trim()); }
+      if (w.worker_code)    { workerMap[String(w.worker_code).trim().toLowerCase()]    ??= w; workerCodes.push(String(w.worker_code).trim()); }
     });
 
     const conn = await sql.connect(buildMssqlConfig(cfg));

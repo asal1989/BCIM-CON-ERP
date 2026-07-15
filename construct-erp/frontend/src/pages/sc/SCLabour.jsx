@@ -29,6 +29,36 @@ const NMR_STATUS = {
 const fmt = (n) => `₹${Number(n||0).toLocaleString('en-IN',{maximumFractionDigits:0})}`;
 const inp = 'w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-300 transition';
 
+// ─── Inline-editable ESSL biometric code cell ────────────────────────────────
+// Links a worker to the numeric EmployeeCode ESSL uses on the biometric device
+// (worker_code like WKR-0001 is an internal ERP id and never matches ESSL).
+function EsslCodeCell({ worker, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(worker.essl_emp_code || '');
+
+  const commit = () => {
+    setEditing(false);
+    if ((val || '') !== (worker.essl_emp_code || '')) onSave(val || null);
+  };
+
+  if (editing) return (
+    <input autoFocus value={val} onChange={e=>setVal(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e => { if (e.key==='Enter') commit(); if (e.key==='Escape') setEditing(false); }}
+      placeholder="e.g. 2230120"
+      className="w-24 border border-blue-400 rounded-lg px-2 py-1 text-xs font-mono outline-none focus:ring-2 focus:ring-blue-200"
+    />
+  );
+  return (
+    <button onClick={()=>{ setVal(worker.essl_emp_code||''); setEditing(true); }}
+      className="text-xs font-mono px-2 py-1 rounded-lg hover:bg-blue-50 border border-transparent hover:border-blue-200 transition min-w-[70px] text-left">
+      {worker.essl_emp_code
+        ? <span className="text-slate-700 font-semibold">{worker.essl_emp_code}</span>
+        : <span className="text-amber-600 flex items-center gap-1"><AlertTriangle className="w-3 h-3"/> Not set</span>}
+    </button>
+  );
+}
+
 // ─── Create NMR Modal ─────────────────────────────────────────────────────────
 function CreateNMRModal({ wos, onClose }) {
   const qc = useQueryClient();
@@ -622,6 +652,11 @@ export default function SCLabour() {
     onSuccess:()=>{ toast.success('Worker added'); qc.invalidateQueries({queryKey:['sc-workers']}); setShowWorkerForm(false); setWorkerForm({project_id:'',sc_id:'',wo_id:'',worker_name:'',skill_type:'Unskilled',daily_rate:0,mobile:''}); },
     onError:e=>toast.error(e?.response?.data?.error||'Failed'),
   });
+  const updateWorkerMut = useMutation({
+    mutationFn: ({id,...d})=>scAPI.updateWorker(id,d),
+    onSuccess:()=>{ toast.success('ESSL code saved'); qc.invalidateQueries({queryKey:['sc-workers']}); },
+    onError:e=>toast.error(e?.response?.data?.error||'Failed'),
+  });
   const markAttMut = useMutation({
     mutationFn: d=>scAPI.markAttendance(d),
     onSuccess:()=>{ toast.success('Attendance saved'); qc.invalidateQueries({queryKey:['sc-attendance']}); setShowAttForm(false); },
@@ -771,14 +806,14 @@ export default function SCLabour() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{background:`linear-gradient(90deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)`}}>
-                    {['Code','Worker Name','Contractor','Skill Type','Daily Rate (₹)','Mobile','Status'].map(h=>(
+                    {['Code','Worker Name','Contractor','Skill Type','Daily Rate (₹)','Mobile','ESSL Code','Status'].map(h=>(
                       <th key={h} className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-white/80 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {filteredWorkers.length===0 ? (
-                    <tr><td colSpan={7} className="py-12 text-center">
+                    <tr><td colSpan={8} className="py-12 text-center">
                       <Users className="w-10 h-10 text-slate-400 mx-auto mb-2"/>
                       <p className="text-slate-400">No workers registered</p>
                     </td></tr>
@@ -790,6 +825,9 @@ export default function SCLabour() {
                       <td className="px-4 py-3"><span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{w.skill_type}</span></td>
                       <td className="px-4 py-3 font-semibold text-slate-700">₹{Number(w.daily_rate||0).toLocaleString()}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{w.mobile||'—'}</td>
+                      <td className="px-4 py-3">
+                        <EsslCodeCell worker={w} onSave={(code)=>updateWorkerMut.mutate({id:w.id, essl_emp_code:code})} />
+                      </td>
                       <td className="px-4 py-3">
                         <span className={clsx('text-xs px-2 py-0.5 rounded-full font-semibold', w.status==='active'?'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-500')}>
                           {w.status}

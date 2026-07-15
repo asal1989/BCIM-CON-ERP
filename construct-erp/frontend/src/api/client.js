@@ -1575,6 +1575,7 @@ export const scAPI = {
   // Workers
   listWorkers:        (p)       => api.get('/sc/workers', { params: p }),
   createWorker:       (d)       => api.post('/sc/workers', d),
+  updateWorker:       (id, d)   => api.put(`/sc/workers/${id}`, d),
   // Attendance
   listAttendance:     (p)       => api.get('/sc/attendance', { params: p }),
   markAttendance:     (d)       => api.post('/sc/attendance', d),
