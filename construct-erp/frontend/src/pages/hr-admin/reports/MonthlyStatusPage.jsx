@@ -28,17 +28,14 @@ export default function MonthlyStatusPage() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year,  setYear]  = useState(now.getFullYear());
   const [project, setProject] = useState('');
-  const [dept, setDept] = useState('');
 
   const { data: projects } = useQuery({ queryKey:['projects'], queryFn:()=>projectAPI.list().then(r=>r.data?.data||r.data||[]) });
 
-  const from = `${year}-${String(month).padStart(2,'0')}-01`;
-  const to   = `${year}-${String(month).padStart(2,'0')}-${String(daysInMonth(year, month)).padStart(2,'0')}`;
-  const days  = daysInMonth(year, month);
+  const days = daysInMonth(year, month);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['monthly-status', year, month, project, dept],
-    queryFn:  () => hrAttendanceAPI.timesheetReport({ from, to, project_id: project||undefined, department: dept||undefined })
+    queryKey: ['monthly-status', year, month, project],
+    queryFn:  () => hrAttendanceAPI.monthlyReport({ year, month, project_id: project||undefined })
                     .then(r => r.data?.data || r.data || []),
     enabled: true,
   });
@@ -92,7 +89,6 @@ export default function MonthlyStatusPage() {
           <option value=''>All Projects</option>
           {(projects||[]).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        <input value={dept} onChange={e=>setDept(e.target.value)} placeholder="Filter by department..." style={{ border:'1px solid #CBD5E1', borderRadius:6, padding:'5px 10px', fontSize:13 }} />
       </div>
 
       {/* Legend */}
