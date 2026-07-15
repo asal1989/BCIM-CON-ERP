@@ -519,13 +519,13 @@ router.get('/monthly-report', async (req, res) => {
     const scopeProjectId = await getProjectScope(req);
     const effProject = scopeProjectId !== null ? scopeProjectId : (project_id || null);
 
-    const params = [cid, from, to];
+    const staffParams = [cid, from, to];
     let deptFilter = '', projFilter = '';
     let idx = 4;
-    if (department_id) { deptFilter = ` AND ep.department_id=$${idx++}`; params.push(department_id); }
-    if (effProject)    { projFilter = ` AND ep.project_id=$${idx++}`;    params.push(effProject); }
+    if (department_id) { deptFilter = ` AND ep.department_id=$${idx++}`; staffParams.push(department_id); }
+    if (effProject)    { projFilter = ` AND ep.project_id=$${idx++}`;    staffParams.push(effProject); }
 
-    const { rows } = await query(`
+    const staffRes = await query(`
       SELECT
         u.employee_code                        AS emp_id,
         u.name,
@@ -535,7 +535,8 @@ router.get('/monthly-report', async (req, res) => {
         COALESCE(a.status, 'absent')           AS attendance_status,
         TO_CHAR(a.in_time,  'HH12:MI AM')     AS in_time,
         TO_CHAR(a.out_time, 'HH12:MI AM')     AS out_time,
-        COALESCE(a.late_minutes, 0)            AS late_minutes
+        COALESCE(a.late_minutes, 0)            AS late_minutes,
+        'staff'                                AS row_type
       FROM users u
       LEFT JOIN employee_profiles ep  ON ep.user_id = u.id
       LEFT JOIN hr_departments dep    ON dep.id = ep.department_id
@@ -549,9 +550,39 @@ router.get('/monthly-report', async (req, res) => {
         ${deptFilter}
         ${projFilter}
       ORDER BY dep.name NULLS LAST, u.name, a.attendance_date
-    `, params);
+    `, staffParams);
 
-    res.json({ data: rows });
+    // SC workers from sc_attendance
+    const scParams = [cid, from, to];
+    let scProjFilter = '';
+    let scIdx = 4;
+    if (effProject) { scProjFilter = ` AND w.project_id=$${scIdx++}`; scParams.push(effProject); }
+
+    const scRes = await query(`
+      SELECT
+        w.worker_code                          AS emp_id,
+        w.worker_name                          AS name,
+        COALESCE(w.skill_type, '—')           AS designation,
+        COALESCE(sc.name, 'SC Worker')         AS department,
+        a.attendance_date::text                AS attendance_date,
+        COALESCE(a.status, 'absent')           AS attendance_status,
+        NULL::text                             AS in_time,
+        NULL::text                             AS out_time,
+        0                                      AS late_minutes,
+        'labour'                               AS row_type
+      FROM sc_workers w
+      JOIN sc_attendance a
+        ON a.worker_id = w.id
+       AND a.company_id = $1
+       AND a.attendance_date BETWEEN $2 AND $3
+      LEFT JOIN sc_subcontractors sc ON sc.id = w.sc_id
+      WHERE w.company_id = $1
+        AND w.status = 'active'
+        ${scProjFilter}
+      ORDER BY sc.name NULLS LAST, w.worker_name, a.attendance_date
+    `, scParams);
+
+    res.json({ data: [...staffRes.rows, ...scRes.rows] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
