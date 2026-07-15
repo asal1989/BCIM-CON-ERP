@@ -552,6 +552,16 @@ router.get('/timesheet-report', async (req, res) => {
     const projectName  = effectiveProjectId === 'HEAD_OFFICE' ? 'Head Office' : (projectRes.rows[0]?.name || null);
     const projectCode  = effectiveProjectId === 'HEAD_OFFICE' ? 'HO' : (projectRes.rows[0]?.project_code || null);
 
+    // Is the report date a public holiday?
+    const holidayRes = await query(
+      `SELECT name FROM hr_holidays WHERE company_id=$1 AND holiday_date::date=$2::date LIMIT 1`,
+      [cid, reportDate]
+    ).catch(() => ({ rows: [] }));
+    const holidayName = holidayRes.rows[0]?.name || null;
+    const isSunday    = new Date(reportDate + 'T00:00:00').getDay() === 0;
+    // Employees with no punch on a Sunday/holiday are week_off/holiday, not absent
+    const noRecordStatus = holidayName ? 'holiday' : (isSunday ? 'week_off' : 'absent');
+
     // ── Staff query ─────────────────────────────────────────────────────────────
     const staffParams = [...params];
     const staffRows = category !== 'labour' ? (await query(`
@@ -561,7 +571,7 @@ router.get('/timesheet-report', async (req, res) => {
         COALESCE(des.name, u.designation, '—')             AS designation,
         COALESCE(dep.name, u.department, '—')              AS department,
         'BCIM STAFF'                        AS company,
-        COALESCE(a.status, 'absent')        AS attendance_status,
+        COALESCE(a.status, '${noRecordStatus}') AS attendance_status,
         TO_CHAR(a.in_time,  'HH12:MI AM')  AS in_time,
         TO_CHAR(a.out_time, 'HH12:MI AM')  AS out_time,
         a.late_minutes,
@@ -571,7 +581,13 @@ router.get('/timesheet-report', async (req, res) => {
         CASE WHEN COALESCE(ep.employment_status,'active') = 'active'
              THEN 'ACTIVE' ELSE 'INACTIVE' END AS status,
         u.id::text                          AS user_id,
-        'staff'                             AS row_type
+        'staff'                             AS row_type,
+        CASE WHEN a.in_time IS NOT NULL AND a.out_time IS NOT NULL AND a.out_time > a.in_time
+             THEN ROUND(EXTRACT(EPOCH FROM (a.out_time - a.in_time)) / 3600.0, 1)
+             ELSE 0 END                     AS hours_worked,
+        CASE WHEN a.in_time IS NOT NULL AND a.out_time IS NOT NULL AND a.out_time > a.in_time
+             THEN GREATEST(0, ROUND(EXTRACT(EPOCH FROM (a.out_time - a.in_time)) / 3600.0 - 9, 1))
+             ELSE 0 END                     AS overtime_hours
       FROM users u
       LEFT JOIN employee_profiles ep   ON ep.user_id = u.id
       LEFT JOIN hr_departments dep     ON dep.id = ep.department_id
@@ -606,7 +622,7 @@ router.get('/timesheet-report', async (req, res) => {
           w.skill_type                        AS designation,
           'CIVIL'                             AS department,
           sc.name                             AS company,
-          COALESCE(a.status, 'absent')        AS attendance_status,
+          COALESCE(a.status, '${noRecordStatus}') AS attendance_status,
           TO_CHAR(a.in_time,  'HH12:MI AM')      AS in_time,
           TO_CHAR(a.out_time, 'HH12:MI AM')      AS out_time,
           0                                      AS late_minutes,
@@ -633,10 +649,13 @@ router.get('/timesheet-report', async (req, res) => {
 
     const rows = [...staffRows, ...scRows];
 
-    const present = rows.filter(r => r.attendance_status === 'present').length;
-    const half    = rows.filter(r => r.attendance_status === 'half_day').length;
-    const absent  = rows.filter(r => r.attendance_status === 'absent').length;
-    const leave   = rows.filter(r => r.attendance_status === 'leave').length;
+    const present  = rows.filter(r => r.attendance_status === 'present').length;
+    const half     = rows.filter(r => r.attendance_status === 'half_day').length;
+    const absent   = rows.filter(r => r.attendance_status === 'absent').length;
+    const leave    = rows.filter(r => r.attendance_status === 'leave').length;
+    const week_off = rows.filter(r => r.attendance_status === 'week_off').length;
+    const holiday  = rows.filter(r => r.attendance_status === 'holiday').length;
+    const late     = rows.filter(r => (r.late_minutes || 0) > 0).length;
 
     res.json({
       data:        rows,
@@ -644,7 +663,9 @@ router.get('/timesheet-report', async (req, res) => {
       companyName,
       projectName,
       projectCode,
-      summary: { total: rows.length, present, half, absent, leave },
+      holidayName,
+      isSunday,
+      summary: { total: rows.length, present, half, absent, leave, week_off, holiday, late },
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
