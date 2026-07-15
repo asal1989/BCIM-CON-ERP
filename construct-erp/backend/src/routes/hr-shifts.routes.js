@@ -99,7 +99,7 @@ router.post('/shifts', authorize(...HR_ROLES), async (req, res) => {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )`);
     const { rows } = await query(
-      `INSERT INTO hr_shifts(company_id,name,code,start_time,end_time,break_minutes,is_night_shift,grace_minutes,ot_after_minutes)
+      `INSERT INTO hr_shifts(company_id,name,shift_code,start_time,end_time,break_minutes,is_night_shift,grace_minutes,ot_after_minutes)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
       [req.user.company_id, name, code||null, start_time, end_time,
        parseInt(break_minutes)||30, is_night_shift||false,
@@ -115,7 +115,7 @@ router.put('/shifts/:id', authorize(...HR_ROLES), async (req, res) => {
   try {
     const { name, code, start_time, end_time, break_minutes, is_night_shift, grace_minutes, ot_after_minutes, active } = req.body;
     const { rows } = await query(
-      `UPDATE hr_shifts SET name=$1,code=$2,start_time=$3,end_time=$4,break_minutes=$5,
+      `UPDATE hr_shifts SET name=$1,shift_code=$2,start_time=$3,end_time=$4,break_minutes=$5,
        is_night_shift=$6,grace_minutes=$7,ot_after_minutes=$8,active=$9
        WHERE id=$10 AND company_id=$11 RETURNING *`,
       [name, code||null, start_time, end_time,
