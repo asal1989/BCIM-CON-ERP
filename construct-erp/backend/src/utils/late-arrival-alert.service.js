@@ -293,7 +293,7 @@ async function sendLateArrivalAlerts({ date, companyId, minLateMinutes = 5, over
 
         const to = overrideRecipients
           ? (Array.isArray(overrideRecipients) ? overrideRecipients : [overrideRecipients])
-          : [emp.employee_email, emp.manager_email].filter(Boolean);
+          : [emp.employee_email].filter(Boolean);
 
         if (!dryRun && to.length) {
           await sendMail({ to, ...mail });
