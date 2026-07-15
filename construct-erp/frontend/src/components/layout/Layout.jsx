@@ -2729,6 +2729,50 @@ export default function Layout() {
         main *::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
         main::-webkit-scrollbar-thumb:hover,
         main *::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+        /* ── PRINT: unfold all layout containers so content flows across pages ── */
+        @media print {
+          html, body {
+            height: auto !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          /* Root layout div (height:100vh, overflow:hidden) */
+          .erp-layout-enter {
+            height: auto !important;
+            overflow: visible !important;
+            display: block !important;
+          }
+          /* Top header, sidebar, bottom nav, quick-access bars */
+          header, .desktop-sidebar, .print\\:hidden,
+          nav[class*="bottom"], [class*="QuickAccess"],
+          [class*="quick-access"] {
+            display: none !important;
+          }
+          /* Content wrapper (flex:1, overflow:hidden) */
+          .erp-layout-enter > div:last-of-type {
+            overflow: visible !important;
+            height: auto !important;
+            display: block !important;
+            flex: none !important;
+          }
+          /* Main content area */
+          main {
+            overflow: visible !important;
+            height: auto !important;
+            position: static !important;
+            flex: none !important;
+            width: 100% !important;
+          }
+          main > * {
+            animation: none !important;
+          }
+          /* Tables: allow wrapping for print */
+          main table {
+            min-width: 0 !important;
+          }
+        }
       `}</style>
     </div>
   );
