@@ -71,13 +71,29 @@ const HR_ALL   = [...HR_ROLES, 'hr', 'manager', 'department_head'];
 
 router.use(authenticate);
 
+// Ensure extended columns exist — runs inline so it's guaranteed before any query
+const ensureShiftColumns = async () => {
+  const nc = s => query(s).catch(()=>{});
+  await nc(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS break_minutes INT DEFAULT 30`);
+  await nc(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS is_night_shift BOOLEAN DEFAULT FALSE`);
+  await nc(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS ot_after_minutes INT DEFAULT 0`);
+  await nc(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS grace_minutes INT DEFAULT 10`);
+  await nc(`UPDATE hr_shifts SET is_active=TRUE WHERE is_active IS NULL`);
+};
+let columnsEnsured = false;
+const ensureOnce = async () => { if (!columnsEnsured) { await ensureShiftColumns(); columnsEnsured = true; } };
+
 // ── Shifts ────────────────────────────────────────────────────────────────────
 router.get('/shifts', authorize(...HR_ALL), async (req, res) => {
   try {
+    await ensureOnce();
     const { rows } = await query(
       `SELECT id, company_id, name, shift_code AS code, start_time, end_time,
-              break_minutes, is_night_shift, grace_minutes, ot_after_minutes,
-              is_active AS active, created_at
+              COALESCE(break_minutes,30) AS break_minutes,
+              COALESCE(is_night_shift,false) AS is_night_shift,
+              COALESCE(grace_minutes,10) AS grace_minutes,
+              COALESCE(ot_after_minutes,0) AS ot_after_minutes,
+              COALESCE(is_active,true) AS active, created_at
        FROM hr_shifts WHERE company_id=$1 ORDER BY name`,
       [req.user.company_id]
     );
@@ -89,6 +105,7 @@ router.get('/shifts', authorize(...HR_ALL), async (req, res) => {
 
 router.post('/shifts', authorize(...HR_ROLES), async (req, res) => {
   try {
+    await ensureOnce();
     const { name, code, start_time, end_time, break_minutes, is_night_shift, grace_minutes, ot_after_minutes } = req.body;
     if (!name || !start_time || !end_time) return res.status(400).json({ error: 'name, start_time and end_time are required' });
     const { rows } = await query(
@@ -96,7 +113,7 @@ router.post('/shifts', authorize(...HR_ROLES), async (req, res) => {
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
       [req.user.company_id, name, code||null, start_time, end_time,
        parseInt(break_minutes)||30, is_night_shift||false,
-       parseInt(grace_minutes)||10, parseInt(ot_after_minutes)||480]
+       parseInt(grace_minutes)||10, parseInt(ot_after_minutes)||0]
     );
     res.json({ data: rows[0] });
   } catch (err) {
@@ -106,13 +123,14 @@ router.post('/shifts', authorize(...HR_ROLES), async (req, res) => {
 
 router.put('/shifts/:id', authorize(...HR_ROLES), async (req, res) => {
   try {
+    await ensureOnce();
     const { name, code, start_time, end_time, break_minutes, is_night_shift, grace_minutes, ot_after_minutes, active } = req.body;
     const { rows } = await query(
       `UPDATE hr_shifts SET name=$1,shift_code=$2,start_time=$3,end_time=$4,break_minutes=$5,is_night_shift=$6,grace_minutes=$7,ot_after_minutes=$8,is_active=$9
        WHERE id=$10 AND company_id=$11 RETURNING *`,
       [name, code||null, start_time, end_time,
        parseInt(break_minutes)||30, is_night_shift||false,
-       parseInt(grace_minutes)||10, parseInt(ot_after_minutes)||480,
+       parseInt(grace_minutes)||10, parseInt(ot_after_minutes)||0,
        active!==false, req.params.id, req.user.company_id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Shift not found' });
