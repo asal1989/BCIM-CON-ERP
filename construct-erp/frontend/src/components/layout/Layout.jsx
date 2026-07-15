@@ -218,6 +218,7 @@ const navGroups = [
     { to: '/hr-admin/attendance/biometric',    icon: Fingerprint,     label: 'Biometric Attendance' },
     { to: '/hr-admin/attendance/regularization', icon: ClipboardCheck, label: 'Attendance Regularization' },
     { to: '/hr-admin/attendance/timesheet',    icon: FileSpreadsheet, label: 'Timesheet Report' },
+    { to: '/hr-admin/shifts',                  icon: Clock,           label: 'Shift Management' },
     // ── Leaves & Holidays ──
     { to: '/hr-admin/leaves',            icon: CalendarOff,     label: 'Leave Management' },
     { to: '/hr-admin/holidays',          icon: CalendarDays,    label: 'Holiday Calendar' },
@@ -234,7 +235,6 @@ const navGroups = [
     // ── Performance & Growth ──
     { to: '/hr-admin/appraisals',        icon: Star,            label: 'Appraisals' },
     { to: '/hr-admin/performance',       icon: ClipboardList,   label: 'Performance Evaluation' },
-    { to: '/hr-admin/shifts',            icon: Clock,           label: 'Shifts & OT' },
     { to: '/hr-admin/recruitment',       icon: Briefcase,       label: 'Recruitment' },
     { to: '/hr-admin/training',          icon: BookOpen,        label: 'Training' },
     { to: '/hr-admin/advanced',          icon: Briefcase,       label: 'Advanced HR' },
@@ -469,10 +469,10 @@ const NAV_SECTIONS = {
   'HR & Admin': [
     { label: 'Overview',          paths: ['/hr-admin','/hr-admin/analytics','/hr-admin/checklist','/hr-admin/ops-checklist','/ess'] },
     { label: 'People',            paths: ['/hr-admin/employees','/hr-admin/project-staff','/hr-admin/directory','/hr-admin/org-chart','/hr-admin/departments'] },
-    { label: 'Attendance',        paths: ['/hr-admin/attendance','/hr-admin/attendance/dashboard','/hr-admin/attendance/biometric','/hr-admin/attendance/regularization','/hr-admin/attendance/timesheet'] },
+    { label: 'Attendance',        paths: ['/hr-admin/attendance','/hr-admin/attendance/dashboard','/hr-admin/attendance/biometric','/hr-admin/attendance/regularization','/hr-admin/attendance/timesheet','/hr-admin/shifts'] },
     { label: 'Leaves & Holidays', paths: ['/hr-admin/leaves','/hr-admin/holidays'] },
     { label: 'Payroll',           paths: ['/hr-admin/payroll','/hr-admin/payroll-reports','/hr-admin/salary-structures','/hr-admin/employee-salaries','/hr-admin/loans','/hr-admin/expenses','/hr-admin/lop-days','/hr-admin/stop-salary','/hr-admin/fnf'] },
-    { label: 'Performance',       paths: ['/hr-admin/appraisals','/hr-admin/performance','/hr-admin/shifts','/hr-admin/recruitment','/hr-admin/training','/hr-admin/advanced'] },
+    { label: 'Performance',       paths: ['/hr-admin/appraisals','/hr-admin/performance','/hr-admin/recruitment','/hr-admin/training','/hr-admin/advanced'] },
     { label: 'Emp. Services',     paths: ['/hr-admin/letters','/hr-admin/policies','/hr-admin/emp-assets','/hr-admin/travel','/hr-admin/segments','/hr-admin/emp-filters'] },
     { label: 'Site Workers',      paths: ['/hr/workers','/hr/attendance','/hr/payroll'] },
     { label: 'Reports',           paths: ['/hr-admin/reports','/hr-admin/reports/daily-attendance','/hr-admin/reports/monthly-status','/hr-admin/reports/yearly-summary','/hr-admin/reports/attendance-summary','/hr-admin/reports/leave-summary','/hr-admin/reports/employee-details','/hr-admin/reports/shift-schedule','/hr-admin/reports/department-summary','/hr-admin/reports/log-records','/hr-admin/reports/random-check'] },
