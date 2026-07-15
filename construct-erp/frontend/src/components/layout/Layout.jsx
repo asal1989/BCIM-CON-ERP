@@ -15,7 +15,8 @@ import {
   CalendarOff, FileBarChart, Star, UserCheck, Fingerprint, PackageCheck, ArrowLeftRight,
   Landmark, FileSignature, CircleSlash, ShieldCheck, Clock3, Lightbulb,
   Gavel, Target, Send, Coins, Replace, Link2, Wrench, Layers, MapPin, TrendingDown, FolderOpen, Calculator, UserRound,
-  Cog, Fuel, Gauge, BarChart2, History, GitBranch, MinusCircle, FolderKanban, Sparkles, MessageSquare, Mail
+  Cog, Fuel, Gauge, BarChart2, History, GitBranch, MinusCircle, FolderKanban, Sparkles, MessageSquare, Mail,
+  RefreshCw, Shuffle
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import CommandPalette from './CommandPalette';
@@ -241,7 +242,18 @@ const navGroups = [
     { to: '/hr/payroll',                 icon: Banknote,        label: 'Worker Payroll' },
     { to: '/hr-admin/essl-sync',         icon: Fingerprint,     label: 'ESSL Biometric' },
     { to: '/hr-admin/import',            icon: Upload,          label: 'Import Data' },
-    { to: '/hr-admin/reports',           icon: FileBarChart,    label: 'HR Reports' },
+    { to: '/hr-admin/reports',                    icon: FileBarChart,    label: 'HR Reports' },
+    { to: '/hr-admin/attendance/recalculate',     icon: RefreshCw,       label: 'Re-calculate Attendance' },
+    { to: '/hr-admin/reports/daily-attendance',   icon: ClipboardList,   label: 'Daily Attendance Report' },
+    { to: '/hr-admin/reports/monthly-status',     icon: BarChart2,       label: 'Monthly Status' },
+    { to: '/hr-admin/reports/yearly-summary',     icon: CalendarDays,    label: 'Yearly Summary' },
+    { to: '/hr-admin/reports/attendance-summary', icon: FileBarChart,    label: 'Attendance Summary Report' },
+    { to: '/hr-admin/reports/leave-summary',      icon: CalendarOff,     label: 'Leave Summary' },
+    { to: '/hr-admin/reports/employee-details',   icon: Users,           label: 'Employee Details' },
+    { to: '/hr-admin/reports/shift-schedule',     icon: Clock,           label: 'Employees Shift Scheduler' },
+    { to: '/hr-admin/reports/department-summary', icon: Building2,       label: 'Department Summary' },
+    { to: '/hr-admin/reports/log-records',        icon: ScrollText,      label: 'Log Records' },
+    { to: '/hr-admin/reports/random-check',       icon: Shuffle,         label: 'Random Check Report' },
     { to: '/ess',                        icon: UserCheck,       label: 'ESS Portal' },
     { to: '/hr-admin/documents',         icon: FolderSearch,    label: 'Documents' },
     { to: '/hr-admin/compliance',        icon: ShieldCheck,     label: 'Compliance' },
@@ -457,7 +469,7 @@ const NAV_SECTIONS = {
     { label: 'Talent',       paths: ['/hr-admin/shifts','/hr-admin/fnf','/hr-admin/letters','/hr-admin/training','/hr-admin/emp-assets','/hr-admin/travel','/hr-admin/recruitment'] },
     { label: 'Site Workers', paths: ['/hr/workers','/hr/attendance','/hr/payroll'] },
     { label: 'Integrate',    paths: ['/hr-admin/essl-sync','/hr-admin/import'] },
-    { label: 'Reports',      paths: ['/hr-admin/reports'] },
+    { label: 'Reports',      paths: ['/hr-admin/reports','/hr-admin/attendance/recalculate','/hr-admin/reports/daily-attendance','/hr-admin/reports/monthly-status','/hr-admin/reports/yearly-summary','/hr-admin/reports/attendance-summary','/hr-admin/reports/leave-summary','/hr-admin/reports/employee-details','/hr-admin/reports/shift-schedule','/hr-admin/reports/department-summary','/hr-admin/reports/log-records','/hr-admin/reports/random-check'] },
     { label: 'Documents',    paths: ['/hr-admin/documents'] },
   ],
   'Bill Tracker': [

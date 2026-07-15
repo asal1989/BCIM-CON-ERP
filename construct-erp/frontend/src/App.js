@@ -355,6 +355,17 @@ const HRLeaveEntriesPage          = lazy(() => import('./pages/hr-admin/LeaveEnt
 const HROutdoorEntriesPage        = lazy(() => import('./pages/hr-admin/OutdoorEntriesPage'));
 const HRGeofencesPage             = lazy(() => import('./pages/hr-admin/GeofencesPage'));
 const HRWorkCodesPage             = lazy(() => import('./pages/hr-admin/WorkCodesPage'));
+const HRRecalculateAttendancePage = lazy(() => import('./pages/hr-admin/reports/RecalculateAttendancePage'));
+const HRDailyAttendanceReportPage = lazy(() => import('./pages/hr-admin/reports/DailyAttendanceReportPage'));
+const HRMonthlyStatusPage         = lazy(() => import('./pages/hr-admin/reports/MonthlyStatusPage'));
+const HRYearlySummaryPage         = lazy(() => import('./pages/hr-admin/reports/YearlySummaryPage'));
+const HRAttendanceSummaryPage     = lazy(() => import('./pages/hr-admin/reports/AttendanceSummaryPage'));
+const HRLeaveSummaryPage          = lazy(() => import('./pages/hr-admin/reports/LeaveSummaryPage'));
+const HREmployeeDetailsReportPage = lazy(() => import('./pages/hr-admin/reports/EmployeeDetailsReportPage'));
+const HRReportsShiftSchedulePage  = lazy(() => import('./pages/hr-admin/reports/ShiftSchedulePage'));
+const HRDepartmentSummaryPage     = lazy(() => import('./pages/hr-admin/reports/DepartmentSummaryPage'));
+const HRLogRecordsPage            = lazy(() => import('./pages/hr-admin/reports/LogRecordsPage'));
+const HRRandomCheckReportPage     = lazy(() => import('./pages/hr-admin/reports/RandomCheckReportPage'));
 
 // ── Home route resolver — sends each user to their first accessible page ──────
 const MODULE_HOME = {
@@ -905,6 +916,17 @@ export default function App() {
                 <Route path="hr-admin/outdoor-entries"  element={<RequireModule module="HR & Admin"><HROutdoorEntriesPage /></RequireModule>} />
                 <Route path="hr-admin/geofences"        element={<RequireModule module="HR & Admin"><HRGeofencesPage /></RequireModule>} />
                 <Route path="hr-admin/work-codes"       element={<RequireModule module="HR & Admin"><HRWorkCodesPage /></RequireModule>} />
+                <Route path="hr-admin/attendance/recalculate"      element={<RequireModule module="HR & Admin"><HRRecalculateAttendancePage /></RequireModule>} />
+                <Route path="hr-admin/reports/daily-attendance"    element={<RequireModule module="HR & Admin"><HRDailyAttendanceReportPage /></RequireModule>} />
+                <Route path="hr-admin/reports/monthly-status"      element={<RequireModule module="HR & Admin"><HRMonthlyStatusPage /></RequireModule>} />
+                <Route path="hr-admin/reports/yearly-summary"      element={<RequireModule module="HR & Admin"><HRYearlySummaryPage /></RequireModule>} />
+                <Route path="hr-admin/reports/attendance-summary"  element={<RequireModule module="HR & Admin"><HRAttendanceSummaryPage /></RequireModule>} />
+                <Route path="hr-admin/reports/leave-summary"       element={<RequireModule module="HR & Admin"><HRLeaveSummaryPage /></RequireModule>} />
+                <Route path="hr-admin/reports/employee-details"    element={<RequireModule module="HR & Admin"><HREmployeeDetailsReportPage /></RequireModule>} />
+                <Route path="hr-admin/reports/shift-schedule"      element={<RequireModule module="HR & Admin"><HRReportsShiftSchedulePage /></RequireModule>} />
+                <Route path="hr-admin/reports/department-summary"  element={<RequireModule module="HR & Admin"><HRDepartmentSummaryPage /></RequireModule>} />
+                <Route path="hr-admin/reports/log-records"         element={<RequireModule module="HR & Admin"><HRLogRecordsPage /></RequireModule>} />
+                <Route path="hr-admin/reports/random-check"        element={<RequireModule module="HR & Admin"><HRRandomCheckReportPage /></RequireModule>} />
 
                 {/* Planning */}
                 <Route path="planning" element={<RequireModule module="Planning"><PlanningDashboard /></RequireModule>} />

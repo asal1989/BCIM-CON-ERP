@@ -33,12 +33,23 @@ router.post('/agent-push', async (req, res) => {
     const empMap = {};
     erpEmps.rows.forEach(r => { empMap[String(r.employee_code).trim().toLowerCase()] = r.id; });
 
+    // Also load SC workers so their swipes go to sc_attendance
+    const scWorkers = await query(
+      `SELECT id, worker_code, sc_id, project_id, wo_id FROM sc_workers
+       WHERE company_id=$1 AND status='active'`,
+      [company_id]
+    );
+    const scMap = {};
+    scWorkers.rows.forEach(r => { scMap[String(r.worker_code).trim().toLowerCase()] = r; });
+
     const results = { synced: 0, skipped: 0, not_found: [], errors: [] };
 
     for (const rec of records) {
       const code   = String(rec.emp_code || '').trim().toLowerCase();
       const userId = empMap[code];
-      if (!userId) { results.not_found.push(rec.emp_code); results.skipped++; continue; }
+      const scWorker = !userId ? scMap[code] : null;
+
+      if (!userId && !scWorker) { results.not_found.push(rec.emp_code); results.skipped++; continue; }
 
       const inTime  = rec.in_time  || null;
       const outTime = rec.out_time || null;
@@ -46,25 +57,44 @@ router.post('/agent-push', async (req, res) => {
       const hasOut  = !!outTime && outTime !== inTime;
       const status  = resolveStatus(hasIn, hasOut);
 
-      let lateMin = 0;
-      if (inTime) {
-        const [h, m] = inTime.split(':').map(Number);
-        const arrMins = h * 60 + m;
-        if (arrMins > 9 * 60 + 30) lateMin = arrMins - (9 * 60 + 30);
-      }
-
       try {
-        await query(
-          `INSERT INTO hr_attendance
-             (user_id, company_id, attendance_date, status, in_time, out_time, late_minutes, source)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,'essl_agent')
-           ON CONFLICT (user_id, attendance_date) DO UPDATE
-             SET status=$4,
-                 in_time=COALESCE($5, hr_attendance.in_time),
-                 out_time=COALESCE($6, hr_attendance.out_time),
-                 late_minutes=$7, source='essl_agent'`,
-          [userId, company_id, rec.date, status, inTime, outTime, lateMin]
-        );
+        if (userId) {
+          let lateMin = 0;
+          if (inTime) {
+            const [h, m] = inTime.split(':').map(Number);
+            const arrMins = h * 60 + m;
+            if (arrMins > 9 * 60 + 30) lateMin = arrMins - (9 * 60 + 30);
+          }
+          await query(
+            `INSERT INTO hr_attendance
+               (user_id, company_id, attendance_date, status, in_time, out_time, late_minutes, source)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,'essl_agent')
+             ON CONFLICT (user_id, attendance_date) DO UPDATE
+               SET status=$4,
+                   in_time=COALESCE($5, hr_attendance.in_time),
+                   out_time=COALESCE($6, hr_attendance.out_time),
+                   late_minutes=$7, source='essl_agent'`,
+            [userId, company_id, rec.date, status, inTime, outTime, lateMin]
+          );
+        } else {
+          // SC worker — write to sc_attendance
+          let hoursWorked = 8;
+          if (inTime && outTime && outTime !== inTime) {
+            const [ih, im] = inTime.split(':').map(Number);
+            const [oh, om] = outTime.split(':').map(Number);
+            const diff = (oh * 60 + om) - (ih * 60 + im);
+            if (diff > 0) hoursWorked = Math.min(parseFloat((diff / 60).toFixed(2)), 12);
+          }
+          await query(
+            `INSERT INTO sc_attendance
+               (company_id, project_id, sc_id, wo_id, worker_id, attendance_date, status, hours_worked, remarks)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'essl_agent')
+             ON CONFLICT (worker_id, attendance_date) DO UPDATE
+               SET status=$7, hours_worked=$8, remarks='essl_agent'`,
+            [company_id, scWorker.project_id, scWorker.sc_id, scWorker.wo_id,
+             scWorker.id, rec.date, status, hoursWorked]
+          );
+        }
         results.synced++;
       } catch (e2) { results.errors.push({ emp: rec.emp_code, date: rec.date, error: e2.message }); }
     }
