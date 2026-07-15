@@ -96,7 +96,7 @@ function MINDetailPanel({ min, onClose, onAuthorize, authLoading, onReceive, rec
                     <td className="px-3 py-2.5">
                       {(it.unit) && <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 text-[10px] uppercase font-medium">{it.unit}</span>}
                     </td>
-                    <td className="px-3 py-2.5 font-mono text-emerald-700 font-medium">{it.quantity ?? it.qty_issued ?? '—'}</td>
+                    <td className="px-3 py-2.5 font-mono text-emerald-700 font-medium">{it.quantity_issued ?? it.quantity ?? it.qty_issued ?? '—'}</td>
                     <td className="px-3 py-2.5 font-mono text-slate-600">₹{inr(it.rate)}</td>
                     <td className="px-3 py-2.5 font-mono font-medium text-slate-800">₹{inr(it.value || it.total_value)}</td>
                     <td className="px-3 py-2.5 text-slate-500">{it.remarks || '—'}</td>

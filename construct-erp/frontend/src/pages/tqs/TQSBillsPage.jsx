@@ -2710,9 +2710,15 @@ export default function TQSBillsPage() {
   // excludes GST since it's a pass-through tax, not project spend.
   const totalBasicValue = bills.reduce((s, b) => s + parseFloat(b.basic_amount || 0), 0);
   const totalGstValue   = totalValue - totalBasicValue;
-  const paidValue   = bills.filter(b => b.workflow_status === 'paid').reduce((s, b) => s + parseFloat(b.paid_amount || 0), 0);
+  // Sum ALL payments (including partials), not just fully-paid bills — otherwise
+  // partial payments vanish from the card and the totals don't reconcile.
+  const paidValue   = bills.reduce((s, b) => s + parseFloat(b.paid_amount || 0), 0);
   const totalBalanceDue  = bills
     .reduce((s, b) => s + billBalanceDue(b), 0);
+  // Deductions withheld (TDS + retention + advance recovery + other) = the slice
+  // of invoice value never payable to the vendor. Derived so the header cards
+  // reconcile exactly:  Total Value = Paid + Deductions + Balance Due.
+  const deductionsValue = Math.max(0, totalValue - paidValue - totalBalanceDue);
 
   // Status counts for Zoho-style tab bar
   const STATUS_TABS = [
@@ -2854,8 +2860,9 @@ export default function TQSBillsPage() {
         ]}
         pills={[
           { label: 'Total Value',  value: inrCr(totalValue) },
-          { label: 'Balance Due',  value: inrCr(totalBalanceDue), color: '#f87171' },
           { label: 'Paid',         value: inrCr(paidValue),       color: '#34d399' },
+          { label: 'Deductions',   value: inrCr(deductionsValue), color: '#fbbf24' },
+          { label: 'Balance Due',  value: inrCr(totalBalanceDue), color: '#f87171' },
         ]}
         actions={<>
           {activeProject && (<>
@@ -2919,12 +2926,13 @@ export default function TQSBillsPage() {
       <div className="p-4 space-y-4">
 
         {/* ── KPI Grid ── */}
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
           <ThemeKpiCard label="Total Bills"  value={bills.length}                         sub={inrCr(totalValue)}  color="blue"    icon={FileText} />
           <ThemeKpiCard label="Pending"      value={kpiPending}                           color="amber"            icon={AlertTriangle}
             onClick={() => setStatusFilter(p => p === 'pending' ? '' : 'pending')}
             active={statusFilter === 'pending'} />
           <ThemeKpiCard label="In Progress"  value={bills.length - kpiPaid - kpiPending}  color="indigo"           icon={ChevronsRight} />
+          <ThemeKpiCard label="Deductions"   value={inrCr(deductionsValue)}               color="amber"            icon={IndianRupee} />
           <ThemeKpiCard label="Balance Due"  value={inrCr(totalBalanceDue)}               color="red"              icon={IndianRupee} />
           <ThemeKpiCard label="Paid"         value={kpiPaid}                              sub={inrCr(paidValue)}   color="emerald" icon={CheckCircle2}
             onClick={() => setStatusFilter(p => p === 'paid' ? '' : 'paid')}

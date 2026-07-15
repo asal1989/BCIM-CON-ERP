@@ -1197,6 +1197,9 @@ if (require.main === module) {
 
     const { initBirthdayAnniversary } = require('./utils/hr-birthday-anniversary.service');
     initBirthdayAnniversary();
+
+    const { initLateArrivalAlert } = require('./utils/late-arrival-alert.service');
+    initLateArrivalAlert();
   });
   }); // end .finally()
 }

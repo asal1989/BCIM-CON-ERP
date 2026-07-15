@@ -70,7 +70,11 @@ export default function RecalculateAttendancePage() {
             </span>
           </div>
           {result.ok && result.updated !== undefined && (
-            <p style={{ color:'#166534', fontSize:13, margin:0 }}>{result.updated} records updated for {from} → {to}</p>
+            <div style={{ fontSize:13, color:'#166534', display:'flex', flexDirection:'column', gap:4 }}>
+              <p style={{ margin:0, fontWeight:700 }}>{result.updated} total records updated ({from} → {to})</p>
+              <p style={{ margin:0 }}>• Staff: {result.staff_updated} records</p>
+              <p style={{ margin:0 }}>• SC Workers: {result.sc_updated} records</p>
+            </div>
           )}
           {!result.ok && <p style={{ color:'#991B1B', fontSize:13, margin:0 }}>{result.message}</p>}
         </div>

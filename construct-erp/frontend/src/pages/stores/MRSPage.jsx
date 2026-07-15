@@ -918,8 +918,10 @@ export default function MRSPage() {
   const [showMDModal, setShowMDModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
 
-  // Only the Managing Director may edit MRS header/item details directly
-  const canEditMRS = ['managing_director', 'super_admin'].includes(userRoleLower);
+  // MD/super_admin can edit any MRS; stores staff can edit while still pending/stores stage
+  const isStoresStaff = ['stores_manager', 'store_keeper'].includes(userRoleLower);
+  const canEditMRS = ['managing_director', 'super_admin'].includes(userRoleLower) ||
+    (isStoresStaff && ['pending', 'stores_verified'].includes(liveStatus));
   const updateMRSMutation = useMutation({
     mutationFn: ({ id, data }) => mrsAPI.update(id, data),
     onSuccess: () => {

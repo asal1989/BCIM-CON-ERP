@@ -185,6 +185,7 @@ export const subcontractorAPI = {
   approveWorkOrder:  (id, d)  => api.patch(`/subcontractors/work-orders/${id}/approve`, d),
   mdApproveWorkOrder:(id)     => api.patch(`/subcontractors/work-orders/${id}/md-approve`),
   rejectWorkOrder:   (id, d)  => api.patch(`/subcontractors/work-orders/${id}/reject`, d),
+  terminateWorkOrder:(id, d)  => api.patch(`/subcontractors/work-orders/${id}/terminate`, d),
   downloadWOTemplate:()       => api.get('/subcontractors/work-orders/import/template', { responseType: 'blob' }),
   excelImportPreview:(file)   => { const fd = new FormData(); fd.append('file', file); return api.post('/subcontractors/work-orders/import/excel', fd, { headers: { 'Content-Type': undefined } }); },
   // Measurements
@@ -493,6 +494,7 @@ export const hrShiftsAPI = {
   deleteShift:  (id)       => api.delete(`/hr-admin/shifts/${id}`),
   empShifts:    (p)        => api.get('/hr-admin/employee-shifts', { params: p }),
   assignShift:  (d)        => api.post('/hr-admin/employee-shifts', d),
+  bulkAssignShift: (d)     => api.post('/hr-admin/employee-shifts/bulk-assign', d),
   removeShift:  (id)       => api.delete(`/hr-admin/employee-shifts/${id}`),
   overtime:     (p)        => api.get('/hr-admin/overtime', { params: p }),
   addOT:        (d)        => api.post('/hr-admin/overtime', d),
@@ -1909,6 +1911,9 @@ export const hrAttendanceAPI = {
   update:  (id, d)  => api.put(`/hr-admin/attendance/${id}`, d),
   timesheetReport: (params) => api.get('/hr-admin/attendance/timesheet-report', { params }),
   monthlyReport:  (params) => api.get('/hr-admin/attendance/monthly-report', { params }),
+  yearlySummary:  (params) => api.get('/hr-admin/attendance/yearly-summary', { params }),
+  runLateAlerts:  (data)   => api.post('/hr-admin/attendance/late-alerts/run', data || {}),
+  testLateAlert:  ()       => api.post('/hr-admin/attendance/late-alerts/test', {}),
 };
 
 export const hrSalaryAPI = {

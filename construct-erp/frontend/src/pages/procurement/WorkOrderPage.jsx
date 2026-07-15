@@ -992,6 +992,56 @@ function CreateWOModal({ onClose, vendors, projects, mrsList = [], onCreate, onU
   );
 }
 
+/* ─── WO Terminate Modal ─── */
+function WOTerminateModal({ wo, onClose, onConfirm, isPending }) {
+  const [reason, setReason] = useState('');
+  const canSubmit = reason.trim().length > 0;
+  return (
+    <div className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center">
+              <XCircle className="w-4 h-4 text-orange-500" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Terminate Work Order</p>
+              <p className="text-xs text-slate-500">{wo?.wo_number}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="px-5 py-4 space-y-3">
+          <div className="bg-orange-50 border border-orange-200 rounded-xl px-3 py-2.5 text-sm">
+            <p className="font-semibold text-orange-800">{(wo?.vendor_name || '').toUpperCase()}</p>
+            <p className="text-xs text-orange-600 mt-0.5">₹{inr(wo?.total_value || wo?.contract_amount)} — Work stopped midway</p>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5">Reason for Termination <span className="text-red-500">*</span></label>
+            <textarea
+              rows={3}
+              autoFocus
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              placeholder="e.g. Vendor abandoned site, non-performance, financial default…"
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-50 resize-none transition-all"
+            />
+            {!canSubmit && <p className="text-[11px] text-slate-400 mt-1">Reason is required to record why the work was stopped.</p>}
+          </div>
+        </div>
+        <div className="flex gap-3 px-5 pb-5">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors">Cancel</button>
+          <button onClick={() => onConfirm(reason.trim())} disabled={isPending || !canSubmit}
+            className="flex-1 py-2.5 rounded-xl text-white text-sm font-black disabled:opacity-50 transition-all"
+            style={{ background: 'linear-gradient(135deg,#F97316,#EA580C)' }}>
+            {isPending ? 'Terminating…' : 'Terminate WO'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── WO Reject Reason Modal ─── */
 function WORejectModal({ wo, onClose, onConfirm, isPending }) {
   const [reason, setReason] = useState('');
@@ -1043,8 +1093,9 @@ function WORejectModal({ wo, onClose, onConfirm, isPending }) {
 }
 
 /* ── WO Detail Panel — Full-Screen Modal ────────────────────────────────── */
-function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, isApproving, isMDApproving, isRejecting, user, company }) {
-  const [rejectModal, setRejectModal] = useState(false);
+function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, onTerminate, isApproving, isMDApproving, isRejecting, isTerminating, user, company }) {
+  const [rejectModal, setRejectModal]       = useState(false);
+  const [terminateModal, setTerminateModal] = useState(false);
   const { data: detail, isLoading: detailLoading } = useQuery({
     queryKey: ['work-order-detail', wo?.id],
     queryFn: () => subcontractorAPI.getWorkOrder(wo.id).then(r => r.data),
@@ -1402,6 +1453,30 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
           </div>{/* end right column */}
         </div>{/* end two-column body */}
 
+        {/* Terminate button — visible for active/approved WOs */}
+        {['active','approved'].includes(liveStatus) && (
+          <div className="px-6 py-3 border-t border-slate-100 bg-orange-50 flex items-center justify-between gap-3">
+            <p className="text-xs text-orange-700 font-medium">Vendor stopped work or abandoned site?</p>
+            <button
+              onClick={() => setTerminateModal(true)}
+              disabled={isTerminating}
+              className="shrink-0 px-4 h-8 rounded-lg border border-orange-300 bg-white text-orange-700 text-xs font-semibold hover:bg-orange-100 transition-colors disabled:opacity-50">
+              {isTerminating ? 'Terminating…' : '✕ Terminate WO'}
+            </button>
+          </div>
+        )}
+
+        {/* Termination reason — shown once terminated */}
+        {liveStatus === 'terminated' && displayWO.rejection_reason && (
+          <div className="px-6 py-3 border-t border-slate-100 bg-orange-50 flex items-start gap-2">
+            <XCircle className="w-4 h-4 text-orange-500 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-xs font-semibold text-orange-800">Terminated</p>
+              <p className="text-xs text-orange-700 mt-0.5">{displayWO.rejection_reason}</p>
+            </div>
+          </div>
+        )}
+
         {/* Attachments */}
         <div className="px-6 py-4 border-t border-slate-100 bg-white">
           <RecordAttachments
@@ -1424,6 +1499,14 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
         isPending={isRejecting}
         onClose={() => setRejectModal(false)}
         onConfirm={(reason) => { onReject(wo.id, reason); setRejectModal(false); }}
+      />
+    )}
+    {terminateModal && (
+      <WOTerminateModal
+        wo={displayWO}
+        isPending={isTerminating}
+        onClose={() => setTerminateModal(false)}
+        onConfirm={(reason) => { onTerminate(wo.id, reason); setTerminateModal(false); }}
       />
     )}
     </>
@@ -1510,6 +1593,11 @@ export default function WorkOrderPage() {
     mutationFn: ({ id, reason }) => subcontractorAPI.rejectWorkOrder(id, { reason }),
     onSuccess: () => { toast.success('Work Order rejected'); setSelectedWO(null); qc.invalidateQueries({ queryKey: ['work-orders'] }); },
     onError: e => toast.error(e?.response?.data?.error || 'Rejection failed'),
+  });
+  const terminateMutation = useMutation({
+    mutationFn: ({ id, reason }) => subcontractorAPI.terminateWorkOrder(id, { reason }),
+    onSuccess: () => { toast.success('Work Order terminated'); setSelectedWO(null); qc.invalidateQueries({ queryKey: ['work-orders'] }); },
+    onError: e => toast.error(e?.response?.data?.error || 'Termination failed'),
   });
 
   const allWOs = woData;
@@ -1987,8 +2075,10 @@ export default function WorkOrderPage() {
           onEdit={wo => setEditingWO(wo)}
           onApprove={id => approveMutation.mutate(id)} onMDApprove={id => mdApproveMutation.mutate(id)}
           onReject={(id, reason) => rejectMutation.mutate({ id, reason })}
+          onTerminate={(id, reason) => terminateMutation.mutate({ id, reason })}
           isApproving={approveMutation.isPending} isMDApproving={mdApproveMutation.isPending}
-          isRejecting={rejectMutation.isPending} user={user} company={companyData}
+          isRejecting={rejectMutation.isPending} isTerminating={terminateMutation.isPending}
+          user={user} company={companyData}
         />
       )}
       {editingWO && (

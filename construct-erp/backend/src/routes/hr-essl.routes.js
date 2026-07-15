@@ -42,6 +42,9 @@ router.post('/agent-push', async (req, res) => {
     const scMap = {};
     scWorkers.rows.forEach(r => { scMap[String(r.worker_code).trim().toLowerCase()] = r; });
 
+    // Per-employee late cutoff from their assigned shift (site / head office etc.)
+    const cutoffMap = await buildShiftCutoffMap(company_id);
+
     const results = { synced: 0, skipped: 0, not_found: [], errors: [] };
 
     for (const rec of records) {
@@ -59,12 +62,7 @@ router.post('/agent-push', async (req, res) => {
 
       try {
         if (userId) {
-          let lateMin = 0;
-          if (inTime) {
-            const [h, m] = inTime.split(':').map(Number);
-            const arrMins = h * 60 + m;
-            if (arrMins > 9 * 60 + 30) lateMin = arrMins - (9 * 60 + 30);
-          }
+          const lateMin = lateMinutesFor(inTime, cutoffMap[userId] ?? DEFAULT_CUTOFF_MINS);
           // Merge with existing punches: earliest = in, latest = out.
           // A partial window sync may deliver only an evening punch (as in_time),
           // so every incoming time is a candidate for both in and out.
@@ -236,6 +234,47 @@ function resolveStatus(hasIn, hasOut) {
   if (hasIn && hasOut) return 'present';
   if (hasIn || hasOut) return 'half_day';
   return 'absent';
+}
+
+// Default "on-time by" cutoff in minutes-since-midnight when an employee has no
+// shift assigned (09:30, matching the historical hardcoded behaviour).
+const DEFAULT_CUTOFF_MINS = 9 * 60 + 30;
+
+// Build { userId: cutoffMinutes } for a company from each employee's currently
+// effective shift assignment. cutoff = shift start_time + grace_minutes, so site
+// and head-office staff are judged late against their OWN configured shift timing
+// (set in Shift Management) instead of a single company-wide 09:30. Employees with
+// no shift assignment fall back to DEFAULT_CUTOFF_MINS.
+async function buildShiftCutoffMap(companyId) {
+  const map = {};
+  try {
+    const { rows } = await query(`
+      SELECT DISTINCT ON (es.employee_id)
+             es.employee_id,
+             hs.start_time,
+             COALESCE(hs.grace_minutes, 0) AS grace_minutes
+      FROM hr_employee_shifts es
+      JOIN hr_shifts hs ON hs.id = es.shift_id
+      WHERE es.company_id = $1
+        AND es.effective_from <= CURRENT_DATE
+        AND (es.effective_to IS NULL OR es.effective_to >= CURRENT_DATE)
+      ORDER BY es.employee_id, es.effective_from DESC
+    `, [companyId]);
+    for (const r of rows) {
+      if (!r.start_time) continue;
+      const [h, m] = String(r.start_time).split(':').map(Number);
+      map[r.employee_id] = h * 60 + m + (parseInt(r.grace_minutes, 10) || 0);
+    }
+  } catch (_) { /* no shift tables / assignments — everyone uses the default */ }
+  return map;
+}
+
+// Late minutes for an arrival "HH:MM[:SS]" against the employee's cutoff.
+function lateMinutesFor(inTime, cutoffMins) {
+  if (!inTime) return 0;
+  const [h, m] = String(inTime).split(':').map(Number);
+  const arr = h * 60 + m;
+  return arr > cutoffMins ? arr - cutoffMins : 0;
 }
 
 // ─── Build list of DeviceLogs_M_YYYY table names for a date range ─────────────
@@ -467,6 +506,9 @@ router.post('/sync', async (req, res) => {
       erpCodesArr.push(code);
     });
 
+    // Per-employee late cutoff from their assigned shift (site / head office etc.)
+    const cutoffMap = await buildShiftCutoffMap(companyId);
+
     // ── Connect to ESSL MSSQL ──────────────────────────────────────────────
     const conn   = await sql.connect(buildMssqlConfig(cfg));
     const tables = await existingTables(conn, monthlyTables(from, to));
@@ -533,14 +575,9 @@ router.post('/sync', async (req, res) => {
       const hasIn  = !!inTime;
       const hasOut = !!outTime && outTime !== inTime;
 
-      // Compute late minutes (if in_time > 09:30 → late)
-      let lateMin = 0;
-      if (inTime) {
-        const [h, m] = inTime.split(':').map(Number);
-        const arrivalMins = h * 60 + m;
-        const standardMins = 9 * 60 + 30; // 09:30 standard
-        if (arrivalMins > standardMins) lateMin = arrivalMins - standardMins;
-      }
+      // Late minutes against the employee's assigned shift cutoff (falls back to
+      // 09:30 when no shift is assigned) — see buildShiftCutoffMap.
+      const lateMin = lateMinutesFor(inTime, cutoffMap[userId] ?? DEFAULT_CUTOFF_MINS);
 
       const status = resolveStatus(hasIn, hasOut);
 

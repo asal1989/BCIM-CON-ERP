@@ -1161,11 +1161,15 @@ router.patch('/:id/cancel-items', async (req, res) => {
 // already on a PO. New items (no id) are appended; existing items are never
 // removed here (use /cancel-items for that, which is audit-tracked).
 // NOTE: must be registered BEFORE /:id/:stage so the wildcard can't swallow it.
-const MD_EDIT_ROLES = ['managing_director', 'super_admin'];
+const STORES_EDIT_ROLES = ['stores_manager', 'store_keeper'];
+const ALL_EDIT_ROLES   = ['managing_director', 'super_admin', ...STORES_EDIT_ROLES];
+const STORES_EDITABLE_STATUSES = new Set(['pending', 'stores_verified']);
+
 router.patch('/:id', async (req, res) => {
   try {
-    if (!MD_EDIT_ROLES.includes((req.user.role || '').toLowerCase())) {
-      return res.status(403).json({ error: 'Only the Managing Director can edit a Material Requisition.' });
+    const userRole = (req.user.role || '').toLowerCase();
+    if (!ALL_EDIT_ROLES.includes(userRole)) {
+      return res.status(403).json({ error: 'Only the Managing Director or Stores team can edit a Material Requisition.' });
     }
     const {
       department, head_office_project_name, site_incharge, required_by,
@@ -1182,6 +1186,10 @@ router.patch('/:id', async (req, res) => {
     }
     if (!userCanAccessProject(req, mrs.rows[0].project_id)) {
       return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
+    // Stores staff can only edit while MRS is still pending or at stores stage
+    if (STORES_EDIT_ROLES.includes(userRole) && !STORES_EDITABLE_STATUSES.has(mrs.rows[0].status)) {
+      return res.status(403).json({ error: 'Stores staff can only edit an MRS that is still pending or at stores-verification stage.' });
     }
 
     await withTransaction(async (client) => {

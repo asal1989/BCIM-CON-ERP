@@ -8,6 +8,7 @@ const { query, withTransaction } = require('../config/database');
 const { extractWO } = require('../services/woExtraction.service');
 const { getNextDqsNumber } = require('../services/documentNumber.service');
 const { logAudit } = require('../utils/auditLog');
+const { sendMail } = require('../services/mail.service');
 const { runSchemaInit } = require('../utils/schemaInit');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -128,6 +129,120 @@ router.patch('/work-orders/:id/reject', authorize('super_admin', 'admin', 'proje
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Work order not found' });
     res.json({ data: result.rows[0], message: 'Work Order rejected' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PATCH /work-orders/:id/terminate — close a WO mid-way when vendor abandons work
+router.patch('/work-orders/:id/terminate', authorize('super_admin', 'admin', 'project_manager', 'procurement_manager', 'managing_director', 'md', 'ceo'), async (req, res) => {
+  try {
+    const reason = (req.body?.reason || '').trim();
+    if (!reason) return res.status(400).json({ error: 'A termination reason is required.' });
+    const result = await query(
+      `UPDATE work_orders
+       SET status='terminated', rejection_reason=$3, updated_at=NOW()
+       WHERE id=$1
+         AND project_id IN (SELECT id FROM projects WHERE company_id=$2)
+         AND status NOT IN ('terminated','closed','rejected')
+       RETURNING *, (SELECT name FROM projects WHERE id=project_id) AS project_name,
+                    (SELECT name FROM users WHERE id=vendor_id) AS vendor_name_resolved`,
+      [req.params.id, req.user.company_id, reason]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Work order not found or already closed/terminated.' });
+
+    const wo = result.rows[0];
+    res.json({ data: wo, message: 'Work Order terminated' });
+
+    // Fire-and-forget email to MD, Procurement, Super Admin
+    (async () => {
+      try {
+        const { rows: recipients } = await query(
+          `SELECT DISTINCT email, name FROM users
+           WHERE company_id=$1
+             AND role IN ('managing_director','md','ceo','procurement_manager','super_admin')
+             AND is_active=TRUE AND email IS NOT NULL`,
+          [req.user.company_id]
+        );
+        if (!recipients.length) return;
+
+        const terminatedBy = req.user.name || req.user.email || 'System';
+        const vendorName   = wo.vendor_name || wo.vendor_name_resolved || '—';
+        const woValue      = Number(wo.total_value || wo.contract_amount || 0).toLocaleString('en-IN');
+        const projectName  = wo.project_name || '—';
+        const erp = process.env.API_BASE_URL || 'https://erp.bcim.in';
+
+        await sendMail({
+          to: recipients.map(r => r.email),
+          subject: `⚠ Work Order Terminated — ${wo.wo_number || wo.id}`,
+          html: `
+<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:24px 0">
+<tr><td align="center">
+<table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;border-collapse:collapse">
+  <tr><td style="background:#7c2d12;height:4px;border-radius:6px 6px 0 0;font-size:1px">&nbsp;</td></tr>
+  <tr><td style="background:#1e3a8a;padding:20px 24px">
+    <p style="margin:0;color:#fff;font-size:15px;font-weight:700">BCIM CONSTRUCTIONS</p>
+    <p style="margin:4px 0 0;color:#93c5fd;font-size:11px;font-weight:600;letter-spacing:1px">WORK ORDER — TERMINATION NOTICE</p>
+  </td></tr>
+  <tr><td style="background:#fff;padding:24px">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;margin-bottom:20px">
+      <tr><td style="background:#ea580c;padding:8px 16px;border-radius:7px 7px 0 0">
+        <p style="margin:0;color:#fff;font-size:11px;font-weight:700;letter-spacing:1px">TERMINATED WORK ORDER</p>
+      </td></tr>
+      <tr><td style="padding:16px">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-size:12px;width:40%">WO Number</td>
+            <td style="padding:6px 0;font-size:13px;font-weight:700;color:#0f172a">${wo.wo_number || wo.id}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-size:12px;border-top:1px solid #f1f5f9">Vendor</td>
+            <td style="padding:6px 0;font-size:13px;font-weight:600;color:#0f172a;border-top:1px solid #f1f5f9">${vendorName}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-size:12px;border-top:1px solid #f1f5f9">Project</td>
+            <td style="padding:6px 0;font-size:13px;font-weight:600;color:#0f172a;border-top:1px solid #f1f5f9">${projectName}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-size:12px;border-top:1px solid #f1f5f9">Contract Value</td>
+            <td style="padding:6px 0;font-size:13px;font-weight:700;color:#b91c1c;border-top:1px solid #f1f5f9">₹${woValue}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-size:12px;border-top:1px solid #f1f5f9">Terminated By</td>
+            <td style="padding:6px 0;font-size:13px;color:#0f172a;border-top:1px solid #f1f5f9">${terminatedBy}</td>
+          </tr>
+        </table>
+      </td></tr>
+    </table>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px">
+      <tr><td style="background:#fef9c3;border-left:4px solid #ca8a04;padding:12px 14px">
+        <p style="margin:0;font-size:12px;font-weight:700;color:#713f12">Reason for Termination</p>
+        <p style="margin:6px 0 0;font-size:13px;color:#78350f;line-height:1.6">${reason}</p>
+      </td></tr>
+    </table>
+
+    <table cellpadding="0" cellspacing="0">
+      <tr><td style="background:#1e3a8a;border-radius:6px">
+        <a href="${erp}/work-orders" style="display:inline-block;color:#fff;padding:10px 22px;text-decoration:none;font-weight:700;font-size:12px">
+          View Work Order in ERP →
+        </a>
+      </td></tr>
+    </table>
+  </td></tr>
+  <tr><td style="background:#f8fafc;padding:14px 24px;border-top:1px solid #e2e8f0">
+    <p style="margin:0;font-size:11px;color:#94a3b8">Automated alert · BCIM ERP · <a href="mailto:hr@bcim.in" style="color:#3b82f6;text-decoration:none">hr@bcim.in</a></p>
+  </td></tr>
+  <tr><td style="background:#1e3a8a;height:4px;border-radius:0 0 6px 6px;font-size:1px">&nbsp;</td></tr>
+</table>
+</td></tr></table>
+</body></html>`,
+          text: `Work Order Terminated\n\nWO: ${wo.wo_number || wo.id}\nVendor: ${vendorName}\nProject: ${projectName}\nValue: ₹${woValue}\nTerminated by: ${terminatedBy}\n\nReason: ${reason}\n\nView: ${erp}/work-orders`,
+        });
+      } catch (mailErr) {
+        console.error('WO termination email failed:', mailErr.message);
+      }
+    })();
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

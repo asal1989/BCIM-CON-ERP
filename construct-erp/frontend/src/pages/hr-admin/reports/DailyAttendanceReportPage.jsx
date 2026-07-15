@@ -30,6 +30,9 @@ export default function DailyAttendanceReportPage() {
   const absent   = rows.filter(r=>(r.attendance_status||r.status||'').toLowerCase()==='absent').length;
   const leave    = rows.filter(r=>(r.attendance_status||r.status||'').toLowerCase()==='leave').length;
   const half     = rows.filter(r=>(r.attendance_status||r.status||'').toLowerCase()==='half_day').length;
+  const lateRows = rows.filter(r=>(r.late_minutes||0)>0).sort((a,b)=>(b.late_minutes||0)-(a.late_minutes||0));
+  const totalLate = lateRows.reduce((s,r)=>s+(r.late_minutes||0),0);
+  const avgLate  = lateRows.length>0 ? Math.round(totalLate/lateRows.length) : 0;
 
   const exportCSV = () => {
     const header = ['Emp ID','Name','Designation','Department','Status','In Time','Out Time','Late (min)','Source'];
@@ -79,6 +82,18 @@ export default function DailyAttendanceReportPage() {
             <div style={{ fontSize:11, color:c, fontWeight:600 }}>{l}</div>
           </div>
         ))}
+        {lateRows.length > 0 && (
+          <div style={{ background:'#FFF7ED', border:'1px solid #FED7AA', borderRadius:8, padding:'10px 16px', minWidth:160 }}>
+            <div style={{ fontWeight:800, fontSize:18, color:'#C2410C' }}>{lateRows.length} Late</div>
+            <div style={{ fontSize:11, color:'#C2410C', fontWeight:600 }}>Avg {avgLate} min · Total {totalLate} min</div>
+            <div style={{ marginTop:6, fontSize:10, color:'#92400E', maxHeight:48, overflowY:'auto' }}>
+              {lateRows.slice(0,5).map((r,i)=>(
+                <div key={i}>{r.name} — {r.late_minutes}m</div>
+              ))}
+              {lateRows.length>5 && <div>+{lateRows.length-5} more...</div>}
+            </div>
+          </div>
+        )}
       </div>
 
       <div style={{ overflowX:'auto', background:'#fff', borderRadius:8, border:'1px solid #E2E8F0' }}>

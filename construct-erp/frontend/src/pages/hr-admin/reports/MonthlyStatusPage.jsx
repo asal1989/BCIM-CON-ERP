@@ -7,21 +7,32 @@ const MONTHS = ['January','February','March','April','May','June','July','August
 const CY = new Date().getFullYear();
 const YEARS = [CY-2, CY-1, CY];
 
-const STATUS_COLOR = { present:'#D1FAE5', absent:'#FEE2E2', leave:'#FEF3C7', half_day:'#DBEAFE', holiday:'#EDE9FE', late:'#FDE8D8' };
-const STATUS_TEXT  = { present:'#065F46', absent:'#991B1B', leave:'#92400E', half_day:'#1E40AF', holiday:'#5B21B6', late:'#9A3412' };
-const STATUS_LABEL = { present:'P', absent:'A', leave:'L', half_day:'HD', holiday:'H', late:'LA' };
+const STATUS_COLOR = {
+  present:'#D1FAE5', absent:'#FEE2E2', leave:'#FEF3C7',
+  half_day:'#DBEAFE', holiday:'#EDE9FE', week_off:'#F1F5F9', late:'#FDE8D8',
+};
+const STATUS_TEXT  = {
+  present:'#065F46', absent:'#991B1B', leave:'#92400E',
+  half_day:'#1E40AF', holiday:'#5B21B6', week_off:'#94A3B8', late:'#9A3412',
+};
+const STATUS_LABEL = {
+  present:'P', absent:'A', leave:'L', half_day:'HD', holiday:'H', week_off:'WO', late:'LA',
+};
 
 function Pill({ s }) {
   const key = (s||'absent').toLowerCase();
   return (
     <span style={{ background: STATUS_COLOR[key]||'#F1F5F9', color: STATUS_TEXT[key]||'#475569',
-      borderRadius:3, padding:'1px 6px', fontWeight:700, fontSize:10, letterSpacing:0.4 }}>
+      borderRadius:3, padding:'1px 5px', fontWeight:700, fontSize:9, letterSpacing:0.3 }}>
       {STATUS_LABEL[key]||s||'A'}
     </span>
   );
 }
 
 function daysInMonth(y, m) { return new Date(y, m, 0).getDate(); }
+
+// Returns 0=Sun … 6=Sat for day d in month m (1-based) of year y
+function dayOfWeek(y, m, d) { return new Date(y, m - 1, d).getDay(); }
 
 export default function MonthlyStatusPage() {
   const now = new Date();
@@ -33,18 +44,42 @@ export default function MonthlyStatusPage() {
 
   const days = daysInMonth(year, month);
 
-  const { data, isLoading } = useQuery({
+  const { data: apiData, isLoading } = useQuery({
     queryKey: ['monthly-status', year, month, project],
     queryFn:  () => hrAttendanceAPI.monthlyReport({ year, month, project_id: project||undefined })
-                    .then(r => r.data?.data || r.data || []),
+                    .then(r => r.data || {}),
     enabled: true,
   });
 
-  // Group by employee → map of day → status
+  const attendanceRows = Array.isArray(apiData?.data) ? apiData.data : Array.isArray(apiData) ? apiData : [];
+  const holidays = apiData?.holidays || [];
+
+  // Build set of holiday dates: "YYYY-MM-DD"
+  const holidaySet = new Set(holidays.map(h => h.date?.slice(0,10)));
+
+  // Build set of Sundays in this month
+  const sundaySet = new Set();
+  for (let d = 1; d <= days; d++) {
+    if (dayOfWeek(year, month, d) === 0) sundaySet.add(d);
+  }
+
+  // Helper: get calendar status for a day — holiday/week_off override attendance
+  function calStatus(empDays, dayNum) {
+    const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(dayNum).padStart(2,'0')}`;
+    if (holidaySet.has(dateStr)) return 'holiday';
+    if (sundaySet.has(dayNum))   return 'week_off';
+    return empDays[dayNum] || null;
+  }
+
+  // Group by employee
   const empMap = {};
-  (data||[]).forEach(row => {
+  attendanceRows.forEach(row => {
     const key = row.emp_id || row.user_id;
-    if (!empMap[key]) empMap[key] = { emp_id: row.emp_id, name: row.name, designation: row.designation, department: row.department, days: {}, present:0, absent:0, leave:0, half:0 };
+    if (!empMap[key]) empMap[key] = {
+      emp_id: row.emp_id, name: row.name,
+      designation: row.designation, department: row.department,
+      days: {}, present:0, absent:0, leave:0, half:0,
+    };
     const d = new Date(row.attendance_date || row.date);
     const day = d.getDate();
     const s = (row.attendance_status || row.status || 'absent').toLowerCase();
@@ -56,11 +91,23 @@ export default function MonthlyStatusPage() {
   });
   const rows = Object.values(empMap);
 
+  // Day header — highlight Sundays and holidays
+  function dayHeaderStyle(d) {
+    const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    if (holidaySet.has(dateStr)) return { color:'#5B21B6', fontWeight:800 };
+    if (sundaySet.has(d))        return { color:'#94A3B8' };
+    return { color:'#475569' };
+  }
+
   const exportCSV = () => {
     const header = ['Emp ID','Name','Designation','Department',...Array.from({length:days},(_,i)=>`${i+1}`),'P','A','L','HD'];
     const csvRows = rows.map(r => [r.emp_id, r.name, r.designation||'', r.department||'',
-      ...Array.from({length:days},(_,i) => STATUS_LABEL[(r.days[i+1]||'absent').toLowerCase()]||'A'),
-      r.present, r.absent, r.leave, r.half]);
+      ...Array.from({length:days},(_,i) => {
+        const s = calStatus(r.days, i+1);
+        return STATUS_LABEL[(s||'').toLowerCase()] || (s ? s : '—');
+      }),
+      r.present, r.absent, r.leave, r.half,
+    ]);
     const csv = [header, ...csvRows].map(r=>r.join(',')).join('\n');
     const a = document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.download=`monthly-status-${year}-${month}.csv`; a.click();
   };
@@ -92,10 +139,15 @@ export default function MonthlyStatusPage() {
       </div>
 
       {/* Legend */}
-      <div style={{ display:'flex', gap:10, marginBottom:12, flexWrap:'wrap' }}>
+      <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap' }}>
         {Object.entries(STATUS_LABEL).map(([k,v])=>(
           <span key={k} style={{ background:STATUS_COLOR[k]||'#F1F5F9', color:STATUS_TEXT[k]||'#475569', borderRadius:4, padding:'2px 8px', fontSize:11, fontWeight:700 }}>{v} – {k.replace('_',' ')}</span>
         ))}
+        {holidays.length > 0 && (
+          <span style={{ fontSize:11, color:'#5B21B6', marginLeft:4 }}>
+            Holidays: {holidays.map(h => `${h.holiday_name} (${h.date?.slice(5)})`).join(', ')}
+          </span>
+        )}
       </div>
 
       {/* Table */}
@@ -108,12 +160,22 @@ export default function MonthlyStatusPage() {
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
             <thead>
               <tr style={{ background:'#F8FAFC', borderBottom:'2px solid #E2E8F0' }}>
-                <th style={{ padding:'8px 10px', textAlign:'left', position:'sticky', left:0, background:'#F8FAFC', fontWeight:700, color:'#475569', whiteSpace:'nowrap' }}>Emp ID</th>
-                <th style={{ padding:'8px 10px', textAlign:'left', position:'sticky', left:60, background:'#F8FAFC', fontWeight:700, color:'#475569', whiteSpace:'nowrap' }}>Name</th>
+                <th style={{ padding:'8px 10px', textAlign:'left', position:'sticky', left:0, background:'#F8FAFC', fontWeight:700, color:'#475569', whiteSpace:'nowrap', zIndex:2 }}>Emp ID</th>
+                <th style={{ padding:'8px 10px', textAlign:'left', position:'sticky', left:60, background:'#F8FAFC', fontWeight:700, color:'#475569', whiteSpace:'nowrap', zIndex:2 }}>Name</th>
                 <th style={{ padding:'8px 10px', textAlign:'left', fontWeight:700, color:'#475569', whiteSpace:'nowrap' }}>Dept</th>
-                {Array.from({length:days},(_,i)=>(
-                  <th key={i+1} style={{ padding:'6px 4px', textAlign:'center', fontWeight:700, color:'#475569', minWidth:28 }}>{i+1}</th>
-                ))}
+                {Array.from({length:days},(_,i)=>{
+                  const d = i+1;
+                  const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                  const isHoliday = holidaySet.has(dateStr);
+                  const isSunday  = sundaySet.has(d);
+                  return (
+                    <th key={d} style={{
+                      padding:'6px 3px', textAlign:'center', minWidth:26, fontSize:10,
+                      background: isHoliday ? '#EDE9FE' : isSunday ? '#F8FAFC' : undefined,
+                      ...dayHeaderStyle(d),
+                    }}>{d}</th>
+                  );
+                })}
                 <th style={{ padding:'8px 6px', textAlign:'center', fontWeight:700, color:'#065F46', background:'#D1FAE5' }}>P</th>
                 <th style={{ padding:'8px 6px', textAlign:'center', fontWeight:700, color:'#991B1B', background:'#FEE2E2' }}>A</th>
                 <th style={{ padding:'8px 6px', textAlign:'center', fontWeight:700, color:'#92400E', background:'#FEF3C7' }}>L</th>
@@ -123,14 +185,20 @@ export default function MonthlyStatusPage() {
             <tbody>
               {rows.map((r,idx) => (
                 <tr key={idx} style={{ borderBottom:'1px solid #F1F5F9' }}>
-                  <td style={{ padding:'6px 10px', position:'sticky', left:0, background:'#fff', color:'#64748B', fontFamily:'monospace' }}>{r.emp_id}</td>
-                  <td style={{ padding:'6px 10px', position:'sticky', left:60, background:'#fff', fontWeight:600, color:'#1E293B', whiteSpace:'nowrap' }}>{r.name}</td>
+                  <td style={{ padding:'6px 10px', position:'sticky', left:0, background:'#fff', color:'#64748B', fontFamily:'monospace', zIndex:1 }}>{r.emp_id}</td>
+                  <td style={{ padding:'6px 10px', position:'sticky', left:60, background:'#fff', fontWeight:600, color:'#1E293B', whiteSpace:'nowrap', zIndex:1 }}>{r.name}</td>
                   <td style={{ padding:'6px 10px', color:'#64748B', whiteSpace:'nowrap' }}>{r.department}</td>
-                  {Array.from({length:days},(_,i) => (
-                    <td key={i+1} style={{ padding:'4px 2px', textAlign:'center' }}>
-                      {r.days[i+1] ? <Pill s={r.days[i+1]} /> : <span style={{ color:'#CBD5E1', fontSize:10 }}>—</span>}
-                    </td>
-                  ))}
+                  {Array.from({length:days},(_,i) => {
+                    const d = i+1;
+                    const s = calStatus(r.days, d);
+                    const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                    const cellBg = holidaySet.has(dateStr) ? '#F5F3FF' : sundaySet.has(d) ? '#F8FAFC' : undefined;
+                    return (
+                      <td key={d} style={{ padding:'3px 2px', textAlign:'center', background: cellBg }}>
+                        {s ? <Pill s={s} /> : <span style={{ color:'#E2E8F0', fontSize:9 }}>·</span>}
+                      </td>
+                    );
+                  })}
                   <td style={{ padding:'6px', textAlign:'center', fontWeight:700, color:'#065F46', background:'#F0FDF4' }}>{r.present}</td>
                   <td style={{ padding:'6px', textAlign:'center', fontWeight:700, color:'#991B1B', background:'#FFF1F2' }}>{r.absent}</td>
                   <td style={{ padding:'6px', textAlign:'center', fontWeight:700, color:'#92400E', background:'#FFFBEB' }}>{r.leave}</td>
