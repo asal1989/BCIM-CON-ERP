@@ -1031,7 +1031,125 @@ async function runAutoMigrations() {
             CHECK (contractor_type IN ('company','individual','partnership','llp','proprietorship','labour_contractor'));
         END IF;
       END $$`);
-    logger.info('✅ Auto-migrations complete (003–042)');
+    // 043 Bulk-seed DQS Tower workers for Habibur Rahman and MD Faruk
+    await client.query(`
+      DO $$
+      DECLARE
+        v_cid        UUID;
+        v_sc_habib   UUID;
+        v_sc_faruk   UUID;
+        v_wo_habib   UUID;
+        v_wo_faruk   UUID;
+        v_proj       UUID;
+        v_cnt        INTEGER;
+        v_code       TEXT;
+      BEGIN
+        -- Get company id
+        SELECT id INTO v_cid FROM companies LIMIT 1;
+        IF v_cid IS NULL THEN RETURN; END IF;
+
+        -- Get DQS Tower project id
+        SELECT id INTO v_proj FROM projects
+        WHERE company_id = v_cid
+          AND (LOWER(name) LIKE '%dqs%' OR LOWER(project_code) LIKE '%dqs%')
+        LIMIT 1;
+
+        -- Find Habibur Rahman subcontractor
+        SELECT id INTO v_sc_habib FROM sc_subcontractors
+        WHERE company_id = v_cid AND LOWER(name) LIKE '%habib%'
+        ORDER BY created_at LIMIT 1;
+
+        -- Find MD Faruk subcontractor
+        SELECT id INTO v_sc_faruk FROM sc_subcontractors
+        WHERE company_id = v_cid AND LOWER(name) LIKE '%faruk%'
+        ORDER BY created_at LIMIT 1;
+
+        -- Get active WO for Habibur Rahman
+        IF v_sc_habib IS NOT NULL THEN
+          SELECT id INTO v_wo_habib FROM sc_work_orders
+          WHERE company_id = v_cid AND sc_id = v_sc_habib AND status = 'active'
+          ORDER BY created_at LIMIT 1;
+        END IF;
+
+        -- Get active WO for MD Faruk
+        IF v_sc_faruk IS NOT NULL THEN
+          SELECT id INTO v_wo_faruk FROM sc_work_orders
+          WHERE company_id = v_cid AND sc_id = v_sc_faruk AND status = 'active'
+          ORDER BY created_at LIMIT 1;
+        END IF;
+
+        -- Helper function to insert a worker (skip if worker_code already exists)
+        -- Habibur Rahman workers
+        IF v_sc_habib IS NOT NULL THEN
+          WITH workers(code, name, skill) AS (VALUES
+            ('3030009','Chanchal Oraw','Unskilled'),
+            ('3030024','Sudeb Pahan','Unskilled'),
+            ('3030027','Joskel Tudu','Unskilled'),
+            ('3030044','Shyamal Nunia','Mason'),
+            ('3030076','Halu Hansda','Unskilled'),
+            ('3030078','Gali Saren','Unskilled'),
+            ('3030087','Sunil Murmu','Unskilled'),
+            ('3030111','Shyamal Chandra Lohara','Carpenter'),
+            ('3030112','Khit Kalu Sarkar','Unskilled'),
+            ('3030113','Sukda Besara','Unskilled'),
+            ('3030114','Delu Sarkar','Unskilled'),
+            ('3030118','Shiba Nunia','Carpenter'),
+            ('3030119','Arun Nuniya','Carpenter'),
+            ('3030120','Arjun Nunia','Carpenter'),
+            ('3030126','Mangal Murmu','Unskilled'),
+            ('3030127','Majhi Soren','Unskilled'),
+            ('3030128','Kishtu Murmu','Unskilled'),
+            ('3030129','Sapol Murmu','Unskilled'),
+            ('3030131','Shankar Mahaldar','Unskilled'),
+            ('3030132','Gorkha Nuniya','Unskilled'),
+            ('3030133','Chhutu Nuniya','Unskilled'),
+            ('3030140','Sufal Hemram','Mason'),
+            ('3030141','Suraj Mandal','Mason'),
+            ('3030142','Semanta Desi','Mason'),
+            ('3030148','Parimal Hemrom','Mason'),
+            ('3030149','Kiran Murmu','Unskilled'),
+            ('3030150','Salkhan Murmu','Unskilled'),
+            ('3030151','Raman Murmu','Unskilled'),
+            ('3030152','Uttam Kisku','Unskilled'),
+            ('3030153','Biswajit Hasda','Unskilled'),
+            ('3030154','Sujit Hasda','Unskilled')
+          )
+          INSERT INTO sc_workers (company_id, project_id, sc_id, wo_id, worker_code, worker_name, skill_type, status)
+          SELECT v_cid, v_proj, v_sc_habib, v_wo_habib, w.code, w.name, w.skill, 'active'
+          FROM workers w
+          WHERE NOT EXISTS (
+            SELECT 1 FROM sc_workers x WHERE x.company_id = v_cid AND x.worker_code = w.code
+          );
+        END IF;
+
+        -- MD Faruk workers
+        IF v_sc_faruk IS NOT NULL THEN
+          WITH workers(code, name, skill) AS (VALUES
+            ('3030008','Umesh Paswan','Steel Fitter'),
+            ('3030136','Bijay Bhuiyan','Steel Fitter'),
+            ('3030138','Sachin Kumar','Steel Helper'),
+            ('3030139','Bijay Bhuiyan','Steel Helper'),
+            ('3030161','Sulendra Oraon','Steel Helper'),
+            ('3030169','Tanveer Bhuiyan','Steel Fitter'),
+            ('3030170','Sulendra Kumar','Steel Fitter'),
+            ('3030171','Bisun Bhuyan','Steel Helper'),
+            ('3030172','Mohan Saw','Steel Helper'),
+            ('3030173','Jeetendra Kumar','Steel Helper'),
+            ('3030174','Abhishek Kumar','Steel Helper'),
+            ('3030175','Kailash Bhuiyan','Steel Helper'),
+            ('3030176','Tileshwar Bhuiyan','Steel Fitter'),
+            ('3030177','Gandori Bhuinya','Steel Fitter'),
+            ('3030178','Arjun Bhuiyan','Cook')
+          )
+          INSERT INTO sc_workers (company_id, project_id, sc_id, wo_id, worker_code, worker_name, skill_type, status)
+          SELECT v_cid, v_proj, v_sc_faruk, v_wo_faruk, w.code, w.name, w.skill, 'active'
+          FROM workers w
+          WHERE NOT EXISTS (
+            SELECT 1 FROM sc_workers x WHERE x.company_id = v_cid AND x.worker_code = w.code
+          );
+        END IF;
+      END $$`);
+    logger.info('✅ Auto-migrations complete (003–043)');
   } catch (err) {
     logger.warn('⚠️  Auto-migration warning:', err.message);
   } finally {
