@@ -1909,6 +1909,7 @@ export const hrAttendanceAPI = {
   update:  (id, d)  => api.put(`/hr-admin/attendance/${id}`, d),
   timesheetReport: (params) => api.get('/hr-admin/attendance/timesheet-report', { params }),
   monthlyReport:  (params) => api.get('/hr-admin/attendance/monthly-report', { params }),
+  yearlySummary:  (params) => api.get('/hr-admin/attendance/yearly-summary', { params }),
 };
 
 export const hrSalaryAPI = {

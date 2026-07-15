@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { hrAttendanceAPI, hrEmployeesAPI } from '../../../api/client';
+import { hrAttendanceAPI, hrEmployeesAPI, scAPI } from '../../../api/client';
 import { Download, CalendarDays } from 'lucide-react';
 
 const CY = new Date().getFullYear();
@@ -11,17 +11,28 @@ export default function YearlySummaryPage() {
   const [year, setYear] = useState(CY);
   const [dept, setDept] = useState('');
 
-  const { data: emps, isLoading: loadingEmps } = useQuery({
+  const { data: staffEmps, isLoading: loadingEmps } = useQuery({
     queryKey: ['employees-yearly', year, dept],
     queryFn: () => hrEmployeesAPI.list({ limit: 500, department: dept||undefined }).then(r => r.data?.data || r.data?.employees || r.data || []),
   });
 
-  const { data: summary, isLoading: loadingSummary } = useQuery({
-    queryKey: ['attendance-summary-yearly', year],
-    queryFn: () => hrAttendanceAPI.summary({ year }).then(r => r.data?.data || r.data || {}),
+  const { data: scWorkers, isLoading: loadingSC } = useQuery({
+    queryKey: ['sc-workers-yearly', year],
+    queryFn: () => scAPI.listWorkers({ limit: 1000, status: 'active' }).then(r => r.data?.data || r.data || []),
   });
 
-  const isLoading = loadingEmps || loadingSummary;
+  const { data: summary, isLoading: loadingSummary } = useQuery({
+    queryKey: ['attendance-summary-yearly', year],
+    queryFn: () => hrAttendanceAPI.yearlySummary({ year }).then(r => r.data?.data || r.data || {}),
+  });
+
+  // Merge staff + SC workers into one list
+  const emps = [
+    ...(staffEmps||[]).map(e => ({ employee_code: e.employee_code||e.id, name: e.name, department: e.department||e.department_name||'', designation: e.designation||'', type:'staff' })),
+    ...(scWorkers||[]).map(w => ({ employee_code: w.worker_code, name: w.worker_name, department: w.sc_name||'SC Workers', designation: w.skill_type||'', type:'labour' })),
+  ];
+
+  const isLoading = loadingEmps || loadingSC || loadingSummary;
 
   const exportCSV = () => {
     const header = ['Emp ID','Name','Department','Designation',...MONTHS,'Total P','Total A','Total L','%Attendance'];
