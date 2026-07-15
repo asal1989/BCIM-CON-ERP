@@ -41,137 +41,171 @@ function buildLateEmail({ employeeName, employeeCode, date, checkInTime, lateMin
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#eef2f7;font-family:Arial,Helvetica,sans-serif">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f7;padding:32px 0">
+<body style="margin:0;padding:0;background:#e8edf5;font-family:Arial,Helvetica,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#e8edf5;padding:28px 0">
 <tr><td align="center">
-<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;border-collapse:collapse">
+
+  <!-- ── TOP ACCENT BAR ── -->
+  <tr>
+    <td style="background:#1a56db;height:5px;border-radius:8px 8px 0 0;font-size:1px;line-height:1px">&nbsp;</td>
+  </tr>
 
   <!-- ── HEADER ── -->
-  <tr><td style="background:linear-gradient(135deg,#0a1d3e 0%,#1e3a8a 100%);border-radius:12px 12px 0 0;padding:0">
-    <table width="100%" cellpadding="0" cellspacing="0">
-      <tr>
-        <!-- Logo + Company -->
-        <td style="padding:24px 28px 20px">
-          <table cellpadding="0" cellspacing="0">
-            <tr>
-              <td style="background:#fff;border-radius:8px;padding:6px 10px;vertical-align:middle">
-                <img src="${LOGO_SRC}" alt="BCIM" height="38" style="display:block;height:38px;max-width:120px">
-              </td>
-              <td style="padding-left:14px;vertical-align:middle">
-                <div style="color:#ffffff;font-size:15px;font-weight:800;letter-spacing:0.3px;line-height:1.2">
-                  ${companyName.toUpperCase()}
-                </div>
-                <div style="color:#93c5fd;font-size:11px;font-weight:600;letter-spacing:1px;margin-top:3px">HR DEPARTMENT</div>
-              </td>
-            </tr>
-          </table>
-        </td>
-        <!-- Late Badge -->
-        <td align="right" style="padding:24px 28px 20px;vertical-align:middle">
-          <div style="display:inline-block;background:rgba(239,68,68,0.18);border:2px solid rgba(239,68,68,0.5);border-radius:12px;padding:10px 18px;text-align:center">
-            <div style="color:#fca5a5;font-size:26px;font-weight:900;line-height:1;letter-spacing:-0.5px">${lateStr}</div>
-            <div style="color:#ef4444;font-size:10px;font-weight:700;letter-spacing:2px;margin-top:4px">LATE</div>
-          </div>
-        </td>
-      </tr>
-      <!-- Title strip -->
-      <tr>
-        <td colspan="2" style="background:rgba(255,255,255,0.08);padding:12px 28px;border-top:1px solid rgba(255,255,255,0.1)">
-          <div style="color:#e2e8f0;font-size:13px;font-weight:700;letter-spacing:0.5px">&#9888;&nbsp; LATE ARRIVAL NOTICE</div>
-        </td>
-      </tr>
-    </table>
-  </td></tr>
+  <tr>
+    <td style="background:#1e3a8a;padding:0">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <!-- Logo + Company name -->
+          <td style="padding:22px 24px 18px;vertical-align:middle">
+            <table cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="background:#ffffff;border-radius:6px;padding:7px 12px;vertical-align:middle">
+                  <img src="${LOGO_SRC}" alt="BCIM" height="36" style="display:block;height:36px;max-width:110px;border:0">
+                </td>
+                <td style="padding-left:16px;vertical-align:middle">
+                  <p style="margin:0;color:#ffffff;font-size:16px;font-weight:700;line-height:1.3">${companyName.toUpperCase()}</p>
+                  <p style="margin:4px 0 0;color:#93c5fd;font-size:11px;font-weight:600;letter-spacing:1.5px">HR DEPARTMENT</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+          <!-- Late badge - solid red, no rgba -->
+          <td align="right" style="padding:22px 24px 18px;vertical-align:middle">
+            <table cellpadding="0" cellspacing="0" style="background:#b91c1c;border-radius:8px">
+              <tr>
+                <td style="padding:10px 20px;text-align:center">
+                  <p style="margin:0;color:#ffffff;font-size:24px;font-weight:900;line-height:1;letter-spacing:-0.5px">${lateStr}</p>
+                  <p style="margin:5px 0 0;color:#fecaca;font-size:10px;font-weight:700;letter-spacing:2.5px">LATE</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <!-- Title strip - solid darker blue, no rgba -->
+        <tr>
+          <td colspan="2" style="background:#1e40af;padding:10px 24px;border-top:1px solid #3b82f6">
+            <p style="margin:0;color:#ffffff;font-size:12px;font-weight:700;letter-spacing:1px">&#9888; LATE ARRIVAL NOTICE</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
 
   <!-- ── BODY ── -->
-  <tr><td style="background:#ffffff;padding:28px 28px 0">
+  <tr>
+    <td style="background:#ffffff;padding:28px 24px 20px">
 
-    <p style="margin:0 0 6px;font-size:15px;color:#1e293b">
-      Dear <strong style="color:#0f172a">${employeeName}</strong>,
-    </p>
-    <p style="margin:0 0 24px;font-size:14px;color:#475569;line-height:1.7">
-      Our records show that you arrived
-      <strong style="color:#dc2626;background:#fee2e2;padding:1px 6px;border-radius:4px">${lateStr} late</strong>
-      to work on <strong style="color:#0f172a">${dateStr}</strong>.
-      We kindly request you to ensure punctuality going forward.
-    </p>
+      <p style="margin:0 0 6px;font-size:15px;color:#1e293b;font-weight:400">
+        Dear <strong style="color:#0f172a">${employeeName}</strong>,
+      </p>
+      <p style="margin:0 0 24px;font-size:14px;color:#475569;line-height:1.75">
+        Our records show that you arrived
+        <strong style="color:#b91c1c">${lateStr} late</strong>
+        to work on <strong style="color:#0f172a">${dateStr}</strong>.
+        Please ensure punctuality going forward.
+      </p>
 
-    <!-- Details card -->
-    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;margin-bottom:24px">
-      <div style="background:#1e3a8a;padding:10px 16px">
-        <span style="color:#bfdbfe;font-size:11px;font-weight:700;letter-spacing:1px">ATTENDANCE DETAILS</span>
-      </div>
-      <table width="100%" cellpadding="0" cellspacing="0">
-        ${row('Employee Name',  `<span style="color:#0f172a">${employeeName}</span>`)}
-        ${row('Employee Code',  `<span style="color:#334155">${employeeCode || '—'}</span>`)}
-        ${row('Date',           `<span style="color:#0f172a">${dateStr}</span>`)}
-        ${shiftStart ? row('Shift Start Time', `<span style="color:#0369a1">${shiftStart}</span>`) : ''}
-        ${row('Actual Check-in', `<span style="color:#dc2626;font-size:14px">${checkInTime}</span>`)}
-        ${row('Late By',
-          `<span style="display:inline-block;background:#fee2e2;color:#dc2626;font-weight:700;font-size:12px;padding:3px 12px;border-radius:20px">${lateStr}</span>`
-        )}
+      <!-- Details table -->
+      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #cbd5e1;border-radius:8px;border-collapse:collapse;margin-bottom:24px;overflow:hidden">
+        <tr>
+          <td colspan="2" style="background:#1e3a8a;padding:10px 16px">
+            <p style="margin:0;color:#bfdbfe;font-size:11px;font-weight:700;letter-spacing:1.5px">ATTENDANCE DETAILS</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:10px 16px;color:#64748b;font-size:13px;border-bottom:1px solid #f1f5f9;width:42%;background:#f8fafc">Employee Name</td>
+          <td style="padding:10px 16px;font-size:13px;font-weight:600;border-bottom:1px solid #f1f5f9;color:#0f172a">${employeeName}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 16px;color:#64748b;font-size:13px;border-bottom:1px solid #f1f5f9;background:#f8fafc">Employee Code</td>
+          <td style="padding:10px 16px;font-size:13px;font-weight:600;border-bottom:1px solid #f1f5f9;color:#334155">${employeeCode || '—'}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 16px;color:#64748b;font-size:13px;border-bottom:1px solid #f1f5f9;background:#f8fafc">Date</td>
+          <td style="padding:10px 16px;font-size:13px;font-weight:600;border-bottom:1px solid #f1f5f9;color:#0f172a">${dateStr}</td>
+        </tr>
+        ${shiftStart ? `<tr>
+          <td style="padding:10px 16px;color:#64748b;font-size:13px;border-bottom:1px solid #f1f5f9;background:#f8fafc">Shift Start Time</td>
+          <td style="padding:10px 16px;font-size:13px;font-weight:600;border-bottom:1px solid #f1f5f9;color:#1d4ed8">${shiftStart}</td>
+        </tr>` : ''}
+        <tr>
+          <td style="padding:10px 16px;color:#64748b;font-size:13px;border-bottom:1px solid #f1f5f9;background:#f8fafc">Actual Check-in</td>
+          <td style="padding:10px 16px;font-size:14px;font-weight:700;border-bottom:1px solid #f1f5f9;color:#b91c1c">${checkInTime}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 16px;color:#64748b;font-size:13px;background:#f8fafc">Late By</td>
+          <td style="padding:10px 16px">
+            <table cellpadding="0" cellspacing="0" style="background:#fee2e2;border-radius:20px">
+              <tr><td style="padding:4px 14px;color:#b91c1c;font-size:12px;font-weight:700">${lateStr}</td></tr>
+            </table>
+          </td>
+        </tr>
       </table>
-    </div>
 
-    <!-- Warning note -->
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px">
-      <tr>
-        <td style="background:#fffbeb;border-left:4px solid #f59e0b;border-radius:0 8px 8px 0;padding:14px 16px">
-          <p style="margin:0;font-size:13px;color:#78350f;line-height:1.6">
-            <strong>&#9888; Please Note:</strong> Repeated late arrivals may impact your attendance record,
-            performance evaluation, and salary calculations as per company policy.
-            If you have a valid reason, please submit an
-            <strong>Attendance Regularization</strong> request via the ESS portal.
-          </p>
-        </td>
-      </tr>
-    </table>
+      <!-- Warning box - solid yellow, no rgba -->
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px">
+        <tr>
+          <td style="background:#fefce8;border-left:4px solid #ca8a04;padding:14px 16px">
+            <p style="margin:0;font-size:13px;color:#713f12;line-height:1.65">
+              <strong>Please Note:</strong> Repeated late arrivals may impact your attendance record,
+              performance evaluation, and salary calculations as per company policy.
+              If you have a valid reason, please submit an
+              <strong>Attendance Regularization</strong> request via the ESS portal.
+            </p>
+          </td>
+        </tr>
+      </table>
 
-    <!-- CTA -->
-    <p style="margin:0 0 8px;font-size:13px;color:#475569">
-      View your attendance or submit a regularization request:
-    </p>
-    <p style="margin:0 0 24px">
-      <a href="${ERP_URL}/ess"
-         style="display:inline-block;background:linear-gradient(135deg,#0a1d3e,#1e3a8a);color:#fff;padding:12px 26px;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px;letter-spacing:0.3px">
-        View My Attendance &rarr;
-      </a>
-    </p>
+      <!-- CTA button - solid color, no gradient -->
+      <p style="margin:0 0 8px;font-size:13px;color:#475569">View your attendance or submit a regularization request:</p>
+      <table cellpadding="0" cellspacing="0" style="margin-bottom:28px">
+        <tr>
+          <td style="background:#1e3a8a;border-radius:6px">
+            <a href="${ERP_URL}/ess"
+               style="display:inline-block;color:#ffffff;padding:12px 28px;text-decoration:none;font-weight:700;font-size:13px;letter-spacing:0.3px">
+              View My Attendance &rarr;
+            </a>
+          </td>
+        </tr>
+      </table>
 
-  </td></tr>
+    </td>
+  </tr>
 
   <!-- ── FOOTER ── -->
-  <tr><td style="background:#ffffff;padding:0 28px 28px">
-    ${managerName ? `<p style="margin:0 0 12px;font-size:12px;color:#64748b;background:#f8fafc;border-radius:6px;padding:10px 14px">
-      &#128203; This notice has also been sent to your reporting manager <strong>${managerName}</strong>.
-    </p>` : ''}
+  <tr>
+    <td style="background:#f8fafc;padding:20px 24px;border-top:1px solid #e2e8f0">
+      ${managerName ? `<p style="margin:0 0 16px;font-size:12px;color:#64748b;background:#ffffff;border:1px solid #e2e8f0;border-radius:6px;padding:10px 14px">
+        This notice has also been shared with your reporting manager <strong style="color:#334155">${managerName}</strong>.
+      </p>` : ''}
 
-    <p style="margin:0 0 4px;font-size:13px;color:#475569">Regards,</p>
-    <p style="margin:0 0 24px;font-size:13px;color:#0f172a">
-      <strong style="color:#1e3a8a">HR Department</strong><br>
-      <strong>${companyName}</strong>
-    </p>
+      <p style="margin:0 0 2px;font-size:13px;color:#64748b">Regards,</p>
+      <p style="margin:0 0 20px;font-size:13px;color:#0f172a">
+        <strong style="color:#1e3a8a">HR Department</strong><br>
+        <strong>${companyName}</strong>
+      </p>
 
-    <hr style="border:none;border-top:1px solid #e2e8f0;margin:0 0 16px">
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e2e8f0;padding-top:16px">
+        <tr>
+          <td style="vertical-align:middle">
+            <img src="${LOGO_SRC}" alt="BCIM" height="20" style="display:inline-block;height:20px;vertical-align:middle;border:0">
+            <span style="color:#94a3b8;font-size:11px;margin-left:8px;vertical-align:middle">${companyName}</span>
+          </td>
+          <td align="right" style="vertical-align:middle">
+            <span style="color:#94a3b8;font-size:11px">Automated &bull; Do not reply &bull;
+              <a href="mailto:hr@bcim.in" style="color:#1d4ed8;text-decoration:none">hr@bcim.in</a>
+            </span>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
 
-    <!-- Footer branding -->
-    <table width="100%" cellpadding="0" cellspacing="0">
-      <tr>
-        <td style="vertical-align:middle">
-          <img src="${LOGO_SRC}" alt="BCIM" height="24" style="display:inline-block;height:24px;vertical-align:middle;opacity:0.5">
-          <span style="color:#94a3b8;font-size:11px;margin-left:8px;vertical-align:middle">${companyName}</span>
-        </td>
-        <td align="right" style="vertical-align:middle">
-          <span style="color:#cbd5e1;font-size:11px">Automated &bull; Do not reply &bull;
-            <a href="mailto:hr@bcim.in" style="color:#3b82f6;text-decoration:none">hr@bcim.in</a>
-          </span>
-        </td>
-      </tr>
-    </table>
-  </td></tr>
-
-  <!-- Bottom border accent -->
-  <tr><td style="background:linear-gradient(90deg,#0a1d3e,#1e3a8a,#3b82f6);height:4px;border-radius:0 0 12px 12px"></td></tr>
+  <!-- Bottom accent bar - solid color, no gradient -->
+  <tr>
+    <td style="background:#1e3a8a;height:4px;border-radius:0 0 8px 8px;font-size:1px;line-height:1px">&nbsp;</td>
+  </tr>
 
 </table>
 </td></tr>
