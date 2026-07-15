@@ -11,8 +11,8 @@
  *   3. Edit config.json with your API key and company ID
  *   4. Run:  npm install
  *   5. Test: node sync.js --minutes 10
- *   6. Continuous: node sync.js --loop          (every 5 min, runs forever)
- *      Or use Task Scheduler → run run-sync.bat daily (legacy mode)
+ *   6. Continuous: node sync.js --loop          (every 1 min, runs forever)
+ *      Or use Task Scheduler to run run-sync.bat daily (legacy mode)
  */
 
 'use strict';
@@ -25,13 +25,13 @@ const path   = require('path');
 // ── Load config ───────────────────────────────────────────────────────────────
 const CFG_PATH = path.join(__dirname, 'config.json');
 if (!fs.existsSync(CFG_PATH)) {
-  console.error('ERROR: config.json not found. Copy config.example.json → config.json and fill in your details.');
+  console.error('ERROR: config.json not found. Copy config.example.json -> config.json and fill in your details.');
   process.exit(1);
 }
 const cfg = JSON.parse(fs.readFileSync(CFG_PATH, 'utf8'));
 
-const LOOP_INTERVAL_MS  = (cfg.loop_interval_minutes || 5) * 60 * 1000;
-const DEFAULT_WINDOW_MIN = cfg.window_minutes || 10; // overlap window for real-time mode
+const LOOP_INTERVAL_MS   = (cfg.loop_interval_minutes || 1) * 60 * 1000;
+const DEFAULT_WINDOW_MIN = cfg.window_minutes || 10;
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 function toDateStr(d)    { return d.toISOString().split('T')[0]; }
@@ -46,6 +46,7 @@ function buildMssqlCfg() {
     password: cfg.essl.password,
     server:   cfg.essl.host,
     database: cfg.essl.database,
+    pool: { max: 5, min: 1, idleTimeoutMillis: 300000 },
     options: {
       instanceName:           cfg.essl.instance || undefined,
       encrypt:                false,
@@ -56,6 +57,17 @@ function buildMssqlCfg() {
   };
   if (!cfg.essl.instance) c.port = parseInt(cfg.essl.port) || 1433;
   return c;
+}
+
+// ── Persistent connection pool (reused across loop ticks) ─────────────────────
+let pool = null;
+
+async function getPool() {
+  if (pool && pool.connected) return pool;
+  if (pool) { try { await pool.close(); } catch (_) {} pool = null; }
+  pool = await new sql.ConnectionPool(buildMssqlCfg()).connect();
+  console.log('[ESSL Agent] SQL pool connected.');
+  return pool;
 }
 
 // ── Discover monthly DeviceLogs tables ───────────────────────────────────────
@@ -161,23 +173,25 @@ function pushToERP(records, raw_swipes) {
   });
 }
 
+// ── Parse args ────────────────────────────────────────────────────────────────
+const args       = process.argv.slice(2);
+const loopMode   = args.includes('--loop');
+const daysArg    = args.indexOf('--days');
+const minutesArg = args.indexOf('--minutes');
+
 // ── Single sync run ───────────────────────────────────────────────────────────
 async function runSync({ fromDT, toDT, label }) {
   console.log(`\n[ESSL Agent] ${new Date().toLocaleString()}`);
   console.log(`[ESSL Agent] Syncing ${label}`);
-  console.log(`[ESSL Agent] ESSL Server: ${cfg.essl.host}\\${cfg.essl.instance || 'default'}`);
 
-  let conn;
   try {
-    console.log('[ESSL Agent] Connecting to SQL Server…');
-    conn = await sql.connect(buildMssqlCfg());
-    console.log('[ESSL Agent] Connected.');
+    const conn = await getPool();
 
     const allTables = monthlyTables(fromDT, toDT);
     const tables    = await existingTables(conn, allTables);
     console.log(`[ESSL Agent] Tables found: ${tables.join(', ') || 'none'}`);
 
-    if (!tables.length) { console.log('[ESSL Agent] No DeviceLogs tables for this range. Done.'); return; }
+    if (!tables.length) { console.log('[ESSL Agent] No DeviceLogs tables for this range.'); return; }
 
     const rawSwipes = await pullSwipes(conn, tables, fromDT, toDT);
     console.log(`[ESSL Agent] Raw swipes: ${rawSwipes.length}`);
@@ -187,50 +201,48 @@ async function runSync({ fromDT, toDT, label }) {
 
     if (!records.length && !rawSwipes.length) { console.log('[ESSL Agent] Nothing to push.'); return; }
 
-    console.log(`[ESSL Agent] Pushing to ERP: ${cfg.erp.push_url}`);
+    console.log(`[ESSL Agent] Pushing to ERP...`);
     const result = await pushToERP(records, rawSwipes);
-    console.log(`[ESSL Agent] ✓ Synced: ${result.synced || 0} | Skipped: ${result.skipped || 0} | Raw saved: ${result.raw_saved || 0}`);
+    console.log(`[ESSL Agent] Synced: ${result.synced || 0} | Skipped: ${result.skipped || 0} | Raw saved: ${result.raw_saved || 0}`);
     if (result.not_found?.length) console.log(`[ESSL Agent] Not found in ERP: ${result.not_found.join(', ')}`);
     if (result.errors?.length)    console.log('[ESSL Agent] Errors:', result.errors);
 
   } catch (err) {
     console.error('[ESSL Agent] ERROR:', err.message);
-    if (!loopMode) process.exit(1); // in loop mode, log and continue
-  } finally {
-    if (conn) await conn.close().catch(() => {});
-    console.log('[ESSL Agent] Done.\n');
+    // Force pool reconnect on next tick
+    if (pool) { try { await pool.close(); } catch (_) {} pool = null; }
+    if (!loopMode) process.exit(1);
   }
 }
-
-// ── Parse args ────────────────────────────────────────────────────────────────
-const args       = process.argv.slice(2);
-const loopMode   = args.includes('--loop');
-const daysArg    = args.indexOf('--days');
-const minutesArg = args.indexOf('--minutes');
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
   if (loopMode) {
-    // Continuous mode: sync every N minutes (default 5)
     const windowMin = minutesArg >= 0 ? parseInt(args[minutesArg + 1]) || DEFAULT_WINDOW_MIN : DEFAULT_WINDOW_MIN;
-    console.log(`[ESSL Agent] Loop mode started — interval: ${cfg.loop_interval_minutes || 5} min | window: ${windowMin} min`);
+    const intervalMin = cfg.loop_interval_minutes || 1;
+    console.log(`[ESSL Agent] Loop mode started`);
+    console.log(`[ESSL Agent]   Interval : every ${intervalMin} min`);
+    console.log(`[ESSL Agent]   Window   : last ${windowMin} min`);
+    console.log(`[ESSL Agent]   ERP      : ${cfg.erp.push_url}`);
+    console.log(`[ESSL Agent]   ESSL     : ${cfg.essl.host}\\${cfg.essl.instance || 'default'}`);
     console.log('[ESSL Agent] Press Ctrl+C to stop.\n');
 
+    // Use sequential setTimeout instead of setInterval to prevent overlapping ticks
     const tick = async () => {
       const now  = new Date();
       const from = addMinutes(now, -windowMin);
       await runSync({
         fromDT: toDateTimeStr(from),
         toDT:   toDateTimeStr(now),
-        label:  `last ${windowMin} minutes (${toDateTimeStr(from)} → ${toDateTimeStr(now)})`,
+        label:  `last ${windowMin} min`,
       });
+      // Schedule next tick AFTER this one finishes
+      setTimeout(tick, LOOP_INTERVAL_MS);
     };
 
-    await tick(); // run immediately on start
-    setInterval(tick, LOOP_INTERVAL_MS);
+    await tick();
 
   } else {
-    // One-shot mode
     let fromDT, toDT, label;
 
     if (minutesArg >= 0) {
@@ -244,11 +256,20 @@ async function main() {
       const days = daysArg >= 0 ? parseInt(args[daysArg + 1]) || 1 : cfg.sync_days || 1;
       toDT   = toDateStr(new Date()) + ' 23:59:59';
       fromDT = toDateStr(addDays(new Date(), -days)) + ' 00:00:00';
-      label  = `${fromDT.slice(0, 10)} → ${toDT.slice(0, 10)} (${days} day(s))`;
+      label  = `${fromDT.slice(0, 10)} to ${toDT.slice(0, 10)} (${days} day(s))`;
     }
 
     await runSync({ fromDT, toDT, label });
+    // Close pool after one-shot
+    if (pool) { try { await pool.close(); } catch (_) {} }
   }
 }
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('\n[ESSL Agent] Shutting down...');
+  if (pool) { try { await pool.close(); } catch (_) {} }
+  process.exit(0);
+});
 
 main();
