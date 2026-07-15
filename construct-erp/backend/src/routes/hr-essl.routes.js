@@ -87,12 +87,12 @@ router.post('/agent-push', async (req, res) => {
           }
           await query(
             `INSERT INTO sc_attendance
-               (company_id, project_id, sc_id, wo_id, worker_id, attendance_date, status, hours_worked, remarks)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'essl_agent')
+               (company_id, project_id, sc_id, wo_id, worker_id, attendance_date, status, hours_worked, in_time, out_time, remarks)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'essl_agent')
              ON CONFLICT (worker_id, attendance_date) DO UPDATE
-               SET status=$7, hours_worked=$8, remarks='essl_agent'`,
+               SET status=$7, hours_worked=$8, in_time=$9, out_time=$10, remarks='essl_agent'`,
             [company_id, scWorker.project_id, scWorker.sc_id, scWorker.wo_id,
-             scWorker.id, rec.date, status, hoursWorked]
+             scWorker.id, rec.date, status, hoursWorked, inTime || null, (hasOut ? outTime : null)]
           );
         }
         results.synced++;

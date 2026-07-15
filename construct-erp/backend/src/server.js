@@ -1149,7 +1149,13 @@ async function runAutoMigrations() {
           );
         END IF;
       END $$`);
-    logger.info('✅ Auto-migrations complete (003–043)');
+    // Migration 044 — add in_time / out_time to sc_attendance for ESSL sync
+    await client.query(`
+      ALTER TABLE sc_attendance
+        ADD COLUMN IF NOT EXISTS in_time  TIME,
+        ADD COLUMN IF NOT EXISTS out_time TIME
+    `);
+    logger.info('✅ Auto-migrations complete (003–044)');
   } catch (err) {
     logger.warn('⚠️  Auto-migration warning:', err.message);
   } finally {
