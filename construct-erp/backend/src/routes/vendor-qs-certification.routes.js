@@ -1356,32 +1356,33 @@ router.post('/:id/payment', async (req, res) => {
 
       const billsRes = await client.query(`
         SELECT cb.bill_id, cb.total_amount, b.vendor_name, b.project_id, b.bill_type,
-               b.sl_number, b.inv_number, b.total_amount AS bill_total,
-               COALESCE(u.certified_net, 0) AS certified_net,
+               b.sl_number, b.inv_number,
                COALESCE(u.tds_deduction, 0) AS tds_deduction,
-               COALESCE(u.other_deductions, 0) AS other_deductions,
-               COALESCE(u.advance_recovered, 0) AS advance_recovered,
                COALESCE(u.paid_amount, 0) AS existing_paid
         FROM vendor_qs_certification_bills cb
         JOIN tqs_bills b ON b.id = cb.bill_id
         LEFT JOIN tqs_bill_updates u ON u.bill_id = cb.bill_id
-                                    AND u.certification_id = cb.certification_id
         WHERE cb.certification_id = $1
         ORDER BY cb.inv_date
       `, [req.params.id]);
       if (!billsRes.rows.length) throw new Error('No bills linked to this certification');
 
-      const totalNet = billsRes.rows.reduce((s, b) => s + billPayableCap(b), 0)
-                       || billsRes.rows.reduce((s, b) => s + n(b.total_amount), 0)
-                       || 1;
-      const allocate = (amount, base) => Math.round((n(base) / totalNet) * n(amount) * 100) / 100;
+      // Per-bill certified cap = THIS cert's net_payable split across its bills by
+      // invoice total, exactly as allocated at certification time. Tying the cap to
+      // the certification (not the shared per-bill tqs_bill_updates row, which a later
+      // cert on the same bill overwrites) guarantees every linked bill is paid and the
+      // caps sum to net_payable — fixes 2-bill certs that only settled one bill.
+      const certNet = n(cert.net_payable);
+      const selectedBillTotal = Math.max(1, billsRes.rows.reduce((s, b) => s + n(b.total_amount), 0));
+      const capFor = (b) => round2((n(b.total_amount) / selectedBillTotal) * certNet);
+      const totalNet = billsRes.rows.reduce((s, b) => s + capFor(b), 0) || 1;
+      const allocate = (amount, base) => round2((n(base) / totalNet) * n(amount));
 
       // 1) Update each bill's tqs_bill_updates and workflow_status
       const lines = [];
       for (const b of billsRes.rows) {
-        const baseShare = billPayableCap(b) || n(b.total_amount);
-        let billPaid = allocate(totalPaid, baseShare);
-        const certifiedNet = billPayableCap(b);
+        const certifiedNet = capFor(b);
+        let billPaid = allocate(totalPaid, certifiedNet);
         const remaining = Math.max(0, certifiedNet - n(b.existing_paid));
         if (billPaid > remaining + 0.50) {
           const err = new Error(`Payment exceeds payable balance for ${b.sl_number}. Remaining payable is Rs ${remaining.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`);
