@@ -1380,14 +1380,16 @@ router.post('/:id/payment', async (req, res) => {
       const lines = [];
       for (const b of billsRes.rows) {
         const baseShare = billPayableCap(b) || n(b.total_amount);
-        const billPaid = allocate(totalPaid, baseShare);
+        let billPaid = allocate(totalPaid, baseShare);
         const certifiedNet = billPayableCap(b);
         const remaining = Math.max(0, certifiedNet - n(b.existing_paid));
-        if (billPaid > remaining + 0.01) {
+        if (billPaid > remaining + 0.50) {
           const err = new Error(`Payment exceeds payable balance for ${b.sl_number}. Remaining payable is Rs ${remaining.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`);
           err.statusCode = 400;
           throw err;
         }
+        // Clamp to remaining to absorb sub-rupee rounding differences
+        billPaid = round2(Math.min(billPaid, remaining));
         const billTotalPaid = round2(n(b.existing_paid) + billPaid);
         const billBalance = Math.max(0, certifiedNet - billTotalPaid);
         const billStatus = billBalance <= 0.01 ? 'paid' : billPaid > 0 ? 'partial' : 'pending';
