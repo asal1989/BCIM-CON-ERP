@@ -270,7 +270,7 @@ async function sendLateArrivalAlerts({ date, companyId, minLateMinutes = 5, over
       WHERE a.company_id = $1
         AND a.attendance_date = $2
         AND a.late_minutes >= $3
-        AND a.status = 'present'
+        AND a.status IN ('present', 'half_day')
         AND u.is_active = TRUE
         AND u.email IS NOT NULL
       ORDER BY a.late_minutes DESC
