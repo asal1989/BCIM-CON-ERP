@@ -339,6 +339,7 @@ function AttendanceTab({ leaveTypes }) {
   const createCorrection = useMutation({
     mutationFn: essAPI.createCorrection,
     onSuccess: () => { toast.success('Correction requested'); setCorrection({ ...correction, reason: '' }); refresh(); },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to submit correction request'),
   });
 
   /* build day→status map */

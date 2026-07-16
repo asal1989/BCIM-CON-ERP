@@ -639,15 +639,20 @@ router.get('/regularizations', async (req, res) => {
 });
 
 router.post('/regularizations', async (req, res) => {
-  const { user_id, attendance_id, attendance_date, requested_status, requested_in_time, requested_out_time, reason } = req.body;
-  const { rows } = await query(
-    `INSERT INTO hr_attendance_correction_requests
-     (company_id, user_id, attendance_id, attendance_date, requested_status, requested_in_time, requested_out_time, reason)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-    [companyId(req), user_id || req.user.id, attendance_id || null, attendance_date,
-      requested_status || 'present', requested_in_time || null, requested_out_time || null, reason || null]
-  );
-  res.status(201).json({ data: rows[0] });
+  try {
+    const { user_id, attendance_id, attendance_date, requested_status, requested_in_time, requested_out_time, reason } = req.body;
+    if (!attendance_date) return res.status(400).json({ error: 'Attendance date is required' });
+    const { rows } = await query(
+      `INSERT INTO hr_attendance_correction_requests
+       (company_id, user_id, attendance_id, attendance_date, requested_status, requested_in_time, requested_out_time, reason)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [companyId(req), user_id || req.user.id, attendance_id || null, attendance_date,
+        requested_status || 'present', requested_in_time || null, requested_out_time || null, reason || null]
+    );
+    res.status(201).json({ data: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.patch('/regularizations/:id/:action', async (req, res) => {
