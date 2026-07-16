@@ -113,7 +113,7 @@ router.post('/shifts', authorize(...HR_ROLES), async (req, res) => {
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
       [req.user.company_id, name, code||null, start_time, end_time,
        parseInt(break_minutes)||30, is_night_shift||false,
-       parseInt(grace_minutes)||10, parseInt(ot_after_minutes)||0]
+       grace_minutes != null ? parseInt(grace_minutes) : 10, parseInt(ot_after_minutes)||0]
     );
     res.json({ data: rows[0] });
   } catch (err) {
@@ -130,7 +130,7 @@ router.put('/shifts/:id', authorize(...HR_ROLES), async (req, res) => {
        WHERE id=$10 AND company_id=$11 RETURNING *`,
       [name, code||null, start_time, end_time,
        parseInt(break_minutes)||30, is_night_shift||false,
-       parseInt(grace_minutes)||10, parseInt(ot_after_minutes)||0,
+       grace_minutes != null ? parseInt(grace_minutes) : 10, parseInt(ot_after_minutes)||0,
        active!==false, req.params.id, req.user.company_id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Shift not found' });
