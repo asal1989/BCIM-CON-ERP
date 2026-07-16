@@ -520,6 +520,16 @@ router.get('/timesheet-report', async (req, res) => {
     let roleFilter = '';
     // No role filter — all active employees appear in the timesheet regardless of system role
 
+    // BCIM Staff (office/management) vs BCIM Workers (direct-hire labour) are both
+    // rows in users/employee_profiles, distinguished only by employee_category.
+    let categoryFilter = '';
+    if (category === 'staff') {
+      categoryFilter = ` AND COALESCE(ep.employee_category, 'staff') = 'staff'`;
+    } else if (category === 'labour') {
+      categoryFilter = ` AND ep.employee_category = 'workman'`;
+    }
+    // category === 'all' → no filter, every employee_category included
+
     // For project-scoped roles use their project; for HR roles use explicit filter if provided
     const scopeProjectId = await getProjectScope(req);
     const effectiveProjectId = scopeProjectId !== null ? scopeProjectId : (project_id || null);
@@ -564,13 +574,14 @@ router.get('/timesheet-report', async (req, res) => {
 
     // ── Staff query ─────────────────────────────────────────────────────────────
     const staffParams = [...params];
-    const staffRows = category !== 'labour' ? (await query(`
+    const staffRows = (await query(`
       SELECT
         u.employee_code                     AS emp_id,
         u.name,
         COALESCE(des.name, u.designation, '—')             AS designation,
         COALESCE(dep.name, u.department, '—')              AS department,
-        'BCIM STAFF'                        AS company,
+        CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
+             THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END AS company,
         COALESCE(a.status, '${noRecordStatus}') AS attendance_status,
         TO_CHAR(a.in_time,  'HH12:MI AM')  AS in_time,
         TO_CHAR(a.out_time, 'HH12:MI AM')  AS out_time,
@@ -581,7 +592,8 @@ router.get('/timesheet-report', async (req, res) => {
         CASE WHEN COALESCE(ep.employment_status,'active') = 'active'
              THEN 'ACTIVE' ELSE 'INACTIVE' END AS status,
         u.id::text                          AS user_id,
-        'staff'                             AS row_type,
+        CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
+             THEN 'workman' ELSE 'staff' END AS row_type,
         CASE WHEN a.in_time IS NOT NULL AND a.out_time IS NOT NULL AND a.out_time > a.in_time
              THEN ROUND(EXTRACT(EPOCH FROM (a.out_time - a.in_time)) / 3600.0, 1)
              ELSE 0 END                     AS hours_worked,
@@ -598,10 +610,11 @@ router.get('/timesheet-report', async (req, res) => {
       WHERE u.company_id = $1
         AND u.is_active = TRUE
         ${roleFilter}
+        ${categoryFilter}
         ${deptFilter}
         ${projectFilter}
       ORDER BY dep.name NULLS LAST, u.name
-    `, staffParams)).rows : [];
+    `, staffParams)).rows;
 
     // ── SC Workers (Labour) query ─────────────────────────────────────────────
     let scRows = [];
@@ -676,7 +689,7 @@ router.get('/timesheet-report', async (req, res) => {
 // ═══════════════════════════════════════════════════════════
 router.get('/monthly-report', async (req, res) => {
   try {
-    const { year, month, project_id, department_id } = req.query;
+    const { year, month, project_id, department_id, category = 'all' } = req.query;
     const cid = req.user.company_id;
     if (!year || !month) return res.status(400).json({ error: 'year and month required' });
 
@@ -687,6 +700,16 @@ router.get('/monthly-report', async (req, res) => {
 
     const scopeProjectId = await getProjectScope(req);
     const effProject = scopeProjectId !== null ? scopeProjectId : (project_id || null);
+
+    // BCIM Staff (office/management) vs BCIM Workers (direct-hire labour) are both
+    // rows in users/employee_profiles, distinguished only by employee_category.
+    let categoryFilter = '';
+    if (category === 'staff') {
+      categoryFilter = ` AND COALESCE(ep.employee_category, 'staff') = 'staff'`;
+    } else if (category === 'labour') {
+      categoryFilter = ` AND ep.employee_category = 'workman'`;
+    }
+    // category === 'all' → no filter, every employee_category included
 
     const staffParams = [cid, from, to];
     let deptFilter = '', projFilter = '';
@@ -699,13 +722,16 @@ router.get('/monthly-report', async (req, res) => {
         u.employee_code                        AS emp_id,
         u.name,
         COALESCE(des.name, u.designation, '—') AS designation,
-        COALESCE(dep.name, u.department, '—')  AS department,
+        COALESCE(dep.name, u.department,
+          CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
+               THEN 'BCIM Workers' ELSE '—' END)  AS department,
         a.attendance_date::text                AS attendance_date,
         COALESCE(a.status, 'absent')           AS attendance_status,
         TO_CHAR(a.in_time,  'HH12:MI AM')     AS in_time,
         TO_CHAR(a.out_time, 'HH12:MI AM')     AS out_time,
         COALESCE(a.late_minutes, 0)            AS late_minutes,
-        'staff'                                AS row_type
+        CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
+             THEN 'workman' ELSE 'staff' END    AS row_type
       FROM users u
       LEFT JOIN employee_profiles ep  ON ep.user_id = u.id
       LEFT JOIN hr_departments dep    ON dep.id = ep.department_id
@@ -716,6 +742,7 @@ router.get('/monthly-report', async (req, res) => {
        AND a.attendance_date BETWEEN $2 AND $3
       WHERE u.company_id = $1
         AND u.is_active = TRUE
+        ${categoryFilter}
         ${deptFilter}
         ${projFilter}
       ORDER BY dep.name NULLS LAST, u.name, a.attendance_date
@@ -727,7 +754,7 @@ router.get('/monthly-report', async (req, res) => {
     let scIdx = 4;
     if (effProject) { scProjFilter = ` AND w.project_id=$${scIdx++}`; scParams.push(effProject); }
 
-    const scRes = await query(`
+    const scRes = (category === 'labour' || category === 'all') ? await query(`
       SELECT
         w.worker_code                          AS emp_id,
         w.worker_name                          AS name,
@@ -749,7 +776,7 @@ router.get('/monthly-report', async (req, res) => {
         AND w.status = 'active'
         ${scProjFilter}
       ORDER BY sc.name NULLS LAST, w.worker_name, a.attendance_date
-    `, scParams);
+    `, scParams) : { rows: [] };
 
     // Holidays for the month
     const holidayRes = await query(

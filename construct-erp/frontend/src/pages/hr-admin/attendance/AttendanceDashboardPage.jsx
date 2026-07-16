@@ -321,7 +321,7 @@ export default function AttendanceDashboardPage() {
         </div>
       </div>
 
-      <div className="p-5 space-y-4" style={{marginTop:-36}}>
+      <div className="relative z-10 p-5 space-y-4" style={{marginTop:-36}}>
 
         {/* ── KPI rows ────────────────────────────────────────────────────── */}
         {[KPI_ROW1, KPI_ROW2, KPI_ROW3].map((row, ri) => (

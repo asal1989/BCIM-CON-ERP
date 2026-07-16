@@ -518,7 +518,7 @@ export default function AttendancePage() {
         </div>
       </motion.div>
 
-      <div className="px-6 pb-8 space-y-6" style={{marginTop:-44}}>
+      <div className="relative z-10 px-6 pb-8 space-y-6" style={{marginTop:-44}}>
 
       {/* ── KPI cards (overlap hero) ─────────────────────────────────────── */}
       <motion.div {...fade(0.04)} className="grid gap-3" style={{gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))'}}>
