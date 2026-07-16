@@ -108,18 +108,28 @@ const MRS_STAGE_MAP = {
   'approved_mgmt':   { nextStatus: 'approved_md',     colBy: 'approved_md_by',     colAt: 'approved_md_at',     label: 'Managing Director' },
 };
 
-// Which SC bill stages can this role act on?
-function scBillStageForRole(role) {
+// Which SC bill stages can this role act on, AND which current_stage values belong to them?
+// stageNames: the sc_bills.current_stage label(s) this role owns.
+// Empty stageNames = admin/super_admin: see all stages, no current_stage filter.
+function scBillScopeForRole(role) {
   const map = {
-    site_engineer:   ['submitted'],
-    qs_engineer:     ['submitted','under_review'],
-    project_manager: ['submitted','under_review'],
-    accounts:        ['submitted','under_review'],
-    management:      ['submitted','under_review'],
-    admin:           ['submitted','under_review'],
-    super_admin:     ['submitted','under_review'],
+    site_engineer:       { statuses: ['submitted'],                stageNames: ['qs_engineer','site_engineer'] },
+    qs_engineer:         { statuses: ['submitted','under_review'], stageNames: ['qs_engineer'] },
+    project_manager:     { statuses: ['under_review'],            stageNames: ['project_head','project_manager'] },
+    project_head:        { statuses: ['under_review'],            stageNames: ['project_head','project_manager'] },
+    accounts:            { statuses: ['under_review'],            stageNames: ['accounts'] },
+    management:          { statuses: ['under_review'],            stageNames: ['project_head','management'] },
+    management_director: { statuses: ['under_review'],            stageNames: ['project_head','management','management_director'] },
+    director:            { statuses: ['under_review'],            stageNames: ['project_head','management','director'] },
+    project_director:    { statuses: ['under_review'],            stageNames: ['project_head','management','project_director'] },
+    managing_director:   { statuses: ['under_review'],            stageNames: ['managing_director','md'] },
+    md:                  { statuses: ['under_review'],            stageNames: ['managing_director','md'] },
+    ceo:                 { statuses: ['under_review'],            stageNames: ['managing_director','md','ceo'] },
+    cfo:                 { statuses: ['under_review'],            stageNames: ['managing_director','cfo'] },
+    admin:               { statuses: ['submitted','under_review'], stageNames: [] },
+    super_admin:         { statuses: ['submitted','under_review'], stageNames: [] },
   };
-  return map[role] || [];
+  return map[role] || { statuses: [], stageNames: [] };
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -177,10 +187,19 @@ router.get('/pending', async (req, res) => {
       return res.json({ data: hrItems, summary, total: hrItems.length });
     }
 
-    // ── 1. SC Bills ──────────────────────────────────────────────────────────
-    const scBillStages = scBillStageForRole(role);
-    if (scBillStages.length) {
-      const placeholders = scBillStages.map((_, i) => `$${i+2}`).join(',');
+    // ── 1. SC Bills — filtered to the user's own approval stage ─────────────
+    // Prevents MD from seeing bills still waiting at QS/PM/management stages,
+    // and prevents Project Director from seeing MD-stage bills.
+    const scBillScope = scBillScopeForRole(role);
+    if (scBillScope.statuses.length) {
+      const params = [cid, ...scBillScope.statuses];
+      const statusPh = scBillScope.statuses.map((_, i) => `$${i + 2}`).join(',');
+      let stageCond = '';
+      if (scBillScope.stageNames.length) {
+        const stagePh = scBillScope.stageNames.map((_, i) => `$${params.length + i + 1}`).join(',');
+        stageCond = ` AND b.current_stage IN (${stagePh})`;
+        params.push(...scBillScope.stageNames);
+      }
       const r = await query(`
         SELECT b.id, b.bill_number AS ref_no, b.bill_date AS doc_date,
                b.net_payable AS amount, b.status, b.created_at, b.current_stage,
@@ -192,8 +211,8 @@ router.get('/pending', async (req, res) => {
         JOIN sc_subcontractors sc ON sc.id=b.sc_id
         JOIN projects p ON p.id=b.project_id
         LEFT JOIN users u ON u.id=b.submitted_by
-        WHERE b.company_id=$1 AND b.status IN (${placeholders})
-        ORDER BY b.created_at ASC`, [cid, ...scBillStages]);
+        WHERE b.company_id=$1 AND b.status IN (${statusPh})${stageCond}
+        ORDER BY b.created_at ASC`, params);
       items.push(...r.rows);
     }
 
@@ -502,13 +521,20 @@ router.post('/action', async (req, res) => {
           if (!bill.rows.length) return res.status(404).json({ error: 'Bill not found' });
           const b = bill.rows[0];
           const stage = b.current_stage;
-          const finalStages = ['accounts','management'];
-          const newStatus = finalStages.includes(stage) ? 'approved' : 'under_review';
-          await query(`UPDATE sc_bills SET status=$1, approved_by=$2, approved_at=CASE WHEN $1='approved' THEN NOW() ELSE NULL END, updated_at=NOW() WHERE id=$3`,
-            [newStatus, uid, entity_id]);
+          // Fetch dynamic approval stages from settings (same source as sc.routes.js)
+          const settingsRes = await query(`SELECT approval_stages FROM sc_settings WHERE company_id=$1`, [CID(req)]);
+          const stages = settingsRes.rows[0]?.approval_stages || ['qs_engineer','project_head','managing_director'];
+          const idx      = stages.indexOf(stage);
+          const isFinal  = idx < 0 || idx === stages.length - 1;
+          const nextStage = !isFinal ? stages[idx + 1] : stage;
+          const newStatus = isFinal ? 'approved' : 'under_review';
+          await query(
+            `UPDATE sc_bills SET status=$1, current_stage=$2, approved_by=$3,
+                    approved_at=CASE WHEN $1='approved' THEN NOW() ELSE NULL END, updated_at=NOW()
+             WHERE id=$4`,
+            [newStatus, nextStage, uid, entity_id]);
           await query(`INSERT INTO sc_bill_approvals (bill_id,stage,action,actor_id,actor_name,comments) VALUES ($1,$2,'approved',$3,$4,$5)`,
             [entity_id, stage, uid, uname, comments||'Approved']);
-          // Push notification
           if (newStatus === 'approved') {
             notifyScBillFullyApproved(CID(req), b, uname);
           } else {
@@ -520,7 +546,6 @@ router.post('/action', async (req, res) => {
           const bill = await query(`SELECT * FROM sc_bills WHERE id=$1`, [entity_id]);
           await query(`INSERT INTO sc_bill_approvals (bill_id,stage,action,actor_id,actor_name,comments) VALUES ($1,$2,'rejected',$3,$4,$5)`,
             [entity_id, bill.rows[0]?.current_stage||'unknown', uid, uname, comments||'Rejected']);
-          // Push notification
           notifyScBillRejected(CID(req), bill.rows[0] || { id: entity_id }, uname, comments);
         }
         break;
