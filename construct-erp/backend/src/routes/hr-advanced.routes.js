@@ -20,9 +20,48 @@ const HR_ACCESS_ROLES = new Set([
   'department_head',
 ]);
 
+const FULL_HR_ROLES = new Set(['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager']);
+
 function hasHrAccess(req) {
   return HR_ACCESS_ROLES.has(String(req.user?.role || '').trim().toLowerCase());
 }
+
+// Returns null for full HR admins (no restriction); returns the caller's
+// project_id for project/dept roles so all queries scope to their project.
+async function getProjectScope(req) {
+  const role = String(req.user?.role || '').toLowerCase();
+  if (FULL_HR_ROLES.has(role)) return null;
+  const r = await query(
+    `SELECT project_id FROM employee_profiles WHERE user_id=$1`,
+    [req.user.id]
+  );
+  return r.rows[0]?.project_id || null;
+}
+
+// ESS-facing paths that any authenticated employee may call (self-service only).
+// Everything else in this router is HR-admin-only.
+const ESS_OPEN = [
+  { path: '/policies',               method: 'GET'  },  // read published policies
+  { path: '/policies/',              method: 'POST' },  // acknowledge a policy
+  { path: '/service-requests',       method: 'GET'  },  // employee views own requests
+  { path: '/service-requests',       method: 'POST' },  // employee creates request
+  { path: '/regularizations',        method: 'POST' },  // employee submits correction
+  { path: '/payroll-compliance/tax-declarations', method: 'GET'  }, // employee reads own decl.
+  { path: '/payroll-compliance/tax-declarations', method: 'POST' }, // employee submits decl.
+  { path: '/performance/goals',      method: 'GET'  },  // employee views own goals
+];
+
+router.use((req, res, next) => {
+  if (hasHrAccess(req)) return next();
+  const role = String(req.user?.role || '').trim().toLowerCase();
+  const isEssAllowed = ESS_OPEN.some(
+    ({ path, method }) => req.path.startsWith(path) && req.method === method
+  );
+  if (isEssAllowed) return next();
+  return res.status(403).json({
+    error: `HR Admin access denied. Your role (${req.user?.role}) does not have permission.`,
+  });
+});
 
 const initTables = async () => {
   await query(`
@@ -600,15 +639,20 @@ router.get('/regularizations', async (req, res) => {
 });
 
 router.post('/regularizations', async (req, res) => {
-  const { user_id, attendance_id, attendance_date, requested_status, requested_in_time, requested_out_time, reason } = req.body;
-  const { rows } = await query(
-    `INSERT INTO hr_attendance_correction_requests
-     (company_id, user_id, attendance_id, attendance_date, requested_status, requested_in_time, requested_out_time, reason)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-    [companyId(req), user_id || req.user.id, attendance_id || null, attendance_date,
-      requested_status || 'present', requested_in_time || null, requested_out_time || null, reason || null]
-  );
-  res.status(201).json({ data: rows[0] });
+  try {
+    const { user_id, attendance_id, attendance_date, requested_status, requested_in_time, requested_out_time, reason } = req.body;
+    if (!attendance_date) return res.status(400).json({ error: 'Attendance date is required' });
+    const { rows } = await query(
+      `INSERT INTO hr_attendance_correction_requests
+       (company_id, user_id, attendance_id, attendance_date, requested_status, requested_in_time, requested_out_time, reason)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [companyId(req), hasHrAccess(req) ? (user_id || req.user.id) : req.user.id, attendance_id || null, attendance_date,
+        requested_status || 'present', requested_in_time || null, requested_out_time || null, reason || null]
+    );
+    res.status(201).json({ data: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.patch('/regularizations/:id/:action', async (req, res) => {
@@ -737,25 +781,29 @@ router.post('/payroll-compliance/settings', async (req, res) => {
 
 router.get('/payroll-compliance/tax-declarations', async (req, res) => {
   const fy = req.query.financial_year || `${new Date().getFullYear()}-${String(new Date().getFullYear() + 1).slice(-2)}`;
-  const { rows } = await query(
-    `SELECT t.*, u.name AS employee_name, u.employee_code
+  const params = [companyId(req), fy];
+  let sql = `SELECT t.*, u.name AS employee_name, u.employee_code
      FROM hr_tax_declarations t
      JOIN users u ON u.id = t.user_id
-     WHERE t.company_id=$1 AND t.financial_year=$2
-     ORDER BY t.created_at DESC`,
-    [companyId(req), fy]
-  );
+     WHERE t.company_id=$1 AND t.financial_year=$2`;
+  if (!hasHrAccess(req)) { params.push(req.user.id); sql += ` AND t.user_id=$${params.length}`; }
+  sql += ' ORDER BY t.created_at DESC';
+  const { rows } = await query(sql, params);
   res.json({ data: rows });
 });
 
 router.post('/payroll-compliance/tax-declarations', async (req, res) => {
   const { user_id, financial_year, declared_amount, approved_amount, status, remarks } = req.body;
+  const isHr = hasHrAccess(req);
   const { rows } = await query(
     `INSERT INTO hr_tax_declarations
      (company_id, user_id, financial_year, declared_amount, approved_amount, status, remarks)
      VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-    [companyId(req), user_id || req.user.id, financial_year, declared_amount || 0,
-      approved_amount || 0, status || 'submitted', remarks || null]
+    [companyId(req), isHr ? (user_id || req.user.id) : req.user.id, financial_year,
+      declared_amount || 0,
+      isHr ? (approved_amount || 0) : 0,
+      isHr ? (status || 'submitted') : 'submitted',
+      remarks || null]
   );
   res.status(201).json({ data: rows[0] });
 });
@@ -1160,62 +1208,77 @@ router.patch('/service-requests/:id', async (req, res) => {
 });
 
 router.get('/analytics/summary', async (req, res) => {
-  const [
-    employees,
-    recruitment,
-    attendanceCorrections,
-    training,
-    cases,
-    exits,
-    goals,
-    letters,
-    policies,
-    serviceRequests,
-  ] = await Promise.all([
-    query(`SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE is_active=TRUE)::int AS active FROM users WHERE company_id=$1`, [companyId(req)]),
-    query(`SELECT COUNT(*)::int AS open_jobs FROM hr_job_openings WHERE company_id=$1 AND status='open'`, [companyId(req)]),
-    query(`SELECT COUNT(*)::int AS pending FROM hr_attendance_correction_requests WHERE company_id=$1 AND status='pending'`, [companyId(req)]),
-    query(`SELECT COUNT(*)::int AS planned FROM hr_training_programs WHERE company_id=$1 AND status IN ('planned','scheduled')`, [companyId(req)]),
-    query(`SELECT COUNT(*)::int AS open_cases FROM hr_employee_cases WHERE company_id=$1 AND status='open'`, [companyId(req)]),
-    query(`SELECT COUNT(*)::int AS active_exits FROM hr_exit_cases WHERE company_id=$1 AND status NOT IN ('closed','cancelled')`, [companyId(req)]),
-    query(`SELECT COUNT(*)::int AS goals, COALESCE(AVG(rating),0)::numeric(5,2) AS avg_rating FROM hr_performance_goals WHERE company_id=$1`, [companyId(req)]),
-    query(`SELECT COUNT(*)::int AS issued_letters FROM hr_letter_issues WHERE company_id=$1`, [companyId(req)]),
-    query(`
-      SELECT COUNT(*)::int AS published_policies,
-             COUNT(a.id)::int AS acknowledgements
-      FROM hr_policy_documents p
-      LEFT JOIN hr_policy_acknowledgements a ON a.policy_id = p.id
-      WHERE p.company_id=$1 AND p.status='published'`,
-    [companyId(req)]),
-    query(`SELECT COUNT(*)::int AS open_requests FROM hr_service_requests WHERE company_id=$1 AND status IN ('open','in_progress')`, [companyId(req)]),
-  ]);
+  try {
+    const safe = (q, params, fallback) => query(q, params).catch(() => ({ rows: [fallback] }));
+    const cid = companyId(req);
+    const projectId = await getProjectScope(req);
 
-  const departments = await query(
-    `SELECT COALESCE(d.name,'Unassigned') AS department, COUNT(u.id)::int AS headcount
-     FROM users u
-     LEFT JOIN employee_profiles ep ON ep.user_id = u.id
-     LEFT JOIN hr_departments d ON d.id = ep.department_id
-     WHERE u.company_id=$1 AND u.is_active=TRUE
-     GROUP BY COALESCE(d.name,'Unassigned')
-     ORDER BY headcount DESC`,
-    [companyId(req)]
-  );
+    // For project-scoped roles, count only employees in their project
+    const empFilter = projectId !== null
+      ? `SELECT COUNT(u.*)::int AS total, COUNT(u.*) FILTER (WHERE u.is_active=TRUE)::int AS active
+         FROM users u JOIN employee_profiles ep ON ep.user_id=u.id
+         WHERE u.company_id=$1 AND ep.project_id=$2`
+      : `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE is_active=TRUE)::int AS active FROM users WHERE company_id=$1`;
 
-  res.json({
-    data: {
-      employees: employees.rows[0],
-      recruitment: recruitment.rows[0],
-      attendanceCorrections: attendanceCorrections.rows[0],
-      training: training.rows[0],
-      cases: cases.rows[0],
-      exits: exits.rows[0],
-      goals: goals.rows[0],
-      letters: letters.rows[0],
-      policies: policies.rows[0],
-      serviceRequests: serviceRequests.rows[0],
-      departments: departments.rows,
-    },
-  });
+    const [
+      employees,
+      recruitment,
+      attendanceCorrections,
+      training,
+      cases,
+      exits,
+      goals,
+      letters,
+      policies,
+      serviceRequests,
+    ] = await Promise.all([
+      projectId !== null
+        ? query(empFilter, [cid, projectId])
+        : query(empFilter, [cid]),
+      safe(`SELECT COUNT(*)::int AS open_jobs FROM hr_job_openings WHERE company_id=$1 AND status='open'`, [cid], { open_jobs: 0 }),
+      safe(`SELECT COUNT(*)::int AS pending FROM hr_attendance_correction_requests WHERE company_id=$1 AND status='pending'`, [cid], { pending: 0 }),
+      safe(`SELECT COUNT(*)::int AS planned FROM hr_training_programs WHERE company_id=$1 AND status IN ('planned','scheduled')`, [cid], { planned: 0 }),
+      safe(`SELECT COUNT(*)::int AS open_cases FROM hr_employee_cases WHERE company_id=$1 AND status='open'`, [cid], { open_cases: 0 }),
+      safe(`SELECT COUNT(*)::int AS active_exits FROM hr_exit_cases WHERE company_id=$1 AND status NOT IN ('closed','cancelled')`, [cid], { active_exits: 0 }),
+      safe(`SELECT COUNT(*)::int AS goals, COALESCE(AVG(rating),0)::numeric(5,2) AS avg_rating FROM hr_performance_goals WHERE company_id=$1`, [cid], { goals: 0, avg_rating: 0 }),
+      safe(`SELECT COUNT(*)::int AS issued_letters FROM hr_letter_issues WHERE company_id=$1`, [cid], { issued_letters: 0 }),
+      safe(`
+        SELECT COUNT(*)::int AS published_policies, COUNT(a.id)::int AS acknowledgements
+        FROM hr_policy_documents p
+        LEFT JOIN hr_policy_acknowledgements a ON a.policy_id = p.id
+        WHERE p.company_id=$1 AND p.status='published'`, [cid], { published_policies: 0, acknowledgements: 0 }),
+      safe(`SELECT COUNT(*)::int AS open_requests FROM hr_service_requests WHERE company_id=$1 AND status IN ('open','in_progress')`, [cid], { open_requests: 0 }),
+    ]);
+
+    const deptParams = projectId !== null ? [cid, projectId] : [cid];
+    const deptExtra  = projectId !== null ? ` AND ep.project_id=$2` : '';
+    const departments = await query(
+      `SELECT COALESCE(d.name,'Unassigned') AS department, COUNT(u.id)::int AS headcount
+       FROM users u
+       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+       LEFT JOIN hr_departments d ON d.id = ep.department_id
+       WHERE u.company_id=$1 AND u.is_active=TRUE${deptExtra}
+       GROUP BY COALESCE(d.name,'Unassigned')
+       ORDER BY headcount DESC`,
+      deptParams
+    );
+
+    res.json({
+      data: {
+        employees: employees.rows[0],
+        recruitment: recruitment.rows[0],
+        attendanceCorrections: attendanceCorrections.rows[0],
+        training: training.rows[0],
+        cases: cases.rows[0],
+        exits: exits.rows[0],
+        goals: goals.rows[0],
+        letters: letters.rows[0],
+        policies: policies.rows[0],
+        serviceRequests: serviceRequests.rows[0],
+        departments: departments.rows,
+      },
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── HR Analytics Charts ───────────────────────────────────────────────────────

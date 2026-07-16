@@ -5,7 +5,7 @@ import { Plus, X, Pencil, Trash2, Clock, Users, CheckCircle2, XCircle } from 'lu
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
 import toast from 'react-hot-toast';
-import { hrShiftsAPI, hrEmployeesAPI } from '../../api/client';
+import { hrShiftsAPI, hrEmployeesAPI, projectAPI } from '../../api/client';
 import { PageHeader } from '../../theme';
 import { FIELD_HL } from '../../constants/fieldStyles';
 
@@ -119,15 +119,74 @@ function AssignShiftForm({ shifts, employees, onClose, onSaved }) {
   );
 }
 
+function BulkAssignForm({ shifts, projects, onClose, onSaved }) {
+  const [f, setF] = useState({ project_id: '', shift_id: '', effective_from: dayjs().format('YYYY-MM-DD'), effective_to: '' });
+  const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+  const mut = useMutation({
+    mutationFn: d => hrShiftsAPI.bulkAssignShift(d),
+    onSuccess: r => { toast.success(`Shift assigned to ${r.data?.data?.assigned || 0} employee(s)`); onSaved(); onClose(); },
+    onError: e => toast.error(e?.response?.data?.error || 'Failed'),
+  });
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-5 py-4 border-b">
+          <h3 className="text-sm font-semibold">Bulk Assign Shift by Project</h3>
+          <button onClick={onClose}><X size={16}/></button>
+        </div>
+        <div className="p-5 space-y-3">
+          <div>
+            <label className="block text-[11px] text-slate-500 mb-1">Project / Group *</label>
+            <select value={f.project_id} onChange={e=>set('project_id',e.target.value)} className={INP}>
+              <option value="">Select group…</option>
+              <option value="none">Head Office / No Project</option>
+              {projects.map(p=><option key={p.id} value={p.id}>{p.name}{p.project_code?` (${p.project_code})`:''}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[11px] text-slate-500 mb-1">Shift *</label>
+            <select value={f.shift_id} onChange={e=>set('shift_id',e.target.value)} className={INP}>
+              <option value="">Select shift…</option>
+              {shifts.map(s=><option key={s.id} value={s.id}>{s.name}{s.code?` (${s.code})`:''} · {s.start_time}–{s.end_time}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] text-slate-500 mb-1">Effective From *</label>
+              <input type="date" value={f.effective_from} onChange={e=>set('effective_from',e.target.value)} className={INP}/>
+            </div>
+            <div>
+              <label className="block text-[11px] text-slate-500 mb-1">Effective To (optional)</label>
+              <input type="date" value={f.effective_to} onChange={e=>set('effective_to',e.target.value)} className={INP}/>
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-400 bg-slate-50 rounded-lg px-3 py-2">
+            All active employees in the selected group will be assigned this shift. Any existing open assignment will be closed automatically.
+          </p>
+        </div>
+        <div className="flex justify-end gap-2 px-5 py-3 border-t">
+          <button onClick={onClose} className="h-9 px-4 rounded-xl border text-xs">Cancel</button>
+          <button onClick={()=>mut.mutate(f)} disabled={mut.isPending||!f.project_id||!f.shift_id}
+            className="h-9 px-5 rounded-xl bg-blue-600 text-white text-xs font-semibold disabled:opacity-50">
+            {mut.isPending?'Assigning…':'Bulk Assign'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ShiftManagementPage() {
   const qc = useQueryClient();
   const [tab, setTab] = useState('Shifts');
   const [showForm, setShowForm] = useState(false);
   const [showAssign, setShowAssign] = useState(false);
+  const [showBulkAssign, setShowBulkAssign] = useState(false);
   const [editItem, setEditItem] = useState(null);
 
   const { data: shifts=[] } = useQuery({ queryKey:['hr-shifts'], queryFn:()=>hrShiftsAPI.shifts().then(r=>r.data?.data||[]) });
   const { data: employees=[] } = useQuery({ queryKey:['hr-employees-active'], queryFn:()=>hrEmployeesAPI.list({ is_active:true, limit:500 }).then(r=>r.data?.data||[]) });
+  const { data: projects=[] } = useQuery({ queryKey:['projects-list'], queryFn:()=>projectAPI.list({ limit:200 }).then(r=>r.data?.data||r.data||[]) });
   const { data: overtime=[] } = useQuery({ queryKey:['hr-ot'], queryFn:()=>hrShiftsAPI.overtime().then(r=>r.data?.data||[]) });
   const { data: compoff=[] } = useQuery({ queryKey:['hr-compoff'], queryFn:()=>hrShiftsAPI.compOff().then(r=>r.data?.data||[]) });
   const { data: empShifts=[] } = useQuery({ queryKey:['hr-emp-shifts'], queryFn:()=>hrShiftsAPI.empShifts().then(r=>r.data?.data||[]) });
@@ -155,9 +214,14 @@ export default function ShiftManagementPage() {
               <Plus size={14}/> New Shift
             </button>
           ) : tab==='Employee Assignment' ? (
-            <button onClick={()=>setShowAssign(true)} className="h-9 px-4 rounded-xl bg-blue-600 text-white text-xs font-semibold flex items-center gap-2">
-              <Plus size={14}/> Assign Shift
-            </button>
+            <div className="flex gap-2">
+              <button onClick={()=>setShowBulkAssign(true)} className="h-9 px-4 rounded-xl bg-indigo-600 text-white text-xs font-semibold flex items-center gap-2">
+                <Users size={14}/> Bulk Assign by Project
+              </button>
+              <button onClick={()=>setShowAssign(true)} className="h-9 px-4 rounded-xl bg-blue-600 text-white text-xs font-semibold flex items-center gap-2">
+                <Plus size={14}/> Assign Shift
+              </button>
+            </div>
           ) : null
         }
       />
@@ -321,6 +385,9 @@ export default function ShiftManagementPage() {
       )}
       {showAssign && (
         <AssignShiftForm shifts={shifts} employees={employees} onClose={()=>setShowAssign(false)} onSaved={()=>qc.invalidateQueries({queryKey:['hr-emp-shifts']})} />
+      )}
+      {showBulkAssign && (
+        <BulkAssignForm shifts={shifts} projects={projects} onClose={()=>setShowBulkAssign(false)} onSaved={()=>qc.invalidateQueries({queryKey:['hr-emp-shifts']})} />
       )}
     </div>
   );

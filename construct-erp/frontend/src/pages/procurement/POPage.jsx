@@ -212,7 +212,7 @@ function SendPOMailModal({ po, onClose, onSent }) {
             </div>
             <div>
               <h3 className="text-sm font-semibold text-slate-900">Send Purchase Order to Vendor</h3>
-              <p className="text-xs text-slate-500">{po.po_ref_no || po.po_number || po.serial_no_formatted} - {po.vendor_name}</p>
+              <p className="text-xs text-slate-500">{po.po_ref_no || po.po_number || po.serial_no_formatted} - {(po.vendor_name || '').toUpperCase()}</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><X className="w-4 h-4" /></button>
@@ -1131,7 +1131,7 @@ function PORejectModal({ po, onClose, onConfirm, isPending }) {
         </div>
         <div className="px-5 py-4 space-y-3">
           <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm">
-            <p className="font-semibold text-red-800">{po?.vendor_name}</p>
+            <p className="font-semibold text-red-800">{(po?.vendor_name || '').toUpperCase()}</p>
             <p className="text-xs text-red-600 mt-0.5">{inr(po?.grand_total)} · {fmt(po?.po_date)}</p>
           </div>
           <div>
@@ -1248,7 +1248,7 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
             </div>
             <div>
               <p className="text-base font-medium text-slate-900 font-mono">{po.po_ref_no || po.po_number || po.serial_no_formatted}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{po.vendor_name} · {fmt(po.po_date)}</p>
+              <p className="text-xs text-slate-500 mt-0.5">{(po.vendor_name || '').toUpperCase()} · {fmt(po.po_date)}</p>
             </div>
             <StatusBadge status={liveStatus} />
           </div>
@@ -1298,8 +1298,8 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
           {/* Info grid */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
-              ['Vendor',         po.vendor_name],
-              ['Project',        po.project_name],
+              ['Vendor',         (po.vendor_name || '').toUpperCase()],
+              ['Project',        (po.project_name || '').toUpperCase()],
               ['PO Date',        fmt(po.po_date)],
               ['Delivery',       fmt(po.delivery_date)],
               ['Payment Terms',  po.payment_terms || '—'],
@@ -1973,7 +1973,7 @@ function POImportModal({ onClose, vendors, projects, onImported }) {
                     {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                   {header.project_name && (
-                    <p className="text-xs text-slate-500 mt-1">From file: <span className="font-medium text-slate-700">{header.project_name}</span></p>
+                    <p className="text-xs text-slate-500 mt-1">From file: <span className="font-medium text-slate-700">{(header.project_name || '').toUpperCase()}</span></p>
                   )}
                 </div>
                 <div>
@@ -1985,7 +1985,7 @@ function POImportModal({ onClose, vendors, projects, onImported }) {
                   </select>
                   {header.vendor_name && (
                     <p className="text-xs text-slate-500 mt-1">
-                      From file: <span className="font-medium text-slate-700">{header.vendor_name}</span>
+                      From file: <span className="font-medium text-slate-700">{(header.vendor_name || '').toUpperCase()}</span>
                       {header.vendor_gstin && <span className="ml-1 text-indigo-600"> · GST: {header.vendor_gstin}</span>}
                       {!vendorId && <span className="ml-1 text-amber-600"> — not matched, please select manually</span>}
                     </p>
@@ -2436,10 +2436,10 @@ export default function POPage() {
                     </span>
                   </td>
                   <td className="px-5 py-3.5">
-                    <div className="text-sm font-medium text-slate-800 max-w-56 truncate">{po.vendor_name}</div>
+                    <div className="text-sm font-medium text-slate-800 max-w-56 truncate">{(po.vendor_name || '').toUpperCase()}</div>
                   </td>
                   <td className="px-5 py-3.5">
-                    <div className="text-xs text-slate-400 truncate max-w-56">{po.project_name}</div>
+                    <div className="text-xs text-slate-400 truncate max-w-56">{(po.project_name || '').toUpperCase()}</div>
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap text-xs font-medium text-slate-700">{fmt(po.po_date)}</td>
                   <td className="px-5 py-3.5 whitespace-nowrap text-xs text-slate-400">{fmt(po.delivery_date)}</td>

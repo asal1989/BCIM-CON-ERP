@@ -554,8 +554,8 @@ vendorRouter.put('/:id', authorize('super_admin', 'admin', 'procurement_manager'
     ];
 
     let updates = [];
-    let params = [req.params.id];
-    let i = 2;
+    let params = [req.params.id, req.user.company_id];
+    let i = 3;
 
     Object.keys(fields).forEach(key => {
       if (allowed.includes(key)) {
@@ -566,12 +566,12 @@ vendorRouter.put('/:id', authorize('super_admin', 'admin', 'procurement_manager'
 
     let vendor;
     if (updates.length > 0) {
-      const sql = `UPDATE vendors SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $1 RETURNING *`;
+      const sql = `UPDATE vendors SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $1 AND company_id = $2 RETURNING *`;
       const result = await query(sql, params);
       if (result.rowCount === 0) return res.status(404).json({ error: 'Vendor not found' });
       vendor = result.rows[0];
     } else {
-      const result = await query('SELECT * FROM vendors WHERE id = $1', [req.params.id]);
+      const result = await query('SELECT * FROM vendors WHERE id = $1 AND company_id = $2', [req.params.id, req.user.company_id]);
       if (result.rowCount === 0) return res.status(404).json({ error: 'Vendor not found' });
       vendor = result.rows[0];
     }
@@ -598,8 +598,9 @@ vendorRouter.put('/:id', authorize('super_admin', 'admin', 'procurement_manager'
 // DELETE /:id — Deactivate vendor
 vendorRouter.delete('/:id', authorize('super_admin', 'admin', 'procurement_manager'), async (req, res) => {
   try {
-    const before = await query('SELECT name, vendor_type, is_active FROM vendors WHERE id = $1', [req.params.id]);
-    await query('UPDATE vendors SET is_active = false WHERE id = $1', [req.params.id]);
+    const before = await query('SELECT name, vendor_type, is_active FROM vendors WHERE id = $1 AND company_id = $2', [req.params.id, req.user.company_id]);
+    if (!before.rowCount) return res.status(404).json({ error: 'Vendor not found' });
+    await query('UPDATE vendors SET is_active = false WHERE id = $1 AND company_id = $2', [req.params.id, req.user.company_id]);
     await logAudit(req, { action: 'deactivate', tableName: 'vendors', recordId: req.params.id, oldValues: before.rows[0] });
     res.json({ message: 'Vendor deactivated successfully' });
   } catch (err) {

@@ -1,11 +1,13 @@
-// Azure/OneDrive integration — token fetched directly via node-fetch
+// Azure/SharePoint integration — token fetched directly via node-fetch
 // (avoids @azure/identity SDK which has network issues in some Railway regions)
+// Files live in the "ConstructERP Documents" SharePoint site's document
+// library, not a personal OneDrive drive — see SHAREPOINT_SITE_ID.
 const fetch = require('node-fetch');
 
 const TENANT_ID     = process.env.ONEDRIVE_TENANT_ID;
 const CLIENT_ID     = process.env.ONEDRIVE_CLIENT_ID;
 const CLIENT_SECRET = process.env.ONEDRIVE_CLIENT_SECRET;
-const USER_EMAIL    = process.env.ONEDRIVE_USER_EMAIL;
+const SITE_ID       = process.env.SHAREPOINT_SITE_ID;
 
 let cachedToken = null;
 let tokenExpiry = 0;
@@ -47,7 +49,7 @@ async function uploadToSharePoint(fileName, fileBuffer, folderPath = 'Vendor Inv
   const sanitizedFileName = String(fileName).replace(/[<>:"|?*]/g, '_').trim();
   const sanitizedFolder   = String(folderPath).replace(/[<>:"|?*]/g, '_').trim();
 
-  const uploadUrl = `https://graph.microsoft.com/v1.0/users/${USER_EMAIL}/drive/root:/${sanitizedFolder}/${sanitizedFileName}:/content`;
+  const uploadUrl = `https://graph.microsoft.com/v1.0/sites/${SITE_ID}/drive/root:/${sanitizedFolder}/${sanitizedFileName}:/content`;
 
   const uploadRes = await fetch(uploadUrl, {
     method:  'PUT',
@@ -74,7 +76,7 @@ async function uploadToSharePoint(fileName, fileBuffer, folderPath = 'Vendor Inv
 async function deleteFromOneDrive(itemId) {
   if (!itemId) throw new Error('No OneDrive item ID');
   const token = await getAccessToken();
-  const url = `https://graph.microsoft.com/v1.0/users/${USER_EMAIL}/drive/items/${itemId}`;
+  const url = `https://graph.microsoft.com/v1.0/sites/${SITE_ID}/drive/items/${itemId}`;
   const res = await fetch(url, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
   if (!res.ok && res.status !== 404) {
     const err = await res.text();
@@ -83,4 +85,61 @@ async function deleteFromOneDrive(itemId) {
   console.log(`[OneDrive] Deleted item ${itemId}`);
 }
 
-module.exports = { uploadToSharePoint, deleteFromOneDrive };
+// ── Teams Online Meetings ─────────────────────────────────────────────────────
+// Requires the Azure AD app to have Application permission:
+//   OnlineMeetings.ReadWrite.All  (admin consent in Azure portal)
+// The organizer is looked up by UPN/email in Azure AD.
+async function createTeamsMeeting(subject, startDateTime, endDateTime, organizerEmail, attendeeEmails = []) {
+  const token = await getAccessToken();
+
+  // Resolve organizer's Azure AD object ID from their email/UPN
+  const userRes = await fetch(
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(organizerEmail)}`,
+    { headers: { 'Authorization': `Bearer ${token}` } }
+  );
+  if (!userRes.ok) {
+    const errBody = await userRes.text();
+    console.error('[Teams] User lookup failed:', userRes.status, errBody.slice(0, 200));
+    throw new Error(`Organizer "${organizerEmail}" not found in Azure AD (status ${userRes.status}). Check TEAMS_ORGANIZER_EMAIL env var.`);
+  }
+  const { id: userId } = await userRes.json();
+
+  // Create the online meeting
+  const body = { subject, startDateTime, endDateTime };
+  if (attendeeEmails.length > 0) {
+    body.participants = {
+      attendees: attendeeEmails.map(email => ({
+        upn: email, role: 'attendee',
+        identity: { user: { displayName: email } },
+      })),
+    };
+  }
+
+  const meetRes = await fetch(
+    `https://graph.microsoft.com/v1.0/users/${userId}/onlineMeetings`,
+    {
+      method:  'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }
+  );
+
+  if (!meetRes.ok) {
+    const errBody = await meetRes.json().catch(() => ({}));
+    const msg = errBody?.error?.message || `HTTP ${meetRes.status}`;
+    console.error('[Teams] Meeting creation failed:', msg);
+    throw new Error(`Teams meeting creation failed: ${msg}`);
+  }
+
+  const m = await meetRes.json();
+  console.log('[Teams] Meeting created:', m.id, m.joinUrl?.slice(0, 60));
+  return {
+    id:            m.id,
+    subject:       m.subject,
+    joinUrl:       m.joinUrl || m.joinWebUrl,
+    startDateTime: m.startDateTime,
+    endDateTime:   m.endDateTime,
+  };
+}
+
+module.exports = { uploadToSharePoint, deleteFromOneDrive, createTeamsMeeting };

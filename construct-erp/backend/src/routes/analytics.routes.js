@@ -164,8 +164,8 @@ router.get('/global', async (req, res) => {
          COUNT(*) as total,
          COUNT(*) FILTER (WHERE status = 'pm_approved' OR status = 'verified' OR (metadata->>'passed')::boolean = true) as passed
        FROM quality_checklists qc
-       WHERE qc.company_id = $1`,
-      [req.user.company_id]
+       WHERE ${withProjectScope('qc', scope)}`,
+      scope.params
     );
     const totalChecklists = Number.parseInt(quality.rows[0]?.total || 0, 10);
     const qualityScore = totalChecklists > 0
@@ -300,6 +300,8 @@ router.get('/executive', async (req, res) => {
       ncrsRes,
       documentsRes,
       allTimeBillsRes,
+      budgetSpentRes,
+      allTimeCollectionsRes,
     ] = await Promise.all([
       safeQuery(
         `SELECT p.id, p.name, p.project_code, p.type, p.status
@@ -422,6 +424,53 @@ router.get('/executive', async (req, res) => {
          WHERE ${projectScopedClause('rb')}`,
         scope.params
       ),
+      // Budget vs Spent across all company projects
+      safeQuery(
+        `SELECT
+           -- Total budget: sum of all cost-head budgets across projects
+           COALESCE((
+             SELECT SUM(pcb.budget_amount)
+             FROM project_costhead_budgets pcb
+             JOIN projects pp ON pp.id = pcb.project_id
+             WHERE pp.company_id = $1
+           ), 0) AS total_budget,
+
+           -- Total spent: line-item totals matching budget control page "bills received"
+           COALESCE((
+             SELECT SUM(li.basic_amount + COALESCE(li.cgst_amt,0) + COALESCE(li.sgst_amt,0) + COALESCE(li.igst_amt,0))
+             FROM tqs_bill_line_items li
+             JOIN tqs_bills tb ON tb.id = li.bill_id
+             JOIN projects pp ON pp.id = tb.project_id
+             WHERE pp.company_id = $1 AND tb.is_deleted = FALSE
+           ), 0)
+           +
+           COALESCE((
+             SELECT SUM(bi.curr_qty * bi.rate * (1 + COALESCE(sb.gst_pct, 18) / 100.0))
+             FROM sc_bill_items bi
+             JOIN sc_bills sb ON sb.id = bi.bill_id
+             JOIN projects pp ON pp.id = sb.project_id
+             WHERE pp.company_id = $1 AND sb.status IN ('submitted','approved','paid')
+           ), 0)
+           +
+           COALESCE((
+             SELECT SUM(rbi.current_qty * rbi.rate * (1 + COALESCE(rb.gst_rate, 18) / 100.0))
+             FROM ra_bill_items rbi
+             JOIN ra_bills rb ON rb.id = rbi.ra_bill_id
+             JOIN projects pp ON pp.id = rb.project_id
+             WHERE pp.company_id = $1 AND rb.status IN ('certified','paid')
+           ), 0)
+           AS total_spent`,
+        [scope.params[0]]
+      ),
+      // All-time collections (not date-filtered) for correct receivables calculation
+      safeQuery(
+        `SELECT COALESCE(SUM(pay.net_amount), 0) AS total_collections
+         FROM payments pay
+         JOIN projects p ON pay.project_id = p.id
+         WHERE ${withProjectScope('pay', scope)}
+           AND LOWER(pay.payment_type) = 'customer_receipt'`,
+        scope.params
+      ),
     ]);
 
     const projectOptions = projectOptionsRes.rows;
@@ -439,10 +488,14 @@ router.get('/executive', async (req, res) => {
     const documents = documentsRes.rows;
 
     // All-time billing KPIs (not date-filtered)
-    const billKpis      = allTimeBillsRes.rows[0] || {};
-    const totalCertified  = toNumber(billKpis.total_certified);
-    const pendingRAValue  = toNumber(billKpis.pending_value);
-    const pendingRACount  = parseInt(billKpis.pending_count || 0, 10);
+    const billKpis          = allTimeBillsRes.rows[0] || {};
+    const budgetSpentKpi    = budgetSpentRes.rows[0] || {};
+    const totalBudget       = toNumber(budgetSpentKpi.total_budget);
+    const totalSpent        = toNumber(budgetSpentKpi.total_spent);
+    const totalCertified    = toNumber(billKpis.total_certified);
+    const pendingRAValue    = toNumber(billKpis.pending_value);
+    const pendingRACount    = parseInt(billKpis.pending_count || 0, 10);
+    const allTimeCollections = toNumber(allTimeCollectionsRes.rows[0]?.total_collections);
 
     const activeProjects = projects.filter((project) => project.status === 'active');
     const delayedProjects = projects.filter((project) => project.status === 'delayed');
@@ -451,7 +504,7 @@ router.get('/executive', async (req, res) => {
 
     const totalContractValue = projects.reduce((sum, project) => sum + toNumber(project.contract_value), 0);
     const pendingRABills    = raBills.filter((bill) => ['draft', 'submitted'].includes(String(bill.status || '').toLowerCase()));
-    const totalCollections  = collections.reduce((sum, payment) => sum + toNumber(payment.net_amount || payment.amount), 0);
+    const totalCollections  = allTimeCollections;
     const receivables       = Math.max(totalCertified - totalCollections, 0);
 
     const openIncidents = incidents.filter((incident) => isOpenStatus(incident.status, ['closed', 'resolved'])).length;
@@ -469,17 +522,20 @@ router.get('/executive', async (req, res) => {
     const qualityScore = totalQualityItems > 0 ? Math.max(0, 100 - (((openRFIs + openNCRs) / totalQualityItems) * 100)) : 100;
 
     const months = buildMonthSeries(filters.dateFrom, filters.dateTo);
+    // Build cumulative certified cost per month (RA bills with certified/paid status)
+    const certifiedBills = raBills.filter((b) =>
+      ['certified', 'authorized', 'verified', 'paid'].includes(String(b.status || '').toLowerCase())
+    );
+    let cumulativeCost = 0;
     const financeTrend = months.map((month) => {
-      const billed = raBills
+      const monthCost = certifiedBills
         .filter((bill) => String(bill.bill_date || '').slice(0, 7) === month.key)
-        .reduce((sum, bill) => sum + toNumber(bill.bill_value || bill.net_payable || bill.gross_amount), 0);
-      const collected = collections
-        .filter((payment) => String(payment.payment_date || '').slice(0, 7) === month.key)
-        .reduce((sum, payment) => sum + toNumber(payment.net_amount || payment.amount), 0);
+        .reduce((sum, bill) => sum + toNumber(bill.net_payable || bill.bill_value || bill.gross_amount), 0);
+      cumulativeCost += monthCost;
       return {
         month: month.label,
-        billed: Number((billed / 100000).toFixed(2)),
-        collected: Number((collected / 100000).toFixed(2)),
+        budget: Number((totalContractValue / 10000000).toFixed(2)),   // flat budget reference line in Cr
+        cost:   Number((cumulativeCost / 10000000).toFixed(2)),        // cumulative cost in Cr
       };
     });
 
@@ -537,6 +593,8 @@ router.get('/executive', async (req, res) => {
           low_stock_count: lowStock.length,
           workforce_count: workers.length,
           documents_count: documents.length,
+          total_budget: totalBudget,
+          total_spent:  totalSpent,
         },
         charts: {
           finance_trend: financeTrend,
@@ -557,6 +615,10 @@ router.get('/executive', async (req, res) => {
           ra_bills: recentBills,
           payments: recentPayments,
           documents: recentDocuments,
+          purchase_orders: purchaseOrders.slice(0, 6),
+          incidents: incidents.slice(0, 5),
+          rfis: rfis.filter(r => !['closed','approved','completed'].includes(String(r.status||'').toLowerCase())).slice(0, 5),
+          ncrs: ncrs.filter(n => !['verified','closed','completed'].includes(String(n.status||'').toLowerCase())).slice(0, 5),
         },
         pulse: {
           procurement_stores: {
@@ -568,6 +630,8 @@ router.get('/executive', async (req, res) => {
             pending_vendor_bill_value: pendingRAValue,
             open_documents: documents.length,
             recent_documents: recentDocuments.length,
+            low_stock_items: lowStock.slice(0, 8),
+            recent_purchase_orders: [...purchaseOrders].slice(0, 6),
           },
           quality_safety: {
             safety_score: safetyScore,

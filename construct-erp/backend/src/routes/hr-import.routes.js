@@ -592,9 +592,9 @@ router.post('/dedup-execute', async (req, res) => {
          CASE WHEN u.department  IS NOT NULL AND u.department  <> '' THEN 1 ELSE 0 END) AS score
       FROM users u
       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
-      WHERE u.role = 'employee'
+      WHERE u.role = 'employee' AND u.company_id = $1
       ORDER BY LOWER(TRIM(u.name)), score DESC
-    `);
+    `, [req.user.company_id]);
 
     const groups = {};
     for (const r of rows) {

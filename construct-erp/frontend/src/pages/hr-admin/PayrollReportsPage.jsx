@@ -9,8 +9,12 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { hrPayrollAPI, hrPayrollExtAPI, companySettingsAPI, projectAPI } from '../../api/client';
-import { PageHeader } from '../../theme';
+import { motion } from 'framer-motion';
 import useAuthStore from '../../store/authStore';
+
+// Zoho People / GreytHR-style design tokens — shared across the Payroll menu
+const B = { navy:'#0A1F5C', blue:'#2563EB', yellow:'#F4C430', success:'#10B981', warning:'#F59E0B', danger:'#EF4444' };
+const fade = (d=0) => ({ initial:{opacity:0,y:14}, animate:{opacity:1,y:0}, transition:{duration:0.35,delay:d,ease:[0.16,1,0.3,1]} });
 
 const MONTHS = [
   'January','February','March','April','May','June',
@@ -189,7 +193,7 @@ async function generateForm16PDF(r, fyYear, company, logoBase64) {
   tableRow('Provident Fund (Employee) — u/s 80C', fmt(r.total_pf_employee));
   tableRow('Professional Tax',                     fmt(r.total_pt));
   tableRow('ESI (Employee Contribution)',           fmt(r.total_esi_employee));
-  tableRow('Standard Deduction — u/s 16(ia)',      fmt(r.standard_deduction || 50000));
+  tableRow('Standard Deduction — u/s 16(ia)',      fmt(r.standard_deduction || 75000));
   doc.setFillColor(240, 253, 244);
   doc.rect(ML, y - 1, CW, 7, 'F');
   tableRow('Total Deductions (B)', fmt(r.total_deductions), true, [5, 150, 105]);
@@ -771,15 +775,52 @@ export default function PayrollReportsPage() {
 
   const companyAddr = [company.address, company.city, company.state].filter(Boolean).join(', ');
 
-  return (
-    <div className="h-full flex flex-col overflow-hidden bg-[#f5f6fa]">
-      <PageHeader
-        title="Payroll Reports"
-        subtitle="Form 16 · TDS Summary · Bank Transfer"
-        breadcrumbs={[{ label: 'HR & Admin' }, { label: 'Payroll Reports' }]}
-      />
+  const totalGross  = rows.reduce((s, r) => s + +r.total_gross,   0);
+  const totalTds    = rows.reduce((s, r) => s + +r.total_tds,     0);
+  const totalNetPay = rows.reduce((s, r) => s + +r.total_net_pay, 0);
 
-      <div className="flex-1 overflow-auto p-5 md:p-6 space-y-5">
+  return (
+    <div className="p-6 space-y-6 min-h-screen" style={{ background: '#F8FAFC' }}>
+
+      {/* Header */}
+      <motion.div {...fade(0)} className="relative overflow-hidden rounded-2xl"
+        style={{ background:`linear-gradient(135deg,${B.navy},#1e3a8a)`, boxShadow:'0 8px 32px rgba(10,31,92,0.2)' }}>
+        <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-[0.07]"
+          style={{ background:'radial-gradient(circle,#fff,transparent 70%)', transform:'translate(25%,-25%)' }}/>
+        <div className="relative z-10 px-8 py-6">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center">
+              <FileText className="w-4 h-4 text-white"/>
+            </div>
+            <span className="text-white/60 text-sm font-semibold">HR & Admin</span>
+          </div>
+          <h1 className="text-2xl font-black text-white">Payroll Reports</h1>
+          <p className="text-white/55 text-sm mt-1">Form 16 · TDS Summary · Bank Transfer</p>
+        </div>
+      </motion.div>
+
+      {/* KPI Cards */}
+      <motion.div {...fade(0.08)} className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label:'Employees',   value: rows.length,       icon: Building2,    color: B.blue,    bg:'#EFF6FF' },
+          { label:'Total Gross', value: fmt(totalGross),   icon: IndianRupee,  color: B.success, bg:'#ECFDF5' },
+          { label:'Total TDS',   value: fmt(totalTds),     icon: AlertCircle,  color: B.danger,  bg:'#FEF2F2' },
+          { label:'Total Net Pay', value: fmt(totalNetPay),icon: CheckCircle2, color: B.navy,    bg:'#EEF2FF' },
+        ].map((c, i) => (
+          <motion.div key={c.label} {...fade(0.08 + i*0.04)} className="bg-white rounded-2xl p-5 border border-gray-100"
+            style={{ boxShadow:'0 2px 12px rgba(10,31,92,0.06)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">{c.label}</p>
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: c.bg }}>
+                <c.icon className="w-4 h-4" style={{ color: c.color }}/>
+              </div>
+            </div>
+            <p className="text-2xl font-black text-gray-900">{c.value}</p>
+          </motion.div>
+        ))}
+      </motion.div>
+
+      <div className="space-y-5">
 
         {/* Company info banner */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4 flex items-center gap-4">

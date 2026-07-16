@@ -1,0 +1,211 @@
+// src/screens/CallScreen.js — full-screen call UI for voice, video, and screen share.
+// Receives callType ('audio'|'video'|'screen'), peerId, peerName from route params.
+// For incoming calls, receives the offer + from so answerCall() can be triggered immediately.
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  View, Text, TouchableOpacity, StyleSheet, StatusBar, Platform, Alert, PermissionsAndroid,
+} from 'react-native';
+import { RTCView } from 'react-native-webrtc';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import Avatar from '../components/Avatar';
+import { useChat } from '../context/ChatContext';
+import { useAuth } from '../context/AuthContext';
+import { useWebRTC } from '../hooks/useWebRTC';
+import { chatAPI } from '../api/client';
+
+function ControlBtn({ icon, label, onPress, color = '#fff', bgColor = 'rgba(255,255,255,0.15)', size = 26 }) {
+  return (
+    <TouchableOpacity style={[styles.ctrlBtn, { backgroundColor: bgColor }]} onPress={onPress}>
+      <MaterialCommunityIcons name={icon} size={size} color={color} />
+      {label ? <Text style={[styles.ctrlLabel, { color }]}>{label}</Text> : null}
+    </TouchableOpacity>
+  );
+}
+
+export default function CallScreen() {
+  const navigation = useNavigation();
+  const route = useRoute();
+  const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const { socketRef } = useChat();
+
+  const {
+    peerId, peerName, peerPhoto,
+    callType = 'video',       // 'audio' | 'video' | 'screen'
+    incoming = false,         // true when this screen is pushed by an incoming call
+    incomingOffer,
+  } = route.params || {};
+
+  const endedRef   = useRef(false);
+  const startedAt  = useRef(Date.now());
+  const callStatus = useRef('missed'); // updated to 'answered' on connect, 'rejected' on reject
+
+  const handleCallEnded = (status) => {
+    if (endedRef.current) return;
+    endedRef.current = true;
+    const duration = Math.round((Date.now() - startedAt.current) / 1000);
+    const finalStatus = status || callStatus.current;
+    // Save call log — best effort, never block navigation
+    chatAPI.saveCallLog({
+      callee_id:     incoming ? user?.id : peerId,
+      callee_name:   incoming ? (user?.full_name || user?.name) : peerName,
+      call_type:     callType,
+      status:        finalStatus,
+      duration_secs: finalStatus === 'answered' ? duration : 0,
+      started_at:    new Date(startedAt.current).toISOString(),
+    }).catch(() => {});
+    if (navigation.canGoBack()) navigation.goBack();
+  };
+
+  const {
+    localStream, remoteStream,
+    callState, incomingCall,
+    muted, videoOff, speakerOn,
+    startCall, answerCall, rejectCall, endCall,
+    startScreenShare,
+    toggleMute, toggleVideo, toggleSpeaker,
+  } = useWebRTC({ socketRef, user, onCallEnded: () => handleCallEnded() });
+
+  // Track answered state
+  useEffect(() => {
+    if (callState === 'connected') callStatus.current = 'answered';
+  }, [callState]);
+
+  // Request Android permissions before accessing camera/mic, then start the call
+  useEffect(() => {
+    const requestAndStart = async () => {
+      if (Platform.OS === 'android') {
+        const perms = [PermissionsAndroid.PERMISSIONS.RECORD_AUDIO];
+        if (callType === 'video') perms.push(PermissionsAndroid.PERMISSIONS.CAMERA);
+        const results = await PermissionsAndroid.requestMultiple(perms);
+        const denied = Object.values(results).some(
+          v => v !== PermissionsAndroid.RESULTS.GRANTED
+        );
+        if (denied) {
+          Alert.alert(
+            'Permissions required',
+            callType === 'video'
+              ? 'Camera and microphone access are needed for video calls.'
+              : 'Microphone access is needed for voice calls.',
+            [{ text: 'OK', onPress: handleCallEnded }]
+          );
+          return;
+        }
+      }
+      if (incoming) {
+        answerCall({ from: peerId, callType, offer: incomingOffer, callerName: peerName });
+      } else if (callType === 'screen') {
+        startScreenShare({ peerId, peerName });
+      } else {
+        startCall({ peerId, peerName, callType });
+      }
+    };
+    requestAndStart();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const isVideo  = callType === 'video' || callType === 'screen';
+  const isScreen = callType === 'screen';
+
+  const stateLabel =
+    callState === 'calling'   ? 'Calling…' :
+    callState === 'ringing'   ? 'Ringing…' :
+    callState === 'connected' ? 'Connected' : '';
+
+  return (
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor="#000" />
+
+      {/* Remote stream (full screen) */}
+      {remoteStream && isVideo ? (
+        <RTCView
+          streamURL={remoteStream.toURL()}
+          style={StyleSheet.absoluteFill}
+          objectFit="cover"
+          mirror={false}
+        />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, styles.audioBackground]}>
+          <Avatar name={peerName} size={96} />
+        </View>
+      )}
+
+      {/* Top bar: peer name + state */}
+      <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
+        <Text style={styles.peerName}>{peerName}</Text>
+        <Text style={styles.stateLabel}>{stateLabel}</Text>
+        {isScreen && <Text style={styles.screenNote}>You are sharing your screen</Text>}
+      </View>
+
+      {/* Local preview (PiP, bottom-right) — only for video calls */}
+      {localStream && isVideo && !isScreen ? (
+        <RTCView
+          streamURL={localStream.toURL()}
+          style={[styles.localPreview, { bottom: insets.bottom + 120 }]}
+          objectFit="cover"
+          mirror
+        />
+      ) : null}
+
+      {/* Controls */}
+      <View style={[styles.controls, { paddingBottom: insets.bottom + 24 }]}>
+        <ControlBtn
+          icon={muted ? 'microphone-off' : 'microphone'}
+          label={muted ? 'Unmute' : 'Mute'}
+          onPress={toggleMute}
+          bgColor={muted ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.15)'}
+        />
+        {isVideo && !isScreen && (
+          <ControlBtn
+            icon={videoOff ? 'video-off' : 'video'}
+            label={videoOff ? 'Start video' : 'Stop video'}
+            onPress={toggleVideo}
+            bgColor={videoOff ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.15)'}
+          />
+        )}
+        <ControlBtn
+          icon={speakerOn ? 'volume-high' : 'volume-off'}
+          label="Speaker"
+          onPress={toggleSpeaker}
+        />
+        {/* End call — red */}
+        <ControlBtn
+          icon="phone-hangup"
+          label="End"
+          onPress={endCall}
+          bgColor="#EF4444"
+          size={28}
+        />
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#111' },
+  audioBackground: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#1a1a2e' },
+  topBar: {
+    position: 'absolute', top: 0, left: 0, right: 0,
+    alignItems: 'center', paddingHorizontal: 24, paddingBottom: 16,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  peerName:    { fontSize: 22, fontWeight: '700', color: '#fff', marginBottom: 4 },
+  stateLabel:  { fontSize: 14, color: 'rgba(255,255,255,0.7)' },
+  screenNote:  { fontSize: 12, color: '#60A5FA', marginTop: 4 },
+  localPreview: {
+    position: 'absolute', right: 16, width: 96, height: 144,
+    borderRadius: 10, overflow: 'hidden', borderWidth: 2, borderColor: '#fff',
+  },
+  controls: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)', paddingTop: 20,
+  },
+  ctrlBtn: {
+    alignItems: 'center', justifyContent: 'center',
+    width: 64, height: 64, borderRadius: 32,
+  },
+  ctrlLabel: { fontSize: 11, marginTop: 4, fontWeight: '600' },
+});

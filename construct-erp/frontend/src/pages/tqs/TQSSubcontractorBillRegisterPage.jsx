@@ -193,7 +193,7 @@ export default function TQSSubcontractorBillRegisterPage() {
                   <tr key={b.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-4 py-2.5 font-mono text-slate-500">{b.sl_number}</td>
                     <td className="px-4 py-2.5 font-mono font-medium text-indigo-700">{b.po_number || b.wo_number || '—'}</td>
-                    <td className="px-4 py-2.5 font-medium text-slate-900 font-medium max-w-[180px] truncate" title={b.vendor_name}>{b.vendor_name}</td>
+                    <td className="px-4 py-2.5 font-medium text-slate-900 font-medium max-w-[180px] truncate" title={(b.vendor_name || '').toUpperCase()}>{(b.vendor_name || '').toUpperCase()}</td>
                     <td className="px-4 py-2.5 text-slate-600">{b.inv_number || '—'}</td>
                     <td className="px-4 py-2.5 text-slate-900 font-medium whitespace-nowrap">{fmt(b.inv_date)}</td>
                     <td className="px-4 py-2.5 text-right font-medium text-slate-700">₹{inr(b.basic_amount)}</td>

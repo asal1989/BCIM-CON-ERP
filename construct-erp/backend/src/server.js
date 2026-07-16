@@ -138,6 +138,7 @@ const tenderMgmtRoutes    = require('./routes/tender-mgmt.routes');
 const scRoutes            = require('./routes/sc.routes');
 const hireLogRoutes       = require('./routes/hireLog.routes');
 const hireRentalRoutes    = require('./routes/hireRental.routes');
+const paymentRecommendationsRoutes = require('./routes/payment-recommendations.routes');
 const supplyTrackerRoutes = require('./routes/supply-tracker.routes');
 const auditLogRoutes      = require('./routes/audit-log.routes');
 const rolePermissionsRoutes = require('./routes/role-permissions.routes');
@@ -154,6 +155,102 @@ const approvalEngineRoutes        = require('./routes/approval-engine.routes');
 const ewayBillRoutes              = require('./routes/ewayBill.routes');
 const searchRoutes                = require('./routes/search.routes');
 
+// ── Data migration: move 13 bills to DQS Tower project ───────────────────────
+const { runSchemaInit } = require('./utils/schemaInit');
+const { query: dbQuery } = require('./config/database');
+
+// Extract the numeric parts: ['511','516','321','534','540','607','612','623','672','673','785','796','797']
+const DQS_BILL_SERIALS = ['511','516','321','534','540','607','612','623','672','673','785','796','797'];
+
+// Delete the two duplicate bills that have 'IN/' prefix in inv_number (PO-429, PO-430)
+runSchemaInit('data_migration_delete_in_prefix_duplicates_2026', async () => {
+  const res = await dbQuery(
+    `UPDATE tqs_bills SET is_deleted = true, updated_at = NOW()
+     WHERE inv_number LIKE 'IN/%'
+       AND inv_number IN ('IN/00511/26-27','IN/00516/26-27')
+       AND is_deleted = false`
+  );
+  console.log(`[migration] Soft-deleted ${res.rowCount} IN/ prefix duplicate bill(s)`);
+});
+
+// Rename inv_number 00511/26-27 → IN/00511/26-27 and 00516/26-27 → IN/00516/26-27
+runSchemaInit('data_migration_rename_00516_to_in_prefix_2026', async () => {
+  const res = await dbQuery(
+    `UPDATE tqs_bills SET inv_number = 'IN/00516/26-27', updated_at = NOW()
+     WHERE inv_number = '00516/26-27' AND is_deleted = false`
+  );
+  console.log(`[migration] Renamed 00516/26-27 → IN/00516/26-27 (${res.rowCount} row)`);
+});
+
+// Rename inv_number 00511/26-27 → IN/00511/26-27 (user correction 2026-07-10)
+runSchemaInit('data_migration_rename_00511_to_in_prefix_2026', async () => {
+  const res = await dbQuery(
+    `UPDATE tqs_bills SET inv_number = 'IN/00511/26-27', updated_at = NOW()
+     WHERE inv_number = '00511/26-27' AND is_deleted = false`
+  );
+  console.log(`[migration] Renamed 00511/26-27 → IN/00511/26-27 (${res.rowCount} row)`);
+});
+
+runSchemaInit('data_migration_bills_to_dqs_tower_2026_v2', async () => {
+  const projRes = await dbQuery(
+    `SELECT id, name FROM projects WHERE LOWER(name) LIKE '%dqs%' ORDER BY name LIMIT 1`
+  );
+  if (!projRes.rows.length) {
+    console.warn('[migration-dqs] DQS Tower project not found — skipping');
+    return;
+  }
+  const dqsId   = projRes.rows[0].id;
+  const dqsName = projRes.rows[0].name;
+
+  // Diagnostic: find bills matching any of the serial numbers in sl_number or inv_number
+  const diagRes = await dbQuery(
+    `SELECT id, sl_number, inv_number, vendor_name, project_id,
+            (SELECT name FROM projects WHERE id = tqs_bills.project_id) AS current_project
+       FROM tqs_bills
+      WHERE is_deleted = false
+        AND (
+          REGEXP_REPLACE(COALESCE(sl_number,''), '[^0-9]', '', 'g') = ANY($1)
+          OR REGEXP_REPLACE(COALESCE(inv_number,''), '[^0-9/\\-]', '', 'g') = ANY($2)
+        )`,
+    [
+      DQS_BILL_SERIALS,
+      ['00511/26-27','00516/26-27','00321/26-27','00534/26-27','00540/26-27',
+       '00607/26-27','00612/26-27','00623/26-27','00672/26-27','00673/26-27',
+       '00785/26-27','00796/26-27','00797/26-27'],
+    ]
+  );
+  console.log(`[migration-dqs] Diagnostic — found ${diagRes.rows.length} candidate bill(s):`);
+  diagRes.rows.forEach(r =>
+    console.log(`  sl=${r.sl_number} | inv=${r.inv_number} | vendor=${r.vendor_name} | project=${r.current_project}`)
+  );
+
+  // Move ALL candidate bills to DQS Tower (not yet there)
+  const toMove = diagRes.rows.filter(r => r.project_id !== dqsId).map(r => r.id);
+  if (toMove.length) {
+    const updRes = await dbQuery(
+      `UPDATE tqs_bills SET project_id = $1 WHERE id = ANY($2)`,
+      [dqsId, toMove]
+    );
+    console.log(`[migration-dqs] Moved ${updRes.rowCount} bill(s) → "${dqsName}" (${dqsId})`);
+  } else {
+    console.log(`[migration-dqs] All candidate bills already in "${dqsName}" — nothing to move`);
+  }
+
+  // Also try exact match on the original number strings
+  const exactRes = await dbQuery(
+    `UPDATE tqs_bills SET project_id = $1
+     WHERE (sl_number = ANY($2) OR inv_number = ANY($2))
+       AND project_id IS DISTINCT FROM $1
+       AND is_deleted = false`,
+    [dqsId, ['00511/26-27','00516/26-27','00321/26-27','00534/26-27','00540/26-27',
+              '00607/26-27','00612/26-27','00623/26-27','00672/26-27','00673/26-27',
+              '00785/26-27','00796/26-27','00797/26-27']]
+  );
+  if (exactRes.rowCount)
+    console.log(`[migration-dqs] Exact-match also moved ${exactRes.rowCount} additional bill(s)`);
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 const http   = require('http');
 const { Server: SocketIO } = require('socket.io');
 const jwt    = require('jsonwebtoken');
@@ -161,9 +258,16 @@ const jwt    = require('jsonwebtoken');
 const app    = express();
 const server = http.createServer(app);
 const PORT   = process.env.PORT || 5000;
+// erp.bcim.in is the only production frontend (confirmed 2026-07 — nothing
+// else calls this backend from a raw *.railway.app URL), so the blanket
+// *.up.railway.app / *.railway.app wildcard below was broader than needed:
+// with credentials:true, ANY tenant's free Railway deploy could otherwise
+// issue a matching-origin credentialed request. Prod + dev/LAN access is now
+// via this explicit allowlist instead of a wildcard.
 const extraAllowedOrigins = [
   'http://bcim.ddns.net:3000',
   'https://bcim.ddns.net:3000',
+  'https://erp.bcim.in',
 ];
 
 const isAllowedOrigin = (origin) => {
@@ -171,8 +275,10 @@ const isAllowedOrigin = (origin) => {
   if (extraAllowedOrigins.includes(origin)) return true;
   if (/^https?:\/\/localhost(:\d+)?\/?$/.test(origin)) return true;
   if (/^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(origin)) return true;
-  if (origin.endsWith('.vercel.app')) return true;
-  if (origin.endsWith('.up.railway.app') || origin.endsWith('.railway.app')) return true;
+  // Vercel: only allow the specific team slug or an explicit env var override
+  // (a bare *.vercel.app wildcard lets ANY Vercel deploy make credentialed requests)
+  const vercelSlug = process.env.VERCEL_DEPLOY_SLUG; // e.g. "bcim-con-erp"
+  if (vercelSlug && origin.includes(`.vercel.app`) && origin.includes(vercelSlug)) return true;
   if (process.env.FRONTEND_URL && origin.startsWith(process.env.FRONTEND_URL)) return true;
   return false;
 };
@@ -197,21 +303,13 @@ app.use(helmet({
 }));
 
 // CORS
+// (This callback used to re-list every localhost/LAN/Vercel/Railway/
+// FRONTEND_URL check a second time below isAllowedOrigin(origin) — all dead
+// code, since isAllowedOrigin already covers each of those cases and returns
+// early. isAllowedOrigin is the single source of truth now.)
 app.use(cors({
   origin: (origin, cb) => {
     if (isAllowedOrigin(origin)) return cb(null, true);
-    // no origin = same-origin requests (production), curl, mobile apps
-    if (!origin) return cb(null, true);
-    // any localhost port — allow in dev
-    if (/^https?:\/\/localhost(:\d+)?\/?$/.test(origin)) return cb(null, true);
-    // LAN / local network IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
-    if (/^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(origin)) return cb(null, true);
-    // any Vercel preview or production deploy
-    if (origin.endsWith('.vercel.app')) return cb(null, true);
-    // Railway deployments
-    if (origin.endsWith('.up.railway.app') || origin.endsWith('.railway.app')) return cb(null, true);
-    // explicit production frontend URL
-    if (process.env.FRONTEND_URL && origin.startsWith(process.env.FRONTEND_URL)) return cb(null, true);
     cb(new Error(`CORS: ${origin} not allowed`));
   },
   credentials: true,
@@ -238,7 +336,16 @@ app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 // Static file serving (uploads) — authenticated only
 // Requires a valid JWT so private documents cannot be hot-linked
 const { authenticate } = require('./middleware/auth');
-app.use('/uploads', authenticate, express.static(path.join(__dirname, '../uploads')));
+// /uploads sits outside the /api/ prefix so the general limiter below never
+// covered it — an authenticated client could otherwise hammer disk reads
+// with no throttle at all. Generous limit since legit DMS/document pages can
+// legitimately load many attachments in a normal session.
+const uploadsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
+  message: { error: 'Too many file requests, please try again later.' }
+});
+app.use('/uploads', uploadsLimiter, authenticate, express.static(path.join(__dirname, '../uploads')));
 // If express.static didn't find the file it calls next() — catch it here so
 // the React catch-all doesn't return index.html with a 200 status
 app.use('/uploads', (req, res) => res.status(404).json({ error: 'File not found or has been deleted' }));
@@ -252,11 +359,7 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 // Auth-specific limiter (brute-force protection)
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,  // 15 minutes
-  max: 200,                   // raised: small team + dev environment
-  message: { error: 'Too many login attempts, try again in 15 minutes.' }
-});
+// Auth rate limiter removed — private office ERP, shared IP causes false lockouts
 
 // ============================================
 // HEALTH CHECK
@@ -284,7 +387,7 @@ app.get('/health', async (req, res) => {
 const API = '/api/v1';
 
 // Auth
-app.use(`${API}/auth`, authLimiter, authRoutes);
+app.use(`${API}/auth`, authRoutes);
 
 // Core
 app.use(`${API}/projects`, projectRoutes);
@@ -473,6 +576,7 @@ app.use(`${API}/tender-mgmt`,         tenderMgmtRoutes);
 app.use(`${API}/sc`,                  scRoutes);
 app.use(`${API}/hire-log`,            hireLogRoutes);
 app.use(`${API}/hire-rental`,         hireRentalRoutes);
+app.use(`${API}/payment-recommendations`, paymentRecommendationsRoutes);
 app.use(`${API}/supply-tracker`,      supplyTrackerRoutes);
 app.use(`${API}/audit-log`,           auditLogRoutes);
 app.use(`${API}/role-permissions`,    rolePermissionsRoutes);
@@ -494,6 +598,15 @@ app.use(`${API}/petty-cash`, pettyCashRoutes);
 app.use(`${API}/automation-ideas`, automationIdeasRoutes);
 app.use(`${API}/approval-engine`, approvalEngineRoutes);
 app.use(`${API}/search`, searchRoutes);
+
+// GET /api/v1/chat/pending-call — returns the stored call:offer for this user (if any, not expired).
+// Called by the mobile app after it wakes from an FCM incoming-call push notification.
+const { authenticate: authMw } = require('./middleware/auth');
+app.get(`${API}/chat/pending-call`, authMw, (req, res) => {
+  const entry = getPendingCall(req.user.id);
+  if (!entry) return res.json({ pending: null });
+  res.json({ pending: entry });
+});
 
 // ============================================
 // SOCKET.IO — Real-time Chat
@@ -531,6 +644,36 @@ const CHAT_CHANNELS = [
   'hr', 'planning', 'quality', 'subcontractors', 'tender', 'it-support',
 ];
 
+// Pending call store — holds the last call:offer for each callee for up to 45 s.
+// Used by the mobile app after waking from an FCM notification to fetch the offer.
+const pendingCalls = new Map(); // userId → { from, callerName, callerPhoto, callType, offer, expiresAt }
+function setPendingCall(userId, data) {
+  pendingCalls.set(String(userId), { ...data, expiresAt: Date.now() + 45_000 });
+}
+function getPendingCall(userId) {
+  const entry = pendingCalls.get(String(userId));
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) { pendingCalls.delete(String(userId)); return null; }
+  return entry;
+}
+function clearPendingCall(userId) { pendingCalls.delete(String(userId)); }
+
+// Minimal per-socket flood guard. The REST POST that persists a chat message
+// sits behind the general /api/ limiter, but `send_message` itself is only a
+// broadcast — a raw socket client could emit it directly (bypassing REST
+// entirely) and spam every channel member with no throttle at all. Same risk
+// applies to call signaling. This tracks a rolling window per socket+event.
+const socketRateState = new WeakMap();
+function isRateLimited(socket, event, max, windowMs) {
+  let state = socketRateState.get(socket);
+  if (!state) { state = {}; socketRateState.set(socket, state); }
+  const now = Date.now();
+  const hits = (state[event] || []).filter(t => now - t < windowMs);
+  hits.push(now);
+  state[event] = hits;
+  return hits.length > max;
+}
+
 io.on('connection', (socket) => {
   logger.info(`💬 Chat: ${socket.user?.name || socket.user?.id} connected`);
   CHAT_CHANNELS.forEach(ch => socket.join(ch));
@@ -553,17 +696,51 @@ io.on('connection', (socket) => {
 
   // New message — broadcast to everyone in the channel
   socket.on('send_message', (msg) => {
+    if (isRateLimited(socket, 'send_message', 30, 10_000)) return; // >30 broadcasts/10s — drop silently
     // msg already saved via REST POST, just broadcast to others
     if (msg.channel?.startsWith('dm-')) {
-      // DM channel id is `dm-<uuid1>-<uuid2>` (sorted) — each UUID is a fixed
-      // 36 chars, so we can split deterministically without a delimiter clash.
       const raw = msg.channel.slice(3);
       const id1 = raw.slice(0, 36);
       const id2 = raw.slice(37);
       const recipientId = id1 === String(socket.user?.id) ? id2 : id1;
       io.to(`user-${recipientId}`).emit('new_message', msg);
+      // Push notification for DM
+      try {
+        const { sendPushToUser } = require('./services/fcm.service');
+        const senderName = socket.user?.name || socket.user?.username || 'Someone';
+        sendPushToUser(recipientId, {
+          title: `💬 ${senderName}`,
+          body: msg.text || (msg.file_name ? `📎 ${msg.file_name}` : 'New message'),
+          data: { type: 'dm', channel: msg.channel, senderId: String(socket.user?.id) },
+        });
+      } catch (_) {}
     } else {
       socket.to(msg.channel).emit('new_message', msg);
+      // Push for @mentions in channel messages
+      try {
+        const mentionRegex = /@([A-Za-z0-9 _]+)/g;
+        const text = msg.text || '';
+        let match;
+        const mentionedNames = new Set();
+        while ((match = mentionRegex.exec(text)) !== null) mentionedNames.add(match[1].trim().toLowerCase());
+        if (mentionedNames.size > 0) {
+          const { query: dbQ } = require('./config/database');
+          const { sendPushToUser } = require('./services/fcm.service');
+          const senderName = socket.user?.name || 'Someone';
+          dbQ(`SELECT id, full_name, name FROM users WHERE is_active = TRUE`).then(({ rows }) => {
+            rows.forEach(u => {
+              const uname = (u.full_name || u.name || '').toLowerCase();
+              if (mentionedNames.has(uname) && String(u.id) !== String(socket.user?.id)) {
+                sendPushToUser(u.id, {
+                  title: `🔔 ${senderName} mentioned you`,
+                  body: text.slice(0, 100),
+                  data: { type: 'mention', channel: msg.channel },
+                });
+              }
+            });
+          }).catch(() => {});
+        }
+      } catch (_) {}
     }
   });
 
@@ -584,6 +761,89 @@ io.on('connection', (socket) => {
   socket.on('stop_typing', ({ channel }) => {
     socket.to(channel).emit('user_stop_typing', { channel });
   });
+
+  // ── WebRTC call signaling ──────────────────────────────────────────────────
+  // All events are routed via the user-{id} room so they reach the target
+  // regardless of which socket instance is connected. The server acts purely
+  // as a relay — no media flows through here, only SDP offers/answers and
+  // ICE candidates.
+
+  socket.on('call:offer', ({ to, offer, callerName, callerPhoto, callType }) => {
+    if (isRateLimited(socket, 'call:offer', 10, 60_000)) return; // >10 call attempts/min — drop (prevents ring-spam)
+    const targetRoom = `user-${to}`;
+    const roomSockets = io.sockets.adapter.rooms.get(targetRoom);
+    const callerDisplay = callerName || socket.user.name || 'Someone';
+    const resolvedCallType = callType || 'video';
+    logger.info(`📞 call:offer from ${socket.user.id} → ${targetRoom} (${roomSockets?.size ?? 0} sockets in room)`);
+    io.to(targetRoom).emit('call:offer', {
+      from: socket.user.id,
+      callerName: callerDisplay,
+      callerPhoto: callerPhoto || null,
+      callType: resolvedCallType,
+      offer,
+    });
+    // Store offer so the mobile can fetch it after waking from FCM notification
+    setPendingCall(to, {
+      from: socket.user.id, callerName: callerDisplay, callerPhoto: callerPhoto || null,
+      callType: resolvedCallType, offer,
+    });
+    // FCM push so the callee is alerted when the app is backgrounded/killed
+    try {
+      const { sendPushToUser } = require('./services/fcm.service');
+      const callLabel = resolvedCallType === 'video' ? 'Video call' : resolvedCallType === 'screen' ? 'Screen share' : 'Voice call';
+      sendPushToUser(to, {
+        title: `📞 Incoming ${callLabel}`,
+        body: `${callerDisplay} is calling you — tap to answer`,
+        data: {
+          type:         'incoming_call',
+          call_type:    resolvedCallType,
+          from:         String(socket.user.id),
+          caller_name:  callerDisplay,
+          caller_photo: callerPhoto || '',
+        },
+      }, { channelId: 'erp-calls', fullScreen: true });
+    } catch (_) {}
+  });
+
+  socket.on('call:answer', ({ to, answer }) => {
+    clearPendingCall(socket.user.id); // callee answered — no longer pending
+    io.to(`user-${to}`).emit('call:answer', { from: socket.user.id, answer });
+  });
+
+  socket.on('call:ice-candidate', ({ to, candidate }) => {
+    io.to(`user-${to}`).emit('call:ice-candidate', { from: socket.user.id, candidate });
+  });
+
+  socket.on('call:end', ({ to }) => {
+    clearPendingCall(to);
+    io.to(`user-${to}`).emit('call:end', { from: socket.user.id });
+  });
+
+  socket.on('call:reject', ({ to }) => {
+    clearPendingCall(socket.user.id); // callee rejected
+    io.to(`user-${to}`).emit('call:reject', { from: socket.user.id });
+  });
+
+  socket.on('call:busy', ({ to }) => {
+    clearPendingCall(to);
+    io.to(`user-${to}`).emit('call:busy', { from: socket.user.id });
+  });
+
+  // ── Screen share signaling ────────────────────────────────────────────────────
+  // Pass sharerName/sharerPhoto through from the client (like call:offer does) —
+  // profile_photo_url is NOT in the JWT payload so socket.user.profile_photo_url
+  // is always undefined, which would break the avatar in IncomingShareModal.
+  socket.on('screenshare:offer', ({ to, offer, sharerName, sharerPhoto }) => {
+    io.to(`user-${to}`).emit('screenshare:offer', {
+      from: socket.user.id,
+      sharerName:  sharerName || socket.user.name || socket.user.username,
+      sharerPhoto: sharerPhoto || null,
+      offer,
+    });
+  });
+  socket.on('screenshare:answer',        ({ to, answer })    => io.to(`user-${to}`).emit('screenshare:answer',        { from: socket.user.id, answer }));
+  socket.on('screenshare:ice-candidate', ({ to, candidate }) => io.to(`user-${to}`).emit('screenshare:ice-candidate', { from: socket.user.id, candidate }));
+  socket.on('screenshare:end',           ({ to })            => io.to(`user-${to}`).emit('screenshare:end',           { from: socket.user.id }));
 
   socket.on('disconnect', () => {
     logger.info(`💬 Chat: ${socket.user?.name || socket.user?.id} disconnected`);
@@ -756,7 +1016,146 @@ async function runAutoMigrations() {
     // 041 P6 activity → BOQ chapter link (for pulling activity budgets from the
     // BOQ Budget Breakdown chapter totals instead of re-entering them)
     await client.query(`ALTER TABLE project_activities ADD COLUMN IF NOT EXISTS boq_chapter_no VARCHAR(50)`);
-    logger.info('✅ Auto-migrations complete (003–041)');
+    // 042 Add labour_contractor to sc_subcontractors.contractor_type check constraint
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.check_constraints
+          WHERE constraint_schema = current_schema()
+            AND constraint_name = 'sc_subcontractors_contractor_type_check'
+            AND check_clause LIKE '%labour_contractor%'
+        ) THEN
+          ALTER TABLE sc_subcontractors DROP CONSTRAINT IF EXISTS sc_subcontractors_contractor_type_check;
+          ALTER TABLE sc_subcontractors ADD CONSTRAINT sc_subcontractors_contractor_type_check
+            CHECK (contractor_type IN ('company','individual','partnership','llp','proprietorship','labour_contractor'));
+        END IF;
+      END $$`);
+    // 043 Bulk-seed DQS Tower workers for Habibur Rahman and MD Faruk
+    await client.query(`
+      DO $$
+      DECLARE
+        v_cid        UUID;
+        v_sc_habib   UUID;
+        v_sc_faruk   UUID;
+        v_wo_habib   UUID;
+        v_wo_faruk   UUID;
+        v_proj       UUID;
+        v_cnt        INTEGER;
+        v_code       TEXT;
+      BEGIN
+        -- Get company id
+        SELECT id INTO v_cid FROM companies LIMIT 1;
+        IF v_cid IS NULL THEN RETURN; END IF;
+
+        -- Get DQS Tower project id
+        SELECT id INTO v_proj FROM projects
+        WHERE company_id = v_cid
+          AND (LOWER(name) LIKE '%dqs%' OR LOWER(project_code) LIKE '%dqs%')
+        LIMIT 1;
+
+        -- Find Habibur Rahman subcontractor
+        SELECT id INTO v_sc_habib FROM sc_subcontractors
+        WHERE company_id = v_cid AND LOWER(name) LIKE '%habib%'
+        ORDER BY created_at LIMIT 1;
+
+        -- Find MD Faruk subcontractor
+        SELECT id INTO v_sc_faruk FROM sc_subcontractors
+        WHERE company_id = v_cid AND LOWER(name) LIKE '%faruk%'
+        ORDER BY created_at LIMIT 1;
+
+        -- Get active WO for Habibur Rahman
+        IF v_sc_habib IS NOT NULL THEN
+          SELECT id INTO v_wo_habib FROM sc_work_orders
+          WHERE company_id = v_cid AND sc_id = v_sc_habib AND status = 'active'
+          ORDER BY created_at LIMIT 1;
+        END IF;
+
+        -- Get active WO for MD Faruk
+        IF v_sc_faruk IS NOT NULL THEN
+          SELECT id INTO v_wo_faruk FROM sc_work_orders
+          WHERE company_id = v_cid AND sc_id = v_sc_faruk AND status = 'active'
+          ORDER BY created_at LIMIT 1;
+        END IF;
+
+        -- Helper function to insert a worker (skip if worker_code already exists)
+        -- Habibur Rahman workers
+        IF v_sc_habib IS NOT NULL THEN
+          WITH workers(code, name, skill) AS (VALUES
+            ('3030009','Chanchal Oraw','Unskilled'),
+            ('3030024','Sudeb Pahan','Unskilled'),
+            ('3030027','Joskel Tudu','Unskilled'),
+            ('3030044','Shyamal Nunia','Mason'),
+            ('3030076','Halu Hansda','Unskilled'),
+            ('3030078','Gali Saren','Unskilled'),
+            ('3030087','Sunil Murmu','Unskilled'),
+            ('3030111','Shyamal Chandra Lohara','Carpenter'),
+            ('3030112','Khit Kalu Sarkar','Unskilled'),
+            ('3030113','Sukda Besara','Unskilled'),
+            ('3030114','Delu Sarkar','Unskilled'),
+            ('3030118','Shiba Nunia','Carpenter'),
+            ('3030119','Arun Nuniya','Carpenter'),
+            ('3030120','Arjun Nunia','Carpenter'),
+            ('3030126','Mangal Murmu','Unskilled'),
+            ('3030127','Majhi Soren','Unskilled'),
+            ('3030128','Kishtu Murmu','Unskilled'),
+            ('3030129','Sapol Murmu','Unskilled'),
+            ('3030131','Shankar Mahaldar','Unskilled'),
+            ('3030132','Gorkha Nuniya','Unskilled'),
+            ('3030133','Chhutu Nuniya','Unskilled'),
+            ('3030140','Sufal Hemram','Mason'),
+            ('3030141','Suraj Mandal','Mason'),
+            ('3030142','Semanta Desi','Mason'),
+            ('3030148','Parimal Hemrom','Mason'),
+            ('3030149','Kiran Murmu','Unskilled'),
+            ('3030150','Salkhan Murmu','Unskilled'),
+            ('3030151','Raman Murmu','Unskilled'),
+            ('3030152','Uttam Kisku','Unskilled'),
+            ('3030153','Biswajit Hasda','Unskilled'),
+            ('3030154','Sujit Hasda','Unskilled')
+          )
+          INSERT INTO sc_workers (company_id, project_id, sc_id, wo_id, worker_code, worker_name, skill_type, status)
+          SELECT v_cid, v_proj, v_sc_habib, v_wo_habib, w.code, w.name, w.skill, 'active'
+          FROM workers w
+          WHERE NOT EXISTS (
+            SELECT 1 FROM sc_workers x WHERE x.company_id = v_cid AND x.worker_code = w.code
+          );
+        END IF;
+
+        -- MD Faruk workers
+        IF v_sc_faruk IS NOT NULL THEN
+          WITH workers(code, name, skill) AS (VALUES
+            ('3030008','Umesh Paswan','Steel Fitter'),
+            ('3030136','Bijay Bhuiyan','Steel Fitter'),
+            ('3030138','Sachin Kumar','Steel Helper'),
+            ('3030139','Bijay Bhuiyan','Steel Helper'),
+            ('3030161','Sulendra Oraon','Steel Helper'),
+            ('3030169','Tanveer Bhuiyan','Steel Fitter'),
+            ('3030170','Sulendra Kumar','Steel Fitter'),
+            ('3030171','Bisun Bhuyan','Steel Helper'),
+            ('3030172','Mohan Saw','Steel Helper'),
+            ('3030173','Jeetendra Kumar','Steel Helper'),
+            ('3030174','Abhishek Kumar','Steel Helper'),
+            ('3030175','Kailash Bhuiyan','Steel Helper'),
+            ('3030176','Tileshwar Bhuiyan','Steel Fitter'),
+            ('3030177','Gandori Bhuinya','Steel Fitter'),
+            ('3030178','Arjun Bhuiyan','Cook')
+          )
+          INSERT INTO sc_workers (company_id, project_id, sc_id, wo_id, worker_code, worker_name, skill_type, status)
+          SELECT v_cid, v_proj, v_sc_faruk, v_wo_faruk, w.code, w.name, w.skill, 'active'
+          FROM workers w
+          WHERE NOT EXISTS (
+            SELECT 1 FROM sc_workers x WHERE x.company_id = v_cid AND x.worker_code = w.code
+          );
+        END IF;
+      END $$`);
+    // Migration 044 — add in_time / out_time to sc_attendance for ESSL sync
+    await client.query(`
+      ALTER TABLE sc_attendance
+        ADD COLUMN IF NOT EXISTS in_time  TIME,
+        ADD COLUMN IF NOT EXISTS out_time TIME
+    `);
+    logger.info('✅ Auto-migrations complete (003–044)');
   } catch (err) {
     logger.warn('⚠️  Auto-migration warning:', err.message);
   } finally {
@@ -798,6 +1197,12 @@ if (require.main === module) {
 
     const { initBirthdayAnniversary } = require('./utils/hr-birthday-anniversary.service');
     initBirthdayAnniversary();
+
+    const { initLateArrivalAlert } = require('./utils/late-arrival-alert.service');
+    initLateArrivalAlert();
+
+    const { initLateSummary } = require('./utils/hr-late-summary.service');
+    initLateSummary();
   });
   }); // end .finally()
 }

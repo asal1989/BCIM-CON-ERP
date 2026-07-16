@@ -148,10 +148,13 @@ router.post('/', authorize('super_admin','admin','accountant'), async (req, res)
 // PATCH /invoices/:id/verify — Step 2: Audit Verification
 router.patch('/:id/verify', authorize('super_admin','admin','accountant'), async (req, res) => {
   try {
-    await query(
-      `UPDATE invoices SET status = 'verified', verified_by = $1, updated_at = NOW() WHERE id = $2`,
-      [req.user.id, req.params.id]
+    const r = await query(
+      `UPDATE invoices SET status = 'verified', verified_by = $1, updated_at = NOW()
+       WHERE id = $2 AND project_id IN (SELECT id FROM projects WHERE company_id = $3)
+       RETURNING id`,
+      [req.user.id, req.params.id, req.user.company_id]
     );
+    if (!r.rowCount) return res.status(404).json({ error: 'Invoice not found' });
     res.json({ message: 'Invoice verified by audit' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -171,6 +174,7 @@ router.patch('/:id/authorize', authorize('super_admin','admin'), async (req, res
          WHERE i.id = $1`, [req.params.id]
       );
       if (!inv) throw new Error('Invoice not found');
+      if (inv.company_id !== req.user.company_id) throw Object.assign(new Error('Invoice not found'), { status: 404 });
 
       await client.query(
         `UPDATE invoices SET status = 'authorized', authorized_by = $1, updated_at = NOW() WHERE id = $2`,

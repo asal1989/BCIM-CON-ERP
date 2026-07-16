@@ -22,6 +22,7 @@ const PROJECT_INJECT_SKIP = [
   /\/documents/,        // many document routes already filter by project_id explicitly
   /\/vendor/,           // vendor master data is company-wide
   /\/quotations\/vendor-rfq/,
+  /\/hr-admin\/employees/,  // HR-only endpoint; all employees visible regardless of project context
 ];
 
 function shouldInjectProject(url) {
@@ -184,6 +185,7 @@ export const subcontractorAPI = {
   approveWorkOrder:  (id, d)  => api.patch(`/subcontractors/work-orders/${id}/approve`, d),
   mdApproveWorkOrder:(id)     => api.patch(`/subcontractors/work-orders/${id}/md-approve`),
   rejectWorkOrder:   (id, d)  => api.patch(`/subcontractors/work-orders/${id}/reject`, d),
+  terminateWorkOrder:(id, d)  => api.patch(`/subcontractors/work-orders/${id}/terminate`, d),
   downloadWOTemplate:()       => api.get('/subcontractors/work-orders/import/template', { responseType: 'blob' }),
   excelImportPreview:(file)   => { const fd = new FormData(); fd.append('file', file); return api.post('/subcontractors/work-orders/import/excel', fd, { headers: { 'Content-Type': undefined } }); },
   // Measurements
@@ -289,6 +291,7 @@ export const raBillAPI = {
   approve:       (id, d)  => api.patch(`/ra-bills/${id}/approve`, d),
   reject:        (id, d)  => api.patch(`/ra-bills/${id}/reject`, d),
   pay:           (id, d)  => api.patch(`/ra-bills/${id}/pay`, d),
+  revert:        (id)     => api.patch(`/ra-bills/${id}/revert`),
   delete:        (id)     => api.delete(`/ra-bills/${id}`),
   getPrevStats:  (params) => api.get('/ra-bills/previous-stats', { params }),
   boqItemBilled:  (projectId) => api.get('/ra-bills/boq-item-billed',  { params: { project_id: projectId } }),
@@ -491,6 +494,7 @@ export const hrShiftsAPI = {
   deleteShift:  (id)       => api.delete(`/hr-admin/shifts/${id}`),
   empShifts:    (p)        => api.get('/hr-admin/employee-shifts', { params: p }),
   assignShift:  (d)        => api.post('/hr-admin/employee-shifts', d),
+  bulkAssignShift: (d)     => api.post('/hr-admin/employee-shifts/bulk-assign', d),
   removeShift:  (id)       => api.delete(`/hr-admin/employee-shifts/${id}`),
   overtime:     (p)        => api.get('/hr-admin/overtime', { params: p }),
   addOT:        (d)        => api.post('/hr-admin/overtime', d),
@@ -1405,6 +1409,7 @@ export const dmsAPI = {
   preview:        (id, p)   => api.get(`/dms/${id}/preview`, { params: p }),
   fileBlob:       (id)      => api.get(`/dms/${id}/file`, { responseType: 'blob' }),
   docxPreviewUrl: (id)      => `/api/v1/dms/${id}/docx-preview`,
+  docxBlob:       (id)      => api.get(`/dms/${id}/docx-preview`, { responseType: 'blob' }),
   updateMetadata: (id, d)   => api.patch(`/dms/${id}/metadata`, d),
   users:          ()        => api.get('/users'),
   dashboard:      ()        => api.get('/dms/dashboard'),
@@ -1570,6 +1575,8 @@ export const scAPI = {
   // Workers
   listWorkers:        (p)       => api.get('/sc/workers', { params: p }),
   createWorker:       (d)       => api.post('/sc/workers', d),
+  updateWorker:       (id, d)   => api.put(`/sc/workers/${id}`, d),
+  deleteWorker:       (id)      => api.delete(`/sc/workers/${id}`),
   // Attendance
   listAttendance:     (p)       => api.get('/sc/attendance', { params: p }),
   markAttendance:     (d)       => api.post('/sc/attendance', d),
@@ -1640,6 +1647,11 @@ export const scAPI = {
   // Final Bills
   listFinalBills:     (p)       => api.get('/sc/final-bills', { params: p }),
   createFinalBill:    (d)       => api.post('/sc/final-bills', d),
+  // Bill file attachments
+  listBillFiles:      (id)      => api.get(`/sc/bills/${id}/files`),
+  uploadBillFile:     (id, fd)  => api.post(`/sc/bills/${id}/files`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  deleteBillFile:     (id, fid) => api.delete(`/sc/bills/${id}/files/${fid}`),
+  serveBillFile:      (id, fid) => `/api/sc/bills/${id}/files/${fid}/serve`,
   // Enhanced Reports
   reportLedger:       (p)       => api.get('/sc/reports/ledger', { params: p }),
   reportBOQActual:    (p)       => api.get('/sc/reports/boq-actual', { params: p }),
@@ -1667,6 +1679,13 @@ export const hireLogAPI = {
   deleteEntry:   (woId, id)   => api.delete(`/hire-log/${woId}/${id}`),
   markBilled:    (woId, id, scBillId) => api.patch(`/hire-log/${woId}/${id}/mark-billed`, { sc_bill_id: scBillId }),
   categorizeItem:(woId, itemId, d) => api.patch(`/hire-log/${woId}/items/${itemId}/categorize`, d),
+  listFiles:       (woId, id)        => api.get(`/hire-log/${woId}/${id}/files`),
+  uploadFile:      (woId, id, fd)    => api.post(`/hire-log/${woId}/${id}/files`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  deleteFile:      (woId, id, fid)   => api.delete(`/hire-log/${woId}/${id}/files/${fid}`),
+  serveFile:       (woId, id, fid)   => `/api/hire-log/${woId}/${id}/files/${fid}/serve`,
+  listDailyLog:    (woId)            => api.get(`/hire-log/${woId}/daily`),
+  addDailyEntry:   (woId, d)         => api.post(`/hire-log/${woId}/daily`, d),
+  deleteDailyEntry:(woId, id)        => api.delete(`/hire-log/${woId}/daily/${id}`),
 };
 
 export const analyticsAPI = {
@@ -1731,6 +1750,9 @@ export const tqsBillsAPI = {
   // ── Import ──
   downloadTemplate: ()         => api.get('/tqs/bills/import/template', { responseType: 'blob' }),
   bulkImport:       (fd)       => api.post('/tqs/bills/bulk-import', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  // ── Duplicate & outstanding checks ──
+  checkDuplicate:      (params) => api.get('/tqs/bills/check-duplicate',    { params }),
+  vendorOutstanding:   (params) => api.get('/tqs/bills/vendor-outstanding', { params }),
   // ── Cross-module lookups ──
   lookupPOs:        (params)   => api.get('/tqs/bills/lookup/pos',        { params }),
   lookupWOs:        (params)   => api.get('/tqs/bills/lookup/wos',        { params }),
@@ -1829,6 +1851,7 @@ export const vendorQSCertificationAPI = {
   refreshFromBills:(id)     => api.post(`/vendor-qs-certifications/${id}/refresh-from-bills`),
   updateAmounts:   (id, d)  => api.patch(`/vendor-qs-certifications/${id}/amounts`, d),
   updateStatus:    (id, d)  => api.patch(`/vendor-qs-certifications/${id}/status`, d),
+  updateItems:     (id, d)  => api.patch(`/vendor-qs-certifications/${id}/items`, d),
   recordPayment:   (id, d)  => api.post(`/vendor-qs-certifications/${id}/payment`, d),
   delete:          (id)     => api.delete(`/vendor-qs-certifications/${id}`),
 };
@@ -1888,6 +1911,12 @@ export const hrAttendanceAPI = {
   baseline:(data)   => api.post('/hr-admin/attendance/month-baseline', data),
   upsert:  (data)   => api.post('/hr-admin/attendance', data),
   update:  (id, d)  => api.put(`/hr-admin/attendance/${id}`, d),
+  timesheetReport: (params) => api.get('/hr-admin/attendance/timesheet-report', { params }),
+  monthlyReport:  (params) => api.get('/hr-admin/attendance/monthly-report', { params }),
+  yearlySummary:  (params) => api.get('/hr-admin/attendance/yearly-summary', { params }),
+  runLateAlerts:  (data)   => api.post('/hr-admin/attendance/late-alerts/run', data || {}),
+  testLateAlert:  ()       => api.post('/hr-admin/attendance/late-alerts/test', {}),
+  runLateSummary: (data)   => api.post('/hr-admin/attendance/late-summary/run', data || {}),
 };
 
 export const hrSalaryAPI = {
@@ -1897,9 +1926,15 @@ export const hrSalaryAPI = {
   listEmpSalaries:    (params) => api.get('/hr-admin/salary/employee-salaries', { params }),
   getCurrentSalary:   (uid)    => api.get(`/hr-admin/salary/employee-salaries/${uid}/current`),
   assignSalary:       (data)   => api.post('/hr-admin/salary/employee-salaries', data),
+  updateEmpSalary:    (id, d)  => api.put(`/hr-admin/salary/employee-salaries/${id}`, d),
   calculateBreakup:   (data)   => api.post('/hr-admin/salary/calculate-breakup', data),
   updateMess:         (id, d)  => api.patch(`/hr-admin/salary/employee-salaries/${id}/mess-deduction`, d),
   updateBasicReversal:(id, d)  => api.patch(`/hr-admin/salary/employee-salaries/${id}/basic-reversal`, d),
+  importSalaries:     (file)   => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post('/hr-admin/salary/import', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
 };
 
 export const hrPayrollAPI = {
@@ -1974,6 +2009,14 @@ export const hrEsslAPI = {
   sync:           (from, to)   => api.post('/hr-admin/essl/sync', { from, to }),
   unmatched:      ()           => api.get('/hr-admin/essl/unmatched'),
   agentKey:       ()           => api.get('/hr-admin/essl/agent-key'),
+  getDevices:     ()           => api.get('/hr-admin/essl/devices'),
+  getSyncHistory: (limit = 20) => api.get('/hr-admin/essl/sync-history', { params: { limit } }),
+  triggerSync:    (from, to)   => api.post('/hr-admin/essl/trigger-sync', { from, to }),
+  previewSC:      (params)     => api.get('/hr-admin/essl/preview-sc', { params }),
+  syncSC:         (data)       => api.post('/hr-admin/essl/sync-sc', data),
+  getUnmatched:   ()           => api.get('/hr-admin/essl/unmatched'),
+  deviceLogs:     (params)     => api.get('/hr-admin/essl/device-logs', { params }),
+  importLogs:     (formData)   => api.post('/hr-admin/essl/import-logs', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
 };
 
 export const hrComplianceAPI = {
@@ -2014,10 +2057,13 @@ export const hrComplianceAPI = {
 };
 
 export const mailAPI = {
-  status:        ()        => api.get('/mail/status'),
-  test:          (to)      => api.post('/mail/test', { to }),
-  send:          (data)    => api.post('/mail/send', data),
-  resendWelcome: (to)      => api.post('/mail/welcome', { to }),
+  status:         ()     => api.get('/mail/status'),
+  test:           (to)   => api.post('/mail/test', { to }),
+  send:           (data) => api.post('/mail/send', data),
+  resendWelcome:  (to)   => api.post('/mail/welcome', { to }),
+  erpDailyReport: ()     => api.post('/mail/erp-daily-report'),
+  dailyDigest:    (data) => api.post('/mail/daily-digest', data || {}),
+  weeklySummary:  (data) => api.post('/mail/weekly-summary', data || {}),
 };
 
 const multipart = { headers: { 'Content-Type': undefined } };
@@ -2103,6 +2149,7 @@ export const essAPI = {
   attendance:           (params)       => api.get('/ess/attendance', { params }),
   attendanceCorrections:()             => api.get('/ess/attendance/corrections'),
   createCorrection:     (data)         => api.post('/ess/attendance/corrections', data),
+  swipes:               (params)       => api.get('/ess/swipes', { params }),
   leaveBalances:        (params)       => api.get('/ess/leave/balances', { params }),
   leaveRequests:        ()             => api.get('/ess/leave/requests'),
   createLeaveRequest:   (data)         => api.post('/ess/leave/requests', data),
@@ -2225,6 +2272,16 @@ export const stockVerifAPI = {
 
 export const storesReportAPI = {
   get: (type, params) => api.get(`/stores-reports/${type}`, { params }),
+};
+
+export const paymentRecommendationAPI = {
+  list:         (params)   => api.get('/payment-recommendations', { params }),
+  get:          (id)       => api.get(`/payment-recommendations/${id}`),
+  pendingBills: (params)   => api.get('/payment-recommendations/pending-bills', { params }),
+  create:       (data)     => api.post('/payment-recommendations', data),
+  approve:      (id)       => api.patch(`/payment-recommendations/${id}/approve`),
+  reject:       (id)       => api.patch(`/payment-recommendations/${id}/reject`),
+  process:      (id, data) => api.patch(`/payment-recommendations/${id}/process`, data),
 };
 
 export default api;

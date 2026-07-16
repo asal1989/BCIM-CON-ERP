@@ -346,9 +346,10 @@ function UnmatchedPanel() {
 function AgentSetupPanel() {
   const [copied, setCopied] = useState(null);
 
-  const { data: agentData, isLoading, refetch } = useQuery({
+  const { data: agentData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['essl-agent-key'],
     queryFn:  () => hrEsslAPI.agentKey().then(r => r.data?.data ?? r.data),
+    retry: 1,
   });
 
   const copy = (text, label) => {
@@ -423,6 +424,19 @@ function AgentSetupPanel() {
         {isLoading && (
           <div className="flex items-center gap-2 text-gray-400 text-sm">
             <RefreshCw className="w-4 h-4 animate-spin"/> Loading API key…
+          </div>
+        )}
+
+        {isError && (
+          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 space-y-2">
+            <div className="flex items-center gap-2 text-red-700 text-sm font-bold">
+              <XCircle className="w-4 h-4"/> Failed to load API key
+            </div>
+            <p className="text-red-600 text-xs">{error?.response?.data?.error || error?.message || 'Unknown error'}</p>
+            <button onClick={() => refetch()}
+              className="flex items-center gap-2 px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-bold rounded-xl">
+              <RefreshCw className="w-3 h-3"/> Retry
+            </button>
           </div>
         )}
 

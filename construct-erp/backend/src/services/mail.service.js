@@ -149,12 +149,14 @@ const sendMail = async ({ to, cc, subject, html, text, attachments = [] }) => {
 
   const results = [];
   for (const recipient of recipients) {
+    let lastErr = null;
     if (isGraphConfigured()) {
       try {
         await sendViaGraph({ to: recipient, cc: ccRecipients, subject, html, text, attachments });
         results.push({ to: recipient, sent: true, provider: 'graph' });
         continue;
       } catch (err) {
+        lastErr = err;
         console.error('[mail] Graph API failed:', err.message);
       }
     }
@@ -184,8 +186,11 @@ const sendMail = async ({ to, cc, subject, html, text, attachments = [] }) => {
       }
     }
 
-    console.warn(`[mail] No provider configured. Email not sent to ${recipient}: ${subject}`);
-    results.push({ to: recipient, sent: false, reason: 'No mail provider configured (Graph or SMTP)' });
+    const reason = lastErr
+      ? `Graph API error: ${lastErr.message}`
+      : 'No mail provider configured (Graph or SMTP)';
+    console.warn(`[mail] Email not sent to ${recipient}: ${reason}`);
+    results.push({ to: recipient, sent: false, reason });
   }
 
   const sent = results.some(r => r.sent);

@@ -174,7 +174,7 @@ export default function TQSDeductionRegisterPage() {
                   return (
                     <tr key={i} className="hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-2.5 font-mono font-medium text-indigo-700 whitespace-nowrap">{r.wo_number || '—'}</td>
-                      <td className="px-4 py-2.5 font-medium text-slate-900 font-medium max-w-[180px] truncate" title={r.vendor_name}>{r.vendor_name}</td>
+                      <td className="px-4 py-2.5 font-medium text-slate-900 font-medium max-w-[180px] truncate" title={(r.vendor_name || '').toUpperCase()}>{(r.vendor_name || '').toUpperCase()}</td>
                       <td className="px-4 py-2.5 text-center text-slate-500">{r.bill_count}</td>
                       <td className="px-4 py-2.5 text-right font-medium text-slate-800">₹{inr(r.gross_billed)}</td>
                       <td className="px-4 py-2.5 text-right text-amber-700 font-medium bg-amber-50/40">

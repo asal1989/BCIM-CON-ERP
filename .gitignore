@@ -11,3 +11,9 @@ ecosystem.config.js
 *.zip
 construct-erp/archive/
 construct-erp/mobile-app.rar
+
+# NOTE: construct-erp/frontend/build/ is intentionally TRACKED, not ignored.
+# Railway's own frontend build step is unreliable, so the committed build/ is
+# the real deploy artifact — see construct-erp/.gitignore for the full note.
+# Do NOT re-add a "construct-erp/frontend/build/" ignore rule here or there.
+construct-erp/frontend/node_modules/

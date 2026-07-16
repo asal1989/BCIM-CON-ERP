@@ -11,4 +11,5 @@ export default makeListScreen({
   secondary: (item) => item.subject || item.description,
   meta: (item) => item.priority ? `Priority: ${item.priority}` : null,
   status: (item) => item.status,
+  detailScreen: 'ITTicketDetail',
 });

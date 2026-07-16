@@ -2,12 +2,15 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../theme';
 
 import DashboardScreen from '../screens/DashboardScreen';
 import ApprovalsScreen from '../screens/ApprovalsScreen';
 import MoreScreen from '../screens/MoreScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import ChatListScreen from '../screens/ChatListScreen';
+import ChatThreadScreen from '../screens/ChatThreadScreen';
 import StoresScreen from '../screens/StoresScreen';
 import IGNScreen from '../screens/IGNScreen';
 import GRSScreen from '../screens/GRSScreen';
@@ -43,6 +46,7 @@ import MilestonesScreen from '../screens/MilestonesScreen';
 import ActivitiesScreen from '../screens/ActivitiesScreen';
 import TendersScreen from '../screens/TendersScreen';
 import IncidentsScreen from '../screens/IncidentsScreen';
+import IncidentDetailScreen from '../screens/IncidentDetailScreen';
 import ITAssetsScreen from '../screens/ITAssetsScreen';
 import PlantScreen from '../screens/PlantScreen';
 import HireRentalScreen from '../screens/HireRentalScreen';
@@ -52,16 +56,22 @@ import TDSScreen from '../screens/TDSScreen';
 import ProjectsScreen from '../screens/ProjectsScreen';
 import VendorPaymentsScreen from '../screens/VendorPaymentsScreen';
 import StoreLedgerScreen from '../screens/StoreLedgerScreen';
+import StoreLedgerDetailScreen from '../screens/StoreLedgerDetailScreen';
 import PettyCashScreen from '../screens/PettyCashScreen';
 import GatePassScreen from '../screens/GatePassScreen';
+import GatePassDetailScreen from '../screens/GatePassDetailScreen';
+import CreateGatePassScreen from '../screens/CreateGatePassScreen';
 import PayrollScreen from '../screens/PayrollScreen';
 import EmployeeDirectoryScreen from '../screens/EmployeeDirectoryScreen';
 import QualityITPScreen from '../screens/QualityITPScreen';
+import ITPDetailScreen from '../screens/ITPDetailScreen';
 import QualityMIRScreen from '../screens/QualityMIRScreen';
+import MIRDetailScreen from '../screens/MIRDetailScreen';
 import QualityAuditsScreen from '../screens/QualityAuditsScreen';
 import PermitsScreen from '../screens/PermitsScreen';
 import PPEScreen from '../screens/PPEScreen';
 import ITTicketsScreen from '../screens/ITTicketsScreen';
+import ITTicketDetailScreen from '../screens/ITTicketDetailScreen';
 import LookAheadScreen from '../screens/LookAheadScreen';
 import EngineerLogScreen from '../screens/EngineerLogScreen';
 import MethodStatementsScreen from '../screens/MethodStatementsScreen';
@@ -89,18 +99,24 @@ import PayslipDetailScreen from '../screens/PayslipDetailScreen';
 import PlaceholderScreen from '../screens/PlaceholderScreen';
 import CreateMaterialRequestScreen from '../screens/CreateMaterialRequestScreen';
 import CreateIGNScreen from '../screens/CreateIGNScreen';
+import CallScreen from '../screens/CallScreen';
 import CreateDPRScreen from '../screens/CreateDPRScreen';
 import AttendanceCorrectionScreen from '../screens/AttendanceCorrectionScreen';
 import HRRequestsScreen from '../screens/HRRequestsScreen';
 import HolidaysScreen from '../screens/HolidaysScreen';
 import CurrentSalaryScreen from '../screens/CurrentSalaryScreen';
 import ITDeclarationScreen from '../screens/ITDeclarationScreen';
+import VendorPaymentDetailScreen from '../screens/VendorPaymentDetailScreen';
+import CreateVendorPaymentScreen from '../screens/CreateVendorPaymentScreen';
+import PettyCashDetailScreen from '../screens/PettyCashDetailScreen';
+import CreatePettyCashEntryScreen from '../screens/CreatePettyCashEntryScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
 const TAB_ICONS = {
   Home:      'view-dashboard-outline',
+  Chat:      'chat-processing-outline',
   Approvals: 'check-decagram-outline',
   Stores:    'warehouse',
   Menu:      'view-grid-outline',
@@ -108,13 +124,23 @@ const TAB_ICONS = {
 };
 
 function TabNavigator() {
+  // Android 15+ enforces edge-to-edge (mandatory as of Expo SDK 54 / RN 0.81),
+  // so the system gesture-navigation strip can overlap a fixed-height tab bar
+  // and swallow taps meant for it. Add the real bottom inset instead of a
+  // hardcoded paddingBottom so the tab bar's touchable area sits above it.
+  const insets = useSafeAreaInsets();
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.muted,
-        tabBarStyle: { borderTopColor: theme.colors.border, height: 58, paddingBottom: 6, paddingTop: 6 },
+        tabBarStyle: {
+          borderTopColor: theme.colors.border,
+          height: 52 + insets.bottom,
+          paddingBottom: 6 + insets.bottom,
+          paddingTop: 6,
+        },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         tabBarIcon: ({ color, size }) => (
           <MaterialCommunityIcons name={TAB_ICONS[route.name]} color={color} size={size ?? 22} />
@@ -122,6 +148,7 @@ function TabNavigator() {
       })}
     >
       <Tab.Screen name="Home" component={DashboardScreen} options={{ title: 'Dashboard' }} />
+      <Tab.Screen name="Chat" component={ChatListScreen} options={{ title: 'Chat' }} />
       <Tab.Screen name="Approvals" component={ApprovalsScreen} />
       <Tab.Screen name="Stores" component={StoresScreen} />
       <Tab.Screen name="Menu" component={MoreScreen} />
@@ -137,6 +164,8 @@ export default function RootNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Tabs" component={TabNavigator} />
+      <Stack.Screen name="ChatThread" component={ChatThreadScreen} options={{ headerShown: true }} />
+      <Stack.Screen name="Call" component={CallScreen} options={{ headerShown: false, presentation: 'fullScreenModal' }} />
       <Stack.Screen name="Dashboard" component={DashboardScreen} />
       <Stack.Screen name="IGN" component={IGNScreen} />
       <Stack.Screen name="GRS" component={GRSScreen} />
@@ -172,6 +201,7 @@ export default function RootNavigator() {
       <Stack.Screen name="Activities" component={ActivitiesScreen} />
       <Stack.Screen name="Tenders" component={TendersScreen} />
       <Stack.Screen name="Incidents" component={IncidentsScreen} />
+      <Stack.Screen name="IncidentDetail" component={IncidentDetailScreen} />
       <Stack.Screen name="ITAssets" component={ITAssetsScreen} />
       <Stack.Screen name="Plant" component={PlantScreen} />
       <Stack.Screen name="HireRental" component={HireRentalScreen} />
@@ -180,17 +210,27 @@ export default function RootNavigator() {
       <Stack.Screen name="TDS" component={TDSScreen} />
       <Stack.Screen name="Projects" component={ProjectsScreen} />
       <Stack.Screen name="VendorPayments" component={VendorPaymentsScreen} />
+      <Stack.Screen name="VendorPaymentDetail" component={VendorPaymentDetailScreen} />
+      <Stack.Screen name="CreateVendorPayment" component={CreateVendorPaymentScreen} />
       <Stack.Screen name="StoreLedger" component={StoreLedgerScreen} />
+      <Stack.Screen name="StoreLedgerDetail" component={StoreLedgerDetailScreen} />
       <Stack.Screen name="PettyCash" component={PettyCashScreen} />
+      <Stack.Screen name="PettyCashDetail" component={PettyCashDetailScreen} />
+      <Stack.Screen name="CreatePettyCashEntry" component={CreatePettyCashEntryScreen} />
       <Stack.Screen name="GatePass" component={GatePassScreen} />
+      <Stack.Screen name="GatePassDetail" component={GatePassDetailScreen} />
+      <Stack.Screen name="CreateGatePass" component={CreateGatePassScreen} />
       <Stack.Screen name="Payroll" component={PayrollScreen} />
       <Stack.Screen name="EmployeeDirectory" component={EmployeeDirectoryScreen} />
       <Stack.Screen name="QualityITP" component={QualityITPScreen} />
+      <Stack.Screen name="ITPDetail" component={ITPDetailScreen} />
       <Stack.Screen name="QualityMIR" component={QualityMIRScreen} />
+      <Stack.Screen name="MIRDetail" component={MIRDetailScreen} />
       <Stack.Screen name="QualityAudits" component={QualityAuditsScreen} />
       <Stack.Screen name="Permits" component={PermitsScreen} />
       <Stack.Screen name="PPE" component={PPEScreen} />
       <Stack.Screen name="ITTickets" component={ITTicketsScreen} />
+      <Stack.Screen name="ITTicketDetail" component={ITTicketDetailScreen} />
       <Stack.Screen name="LookAhead" component={LookAheadScreen} />
       <Stack.Screen name="EngineerLog" component={EngineerLogScreen} />
       <Stack.Screen name="MethodStatements" component={MethodStatementsScreen} />

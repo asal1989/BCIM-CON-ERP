@@ -222,6 +222,25 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
     staleTime: 60000,
   });
 
+  // Vendor outstanding summary — shown once a vendor is selected
+  const { data: vendorOutstanding } = useQuery({
+    queryKey: ['vendor-outstanding', form.vendor_id, form.vendor_name],
+    queryFn: () => tqsBillsAPI.vendorOutstanding(
+      form.vendor_id ? { vendor_id: form.vendor_id } : { vendor_name: form.vendor_name }
+    ).then(r => r.data?.data),
+    enabled: !!(form.vendor_id || form.vendor_name?.trim().length > 1),
+    staleTime: 30000,
+  });
+
+  // Duplicate invoice number detection — fires when vendor + inv_number both filled
+  const { data: dupBills = [] } = useQuery({
+    queryKey: ['dup-check', form.vendor_name, form.inv_number],
+    queryFn: () => tqsBillsAPI.checkDuplicate({ vendor_name: form.vendor_name, inv_number: form.inv_number })
+      .then(r => r.data?.data ?? []),
+    enabled: !!(form.vendor_name?.trim() && form.inv_number?.trim().length >= 2),
+    staleTime: 10000,
+  });
+
   // Approved POs available for invoicing (filtered by project once selected)
   const { data: availablePOs = [] } = useQuery({
     queryKey: ['tqs-lookup-pos', form.project_id, form.vendor_id, form.vendor_name],
@@ -770,6 +789,17 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
 
               </div>
 
+              {/* Vendor outstanding summary card */}
+              {vendorOutstanding && vendorOutstanding.bill_count > 0 && vendorOutstanding.total_outstanding > 0 && (
+                <div className="col-span-2 md:col-span-3 flex items-center gap-3 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                  <span className="text-amber-800">
+                    This vendor has <strong>{vendorOutstanding.bill_count} unpaid bill{vendorOutstanding.bill_count > 1 ? 's' : ''}</strong> with ₹{Number(vendorOutstanding.total_outstanding || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })} outstanding
+                    {vendorOutstanding.oldest_inv_date && ` — oldest since ${dayjs(vendorOutstanding.oldest_inv_date).format('DD MMM YYYY')}`}.
+                  </span>
+                </div>
+              )}
+
               {/* Work Description - only for WO */}
               {form.bill_type === 'wo' && (
                 <div className="col-span-2 md:col-span-3">
@@ -890,10 +920,19 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
               )}
 
               {/* Invoice Number */}
-              <div>
+              <div className="col-span-2 md:col-span-1">
                 <Lbl req>Invoice Number</Lbl>
-                <input className={F} placeholder="INV-001"
-                  value={form.inv_number} onChange={e => set('inv_number', e.target.value)} required />
+                <input className={`${F}${dupBills.length > 0 ? ' border-red-400 focus:border-red-500 focus:ring-red-500/30' : ''}`} placeholder="INV-001"
+                  value={form.inv_number} onChange={e => set('inv_number', e.target.value.toUpperCase())} required style={{ textTransform: 'uppercase' }} />
+                {dupBills.length > 0 && (
+                  <div className="mt-1.5 flex items-start gap-1.5 text-[11px] text-red-600 bg-red-50 border border-red-200 rounded-md px-2.5 py-2">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span>
+                      Duplicate: <strong>{form.inv_number}</strong> already exists for this vendor
+                      {dupBills.map(b => ` (SL ${b.sl_number}${b.project_name ? ` — ${b.project_name}` : ''})`).join(', ')}.
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Invoice Date - auto-derives Invoice Month */}
@@ -1883,7 +1922,7 @@ function EditBillModal({ bill, projects, onClose }) {
             Bill Tracker <span className="text-slate-300">›</span> Bills <span className="text-slate-300">›</span>{' '}
             <b className="text-slate-700">Edit Bill — SL #{bill.sl_number}</b>
           </div>
-          <span className="text-xs text-slate-400">{bill.vendor_name} · {bill.inv_number}</span>
+          <span className="text-xs text-slate-400">{(bill.vendor_name || '').toUpperCase()} · {bill.inv_number}</span>
         </div>
         <button
           onClick={onClose}
@@ -1907,7 +1946,7 @@ function EditBillModal({ bill, projects, onClose }) {
               </div>
               <div>
                 <Lbl req>Invoice Number</Lbl>
-                <input className={F} value={form.inv_number} onChange={e => set('inv_number', e.target.value)} />
+                <input className={F} value={form.inv_number} onChange={e => set('inv_number', e.target.value.toUpperCase())} style={{ textTransform: 'uppercase' }} />
               </div>
               <div>
                 <Lbl req>Invoice Date</Lbl>
@@ -2518,6 +2557,7 @@ export default function TQSBillsPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingBill, setEditingBill] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [moveTarget, setMoveTarget] = useState(null);
   const [showImport, setShowImport] = useState(false);
   const [showAdvance, setShowAdvance] = useState(false);
   const [showUntagged, setShowUntagged] = useState(false);
@@ -2551,6 +2591,18 @@ export default function TQSBillsPage() {
       qc.invalidateQueries({ queryKey: ['tqs-bills'] });
     },
     onError: (err) => toast.error(err?.response?.data?.error || 'Delete failed'),
+  });
+
+  const [moveProjectId, setMoveProjectId] = useState('');
+  const moveMut = useMutation({
+    mutationFn: ({ id, project_id }) => tqsBillsAPI.updateMeta(id, { project_id }),
+    onSuccess: () => {
+      toast.success('Bill moved to new project');
+      setMoveTarget(null);
+      setMoveProjectId('');
+      qc.invalidateQueries({ queryKey: ['tqs-bills'] });
+    },
+    onError: (err) => toast.error(err?.response?.data?.error || 'Move failed'),
   });
 
   const advanceStageMut = useMutation({
@@ -2658,9 +2710,15 @@ export default function TQSBillsPage() {
   // excludes GST since it's a pass-through tax, not project spend.
   const totalBasicValue = bills.reduce((s, b) => s + parseFloat(b.basic_amount || 0), 0);
   const totalGstValue   = totalValue - totalBasicValue;
-  const paidValue   = bills.filter(b => b.workflow_status === 'paid').reduce((s, b) => s + parseFloat(b.paid_amount || 0), 0);
+  // Sum ALL payments (including partials), not just fully-paid bills — otherwise
+  // partial payments vanish from the card and the totals don't reconcile.
+  const paidValue   = bills.reduce((s, b) => s + parseFloat(b.paid_amount || 0), 0);
   const totalBalanceDue  = bills
     .reduce((s, b) => s + billBalanceDue(b), 0);
+  // Deductions withheld (TDS + retention + advance recovery + other) = the slice
+  // of invoice value never payable to the vendor. Derived so the header cards
+  // reconcile exactly:  Total Value = Paid + Deductions + Balance Due.
+  const deductionsValue = Math.max(0, totalValue - paidValue - totalBalanceDue);
 
   // Status counts for Zoho-style tab bar
   const STATUS_TABS = [
@@ -2802,8 +2860,9 @@ export default function TQSBillsPage() {
         ]}
         pills={[
           { label: 'Total Value',  value: inrCr(totalValue) },
-          { label: 'Balance Due',  value: inrCr(totalBalanceDue), color: '#f87171' },
           { label: 'Paid',         value: inrCr(paidValue),       color: '#34d399' },
+          { label: 'Deductions',   value: inrCr(deductionsValue), color: '#fbbf24' },
+          { label: 'Balance Due',  value: inrCr(totalBalanceDue), color: '#f87171' },
         ]}
         actions={<>
           {activeProject && (<>
@@ -2867,12 +2926,13 @@ export default function TQSBillsPage() {
       <div className="p-4 space-y-4">
 
         {/* ── KPI Grid ── */}
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
           <ThemeKpiCard label="Total Bills"  value={bills.length}                         sub={inrCr(totalValue)}  color="blue"    icon={FileText} />
           <ThemeKpiCard label="Pending"      value={kpiPending}                           color="amber"            icon={AlertTriangle}
             onClick={() => setStatusFilter(p => p === 'pending' ? '' : 'pending')}
             active={statusFilter === 'pending'} />
           <ThemeKpiCard label="In Progress"  value={bills.length - kpiPaid - kpiPending}  color="indigo"           icon={ChevronsRight} />
+          <ThemeKpiCard label="Deductions"   value={inrCr(deductionsValue)}               color="amber"            icon={IndianRupee} />
           <ThemeKpiCard label="Balance Due"  value={inrCr(totalBalanceDue)}               color="red"              icon={IndianRupee} />
           <ThemeKpiCard label="Paid"         value={kpiPaid}                              sub={inrCr(paidValue)}   color="emerald" icon={CheckCircle2}
             onClick={() => setStatusFilter(p => p === 'paid' ? '' : 'paid')}
@@ -3113,15 +3173,15 @@ export default function TQSBillsPage() {
                       </td>;
                     case 'vendor_name':
                       return <td key={col.key} className={cls}>
-                        <span className="font-medium text-slate-900 text-[13px] block whitespace-normal leading-snug" title={b.vendor_name}>{b.vendor_name}</span>
+                        <span className="font-medium text-slate-900 text-[13px] block whitespace-normal leading-snug" title={(b.vendor_name || '').toUpperCase()}>{(b.vendor_name || '').toUpperCase()}</span>
                       </td>;
                     case 'project_name':
                       return <td key={col.key} className={cls}>
-                        <span className="text-slate-900 text-[11px] font-medium whitespace-normal leading-snug block" title={b.project_name || ''}>{b.project_name || '—'}</span>
+                        <span className="text-slate-900 text-[11px] font-medium whitespace-normal leading-snug block" title={(b.project_name || '').toUpperCase()}>{(b.project_name || '').toUpperCase() || '—'}</span>
                       </td>;
                     case 'inv_number':
                       return <td key={col.key} className={cls}>
-                        <span className="font-mono text-slate-900 text-[12px] font-medium whitespace-normal break-words block" title={b.inv_number}>{b.inv_number}</span>
+                        <span className="font-mono text-slate-900 text-[12px] font-medium whitespace-normal break-words block" title={b.inv_number}>{(b.inv_number || '').toUpperCase()}</span>
                       </td>;
                     case 'inv_date':
                       return <td key={col.key} className={cls}>
@@ -3244,6 +3304,13 @@ export default function TQSBillsPage() {
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
                       <button
+                        onClick={() => setMoveTarget(b)}
+                        className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                        title="Move to another project"
+                      >
+                        <Building2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
                         onClick={() => setDeleteTarget(b)}
                         className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                         title="Delete"
@@ -3305,6 +3372,58 @@ export default function TQSBillsPage() {
       )}
 
       {/* â"€â"€ Delete Confirm Modal â"€â"€ */}
+      {/* ── Move to Project Modal ── */}
+      {moveTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                <Building2 className="w-5 h-5 text-indigo-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-slate-800">Move to Another Project</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {moveTarget.inv_number || moveTarget.sl_number} · {moveTarget.vendor_name}
+                </p>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Select Project</label>
+              <select
+                value={moveProjectId}
+                onChange={e => setMoveProjectId(e.target.value)}
+                className="w-full h-10 border border-slate-200 rounded-lg px-3 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-indigo-300"
+              >
+                <option value="">— Choose project —</option>
+                {projects.filter(p => p.id !== moveTarget.project_id).map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              {moveTarget.project_id && (
+                <p className="text-xs text-slate-400 mt-1.5">
+                  Current project: <span className="font-medium text-slate-600">{projects.find(p => p.id === moveTarget.project_id)?.name || 'Unknown'}</span>
+                </p>
+              )}
+            </div>
+            <div className="flex gap-3 justify-end pt-1">
+              <button
+                onClick={() => { setMoveTarget(null); setMoveProjectId(''); }}
+                className="px-4 py-2 text-sm border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => moveMut.mutate({ id: moveTarget.id, project_id: moveProjectId })}
+                disabled={!moveProjectId || moveMut.isPending}
+                className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                {moveMut.isPending ? 'Moving…' : 'Move Bill'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {deleteTarget && canManageBillActions && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">

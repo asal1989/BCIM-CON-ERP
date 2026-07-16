@@ -92,7 +92,7 @@ function WORejectModal({ wo, onClose, onConfirm, isPending }) {
         </div>
         <div className="px-5 py-4 space-y-3">
           <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm">
-            <p className="font-semibold text-red-800">{wo?.vendor_name}</p>
+            <p className="font-semibold text-red-800">{(wo?.vendor_name || '').toUpperCase()}</p>
             <p className="text-xs text-red-600 mt-0.5">₹{inr(wo?.total_value || wo?.contract_amount)}</p>
           </div>
           <div>
@@ -212,7 +212,7 @@ function WODrawer({ wo, onClose }) {
           <div>
             <p className="text-base font-medium text-slate-900 font-mono">{data.wo_number}</p>
             <p className="text-xs text-slate-500 font-medium mt-0.5 truncate max-w-[420px]">
-              {data.vendor_name || '—'} · {data.created_at ? dayjs(data.created_at).format('DD-MM-YYYY') : '—'}
+              {(data.vendor_name || '—').toUpperCase()} · {data.created_at ? dayjs(data.created_at).format('DD-MM-YYYY') : '—'}
             </p>
           </div>
           <StatusBadge status={liveStatus} />
@@ -241,10 +241,10 @@ function WODrawer({ wo, onClose }) {
           {/* Info grid */}
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
             {[
-              ['Vendor / Sub-Con',  data.vendor_name     || '—'],
+              ['Vendor / Sub-Con',  (data.vendor_name || '—').toUpperCase()],
               ['Vendor Type',       data.vendor_type     || '—'],
               ['Vendor GSTIN',      data.vendor_gstin    || '—'],
-              ['Project',           data.project_name    || '—'],
+              ['Project',           (data.project_name || '—').toUpperCase()],
               ['Start Date',        data.start_date  ? dayjs(data.start_date).format('DD-MM-YYYY')  : '—'],
               ['End / Target Date', data.end_date    ? dayjs(data.end_date).format('DD-MM-YYYY')    : '—'],
               ['Contract Amount',   `₹ ${inr(data.contract_amount || val)}`],
@@ -844,8 +844,8 @@ export default function WORegisterPage() {
                         <tr key={wo.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedWO(wo)}>
                           <TD className="font-mono font-medium text-indigo-700">{wo.wo_number}</TD>
                           <TD>{wo.start_date ? dayjs(wo.start_date).format('DD-MM-YYYY') : '-'}</TD>
-                          <TD className="font-medium text-slate-800">{wo.vendor_name || '-'}</TD>
-                          <TD>{wo.project_name || '-'}</TD>
+                          <TD className="font-medium text-slate-800">{(wo.vendor_name || '-').toUpperCase()}</TD>
+                          <TD>{(wo.project_name || '-').toUpperCase()}</TD>
                           <TD className="max-w-[260px] truncate">{wo.subject || '-'}</TD>
                           <TD><StatusBadge status={wo.status} /></TD>
                           <TD right className="font-mono font-semibold">Rs {inr(value)}</TD>
@@ -879,7 +879,7 @@ export default function WORegisterPage() {
                         <tr key={`${row.wo.id}-${row.id || idx}`} className="hover:bg-slate-50">
                           <TD className="font-mono font-medium text-indigo-700">{row.wo.wo_number}</TD>
                           <TD>{row.wo.start_date ? dayjs(row.wo.start_date).format('DD-MM-YYYY') : '-'}</TD>
-                          <TD>{row.wo.vendor_name || '-'}</TD>
+                          <TD>{(row.wo.vendor_name || '-').toUpperCase()}</TD>
                           <TD className="max-w-[420px]">{row.description || '-'}</TD>
                           <TD>{row.unit || '-'}</TD>
                           <TD right className="font-mono">{qty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}</TD>
@@ -902,7 +902,7 @@ export default function WORegisterPage() {
                   <tbody>
                     {vendorSummary.map(v => (
                       <tr key={v.vendor_name} className="hover:bg-slate-50">
-                        <TD className="font-medium text-slate-800">{v.vendor_name}</TD>
+                        <TD className="font-medium text-slate-800">{(v.vendor_name || '').toUpperCase()}</TD>
                         <TD className="max-w-[320px] truncate">{v.projects || '-'}</TD>
                         <TD right className="font-mono">{v.count}</TD>
                         <TD right className="font-mono font-semibold">Rs {inr(v.total)}</TD>

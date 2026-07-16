@@ -193,7 +193,7 @@ const WOPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <tbody>
                         {[
-                          ['Project:',          data.project_name || '—', true],
+                          ['Project:',          (data.project_name || '—').toUpperCase(), true],
                           ['WO No:',            data.wo_number || '—'],
                           ['Date:',             data.wo_date ? dayjs(data.wo_date).format('DD-MM-YYYY') : (data.created_at ? dayjs(data.created_at).format('DD-MM-YYYY') : '—')],
                           ['MR No:',            data.mrs_number || '—'],
@@ -216,7 +216,7 @@ const WOPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
                 <tr>
                   <td style={{ width: '50%', borderRight: '1px solid #000', padding: '5px 6px', verticalAlign: 'top' }}>
                     <div>To,</div>
-                    <div style={{ fontWeight: 700 }}>M/s. {data.vendor_name || '—'}</div>
+                    <div style={{ fontWeight: 700 }}>M/s. {(data.vendor_name || '—').toUpperCase()}</div>
                     <div style={{ whiteSpace: 'pre-line', lineHeight: 1.4 }}>{vendorFullAddr}</div>
                     {data.vendor_email && <div>Email: {data.vendor_email}</div>}
                     {(data.vendor_contact_person || data.vendor_phone) && (
@@ -227,7 +227,7 @@ const WOPrintTemplate = React.forwardRef(({ data, company = {} }, ref) => {
                   </td>
                   <td style={{ padding: '5px 6px', verticalAlign: 'top' }}>
                     <div style={{ fontWeight: 700, textDecoration: 'underline' }}>SITE / WORK ADDRESS:-</div>
-                    {!isLanco && <div style={{ fontWeight: 700 }}>{data.project_name || ''}</div>}
+                    {!isLanco && <div style={{ fontWeight: 700 }}>{(data.project_name || '').toUpperCase()}</div>}
                     <div style={{ whiteSpace: 'pre-line', lineHeight: 1.4 }}>{siteAddress}</div>
                   </td>
                 </tr>

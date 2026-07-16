@@ -1,6 +1,9 @@
 // sc.routes.js — Complete Subcontractor Management Module
 const express = require('express');
 const router  = express.Router();
+const multer  = require('multer');
+const path    = require('path');
+const fs      = require('fs');
 const { authenticate, authorize } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const dayjs = require('dayjs');
@@ -8,6 +11,121 @@ const esslService = require('../services/essl.service');
 const { notifyScBillSubmitted, notifyScWoSubmitted } = require('../services/notif.helper');
 const { runSchemaInit } = require('../utils/schemaInit');
 const { BOQ_COST_HEADS } = require('../constants/boqCostHeads');
+const { uploadToOneDrive, isConfigured } = require('../services/onedrive.service');
+
+// ── Multer storage for SC bill file attachments ────────────────────────────
+const scBillStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, '../../uploads/sc-bills', req.params.id || 'tmp');
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, `${Date.now()}-${safe}`);
+  },
+});
+const scBillUpload = multer({ storage: scBillStorage, limits: { fileSize: 20 * 1024 * 1024 } });
+
+// Ensure the SC Measurement Book and Advances tables exist.
+// These were originally created via 025_sc_enhanced.sql (a one-time migration).
+// Adding runSchemaInit guards so they auto-create on Railway even if that file never ran.
+runSchemaInit('sc_mb_entries_table', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS sc_mb_entries (
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id      UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      project_id      UUID NOT NULL REFERENCES projects(id),
+      wo_id           UUID NOT NULL REFERENCES sc_work_orders(id),
+      wo_item_id      UUID REFERENCES sc_wo_items(id),
+      sc_id           UUID NOT NULL REFERENCES sc_subcontractors(id),
+      mb_number       VARCHAR(60) NOT NULL,
+      mb_date         DATE NOT NULL DEFAULT CURRENT_DATE,
+      tower_block     VARCHAR(100),
+      floor_number    VARCHAR(50),
+      location_detail VARCHAR(300),
+      drawing_ref     VARCHAR(200),
+      description     TEXT NOT NULL,
+      unit            VARCHAR(30),
+      executed_qty    NUMERIC(14,3) NOT NULL DEFAULT 0,
+      previous_qty    NUMERIC(14,3) DEFAULT 0,
+      site_photos     JSONB DEFAULT '[]',
+      remarks         TEXT,
+      status          VARCHAR(20) DEFAULT 'draft'
+                        CHECK (status IN ('draft','submitted','checked','approved','rejected')),
+      checked_by      UUID REFERENCES users(id),
+      checked_at      TIMESTAMPTZ,
+      check_remarks   TEXT,
+      approved_by     UUID REFERENCES users(id),
+      approved_at     TIMESTAMPTZ,
+      approve_remarks TEXT,
+      rejected_by     UUID REFERENCES users(id),
+      rejection_remarks TEXT,
+      created_by      UUID REFERENCES users(id),
+      created_at      TIMESTAMPTZ DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (company_id, mb_number)
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_sc_mb_wo     ON sc_mb_entries(wo_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_sc_mb_item   ON sc_mb_entries(wo_item_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_sc_mb_status ON sc_mb_entries(status)`);
+  await query(`ALTER TABLE sc_mb_entries ADD COLUMN IF NOT EXISTS qaqc_cleared     BOOLEAN DEFAULT FALSE`);
+  await query(`ALTER TABLE sc_mb_entries ADD COLUMN IF NOT EXISTS qaqc_cleared_by  UUID REFERENCES users(id)`);
+  await query(`ALTER TABLE sc_mb_entries ADD COLUMN IF NOT EXISTS qaqc_cleared_at  TIMESTAMPTZ`);
+  await query(`ALTER TABLE sc_mb_entries ADD COLUMN IF NOT EXISTS qaqc_remarks     TEXT`);
+});
+
+runSchemaInit('sc_advances_table', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS sc_advances (
+      id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id          UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      project_id          UUID NOT NULL REFERENCES projects(id),
+      wo_id               UUID NOT NULL REFERENCES sc_work_orders(id),
+      sc_id               UUID NOT NULL REFERENCES sc_subcontractors(id),
+      advance_number      VARCHAR(60) NOT NULL,
+      advance_date        DATE NOT NULL DEFAULT CURRENT_DATE,
+      amount              NUMERIC(18,2) NOT NULL,
+      recovery_pct        NUMERIC(5,2) DEFAULT 10,
+      recovered_amount    NUMERIC(18,2) DEFAULT 0,
+      balance_amount      NUMERIC(18,2) GENERATED ALWAYS AS (amount - recovered_amount) STORED,
+      recovery_start_bill VARCHAR(60),
+      payment_mode        VARCHAR(30) DEFAULT 'bank_transfer',
+      reference_no        VARCHAR(200),
+      remarks             TEXT,
+      status              VARCHAR(20) DEFAULT 'active'
+                            CHECK (status IN ('active','fully_recovered','cancelled')),
+      approved_by         UUID REFERENCES users(id),
+      created_by          UUID REFERENCES users(id),
+      created_at          TIMESTAMPTZ DEFAULT NOW(),
+      updated_at          TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (company_id, advance_number)
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_sc_adv_wo ON sc_advances(wo_id)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_sc_adv_sc ON sc_advances(sc_id)`);
+  await query(`ALTER TABLE sc_work_orders ADD COLUMN IF NOT EXISTS advance_paid NUMERIC(18,2) DEFAULT 0`);
+});
+
+runSchemaInit('sc_bill_files_table', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS sc_bill_files (
+      id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      bill_id          UUID REFERENCES sc_bills(id) ON DELETE CASCADE,
+      file_name        TEXT,
+      file_size        INT,
+      file_type        TEXT,
+      local_url        TEXT,
+      onedrive_id      TEXT,
+      onedrive_url     TEXT,
+      onedrive_web_url TEXT,
+      uploaded_by      UUID,
+      uploaded_at      TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_sc_bill_files_bill ON sc_bill_files(bill_id)`);
+});
 
 runSchemaInit('sc_bill_items_cost_head', async () => {
   await query(`ALTER TABLE sc_bill_items ADD COLUMN IF NOT EXISTS cost_head TEXT`);
@@ -74,6 +192,7 @@ async function nextBillNumber(client, cid, projId) {
 
 function normalizeContractorType(vendorType) {
   const t = String(vendorType || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (t.includes('labour') || t.includes('labor')) return 'labour_contractor';
   if (t.includes('llp')) return 'llp';
   if (t.includes('partnership')) return 'partnership';
   if (t.includes('proprietor')) return 'proprietorship';
@@ -127,14 +246,9 @@ async function syncLegacyWorkOrdersToSC(req, filters = {}) {
       const woNumber = String(row.wo_number || '').trim();
       if (!woNumber || !row.project_id || !row.vendor_id) continue;
 
-      const existingWO = await client.query(
-        `SELECT id FROM sc_work_orders WHERE company_id=$1 AND UPPER(TRIM(wo_number))=UPPER(TRIM($2))`,
-        [cid, woNumber]
-      );
-      if (existingWO.rows.length) continue;
-
+      // Find or create the SC subcontractor first (before WO existence check)
       let sc = await client.query(
-        `SELECT id FROM sc_subcontractors
+        `SELECT id, contractor_type FROM sc_subcontractors
          WHERE company_id=$1
            AND (
              LOWER(TRIM(name)) = LOWER(TRIM($2))
@@ -146,6 +260,7 @@ async function syncLegacyWorkOrdersToSC(req, filters = {}) {
       );
 
       let scId = sc.rows[0]?.id;
+      const correctContractorType = normalizeContractorType(row.vendor_type);
       if (!scId) {
         const count = await client.query(`SELECT COUNT(*) FROM sc_subcontractors WHERE company_id=$1`, [cid]);
         const scCode = `SC-${String(parseInt(count.rows[0].count, 10) + 1).padStart(3, '0')}`;
@@ -159,13 +274,26 @@ async function syncLegacyWorkOrdersToSC(req, filters = {}) {
         `, [
           cid, scCode, row.vendor_name, row.contact_person || null, row.phone || null, row.email || null,
           row.gst_number || null, row.pan_number || null, row.address || null, row.city || null, row.state || null,
-          row.pincode || null, row.trade_category || row.work_category || null, normalizeContractorType(row.vendor_type),
+          row.pincode || null, row.trade_category || row.work_category || null, correctContractorType,
           row.bank_name || null, row.account_number || null, row.ifsc_code || null, row.bank_branch || null,
           `Synced from vendor master (${row.vendor_code || row.vendor_id})`, req.user.id
         ]);
         scId = inserted.rows[0].id;
         createdSubs++;
+      } else if (sc.rows[0].contractor_type !== correctContractorType) {
+        // Fix contractor_type if it was set incorrectly on a previous sync
+        await client.query(
+          `UPDATE sc_subcontractors SET contractor_type=$1 WHERE id=$2`,
+          [correctContractorType, scId]
+        );
       }
+
+      // Skip WO creation if already synced, but subcontractor type is already updated above
+      const existingWO = await client.query(
+        `SELECT id FROM sc_work_orders WHERE company_id=$1 AND UPPER(TRIM(wo_number))=UPPER(TRIM($2))`,
+        [cid, woNumber]
+      );
+      if (existingWO.rows.length) continue;
 
       const contractAmount = Number(row.contract_amount || row.total_value || 0);
       const insertedWO = await client.query(`
@@ -428,7 +556,8 @@ router.put('/subcontractors/:id', authorize(...PLANNER), async (req, res) => {
 router.get('/work-orders', async (req, res) => {
   try {
     const { project_id, sc_id, status } = req.query;
-    const sync = await syncLegacyWorkOrdersToSC(req, { project_id, status });
+    // Sync without status filter so contractor_type is corrected for all vendors
+    const sync = await syncLegacyWorkOrdersToSC(req, { project_id });
     const { contractor_type: ctFilter } = req.query;
     let sql = `SELECT wo.*, sc.name AS sc_name, sc.sc_code, sc.contractor_type,
       sc.trade_type, p.name AS project_name, p.project_code, u.name AS created_by_name,
@@ -542,32 +671,40 @@ router.get('/work-orders/:id', async (req, res) => {
              ELSE 0 END AS billed_pct
       FROM sc_wo_items WHERE wo_id=$1 ORDER BY sequence_no`, [req.params.id]);
 
-    // Advances against this WO are frequently issued through two other systems
+    // Advances against this WO are frequently issued through three other systems
     // instead of the sc_advances module below, so relying on it alone leaves
     // advance_paid at 0 even when real money has been paid out:
     //  1. Advance Tracker (tqs_advance_vouchers), matched by wo_number.
-    //  2. Finance "Record Payment" screen (payments table), which records
-    //     vendor advances with cost_head = 'Advance — <wo_number>' — this is
-    //     actually the more commonly used path for Sub Con advances.
-    const trackerAdv = await query(`
-      SELECT COALESCE(SUM(paid_amount), 0) AS total_paid
-      FROM tqs_advance_vouchers
-      WHERE wo_number = $1 AND project_id = $2 AND is_deleted = false
-        AND status IN ('issued', 'partial', 'recovered') AND paid_amount > 0`,
-      [wo.rows[0].wo_number, wo.rows[0].project_id]);
-    const paymentsAdv = await query(`
-      SELECT COALESCE(SUM(amount), 0) AS total_paid
-      FROM payments
-      WHERE project_id = $1 AND cost_head = $2
-        AND status IN ('success', 'paid')`,
-      [wo.rows[0].project_id, `Advance — ${wo.rows[0].wo_number}`]);
+    //  2. Finance "Record Payment" screen (payments table), cost_head = 'Advance — <wo_number>'.
+    //  3. Bill Tracker advance (tqs_advances), matched by wo_number.
+    const [trackerAdv, paymentsAdv, billTrackerAdv] = await Promise.all([
+      query(`
+        SELECT COALESCE(SUM(paid_amount), 0) AS total_paid
+        FROM tqs_advance_vouchers
+        WHERE wo_number = $1 AND project_id = $2 AND is_deleted = false
+          AND status IN ('issued', 'partial', 'recovered') AND paid_amount > 0`,
+        [wo.rows[0].wo_number, wo.rows[0].project_id]),
+      query(`
+        SELECT COALESCE(SUM(amount), 0) AS total_paid
+        FROM payments
+        WHERE project_id = $1 AND cost_head = $2
+          AND status IN ('success', 'paid')`,
+        [wo.rows[0].project_id, `Advance — ${wo.rows[0].wo_number}`]),
+      query(`
+        SELECT COALESCE(SUM(amount), 0) AS total_paid
+        FROM tqs_advances
+        WHERE wo_number = $1 AND project_id = $2
+          AND LOWER(status) != 'cancelled'`,
+        [wo.rows[0].wo_number, wo.rows[0].project_id]),
+    ]);
     const recovered = await query(`
       SELECT COALESCE(SUM(advance_recovery), 0) AS recovered
       FROM sc_bills WHERE wo_id = $1 AND status NOT IN ('draft', 'rejected')`,
       [req.params.id]);
     const advancePaid = parseFloat(wo.rows[0].advance_paid || 0)
       + parseFloat(trackerAdv.rows[0].total_paid || 0)
-      + parseFloat(paymentsAdv.rows[0].total_paid || 0);
+      + parseFloat(paymentsAdv.rows[0].total_paid || 0)
+      + parseFloat(billTrackerAdv.rows[0].total_paid || 0);
     const advanceRecovered = parseFloat(recovered.rows[0].recovered || 0);
 
     res.json({ data: {
@@ -665,6 +802,14 @@ router.patch('/work-orders/:id/approve', authorize(...ADMIN,'project_manager'), 
 // ════════════════════════════════════════════════════════════════════
 // 4. WORKERS & ATTENDANCE
 // ════════════════════════════════════════════════════════════════════
+// essl_emp_code links a worker to their ESSL/biometric device EmployeeCode,
+// since worker_code (WKR-0001) is an internal ERP id and never matches ESSL's
+// own numeric employee codes — without this, ESSL sync can never find labour.
+(async () => {
+  await query(`ALTER TABLE sc_workers ADD COLUMN IF NOT EXISTS essl_emp_code VARCHAR(50)`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_sc_workers_essl_emp_code ON sc_workers(company_id, essl_emp_code)`).catch(() => {});
+})();
+
 router.get('/workers', async (req, res) => {
   try {
     const { project_id, sc_id, wo_id } = req.query;
@@ -680,13 +825,57 @@ router.get('/workers', async (req, res) => {
 
 router.post('/workers', authorize(...PLANNER), async (req, res) => {
   try {
-    const { project_id, sc_id, wo_id, worker_name, skill_type, daily_rate, mobile, aadhar_number } = req.body;
+    const { project_id, sc_id, wo_id, worker_name, skill_type, daily_rate, mobile, aadhar_number, essl_emp_code } = req.body;
     if (!worker_name) return res.status(400).json({ error: 'worker_name required' });
     const cnt = (await query(`SELECT COUNT(*) FROM sc_workers WHERE company_id=$1`, [CID(req)])).rows[0].count;
     const worker_code = `WKR-${String(parseInt(cnt)+1).padStart(4,'0')}`;
-    const r = await query(`INSERT INTO sc_workers (company_id,project_id,sc_id,wo_id,worker_code,worker_name,skill_type,daily_rate,mobile,aadhar_number,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-      [CID(req),project_id||null,sc_id||null,wo_id||null,worker_code,worker_name,skill_type||'Unskilled',daily_rate||0,mobile||null,aadhar_number||null,req.user.id]);
+    const r = await query(`INSERT INTO sc_workers (company_id,project_id,sc_id,wo_id,worker_code,worker_name,skill_type,daily_rate,mobile,aadhar_number,essl_emp_code,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [CID(req),project_id||null,sc_id||null,wo_id||null,worker_code,worker_name,skill_type||'Unskilled',daily_rate||0,mobile||null,aadhar_number||null,essl_emp_code||null,req.user.id]);
     res.status(201).json({ data: r.rows[0] });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+router.put('/workers/:id', authorize(...PLANNER), async (req, res) => {
+  try {
+    const { project_id, sc_id, wo_id, worker_name, skill_type, daily_rate, mobile, aadhar_number, essl_emp_code, status } = req.body;
+    const r = await query(
+      `UPDATE sc_workers SET
+         project_id=COALESCE($1,project_id), sc_id=COALESCE($2,sc_id), wo_id=COALESCE($3,wo_id),
+         worker_name=COALESCE($4,worker_name), skill_type=COALESCE($5,skill_type),
+         daily_rate=COALESCE($6,daily_rate), mobile=COALESCE($7,mobile),
+         aadhar_number=COALESCE($8,aadhar_number), essl_emp_code=$9, status=COALESCE($10,status)
+       WHERE id=$11 AND company_id=$12 RETURNING *`,
+      [project_id||null, sc_id||null, wo_id||null, worker_name||null, skill_type||null,
+       daily_rate ?? null, mobile||null, aadhar_number||null, essl_emp_code||null, status||null,
+       req.params.id, CID(req)]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Worker not found' });
+    res.json({ data: r.rows[0] });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /sc/workers/:id — remove a worker not tied to any NMR or attendance history
+router.delete('/workers/:id', authorize(...PLANNER), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const cid = CID(req);
+
+    const owned = await query(`SELECT id FROM sc_workers WHERE id=$1 AND company_id=$2`, [id, cid]);
+    if (!owned.rows.length) return res.status(404).json({ error: 'Worker not found' });
+
+    // NMR totals are aggregated from sc_attendance at creation time (no per-worker
+    // line table exists), so attendance history is the only thing that ties a
+    // worker to billed NMRs — block delete if any exists.
+    const attRes = await query(`SELECT COUNT(*) FROM sc_attendance WHERE worker_id=$1`, [id]);
+    const attCount = parseInt(attRes.rows[0].count);
+    if (attCount > 0) {
+      return res.status(409).json({
+        error: `Cannot delete: worker has ${attCount} attendance record(s) which may be included in an NMR. Deactivate instead.`,
+      });
+    }
+
+    await query(`DELETE FROM sc_workers WHERE id=$1 AND company_id=$2`, [id, cid]);
+    res.json({ success: true });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
@@ -1005,9 +1194,12 @@ router.patch('/bills/:id', authorize(...PLANNER), async (req, res) => {
       gst_pct, tds_pct, retention_pct, is_igst, labour_cess_pct,
       advance_recovery, material_recovery, penalty_amount, other_deductions,
       retention_release_amount, credit_note_amount,
+      items, // [{id, curr_qty}] — only qs_engineer / super_admin may send this
     } = req.body;
 
-    const grossAmt = parseFloat(bill.gross_amount);
+    // Only QS engineer and super admin can edit quantities
+    const canEditItems = ['super_admin', 'qs_engineer'].includes(req.user.role);
+    let grossAmt = parseFloat(bill.gross_amount);
     const effectiveGstPct = parseFloat(gst_pct ?? bill.gst_pct);
     const gst = grossAmt * effectiveGstPct / 100;
     const isIgst = is_igst ?? bill.is_igst;
@@ -1029,21 +1221,49 @@ router.patch('/bills/:id', authorize(...PLANNER), async (req, res) => {
     const net = grossAmt + gst + retRelease - creditNote - tds - ret - adv - mat - pen - labourCess - oth;
 
     const updated = await withTransaction(async (client) => {
+      // If item quantities were sent by an authorised role, update them and recompute gross
+      if (canEditItems && Array.isArray(items) && items.length > 0) {
+        for (const it of items) {
+          await client.query(
+            `UPDATE sc_bill_items SET curr_qty=$1 WHERE id=$2 AND bill_id=$3`,
+            [parseFloat(it.curr_qty), it.id, req.params.id]
+          );
+        }
+        // Recompute gross from updated items
+        const gRow = await client.query(
+          `SELECT COALESCE(SUM(amount),0) AS gross FROM sc_bill_items WHERE bill_id=$1`,
+          [req.params.id]
+        );
+        grossAmt = parseFloat(gRow.rows[0].gross);
+      }
+
+      // Recompute all deductions based on (possibly updated) grossAmt
+      const gst2 = grossAmt * effectiveGstPct / 100;
+      const cgst2 = isIgst ? 0 : Math.round(gst2 / 2 * 100) / 100;
+      const sgst2 = isIgst ? 0 : gst2 - cgst2;
+      const igst2 = isIgst ? gst2 : 0;
+      const labourCess2 = grossAmt * labourCessPct / 100;
+      const tds2 = grossAmt * effectiveTdsPct / 100;
+      const ret2 = grossAmt * effectiveRetPct / 100;
+      const net2 = grossAmt + gst2 + retRelease - creditNote - tds2 - ret2 - adv - mat - pen - labourCess2 - oth;
+
       const r = await client.query(
         `UPDATE sc_bills SET
            bill_date=$1, period_from=$2, period_to=$3, description=$4,
-           gst_pct=$5, gst_amount=$6, is_igst=$7, cgst_amount=$8, sgst_amount=$9, igst_amount=$10,
-           tds_pct=$11, tds_amount=$12, retention_pct=$13, retention_amount=$14,
-           advance_recovery=$15, material_recovery=$16, penalty_amount=$17, other_deductions=$18,
-           labour_cess_amount=$19, retention_release_amount=$20, credit_note_amount=$21,
-           net_payable=$22, updated_at=NOW()
-         WHERE id=$23 RETURNING *`,
+           gross_amount=$5,
+           gst_pct=$6, gst_amount=$7, is_igst=$8, cgst_amount=$9, sgst_amount=$10, igst_amount=$11,
+           tds_pct=$12, tds_amount=$13, retention_pct=$14, retention_amount=$15,
+           advance_recovery=$16, material_recovery=$17, penalty_amount=$18, other_deductions=$19,
+           labour_cess_amount=$20, retention_release_amount=$21, credit_note_amount=$22,
+           net_payable=$23, updated_at=NOW()
+         WHERE id=$24 RETURNING *`,
         [bill_date || bill.bill_date, period_from ?? bill.period_from, period_to ?? bill.period_to, description ?? bill.description,
-         effectiveGstPct, gst, isIgst, cgst, sgst, igst,
-         effectiveTdsPct, tds, effectiveRetPct, ret,
+         grossAmt,
+         effectiveGstPct, gst2, isIgst, cgst2, sgst2, igst2,
+         effectiveTdsPct, tds2, effectiveRetPct, ret2,
          adv, mat, pen, oth,
-         labourCess, retRelease, creditNote,
-         net, req.params.id]
+         labourCess2, retRelease, creditNote,
+         net2, req.params.id]
       );
       await recalculateWOConsumption(bill.wo_id, client);
       return r.rows[0];
@@ -1237,6 +1457,88 @@ router.patch('/bills/:id/reject', authorize('super_admin','admin','project_manag
     });
     if (!result) return res.status(404).json({ error: 'Not found or already rejected' });
     res.json({ data: result });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /sc/bills/:id/files ───────────────────────────────────────────────────
+router.get('/bills/:id/files', async (req, res) => {
+  try {
+    const check = await query(`SELECT id FROM sc_bills WHERE id=$1 AND company_id=$2`, [req.params.id, CID(req)]);
+    if (!check.rows.length) return res.status(404).json({ error: 'Bill not found' });
+    const r = await query(`SELECT * FROM sc_bill_files WHERE bill_id=$1 ORDER BY uploaded_at DESC`, [req.params.id]);
+    res.json({ data: r.rows });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /sc/bills/:id/files ──────────────────────────────────────────────────
+router.post('/bills/:id/files', scBillUpload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  try {
+    const billRes = await query(
+      `SELECT b.id, p.name AS project_name FROM sc_bills b LEFT JOIN projects p ON p.id=b.project_id WHERE b.id=$1 AND b.company_id=$2`,
+      [req.params.id, CID(req)]
+    );
+    if (!billRes.rows.length) return res.status(404).json({ error: 'Bill not found' });
+    const projectName = billRes.rows[0].project_name || 'General';
+
+    const local_url = `/uploads/sc-bills/${req.params.id}/${req.file.filename}`;
+    let onedriveData = null;
+    try {
+      onedriveData = await uploadToOneDrive(req.file.path, req.file.originalname, 'Subcontractor Bills', projectName);
+    } catch (odErr) {
+      console.error('[SC bills] OneDrive upload failed:', odErr.message);
+    }
+
+    const r = await query(`
+      INSERT INTO sc_bill_files (bill_id, file_name, file_size, file_type, local_url, onedrive_id, onedrive_url, onedrive_web_url, uploaded_by)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *
+    `, [
+      req.params.id, req.file.originalname, req.file.size, req.file.mimetype, local_url,
+      onedriveData?.onedrive_id || null,
+      onedriveData?.onedrive_url || null,
+      onedriveData?.onedrive_web_url || null,
+      req.user.id,
+    ]);
+    res.status(201).json({ data: r.rows[0], onedrive_synced: !!onedriveData, onedrive_configured: isConfigured() });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// ── DELETE /sc/bills/:id/files/:fid ──────────────────────────────────────────
+router.delete('/bills/:id/files/:fid', async (req, res) => {
+  try {
+    const check = await query(`SELECT id FROM sc_bills WHERE id=$1 AND company_id=$2`, [req.params.id, CID(req)]);
+    if (!check.rows.length) return res.status(404).json({ error: 'Bill not found' });
+    const f = await query(`SELECT * FROM sc_bill_files WHERE id=$1 AND bill_id=$2`, [req.params.fid, req.params.id]);
+    if (!f.rows.length) return res.status(404).json({ error: 'File not found' });
+    if (f.rows[0].local_url) {
+      const full = path.join(__dirname, '../../', f.rows[0].local_url);
+      if (fs.existsSync(full)) fs.unlinkSync(full);
+    }
+    await query(`DELETE FROM sc_bill_files WHERE id=$1`, [req.params.fid]);
+    res.json({ message: 'Deleted' });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /sc/bills/:id/files/:fid/serve ───────────────────────────────────────
+router.get('/bills/:id/files/:fid/serve', async (req, res) => {
+  try {
+    const check = await query(`SELECT id FROM sc_bills WHERE id=$1 AND company_id=$2`, [req.params.id, CID(req)]);
+    if (!check.rows.length) return res.status(404).json({ error: 'Bill not found' });
+    const r = await query(`SELECT * FROM sc_bill_files WHERE id=$1 AND bill_id=$2`, [req.params.fid, req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'File not found' });
+    const f = r.rows[0];
+
+    const safeFileName = encodeURIComponent(f.file_name || 'file');
+    if (f.local_url) {
+      const full = path.join(__dirname, '../../', f.local_url);
+      if (fs.existsSync(full)) {
+        res.setHeader('Content-Type', f.file_type || 'application/octet-stream');
+        res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${safeFileName}`);
+        return fs.createReadStream(full).pipe(res);
+      }
+    }
+    if (f.onedrive_web_url) return res.redirect(f.onedrive_web_url);
+    res.status(404).json({ error: 'File no longer available' });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 

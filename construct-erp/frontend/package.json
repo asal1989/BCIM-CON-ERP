@@ -13,7 +13,7 @@
     "axios": "^1.6.5",
     "clsx": "^2.1.1",
     "dayjs": "^1.11.10",
-    "express": "^5.2.1",
+    "dompurify": "^3.4.12",
     "framer-motion": "^12.38.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
@@ -67,6 +67,10 @@
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "4.60.2",
+    "@rollup/rollup-linux-x64-musl": "4.60.2"
   },
   "browserslist": {
     "production": [

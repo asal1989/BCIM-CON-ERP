@@ -81,8 +81,11 @@ router.post('/', authorize('super_admin', 'admin', 'accountant'), async (req, re
       return res.status(400).json({ error: 'Invalid project for this company' });
     }
 
-    const net  = parseFloat(amount) - parseFloat(tds_deducted || 0);
     const paid = parseFloat(amount);
+    if (!amount || isNaN(paid) || paid <= 0) {
+      return res.status(400).json({ error: 'amount must be a positive number' });
+    }
+    const net  = paid - parseFloat(tds_deducted || 0);
 
     // Normalize payment mode — DB constraint uses lowercase values
     const MODE_MAP = {
@@ -127,7 +130,8 @@ router.post('/', authorize('super_admin', 'admin', 'accountant'), async (req, re
            JOIN tqs_bill_updates u ON u.bill_id = b.id
            WHERE u.pc_number = $1
              AND b.company_id = $2
-             AND b.is_deleted = FALSE`,
+             AND b.is_deleted = FALSE
+           FOR UPDATE OF u`,
           [pc_number, req.user.company_id]
         );
 
@@ -275,6 +279,55 @@ router.post('/', authorize('super_admin', 'admin', 'accountant'), async (req, re
   }
 });
 
+// ── GET /payments/tds-report — must be before /:id to avoid route shadowing ──
+router.get('/tds-report', async (req, res) => {
+  try {
+    const { year } = req.query;
+    const r = await query(
+      `SELECT entity_name, entity_pan,
+         SUM(amount) AS gross_amount,
+         SUM(tds_deducted) AS tds_deducted,
+         SUM(net_amount) AS net_paid,
+         COUNT(*) AS transaction_count,
+         payment_mode,
+         MIN(payment_date) AS first_payment,
+         MAX(payment_date) AS last_payment
+       FROM payments pay JOIN projects p ON pay.project_id = p.id
+       WHERE p.company_id = $1 AND pay.tds_deducted > 0
+         AND EXTRACT(YEAR FROM pay.payment_date) = $2
+       GROUP BY entity_name, entity_pan, payment_mode
+       ORDER BY tds_deducted DESC`,
+      [req.user.company_id, year || new Date().getFullYear()]
+    );
+    const totals = await query(
+      `SELECT SUM(tds_deducted) AS total_tds, SUM(amount) AS total_gross
+       FROM payments pay JOIN projects p ON pay.project_id = p.id
+       WHERE p.company_id = $1 AND EXTRACT(YEAR FROM pay.payment_date) = $2`,
+      [req.user.company_id, year || new Date().getFullYear()]
+    );
+    res.json({ data: r.rows, totals: totals.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /payments/:id ────────────────────────────────────────────────────
+router.get('/:id', async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT pay.*, p.name AS project_name
+       FROM payments pay
+       JOIN projects p ON pay.project_id = p.id
+       WHERE pay.id = $1 AND p.company_id = $2`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Payment not found' });
+    res.json({ data: r.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── DELETE /payments/:id ──────────────────────────────────────────────────
 router.delete('/:id', authorize('super_admin', 'admin'), async (req, res) => {
   try {
@@ -289,34 +342,6 @@ router.delete('/:id', authorize('super_admin', 'admin'), async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
-
-// ── GET /payments/tds-report ──────────────────────────────────────────────
-router.get('/tds-report', async (req, res) => {
-  const { year } = req.query;
-  const r = await query(
-    `SELECT entity_name, entity_pan,
-       SUM(amount) AS gross_amount,
-       SUM(tds_deducted) AS tds_deducted,
-       SUM(net_amount) AS net_paid,
-       COUNT(*) AS transaction_count,
-       payment_mode,
-       MIN(payment_date) AS first_payment,
-       MAX(payment_date) AS last_payment
-     FROM payments pay JOIN projects p ON pay.project_id = p.id
-     WHERE p.company_id = $1 AND pay.tds_deducted > 0
-       AND EXTRACT(YEAR FROM pay.payment_date) = $2
-     GROUP BY entity_name, entity_pan, payment_mode
-     ORDER BY tds_deducted DESC`,
-    [req.user.company_id, year || new Date().getFullYear()]
-  );
-  const totals = await query(
-    `SELECT SUM(tds_deducted) AS total_tds, SUM(amount) AS total_gross
-     FROM payments pay JOIN projects p ON pay.project_id = p.id
-     WHERE p.company_id = $1 AND EXTRACT(YEAR FROM pay.payment_date) = $2`,
-    [req.user.company_id, year || new Date().getFullYear()]
-  );
-  res.json({ data: r.rows, totals: totals.rows[0] });
 });
 
 module.exports = router;

@@ -61,7 +61,7 @@ const INVALID_TOKEN_CODES = new Set([
  * @param {string} userId
  * @param {{ title: string, body: string, data?: object }} payload
  */
-async function sendPushToUser(userId, payload) {
+async function sendPushToUser(userId, payload, { channelId = 'erp-alerts', fullScreen = false } = {}) {
   const admin = getAdmin();
   if (!admin || !userId) return;
 
@@ -84,7 +84,24 @@ async function sendPushToUser(userId, payload) {
           data,
           android: {
             priority: 'high',
-            notification: { channelId: 'erp-alerts', priority: 'high' },
+            ttl: fullScreen ? 30000 : 3600000, // calls expire in 30s; alerts in 1hr
+            notification: {
+              channelId,
+              priority: 'high',
+              notificationPriority: fullScreen ? 'PRIORITY_MAX' : 'PRIORITY_HIGH',
+              defaultVibrateTimings: false,
+              vibrateTimingsMillis: fullScreen
+                ? [0, 400, 200, 400, 200, 400]
+                : [0, 250, 250, 250],
+              ...(fullScreen ? {
+                // Triggers USE_FULL_SCREEN_INTENT on Android — shows call UI
+                // on top of lock screen / current app without user tapping
+                defaultSound: false,
+                sound: 'default',
+                localOnly: false,
+                sticky: false,
+              } : {}),
+            },
           },
         })
       )

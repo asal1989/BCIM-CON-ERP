@@ -614,6 +614,66 @@ const inrText = (value) =>
   Math.round(Number(value || 0)).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
 
 const numValue = (v) => parseFloat(v || 0) || 0;
+
+// Fixed recipients always notified on bill payment
+const BILL_PAID_FIXED_EMAILS = ['it@bcim.in'];
+
+// Roles whose members are notified on bill payment
+const BILL_PAID_NOTIFY_ROLES = ['qs_engineer', 'procurement_manager', 'purchase_manager', 'procurement_officer'];
+
+async function sendBillPaidEmail({ bill, paidAmount, paymentDate, paymentMode, referenceNumber, actorName, companyId }) {
+  try {
+    // Fetch role-based recipients (procurement + QS teams)
+    const roleRows = await query(
+      `SELECT DISTINCT email, name FROM users
+       WHERE company_id = $1
+         AND role = ANY($2::text[])
+         AND is_active = TRUE
+         AND email IS NOT NULL`,
+      [companyId, BILL_PAID_NOTIFY_ROLES]
+    );
+    const roleEmails = roleRows.rows.map(r => r.email);
+    const toList = [...new Set([...BILL_PAID_FIXED_EMAILS, ...roleEmails])];
+
+    const billRef  = bill.sl_number || bill.inv_number || bill.id;
+    const vendor   = bill.vendor_name || '—';
+    const project  = bill.project_name || bill.project_id || '—';
+    const amount   = inrText(paidAmount || bill.total_amount);
+    const pDate    = paymentDate ? new Date(paymentDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+    const mode     = paymentMode || '—';
+    const ref      = referenceNumber || '—';
+    const actor    = actorName || 'System';
+
+    const subject = `✅ Bill Paid — ${billRef} | ${vendor} | ${amount}`;
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#0f172a">
+        <div style="background:#15803d;padding:18px 28px;border-radius:8px 8px 0 0">
+          <h2 style="color:#fff;margin:0;font-size:18px">✅ Bill Payment Confirmed</h2>
+        </div>
+        <div style="background:#f8fafc;padding:24px 28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px">
+          <table style="width:100%;border-collapse:collapse;font-size:14px">
+            <tr><td style="padding:8px 0;color:#64748b;width:140px">Bill Reference</td><td style="padding:8px 0;font-weight:700">${billRef}</td></tr>
+            <tr><td style="padding:8px 0;color:#64748b">Vendor</td><td style="padding:8px 0">${vendor}</td></tr>
+            <tr><td style="padding:8px 0;color:#64748b">Project</td><td style="padding:8px 0">${project}</td></tr>
+            <tr><td style="padding:8px 0;color:#64748b">Amount Paid</td><td style="padding:8px 0;font-weight:700;color:#15803d;font-size:16px">${amount}</td></tr>
+            <tr><td style="padding:8px 0;color:#64748b">Payment Date</td><td style="padding:8px 0">${pDate}</td></tr>
+            <tr><td style="padding:8px 0;color:#64748b">Payment Mode</td><td style="padding:8px 0">${mode}</td></tr>
+            <tr><td style="padding:8px 0;color:#64748b">Reference No.</td><td style="padding:8px 0">${ref}</td></tr>
+            <tr><td style="padding:8px 0;color:#64748b">Actioned By</td><td style="padding:8px 0">${actor}</td></tr>
+          </table>
+          <hr style="border:none;border-top:1px solid #e2e8f0;margin:18px 0">
+          <p style="font-size:11px;color:#94a3b8;margin:0">
+            This is an automated notification from BCIM ConstructERP – Bill Tracker.
+          </p>
+        </div>
+      </div>`;
+
+    await sendMail({ to: toList, subject, html });
+    console.log(`[bill-paid-email] Sent to: ${toList.join(', ')}`);
+  } catch (err) {
+    console.error('[bill-paid-email] Failed to send:', err.message);
+  }
+}
 const roundMoney = (v) => Math.round(numValue(v) * 100) / 100;
 const billPayableCap = (bill = {}) => {
   const gross = numValue(bill.total_amount);
@@ -2754,6 +2814,54 @@ router.patch('/:id/advance-stage', async (req, res) => {
   }
 });
 
+// ── GET /tqs/bills/check-duplicate ─────────────────────────────────────────
+router.get('/check-duplicate', async (req, res) => {
+  try {
+    const { vendor_name, inv_number, exclude_id } = req.query;
+    if (!vendor_name || !inv_number) return res.json({ data: [] });
+    const params = [req.user.company_id, vendor_name.trim(), inv_number.trim().toUpperCase()];
+    const where = [`b.company_id=$1`, `b.vendor_name ILIKE $2`, `UPPER(TRIM(b.inv_number))=$3`, `b.is_deleted=FALSE`];
+    if (exclude_id) { where.push(`b.id <> $${params.length + 1}`); params.push(exclude_id); }
+    const { rows } = await query(`
+      SELECT b.id, b.sl_number, b.inv_number, b.inv_date, b.total_amount, b.workflow_status,
+             p.name AS project_name
+      FROM tqs_bills b
+      LEFT JOIN projects p ON p.id = b.project_id
+      WHERE ${where.join(' AND ')}
+      ORDER BY b.created_at DESC LIMIT 5
+    `, params);
+    res.json({ data: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /tqs/bills/vendor-outstanding ──────────────────────────────────────
+router.get('/vendor-outstanding', async (req, res) => {
+  try {
+    const { vendor_name, vendor_id } = req.query;
+    if (!vendor_name && !vendor_id) return res.json({ data: null });
+    const params = [req.user.company_id];
+    const where = [`b.company_id=$1`, `b.is_deleted=FALSE`, `b.workflow_status NOT IN ('paid')`];
+    if (vendor_id) { where.push(`b.vendor_id=$${params.length+1}`); params.push(vendor_id); }
+    else { where.push(`b.vendor_name ILIKE $${params.length+1}`); params.push(vendor_name.trim()); }
+    const { rows } = await query(`
+      SELECT COUNT(*)::int AS bill_count,
+             COALESCE(SUM(b.total_amount),0) AS total_invoiced,
+             COALESCE(SUM(COALESCE(u.paid_amount,0)),0) AS total_paid,
+             MIN(b.inv_date) AS oldest_inv_date,
+             MAX(b.workflow_status) AS latest_status
+      FROM tqs_bills b
+      LEFT JOIN tqs_bill_updates u ON u.bill_id = b.id
+      WHERE ${where.join(' AND ')}
+    `, params);
+    const r = rows[0];
+    res.json({ data: { bill_count: r.bill_count, total_outstanding: r.total_invoiced - r.total_paid, oldest_inv_date: r.oldest_inv_date } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── GET /tqs/bills/:id ─────────────────────────────────────────────────────
 router.get('/:id', async (req, res) => {
   try {
@@ -2776,7 +2884,7 @@ router.get('/:id', async (req, res) => {
         LEFT JOIN grn g              ON g.id  = b.grn_id
         WHERE ${billConds.join(' AND ')}
       `, billParams),
-      query(`SELECT * FROM tqs_bill_updates WHERE bill_id = $1`, [req.params.id]),
+      query(`SELECT u.*, cb.certification_id FROM tqs_bill_updates u LEFT JOIN vendor_qs_certification_bills cb ON cb.bill_id = u.bill_id WHERE u.bill_id = $1 LIMIT 1`, [req.params.id]),
       query(`
         SELECT li.*,
                pi.material_name AS po_item_name,
@@ -3634,28 +3742,42 @@ router.patch('/:id/procurement', requireTqsStageAccess('procurement'), async (re
       { key: 'proc_handed_over_to_accounts_date', label: 'Handed to QS Date' },
     ]);
 
+    // If this bill belongs to a PC with multiple invoices, apply dates to all of them
+    const certRes = await query(`
+      SELECT cb.bill_id FROM vendor_qs_certification_bills cb
+      WHERE cb.certification_id = (
+        SELECT cb2.certification_id FROM vendor_qs_certification_bills cb2 WHERE cb2.bill_id = $1 LIMIT 1
+      )
+    `, [req.params.id]);
+
+    const billIds = certRes.rows.length > 0
+      ? certRes.rows.map(r => r.bill_id)
+      : [req.params.id];
+
     await query(`
       UPDATE tqs_bill_updates SET
         proc_received_from_accounts_date=$1,
         proc_handed_over_to_accounts_date=$2,
         procurement_remarks=$3,
         updated_at=NOW()
-      WHERE bill_id=$4
+      WHERE bill_id = ANY($4::uuid[])
     `, [
       proc_received_from_accounts_date || null,
       proc_handed_over_to_accounts_date || null,
       procurement_remarks || null,
-      req.params.id,
+      billIds,
     ]);
 
-    await query(`UPDATE tqs_bills SET workflow_status='qs_sign', updated_at=NOW() WHERE id=$1`, [req.params.id]);
+    await query(`UPDATE tqs_bills SET workflow_status='qs_sign', updated_at=NOW() WHERE id = ANY($1::uuid[])`, [billIds]);
 
-    await logHistory(req.params.id, 'procurement',
-      `Received from Accounts: ${proc_received_from_accounts_date || '—'}, Handed to QS for MD Signature: ${proc_handed_over_to_accounts_date || '—'}`,
-      req.user.id);
-    await logHistory(req.params.id, 'system', 'Moved to QS for MD Signature', req.user.id);
+    for (const bid of billIds) {
+      await logHistory(bid, 'procurement',
+        `Received from Accounts: ${proc_received_from_accounts_date || '—'}, Handed to QS for MD Signature: ${proc_handed_over_to_accounts_date || '—'}${billIds.length > 1 ? ` (applied to all ${billIds.length} invoices in PC)` : ''}`,
+        req.user.id);
+      await logHistory(bid, 'system', 'Moved to QS for MD Signature', req.user.id);
+    }
 
-    res.json({ data: { workflow_status: 'qs_sign' } });
+    res.json({ data: { workflow_status: 'qs_sign', bills_updated: billIds.length } });
   } catch (err) {
     console.error(err);
     res.status(err.statusCode || 500).json({ error: err.message });
@@ -3678,25 +3800,40 @@ router.patch('/:id/qs-sign', requireTqsStageAccess('qs_sign'), async (req, res) 
       { key: 'qs_sign_handed_to_accounts_date', label: 'Handed to Accounts Date' },
     ]);
 
-    await query(`
-      INSERT INTO tqs_bill_updates (bill_id, qs_sign_received_from_procurement_date, qs_sign_date, qs_sign_handed_to_accounts_date, qs_sign_remarks, updated_at)
-      VALUES ($1, $2, $3, $4, $5, NOW())
-      ON CONFLICT (bill_id) DO UPDATE SET
-        qs_sign_received_from_procurement_date = COALESCE(EXCLUDED.qs_sign_received_from_procurement_date, tqs_bill_updates.qs_sign_received_from_procurement_date),
-        qs_sign_date                   = COALESCE(EXCLUDED.qs_sign_date, tqs_bill_updates.qs_sign_date),
-        qs_sign_handed_to_accounts_date = COALESCE(EXCLUDED.qs_sign_handed_to_accounts_date, tqs_bill_updates.qs_sign_handed_to_accounts_date),
-        qs_sign_remarks                = COALESCE(EXCLUDED.qs_sign_remarks, tqs_bill_updates.qs_sign_remarks),
-        updated_at                     = NOW()
-    `, [req.params.id, qs_sign_received_from_procurement_date || null, qs_sign_date || null, qs_sign_handed_to_accounts_date || null, qs_sign_remarks || null]);
+    // If this bill belongs to a PC with multiple invoices, apply to all of them
+    const certRes = await query(`
+      SELECT cb.bill_id FROM vendor_qs_certification_bills cb
+      WHERE cb.certification_id = (
+        SELECT cb2.certification_id FROM vendor_qs_certification_bills cb2 WHERE cb2.bill_id = $1 LIMIT 1
+      )
+    `, [req.params.id]);
 
-    await query(`UPDATE tqs_bills SET workflow_status='accounts', updated_at=NOW() WHERE id=$1`, [req.params.id]);
+    const billIds = certRes.rows.length > 0
+      ? certRes.rows.map(r => r.bill_id)
+      : [req.params.id];
 
-    await logHistory(req.params.id, 'qs_sign',
-      `Received from Procurement${qs_sign_received_from_procurement_date ? ` on ${qs_sign_received_from_procurement_date}` : ''}; MD Signature collected${qs_sign_date ? ` on ${qs_sign_date}` : ''}${qs_sign_handed_to_accounts_date ? `, handed to Accounts: ${qs_sign_handed_to_accounts_date}` : ''}`,
-      req.user.id);
-    await logHistory(req.params.id, 'system', 'Moved to Accounts for Payment', req.user.id);
+    for (const bid of billIds) {
+      await query(`
+        INSERT INTO tqs_bill_updates (bill_id, qs_sign_received_from_procurement_date, qs_sign_date, qs_sign_handed_to_accounts_date, qs_sign_remarks, updated_at)
+        VALUES ($1, $2, $3, $4, $5, NOW())
+        ON CONFLICT (bill_id) DO UPDATE SET
+          qs_sign_received_from_procurement_date = COALESCE(EXCLUDED.qs_sign_received_from_procurement_date, tqs_bill_updates.qs_sign_received_from_procurement_date),
+          qs_sign_date                    = COALESCE(EXCLUDED.qs_sign_date, tqs_bill_updates.qs_sign_date),
+          qs_sign_handed_to_accounts_date = COALESCE(EXCLUDED.qs_sign_handed_to_accounts_date, tqs_bill_updates.qs_sign_handed_to_accounts_date),
+          qs_sign_remarks                 = COALESCE(EXCLUDED.qs_sign_remarks, tqs_bill_updates.qs_sign_remarks),
+          updated_at                      = NOW()
+      `, [bid, qs_sign_received_from_procurement_date || null, qs_sign_date || null, qs_sign_handed_to_accounts_date || null, qs_sign_remarks || null]);
+    }
 
-    res.json({ data: { workflow_status: 'accounts' } });
+    await query(`UPDATE tqs_bills SET workflow_status='accounts', updated_at=NOW() WHERE id = ANY($1::uuid[])`, [billIds]);
+
+    const histNote = `Received from Procurement${qs_sign_received_from_procurement_date ? ` on ${qs_sign_received_from_procurement_date}` : ''}; MD Signature collected${qs_sign_date ? ` on ${qs_sign_date}` : ''}${qs_sign_handed_to_accounts_date ? `, handed to Accounts: ${qs_sign_handed_to_accounts_date}` : ''}${billIds.length > 1 ? ` (applied to all ${billIds.length} invoices in PC)` : ''}`;
+    for (const bid of billIds) {
+      await logHistory(bid, 'qs_sign', histNote, req.user.id);
+      await logHistory(bid, 'system', 'Moved to Accounts for Payment', req.user.id);
+    }
+
+    res.json({ data: { workflow_status: 'accounts', bills_updated: billIds.length } });
   } catch (err) {
     console.error(err);
     res.status(err.statusCode || 500).json({ error: err.message });
@@ -3713,6 +3850,24 @@ router.patch('/:id/mark-paid', requireTqsStageAccess('payment'), async (req, res
     `, [req.params.id]);
     await query(`UPDATE tqs_bills SET workflow_status='paid', updated_at=NOW() WHERE id=$1`, [req.params.id]);
     await logHistory(req.params.id, 'accounts', 'Manually marked as Fully Paid', req.user.id);
+
+    // Send payment notification email
+    const billRow = await query(
+      `SELECT b.*, p.name AS project_name FROM tqs_bills b LEFT JOIN projects p ON p.id = b.project_id WHERE b.id=$1`,
+      [req.params.id]
+    );
+    if (billRow.rows[0]) {
+      sendBillPaidEmail({
+        bill: billRow.rows[0],
+        paidAmount: billRow.rows[0].total_amount,
+        paymentDate: new Date().toISOString(),
+        paymentMode: 'Manual mark',
+        referenceNumber: null,
+        actorName: req.user.name || req.user.email,
+        companyId: req.user.company_id,
+      }).catch(() => {});
+    }
+
     res.json({ data: { workflow_status: 'paid', payment_status: 'paid' } });
   } catch (err) {
     console.error(err);
@@ -3745,7 +3900,10 @@ router.patch('/:id/payment', requireTqsStageAccess('payment'), async (req, res) 
     const status    = balance <= 0 ? 'paid' : new_paid > 0 ? 'partial' : 'pending';
 
     // Fetch the parent bill for project + vendor info
-    const billRow = await query(`SELECT * FROM tqs_bills WHERE id=$1`, [req.params.id]);
+    const billRow = await query(
+      `SELECT b.*, p.name AS project_name FROM tqs_bills b LEFT JOIN projects p ON p.id = b.project_id WHERE b.id=$1`,
+      [req.params.id]
+    );
     if (!billRow.rows.length) return res.status(404).json({ error: 'Bill not found' });
     const bill = billRow.rows[0];
 
@@ -3807,6 +3965,20 @@ router.patch('/:id/payment', requireTqsStageAccess('payment'), async (req, res) 
     await logHistory(req.params.id, 'accounts',
       `Payment recorded ₹${new_paid} (${status})${result.finance_payment_id ? ' → Finance entry created' : ''}`,
       req.user.id);
+
+    // Send notification email when bill is fully paid
+    if (status === 'paid') {
+      sendBillPaidEmail({
+        bill: { ...bill, project_name: bill.project_name || bill.project_id },
+        paidAmount: new_paid,
+        paymentDate: payment_date,
+        paymentMode: payment_mode,
+        referenceNumber: reference_number,
+        actorName: req.user.name || req.user.email,
+        companyId: req.user.company_id,
+      }).catch(() => {});
+    }
+
     res.json({ data: result });
   } catch (err) {
     console.error(err);

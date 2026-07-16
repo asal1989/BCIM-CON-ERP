@@ -326,6 +326,18 @@ const getProjectDashboard = async (req, res) => {
       return res.status(404).json({ error: 'Project not found.' });
     }
 
+    if (!GLOBAL_ROLES.includes(req.user.role)) {
+      const access = await query(
+        `SELECT 1 FROM project_members WHERE project_id = $1 AND user_id = $2
+         UNION
+         SELECT 1 FROM projects WHERE id = $1 AND (
+           project_manager_id = $2 OR site_engineer_id = $2 OR qs_engineer_id = $2
+         )`,
+        [pid, req.user.id]
+      );
+      if (!access.rows[0]) return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
+
     const [boq, billing, workers, incidents, materials] = await Promise.all([
       query(`SELECT COUNT(*) as items, COALESCE(SUM(amount),0) as total_value FROM boq_items WHERE project_id = $1`, [pid]),
       query(`SELECT COALESCE(SUM(gross_amount),0) as billed, COALESCE(SUM(net_payable),0) as certified FROM ra_bills WHERE project_id = $1 AND status = 'certified'`, [pid]),

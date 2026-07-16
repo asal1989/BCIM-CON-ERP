@@ -14,7 +14,7 @@ import {
   ChevronDown, Tag, CalendarDays, Filter, Eye, Rows3,
   UserRound, Layers3, Send, ClipboardCheck, Settings, GripVertical, RefreshCw,
   ShoppingCart, Upload, Paperclip, History, Info, MapPin, RotateCcw, Pencil,
-  ArrowDownUp, ArrowUp, ArrowDown,
+  ArrowDownUp, ArrowUp, ArrowDown, Copy,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
@@ -469,6 +469,19 @@ export default function MRSPage() {
     enabled: !!user?.id && !!selectedMRS?.id,
   });
 
+  // Copy from existing MR modal state
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [copySearch, setCopySearch] = useState('');
+  const [copyPreviewMRS, setCopyPreviewMRS] = useState(null);
+
+  // All MRS across all projects — used only by the "Copy from MR" modal
+  const { data: allMRSForCopy = [], isLoading: copyMRSLoading } = useQuery({
+    queryKey: ['mrs-all-copy', user?.id],
+    queryFn: () => mrsAPI.list().then(r => r.data?.data ?? r.data ?? []).catch(() => []),
+    enabled: !!user?.id && showCopyModal,
+    staleTime: 60 * 1000,
+  });
+
   // Auto-open MRS when navigated from Approvals dashboard
   useEffect(() => {
     const viewId = location.state?.viewId;
@@ -905,8 +918,10 @@ export default function MRSPage() {
   const [showMDModal, setShowMDModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
 
-  // Only the Managing Director may edit MRS header/item details directly
-  const canEditMRS = ['managing_director', 'super_admin'].includes(userRoleLower);
+  // MD/super_admin can edit any MRS; stores staff can edit while still pending/stores stage
+  const isStoresStaff = ['stores_manager', 'store_keeper'].includes(userRoleLower);
+  const canEditMRS = ['managing_director', 'super_admin'].includes(userRoleLower) ||
+    (isStoresStaff && ['pending', 'stores_verified'].includes(liveStatus));
   const updateMRSMutation = useMutation({
     mutationFn: ({ id, data }) => mrsAPI.update(id, data),
     onSuccess: () => {
@@ -1793,6 +1808,11 @@ export default function MRSPage() {
                 <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
                   <h3 className="text-[13px] font-semibold text-slate-700"><Package className="w-3.5 h-3.5 inline mr-1.5 text-blue-500" />Item List</h3>
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => { setCopySearch(''); setCopyPreviewMRS(null); setShowCopyModal(true); }}
+                      className="flex items-center gap-1.5 px-3 h-8 rounded-md text-xs font-semibold text-blue-700 border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors">
+                      <Copy className="w-3 h-3" /> Copy from MR
+                    </button>
                     <button title="Coming soon" disabled className="flex items-center gap-1.5 px-3 h-8 rounded-md text-xs font-semibold text-slate-400 border border-slate-200 cursor-not-allowed">
                       <Upload className="w-3 h-3" /> Import from BOQ
                     </button>
@@ -2200,6 +2220,147 @@ export default function MRSPage() {
           </div>
         </div>
       )}
+
+      {/* ═══ Copy Items from Existing MR Modal ═══ */}
+      {showCopyModal && (() => {
+        const needle = copySearch.trim().toLowerCase();
+        const filtered = allMRSForCopy.filter(m =>
+          !needle ||
+          (m.mrs_number || '').toLowerCase().includes(needle) ||
+          (m.serial_no_formatted || '').toLowerCase().includes(needle) ||
+          (m.project_name || '').toLowerCase().includes(needle) ||
+          (m.department || '').toLowerCase().includes(needle)
+        );
+        const srcItems = (copyPreviewMRS?.items || []).filter(i => i.material_name || i.material);
+        return (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white border border-slate-200 w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 bg-blue-700 flex-shrink-0">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
+                    <Copy className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-white">Copy Items from Existing MR</p>
+                    <p className="text-xs text-blue-200 mt-0.5">Search and select a previous MR to copy its item list</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowCopyModal(false)} className="w-8 h-8 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              {/* Search */}
+              <div className="px-5 py-3 border-b border-slate-100 flex-shrink-0">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <input
+                    autoFocus
+                    className="w-full pl-8 pr-3 h-9 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Search by MR number, project or department…"
+                    value={copySearch}
+                    onChange={e => { setCopySearch(e.target.value); setCopyPreviewMRS(null); }}
+                  />
+                </div>
+              </div>
+              <div className="flex flex-1 overflow-hidden min-h-0">
+                {/* MR list */}
+                <div className="w-80 flex-shrink-0 border-r border-slate-100 overflow-y-auto">
+                  {copyMRSLoading ? (
+                    <div className="flex items-center justify-center h-24 text-xs text-slate-400">Loading…</div>
+                  ) : filtered.length === 0 ? (
+                    <div className="flex items-center justify-center h-24 text-xs text-slate-400">No MRs found</div>
+                  ) : filtered.map(m => {
+                    const label = m.serial_no_formatted || m.mrs_number || m.id;
+                    const itemCount = (m.items || []).filter(i => i.material_name || i.material).length;
+                    const isSelected = copyPreviewMRS?.id === m.id;
+                    return (
+                      <button key={m.id} onClick={() => setCopyPreviewMRS(m)}
+                        className={clsx('w-full text-left px-4 py-3 border-b border-slate-100 transition-colors',
+                          isSelected ? 'bg-blue-50 border-l-2 border-l-blue-500' : 'hover:bg-slate-50')}>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-slate-800 font-mono truncate">{label}</span>
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 flex-shrink-0">{itemCount} items</span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 truncate mt-0.5">{m.project_name || '—'}</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">{m.department || ''}{m.department && m.status ? ' · ' : ''}{m.status || ''}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* Items preview */}
+                <div className="flex-1 overflow-y-auto">
+                  {!copyPreviewMRS ? (
+                    <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-400">
+                      <ClipboardList className="w-8 h-8 opacity-30" />
+                      <p className="text-xs">Select an MR to preview its items</p>
+                    </div>
+                  ) : srcItems.length === 0 ? (
+                    <div className="flex items-center justify-center h-full text-xs text-slate-400">This MR has no items</div>
+                  ) : (
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">#</th>
+                          <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Material</th>
+                          <th className="text-right px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Qty</th>
+                          <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Unit</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {srcItems.map((it, idx) => (
+                          <tr key={idx} className={idx % 2 === 1 ? 'bg-slate-50/60' : ''}>
+                            <td className="px-3 py-2 text-slate-400 font-mono">{idx + 1}</td>
+                            <td className="px-3 py-2 text-slate-800 font-medium">{it.material_name || it.material}</td>
+                            <td className="px-3 py-2 text-right font-mono text-slate-700">{it.quantity || it.qty || '—'}</td>
+                            <td className="px-3 py-2 text-slate-500">{it.unit || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+              {/* Footer */}
+              <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 bg-slate-50 flex-shrink-0">
+                <p className="text-xs text-slate-500">
+                  {copyPreviewMRS
+                    ? `${srcItems.length} item${srcItems.length !== 1 ? 's' : ''} will be added to your current item list`
+                    : 'Items will be appended to any items you have already entered'}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setShowCopyModal(false)} className="px-4 h-8 rounded-lg text-xs font-semibold text-slate-600 border border-slate-200 hover:bg-slate-100 transition-colors">
+                    Cancel
+                  </button>
+                  <button
+                    disabled={!copyPreviewMRS || srcItems.length === 0}
+                    onClick={() => {
+                      const copied = srcItems.map(it => ({
+                        material: it.material_name || it.material || '',
+                        qty: it.quantity || it.qty || '',
+                        unit: it.unit || 'Nos',
+                        purpose: it.purpose || '',
+                        item_code: it.item_code || '',
+                        category: it.category || '',
+                        est_rate: it.est_rate || '',
+                        preferred_vendor_id: '',
+                      }));
+                      const nonEmpty = items.filter(i => i.material || i.qty);
+                      setItems(nonEmpty.length ? [...nonEmpty, ...copied] : copied);
+                      setShowCopyModal(false);
+                      setCopyPreviewMRS(null);
+                      setCopySearch('');
+                      toast.success(`Copied ${copied.length} items from ${copyPreviewMRS.serial_no_formatted || copyPreviewMRS.mrs_number}`);
+                    }}
+                    className="flex items-center gap-1.5 px-4 h-8 rounded-lg text-xs font-semibold text-white bg-blue-700 hover:bg-blue-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                    <Copy className="w-3 h-3" /> Copy {srcItems.length > 0 ? srcItems.length : ''} Items
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── New Inventory Item Modal ── */}
       {showNewItemModal && (

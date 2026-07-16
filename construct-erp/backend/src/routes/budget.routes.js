@@ -58,6 +58,19 @@ router.use(loadProjectScope);
   } catch (_) {}
 })();
 
+// Reusable: SC subcontractor bills (submitted/approved/paid) grouped by cost head.
+// All SC bills map to Subcontracting — Civil.
+const SC_BILLS_ACTUALS_SQL = `
+  SELECT
+    'Subcontracting — Civil' AS cost_head,
+    SUM(b.net_payable) AS actual_spend
+  FROM sc_bills b
+  WHERE b.project_id = $1
+    AND b.company_id = $2
+    AND b.status NOT IN ('draft', 'rejected')
+  GROUP BY 1
+`;
+
 // Reusable: actual spend from DQS tqs_bills (paid) grouped by cost head.
 // vendor_id is NULL on tqs_bills — join by name (ILIKE) as fallback.
 // WO bills → Subcontracting — Civil by default; PO bills → vendor_type mapping.
@@ -152,7 +165,28 @@ router.get('/actuals', async (req, res) => {
 
     // Filter to only bills that match the requested cost head
     const bills = result.rows.filter(r => r.resolved_cost_head === cost_head);
-    res.json({ data: bills });
+
+    // Also include SC subcontractor bills if cost head is Subcontracting — Civil
+    let scBills = [];
+    if (cost_head === 'Subcontracting — Civil') {
+      const scResult = await query(`
+        SELECT
+          b.bill_number AS inv_number, b.bill_date AS inv_date,
+          sc.name AS vendor_name, b.gross_amount AS basic_amount,
+          b.net_payable AS total_amount, b.status AS workflow_status,
+          b.created_at, 'sc' AS bill_type,
+          'Subcontracting — Civil' AS resolved_cost_head
+        FROM sc_bills b
+        JOIN sc_subcontractors sc ON sc.id = b.sc_id
+        WHERE b.project_id = $1
+          AND b.company_id = $2
+          AND b.status NOT IN ('draft', 'rejected')
+        ORDER BY b.bill_date DESC
+      `, [project_id, req.user.company_id]);
+      scBills = scResult.rows;
+    }
+
+    res.json({ data: [...bills, ...scBills] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -176,11 +210,17 @@ router.get('/', async (req, res) => {
       [project_id, req.user.company_id]
     );
 
-    // Actual spend from DQS Tracker paid bills
-    const actuals = await query(DQS_ACTUALS_SQL, [project_id]);
+    // Actual spend from DQS Tracker paid bills + SC subcontractor bills
+    const [actuals, scActuals] = await Promise.all([
+      query(DQS_ACTUALS_SQL, [project_id]),
+      query(SC_BILLS_ACTUALS_SQL, [project_id, req.user.company_id]),
+    ]);
 
     const actualMap = {};
     actuals.rows.forEach(r => { actualMap[r.cost_head] = parseFloat(r.actual_spend || 0); });
+    scActuals.rows.forEach(r => {
+      actualMap[r.cost_head] = (actualMap[r.cost_head] || 0) + parseFloat(r.actual_spend || 0);
+    });
 
     // Merge actual spend into budget lines
     const rows = budget.rows.map(b => ({
@@ -190,15 +230,17 @@ router.get('/', async (req, res) => {
 
     // Also return cost heads that have spend but no budget line (unbudgeted)
     const budgetedHeads = new Set(budget.rows.map(b => b.cost_head));
-    const unbudgeted = actuals.rows
-      .filter(r => !budgetedHeads.has(r.cost_head))
+    const allActualRows = [...actuals.rows, ...scActuals.rows];
+    const seenUnbudgeted = new Set();
+    const unbudgeted = allActualRows
+      .filter(r => !budgetedHeads.has(r.cost_head) && !seenUnbudgeted.has(r.cost_head) && seenUnbudgeted.add(r.cost_head))
       .map(r => ({
         id: null,
         project_id,
         cost_head: r.cost_head,
         budgeted_amount: 0,
-        actual_amount: parseFloat(r.actual_spend || 0),
-        remarks: 'No budget allocated — spend from DQS paid bills',
+        actual_amount: actualMap[r.cost_head] || 0,
+        remarks: 'No budget allocated — spend from bills',
         unbudgeted: true,
       }));
 
@@ -261,19 +303,27 @@ router.get('/commitment', async (req, res) => {
       [project_id, req.user.company_id]
     );
 
-    // Actual paid from DQS Tracker (paid bills)
-    const payments = await query(DQS_ACTUALS_SQL, [project_id]);
+    // Actual paid from DQS Tracker (paid bills) + SC subcontractor bills
+    const [payments, scPayments] = await Promise.all([
+      query(DQS_ACTUALS_SQL, [project_id]),
+      query(SC_BILLS_ACTUALS_SQL, [project_id, req.user.company_id]),
+    ]);
+
+    const paymentMap = {};
+    payments.rows.forEach(r => { paymentMap[r.cost_head] = Number(r.actual_spend || 0); });
+    scPayments.rows.forEach(r => {
+      paymentMap[r.cost_head] = (paymentMap[r.cost_head] || 0) + Number(r.actual_spend || 0);
+    });
 
     // Merge all cost heads
     const allHeads = new Set([
       ...pos.rows.map(r => r.cost_head),
       ...budget.rows.map(r => r.cost_head),
-      ...payments.rows.map(r => r.cost_head),
+      ...Object.keys(paymentMap),
     ]);
 
-    const budgetMap  = Object.fromEntries(budget.rows.map(r => [r.cost_head, Number(r.budgeted_amount)]));
-    const paymentMap = Object.fromEntries(payments.rows.map(r => [r.cost_head, Number(r.actual_spend)]));
-    const poMap      = Object.fromEntries(pos.rows.map(r => [r.cost_head, {
+    const budgetMap = Object.fromEntries(budget.rows.map(r => [r.cost_head, Number(r.budgeted_amount)]));
+    const poMap     = Object.fromEntries(pos.rows.map(r => [r.cost_head, {
       committed:  Number(r.committed),
       po_count:   Number(r.po_count),
       cancelled:  Number(r.cancelled_value),

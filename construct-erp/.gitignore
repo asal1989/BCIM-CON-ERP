@@ -25,7 +25,11 @@ tmp_*.png
 eng.traineddata
 
 # ── React build output ────────────────────────────────────────
-frontend/build/
+# NOTE: frontend/build/ is intentionally TRACKED, not ignored. The backend
+# serves the SPA from this committed folder (server.js express.static), and
+# Railway's own frontend build step is unreliable — so the committed build is
+# the real deploy artifact. Rebuild (`npm run build`) and commit build/ when
+# shipping frontend changes. Do NOT re-add `frontend/build/` here.
 frontend/dist/
 
 # ── Backend ───────────────────────────────────────────────────

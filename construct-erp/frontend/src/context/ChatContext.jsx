@@ -2,7 +2,7 @@
 // DM popups. Mounted once at the app root so the socket connection (and any
 // open DM popup) survives navigation between ERP modules, not just while the
 // /chat page itself is open.
-import { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { io as socketIO } from 'socket.io-client';
 import { Minus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -11,6 +11,13 @@ import api from '../api/client';
 import {
   Av, WA, MessageThread, Composer, fmtSize, withDateDividers, downloadAttachment,
 } from '../components/chat/chatShared';
+import { useWebRTC, CALL_STATE } from '../hooks/useWebRTC';
+import IncomingCallModal from '../components/chat/IncomingCallModal';
+import CallWindow from '../components/chat/CallWindow';
+import { useScreenShare, SHARE_STATE } from '../hooks/useScreenShare';
+import IncomingShareModal from '../components/chat/IncomingShareModal';
+import ScreenShareWindow from '../components/chat/ScreenShareWindow';
+import ScreenShareViewer from '../components/chat/ScreenShareViewer';
 
 const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || window.location.origin;
 const MAX_OPEN_POPUPS = 3;
@@ -124,6 +131,14 @@ export function ChatProvider({ children }) {
     api.get('/users').then(r => setEmployees((r.data?.data || []).filter(u => u.is_active !== false))).catch(() => {});
   }, [user?.id]);
 
+  // Pre-load last-message previews so the sidebar sorts by recency on first render
+  useEffect(() => {
+    if (!user?.id) return;
+    api.get('/chat/previews')
+      .then(r => { if (r.data?.previews) setPreviews(r.data.previews); })
+      .catch(() => {});
+  }, [user?.id]);
+
   const findEmployeeForDm = useCallback((channel) => {
     if (!channel?.startsWith('dm-') || !user?.id) return null;
     const raw = channel.slice(3);
@@ -197,16 +212,95 @@ export function ChatProvider({ children }) {
 
   const unreadTotal = Object.values(unread).reduce((a, b) => a + b, 0);
 
-  const value = {
+  // ── WebRTC calls ─────────────────────────────────────────────────────────────
+  const webrtc = useWebRTC({ socketRef, connected, currentUser: user });
+
+  // ── Screen share with laser pointer ──────────────────────────────────────────
+  const ss = useScreenShare({ socketRef, connected, currentUser: user });
+
+  // Memoized so consumers only re-render when a field they actually read
+  // changes, instead of on every provider render (sockets/typing update
+  // frequently, and this context wraps the whole app).
+  const value = useMemo(() => ({
     socketRef, connected, employees, unread, unreadTotal, previews, popups, typing,
     openPopup, closePopup, toggleMinimize, markRead, registerActive, findEmployeeForDm,
-  };
+    // Call API
+    startCall:   webrtc.startCall,
+    endCall:     webrtc.endCall,
+    callState:   webrtc.callState,
+    callInfo:    webrtc.callInfo,
+    // Screen share API
+    startShare:  ss.startShare,
+    stopShare:   ss.stopShare,
+    shareState:  ss.shareState,
+    shareInfo:   ss.shareInfo,
+    SHARE_STATE,
+  }), [
+    connected, employees, unread, unreadTotal, previews, popups, typing,
+    openPopup, closePopup, toggleMinimize, markRead, registerActive, findEmployeeForDm,
+    webrtc.startCall, webrtc.endCall, webrtc.callState, webrtc.callInfo,
+    ss.startShare, ss.stopShare, ss.shareState, ss.shareInfo,
+  ]);
 
   return (
     <ChatContext.Provider value={value}>
       {children}
       <PopupStack popups={popups} socketRef={socketRef} typing={typing} unread={unread}
         currentUserId={user?.id} onClose={closePopup} onToggleMinimize={toggleMinimize} />
+
+      {/* ── Incoming call overlay ── */}
+      <IncomingCallModal
+        callInfo={webrtc.callState === CALL_STATE.INCOMING ? webrtc.callInfo : null}
+        onAccept={webrtc.answerCall}
+        onReject={webrtc.rejectCall}
+      />
+
+      {/* ── Active / outgoing call window ── */}
+      {(webrtc.callState === CALL_STATE.ACTIVE || webrtc.callState === CALL_STATE.CALLING) && (
+        <CallWindow
+          localStream={webrtc.localStream}
+          remoteStream={webrtc.remoteStream}
+          callInfo={webrtc.callInfo}
+          callState={webrtc.callState}
+          isMuted={webrtc.isMuted}
+          isCameraOff={webrtc.isCameraOff}
+          isScreenSharing={webrtc.isScreenSharing}
+          duration={webrtc.duration}
+          onToggleMute={webrtc.toggleMute}
+          onToggleCamera={webrtc.toggleCamera}
+          onScreenShare={webrtc.isScreenSharing ? webrtc.stopScreenShare : webrtc.startScreenShare}
+          onEnd={webrtc.endCall}
+        />
+      )}
+
+      {/* ── Incoming screen share modal (viewer side) ── */}
+      {ss.shareState === SHARE_STATE.INCOMING && (
+        <IncomingShareModal
+          shareInfo={ss.shareInfo}
+          onAccept={ss.acceptShare}
+          onDecline={ss.stopShare}
+        />
+      )}
+
+      {/* ── Sharer's floating preview with laser dot ── */}
+      {ss.shareState === SHARE_STATE.SHARING && (
+        <ScreenShareWindow
+          screenStream={ss.screenStream}
+          shareInfo={ss.shareInfo}
+          pointerPos={ss.pointerPos}
+          onStop={ss.stopShare}
+        />
+      )}
+
+      {/* ── Viewer's fullscreen stream ── */}
+      {ss.shareState === SHARE_STATE.VIEWING && (
+        <ScreenShareViewer
+          viewerStream={ss.viewerStream}
+          shareInfo={ss.shareInfo}
+          onStop={ss.stopShare}
+          sendPointer={ss.sendPointer}
+        />
+      )}
     </ChatContext.Provider>
   );
 }

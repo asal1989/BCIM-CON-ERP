@@ -3,12 +3,12 @@
 // category (Upto 3 Hours / After 3 Hours / For 1 Day...) across many invoices,
 // recording both vendor-Invoiced and site-Certified hours before raising the
 // actual bill — mirrors the manual tracking sheet used for this billing type.
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { hireLogAPI, scAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
 import { PageHeader, Theme } from '../../theme';
-import { Plus, X, Receipt, Trash2, CheckCircle2, Clock, Truck, Settings, Pencil } from 'lucide-react';
+import { Plus, X, Receipt, Trash2, CheckCircle2, Clock, Truck, Settings, Pencil, Paperclip, Upload, ExternalLink } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
@@ -40,14 +40,139 @@ function computeTieredQty(totalHrs) {
   return { shift: 1, hr: 0, day: 0 };
 }
 
+// ─── Entry Files Modal ──────────────────────────────────────────────────────
+function EntryFilesModal({ wo, entry, onClose }) {
+  const qc = useQueryClient();
+  const fileInputRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+
+  const { data: filesData, isLoading } = useQuery({
+    queryKey: ['hire-log-files', entry.id],
+    queryFn: () => hireLogAPI.listFiles(wo.id, entry.id).then(r => r.data?.data || []),
+    staleTime: 30_000,
+  });
+  const files = filesData || [];
+
+  const deleteMut = useMutation({
+    mutationFn: (fid) => hireLogAPI.deleteFile(wo.id, entry.id, fid),
+    onSuccess: () => { toast.success('Removed'); qc.invalidateQueries({ queryKey: ['hire-log-files', entry.id] }); },
+    onError: () => toast.error('Failed to delete'),
+  });
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    setUploading(true);
+    try {
+      await hireLogAPI.uploadFile(wo.id, entry.id, fd);
+      toast.success('Log sheet uploaded');
+      qc.invalidateQueries({ queryKey: ['hire-log-files', entry.id] });
+    } catch {
+      toast.error('Upload failed');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const fileIcon = (type) => {
+    if (!type) return '📄';
+    if (type.includes('pdf')) return '📕';
+    if (type.includes('image')) return '🖼️';
+    return '📄';
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100"
+          style={{ background: `linear-gradient(135deg, ${Theme.navy} 0%, #0f2a45 100%)` }}>
+          <div>
+            <h2 className="font-bold text-white text-sm flex items-center gap-2">
+              <Paperclip className="w-4 h-4 text-white/70" /> Log Sheet Attachments
+            </h2>
+            <p className="text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.65)' }}>
+              {entry.bill_no || 'Entry'} · {wo.wo_number}
+            </p>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center text-white" style={{ background: 'rgba(255,255,255,0.12)' }}>
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {isLoading ? (
+            <div className="p-6 text-sm text-slate-400 text-center">Loading…</div>
+          ) : files.length === 0 ? (
+            <div className="p-8 text-center">
+              <Paperclip className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+              <p className="text-sm text-slate-400">No log sheets attached yet</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-50">
+              {files.map(f => (
+                <div key={f.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50/60 transition group">
+                  <span className="text-lg flex-shrink-0">{fileIcon(f.file_type)}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-800 truncate">{f.file_name}</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      {f.file_size ? `${(f.file_size / 1024).toFixed(0)} KB` : ''}
+                      {f.onedrive_web_url && <span className="ml-2 text-sky-500 font-medium">• OneDrive</span>}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {f.onedrive_web_url ? (
+                      <a href={f.onedrive_web_url} target="_blank" rel="noopener noreferrer"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-sky-600 hover:bg-sky-50 transition">
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    ) : (
+                      <a href={hireLogAPI.serveFile(wo.id, entry.id, f.id)} target="_blank" rel="noopener noreferrer"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition">
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                    <button onClick={() => {
+                      if (!window.confirm(`Remove "${f.file_name}"?`)) return;
+                      deleteMut.mutate(f.id);
+                    }} className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition opacity-0 group-hover:opacity-100">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-4 border-t border-slate-100 flex items-center justify-between">
+          <div className="text-xs text-slate-400">{files.length} file{files.length !== 1 ? 's' : ''}</div>
+          <div className="flex items-center gap-2">
+            <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={handleFileChange} />
+            <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold text-white transition disabled:opacity-60"
+              style={{ background: Theme.navy }}>
+              <Upload className="w-3.5 h-3.5" />
+              {uploading ? 'Uploading…' : 'Upload Log Sheet'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Add/Edit Entry Modal ───────────────────────────────────────────────────
-function EntryModal({ wo, equipmentGroups, onClose, entry }) {
+function EntryModal({ wo, equipmentGroups, onClose, entry, prefillHours }) {
   const isEdit = !!entry;
   const qc = useQueryClient();
   const [billNo, setBillNo]   = useState(entry?.bill_no || '');
   const [month, setMonth]     = useState(entry?.bill_month || '');
   const [date, setDate]       = useState(entry?.bill_date ? dayjs(entry.bill_date).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'));
   const [hours, setHours]     = useState(() => {
+    if (prefillHours) return prefillHours;
     if (!entry) return {};
     const init = {};
     entry.lines.forEach(l => { init[l.wo_item_id] = { invoice: l.invoice_hours || '', certified: l.certified_hours || '' }; });
@@ -215,7 +340,7 @@ function EntryModal({ wo, equipmentGroups, onClose, entry }) {
 }
 
 // ─── Equipment Group Table ──────────────────────────────────────────────────
-function GroupTable({ wo, group, entries, totals, onRaiseBill, raisingId, onEdit, onDelete }) {
+function GroupTable({ wo, group, entries, totals, onRaiseBill, raisingId, onEdit, onDelete, onFilesClick }) {
   const cats = group.categories;
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
@@ -261,9 +386,15 @@ function GroupTable({ wo, group, entries, totals, onRaiseBill, raisingId, onEdit
                   ))}
                   <td className="px-2 py-2 text-center">
                     {e.status === 'billed' ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                        <CheckCircle2 className="w-3 h-3" /> {e.sc_bill_number || 'Billed'}
-                      </span>
+                      <div className="flex items-center justify-center gap-1">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                          <CheckCircle2 className="w-3 h-3" /> {e.sc_bill_number || 'Billed'}
+                        </span>
+                        <button onClick={() => onFilesClick(e)} title="Attach log sheets"
+                          className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg">
+                          <Paperclip className="w-3 h-3" />
+                        </button>
+                      </div>
                     ) : (
                       <div className="flex items-center justify-center gap-1">
                         <button onClick={() => onRaiseBill(e)} disabled={raisingId === e.id}
@@ -273,6 +404,10 @@ function GroupTable({ wo, group, entries, totals, onRaiseBill, raisingId, onEdit
                         <button onClick={() => onEdit(e)} title="Edit entry"
                           className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">
                           <Pencil className="w-3 h-3" />
+                        </button>
+                        <button onClick={() => onFilesClick(e)} title="Attach log sheets"
+                          className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg">
+                          <Paperclip className="w-3 h-3" />
                         </button>
                         <button onClick={() => onDelete(e)} title="Delete entry"
                           className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
@@ -320,6 +455,221 @@ function GroupTable({ wo, group, entries, totals, onRaiseBill, raisingId, onEdit
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// ─── Daily Log Section ───────────────────────────────────────────────────────
+function DailyLogSection({ wo, equipmentGroups, onCreateBill }) {
+  const qc = useQueryClient();
+  const allCats = equipmentGroups.flatMap(g => g.categories);
+
+  const [showAddRow, setShowAddRow] = useState(false);
+  const [newDate,    setNewDate]    = useState(dayjs().format('YYYY-MM-DD'));
+  const [newItemId,  setNewItemId]  = useState('');
+  const [newQty,     setNewQty]     = useState('');
+  const [newNotes,   setNewNotes]   = useState('');
+
+  const selectedCat = allCats.find(c => c.id === newItemId);
+  const qtyUnit = selectedCat?.unit || 'Qty';
+  const isMonthlyUnit = /month/i.test(qtyUnit);
+  const qtyLabel = isMonthlyUnit ? 'Days Worked' : qtyUnit;
+
+  // Hide "Create Bill from Log" if all WO categories are monthly-rated (bill raised manually)
+  const allMonthly = allCats.length > 0 && allCats.every(c => /month/i.test(c.unit || ''));
+
+  const { data: raw = [] } = useQuery({
+    queryKey: ['hire-daily-log', wo.id],
+    queryFn: () => hireLogAPI.listDailyLog(wo.id).then(r => r.data?.data || []),
+    staleTime: 0,
+  });
+
+  const addMut = useMutation({
+    mutationFn: (d) => hireLogAPI.addDailyEntry(wo.id, d),
+    onSuccess: () => {
+      toast.success('Day recorded');
+      qc.invalidateQueries({ queryKey: ['hire-daily-log', wo.id] });
+      setShowAddRow(false);
+      setNewQty(''); setNewNotes('');
+    },
+    onError: e => toast.error(e?.response?.data?.error || 'Failed'),
+  });
+
+  const delMut = useMutation({
+    mutationFn: (id) => hireLogAPI.deleteDailyEntry(wo.id, id),
+    onSuccess: () => { toast.success('Deleted'); qc.invalidateQueries({ queryKey: ['hire-daily-log', wo.id] }); },
+    onError: () => toast.error('Failed to delete'),
+  });
+
+  const handleAdd = () => {
+    if (!newDate || !newItemId || !newQty) return toast.error('Date, equipment and qty are required');
+    addMut.mutate({ work_date: newDate, wo_item_id: newItemId, qty: parseFloat(newQty), notes: newNotes });
+  };
+
+  // Totals per item_id
+  const totalsPerItem = {};
+  raw.forEach(r => {
+    totalsPerItem[r.wo_item_id] = (totalsPerItem[r.wo_item_id] || 0) + parseFloat(r.qty || 0);
+  });
+
+  const handleCreateBill = () => {
+    const pf = {};
+    Object.entries(totalsPerItem).forEach(([itemId, total]) => {
+      pf[itemId] = { invoice: String(total), certified: String(total) };
+    });
+    onCreateBill(pf);
+  };
+
+  // Group by date
+  const grouped = {};
+  raw.forEach(r => {
+    const d = (r.work_date || '').split('T')[0];
+    if (!grouped[d]) grouped[d] = [];
+    grouped[d].push(r);
+  });
+  const dates = Object.keys(grouped).sort();
+  const totalDays = dates.length;
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-sm text-slate-700">Daily Usage Log</span>
+          {raw.length > 0 && (
+            <span className="text-xs bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full">
+              {raw.length} records · {totalDays} day{totalDays !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+        <div className="flex gap-2">
+          {Object.keys(totalsPerItem).length > 0 && !allMonthly && (
+            <button onClick={handleCreateBill}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition">
+              <Receipt className="w-3.5 h-3.5" /> Create Bill from Log
+            </button>
+          )}
+          <button onClick={() => setShowAddRow(v => !v)}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold border border-slate-200 bg-white text-slate-700 rounded-lg hover:bg-slate-50 transition">
+            <Plus className="w-3.5 h-3.5" /> Add Day
+          </button>
+        </div>
+      </div>
+
+      {/* Add Row form */}
+      {showAddRow && (
+        <div className="px-4 py-3 bg-indigo-50/60 border-b border-indigo-100 flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Date *</label>
+            <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)}
+              className={inp} style={{ minWidth: 130 }} />
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Equipment / Category *</label>
+            <select value={newItemId} onChange={e => setNewItemId(e.target.value)}
+              className={inp} style={{ minWidth: 220 }}>
+              <option value="">— select —</option>
+              {equipmentGroups.map(g => (
+                <optgroup key={g.equipment_group} label={g.equipment_group}>
+                  {g.categories.map(c => (
+                    <option key={c.id} value={c.id}>{c.usage_category} ({c.unit})</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">{qtyLabel} *</label>
+            <input type="number" step="0.5" min="0" value={newQty} onChange={e => setNewQty(e.target.value)}
+              className={inp} style={{ width: 80 }} placeholder={isMonthlyUnit ? '1' : qtyUnit === 'Day' ? '1' : 'e.g. 5.5'} />
+          </div>
+          <div className="flex-1" style={{ minWidth: 140 }}>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Notes</label>
+            <input type="text" value={newNotes} onChange={e => setNewNotes(e.target.value)}
+              className={inp} placeholder="e.g. Debris removal" />
+          </div>
+          <div className="flex gap-2 pb-0.5">
+            <button onClick={handleAdd} disabled={addMut.isPending}
+              className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition">
+              {addMut.isPending ? 'Saving…' : 'Save'}
+            </button>
+            <button onClick={() => setShowAddRow(false)}
+              className="px-3 py-1.5 text-xs font-bold border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Log table */}
+      {raw.length === 0 ? (
+        <div className="p-8 text-center text-slate-400 text-sm">
+          No daily records yet — click <b>Add Day</b> to record usage date by date like a log sheet.
+        </div>
+      ) : (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-slate-100 bg-white">
+                  <th className="text-left px-3 py-2 font-semibold text-slate-400 uppercase tracking-wider w-32">Date</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-400 uppercase tracking-wider">Equipment Group</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-400 uppercase tracking-wider">Category</th>
+                  <th className="text-right px-3 py-2 font-semibold text-slate-400 uppercase tracking-wider w-24">Hours</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-400 uppercase tracking-wider">Notes</th>
+                  <th className="w-8 px-2 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {dates.map(d => (
+                  grouped[d].map((r, i) => (
+                    <tr key={r.id} className={clsx('border-b border-slate-50', i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40')}>
+                      {i === 0 && (
+                        <td rowSpan={grouped[d].length}
+                          className="px-3 py-2 font-bold text-slate-800 border-r border-slate-100 align-top whitespace-nowrap">
+                          {dayjs(d).format('DD MMM YYYY')}
+                          <div className="text-[10px] font-normal text-slate-400">{dayjs(d).format('dddd')}</div>
+                        </td>
+                      )}
+                      <td className="px-3 py-2 text-slate-700 font-medium">{r.equipment_group}</td>
+                      <td className="px-3 py-2 text-slate-500">{r.usage_category}</td>
+                      <td className="px-3 py-2 text-right font-mono font-bold text-indigo-700">
+                        {num(r.qty).toFixed(2)} <span className="text-slate-400 font-normal">{r.item_unit}</span>
+                      </td>
+                      <td className="px-3 py-2 text-slate-400 italic">{r.notes || '—'}</td>
+                      <td className="px-2 py-2 text-center">
+                        <button
+                          onClick={() => { if (window.confirm('Delete this record?')) delMut.mutate(r.id); }}
+                          className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-slate-300 bg-slate-50">
+                  <td colSpan={3} className="px-3 py-2 text-right text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+                    Totals ({totalDays} days)
+                  </td>
+                  <td colSpan={3} className="px-3 py-2">
+                    <div className="flex flex-wrap gap-4">
+                      {allCats.filter(c => totalsPerItem[c.id]).map(c => (
+                        <span key={c.id} className="text-xs font-bold text-indigo-700">
+                          {c.equipment_group} — {c.usage_category}:&nbsp;
+                          {num(totalsPerItem[c.id]).toFixed(2)} {c.unit}
+                          {c.rate ? <span className="text-emerald-700"> → {fmt(num(totalsPerItem[c.id]) * num(c.rate))}</span> : ''}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -471,9 +821,11 @@ export default function HireUsageTrackerPage() {
   const [woId, setWoId] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
+  const [filesEntry, setFilesEntry] = useState(null);
   const [showSetup, setShowSetup] = useState(false);
-  const [raisingId,      setRaisingId]      = useState(null);
+  const [raisingId,       setRaisingId]      = useState(null);
   const [raisingCombined, setRaisingCombined] = useState(false);
+  const [prefillHours,    setPrefillHours]    = useState(null); // from DailyLogSection → EntryModal
 
   // Reset selected WO when project changes
   useEffect(() => { setWoId(''); }, [selectedProjectId]);
@@ -670,19 +1022,30 @@ export default function HireUsageTrackerPage() {
             This work order has no categorized items yet.
           </div>
         ) : (
-          equipmentGroups.map(g => (
-            <GroupTable
-              key={g.equipment_group}
+          <>
+            {/* Daily log sheet — enter day-by-day records */}
+            <DailyLogSection
               wo={wo}
-              group={g}
-              entries={entries.map(e => ({ ...e, lines: e.lines.filter(l => g.categories.some(c => c.id === l.wo_item_id)) }))}
-              totals={totals}
-              onRaiseBill={raiseBill}
-              raisingId={raisingId}
-              onEdit={setEditingEntry}
-              onDelete={deleteEntry}
+              equipmentGroups={equipmentGroups}
+              onCreateBill={(pf) => { setPrefillHours(pf); setShowAdd(true); }}
             />
-          ))
+
+            {/* Bill entries grouped by equipment */}
+            {equipmentGroups.map(g => (
+              <GroupTable
+                key={g.equipment_group}
+                wo={wo}
+                group={g}
+                entries={entries.map(e => ({ ...e, lines: e.lines.filter(l => g.categories.some(c => c.id === l.wo_item_id)) }))}
+                totals={totals}
+                onRaiseBill={raiseBill}
+                raisingId={raisingId}
+                onEdit={setEditingEntry}
+                onDelete={deleteEntry}
+                onFilesClick={setFilesEntry}
+              />
+            ))}
+          </>
         )}
       </div>
 
@@ -690,8 +1053,17 @@ export default function HireUsageTrackerPage() {
         <EntryModal wo={wo} equipmentGroups={equipmentGroups} entry={editingEntry} onClose={() => setEditingEntry(null)} />
       )}
 
+      {filesEntry && wo && (
+        <EntryFilesModal wo={wo} entry={filesEntry} onClose={() => setFilesEntry(null)} />
+      )}
+
       {showAdd && wo && (
-        <EntryModal wo={wo} equipmentGroups={equipmentGroups} onClose={() => setShowAdd(false)} />
+        <EntryModal
+          wo={wo}
+          equipmentGroups={equipmentGroups}
+          prefillHours={prefillHours || undefined}
+          onClose={() => { setShowAdd(false); setPrefillHours(null); }}
+        />
       )}
       {showSetup && (
         <SetupWOModal

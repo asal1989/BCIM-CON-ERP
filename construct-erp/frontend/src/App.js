@@ -1,8 +1,9 @@
 // src/App.js
 import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, QueryCache } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 import useAuthStore from './store/authStore';
 import Layout from './components/layout/Layout';
 import LoadingScreen from './components/common/LoadingScreen';
@@ -11,7 +12,22 @@ import InstallBanner from './components/common/InstallBanner';
 import { LanguageProvider } from './context/LanguageContext';
 import { ChatProvider } from './context/ChatContext';
 
+// Many pages call useQuery and only read {data, isLoading} — a failed
+// request then renders as an empty list or an infinite spinner with no
+// indication anything went wrong. react-query v5 dropped per-query onError,
+// so a QueryCache-level handler is the systemic fix: any query error surfaces
+// a toast unless the page opts out with `meta: { silent: true }`. 401/403 are
+// skipped here since the axios interceptor already handles auth redirects.
 const queryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: (error, query) => {
+      if (query.meta?.silent) return;
+      const status = error?.response?.status;
+      if (status === 401 || status === 403) return;
+      const message = error?.response?.data?.error || error?.message || 'Failed to load data';
+      toast.error(message, { id: `query-error-${query.queryKey.join('-')}` });
+    },
+  }),
   defaultOptions: {
     queries: {
       retry: 1,
@@ -229,6 +245,7 @@ const Project360Page      = lazy(() => import('./pages/reports/Project360Page'))
 const BillsTrackerPage    = lazy(() => import('./pages/bills/BillsTrackerPage'));
 const UsersPage           = lazy(() => import('./pages/users/UsersPage'));
 const AuditLogPage        = lazy(() => import('./pages/admin/AuditLogPage'));
+const MailCenterPage      = lazy(() => import('./pages/admin/MailCenterPage'));
 const RolePermissionsPage = lazy(() => import('./pages/admin/RolePermissionsPage'));
 const MRSVerificationPage = lazy(() => import('./pages/stores/MRSVerificationPage'));
 const POVerificationPage = lazy(() => import('./pages/procurement/POVerificationPage'));
@@ -244,6 +261,7 @@ const SCProgress         = lazy(() => import('./pages/sc/SCProgress'));
 const SCBillPreparation  = lazy(() => import('./pages/sc/SCBillPreparation'));
 const HireUsageTrackerPage = lazy(() => import('./pages/sc/HireUsageTrackerPage'));
 const SCBillApproval     = lazy(() => import('./pages/sc/SCBillApproval'));
+const PaymentRecommendationPage = lazy(() => import('./pages/sc/PaymentRecommendationPage'));
 const SCPayments         = lazy(() => import('./pages/sc/SCPayments'));
 const SCDeductions       = lazy(() => import('./pages/sc/SCDeductions'));
 const SCDocuments        = lazy(() => import('./pages/sc/SCDocuments'));
@@ -282,7 +300,11 @@ const HRDashboardPage       = lazy(() => import('./pages/hr-admin/HRDashboardPag
 const HREmployeeListPage    = lazy(() => import('./pages/hr-admin/EmployeeListPage'));
 const HREmployeeFormPage    = lazy(() => import('./pages/hr-admin/EmployeeFormPage'));
 const HREmployeeDetailPage  = lazy(() => import('./pages/hr-admin/EmployeeDetailPage'));
-const HRAttendancePage      = lazy(() => import('./pages/hr-admin/AttendancePage'));
+const HRAttendancePage            = lazy(() => import('./pages/hr-admin/AttendancePage'));
+const HRAttendanceDashboardPage   = lazy(() => import('./pages/hr-admin/attendance/AttendanceDashboardPage'));
+const HRBiometricAttendancePage   = lazy(() => import('./pages/hr-admin/attendance/BiometricAttendancePage'));
+const HRAttendanceRegularizationPage = lazy(() => import('./pages/hr-admin/attendance/AttendanceRegularizationPage'));
+const HRTimesheetReportPage          = lazy(() => import('./pages/hr-admin/attendance/TimesheetReportPage'));
 const HRLeaveManagementPage = lazy(() => import('./pages/hr-admin/LeaveManagementPage'));
 const HRPayrollPage         = lazy(() => import('./pages/hr-admin/PayrollPage'));
 const HRPayslipPrintPage    = lazy(() => import('./pages/hr-admin/PayslipPrintPage'));
@@ -319,7 +341,31 @@ const HRPoliciesPage          = lazy(() => import('./pages/hr-admin/HRPoliciesPa
 const HRSegmentsPage          = lazy(() => import('./pages/hr-admin/HRSegmentsPage'));
 const HREmployeeFiltersPage   = lazy(() => import('./pages/hr-admin/HREmployeeFiltersPage'));
 const HRCompliancePage            = lazy(() => import('./pages/hr-admin/HRCompliancePage'));
+const ComplianceTrackerPage       = lazy(() => import('./pages/hr-admin/compliance/CompliancePage'));
 const HRConfirmationReportPage    = lazy(() => import('./pages/hr-admin/HRConfirmationReportPage'));
+const HRCompanySettingsPage       = lazy(() => import('./pages/hr-admin/CompanySettingsPage'));
+const HRMasterSettingsPage        = lazy(() => import('./pages/hr-admin/MasterSettingsPage'));
+const HRSmsSettingsPage           = lazy(() => import('./pages/hr-admin/SmsSettingsPage'));
+const HRShiftCalendarPage         = lazy(() => import('./pages/hr-admin/ShiftCalendarPage'));
+const HRShiftRosterPage           = lazy(() => import('./pages/hr-admin/ShiftRosterPage'));
+const HREmployeeCategoriesPage    = lazy(() => import('./pages/hr-admin/EmployeeCategoriesPage'));
+const HREmployeeShiftsPage        = lazy(() => import('./pages/hr-admin/EmployeeShiftsPage'));
+const HRShiftSchedulePage         = lazy(() => import('./pages/hr-admin/ShiftSchedulePage'));
+const HRLeaveEntriesPage          = lazy(() => import('./pages/hr-admin/LeaveEntriesPage'));
+const HROutdoorEntriesPage        = lazy(() => import('./pages/hr-admin/OutdoorEntriesPage'));
+const HRGeofencesPage             = lazy(() => import('./pages/hr-admin/GeofencesPage'));
+const HRWorkCodesPage             = lazy(() => import('./pages/hr-admin/WorkCodesPage'));
+const HRRecalculateAttendancePage = lazy(() => import('./pages/hr-admin/reports/RecalculateAttendancePage'));
+const HRDailyAttendanceReportPage = lazy(() => import('./pages/hr-admin/reports/DailyAttendanceReportPage'));
+const HRMonthlyStatusPage         = lazy(() => import('./pages/hr-admin/reports/MonthlyStatusPage'));
+const HRYearlySummaryPage         = lazy(() => import('./pages/hr-admin/reports/YearlySummaryPage'));
+const HRAttendanceSummaryPage     = lazy(() => import('./pages/hr-admin/reports/AttendanceSummaryPage'));
+const HRLeaveSummaryPage          = lazy(() => import('./pages/hr-admin/reports/LeaveSummaryPage'));
+const HREmployeeDetailsReportPage = lazy(() => import('./pages/hr-admin/reports/EmployeeDetailsReportPage'));
+const HRReportsShiftSchedulePage  = lazy(() => import('./pages/hr-admin/reports/ShiftSchedulePage'));
+const HRDepartmentSummaryPage     = lazy(() => import('./pages/hr-admin/reports/DepartmentSummaryPage'));
+const HRLogRecordsPage            = lazy(() => import('./pages/hr-admin/reports/LogRecordsPage'));
+const HRRandomCheckReportPage     = lazy(() => import('./pages/hr-admin/reports/RandomCheckReportPage'));
 
 // ── Home route resolver — sends each user to their first accessible page ──────
 const MODULE_HOME = {
@@ -364,18 +410,12 @@ const ADMIN_ROLES = [
   'stores_manager', 'store_keeper', 'security_guard',
 ];
 
-// Managing-director roles get the approvals view embedded in their main dashboard.
-const MD_DASHBOARD_ROLES  = ['md', 'managing_director'];
-const MD_DASHBOARD_EMAILS = ['stephen@bcim.in', 'it@bcim.in'];
-
 // Returns true for anyone who should land on the executive dashboard with approvals embedded.
-// Checked in routing, project-gate bypass, and dashboard render — kept in one place.
+// The server sets can_access_executive_dashboard based on role + env-configured email list,
+// so no email addresses live in this bundle.
 function isMDDashboardUser(user) {
   if (!user) return false;
-  const role = String(user.role || '').toLowerCase();
-  return MD_DASHBOARD_ROLES.includes(role)
-    || ['admin', 'super_admin'].includes(role)
-    || MD_DASHBOARD_EMAILS.includes((user.email || '').toLowerCase());
+  return !!user.can_access_executive_dashboard;
 }
 
 function getHomeRoute(user) {
@@ -401,6 +441,9 @@ function getHomeRoute(user) {
 
 // Global roles bypass project selection (they see all projects company-wide)
 const GLOBAL_ROLES = ['super_admin', 'admin', 'managing_director', 'director', 'ceo', 'cfo', 'md'];
+
+// Budget breakdown access is server-derived (can_access_budget_breakdown flag).
+// No email addresses are hardcoded here.
 
 // Route guard — blocks access until token is verified with backend.
 // Also enforces a project selection for scoped users (anyone not in GLOBAL_ROLES).
@@ -439,6 +482,10 @@ function HomeRedirect() {
 // Module-level route guard — redirects to home if user lacks the required module
 function RequireModule({ module, children }) {
   const { user } = useAuthStore();
+  // HR & Admin: display everything (labels, staff/worker names, values) in
+  // uppercase. Purely visual — the underlying data and form values are
+  // untouched, only how they render inside this module.
+  if (module === 'HR & Admin') children = <div className="hr-admin-uppercase">{children}</div>;
   if (!user) return <Navigate to="/login" replace />;
   if (['admin', 'super_admin'].includes(user.role)) return children;
   // Stores-floor roles always have the Stores module — their home route lives
@@ -446,7 +493,10 @@ function RequireModule({ module, children }) {
   const STORES_ROLES = ['security_guard', 'store_keeper', 'stores_manager', 'stores_officer'];
   if (module === 'Stores' && STORES_ROLES.includes(String(user.role || '').toLowerCase())) return children;
   const mods = user.accessible_modules;
-  if (!mods || mods.length === 0) return children; // unconfigured account → full access
+  // No modules assigned → deny access (redirect to home). super_admin/admin already returned above.
+  // Previously this was full-access; changed to deny-by-default so new accounts are
+  // blocked until an admin explicitly assigns modules.
+  if (!mods || mods.length === 0) return <Navigate to={getHomeRoute(user)} replace />;
   const legacyAliases = [
     ...(module === 'Reports'          ? ['CRM & Reports'] : []),
     ...(module === 'Bill Tracker'     ? ['DQS Tracker']   : []),
@@ -467,7 +517,7 @@ function RequireAnyModule({ modules, children }) {
   if (!user) return <Navigate to="/login" replace />;
   if (['admin', 'super_admin'].includes(user.role)) return children;
   const mods = user.accessible_modules;
-  if (!mods || mods.length === 0) return children;
+  if (!mods || mods.length === 0) return <Navigate to={getHomeRoute(user)} replace />;
   const expandedModules = modules.flatMap(module => {
     if (module === 'Bill Tracker') return ['Bill Tracker', 'DQS Tracker'];
     if (module === 'DQS Tracker') return ['DQS Tracker', 'Bill Tracker'];
@@ -482,15 +532,11 @@ function RequireAnyModule({ modules, children }) {
 // across three different routes, all rendering the same cost/margin data —
 // effectively open to most project staff. Locked to an explicit allow-list
 // per direct request: super_admin, the procurement team, and stephen@bcim.in.
-const BUDGET_BREAKDOWN_ROLES = ['procurement_manager', 'purchase_executive'];
-const BUDGET_BREAKDOWN_EMAILS = ['stephen@bcim.in'];
 function RequireBudgetAccess({ children }) {
   const { user } = useAuthStore();
   if (!user) return <Navigate to="/login" replace />;
-  const role = String(user.role || '').toLowerCase();
-  const email = String(user.email || '').toLowerCase();
-  const allowed = role === 'super_admin' || BUDGET_BREAKDOWN_ROLES.includes(role) || BUDGET_BREAKDOWN_EMAILS.includes(email);
-  if (allowed) return children;
+  // Access determined server-side via can_access_budget_breakdown (no emails in bundle)
+  if (user.can_access_budget_breakdown) return children;
   return <Navigate to={getHomeRoute(user)} replace />;
 }
 
@@ -623,6 +669,8 @@ export default function App() {
                 <Route path="qs/variations" element={<RequireModule module="QS & Billing"><VariationPage /></RequireModule>} />
                 <Route path="qs/norms" element={<RequireModule module="QS & Billing"><ConsumptionNormsPage /></RequireModule>} />
                 <Route path="qs/reports" element={<RequireModule module="QS & Billing"><QSReportsPage /></RequireModule>} />
+                <Route path="qs/advance-tracker"  element={<RequireModule module="QS & Billing"><ProcurementAdvanceTrackerPage /></RequireModule>} />
+                <Route path="qs/advances/:id"     element={<RequireModule module="QS & Billing"><ProcurementAdvanceVoucherDetailPage /></RequireModule>} />
 
                 {/* Accounts (Zoho Books style) */}
                 <Route path="accounts" element={<RequireModule module="Finance"><AccountsDashboard /></RequireModule>} />
@@ -792,6 +840,7 @@ export default function App() {
                 <Route path="sc/bill-preparation" element={<RequireModule module="Subcontractors"><SCBillPreparation /></RequireModule>} />
                 <Route path="sc/hire-usage-tracker" element={<RequireModule module="Subcontractors"><HireUsageTrackerPage /></RequireModule>} />
                 <Route path="sc/bill-approval"    element={<RequireModule module="Subcontractors"><SCBillApproval /></RequireModule>} />
+                <Route path="sc/payment-recommendations" element={<RequireModule module="Subcontractors"><PaymentRecommendationPage /></RequireModule>} />
                 <Route path="sc/payments"         element={<RequireModule module="Subcontractors"><SCPayments /></RequireModule>} />
                 <Route path="sc/deductions"       element={<RequireModule module="Subcontractors"><SCDeductions /></RequireModule>} />
                 <Route path="sc/documents"        element={<RequireModule module="Subcontractors"><SCDocuments /></RequireModule>} />
@@ -815,6 +864,7 @@ export default function App() {
                 <Route path="hr-admin/segments" element={<RequireModule module="HR & Admin"><HRSegmentsPage /></RequireModule>} />
                 <Route path="hr-admin/emp-filters"  element={<RequireModule module="HR & Admin"><HREmployeeFiltersPage /></RequireModule>} />
                 <Route path="hr-admin/compliance"  element={<RequireModule module="HR & Admin"><HRCompliancePage /></RequireModule>} />
+                <Route path="hr-admin/compliance-tracker" element={<RequireModule module="HR & Admin"><ComplianceTrackerPage /></RequireModule>} />
                 <Route path="hr-admin/reports/confirmation" element={<RequireModule module="HR & Admin"><HRConfirmationReportPage /></RequireModule>} />
                 <Route path="hr-admin/employees" element={<RequireModule module="HR & Admin"><HREmployeeListPage /></RequireModule>} />
                 <Route path="hr-admin/project-staff" element={<RequireModule module="HR & Admin"><HRProjectStaffPage /></RequireModule>} />
@@ -825,6 +875,10 @@ export default function App() {
                 <Route path="hr-admin/employees/:id" element={<RequireModule module="HR & Admin"><HREmployeeDetailPage /></RequireModule>} />
                 <Route path="hr-admin/employees/:id/edit" element={<RequireModule module="HR & Admin"><HREmployeeFormPage /></RequireModule>} />
                 <Route path="hr-admin/attendance" element={<RequireModule module="HR & Admin"><HRAttendancePage /></RequireModule>} />
+                <Route path="hr-admin/attendance/dashboard" element={<RequireModule module="HR & Admin"><HRAttendanceDashboardPage /></RequireModule>} />
+                <Route path="hr-admin/attendance/biometric" element={<RequireModule module="HR & Admin"><HRBiometricAttendancePage /></RequireModule>} />
+                <Route path="hr-admin/attendance/regularization" element={<RequireModule module="HR & Admin"><HRAttendanceRegularizationPage /></RequireModule>} />
+                <Route path="hr-admin/attendance/timesheet" element={<RequireModule module="HR & Admin"><HRTimesheetReportPage /></RequireModule>} />
                 <Route path="hr-admin/leaves" element={<RequireModule module="HR & Admin"><HRLeaveManagementPage /></RequireModule>} />
                 <Route path="hr-admin/payroll" element={<RequireModule module="HR & Admin"><HRPayrollPage /></RequireModule>} />
                 <Route path="hr-admin/payroll/:id/payslip" element={<RequireModule module="HR & Admin"><HRPayslipPrintPage /></RequireModule>} />
@@ -849,7 +903,30 @@ export default function App() {
                 <Route path="hr-admin/training"     element={<RequireModule module="HR & Admin"><HRTrainingPage /></RequireModule>} />
                 <Route path="hr-admin/emp-assets"   element={<RequireModule module="HR & Admin"><HREmployeeAssetsPage /></RequireModule>} />
                 <Route path="hr-admin/travel"       element={<RequireModule module="HR & Admin"><HRTravelRequestPage /></RequireModule>} />
-                <Route path="hr-admin/recruitment"  element={<RequireModule module="HR & Admin"><HRRecruitmentPage /></RequireModule>} />
+                <Route path="hr-admin/recruitment"     element={<RequireModule module="HR & Admin"><HRRecruitmentPage /></RequireModule>} />
+                <Route path="hr-admin/company-settings" element={<RequireModule module="HR & Admin"><HRCompanySettingsPage /></RequireModule>} />
+                <Route path="hr-admin/master-settings"  element={<RequireModule module="HR & Admin"><HRMasterSettingsPage /></RequireModule>} />
+                <Route path="hr-admin/sms-settings"     element={<RequireModule module="HR & Admin"><HRSmsSettingsPage /></RequireModule>} />
+                <Route path="hr-admin/shift-calendar"   element={<RequireModule module="HR & Admin"><HRShiftCalendarPage /></RequireModule>} />
+                <Route path="hr-admin/shift-roster"     element={<RequireModule module="HR & Admin"><HRShiftRosterPage /></RequireModule>} />
+                <Route path="hr-admin/emp-categories"   element={<RequireModule module="HR & Admin"><HREmployeeCategoriesPage /></RequireModule>} />
+                <Route path="hr-admin/emp-shifts"       element={<RequireModule module="HR & Admin"><HREmployeeShiftsPage /></RequireModule>} />
+                <Route path="hr-admin/shift-schedule"   element={<RequireModule module="HR & Admin"><HRShiftSchedulePage /></RequireModule>} />
+                <Route path="hr-admin/leave-entries"    element={<RequireModule module="HR & Admin"><HRLeaveEntriesPage /></RequireModule>} />
+                <Route path="hr-admin/outdoor-entries"  element={<RequireModule module="HR & Admin"><HROutdoorEntriesPage /></RequireModule>} />
+                <Route path="hr-admin/geofences"        element={<RequireModule module="HR & Admin"><HRGeofencesPage /></RequireModule>} />
+                <Route path="hr-admin/work-codes"       element={<RequireModule module="HR & Admin"><HRWorkCodesPage /></RequireModule>} />
+                <Route path="hr-admin/attendance/recalculate"      element={<RequireModule module="HR & Admin"><HRRecalculateAttendancePage /></RequireModule>} />
+                <Route path="hr-admin/reports/daily-attendance"    element={<RequireModule module="HR & Admin"><HRDailyAttendanceReportPage /></RequireModule>} />
+                <Route path="hr-admin/reports/monthly-status"      element={<RequireModule module="HR & Admin"><HRMonthlyStatusPage /></RequireModule>} />
+                <Route path="hr-admin/reports/yearly-summary"      element={<RequireModule module="HR & Admin"><HRYearlySummaryPage /></RequireModule>} />
+                <Route path="hr-admin/reports/attendance-summary"  element={<RequireModule module="HR & Admin"><HRAttendanceSummaryPage /></RequireModule>} />
+                <Route path="hr-admin/reports/leave-summary"       element={<RequireModule module="HR & Admin"><HRLeaveSummaryPage /></RequireModule>} />
+                <Route path="hr-admin/reports/employee-details"    element={<RequireModule module="HR & Admin"><HREmployeeDetailsReportPage /></RequireModule>} />
+                <Route path="hr-admin/reports/shift-schedule"      element={<RequireModule module="HR & Admin"><HRReportsShiftSchedulePage /></RequireModule>} />
+                <Route path="hr-admin/reports/department-summary"  element={<RequireModule module="HR & Admin"><HRDepartmentSummaryPage /></RequireModule>} />
+                <Route path="hr-admin/reports/log-records"         element={<RequireModule module="HR & Admin"><HRLogRecordsPage /></RequireModule>} />
+                <Route path="hr-admin/reports/random-check"        element={<RequireModule module="HR & Admin"><HRRandomCheckReportPage /></RequireModule>} />
 
                 {/* Planning */}
                 <Route path="planning" element={<RequireModule module="Planning"><PlanningDashboard /></RequireModule>} />
@@ -997,6 +1074,7 @@ export default function App() {
                 {/* Administration */}
                 <Route path="users" element={<RequireModule module="Administration"><UsersPage /></RequireModule>} />
                 <Route path="audit-log" element={<RequireModule module="Administration"><AuditLogPage /></RequireModule>} />
+                <Route path="mail-center" element={<RequireModule module="Administration"><MailCenterPage /></RequireModule>} />
                 <Route path="role-permissions" element={<RequireModule module="Administration"><RolePermissionsPage /></RequireModule>} />
                 <Route path="automation-ideas" element={<RequireModule module="Automation Ideas"><AutomationIdeasPage /></RequireModule>} />
                 <Route path="approval-engine" element={<RequireModule module="Approval Engine"><ApprovalEnginePage /></RequireModule>} />

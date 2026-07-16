@@ -586,7 +586,7 @@ export default function DQSDashboardPage() {
                   >
                     <AlertTriangle size={14} color="#EF4444" style={{ flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: 12, fontWeight: 600, color: '#0F172A', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.vendor_name}</p>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: '#0F172A', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(b.vendor_name || '').toUpperCase()}</p>
                       <p style={{ fontSize: 11, color: '#DC2626', margin: '1px 0 0', fontWeight: 600 }}>₹{inr(b.certified_net || b.total_amount)}</p>
                     </div>
                     <ChevronRight size={13} color="#94A3B8" />
@@ -629,7 +629,7 @@ export default function DQSDashboardPage() {
                     onMouseEnter={e => { e.currentTarget.style.background = '#F8FAFC'; }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                   >
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.vendor_name}</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(b.vendor_name || '').toUpperCase()}</span>
                     <span style={{ fontSize: 11, color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>{b.inv_number || b.sl_number}</span>
                     <span style={{ fontSize: 12, fontWeight: 700, color: '#0F172A' }}>₹{inr(b.total_amount)}</span>
                     <span style={{ fontSize: 10, fontWeight: 600, color: cfg.color, background: cfg.bg, padding: '3px 8px', borderRadius: 20, textAlign: 'center', whiteSpace: 'nowrap', border: `1px solid ${cfg.color}33` }}>

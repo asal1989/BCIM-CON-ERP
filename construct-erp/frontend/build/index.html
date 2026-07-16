@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#1D4ED8" />
+  <meta name="description" content="BCIM Engineering Pvt Ltd — ConstructERP India Pro v3.0" />
+  <link rel="icon" type="image/png" href="/bcim-logo.png" />
+
+  <!-- PWA manifest -->
+  <link rel="manifest" href="/manifest.json" />
+
+  <!-- iOS Safari — "Add to Home Screen" support -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="BCIM ERP" />
+  <link rel="apple-touch-icon" href="/bcim-logo.png" />
+
+  <!-- IBM Plex Sans + IBM Plex Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Space Grotesk + Inter + JetBrains Mono — scoped to the DPR Console (.dpr-console) -->
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <title>BCIM ERP — BCIM Engineering Private Limited</title>
+  <script type="module" crossorigin src="/assets/index-DIwaGN6o.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/vendor-react-C3P8e1DV.js">
+  <link rel="modulepreload" crossorigin href="/assets/vendor-data-693MZDSQ.js">
+  <link rel="modulepreload" crossorigin href="/assets/vendor-ui-BISbFNDL.js">
+  <link rel="modulepreload" crossorigin href="/assets/vendor-icons-BtVJXhVq.js">
+  <link rel="modulepreload" crossorigin href="/assets/vendor-forms-gVMGBE4b.js">
+  <link rel="stylesheet" crossorigin href="/assets/index-u1s_PI-A.css">
+</head>
+<body>
+  <noscript>You need to enable JavaScript to run this app.</noscript>
+  <div id="root"></div>
+  <script>
+    // PWA service worker + AUTO-UPDATE. Without the controllerchange reload
+    // below, a new deploy would keep serving the old cached bundle until the
+    // user manually cleared their cache — the recurring "my changes aren't
+    // showing in production" problem. The SW calls skipWaiting()+clients.claim(),
+    // so a new version takes control immediately; this listener then reloads
+    // the page once so the fresh assets actually render.
+    if ('serviceWorker' in navigator) {
+      var hadController = !!navigator.serviceWorker.controller;
+      var swRefreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (swRefreshing) return;
+        swRefreshing = true;
+        // Reload only when REPLACING an existing controller (a real update) —
+        // not on the very first SW install for a brand-new visitor.
+        if (hadController) window.location.reload();
+      });
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/sw.js').then(function (reg) {
+          // Proactively check for a newer SW on every page load.
+          reg.update();
+        }).catch(function (e) {
+          console.warn('[SW] Registration failed:', e);
+        });
+      });
+    }
+  </script>
+</body>
+</html>

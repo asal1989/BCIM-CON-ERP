@@ -966,6 +966,54 @@ export const REPORTS = [
       { key:'delayedCount', label:'Delayed GRNs',   type:'number', keys:['delayed_count'] },
     ],
   },
+  {
+    key:'procurement-vendor-material-supply', dept:'procurement', category:'Vendor Reports', title:'Vendor-wise Material Supply', icon:Truck, color:'amber',
+    desc:'Material-wise supply summary per vendor — PO ordered vs GRN received quantity and value',
+    filters:['dateRange','project'],
+    endpoint:'/purchase-orders/items-report',
+    dataKey:'data',
+    aggregate: rows => {
+      const m = {};
+      rows.forEach(r => {
+        const key = `${r.vendor_name}||${r.material_name}||${r.unit}`;
+        if (!m[key]) m[key] = {
+          vendor_name: r.vendor_name,
+          material_name: r.material_name,
+          unit: r.unit || '',
+          po_count: 0,
+          ordered_qty: 0,
+          received_qty: 0,
+          supplied_value: 0,
+          balance_qty: 0,
+        };
+        const rate = parseFloat(r.rate) || (parseFloat(r.total_amount) / (parseFloat(r.quantity) || 1));
+        m[key].po_count += 1;
+        m[key].ordered_qty  += parseFloat(r.quantity) || 0;
+        m[key].received_qty += parseFloat(r.received_quantity) || 0;
+        m[key].supplied_value += (parseFloat(r.received_quantity) || 0) * (rate || 0);
+      });
+      return Object.values(m).map(r => ({
+        ...r,
+        balance_qty: Math.max(0, r.ordered_qty - r.received_qty),
+        supply_pct: r.ordered_qty > 0 ? ((r.received_qty / r.ordered_qty) * 100).toFixed(1) + '%' : '—',
+      })).sort((a, b) =>
+        (a.vendor_name || '').localeCompare(b.vendor_name || '') ||
+        (a.material_name || '').localeCompare(b.material_name || '')
+      );
+    },
+    columns:[
+      { key:'vendor_name',    label:'Vendor' },
+      { key:'material_name',  label:'Material' },
+      { key:'unit',           label:'Unit' },
+      { key:'po_count',       label:'POs',           type:'number' },
+      { key:'ordered_qty',    label:'Ordered Qty',   type:'number' },
+      { key:'received_qty',   label:'Supplied (GRN)',type:'number' },
+      { key:'balance_qty',    label:'Balance Qty',   type:'number' },
+      { key:'supply_pct',     label:'Supply %' },
+      { key:'supplied_value', label:'Supplied Value (₹)', type:'amount' },
+    ],
+    chart:{ type:'bar', xKey:'vendor_name', limit:10, bars:[{ key:'supplied_value', label:'Supplied Value (₹)', type:'amount' }] },
+  },
 
   // -- Cost Analysis Reports --
   {

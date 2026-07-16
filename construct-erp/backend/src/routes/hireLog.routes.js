@@ -6,13 +6,67 @@
 // BOQ-quantity Raise Bill flow which assumes a single fixed quantity per item.
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const path   = require('path');
+const fs     = require('fs');
 const { authenticate, authorize } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
+const { uploadToOneDrive, isConfigured } = require('../services/onedrive.service');
+
+// ── Multer storage for hire log file attachments ───────────────────────────
+const hireLogStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, '../../uploads/hire-log', req.params.entryId || 'tmp');
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, `${Date.now()}-${safe}`);
+  },
+});
+const hireLogUpload = multer({ storage: hireLogStorage, limits: { fileSize: 20 * 1024 * 1024 } });
 
 router.use(authenticate);
 const CID = req => req.user.company_id;
 const PLANNER = ['super_admin', 'admin', 'project_manager', 'site_engineer', 'qs_engineer', 'procurement_manager'];
+
+runSchemaInit('hire_log_files_table', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS wo_hire_log_files (
+      id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      log_id           UUID NOT NULL REFERENCES wo_hire_log(id) ON DELETE CASCADE,
+      file_name        TEXT,
+      file_size        INT,
+      file_type        TEXT,
+      local_url        TEXT,
+      onedrive_id      TEXT,
+      onedrive_url     TEXT,
+      onedrive_web_url TEXT,
+      uploaded_by      UUID,
+      uploaded_at      TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_hire_log_files_log ON wo_hire_log_files(log_id)`);
+});
+
+runSchemaInit('hire_daily_log_table', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS wo_hire_daily_log (
+      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id   UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      wo_id        UUID NOT NULL REFERENCES sc_work_orders(id) ON DELETE CASCADE,
+      work_date    DATE NOT NULL,
+      wo_item_id   UUID NOT NULL REFERENCES sc_wo_items(id),
+      qty          NUMERIC(10,3) NOT NULL DEFAULT 0,
+      notes        TEXT,
+      created_by   UUID REFERENCES users(id),
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_hire_daily_log_wo ON wo_hire_daily_log(wo_id, work_date)`);
+});
 
 runSchemaInit('hire_log_tables', async () => {
   await query(`ALTER TABLE sc_wo_items ADD COLUMN IF NOT EXISTS equipment_group VARCHAR(200)`);
@@ -235,6 +289,151 @@ router.patch('/:woId/items/:itemId/categorize', authorize(...PLANNER), async (re
     if (!r.rows.length) return res.status(404).json({ error: 'Item not found' });
     res.json({ data: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Daily Log CRUD ──────────────────────────────────────────────────────────
+
+// GET /:woId/daily — list daily log entries for a WO
+router.get('/:woId/daily', async (req, res) => {
+  try {
+    const r = await query(
+      `SELECT d.*, i.description AS item_description, i.unit AS item_unit,
+              i.equipment_group, i.usage_category, i.rate
+         FROM wo_hire_daily_log d
+         JOIN sc_wo_items i ON i.id = d.wo_item_id
+        WHERE d.wo_id=$1 AND d.company_id=$2
+        ORDER BY d.work_date ASC, d.created_at ASC`,
+      [req.params.woId, CID(req)]
+    );
+    res.json({ data: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /:woId/daily — add a daily log entry
+router.post('/:woId/daily', authorize(...PLANNER), async (req, res) => {
+  try {
+    const { work_date, wo_item_id, qty, notes } = req.body;
+    if (!work_date || !wo_item_id || qty == null)
+      return res.status(400).json({ error: 'work_date, wo_item_id and qty are required' });
+    const check = await query(`SELECT id FROM sc_wo_items WHERE id=$1 AND wo_id=$2`, [wo_item_id, req.params.woId]);
+    if (!check.rows.length) return res.status(400).json({ error: 'Item not found on this WO' });
+    const r = await query(
+      `INSERT INTO wo_hire_daily_log (company_id, wo_id, work_date, wo_item_id, qty, notes, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [CID(req), req.params.woId, work_date, wo_item_id, qty, notes || null, req.user.id]
+    );
+    res.status(201).json({ data: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /:woId/daily/:dailyId — delete a daily log entry
+router.delete('/:woId/daily/:dailyId', authorize(...PLANNER), async (req, res) => {
+  try {
+    const r = await query(
+      `DELETE FROM wo_hire_daily_log WHERE id=$1 AND wo_id=$2 AND company_id=$3 RETURNING id`,
+      [req.params.dailyId, req.params.woId, CID(req)]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Entry not found' });
+    res.json({ message: 'Deleted' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /hire-log/:woId/:entryId/files ────────────────────────────────────────
+router.get('/:woId/:entryId/files', async (req, res) => {
+  try {
+    const check = await query(
+      `SELECT id FROM wo_hire_log WHERE id=$1 AND wo_id=$2 AND company_id=$3`,
+      [req.params.entryId, req.params.woId, CID(req)]
+    );
+    if (!check.rows.length) return res.status(404).json({ error: 'Entry not found' });
+    const r = await query(
+      `SELECT * FROM wo_hire_log_files WHERE log_id=$1 ORDER BY uploaded_at DESC`,
+      [req.params.entryId]
+    );
+    res.json({ data: r.rows });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /hire-log/:woId/:entryId/files ───────────────────────────────────────
+router.post('/:woId/:entryId/files', hireLogUpload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  try {
+    const entryRes = await query(
+      `SELECT l.id, p.name AS project_name
+         FROM wo_hire_log l
+         JOIN sc_work_orders wo ON wo.id = l.wo_id
+         LEFT JOIN projects p ON p.id = wo.project_id
+        WHERE l.id=$1 AND l.wo_id=$2 AND l.company_id=$3`,
+      [req.params.entryId, req.params.woId, CID(req)]
+    );
+    if (!entryRes.rows.length) return res.status(404).json({ error: 'Entry not found' });
+    const projectName = entryRes.rows[0].project_name || 'General';
+
+    const local_url = `/uploads/hire-log/${req.params.entryId}/${req.file.filename}`;
+    let onedriveData = null;
+    try {
+      onedriveData = await uploadToOneDrive(req.file.path, req.file.originalname, 'Hire Log Sheets', projectName);
+    } catch (odErr) {
+      console.error('[hire-log] OneDrive upload failed:', odErr.message);
+    }
+
+    const r = await query(`
+      INSERT INTO wo_hire_log_files (log_id, file_name, file_size, file_type, local_url, onedrive_id, onedrive_url, onedrive_web_url, uploaded_by)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *
+    `, [
+      req.params.entryId, req.file.originalname, req.file.size, req.file.mimetype, local_url,
+      onedriveData?.onedrive_id || null,
+      onedriveData?.onedrive_url || null,
+      onedriveData?.onedrive_web_url || null,
+      req.user.id,
+    ]);
+    res.status(201).json({ data: r.rows[0], onedrive_synced: !!onedriveData, onedrive_configured: isConfigured() });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// ── DELETE /hire-log/:woId/:entryId/files/:fid ────────────────────────────────
+router.delete('/:woId/:entryId/files/:fid', authorize(...PLANNER), async (req, res) => {
+  try {
+    const check = await query(
+      `SELECT id FROM wo_hire_log WHERE id=$1 AND wo_id=$2 AND company_id=$3`,
+      [req.params.entryId, req.params.woId, CID(req)]
+    );
+    if (!check.rows.length) return res.status(404).json({ error: 'Entry not found' });
+    const f = await query(`SELECT * FROM wo_hire_log_files WHERE id=$1 AND log_id=$2`, [req.params.fid, req.params.entryId]);
+    if (!f.rows.length) return res.status(404).json({ error: 'File not found' });
+    if (f.rows[0].local_url) {
+      const full = path.join(__dirname, '../../', f.rows[0].local_url);
+      if (fs.existsSync(full)) fs.unlinkSync(full);
+    }
+    await query(`DELETE FROM wo_hire_log_files WHERE id=$1`, [req.params.fid]);
+    res.json({ message: 'Deleted' });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /hire-log/:woId/:entryId/files/:fid/serve ─────────────────────────────
+router.get('/:woId/:entryId/files/:fid/serve', async (req, res) => {
+  try {
+    const check = await query(
+      `SELECT id FROM wo_hire_log WHERE id=$1 AND wo_id=$2 AND company_id=$3`,
+      [req.params.entryId, req.params.woId, CID(req)]
+    );
+    if (!check.rows.length) return res.status(404).json({ error: 'Entry not found' });
+    const r = await query(`SELECT * FROM wo_hire_log_files WHERE id=$1 AND log_id=$2`, [req.params.fid, req.params.entryId]);
+    if (!r.rows.length) return res.status(404).json({ error: 'File not found' });
+    const f = r.rows[0];
+
+    const safeFileName = encodeURIComponent(f.file_name || 'file');
+    if (f.local_url) {
+      const full = path.join(__dirname, '../../', f.local_url);
+      if (fs.existsSync(full)) {
+        res.setHeader('Content-Type', f.file_type || 'application/octet-stream');
+        res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${safeFileName}`);
+        return fs.createReadStream(full).pipe(res);
+      }
+    }
+    if (f.onedrive_web_url) return res.redirect(f.onedrive_web_url);
+    res.status(404).json({ error: 'File no longer available' });
+  } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;

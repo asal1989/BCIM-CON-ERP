@@ -420,7 +420,7 @@ function ApprovalCard({ item, onApprove, onReject, onView, onMDReview, mdMode, i
 const MD_ROLES = ['md', 'managing_director', 'ceo', 'cfo', 'director', 'admin', 'super_admin'];
 const MD_EMAILS = ['stephen@bcim.in', 'it@bcim.in'];
 
-export default function ApprovalsPage({ embedded = false, mdMode = false }) {
+export default function ApprovalsPage({ embedded = false, mdMode = false, hideHeader = false }) {
   const { user }    = useAuthStore();
   const navigate    = useNavigate();
   const isMDUser = mdMode
@@ -504,7 +504,7 @@ export default function ApprovalsPage({ embedded = false, mdMode = false }) {
 
   return (
     <div style={embedded ? undefined : { background: Theme.pageBg, minHeight:'100vh' }}>
-      {embedded ? (
+      {embedded && !hideHeader ? (
         <div className="flex items-center justify-between mb-3">
           <div>
             <h2 className="text-base font-bold text-slate-800">
@@ -519,7 +519,7 @@ export default function ApprovalsPage({ embedded = false, mdMode = false }) {
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
           </button>
         </div>
-      ) : (
+      ) : embedded && hideHeader ? null : (
         <PageHeader
           title="My Approvals"
           subtitle={`Welcome back, ${user?.name?.split(' ')[0] || 'User'} — ${total} item${total!==1?'s':''} waiting for your action`}

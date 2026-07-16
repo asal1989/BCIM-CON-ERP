@@ -10,6 +10,14 @@ const { notifyLeaveRequested, notifyLeaveApproved, notifyLeaveRejected } = requi
 router.use(authenticate);
 router.use(authorize('super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager', 'manager', 'department_head'));
 
+const FULL_HR_ROLES_LEAVE = new Set(['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager']);
+async function getProjectScopeLeave(req) {
+  const role = String(req.user?.role || '').toLowerCase();
+  if (FULL_HR_ROLES_LEAVE.has(role)) return null;
+  const r = await query(`SELECT project_id FROM employee_profiles WHERE user_id=$1`, [req.user.id]);
+  return r.rows[0]?.project_id || null;
+}
+
 // ─── Auto-create tables ───────────────────────────────────────────────────────
 const initTables = async () => {
   await query(`
@@ -124,12 +132,14 @@ router.put('/balances/:id', async (req, res) => {
 router.get('/requests', async (req, res) => {
   try {
     const { user_id, status, from_date, to_date } = req.query;
+    const projectId = await getProjectScopeLeave(req);
     let sql = `
       SELECT lr.*, u.name as employee_name, u.employee_code,
              lt.name as leave_type_name, lt.code as leave_code,
              ab.name as actioned_by_name
       FROM hr_leave_requests lr
       JOIN users u ON u.id = lr.user_id
+      LEFT JOIN employee_profiles ep ON ep.user_id = u.id
       JOIN hr_leave_types lt ON lt.id = lr.leave_type_id
       LEFT JOIN users ab ON ab.id = lr.actioned_by
       WHERE lr.company_id = $1`;
@@ -140,6 +150,7 @@ router.get('/requests', async (req, res) => {
     if (status)  { sql += ` AND lr.status=$${idx}`;  params.push(status);  idx++; }
     if (from_date) { sql += ` AND lr.from_date >= $${idx}`; params.push(from_date); idx++; }
     if (to_date)   { sql += ` AND lr.to_date <= $${idx}`;   params.push(to_date);   idx++; }
+    if (projectId !== null) { sql += ` AND ep.project_id=$${idx}`; params.push(projectId); idx++; }
 
     sql += ' ORDER BY lr.applied_at DESC';
     const { rows } = await query(sql, params);
@@ -193,15 +204,33 @@ router.patch('/requests/:id/approve', async (req, res) => {
   try {
     await client.query('BEGIN');
 
+    const { rows: existing } = await client.query(
+      `SELECT * FROM hr_leave_requests WHERE id=$1 AND company_id=$2`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!existing.length) throw new Error('Leave request not found');
+    if (existing[0].user_id === req.user.id) throw new Error('Cannot approve your own leave request');
+    if (existing[0].status !== 'pending') throw new Error('Leave request is not pending');
+
+    const req_ = existing[0];
+    const yr = new Date(req_.from_date).getFullYear();
+
+    // Check sufficient balance before deducting
+    const ltInfo = await client.query(`SELECT is_paid FROM hr_leave_types WHERE id=$1`, [req_.leave_type_id]);
+    if (ltInfo.rows[0]?.is_paid) {
+      const bal = await client.query(
+        `SELECT closing_balance FROM hr_leave_balances WHERE user_id=$1 AND leave_type_id=$2 AND year=$3`,
+        [req_.user_id, req_.leave_type_id, yr]
+      );
+      const available = parseFloat(bal.rows[0]?.closing_balance || 0);
+      if (available < req_.days) throw new Error(`Insufficient leave balance: ${available} available, ${req_.days} requested`);
+    }
+
     const { rows: lr } = await client.query(
       `UPDATE hr_leave_requests SET status='approved', actioned_by=$1, actioned_at=NOW()
        WHERE id=$2 AND company_id=$3 RETURNING *`,
       [req.user.id, req.params.id, req.user.company_id]
     );
-    if (!lr.length) throw new Error('Leave request not found');
-
-    const req_ = lr[0];
-    const yr = new Date(req_.from_date).getFullYear();
 
     // Deduct from balance
     await client.query(

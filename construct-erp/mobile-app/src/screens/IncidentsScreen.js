@@ -10,4 +10,5 @@ export default makeListScreen({
   secondary: (item) => item.description || item.title,
   meta: (item) => item.incident_date ? `${item.incident_date} · ${item.severity || ''}` : null,
   status: (item) => item.status,
+  detailScreen: 'IncidentDetail',
 });

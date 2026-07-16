@@ -1,0 +1,83 @@
+name: Database backup
+
+# Railway's free/current plan has no built-in Postgres backups, so this
+# workflow dumps the database and uploads it to the same SharePoint site the
+# app already uses for document storage (via Microsoft Graph API, app-only
+# auth — same credentials as ONEDRIVE_* in the backend). Runs independently
+# of Railway, so it works even if the app itself is down.
+#
+# Manual trigger only (no cron): the dump contains full employee PII and
+# salary data, so a human runs this deliberately from the Actions tab rather
+# than it firing unattended every night.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Dump database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          STAMP=$(date -u +%Y-%m-%d_%H%M)
+          pg_dump "$DATABASE_URL" -Fc -f "backup_${STAMP}.dump"
+          echo "STAMP=${STAMP}" >> "$GITHUB_ENV"
+
+      - name: Get Graph API access token
+        env:
+          TENANT_ID: ${{ secrets.ONEDRIVE_TENANT_ID }}
+          CLIENT_ID: ${{ secrets.ONEDRIVE_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.ONEDRIVE_CLIENT_SECRET }}
+        run: |
+          TOKEN=$(curl -s -X POST \
+            "https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token" \
+            -d "client_id=${CLIENT_ID}" \
+            -d "client_secret=${CLIENT_SECRET}" \
+            -d "scope=https://graph.microsoft.com/.default" \
+            -d "grant_type=client_credentials" | jq -r '.access_token')
+          if [ "$TOKEN" == "null" ] || [ -z "$TOKEN" ]; then
+            echo "Failed to obtain Graph API token"; exit 1
+          fi
+          echo "::add-mask::$TOKEN"
+          echo "TOKEN=${TOKEN}" >> "$GITHUB_ENV"
+
+      - name: Upload backup to SharePoint
+        env:
+          SITE_ID: ${{ secrets.SHAREPOINT_SITE_ID }}
+        run: |
+          FILE="backup_${STAMP}.dump"
+          curl -s -X PUT \
+            "https://graph.microsoft.com/v1.0/sites/${SITE_ID}/drive/root:/ConstructERP/DB-Backups/${FILE}:/content" \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @"${FILE}" -o response.json
+          cat response.json
+          if jq -e '.id' response.json > /dev/null; then
+            echo "Backup uploaded: ${FILE}"
+          else
+            echo "Upload failed"; exit 1
+          fi
+
+      - name: Prune backups older than 30 days
+        env:
+          SITE_ID: ${{ secrets.SHAREPOINT_SITE_ID }}
+        run: |
+          CUTOFF=$(date -u -d '30 days ago' +%Y-%m-%d)
+          curl -s -H "Authorization: Bearer ${TOKEN}" \
+            "https://graph.microsoft.com/v1.0/sites/${SITE_ID}/drive/root:/ConstructERP/DB-Backups:/children?\$select=id,name" \
+            | jq -c '.value[]' | while read -r item; do
+              NAME=$(echo "$item" | jq -r '.name')
+              ITEM_ID=$(echo "$item" | jq -r '.id')
+              FILE_DATE=$(echo "$NAME" | grep -oP '(?<=backup_)\d{4}-\d{2}-\d{2}' || true)
+              if [ -n "$FILE_DATE" ] && [[ "$FILE_DATE" < "$CUTOFF" ]]; then
+                echo "Deleting old backup: $NAME"
+                curl -s -X DELETE \
+                  "https://graph.microsoft.com/v1.0/sites/${SITE_ID}/drive/items/${ITEM_ID}" \
+                  -H "Authorization: Bearer ${TOKEN}"
+              fi
+            done

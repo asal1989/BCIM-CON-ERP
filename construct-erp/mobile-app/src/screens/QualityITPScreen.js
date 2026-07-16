@@ -9,4 +9,5 @@ export default makeListScreen({
   primary: (item) => item.itp_number || item.title || `ITP #${item.id}`,
   secondary: (item) => item.activity_name || item.description,
   status: (item) => item.status,
+  detailScreen: 'ITPDetail',
 });

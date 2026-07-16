@@ -140,6 +140,12 @@ export default function RABillDetail() {
     onError: e => toast.error(e?.response?.data?.error || 'Rejection failed'),
   });
 
+  const revertMut = useMutation({
+    mutationFn: () => raBillAPI.revert(id),
+    onSuccess: () => { toast.success('Bill sent back to QS for editing'); invalidate(); },
+    onError: e => toast.error(e?.response?.data?.error || 'Revert failed'),
+  });
+
   const handleDownloadPDF = () => {
     if (!b) return;
     const doc = new jsPDF({ orientation: 'landscape' });
@@ -298,6 +304,21 @@ export default function RABillDetail() {
                 >
                   <CheckCircle2 size={14} />
                   {certifyMut.isPending ? 'Certifying…' : 'Certify Bill'}
+                </button>
+              )}
+
+              {/* Revert to QS — admin/super_admin only, when certified but not paid */}
+              {b.status === 'certified' && ['admin', 'super_admin'].includes(role) && (
+                <button
+                  onClick={() => {
+                    if (!window.confirm('Send this bill back to QS (verified) for editing? The GL journal entry will be reversed.')) return;
+                    revertMut.mutate();
+                  }}
+                  disabled={revertMut.isPending}
+                  className="h-9 px-4 rounded-xl text-[11px] font-medium border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  <XCircle size={14} />
+                  {revertMut.isPending ? 'Reverting…' : 'Revert to QS'}
                 </button>
               )}
 

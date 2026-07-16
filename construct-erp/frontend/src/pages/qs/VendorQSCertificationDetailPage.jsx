@@ -30,7 +30,10 @@ const netBg  = '#EAF1FB';
 
 const T = {
   page:     { fontFamily: "'Times New Roman',Times,serif", fontSize: '11px', color: '#0A0A0A', fontWeight: '500' },
-  sheet:    { width: '100%', background: '#fff', padding: '4mm 3mm 6mm 3mm', boxSizing: 'border-box', pageBreakAfter: 'always' },
+  // No forced pageBreakAfter here — each print mode (abstract/payment) shows
+  // exactly one visible .print-sheet at a time (the other is display:none),
+  // so an unconditional break-after just adds a wasted blank trailing page.
+  sheet:    { width: '100%', background: '#fff', padding: '4mm 3mm 6mm 3mm', boxSizing: 'border-box' },
   masthead: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: `3px double ${navy}`, paddingBottom: '10px', marginBottom: '10px' },
   logoArea: { display: 'flex', alignItems: 'center', gap: '12px' },
   coName:   { fontSize: '15px', fontWeight: 'bold', color: navy, letterSpacing: '0.6px', lineHeight: 1.2 },
@@ -55,7 +58,10 @@ const T = {
   amtBox:   { marginTop: '10px', border: `1px solid ${navy}`, borderLeft: `4px solid ${navy}`, padding: '7px 14px', fontSize: '11px', background: netBg, lineHeight: 1.6, fontWeight: '600' },
   remarks:  { fontSize: '9.5px', color: '#111', marginTop: '8px', borderTop: `1px solid #C8D6E8`, paddingTop: '5px', fontWeight: '500' },
   sigGrid:  { display: 'flex', gap: '6px', marginTop: '16px', flexWrap: 'wrap' },
-  sigBox:   { flex: '1 1 110px', minWidth: '100px', border: `1px solid #BCC8DC`, padding: '7px 5px', textAlign: 'center', fontSize: '9px', background: '#FAFCFF' },
+  // breakInside avoid stops Chrome's print engine from splitting a single
+  // signature box across a page boundary (it was rendering the box's top
+  // half on one page and duplicating the bottom half on the next).
+  sigBox:   { flex: '1 1 110px', minWidth: '100px', border: `1px solid #BCC8DC`, padding: '7px 5px', textAlign: 'center', fontSize: '9px', background: '#FAFCFF', breakInside: 'avoid', WebkitColumnBreakInside: 'avoid' },
   stamp:    { width: '52px', height: '44px', border: '1px dashed #AAB8CC', margin: '0 auto 5px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '7.5px', color: '#666', letterSpacing: '0.4px', fontWeight: 'bold' },
   sigRole:  { fontWeight: 'bold', color: navy, fontSize: '9px', marginBottom: '3px', lineHeight: '1.3' },
   sigDate:  { marginTop: '5px', fontSize: '8.5px', color: '#111', borderTop: '1px solid #C0C8D8', paddingTop: '3px', fontWeight: '500' },
@@ -211,22 +217,29 @@ function AbstractSheet({ cert }) {
       {/* colgroup sets explicit column widths so the 15-col table fills landscape A4 correctly.
           Total ≈ 281mm (A4 landscape 297mm − 8mm margins each side − 8mm sheet padding each side) */}
       <table style={T.tbl}>
+        {/* Percentage widths (sum = 100) + table-layout:fixed guarantee the
+            table always fills the printable width exactly and never overflows
+            the page horizontally, regardless of the render container width. */}
         <colgroup>
-          <col style={{width:'20px'}}/>  {/* Sl */}
-          <col style={{width:'28px'}}/>  {/* RA */}
-          <col style={{width:'17%'}}/>   {/* Description — proportional */}
-          <col style={{width:'24px'}}/>  {/* Unit */}
-          <col style={{width:'34px'}}/>  {/* Order Qty */}
-          <col style={{width:'50px'}}/>  {/* Order Rate */}
-          <col style={{width:'56px'}}/>  {/* Order Amount */}
-          <col style={{width:'34px'}}/>  {/* Inv Prev Qty */}
-          <col style={{width:'34px'}}/>  {/* Inv Pres Qty */}
-          <col style={{width:'56px'}}/>  {/* Inv Amount */}
-          <col style={{width:'34px'}}/>  {/* QS Prev Qty */}
-          <col style={{width:'34px'}}/>  {/* QS Pres Qty */}
-          <col style={{width:'56px'}}/>  {/* QS Amount */}
-          <col style={{width:'34px'}}/>  {/* Bal Qty */}
-          <col style={{width:'60px'}}/>  {/* Bal Amount */}
+          <col style={{width:'2%'}}/>    {/* Sl */}
+          <col style={{width:'3%'}}/>    {/* RA */}
+          <col style={{width:'23%'}}/>   {/* Description */}
+          <col style={{width:'3%'}}/>    {/* Unit */}
+          <col style={{width:'4%'}}/>    {/* Order Qty */}
+          <col style={{width:'5%'}}/>    {/* Order Rate */}
+          <col style={{width:'6.5%'}}/>  {/* Order Amount */}
+          <col style={{width:'4%'}}/>    {/* Inv Prev Qty */}
+          <col style={{width:'4%'}}/>    {/* Inv Pres Qty */}
+          <col style={{width:'6.5%'}}/>  {/* Inv Amount */}
+          <col style={{width:'4%'}}/>    {/* Weighment Qty */}
+          <col style={{width:'3.5%'}}/>  {/* MSB */}
+          <col style={{width:'3.5%'}}/>  {/* IGN */}
+          <col style={{width:'3.5%'}}/>  {/* GRS */}
+          <col style={{width:'4%'}}/>    {/* QS Prev Qty */}
+          <col style={{width:'4%'}}/>    {/* QS Pres Qty */}
+          <col style={{width:'6.5%'}}/>  {/* QS Amount */}
+          <col style={{width:'4%'}}/>    {/* Bal Qty */}
+          <col style={{width:'6%'}}/>    {/* Bal Amount */}
         </colgroup>
         <thead>
           <tr>
@@ -236,6 +249,10 @@ function AbstractSheet({ cert }) {
             <th style={T.th} rowSpan={2}>Unit</th>
             <th style={T.th} colSpan={3}>As Per Work / Purchase Order</th>
             <th style={T.th} colSpan={3}>As Per Invoice</th>
+            <th style={T.th} rowSpan={2}>As Per<br/>Weighment</th>
+            <th style={T.th} rowSpan={2}>MSB</th>
+            <th style={T.th} rowSpan={2}>IGN</th>
+            <th style={T.th} rowSpan={2}>GRS</th>
             <th style={T.th} colSpan={3}>As Per QS Certified</th>
             <th style={T.th} colSpan={2}>Balance</th>
           </tr>
@@ -265,6 +282,10 @@ function AbstractSheet({ cert }) {
                 <td style={T.tdR}>{fq(it.inv_prev_qty)}</td>
                 <td style={T.tdR}>{fq(it.inv_pres_qty)}</td>
                 <td style={T.tdR}>{raw(invAmt)}</td>
+                <td style={T.tdR}>{fq(it.weighment_qty)}</td>
+                <td style={T.tdC}>{it.msb_ref || '—'}</td>
+                <td style={T.tdC}>{it.ign_ref || '—'}</td>
+                <td style={T.tdC}>{it.grs_ref || '—'}</td>
                 <td style={T.tdR}>{fq(it.qs_prev_qty)}</td>
                 <td style={T.tdR}>{fq(it.qs_pres_qty)}</td>
                 <td style={T.tdR}>{raw(qsAmt)}</td>
@@ -281,7 +302,7 @@ function AbstractSheet({ cert }) {
               <td style={T.tdC}>—</td>
               <td style={{...T.td, fontStyle:'italic', color:'#111', fontWeight:'600'}}>GST / Tax</td>
               <td style={T.tdC}>—</td>
-              <td colSpan={10} style={{...T.tdC, color:'#444', fontSize:'10px', fontWeight:'500'}}>Applicable</td>
+              <td colSpan={14} style={{...T.tdC, color:'#444', fontSize:'10px', fontWeight:'500'}}>Applicable</td>
               <td style={{...T.tdR, fontWeight:'bold'}}>{raw(tax)}</td>
             </tr>
           )}
@@ -289,13 +310,13 @@ function AbstractSheet({ cert }) {
           {/* Total Gross Certified */}
           <tr style={T.totRow}>
             <td colSpan={4} style={{...T.tdC, fontWeight:'bold', fontSize:'9.5px', color: navy}}>Total Gross Certified</td>
-            <td colSpan={8} style={T.tdC}></td>
+            <td colSpan={12} style={T.tdC}></td>
             <td colSpan={3} style={{...T.tdR, fontWeight:'bold', fontSize:'10px'}}>{raw(totalGross)}</td>
           </tr>
 
           {/* Deductions header */}
           <tr>
-            <td colSpan={15} style={{...T.td, background:'#FFF5CC', fontWeight:'bold', fontSize:'9.5px', color: gold, letterSpacing:'0.5px', textTransform:'uppercase', padding:'4px 10px'}}>
+            <td colSpan={19} style={{...T.td, background:'#FFF5CC', fontWeight:'bold', fontSize:'9.5px', color: gold, letterSpacing:'0.5px', textTransform:'uppercase', padding:'4px 10px'}}>
               Deductions
             </td>
           </tr>
@@ -305,20 +326,20 @@ function AbstractSheet({ cert }) {
               <td style={T.tdC}></td>
               <td style={T.tdC}></td>
               <td style={{...T.td, fontStyle: d.amt === 0 ? 'italic' : 'normal', color: d.amt === 0 ? '#555' : '#0A0A0A', fontWeight: d.amt ? 'bold' : '500'}} colSpan={2}>{d.label}</td>
-              <td colSpan={10} style={T.tdC}></td>
+              <td colSpan={14} style={T.tdC}></td>
               <td style={{...T.tdR, fontWeight: 'bold', color: d.amt ? rust : '#555'}}>{raw(d.amt)}</td>
             </tr>
           ))}
 
           {/* Total Deductions */}
           <tr style={T.totRow}>
-            <td colSpan={14} style={{...T.tdC, fontWeight:'bold', color: navy}}>Total Deductions</td>
+            <td colSpan={18} style={{...T.tdC, fontWeight:'bold', color: navy}}>Total Deductions</td>
             <td style={{...T.tdR, fontWeight:'bold', color: rust}}>{raw(totalDed)}</td>
           </tr>
 
           {/* Total Net Certified */}
           <tr style={T.netRow}>
-            <td colSpan={14} style={{...T.tdC, color:'#fff', fontWeight:'bold', fontSize:'10px', letterSpacing:'0.5px'}}>
+            <td colSpan={18} style={{...T.tdC, color:'#fff', fontWeight:'bold', fontSize:'10px', letterSpacing:'0.5px'}}>
               Total Net Certified (Current RA)
             </td>
             <td style={{...T.tdR, color:'#fff', fontWeight:'bold', fontSize:'11px'}}>{raw(netCert)}</td>
@@ -843,6 +864,7 @@ export default function VendorQSCertificationDetailPage() {
     : location.pathname.startsWith('/accounts') ? '/accounts/purchases/qs-certifications'
     : '/qs/vendor-certifications';
   const [showCorrection, setShowCorrection] = useState(false);
+  const [showQtyEdit, setShowQtyEdit] = useState(false);
   const [printMode, setPrintMode] = useState(null); // 'abstract' | 'payment'
   const autoPrintDone = useRef(false);
 
@@ -878,6 +900,16 @@ export default function VendorQSCertificationDetailPage() {
     if (!window.confirm(`Delete certification ${cert.cert_number}?\n\nThis cannot be undone.`)) return;
     deleteMut.mutate();
   };
+
+  const revertToQSMut = useMutation({
+    mutationFn: () => vendorQSCertificationAPI.updateStatus(id, { status: 'certified' }),
+    onSuccess: () => {
+      toast.success('Certification sent back to QS for editing');
+      qc.invalidateQueries({ queryKey: ['vendor-qs-certification', id] });
+      qc.invalidateQueries({ queryKey: ['vendor-qs-certifications'] });
+    },
+    onError: err => toast.error(err?.response?.data?.error || 'Revert failed'),
+  });
 
   const refreshMut = useMutation({
     mutationFn: () => vendorQSCertificationAPI.refreshFromBills(id),
@@ -954,13 +986,25 @@ export default function VendorQSCertificationDetailPage() {
           .no-print { display: none !important; }
 
           /* ── 4. Print sheet resets ── */
+          /* Force the print chain to the full printable width and strip the
+             on-screen padding (bg-slate-200 p-4 wrapper + space-y gaps) so the
+             sheet occupies the entire page and content isn't squeezed/clipped. */
+          .bg-slate-200 { background: #fff !important; padding: 0 !important; margin: 0 !important; }
+          .print-area { width: 100% !important; margin: 0 !important; padding: 0 !important; }
+          .print-area > * + * { margin-top: 0 !important; }
           .print-sheet {
             box-shadow: none !important;
             border: none !important;
             margin: 0 !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+            width: 100% !important;
             background: #fff !important;
             page-break-after: auto;
           }
+          .print-sheet table { width: 100% !important; }
+          /* Keep the signature grid together so boxes never split across pages */
+          .print-sheet > div:last-child { page-break-inside: avoid; }
 
           /* ── 5. Table pagination ── */
           tr, .avoid-break { page-break-inside: avoid; }
@@ -985,15 +1029,17 @@ export default function VendorQSCertificationDetailPage() {
             className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm hover:bg-slate-50">
             <ArrowLeft className="w-4 h-4" /> Back
           </button>
-          <button
-            onClick={handleDelete}
-            disabled={deleteMut.isPending || cert.status === 'paid'}
-            className="px-3 py-2 bg-white border border-red-200 text-red-600 rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm hover:bg-red-50 disabled:opacity-40"
-            title={cert.status === 'paid' ? 'Paid certifications cannot be deleted' : 'Delete this certification'}
-          >
-            {deleteMut.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-            Delete
-          </button>
+          {canEditSensitive && (
+            <button
+              onClick={handleDelete}
+              disabled={deleteMut.isPending || cert.status === 'paid'}
+              className="px-3 py-2 bg-white border border-red-200 text-red-600 rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm hover:bg-red-50 disabled:opacity-40"
+              title={cert.status === 'paid' ? 'Paid certifications cannot be deleted' : 'Delete this certification'}
+            >
+              {deleteMut.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              Delete
+            </button>
+          )}
           {/* Navigate to the linked invoice(s) */}
           {cert.bills?.length === 1 ? (
             <button
@@ -1018,6 +1064,19 @@ export default function VendorQSCertificationDetailPage() {
           ) : null}
         </div>
         <div className="flex items-center gap-2">
+          {/* Revert to QS — admin/super_admin only, when status is 'accounts' */}
+          {cert.status === 'accounts' && canEditSensitive && (
+            <button
+              onClick={() => {
+                if (!window.confirm('Send this certification back to QS for editing?\nThe "Approved → Accounts" status will be cleared.')) return;
+                revertToQSMut.mutate();
+              }}
+              disabled={revertToQSMut.isPending}
+              className="px-4 py-2 bg-amber-50 border border-amber-300 text-amber-700 rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-50 shadow-sm hover:bg-amber-100"
+            >
+              ↩ {revertToQSMut.isPending ? 'Reverting…' : 'Revert to QS'}
+            </button>
+          )}
           <button
             onClick={() => refreshMut.mutate()}
             disabled={refreshMut.isPending || cert.status === 'paid' || cert.status === 'cancelled'}
@@ -1025,6 +1084,15 @@ export default function VendorQSCertificationDetailPage() {
           >
             <RefreshCw className={`w-4 h-4 ${refreshMut.isPending ? 'animate-spin' : ''}`} /> Refresh from Bills
           </button>
+          {canEditSensitive && (
+            <button
+              onClick={() => setShowQtyEdit(true)}
+              disabled={cert.status === 'paid' || cert.status === 'cancelled'}
+              className="px-4 py-2 bg-white border border-indigo-200 text-indigo-700 rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-50 shadow-sm hover:bg-indigo-50"
+            >
+              <Pencil className="w-4 h-4" /> Edit Quantities
+            </button>
+          )}
           <button
             onClick={() => setShowCorrection(true)}
             disabled={cert.status === 'paid' || cert.status === 'cancelled'}
@@ -1092,6 +1160,131 @@ export default function VendorQSCertificationDetailPage() {
       </div>
 
       {showCorrection && <AmountCorrectionModal cert={cert} onClose={() => setShowCorrection(false)} />}
+      {showQtyEdit && (
+        <QuantityEditModal
+          cert={cert}
+          onClose={() => setShowQtyEdit(false)}
+          onSaved={() => {
+            qc.invalidateQueries({ queryKey: ['vendor-qs-certification', id] });
+            qc.invalidateQueries({ queryKey: ['vendor-qs-certifications'] });
+            setShowQtyEdit(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function QuantityEditModal({ cert, onClose, onSaved }) {
+  const n = v => parseFloat(v) || 0;
+  const rawItems = cert.items || [];
+  const [rows, setRows] = useState(() =>
+    rawItems.map(it => ({
+      id:          it.id,
+      description: it.description,
+      unit:        it.unit,
+      order_qty:   it.order_qty,
+      order_rate:  it.order_rate,
+      inv_pres_qty: String(n(it.inv_pres_qty)),
+      qs_pres_qty:  String(n(it.qs_pres_qty)),
+    }))
+  );
+  const mut = useMutation({
+    mutationFn: () => vendorQSCertificationAPI.updateItems(cert.id, {
+      items: rows.map(r => ({
+        id:           r.id,
+        qs_pres_qty:  parseFloat(r.qs_pres_qty)  || 0,
+        inv_pres_qty: parseFloat(r.inv_pres_qty) || 0,
+      })),
+    }),
+    onSuccess: onSaved,
+    onError: err => toast.error(err?.response?.data?.error || 'Failed to update quantities'),
+  });
+
+  const setRow = (idx, key, val) =>
+    setRows(prev => prev.map((r, i) => i === idx ? { ...r, [key]: val } : r));
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 no-print">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-medium text-slate-900">Edit Quantities</h2>
+            <p className="text-xs text-slate-500">Update Invoice Present Qty and QS Certified Qty per line item. Gross amount recalculates automatically.</p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg border border-slate-200"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="overflow-auto flex-1 p-4">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-50">
+                <th className="border border-slate-200 px-2 py-2 text-left font-semibold text-slate-700 w-8">#</th>
+                <th className="border border-slate-200 px-2 py-2 text-left font-semibold text-slate-700">Description</th>
+                <th className="border border-slate-200 px-2 py-2 text-center font-semibold text-slate-700 w-16">Unit</th>
+                <th className="border border-slate-200 px-2 py-2 text-right font-semibold text-slate-700 w-24">Rate (₹)</th>
+                <th className="border border-slate-200 px-2 py-2 text-center font-semibold text-indigo-600 w-28">Inv Pres Qty</th>
+                <th className="border border-slate-200 px-2 py-2 text-center font-semibold text-emerald-700 w-28">QS Pres Qty</th>
+                <th className="border border-slate-200 px-2 py-2 text-right font-semibold text-slate-700 w-28">QS Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, idx) => {
+                const qsAmt = (parseFloat(r.qs_pres_qty) || 0) * n(r.order_rate);
+                return (
+                  <tr key={r.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                    <td className="border border-slate-200 px-2 py-1 text-center text-slate-500">{idx + 1}</td>
+                    <td className="border border-slate-200 px-2 py-1 text-slate-800">{r.description}</td>
+                    <td className="border border-slate-200 px-2 py-1 text-center text-slate-600">{r.unit}</td>
+                    <td className="border border-slate-200 px-2 py-1 text-right text-slate-700">{n(r.order_rate).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="border border-slate-200 px-1 py-1">
+                      <input
+                        type="number"
+                        step="0.001"
+                        min="0"
+                        value={r.inv_pres_qty}
+                        onChange={e => setRow(idx, 'inv_pres_qty', e.target.value)}
+                        className="w-full border border-indigo-200 rounded px-2 py-1 text-center text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                      />
+                    </td>
+                    <td className="border border-slate-200 px-1 py-1">
+                      <input
+                        type="number"
+                        step="0.001"
+                        min="0"
+                        value={r.qs_pres_qty}
+                        onChange={e => setRow(idx, 'qs_pres_qty', e.target.value)}
+                        className="w-full border border-emerald-300 rounded px-2 py-1 text-center text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                      />
+                    </td>
+                    <td className="border border-slate-200 px-2 py-1 text-right font-medium text-slate-800">
+                      ₹{qsAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="bg-emerald-50 font-semibold">
+                <td colSpan={5} className="border border-slate-200 px-2 py-2 text-right text-slate-700">New Gross Total</td>
+                <td colSpan={2} className="border border-slate-200 px-2 py-2 text-right text-emerald-700">
+                  ₹{rows.reduce((s, r) => s + (parseFloat(r.qs_pres_qty) || 0) * n(r.order_rate), 0)
+                    .toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <div className="px-5 py-3 border-t border-slate-200 flex justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button
+            onClick={() => mut.mutate()}
+            disabled={mut.isPending}
+            className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-500 disabled:opacity-50"
+          >
+            {mut.isPending ? 'Saving…' : 'Save Quantities'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

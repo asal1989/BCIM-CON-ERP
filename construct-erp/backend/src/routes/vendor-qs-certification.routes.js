@@ -76,6 +76,14 @@ async function ensureTables() {
   try { await query(`ALTER TABLE vendor_qs_certifications ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(14,2) DEFAULT 0`); } catch (_) {}
   try { await query(`ALTER TABLE vendor_qs_certifications ADD COLUMN IF NOT EXISTS payment_date DATE`); } catch (_) {}
   try { await query(`ALTER TABLE vendor_qs_certifications ADD COLUMN IF NOT EXISTS payment_mode TEXT`); } catch (_) {}
+  // ── Weighment / MSB / IGN / GRS cross-reference columns on items ────────
+  // Weighment qty is a plain cross-check quantity (weighbridge slip), no
+  // rate/amount. MSB/IGN/GRS are free-text reference numbers the QS
+  // certifier types in against their own register — not linked records.
+  try { await query(`ALTER TABLE vendor_qs_certification_items ADD COLUMN IF NOT EXISTS weighment_qty NUMERIC(14,3) DEFAULT 0`); } catch (_) {}
+  try { await query(`ALTER TABLE vendor_qs_certification_items ADD COLUMN IF NOT EXISTS msb_ref TEXT`); } catch (_) {}
+  try { await query(`ALTER TABLE vendor_qs_certification_items ADD COLUMN IF NOT EXISTS ign_ref TEXT`); } catch (_) {}
+  try { await query(`ALTER TABLE vendor_qs_certification_items ADD COLUMN IF NOT EXISTS grs_ref TEXT`); } catch (_) {}
   try { await query(`ALTER TABLE vendor_qs_certifications ADD COLUMN IF NOT EXISTS reference_number TEXT`); } catch (_) {}
   try { await query(`ALTER TABLE vendor_qs_certifications ADD COLUMN IF NOT EXISTS bank_name TEXT`); } catch (_) {}
   try { await query(`ALTER TABLE vendor_qs_certifications ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`); } catch (_) {}
@@ -215,7 +223,12 @@ async function buildSummaryFromBills(executor, billIds, companyId, excludeCertif
     const effectiveRow = singleLinkedRef && !(row.po_item_id || row.wo_item_id) ? singleLinkedRow : row;
     const effectiveIsWO = effectiveRow?.wo_item_id || effectiveRow?.bill_type === 'wo';
     const orderQty = n(effectiveIsWO ? effectiveRow?.wo_ordered_qty : effectiveRow?.po_ordered_qty) || invQty;
-    const rate = n(effectiveIsWO ? (effectiveRow?.wo_ordered_rate || row.rate) : (effectiveRow?.po_ordered_rate || row.rate));
+    // Fall back to basic_amount / qty when the line isn't linked to a WO/PO
+    // item AND its own `rate` column is blank (common for lump-sum bill
+    // entries that only captured a total) — otherwise the certified amount
+    // silently comes out as qty * 0.
+    const linkedRate = n(effectiveIsWO ? (effectiveRow?.wo_ordered_rate || row.rate) : (effectiveRow?.po_ordered_rate || row.rate));
+    const rate = linkedRate || (invQty ? n(row.basic_amount) / invQty : 0);
     const qsPrevQty = n(row.qs_prev_qty);
     const qsPresQty = Math.max(0, invQty);
     const taxAmount = n(row.cgst_amt) + n(row.sgst_amt) + n(row.igst_amt) || n(row.gst_amount);
@@ -451,7 +464,12 @@ router.post('/summary-items', async (req, res) => {
       const effectiveRow = singleLinkedRef && !(row.po_item_id || row.wo_item_id) ? singleLinkedRow : row;
       const effectiveIsWO = effectiveRow?.wo_item_id || effectiveRow?.bill_type === 'wo';
       const orderQty = n(effectiveIsWO ? effectiveRow?.wo_ordered_qty : effectiveRow?.po_ordered_qty) || invQty;
-      const rate = n(effectiveIsWO ? (effectiveRow?.wo_ordered_rate || row.rate) : (effectiveRow?.po_ordered_rate || row.rate));
+      // Fall back to basic_amount / qty when the line isn't linked to a WO/PO
+      // item AND its own `rate` column is blank (common for lump-sum bill
+      // entries that only captured a total) — otherwise the certified amount
+      // silently comes out as qty * 0.
+      const linkedRate = n(effectiveIsWO ? (effectiveRow?.wo_ordered_rate || row.rate) : (effectiveRow?.po_ordered_rate || row.rate));
+      const rate = linkedRate || (invQty ? n(row.basic_amount) / invQty : 0);
       const qsPrevQty = n(row.qs_prev_qty);
       const qsPresQty = Math.max(0, invQty);
       const taxAmount = n(row.cgst_amt) + n(row.sgst_amt) + n(row.igst_amt) || n(row.gst_amount);
@@ -626,6 +644,10 @@ router.post('/', async (req, res) => {
               amount: round2(row.amount || (qsQty * rate)),
               remarks: row.remarks || null,
               tax_amount: n(row.tax_amount),
+              weighment_qty: n(row.weighment_qty),
+              msb_ref: row.msb_ref || null,
+              ign_ref: row.ign_ref || null,
+              grs_ref: row.grs_ref || null,
             };
           })
         : systemItems;
@@ -816,11 +838,13 @@ router.post('/', async (req, res) => {
           INSERT INTO vendor_qs_certification_items (
             certification_id, bill_id, bill_line_item_id, source_inv_number, item_ref_id,
             description, unit, order_qty, order_rate, inv_prev_qty, inv_pres_qty,
-            qs_prev_qty, qs_pres_qty, amount, remarks
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+            qs_prev_qty, qs_pres_qty, amount, remarks,
+            weighment_qty, msb_ref, ign_ref, grs_ref
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
         `, [cert.rows[0].id, it.bill_id, it.bill_line_item_id, it.source_inv_number, it.item_ref_id,
           it.description, it.unit, it.order_qty, it.order_rate, it.inv_prev_qty, it.inv_pres_qty,
-          it.qs_prev_qty, it.qs_pres_qty, it.amount, it.remarks]);
+          it.qs_prev_qty, it.qs_pres_qty, it.amount, it.remarks,
+          it.weighment_qty || 0, it.msb_ref || null, it.ign_ref || null, it.grs_ref || null]);
       }
 
       return cert.rows[0];
@@ -889,21 +913,36 @@ router.post('/:id/refresh-from-bills', async (req, res) => {
       const invoiceBillTotal = round2(linkedBills.rows.reduce((s, b) => s + n(b.total_amount), 0)) || gross;
       const netPayable = round2(invoiceBillTotal - totalDed);
 
+      // weighment_qty/msb_ref/ign_ref/grs_ref are typed in manually by the QS
+      // certifier and aren't derivable from bill data — preserve them across
+      // a refresh by matching old items to the freshly-built ones on the same
+      // key (item_ref_id, else description+unit) before wiping the old rows.
+      const prevAnnotations = await client.query(
+        `SELECT item_ref_id, description, unit, weighment_qty, msb_ref, ign_ref, grs_ref
+           FROM vendor_qs_certification_items WHERE certification_id=$1`,
+        [req.params.id]
+      );
+      const annotationKey = (r) => r.item_ref_id || `${String(r.description || '').trim().toLowerCase()}|${r.unit || ''}`;
+      const annotationMap = new Map(prevAnnotations.rows.map(r => [annotationKey(r), r]));
+
       await client.query(
         `DELETE FROM vendor_qs_certification_items WHERE certification_id=$1`,
         [req.params.id]
       );
 
       for (const it of items) {
+        const carried = annotationMap.get(annotationKey(it));
         await client.query(`
           INSERT INTO vendor_qs_certification_items (
             certification_id, bill_id, bill_line_item_id, source_inv_number, item_ref_id,
             description, unit, order_qty, order_rate, inv_prev_qty, inv_pres_qty,
-            qs_prev_qty, qs_pres_qty, amount, remarks
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+            qs_prev_qty, qs_pres_qty, amount, remarks,
+            weighment_qty, msb_ref, ign_ref, grs_ref
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
         `, [req.params.id, it.bill_id, it.bill_line_item_id, it.source_inv_number, it.item_ref_id,
           it.description, it.unit, it.order_qty, it.order_rate, it.inv_prev_qty, it.inv_pres_qty,
-          it.qs_prev_qty, it.qs_pres_qty, it.amount, it.remarks]);
+          it.qs_prev_qty, it.qs_pres_qty, it.amount, it.remarks,
+          carried?.weighment_qty || 0, carried?.msb_ref || null, carried?.ign_ref || null, carried?.grs_ref || null]);
       }
 
       for (const b of linkedBills.rows) {
@@ -1127,6 +1166,65 @@ router.patch('/:id/amounts', async (req, res) => {
   }
 });
 
+// PATCH /vendor-qs-certifications/:id/items — update qs_pres_qty (and inv_pres_qty)
+// per item. Restricted to CERT_APPROVER_EMAIL / super_admin / admin.
+// Body: { items: [{ id, qs_pres_qty, inv_pres_qty? }] }
+router.patch('/:id/items', async (req, res) => {
+  try {
+    const email = (req.user.email || '').toLowerCase();
+    const role  = (req.user.role  || '').toLowerCase();
+    if (email !== CERT_APPROVER_EMAIL && role !== 'super_admin' && role !== 'admin') {
+      return res.status(403).json({ error: `Only ${CERT_APPROVER_EMAIL} can edit certified quantities.` });
+    }
+    const { items } = req.body;
+    if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'items array required' });
+
+    const result = await withTransaction(async (client) => {
+      // Verify cert belongs to this company and is not paid/cancelled
+      const certRes = await client.query(
+        `SELECT * FROM vendor_qs_certifications WHERE id=$1 AND company_id=$2 FOR UPDATE`,
+        [req.params.id, req.user.company_id]
+      );
+      if (!certRes.rows.length) throw new Error('Certification not found');
+      const cert = certRes.rows[0];
+      if (cert.status === 'paid')      throw new Error('Paid certification cannot be edited');
+      if (cert.status === 'cancelled') throw new Error('Cancelled certification cannot be edited');
+
+      for (const it of items) {
+        const qsQty = parseFloat(it.qs_pres_qty) || 0;
+        await client.query(
+          `UPDATE vendor_qs_certification_items
+           SET qs_pres_qty = $1,
+               inv_pres_qty = COALESCE($2, inv_pres_qty),
+               amount = $1 * order_rate,
+               updated_at = NOW()
+           WHERE id = $3 AND certification_id = $4`,
+          [qsQty, it.inv_pres_qty != null ? parseFloat(it.inv_pres_qty) : null, it.id, req.params.id]
+        );
+      }
+
+      // Recalculate gross_amount on the cert header from the updated items
+      const totals = await client.query(
+        `SELECT COALESCE(SUM(amount),0) AS gross FROM vendor_qs_certification_items WHERE certification_id=$1`,
+        [req.params.id]
+      );
+      const newGross = parseFloat(totals.rows[0].gross) || 0;
+      const newNet   = newGross + n(cert.tax_amount)
+                       - n(cert.tds_amount) - n(cert.advance_recovered)
+                       - n(cert.retention_amount) - n(cert.other_deductions);
+      await client.query(
+        `UPDATE vendor_qs_certifications SET gross_amount=$1, net_payable=$2, updated_at=NOW() WHERE id=$3`,
+        [newGross, newNet, req.params.id]
+      );
+      return { gross_amount: newGross, net_payable: newNet };
+    });
+
+    res.json({ data: result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.patch('/:id/status', async (req, res) => {
   try {
     const { status, remarks } = req.body;
@@ -1258,11 +1356,8 @@ router.post('/:id/payment', async (req, res) => {
 
       const billsRes = await client.query(`
         SELECT cb.bill_id, cb.total_amount, b.vendor_name, b.project_id, b.bill_type,
-               b.sl_number, b.inv_number, b.total_amount AS bill_total,
-               COALESCE(u.certified_net, 0) AS certified_net,
+               b.sl_number, b.inv_number,
                COALESCE(u.tds_deduction, 0) AS tds_deduction,
-               COALESCE(u.other_deductions, 0) AS other_deductions,
-               COALESCE(u.advance_recovered, 0) AS advance_recovered,
                COALESCE(u.paid_amount, 0) AS existing_paid
         FROM vendor_qs_certification_bills cb
         JOIN tqs_bills b ON b.id = cb.bill_id
@@ -1272,23 +1367,30 @@ router.post('/:id/payment', async (req, res) => {
       `, [req.params.id]);
       if (!billsRes.rows.length) throw new Error('No bills linked to this certification');
 
-      const totalNet = billsRes.rows.reduce((s, b) => s + billPayableCap(b), 0)
-                       || billsRes.rows.reduce((s, b) => s + n(b.total_amount), 0)
-                       || 1;
-      const allocate = (amount, base) => Math.round((n(base) / totalNet) * n(amount) * 100) / 100;
+      // Per-bill certified cap = THIS cert's net_payable split across its bills by
+      // invoice total, exactly as allocated at certification time. Tying the cap to
+      // the certification (not the shared per-bill tqs_bill_updates row, which a later
+      // cert on the same bill overwrites) guarantees every linked bill is paid and the
+      // caps sum to net_payable — fixes 2-bill certs that only settled one bill.
+      const certNet = n(cert.net_payable);
+      const selectedBillTotal = Math.max(1, billsRes.rows.reduce((s, b) => s + n(b.total_amount), 0));
+      const capFor = (b) => round2((n(b.total_amount) / selectedBillTotal) * certNet);
+      const totalNet = billsRes.rows.reduce((s, b) => s + capFor(b), 0) || 1;
+      const allocate = (amount, base) => round2((n(base) / totalNet) * n(amount));
 
       // 1) Update each bill's tqs_bill_updates and workflow_status
       const lines = [];
       for (const b of billsRes.rows) {
-        const baseShare = billPayableCap(b) || n(b.total_amount);
-        const billPaid = allocate(totalPaid, baseShare);
-        const certifiedNet = billPayableCap(b);
+        const certifiedNet = capFor(b);
+        let billPaid = allocate(totalPaid, certifiedNet);
         const remaining = Math.max(0, certifiedNet - n(b.existing_paid));
-        if (billPaid > remaining + 0.01) {
+        if (billPaid > remaining + 0.50) {
           const err = new Error(`Payment exceeds payable balance for ${b.sl_number}. Remaining payable is Rs ${remaining.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`);
           err.statusCode = 400;
           throw err;
         }
+        // Clamp to remaining to absorb sub-rupee rounding differences
+        billPaid = round2(Math.min(billPaid, remaining));
         const billTotalPaid = round2(n(b.existing_paid) + billPaid);
         const billBalance = Math.max(0, certifiedNet - billTotalPaid);
         const billStatus = billBalance <= 0.01 ? 'paid' : billPaid > 0 ? 'partial' : 'pending';

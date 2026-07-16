@@ -329,7 +329,7 @@ export default function TQSConcreteTrackerPage() {
                         {filteredBills.map(b => (
                           <tr key={b.id} className="hover:bg-slate-50 transition-colors">
                             <td className="px-4 py-2.5 text-[11px] font-mono text-slate-500">{b.sl_number}</td>
-                            <td className="px-4 py-2.5 text-xs font-medium text-slate-800 max-w-36 truncate">{b.vendor_name || '—'}</td>
+                            <td className="px-4 py-2.5 text-xs font-medium text-slate-800 max-w-36 truncate">{(b.vendor_name || '').toUpperCase() || '—'}</td>
                             <td className="px-4 py-2.5 text-[11px] font-mono text-indigo-600">{b.inv_number || '—'}</td>
                             <td className="px-4 py-2.5 text-xs text-slate-600 whitespace-nowrap">{fmtDate(b.inv_date)}</td>
                             <td className="px-4 py-2.5 text-[11px] text-slate-500">{b.po_number || '—'}</td>

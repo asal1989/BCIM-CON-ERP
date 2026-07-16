@@ -1,7 +1,7 @@
 // src/pages/sc/SCLabour.jsx — Worker Registry + Daily Attendance + NMR (Muster Roll)
 import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { scAPI, projectAPI } from '../../api/client';
+import { scAPI, projectAPI, hrEsslAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import {
@@ -28,6 +28,36 @@ const NMR_STATUS = {
 
 const fmt = (n) => `₹${Number(n||0).toLocaleString('en-IN',{maximumFractionDigits:0})}`;
 const inp = 'w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-300 transition';
+
+// ─── Inline-editable ESSL biometric code cell ────────────────────────────────
+// Links a worker to the numeric EmployeeCode ESSL uses on the biometric device
+// (worker_code like WKR-0001 is an internal ERP id and never matches ESSL).
+function EsslCodeCell({ worker, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(worker.essl_emp_code || '');
+
+  const commit = () => {
+    setEditing(false);
+    if ((val || '') !== (worker.essl_emp_code || '')) onSave(val || null);
+  };
+
+  if (editing) return (
+    <input autoFocus value={val} onChange={e=>setVal(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e => { if (e.key==='Enter') commit(); if (e.key==='Escape') setEditing(false); }}
+      placeholder="e.g. 2230120"
+      className="w-24 border border-blue-400 rounded-lg px-2 py-1 text-xs font-mono outline-none focus:ring-2 focus:ring-blue-200"
+    />
+  );
+  return (
+    <button onClick={()=>{ setVal(worker.essl_emp_code||''); setEditing(true); }}
+      className="text-xs font-mono px-2 py-1 rounded-lg hover:bg-blue-50 border border-transparent hover:border-blue-200 transition min-w-[70px] text-left">
+      {worker.essl_emp_code
+        ? <span className="text-slate-700 font-semibold">{worker.essl_emp_code}</span>
+        : <span className="text-amber-600 flex items-center gap-1"><AlertTriangle className="w-3 h-3"/> Not set</span>}
+    </button>
+  );
+}
 
 // ─── Create NMR Modal ─────────────────────────────────────────────────────────
 function CreateNMRModal({ wos, onClose }) {
@@ -405,17 +435,17 @@ function EsslSyncModal({ onClose }) {
   const handlePreview = async () => {
     setPreviewing(true); setPreview(null);
     try {
-      const r = await scAPI.esslPreview({ from_date: syncDate, to_date: toDate });
+      const r = await hrEsslAPI.previewSC({ from: syncDate, to: toDate });
       setPreview(r.data?.data);
     } catch(e) {
-      toast.error(e?.response?.data?.error || 'Preview failed — check ESSL settings');
+      toast.error(e?.response?.data?.error || 'Preview failed — check ESSL Settings in HR module');
     } finally { setPreviewing(false); }
   };
 
   const handleSync = async () => {
     setSyncing(true); setResult(null);
     try {
-      const r = await scAPI.esslSync({ from_date: syncDate, to_date: toDate, overwrite });
+      const r = await hrEsslAPI.syncSC({ from: syncDate, to: toDate, overwrite });
       setResult(r.data?.data);
       toast.success(r.data.message);
       qc.invalidateQueries({ queryKey:['sc-attendance'] });
@@ -561,9 +591,9 @@ function EsslSyncModal({ onClose }) {
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-600">
           <p className="font-bold mb-1">Prerequisites:</p>
           <ul className="space-y-1 list-disc list-inside">
-            <li>ESSL server IP and MySQL credentials saved in <strong>SC → Settings → ESSL tab</strong></li>
-            <li>Each worker must have an <strong>ESSL Employee Code</strong> set in Workers Registry</li>
-            <li>ESSL server must be on the same LAN as this ERP server</li>
+            <li>ESSL SQL Server credentials saved in <strong>HR &amp; Admin → ESSL Settings</strong></li>
+            <li>Each worker must have a <strong>Worker Code</strong> matching their ESSL Employee Code</li>
+            <li>ESSL ETimetracklite server must be reachable from this ERP server</li>
           </ul>
         </div>
       </div>
@@ -621,6 +651,16 @@ export default function SCLabour() {
     mutationFn: d=>scAPI.createWorker(d),
     onSuccess:()=>{ toast.success('Worker added'); qc.invalidateQueries({queryKey:['sc-workers']}); setShowWorkerForm(false); setWorkerForm({project_id:'',sc_id:'',wo_id:'',worker_name:'',skill_type:'Unskilled',daily_rate:0,mobile:''}); },
     onError:e=>toast.error(e?.response?.data?.error||'Failed'),
+  });
+  const updateWorkerMut = useMutation({
+    mutationFn: ({id,...d})=>scAPI.updateWorker(id,d),
+    onSuccess:()=>{ toast.success('ESSL code saved'); qc.invalidateQueries({queryKey:['sc-workers']}); },
+    onError:e=>toast.error(e?.response?.data?.error||'Failed'),
+  });
+  const deleteWorkerMut = useMutation({
+    mutationFn: (id)=>scAPI.deleteWorker(id),
+    onSuccess:()=>{ toast.success('Worker removed'); qc.invalidateQueries({queryKey:['sc-workers']}); },
+    onError:e=>toast.error(e?.response?.data?.error||'Failed to delete worker'),
   });
   const markAttMut = useMutation({
     mutationFn: d=>scAPI.markAttendance(d),
@@ -771,14 +811,14 @@ export default function SCLabour() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{background:`linear-gradient(90deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)`}}>
-                    {['Code','Worker Name','Contractor','Skill Type','Daily Rate (₹)','Mobile','Status'].map(h=>(
+                    {['Code','Worker Name','Contractor','Skill Type','Daily Rate (₹)','Mobile','ESSL Code','Status',''].map(h=>(
                       <th key={h} className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-white/80 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {filteredWorkers.length===0 ? (
-                    <tr><td colSpan={7} className="py-12 text-center">
+                    <tr><td colSpan={9} className="py-12 text-center">
                       <Users className="w-10 h-10 text-slate-400 mx-auto mb-2"/>
                       <p className="text-slate-400">No workers registered</p>
                     </td></tr>
@@ -791,9 +831,21 @@ export default function SCLabour() {
                       <td className="px-4 py-3 font-semibold text-slate-700">₹{Number(w.daily_rate||0).toLocaleString()}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{w.mobile||'—'}</td>
                       <td className="px-4 py-3">
+                        <EsslCodeCell worker={w} onSave={(code)=>updateWorkerMut.mutate({id:w.id, essl_emp_code:code})} />
+                      </td>
+                      <td className="px-4 py-3">
                         <span className={clsx('text-xs px-2 py-0.5 rounded-full font-semibold', w.status==='active'?'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-500')}>
                           {w.status}
                         </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={()=>{ if (window.confirm(`Remove ${w.worker_name}? This cannot be undone.`)) deleteWorkerMut.mutate(w.id); }}
+                          disabled={deleteWorkerMut.isPending}
+                          title="Remove worker"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-40">
+                          <X className="w-4 h-4"/>
+                        </button>
                       </td>
                     </tr>
                   ))}

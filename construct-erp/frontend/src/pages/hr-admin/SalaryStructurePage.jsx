@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { BarChart2, Plus, Edit2, Trash2, ChevronDown, ChevronRight, X, Layers } from 'lucide-react';
+import { BarChart2, Plus, Edit2, Trash2, ChevronDown, ChevronRight, X, Layers, TrendingUp, TrendingDown, ShieldCheck } from 'lucide-react';
 import { hrSalaryAPI } from '../../api/client';
 import toast from 'react-hot-toast';
 
@@ -174,6 +174,28 @@ export default function SalaryStructurePage() {
           </button>
         </div>
       </motion.div>
+
+      {/* KPI */}
+      {!isLoading && structures.length > 0 && (
+        <motion.div {...fade(0.05)} className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: 'Structures',  value: structures.length, icon: Layers,      color: '#6366F1', bg: '#EEF2FF' },
+            { label: 'Earnings',    value: structures.reduce((s,x)=>s+(x.components||[]).filter(c=>c.component_type==='earning').length,0),   icon: TrendingUp,   color: '#059669', bg: '#ECFDF5' },
+            { label: 'Deductions',  value: structures.reduce((s,x)=>s+(x.components||[]).filter(c=>c.component_type==='deduction').length,0), icon: TrendingDown, color: '#DC2626', bg: '#FEF2F2' },
+            { label: 'Statutory',   value: structures.reduce((s,x)=>s+(x.components||[]).filter(c=>c.component_type==='statutory').length,0), icon: ShieldCheck,  color: '#D97706', bg: '#FFFBEB' },
+          ].map(c => (
+            <div key={c.label} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-medium text-gray-500">{c.label}</p>
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: c.bg }}>
+                  <c.icon className="w-4 h-4" style={{ color: c.color }} />
+                </div>
+              </div>
+              <p className="text-2xl font-medium text-gray-900">{c.value}</p>
+            </div>
+          ))}
+        </motion.div>
+      )}
 
       {/* Structures */}
       {isLoading ? (

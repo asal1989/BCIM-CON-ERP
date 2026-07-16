@@ -345,7 +345,7 @@ function ImportModal({ vendors, projects, onClose, onDone }) {
                         <tr key={idx} className={`${!po.vendor_id ? 'bg-red-50' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
                           <TD mono bold>{po.po_number}</TD>
                           <TD>{fmtDate(po.po_date)}</TD>
-                          <TD className="text-xs text-slate-500">{po.vendor_name || '—'}</TD>
+                          <TD className="text-xs text-slate-500">{(po.vendor_name || '—').toUpperCase()}</TD>
                           <TD>
                             {po.vendor_id ? (
                               <span className="flex items-center gap-1.5 text-emerald-700 text-xs font-medium">
@@ -745,7 +745,7 @@ export default function PORegisterPage() {
                       <tr key={po.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
                         <TD mono bold>{po.po_number}</TD>
                         <TD>{fmtDate(po.po_date)}</TD>
-                        <TD>{po.vendor_name || '—'}</TD>
+                        <TD>{(po.vendor_name || '—').toUpperCase()}</TD>
                         <TD mono>{po.vendor_gst || '—'}</TD>
                         <TD className="max-w-[220px] truncate" title={po.narration}>{po.narration || '—'}</TD>
                         <TD right>₹{fmt(po.sub_total)}</TD>
@@ -786,7 +786,7 @@ export default function PORegisterPage() {
                       <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
                         <TD mono>{it.po_number}</TD>
                         <TD>{fmtDate(it.po_date)}</TD>
-                        <TD>{it.vendor_name || '—'}</TD>
+                        <TD>{(it.vendor_name || '—').toUpperCase()}</TD>
                         <TD right>{it.sort_order}</TD>
                         <TD>{it.material_name}</TD>
                         <TD>{it.unit}</TD>

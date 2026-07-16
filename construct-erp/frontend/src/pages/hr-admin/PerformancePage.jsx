@@ -30,6 +30,38 @@ const inp  = 'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text
 const lbl  = 'text-xs font-semibold text-gray-600 uppercase tracking-wide block mb-1';
 const NAVY = '#0A1F5C';
 
+const PERF_PRINT_CSS = `
+@media print {
+  @page { size: A4 portrait; margin: 12mm; }
+  html, body {
+    margin:0 !important; padding:0 !important; background:#fff !important;
+    -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important;
+  }
+  nav, header, footer, aside,
+  .no-print,
+  .sidebar, .topbar, .app-header, .app-sidebar,
+  [class*="sidebar"], [class*="Sidebar"],
+  [class*="topbar"], [class*="Topbar"],
+  [class*="navbar"], [class*="Navbar"] {
+    display:none !important; width:0 !important; height:0 !important; overflow:hidden !important;
+  }
+  #perf-print-root {
+    position:static !important; inset:auto !important; z-index:auto !important;
+    background:#fff !important; display:block !important;
+    padding:0 !important; overflow:visible !important; height:auto !important;
+  }
+  #perf-print-card {
+    box-shadow:none !important; max-width:100% !important; width:100% !important;
+    border-radius:0 !important;
+  }
+  .print-only { display:block !important; }
+  .perf-sig-section { page-break-inside:avoid !important; margin-top:32px !important; }
+}
+@media screen {
+  .print-only { display:none !important; }
+}
+`;
+
 const calcWeightedScore = (kras) => {
   if (!kras?.length) return 0;
   let total = 0, wTotal = 0;
@@ -145,10 +177,11 @@ function DetailView({ ev, onClose }) {
   const handlePrint = () => window.print();
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center overflow-y-auto py-8 px-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b">
+    <div id="perf-print-root" className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center overflow-y-auto py-8 px-4">
+      <style>{PERF_PRINT_CSS}</style>
+      <div id="perf-print-card" className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl">
+        {/* Header (screen only) */}
+        <div className="no-print flex items-center justify-between px-6 py-4 border-b">
           <h2 className="font-bold text-gray-800 text-lg">Performance Evaluation Report</h2>
           <div className="flex gap-2">
             <button onClick={handlePrint}
@@ -156,6 +189,23 @@ function DetailView({ ev, onClose }) {
               <Printer size={14}/> Print
             </button>
             <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg"><X size={18}/></button>
+          </div>
+        </div>
+
+        {/* Letterhead (print only) */}
+        <div className="print-only" style={{ borderBottom: '3px solid #0A1F5C', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 16 }}>
+          <img src="/bcim-logo.png" alt="BCIM Logo" style={{ height: 54, width: 'auto', objectFit: 'contain', flexShrink: 0 }} />
+          <div style={{ flex: 1, textAlign: 'center' }}>
+            <div style={{ fontSize: 9, fontWeight: 600, color: '#555', letterSpacing: 2, textTransform: 'uppercase' }}>
+              BCIM ENGINEERING PVT LTD
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#0A1F5C', letterSpacing: 0.5, margin: '2px 0' }}>
+              PERFORMANCE EVALUATION REPORT
+            </div>
+            <div style={{ fontSize: 9, color: '#444' }}>
+              Eval Period: <strong>{ev.eval_period || '—'}</strong>&emsp;|&emsp;
+              Eval Date: <strong>{ev.eval_date ? dayjs(ev.eval_date).format('DD MMM YYYY') : '—'}</strong>
+            </div>
           </div>
         </div>
 
@@ -246,6 +296,27 @@ function DetailView({ ev, onClose }) {
                 <p className="text-sm text-gray-700 whitespace-pre-wrap">{val}</p>
               </div>
             ) : null)}
+          </div>
+
+          {/* Signature section (print only) */}
+          <div className="print-only perf-sig-section" style={{ marginTop: 32, borderTop: '1px solid #ccc', paddingTop: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20 }}>
+              {[
+                { role: 'Employee Signature', name: ev.employee_name || '' },
+                { role: 'Evaluator / Reporting Manager', name: ev.evaluator_name || '' },
+                { role: 'HR Head / Approving Authority', name: '' },
+              ].map(sig => (
+                <div key={sig.role} style={{ flex: 1, textAlign: 'center' }}>
+                  <div style={{ borderBottom: '1.5px solid #333', marginBottom: 6, height: 40 }} />
+                  <div style={{ fontSize: 9, fontWeight: 700, color: '#0A1F5C' }}>{sig.role}</div>
+                  <div style={{ fontSize: 8, color: '#555', marginTop: 2 }}>{sig.name}</div>
+                  <div style={{ fontSize: 8, color: '#888', marginTop: 2 }}>Date: ____________</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ textAlign: 'center', marginTop: 12, fontSize: 8, color: '#888' }}>
+              This is a system-generated report - BCIM Engineering Pvt Ltd | Printed on: {new Date().toLocaleString('en-IN')}
+            </div>
           </div>
         </div>
       </div>

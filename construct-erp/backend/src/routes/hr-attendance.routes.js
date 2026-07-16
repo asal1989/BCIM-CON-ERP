@@ -9,6 +9,20 @@ const { runSchemaInit } = require('../utils/schemaInit');
 router.use(authenticate);
 router.use(authorize('super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager', 'manager', 'department_head', 'project_manager', 'project_head'));
 
+// Full HR roles see all employees; project/dept roles see only their project
+const FULL_HR_ROLES = new Set(['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager']);
+
+async function getProjectScope(req) {
+  const role = String(req.user?.role || '').toLowerCase();
+  if (FULL_HR_ROLES.has(role)) return null; // no restriction
+  // Look up the caller's own project_id from their employee profile
+  const r = await query(
+    `SELECT project_id FROM employee_profiles WHERE user_id=$1`,
+    [req.user.id]
+  );
+  return r.rows[0]?.project_id || null; // null = unassigned, still restrict to NULL
+}
+
 // ─── Auto-create table ────────────────────────────────────────────────────────
 const initTable = async () => {
   await query(`
@@ -44,9 +58,9 @@ runSchemaInit('hr-attendance', initTable);
 // ═══════════════════════════════════════════════════════════
 router.get('/', async (req, res) => {
   try {
-    const { user_id, month, year, department_id } = req.query;
-    const m = parseInt(month) || new Date().getMonth() + 1;
-    const y = parseInt(year)  || new Date().getFullYear();
+    const { user_id, month, year, department_id, date, project_id } = req.query;
+    // explicit filter wins; otherwise auto-scope by role
+    const projectId = project_id || await getProjectScope(req);
 
     let sql = `
       SELECT a.*, u.name as employee_name, u.employee_code,
@@ -55,14 +69,22 @@ router.get('/', async (req, res) => {
       JOIN users u ON u.id = a.user_id
       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
       LEFT JOIN hr_departments dep ON dep.id = ep.department_id
-      WHERE a.company_id = $1
-        AND EXTRACT(MONTH FROM a.attendance_date) = $2
-        AND EXTRACT(YEAR  FROM a.attendance_date) = $3`;
-    const params = [req.user.company_id, m, y];
-    let idx = 4;
+      WHERE a.company_id = $1`;
+    const params = [req.user.company_id];
+    let idx = 2;
+
+    if (date) {
+      sql += ` AND a.attendance_date = $${idx}`; params.push(date); idx++;
+    } else {
+      const m = parseInt(month) || new Date().getMonth() + 1;
+      const y = parseInt(year)  || new Date().getFullYear();
+      sql += ` AND EXTRACT(MONTH FROM a.attendance_date) = $${idx} AND EXTRACT(YEAR FROM a.attendance_date) = $${idx+1}`;
+      params.push(m, y); idx += 2;
+    }
 
     if (user_id)      { sql += ` AND a.user_id=$${idx}`;       params.push(user_id);      idx++; }
     if (department_id){ sql += ` AND ep.department_id=$${idx}`; params.push(department_id); idx++; }
+    if (projectId !== null) { sql += ` AND ep.project_id=$${idx}`; params.push(projectId); idx++; }
 
     sql += ' ORDER BY u.name, a.attendance_date';
     const { rows } = await query(sql, params);
@@ -73,38 +95,157 @@ router.get('/', async (req, res) => {
 // ═══════════════════════════════════════════════════════════
 // SUMMARY — per employee for a month
 // ═══════════════════════════════════════════════════════════
+// /summary — per-employee monthly summary (month/year) OR department-grouped (from/to)
 router.get('/summary', async (req, res) => {
   try {
-    const { month, year, department_id } = req.query;
-    const m = parseInt(month) || new Date().getMonth() + 1;
-    const y = parseInt(year)  || new Date().getFullYear();
+    const { month, year, from, to, department_id, project_id } = req.query;
+    const cid = req.user.company_id;
+    const scopeProject = await getProjectScope(req);
+    const effProject = scopeProject !== null ? scopeProject : (project_id || null);
 
-    let sql = `
-      SELECT u.id as user_id, u.name, u.employee_code,
-             dep.name as department_name,
-             COUNT(a.id) as total_marked,
-             COUNT(a.id) FILTER (WHERE a.status='present')   as present,
-             COUNT(a.id) FILTER (WHERE a.status='absent')    as absent,
-             COUNT(a.id) FILTER (WHERE a.status='half_day')  as half_day,
-             COUNT(a.id) FILTER (WHERE a.status='leave')     as on_leave,
-             COUNT(a.id) FILTER (WHERE a.status='holiday')   as holidays,
-             COUNT(a.id) FILTER (WHERE a.status='week_off')  as week_off,
-             SUM(a.late_minutes) as total_late_minutes
-      FROM users u
-      LEFT JOIN employee_profiles ep ON ep.user_id = u.id
-      LEFT JOIN hr_departments dep ON dep.id = ep.department_id
-      LEFT JOIN hr_attendance a ON a.user_id = u.id
-        AND EXTRACT(MONTH FROM a.attendance_date) = $2
-        AND EXTRACT(YEAR  FROM a.attendance_date) = $3
-      WHERE u.company_id = $1 AND u.is_active = TRUE`;
-    const params = [req.user.company_id, m, y];
-    let idx = 4;
+    // ── Per-employee mode (Attendance page sends month/year) ──
+    if (month || year) {
+      const m = parseInt(month) || new Date().getMonth() + 1;
+      const y = parseInt(year)  || new Date().getFullYear();
 
-    if (department_id) { sql += ` AND ep.department_id=$${idx}`; params.push(department_id); idx++; }
+      const params = [cid, m, y];
+      let deptFilter = '', projFilter = '';
+      let idx = 4;
+      if (department_id) { deptFilter = ` AND ep.department_id=$${idx++}`; params.push(department_id); }
+      if (effProject)    { projFilter = ` AND ep.project_id=$${idx++}`;    params.push(effProject); }
 
-    sql += ' GROUP BY u.id, u.name, u.employee_code, dep.name ORDER BY u.name';
-    const { rows } = await query(sql, params);
-    res.json({ data: rows });
+      const { rows } = await query(`
+        SELECT u.id AS user_id,
+               u.name,
+               u.employee_code,
+               ep.department_id,
+               COALESCE(dep.name, u.department, '—') AS department_name,
+               COUNT(*) FILTER (WHERE a.status='present')  AS present,
+               COUNT(*) FILTER (WHERE a.status='absent')   AS absent,
+               COUNT(*) FILTER (WHERE a.status='half_day') AS half_day,
+               COUNT(*) FILTER (WHERE a.status='leave')    AS on_leave,
+               COUNT(*)                                    AS total_marked
+        FROM users u
+        LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+        LEFT JOIN hr_departments dep   ON dep.id = ep.department_id
+        LEFT JOIN hr_attendance a      ON a.user_id = u.id
+                                      AND a.company_id = $1
+                                      AND EXTRACT(MONTH FROM a.attendance_date) = $2
+                                      AND EXTRACT(YEAR  FROM a.attendance_date) = $3
+        WHERE u.company_id = $1
+          AND u.is_active = TRUE
+          ${deptFilter}
+          ${projFilter}
+        GROUP BY u.id, u.name, u.employee_code, ep.department_id, dep.name, u.department
+        ORDER BY dep.name NULLS LAST, u.name
+      `, params);
+
+      return res.json({ data: rows });
+    }
+
+    // ── Department-grouped mode (reports send from/to) ──
+    const fromDate = from || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+    const toDate   = to   || new Date().toISOString().slice(0,10);
+
+    const staffParams = [cid, fromDate, toDate];
+    let staffProjFilter = '';
+    if (effProject) { staffProjFilter = ` AND ep.project_id=$4`; staffParams.push(effProject); }
+
+    const scParams = [cid, fromDate, toDate];
+    let scProjFilter = '';
+    if (effProject) { scProjFilter = ` AND w.project_id=$4`; scParams.push(effProject); }
+
+    const [staffRes, scRes] = await Promise.all([
+      query(`
+        SELECT COALESCE(dep.name, 'Unassigned')         AS label,
+               COUNT(*) FILTER (WHERE a.status='present')  AS present,
+               COUNT(*) FILTER (WHERE a.status='absent')   AS absent,
+               COUNT(*) FILTER (WHERE a.status='leave')    AS leave,
+               COUNT(*) FILTER (WHERE a.status='half_day') AS half_day,
+               COUNT(*)                                    AS total
+        FROM hr_attendance a
+        JOIN users u ON u.id = a.user_id
+        LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+        LEFT JOIN hr_departments dep   ON dep.id = ep.department_id
+        WHERE a.company_id=$1 AND a.attendance_date BETWEEN $2 AND $3
+        ${staffProjFilter}
+        GROUP BY dep.name ORDER BY dep.name
+      `, staffParams),
+      query(`
+        SELECT COALESCE(sc.name, 'SC Workers')           AS label,
+               COUNT(*) FILTER (WHERE a.status='present')  AS present,
+               COUNT(*) FILTER (WHERE a.status='absent')   AS absent,
+               0                                           AS leave,
+               COUNT(*) FILTER (WHERE a.status='half_day') AS half_day,
+               COUNT(*)                                    AS total
+        FROM sc_attendance a
+        JOIN sc_workers w ON w.id = a.worker_id
+        LEFT JOIN sc_subcontractors sc ON sc.id = w.sc_id
+        WHERE a.company_id=$1 AND a.attendance_date BETWEEN $2 AND $3
+        ${scProjFilter}
+        GROUP BY sc.name ORDER BY sc.name
+      `, scParams),
+    ]);
+
+    res.json({ data: [...staffRes.rows, ...scRes.rows] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// /yearly-summary — per-employee monthly breakdown for a full year (staff + SC workers)
+router.get('/yearly-summary', async (req, res) => {
+  try {
+    const { year } = req.query;
+    const y = parseInt(year) || new Date().getFullYear();
+    const cid = req.user.company_id;
+    const scopeProject = await getProjectScope(req);
+
+    let staffProjFilter = '', scProjFilter = '';
+    const staffParams = [cid, y];
+    const scParams    = [cid, y];
+    if (scopeProject !== null) {
+      staffProjFilter = ` AND ep.project_id=$3`; staffParams.push(scopeProject);
+      scProjFilter    = ` AND w.project_id=$3`;  scParams.push(scopeProject);
+    }
+
+    const [staffRes, scRes] = await Promise.all([
+      query(`
+        SELECT u.employee_code AS emp_key,
+               EXTRACT(MONTH FROM a.attendance_date)::int AS month_num,
+               COUNT(*) FILTER (WHERE a.status='present')  AS present,
+               COUNT(*) FILTER (WHERE a.status='absent')   AS absent,
+               COUNT(*) FILTER (WHERE a.status='leave')    AS leave
+        FROM hr_attendance a
+        JOIN users u ON u.id = a.user_id
+        LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+        WHERE a.company_id=$1 AND EXTRACT(YEAR FROM a.attendance_date)=$2
+        ${staffProjFilter}
+        GROUP BY u.employee_code, EXTRACT(MONTH FROM a.attendance_date)
+      `, staffParams),
+      query(`
+        SELECT w.worker_code AS emp_key,
+               EXTRACT(MONTH FROM a.attendance_date)::int AS month_num,
+               COUNT(*) FILTER (WHERE a.status='present')  AS present,
+               COUNT(*) FILTER (WHERE a.status='absent')   AS absent,
+               0                                           AS leave
+        FROM sc_attendance a
+        JOIN sc_workers w ON w.id = a.worker_id
+        WHERE a.company_id=$1 AND EXTRACT(YEAR FROM a.attendance_date)=$2
+        ${scProjFilter}
+        GROUP BY w.worker_code, EXTRACT(MONTH FROM a.attendance_date)
+      `, scParams),
+    ]);
+
+    // Build keyed object: { empKey: { monthNum: { present, absent, leave } } }
+    const result = {};
+    [...staffRes.rows, ...scRes.rows].forEach(r => {
+      if (!result[r.emp_key]) result[r.emp_key] = {};
+      result[r.emp_key][r.month_num] = {
+        present: parseInt(r.present)||0,
+        absent:  parseInt(r.absent)||0,
+        leave:   parseInt(r.leave)||0,
+      };
+    });
+    res.json({ data: result });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -116,19 +257,36 @@ router.get('/daily-trend', async (req, res) => {
     const { month, year } = req.query;
     const m = parseInt(month) || new Date().getMonth() + 1;
     const y = parseInt(year)  || new Date().getFullYear();
-    const { rows } = await query(
-      `SELECT attendance_date,
-              COUNT(*) FILTER (WHERE status='present')  AS present,
-              COUNT(*) FILTER (WHERE status='absent')   AS absent,
-              COUNT(*) FILTER (WHERE status='leave')    AS on_leave
-       FROM hr_attendance
-       WHERE company_id=$1
-         AND EXTRACT(MONTH FROM attendance_date)=$2
-         AND EXTRACT(YEAR  FROM attendance_date)=$3
-       GROUP BY attendance_date
-       ORDER BY attendance_date`,
-      [req.user.company_id, m, y]
-    );
+    const projectId = await getProjectScope(req);
+
+    let sql, params;
+    if (projectId !== null) {
+      // scoped: join employee_profiles to filter by project
+      sql = `SELECT a.attendance_date,
+                    COUNT(*) FILTER (WHERE a.status='present') AS present,
+                    COUNT(*) FILTER (WHERE a.status='absent')  AS absent,
+                    COUNT(*) FILTER (WHERE a.status='leave')   AS on_leave
+             FROM hr_attendance a
+             JOIN employee_profiles ep ON ep.user_id = a.user_id
+             WHERE a.company_id=$1
+               AND EXTRACT(MONTH FROM a.attendance_date)=$2
+               AND EXTRACT(YEAR  FROM a.attendance_date)=$3
+               AND ep.project_id=$4
+             GROUP BY a.attendance_date ORDER BY a.attendance_date`;
+      params = [req.user.company_id, m, y, projectId];
+    } else {
+      sql = `SELECT attendance_date,
+                    COUNT(*) FILTER (WHERE status='present') AS present,
+                    COUNT(*) FILTER (WHERE status='absent')  AS absent,
+                    COUNT(*) FILTER (WHERE status='leave')   AS on_leave
+             FROM hr_attendance
+             WHERE company_id=$1
+               AND EXTRACT(MONTH FROM attendance_date)=$2
+               AND EXTRACT(YEAR  FROM attendance_date)=$3
+             GROUP BY attendance_date ORDER BY attendance_date`;
+      params = [req.user.company_id, m, y];
+    }
+    const { rows } = await query(sql, params);
     res.json({ data: rows });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -138,27 +296,55 @@ router.get('/daily-trend', async (req, res) => {
 // ═══════════════════════════════════════════════════════════
 router.get('/department-summary', async (req, res) => {
   try {
-    const { month, year } = req.query;
-    const m = parseInt(month) || new Date().getMonth() + 1;
-    const y = parseInt(year)  || new Date().getFullYear();
-    const { rows } = await query(
-      `SELECT COALESCE(dep.name, 'Unassigned') AS department_name,
-              COUNT(DISTINCT u.id)                                       AS headcount,
-              COUNT(a.id) FILTER (WHERE a.status='present')              AS present,
-              COUNT(a.id) FILTER (WHERE a.status='absent')               AS absent,
-              COUNT(a.id) FILTER (WHERE a.status='leave')                AS on_leave
-       FROM users u
-       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
-       LEFT JOIN hr_departments dep ON dep.id = ep.department_id
-       LEFT JOIN hr_attendance a ON a.user_id = u.id
-         AND EXTRACT(MONTH FROM a.attendance_date)=$2
-         AND EXTRACT(YEAR  FROM a.attendance_date)=$3
-       WHERE u.company_id=$1 AND u.is_active=TRUE
-       GROUP BY dep.name
-       ORDER BY headcount DESC`,
-      [req.user.company_id, m, y]
-    );
-    res.json({ data: rows });
+    const { from, to, project_id } = req.query;
+    const cid = req.user.company_id;
+    const scopeProject = await getProjectScope(req);
+    const effProject = scopeProject !== null ? scopeProject : (project_id || null);
+
+    const fromDate = from || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+    const toDate   = to   || new Date().toISOString().slice(0,10);
+
+    const staffParams = [cid, fromDate, toDate];
+    let staffProjFilter = '';
+    if (effProject) { staffProjFilter = ` AND ep.project_id=$4`; staffParams.push(effProject); }
+
+    const scParams = [cid, fromDate, toDate];
+    let scProjFilter = '';
+    if (effProject) { scProjFilter = ` AND w.project_id=$4`; scParams.push(effProject); }
+
+    const [staffRes, scRes] = await Promise.all([
+      query(`
+        SELECT COALESCE(dep.name, 'Unassigned')          AS department,
+               COUNT(*) FILTER (WHERE a.status='present')  AS present,
+               COUNT(*) FILTER (WHERE a.status='absent')   AS absent,
+               COUNT(*) FILTER (WHERE a.status='leave')    AS leave,
+               COUNT(*) FILTER (WHERE a.status='half_day') AS half_day,
+               COUNT(*)                                    AS total
+        FROM hr_attendance a
+        JOIN users u ON u.id = a.user_id AND u.is_active=TRUE
+        LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+        LEFT JOIN hr_departments dep   ON dep.id = ep.department_id
+        WHERE a.company_id=$1 AND a.attendance_date BETWEEN $2 AND $3
+        ${staffProjFilter}
+        GROUP BY dep.name ORDER BY dep.name
+      `, staffParams),
+      query(`
+        SELECT COALESCE(sc.name, 'SC Workers')           AS department,
+               COUNT(*) FILTER (WHERE a.status='present')  AS present,
+               COUNT(*) FILTER (WHERE a.status='absent')   AS absent,
+               0                                           AS leave,
+               COUNT(*) FILTER (WHERE a.status='half_day') AS half_day,
+               COUNT(*)                                    AS total
+        FROM sc_attendance a
+        JOIN sc_workers w ON w.id = a.worker_id AND w.status='active'
+        LEFT JOIN sc_subcontractors sc ON sc.id = w.sc_id
+        WHERE a.company_id=$1 AND a.attendance_date BETWEEN $2 AND $3
+        ${scProjFilter}
+        GROUP BY sc.name ORDER BY sc.name
+      `, scParams),
+    ]);
+
+    res.json({ data: [...staffRes.rows, ...scRes.rows] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -321,6 +507,292 @@ router.delete('/month-baseline', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ═══════════════════════════════════════════════════════════
+// GET /timesheet-report — Daily site timesheet (Overall sheet format)
+// ?date=YYYY-MM-DD&category=staff|labour|all&department_id=
+// ═══════════════════════════════════════════════════════════
+router.get('/timesheet-report', async (req, res) => {
+  try {
+    const { date, category = 'staff', department_id, project_id } = req.query;
+    const reportDate = date || new Date().toISOString().slice(0, 10);
+    const cid = req.user.company_id;
+
+    let roleFilter = '';
+    // No role filter — all active employees appear in the timesheet regardless of system role
+
+    // BCIM Staff (office/management) vs BCIM Workers (direct-hire labour) are both
+    // rows in users/employee_profiles, distinguished only by employee_category.
+    let categoryFilter = '';
+    if (category === 'staff') {
+      categoryFilter = ` AND COALESCE(ep.employee_category, 'staff') = 'staff'`;
+    } else if (category === 'labour') {
+      categoryFilter = ` AND ep.employee_category = 'workman'`;
+    }
+    // category === 'all' → no filter, every employee_category included
+
+    // For project-scoped roles use their project; for HR roles use explicit filter if provided
+    const scopeProjectId = await getProjectScope(req);
+    const effectiveProjectId = scopeProjectId !== null ? scopeProjectId : (project_id || null);
+
+    let deptFilter = '';
+    let projectFilter = '';
+    const params = [cid, reportDate];
+    let idx = 3;
+    if (department_id) {
+      deptFilter = ` AND ep.department_id = $${idx}`;
+      params.push(department_id);
+      idx++;
+    }
+    if (effectiveProjectId === 'HEAD_OFFICE') {
+      projectFilter = ` AND ep.project_id IS NULL`;
+    } else if (effectiveProjectId) {
+      projectFilter = ` AND ep.project_id = $${idx}`;
+      params.push(effectiveProjectId);
+      idx++;
+    }
+
+    // Fetch company name and project name for the print header
+    const [companyRes, projectRes] = await Promise.all([
+      query(`SELECT name FROM companies WHERE id=$1`, [cid]),
+      effectiveProjectId && effectiveProjectId !== 'HEAD_OFFICE'
+        ? query(`SELECT name, project_code FROM projects WHERE id=$1`, [effectiveProjectId])
+        : Promise.resolve({ rows: [] }),
+    ]);
+    const companyName  = companyRes.rows[0]?.name  || 'BCIM';
+    const projectName  = effectiveProjectId === 'HEAD_OFFICE' ? 'Head Office' : (projectRes.rows[0]?.name || null);
+    const projectCode  = effectiveProjectId === 'HEAD_OFFICE' ? 'HO' : (projectRes.rows[0]?.project_code || null);
+
+    // Is the report date a public holiday?
+    const holidayRes = await query(
+      `SELECT name FROM hr_holidays WHERE company_id=$1 AND holiday_date::date=$2::date LIMIT 1`,
+      [cid, reportDate]
+    ).catch(() => ({ rows: [] }));
+    const holidayName = holidayRes.rows[0]?.name || null;
+    const isSunday    = new Date(reportDate + 'T00:00:00').getDay() === 0;
+    // Employees with no punch on a Sunday/holiday are week_off/holiday, not absent
+    const noRecordStatus = holidayName ? 'holiday' : (isSunday ? 'week_off' : 'absent');
+
+    // ── Staff query ─────────────────────────────────────────────────────────────
+    const staffParams = [...params];
+    const staffRows = (await query(`
+      SELECT
+        u.employee_code                     AS emp_id,
+        u.name,
+        COALESCE(des.name, u.designation, '—')             AS designation,
+        COALESCE(dep.name, u.department, '—')              AS department,
+        CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
+             THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END AS company,
+        COALESCE(a.status, '${noRecordStatus}') AS attendance_status,
+        TO_CHAR(a.in_time,  'HH12:MI AM')  AS in_time,
+        TO_CHAR(a.out_time, 'HH12:MI AM')  AS out_time,
+        a.late_minutes,
+        a.remarks                           AS reason,
+        COALESCE(ep.work_location, '—')    AS location,
+        'DAY'                               AS shift,
+        CASE WHEN COALESCE(ep.employment_status,'active') = 'active'
+             THEN 'ACTIVE' ELSE 'INACTIVE' END AS status,
+        u.id::text                          AS user_id,
+        CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
+             THEN 'workman' ELSE 'staff' END AS row_type,
+        CASE WHEN a.in_time IS NOT NULL AND a.out_time IS NOT NULL AND a.out_time > a.in_time
+             THEN ROUND(EXTRACT(EPOCH FROM (a.out_time - a.in_time)) / 3600.0, 1)
+             ELSE 0 END                     AS hours_worked,
+        CASE WHEN a.in_time IS NOT NULL AND a.out_time IS NOT NULL AND a.out_time > a.in_time
+             THEN GREATEST(0, ROUND(EXTRACT(EPOCH FROM (a.out_time - a.in_time)) / 3600.0 - 9, 1))
+             ELSE 0 END                     AS overtime_hours
+      FROM users u
+      LEFT JOIN employee_profiles ep   ON ep.user_id = u.id
+      LEFT JOIN hr_departments dep     ON dep.id = ep.department_id
+      LEFT JOIN hr_designations des    ON des.id = ep.designation_id
+      LEFT JOIN hr_attendance a        ON a.user_id = u.id
+                                     AND a.attendance_date = $2
+                                     AND a.company_id = $1
+      WHERE u.company_id = $1
+        AND u.is_active = TRUE
+        ${roleFilter}
+        ${categoryFilter}
+        ${deptFilter}
+        ${projectFilter}
+      ORDER BY dep.name NULLS LAST, u.name
+    `, staffParams)).rows;
+
+    // ── SC Workers (Labour) query ─────────────────────────────────────────────
+    let scRows = [];
+    if (category === 'labour' || category === 'all') {
+      const scParams = [cid, reportDate];
+      let scProjectFilter = '';
+      let scPIdx = 3;
+      if (effectiveProjectId === 'HEAD_OFFICE') {
+        scProjectFilter = ' AND 1=0'; // no SC workers in head office
+      } else if (effectiveProjectId) {
+        scProjectFilter = ` AND w.project_id = $${scPIdx++}`;
+        scParams.push(effectiveProjectId);
+      }
+      scRows = (await query(`
+        SELECT
+          w.worker_code                       AS emp_id,
+          w.worker_name                       AS name,
+          w.skill_type                        AS designation,
+          'CIVIL'                             AS department,
+          sc.name                             AS company,
+          COALESCE(a.status, '${noRecordStatus}') AS attendance_status,
+          TO_CHAR(a.in_time,  'HH12:MI AM')      AS in_time,
+          TO_CHAR(a.out_time, 'HH12:MI AM')      AS out_time,
+          0                                      AS late_minutes,
+          a.remarks                              AS reason,
+          COALESCE(p.name, '—')                AS location,
+          'DAY'                                  AS shift,
+          CASE WHEN w.status = 'active' THEN 'ACTIVE' ELSE 'INACTIVE' END AS status,
+          w.id::text                             AS user_id,
+          'labour'                               AS row_type,
+          COALESCE(a.hours_worked, 0)            AS hours_worked,
+          GREATEST(0, COALESCE(a.hours_worked,0) - 8) AS overtime_hours
+        FROM sc_workers w
+        LEFT JOIN sc_subcontractors sc ON sc.id = w.sc_id
+        LEFT JOIN projects p           ON p.id  = w.project_id
+        LEFT JOIN sc_attendance a      ON a.worker_id = w.id
+                                     AND a.attendance_date = $2
+                                     AND a.company_id = $1
+        WHERE w.company_id = $1
+          AND w.status = 'active'
+          ${scProjectFilter}
+        ORDER BY sc.name, w.worker_name
+      `, scParams)).rows;
+    }
+
+    const rows = [...staffRows, ...scRows];
+
+    const present  = rows.filter(r => r.attendance_status === 'present').length;
+    const half     = rows.filter(r => r.attendance_status === 'half_day').length;
+    const absent   = rows.filter(r => r.attendance_status === 'absent').length;
+    const leave    = rows.filter(r => r.attendance_status === 'leave').length;
+    const week_off = rows.filter(r => r.attendance_status === 'week_off').length;
+    const holiday  = rows.filter(r => r.attendance_status === 'holiday').length;
+    const late     = rows.filter(r => (r.late_minutes || 0) > 0).length;
+
+    res.json({
+      data:        rows,
+      date:        reportDate,
+      companyName,
+      projectName,
+      projectCode,
+      holidayName,
+      isSunday,
+      summary: { total: rows.length, present, half, absent, leave, week_off, holiday, late },
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// GET /monthly-report  ?year=2026&month=7&project_id=&department_id=
+// Returns one row per (employee, date) for the whole month
+// ═══════════════════════════════════════════════════════════
+router.get('/monthly-report', async (req, res) => {
+  try {
+    const { year, month, project_id, department_id, category = 'all' } = req.query;
+    const cid = req.user.company_id;
+    if (!year || !month) return res.status(400).json({ error: 'year and month required' });
+
+    const y = parseInt(year), m = parseInt(month);
+    const from = `${y}-${String(m).padStart(2,'0')}-01`;
+    const lastDay = new Date(y, m, 0).getDate();
+    const to = `${y}-${String(m).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+
+    const scopeProjectId = await getProjectScope(req);
+    const effProject = scopeProjectId !== null ? scopeProjectId : (project_id || null);
+
+    // BCIM Staff (office/management) vs BCIM Workers (direct-hire labour) are both
+    // rows in users/employee_profiles, distinguished only by employee_category.
+    let categoryFilter = '';
+    if (category === 'staff') {
+      categoryFilter = ` AND COALESCE(ep.employee_category, 'staff') = 'staff'`;
+    } else if (category === 'labour') {
+      categoryFilter = ` AND ep.employee_category = 'workman'`;
+    }
+    // category === 'all' → no filter, every employee_category included
+
+    const staffParams = [cid, from, to];
+    let deptFilter = '', projFilter = '';
+    let idx = 4;
+    if (department_id) { deptFilter = ` AND ep.department_id=$${idx++}`; staffParams.push(department_id); }
+    if (effProject)    { projFilter = ` AND ep.project_id=$${idx++}`;    staffParams.push(effProject); }
+
+    const staffRes = await query(`
+      SELECT
+        u.employee_code                        AS emp_id,
+        u.name,
+        COALESCE(des.name, u.designation, '—') AS designation,
+        COALESCE(dep.name, u.department,
+          CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
+               THEN 'BCIM Workers' ELSE '—' END)  AS department,
+        a.attendance_date::text                AS attendance_date,
+        COALESCE(a.status, 'absent')           AS attendance_status,
+        TO_CHAR(a.in_time,  'HH12:MI AM')     AS in_time,
+        TO_CHAR(a.out_time, 'HH12:MI AM')     AS out_time,
+        COALESCE(a.late_minutes, 0)            AS late_minutes,
+        CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
+             THEN 'workman' ELSE 'staff' END    AS row_type
+      FROM users u
+      LEFT JOIN employee_profiles ep  ON ep.user_id = u.id
+      LEFT JOIN hr_departments dep    ON dep.id = ep.department_id
+      LEFT JOIN hr_designations des   ON des.id = ep.designation_id
+      JOIN hr_attendance a
+        ON a.user_id = u.id
+       AND a.company_id = $1
+       AND a.attendance_date BETWEEN $2 AND $3
+      WHERE u.company_id = $1
+        AND u.is_active = TRUE
+        ${categoryFilter}
+        ${deptFilter}
+        ${projFilter}
+      ORDER BY dep.name NULLS LAST, u.name, a.attendance_date
+    `, staffParams);
+
+    // SC workers from sc_attendance
+    const scParams = [cid, from, to];
+    let scProjFilter = '';
+    let scIdx = 4;
+    if (effProject) { scProjFilter = ` AND w.project_id=$${scIdx++}`; scParams.push(effProject); }
+
+    const scRes = (category === 'labour' || category === 'all') ? await query(`
+      SELECT
+        w.worker_code                          AS emp_id,
+        w.worker_name                          AS name,
+        COALESCE(w.skill_type, '—')           AS designation,
+        COALESCE(sc.name, 'SC Worker')         AS department,
+        a.attendance_date::text                AS attendance_date,
+        COALESCE(a.status, 'absent')           AS attendance_status,
+        TO_CHAR(a.in_time,  'HH12:MI AM')     AS in_time,
+        TO_CHAR(a.out_time, 'HH12:MI AM')     AS out_time,
+        0                                      AS late_minutes,
+        'labour'                               AS row_type
+      FROM sc_workers w
+      JOIN sc_attendance a
+        ON a.worker_id = w.id
+       AND a.company_id = $1
+       AND a.attendance_date BETWEEN $2 AND $3
+      LEFT JOIN sc_subcontractors sc ON sc.id = w.sc_id
+      WHERE w.company_id = $1
+        AND w.status = 'active'
+        ${scProjFilter}
+      ORDER BY sc.name NULLS LAST, w.worker_name, a.attendance_date
+    `, scParams) : { rows: [] };
+
+    // Holidays for the month
+    const holidayRes = await query(
+      `SELECT holiday_date::text AS date, name AS holiday_name
+       FROM hr_holidays
+       WHERE company_id=$1 AND holiday_date BETWEEN $2 AND $3`,
+      [cid, from, to]
+    );
+
+    res.json({
+      data:     [...staffRes.rows, ...scRes.rows],
+      holidays: holidayRes.rows,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.put('/:id', async (req, res) => {
   try {
     const { status, in_time, out_time, late_minutes, remarks } = req.body;
@@ -350,6 +822,177 @@ router.post('/', async (req, res) => {
        in_time || null, out_time || null, late_minutes || 0, remarks || null]
     );
     res.status(201).json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// LATE ARRIVAL EMAIL ALERTS
+// POST /hr-admin/attendance/late-alerts/run
+// ═══════════════════════════════════════════════════════════
+router.post('/late-alerts/run', async (req, res) => {
+  try {
+    const { sendLateArrivalAlerts } = require('../utils/late-arrival-alert.service');
+    const { date, minLateMinutes, dryRun } = req.body;
+    const result = await sendLateArrivalAlerts({
+      date,
+      companyId: req.user.company_id,
+      minLateMinutes: minLateMinutes ?? 5,
+      dryRun: dryRun ?? false,
+    });
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /hr-admin/attendance/late-alerts/test
+// Sends ONE sample late-arrival email to the logged-in user, using their own
+// most recent late record (or representative sample data if they have none) —
+// purely to preview the alert in your inbox. Never emails anyone else.
+router.post('/late-alerts/test', async (req, res) => {
+  try {
+    const { buildLateEmail } = require('../utils/late-arrival-alert.service');
+    const { sendMail } = require('../services/mail.service');
+
+    if (!req.user.email) return res.status(400).json({ error: 'Your account has no email address on file.' });
+
+    // Most recent real late record for the caller, if any.
+    const { rows } = await query(`
+      SELECT a.attendance_date, a.in_time, a.late_minutes,
+             u.name AS employee_name, u.employee_code, c.name AS company_name
+      FROM hr_attendance a
+      JOIN users u ON u.id = a.user_id
+      LEFT JOIN companies c ON c.id = a.company_id
+      WHERE a.user_id = $1 AND COALESCE(a.late_minutes, 0) > 0
+      ORDER BY a.attendance_date DESC
+      LIMIT 1
+    `, [req.user.id]);
+
+    const rec = rows[0];
+    const usedRealRecord = !!rec;
+
+    // Fall back to a representative sample so the preview always renders.
+    const companyRes = rec ? null : await query(`SELECT name FROM companies WHERE id = $1`, [req.user.company_id]);
+    const data = rec ? {
+      employeeName: rec.employee_name,
+      employeeCode: rec.employee_code,
+      date:         rec.attendance_date,
+      checkInTime:  rec.in_time,
+      lateMinutes:  rec.late_minutes,
+      companyName:  rec.company_name || 'BCIM',
+    } : {
+      employeeName: req.user.name || 'Employee',
+      employeeCode: req.user.employee_code || '—',
+      date:         new Date().toISOString().slice(0, 10),
+      checkInTime:  '09:55',
+      lateMinutes:  25,
+      companyName:  companyRes?.rows?.[0]?.name || 'BCIM',
+    };
+
+    const mail = buildLateEmail(data);
+    await sendMail({ to: req.user.email, subject: `[TEST] ${mail.subject}`, html: mail.html, text: mail.text });
+
+    res.json({
+      ok: true,
+      sentTo: req.user.email,
+      usedRealRecord,
+      basedOn: usedRealRecord
+        ? { date: data.date, lateMinutes: data.lateMinutes, checkIn: data.checkInTime }
+        : 'sample data (no late record found on your attendance)',
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// LATE SUMMARY — HR Manager daily digest (manual trigger)
+// POST /hr-admin/attendance/late-summary/run
+// Body: { date?, recipients? }   (optional overrides)
+// ═══════════════════════════════════════════════════════════
+router.post('/late-summary/run', authorize('super_admin','admin','hr','hr_admin','hr_manager'), async (req, res) => {
+  try {
+    const { runLateSummary } = require('../utils/hr-late-summary.service');
+    const { date, recipients } = req.body;
+    const result = await runLateSummary({ date: date || undefined, manual: true, recipients: recipients || undefined });
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// RECALCULATE ATTENDANCE
+// POST /hr-admin/attendance/recalculate  { from, to }
+// Re-derives status/late_minutes from stored in_time/out_time for both staff and SC workers
+// ═══════════════════════════════════════════════════════════
+router.post('/recalculate', async (req, res) => {
+  try {
+    const { from, to } = req.body;
+    if (!from || !to) return res.status(400).json({ error: 'from and to dates are required' });
+    if (from > to)    return res.status(400).json({ error: 'from must be before to' });
+
+    const cid = req.user.company_id;
+
+    // Staff — re-derive status and late_minutes from in_time/out_time
+    // Leave/holiday/week_off records are preserved
+    const staffResult = await query(`
+      UPDATE hr_attendance ha
+      SET
+        status = CASE
+          WHEN ha.status IN ('leave','holiday','week_off') THEN ha.status
+          WHEN ha.in_time IS NOT NULL AND ha.out_time IS NOT NULL
+               AND ha.out_time != ha.in_time THEN 'present'
+          WHEN ha.in_time IS NOT NULL OR ha.out_time IS NOT NULL THEN 'half_day'
+          ELSE 'absent'
+        END,
+        late_minutes = CASE
+          WHEN ha.status IN ('leave','holiday','week_off') THEN ha.late_minutes
+          WHEN ha.in_time IS NOT NULL THEN
+            GREATEST(0, EXTRACT(EPOCH FROM (
+              ha.in_time::time - COALESCE(
+                (SELECT (hs.start_time + (COALESCE(hs.grace_minutes,0) * INTERVAL '1 minute'))::time
+                 FROM hr_employee_shifts es
+                 JOIN hr_shifts hs ON hs.id = es.shift_id
+                 WHERE es.employee_id = ha.user_id
+                   AND es.effective_from <= ha.attendance_date
+                   AND (es.effective_to IS NULL OR es.effective_to >= ha.attendance_date)
+                 ORDER BY es.effective_from DESC LIMIT 1),
+                '09:30:00'::time
+              )
+            )) / 60)::int
+          ELSE 0
+        END
+      FROM users u
+      WHERE ha.user_id = u.id
+        AND u.company_id = $1
+        AND ha.attendance_date BETWEEN $2 AND $3
+      RETURNING ha.id
+    `, [cid, from, to]);
+
+    // SC workers — re-derive status and hours_worked from in_time/out_time
+    const scResult = await query(`
+      UPDATE sc_attendance sa
+      SET
+        status = CASE
+          WHEN sa.in_time IS NOT NULL AND sa.out_time IS NOT NULL
+               AND sa.out_time != sa.in_time THEN 'present'
+          WHEN sa.in_time IS NOT NULL OR sa.out_time IS NOT NULL THEN 'half_day'
+          ELSE sa.status
+        END,
+        hours_worked = CASE
+          WHEN sa.in_time IS NOT NULL AND sa.out_time IS NOT NULL
+               AND sa.out_time != sa.in_time THEN
+            LEAST(12.0, ROUND(EXTRACT(EPOCH FROM (sa.out_time - sa.in_time)) / 3600.0, 2))
+          ELSE sa.hours_worked
+        END
+      FROM sc_workers w
+      WHERE sa.worker_id = w.id
+        AND w.company_id = $1
+        AND sa.attendance_date BETWEEN $2 AND $3
+      RETURNING sa.id
+    `, [cid, from, to]);
+
+    res.json({
+      updated:       staffResult.rows.length + scResult.rows.length,
+      staff_updated: staffResult.rows.length,
+      sc_updated:    scResult.rows.length,
+      from, to,
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

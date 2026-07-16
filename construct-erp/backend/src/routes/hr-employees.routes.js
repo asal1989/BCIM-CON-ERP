@@ -8,6 +8,14 @@ const fs     = require('fs');
 const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
+const { uploadToSharePoint, deleteFromOneDrive } = require('../services/azureService');
+
+const SHAREPOINT_ENABLED = !!(
+  process.env.ONEDRIVE_TENANT_ID &&
+  process.env.ONEDRIVE_CLIENT_ID &&
+  process.env.ONEDRIVE_CLIENT_SECRET &&
+  process.env.SHAREPOINT_SITE_ID
+);
 const { sendWelcomeLoginMail } = require('../services/mail.service');
 const { createPasswordResetToken, getResetBaseUrl } = require('../controllers/auth.controller');
 
@@ -93,6 +101,8 @@ const initTables = async () => {
       uploaded_by UUID REFERENCES users(id)
     )
   `);
+  await query(`ALTER TABLE employee_documents ADD COLUMN IF NOT EXISTS sharepoint_id TEXT`);
+  await query(`ALTER TABLE employee_documents ADD COLUMN IF NOT EXISTS sharepoint_url TEXT`);
   await query(`ALTER TABLE employee_profiles ADD COLUMN IF NOT EXISTS reporting_manager_id UUID REFERENCES users(id)`);
   await query(`ALTER TABLE employee_profiles ADD COLUMN IF NOT EXISTS work_location TEXT`);
   await query(`ALTER TABLE employee_profiles ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES projects(id)`);
@@ -134,6 +144,23 @@ const initTables = async () => {
   `);
 };
 runSchemaInit('hr-employees', initTables);
+
+// Add columns that may be missing from older deployments
+runSchemaInit('hr-employees-cols-v2', async () => {
+  const { query: q } = require('../config/database');
+  await q(`ALTER TABLE employee_profiles ADD COLUMN IF NOT EXISTS employment_status TEXT DEFAULT 'active'`);
+  await q(`ALTER TABLE employee_profiles ADD COLUMN IF NOT EXISTS date_of_leaving DATE`);
+  await q(`ALTER TABLE employee_profiles ADD COLUMN IF NOT EXISTS leaving_reason TEXT`);
+  await q(`ALTER TABLE employee_profiles ADD COLUMN IF NOT EXISTS profile_photo_url TEXT`);
+  await q(`ALTER TABLE employee_profiles ADD COLUMN IF NOT EXISTS probation_end_date DATE`);
+  await q(`ALTER TABLE employee_profiles ADD COLUMN IF NOT EXISTS notice_period_days INT DEFAULT 30`);
+});
+
+runSchemaInit('hr-employees-docs-sharepoint', async () => {
+  const { query: q } = require('../config/database');
+  await q(`ALTER TABLE employee_documents ADD COLUMN IF NOT EXISTS sharepoint_id TEXT`);
+  await q(`ALTER TABLE employee_documents ADD COLUMN IF NOT EXISTS sharepoint_url TEXT`);
+});
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const employeeSelect = `
@@ -219,7 +246,7 @@ router.get('/', async (req, res) => {
         params.push(department_id); idx++;
       }
       if (employment_status) {
-        sql += ` AND ep.employment_status = $${idx}`;
+        sql += ` AND COALESCE(ep.employment_status, 'active') = $${idx}`;
         params.push(employment_status); idx++;
       }
       if (employment_type) {
@@ -387,7 +414,7 @@ router.post('/', async (req, res) => {
 
     const {
       // User fields
-      name, email, phone, role, employee_code,
+      name, phone, role, employee_code,
       // Profile fields
       department_id, designation_id, date_of_joining, date_of_birth, gender,
       father_name, mother_name, marital_status, blood_group, nationality,
@@ -398,6 +425,12 @@ router.post('/', async (req, res) => {
       employment_type, probation_end_date, notice_period_days,
       reporting_manager_id, work_location, project_id,
     } = req.body;
+
+    const isWorker = req.body.employee_category === 'workman';
+    // Workers may have no email; normalize empty string to null to avoid UNIQUE conflicts
+    const email = req.body.email?.trim() || null;
+    if (!isWorker && !email) return res.status(400).json({ error: 'Email is required for BCIM Staff' });
+    if (!name) return res.status(400).json({ error: 'Name is required' });
 
     // Generate employee code if not provided
     const code = employee_code || await generateEmpCode(req.user.company_id);
@@ -483,7 +516,7 @@ router.put('/:id', async (req, res) => {
     await client.query('BEGIN');
 
     const {
-      name, email, phone, role,
+      name, email, phone, role, employee_code,
       department_id, designation_id, date_of_joining, date_of_birth, gender,
       father_name, mother_name, marital_status, blood_group, nationality,
       pan_number, aadhaar_number, uan_number, pf_account_number, esi_number,
@@ -502,11 +535,46 @@ router.put('/:id', async (req, res) => {
       desigName = dr.rows[0]?.name || '';
     }
 
+    // Guard: never let an HR employee-record edit silently downgrade a
+    // super_admin. Editing it@bcim.in's (or any super_admin's) profile here
+    // used to overwrite users.role with `role || 'viewer'`, stripping their
+    // access until the next server restart re-ran the boot-time super_admin
+    // self-heal. Protect the top-admin account (and any current super_admin)
+    // by preserving super_admin regardless of the submitted role.
+    const cur = await client.query(
+      `SELECT email, role FROM users WHERE id=$1 AND company_id=$2`,
+      [req.params.id, req.user.company_id]
+    );
+    const curEmail = String(cur.rows[0]?.email || '').toLowerCase();
+    const isProtectedAdmin = curEmail === 'it@bcim.in' || cur.rows[0]?.role === 'super_admin';
+    // Roles that HR can assign; super_admin is never assignable via this endpoint
+    const ASSIGNABLE_ROLES = new Set(['viewer','employee','qs_engineer','site_engineer',
+      'project_manager','project_head','department_head','hr','hr_manager','admin','hr_admin']);
+    const requestedRole = role && ASSIGNABLE_ROLES.has(role) ? role : (cur.rows[0]?.role || 'employee');
+    const effectiveRole = isProtectedAdmin ? 'super_admin' : requestedRole;
+    const effectiveEmail = curEmail === 'it@bcim.in' ? cur.rows[0].email : email;
+
+    // Only update employee_code if a non-empty value was submitted and it's not already taken
+    let effectiveCode = null;
+    if (employee_code && String(employee_code).trim()) {
+      const codeCheck = await client.query(
+        `SELECT id FROM users WHERE employee_code=$1 AND company_id=$2 AND id<>$3`,
+        [employee_code.trim(), req.user.company_id, req.params.id]
+      );
+      if (codeCheck.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: `Employee code '${employee_code}' is already in use by another employee.` });
+      }
+      effectiveCode = employee_code.trim();
+    }
+
     await client.query(
       `UPDATE users SET name=$1, email=$2, phone=$3, role=$4, designation=$5, department=$6
+         ${effectiveCode ? ', employee_code=$9' : ''}
        WHERE id=$7 AND company_id=$8`,
-      [name, email, phone || null, role || 'viewer', desigName, deptName,
-       req.params.id, req.user.company_id]
+      effectiveCode
+        ? [name, effectiveEmail, phone || null, effectiveRole, desigName, deptName, req.params.id, req.user.company_id, effectiveCode]
+        : [name, effectiveEmail, phone || null, effectiveRole, desigName, deptName, req.params.id, req.user.company_id]
     );
 
     await client.query(
@@ -606,7 +674,7 @@ router.patch('/:id/lifecycle/:itemId', async (req, res) => {
            remarks=$2,
            due_date=$3,
            completed_at=CASE WHEN $1 = 'done' THEN NOW() ELSE NULL END,
-           completed_by=CASE WHEN $1 = 'done' THEN $4 ELSE NULL END,
+           completed_by=CASE WHEN $1 = 'done' THEN $4::uuid ELSE NULL END,
            updated_at=NOW()
        WHERE id=$5 AND user_id=$6 AND company_id=$7
        RETURNING *`,
@@ -644,17 +712,42 @@ router.patch('/:id/lifecycle/:itemId', async (req, res) => {
 router.post('/:id/documents', upload.single('file'), async (req, res) => {
   try {
     const { doc_type, doc_name } = req.body;
-    const fileUrl = req.file ? `/uploads/hr-docs/${req.file.filename}` : req.body.file_url;
+    const localUrl = req.file ? `/uploads/hr-docs/${req.file.filename}` : req.body.file_url;
+    const displayName = doc_name || req.file?.originalname || doc_type;
+
+    let spId = null, spUrl = null, fileUrl = localUrl;
+
+    // Upload to SharePoint if configured; fall back to local on error
+    if (SHAREPOINT_ENABLED && req.file) {
+      try {
+        const empRow = await query(`SELECT name, employee_code FROM users WHERE id=$1`, [req.params.id]);
+        const emp = empRow.rows[0];
+        const folderPath = `HR Documents/${emp?.employee_code || req.params.id} - ${(emp?.name || 'Employee').replace(/[<>:"|?*]/g,'_')}`;
+        const fileBuffer = fs.readFileSync(req.file.path);
+        const sp = await uploadToSharePoint(req.file.originalname, fileBuffer, folderPath);
+        spId  = sp.id;
+        spUrl = sp.webUrl;
+        fileUrl = sp.downloadUrl || sp.webUrl;
+        // Remove local copy after successful SP upload
+        fs.unlink(req.file.path, () => {});
+        console.log(`[HR-Docs] Uploaded to SharePoint: ${spUrl}`);
+      } catch (spErr) {
+        console.error('[HR-Docs] SharePoint upload failed, keeping local copy:', spErr.message);
+        // fileUrl stays as localUrl — graceful fallback
+      }
+    }
+
     const { rows } = await query(
-      `INSERT INTO employee_documents (user_id, doc_type, doc_name, file_url, uploaded_by)
-       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [req.params.id, doc_type, doc_name || req.file?.originalname, fileUrl, req.user.id]
+      `INSERT INTO employee_documents
+         (user_id, doc_type, doc_name, file_url, sharepoint_id, sharepoint_url, uploaded_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [req.params.id, doc_type, displayName, fileUrl, spId, spUrl, req.user.id]
     );
     await query(
       `INSERT INTO employee_timeline
-       (user_id, company_id, event_type, title, description, created_by)
+         (user_id, company_id, event_type, title, description, created_by)
        VALUES ($1,$2,'document','Document uploaded',$3,$4)`,
-      [req.params.id, req.user.company_id, doc_name || req.file?.originalname || doc_type, req.user.id]
+      [req.params.id, req.user.company_id, displayName, req.user.id]
     );
     res.status(201).json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -662,13 +755,33 @@ router.post('/:id/documents', upload.single('file'), async (req, res) => {
 
 router.delete('/:id/documents/:docId', async (req, res) => {
   try {
-    const { rows } = await query(
-      `DELETE FROM employee_documents WHERE id=$1 AND user_id=$2 RETURNING file_url`,
+    // Fetch before delete so we don't reference potentially-missing columns in RETURNING
+    const sel = await query(
+      `SELECT file_url,
+              CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+                                WHERE table_name='employee_documents' AND column_name='sharepoint_id')
+                   THEN (SELECT sharepoint_id::text FROM employee_documents WHERE id=$1)
+                   ELSE NULL END AS sharepoint_id
+       FROM employee_documents WHERE id=$1 AND user_id=$2`,
       [req.params.docId, req.params.id]
     );
-    if (rows[0]?.file_url) {
-      const fp = path.join(__dirname, '../..', rows[0].file_url);
-      if (fs.existsSync(fp)) fs.unlinkSync(fp);
+    await query(
+      `DELETE FROM employee_documents WHERE id=$1 AND user_id=$2`,
+      [req.params.docId, req.params.id]
+    );
+    const rows = sel.rows;
+    if (rows[0]) {
+      const { file_url, sharepoint_id } = rows[0];
+      if (sharepoint_id) {
+        // Delete from SharePoint
+        deleteFromOneDrive(sharepoint_id).catch(e =>
+          console.error('[HR-Docs] SharePoint delete failed:', e.message)
+        );
+      } else if (file_url && file_url.startsWith('/uploads/')) {
+        // Delete local file
+        const fp = path.join(__dirname, '../..', file_url);
+        if (fs.existsSync(fp)) fs.unlinkSync(fp);
+      }
     }
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }

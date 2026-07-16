@@ -120,7 +120,7 @@ function VendorTable({ vendors, docLabel }) {
         {vendors.map((v, i) => (
           <tr key={v.vendor_id || i} className="hover:bg-slate-50">
             <td className="py-2.5 pr-3">
-              <div className="font-medium text-slate-800">{v.vendor_name}</div>
+              <div className="font-medium text-slate-800">{(v.vendor_name || '').toUpperCase()}</div>
               <div className="text-slate-400 font-mono">{v.vendor_code}</div>
             </td>
             <td className="py-2.5 pr-3"><VendorTypeBadge type={v.vendor_type} /></td>
@@ -208,7 +208,7 @@ function ByProjectTab({ projects }) {
                   <div className="flex items-center gap-3 min-w-0">
                     <Building2 className="w-4 h-4 text-indigo-500 shrink-0" />
                     <div className="text-left min-w-0">
-                      <div className="text-sm font-semibold text-slate-900 truncate">{proj.project_name}</div>
+                      <div className="text-sm font-semibold text-slate-900 truncate">{(proj.project_name || '').toUpperCase()}</div>
                       <div className="text-[11px] text-slate-400 font-mono">{proj.project_code}</div>
                     </div>
                   </div>
@@ -519,7 +519,7 @@ export default function VendorList() {
                         <div className="col-span-4 flex items-center gap-3 min-w-0">
                           <div className={clsx('w-2 h-2 rounded-full shrink-0', vt.dot)} />
                           <div className="min-w-0">
-                            <div className="text-sm font-medium text-slate-900 truncate">{v.name}</div>
+                            <div className="text-sm font-medium text-slate-900 truncate">{(v.name || '').toUpperCase()}</div>
                             <div className="text-xs text-slate-900 font-medium font-mono">{v.vendor_code}</div>
                           </div>
                         </div>

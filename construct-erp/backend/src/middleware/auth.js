@@ -38,6 +38,20 @@ const authenticate = async (req, res, next) => {
 
     req.user = result.rows[0];
     req.user.role = canonicalizeRole(req.user.role);
+
+    // Derive privilege flags server-side so they never leak into the frontend bundle.
+    // Any email-based executive access is validated here, not in client JS.
+    const MD_EXEC_EMAILS = (process.env.MD_EXEC_EMAILS || 'stephen@bcim.in')
+      .split(',').map(e => e.trim().toLowerCase());
+    const role = req.user.role.toLowerCase();
+    req.user.can_access_executive_dashboard =
+      ['md', 'managing_director', 'ceo', 'director', 'admin', 'super_admin'].includes(role)
+      || MD_EXEC_EMAILS.includes((req.user.email || '').toLowerCase());
+    const BUDGET_EMAILS = (process.env.BUDGET_BREAKDOWN_EMAILS || 'stephen@bcim.in')
+      .split(',').map(e => e.trim().toLowerCase());
+    req.user.can_access_budget_breakdown =
+      ['super_admin', 'procurement_manager', 'purchase_executive'].includes(role)
+      || BUDGET_EMAILS.includes((req.user.email || '').toLowerCase());
     next();
   } catch (err) {
     if (err.name === 'TokenExpiredError') {

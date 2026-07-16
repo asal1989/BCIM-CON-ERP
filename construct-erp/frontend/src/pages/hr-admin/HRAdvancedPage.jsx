@@ -208,7 +208,7 @@ function RegularizationTab({ employees }) {
   const [form, setForm] = useState({ user_id: '', attendance_date: today(), requested_status: 'present', requested_in_time: '09:30', requested_out_time: '18:00', reason: '' });
   const regs = useQuery({ queryKey: ['hr-advanced-regularizations'], queryFn: () => hrAdvancedAPI.listRegularizations().then(unwrap) });
   const refresh = () => qc.invalidateQueries({ queryKey: ['hr-advanced-regularizations'] });
-  const create = useMutation({ mutationFn: hrAdvancedAPI.createRegularization, onSuccess: () => { toast.success('Regularization requested'); setForm({ ...form, reason: '' }); refresh(); } });
+  const create = useMutation({ mutationFn: hrAdvancedAPI.createRegularization, onSuccess: () => { toast.success('Regularization requested'); setForm({ ...form, reason: '' }); refresh(); }, onError: (e) => toast.error(e?.response?.data?.error || 'Failed to submit regularization') });
   const action = useMutation({ mutationFn: ({ id, type }) => hrAdvancedAPI.actionRegularization(id, type), onSuccess: () => { toast.success('Request updated'); refresh(); } });
   return (
     <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">

@@ -780,12 +780,22 @@ function DocumentsTab({ emp, refetch }) {
                 <FileText className="w-4 h-4 text-blue-600"/>
               </div>
               <div>
-                <div className="text-gray-900 text-sm font-bold">{doc.doc_name}</div>
+                <div className="text-gray-900 text-sm font-bold flex items-center gap-2">
+                  {doc.doc_name}
+                  {doc.sharepoint_id && (
+                    <span style={{
+                      fontSize:10, fontWeight:700, background:'#EFF6FF', color:'#1D4ED8',
+                      border:'1px solid #BFDBFE', borderRadius:4, padding:'1px 6px',
+                    }}>
+                      ☁ SharePoint
+                    </span>
+                  )}
+                </div>
                 <div className="text-gray-400 text-xs capitalize">{doc.doc_type?.replace(/_/g,' ')} · {new Date(doc.uploaded_at).toLocaleDateString('en-IN')}</div>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <a href={doc.file_url} target="_blank" rel="noreferrer"
+              <a href={doc.sharepoint_url || doc.file_url} target="_blank" rel="noreferrer"
                 className="p-2 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors">
                 <Download className="w-4 h-4"/>
               </a>
@@ -827,6 +837,29 @@ export default function EmployeeDetailPage() {
     },
     onError:    (e) => toast.error(e.response?.data?.error || 'Failed to send welcome email', { id:'welcome-mail' }),
   });
+
+  const statusMut = useMutation({
+    mutationFn: ({ employment_status, is_active }) =>
+      hrEmployeesAPI.updateStatus(id, { employment_status, is_active }),
+    onSuccess: (_, vars) => {
+      const label = vars.is_active ? 'reactivated' : 'deactivated';
+      toast.success(`Employee ${label} successfully`);
+      refetch();
+    },
+    onError: (e) => toast.error(e.response?.data?.error || 'Status update failed'),
+  });
+
+  const handleDeactivate = () => {
+    if (!window.confirm(
+      `Deactivate ${emp?.name}?\n\nThis will mark them as Terminated and hide them from all active lists. All history (payroll, attendance, documents) is preserved.\n\nYou can reactivate them at any time.`
+    )) return;
+    statusMut.mutate({ employment_status: 'terminated', is_active: false });
+  };
+
+  const handleReactivate = () => {
+    if (!window.confirm(`Reactivate ${emp?.name}? This will restore them to active status.`)) return;
+    statusMut.mutate({ employment_status: 'active', is_active: true });
+  };
 
   if (isLoading) return (
     <div className="flex items-center justify-center py-24" style={{background:'#F8FAFC',minHeight:'100vh'}}>
@@ -874,17 +907,36 @@ export default function EmployeeDetailPage() {
             </div>
           </div>
           {/* Resend Welcome Email */}
-          <button
-            onClick={() => {
-              if (!emp.email) { toast.error('This employee has no email address'); return; }
-              welcomeMut.mutate(emp.email);
-            }}
-            disabled={welcomeMut.isLoading || !emp.email}
-            title={emp.email ? `Send login-access welcome email to ${emp.email}` : 'No email on file'}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-sm font-bold transition-all flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed mt-1">
-            <Send className="w-4 h-4"/>
-            {welcomeMut.isLoading ? 'Sending…' : 'Resend Welcome'}
-          </button>
+          <div className="flex flex-col gap-2 flex-shrink-0 mt-1">
+            <button
+              onClick={() => {
+                if (!emp.email) { toast.error('This employee has no email address'); return; }
+                welcomeMut.mutate(emp.email);
+              }}
+              disabled={welcomeMut.isLoading || !emp.email}
+              title={emp.email ? `Send login-access welcome email to ${emp.email}` : 'No email on file'}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              <Send className="w-4 h-4"/>
+              {welcomeMut.isLoading ? 'Sending…' : 'Resend Welcome'}
+            </button>
+            {isActive ? (
+              <button
+                onClick={handleDeactivate}
+                disabled={statusMut.isLoading}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/35 border border-red-400/40 text-red-200 text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                <Ban className="w-4 h-4"/>
+                {statusMut.isLoading ? 'Updating…' : 'Deactivate'}
+              </button>
+            ) : (
+              <button
+                onClick={handleReactivate}
+                disabled={statusMut.isLoading}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400/40 text-emerald-200 text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                <CheckCircle2 className="w-4 h-4"/>
+                {statusMut.isLoading ? 'Updating…' : 'Reactivate'}
+              </button>
+            )}
+          </div>
         </div>
       </motion.div>
 

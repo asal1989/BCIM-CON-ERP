@@ -11,6 +11,7 @@ import {
   CheckCircle2, Clock, AlertTriangle, IndianRupee, FileText,
   ArrowRight, Building2, CalendarDays, Layers, Send,
   BarChart3, Info, HardHat, Printer, Pencil, Trash2,
+  Paperclip, Upload, ExternalLink,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
@@ -1102,6 +1103,9 @@ function RaiseBillModal({ wos, onClose, initialWoId }) {
 // ─── Edit Bill Modal — correct GST/TDS/Retention/other deductions ─────────────
 function EditBillModal({ bill, onClose }) {
   const qc = useQueryClient();
+  const { user } = useAuthStore();
+  const canEditQty = ['super_admin', 'qs_engineer'].includes(user?.role);
+
   const [f, setF] = useState({
     gst_pct: bill.gst_pct, tds_pct: bill.tds_pct, retention_pct: bill.retention_pct,
     is_igst: !!bill.is_igst, labour_cess_pct: bill.gross_amount > 0 ? +(100 * bill.labour_cess_amount / bill.gross_amount).toFixed(2) : 0,
@@ -1111,7 +1115,15 @@ function EditBillModal({ bill, onClose }) {
   });
   const set = (k, v) => setF(prev => ({ ...prev, [k]: v }));
 
-  const grossAmt = num(bill.gross_amount);
+  // Item qty state — only used when canEditQty
+  const [itemQtys, setItemQtys] = useState(() =>
+    (bill.items || []).map(it => ({ id: it.id, curr_qty: it.curr_qty, rate: it.rate, description: it.description, unit: it.unit }))
+  );
+  const setItemQty = (id, val) => setItemQtys(prev => prev.map(it => it.id === id ? { ...it, curr_qty: val } : it));
+
+  const grossAmt = canEditQty && itemQtys.length > 0
+    ? itemQtys.reduce((s, it) => s + num(it.curr_qty) * num(it.rate), 0)
+    : num(bill.gross_amount);
   const gst = grossAmt * num(f.gst_pct) / 100;
   const tds = grossAmt * num(f.tds_pct) / 100;
   const ret = grossAmt * num(f.retention_pct) / 100;
@@ -1120,7 +1132,10 @@ function EditBillModal({ bill, onClose }) {
     - tds - ret - num(f.advance_recovery) - num(f.material_recovery) - num(f.penalty_amount) - num(f.other_deductions) - labourCess;
 
   const saveMut = useMutation({
-    mutationFn: () => scAPI.editBill(bill.id, f),
+    mutationFn: () => scAPI.editBill(bill.id, {
+      ...f,
+      ...(canEditQty && itemQtys.length > 0 ? { items: itemQtys.map(it => ({ id: it.id, curr_qty: num(it.curr_qty) })) } : {}),
+    }),
     onSuccess: () => {
       toast.success('Bill updated');
       qc.invalidateQueries({ queryKey: ['sc-bills'] });
@@ -1132,7 +1147,7 @@ function EditBillModal({ bill, onClose }) {
 
   return (
     <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[88vh] overflow-hidden flex flex-col">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100"
           style={{ background: `linear-gradient(135deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)` }}>
           <div>
@@ -1144,6 +1159,48 @@ function EditBillModal({ bill, onClose }) {
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-5 space-y-3">
+          {canEditQty && itemQtys.length > 0 && (
+            <div>
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">BOQ Item Quantities</p>
+              <div className="border border-slate-200 rounded-lg overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-semibold text-slate-600">Description</th>
+                      <th className="text-center px-2 py-2 font-semibold text-slate-600 w-14">Unit</th>
+                      <th className="text-right px-2 py-2 font-semibold text-slate-600 w-20">Rate</th>
+                      <th className="text-center px-2 py-2 font-semibold text-slate-600 w-24">This Bill Qty</th>
+                      <th className="text-right px-2 py-2 font-semibold text-slate-600 w-24">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {itemQtys.map((it, idx) => (
+                      <tr key={it.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                        <td className="px-3 py-2 text-slate-700">{it.description}</td>
+                        <td className="px-2 py-2 text-center text-slate-500">{it.unit}</td>
+                        <td className="px-2 py-2 text-right text-slate-600">{fmt(it.rate)}</td>
+                        <td className="px-2 py-2">
+                          <input
+                            type="number" min="0" step="any"
+                            value={it.curr_qty}
+                            onChange={e => setItemQty(it.id, e.target.value)}
+                            className="w-full border border-indigo-300 rounded px-2 py-1 text-center text-sm font-medium outline-none focus:ring-1 focus:ring-indigo-400"
+                          />
+                        </td>
+                        <td className="px-2 py-2 text-right font-semibold text-slate-700">{fmt(num(it.curr_qty) * num(it.rate))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-indigo-50 border-t border-indigo-200">
+                    <tr>
+                      <td colSpan={4} className="px-3 py-2 text-right font-bold text-indigo-700 text-xs">Gross Work Amount</td>
+                      <td className="px-2 py-2 text-right font-bold text-indigo-700">{fmt(grossAmt)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-3 gap-3">
             <Field label="GST %"><input type="number" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none" value={f.gst_pct} onChange={e => set('gst_pct', e.target.value)} /></Field>
             <Field label="TDS %"><input type="number" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none" value={f.tds_pct} onChange={e => set('tds_pct', e.target.value)} /></Field>
@@ -1171,6 +1228,124 @@ function EditBillModal({ bill, onClose }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Bill Attachments Panel ───────────────────────────────────────────────────
+function BillAttachmentsPanel({ billId }) {
+  const qc = useQueryClient();
+  const fileInputRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+
+  const { data: filesData, isLoading } = useQuery({
+    queryKey: ['sc-bill-files', billId],
+    queryFn: () => scAPI.listBillFiles(billId).then(r => r.data?.data || []),
+    enabled: !!billId,
+    staleTime: 30_000,
+  });
+  const files = filesData || [];
+
+  const deleteMut = useMutation({
+    mutationFn: (fid) => scAPI.deleteBillFile(billId, fid),
+    onSuccess: () => { toast.success('Attachment removed'); qc.invalidateQueries({ queryKey: ['sc-bill-files', billId] }); },
+    onError: () => toast.error('Failed to delete'),
+  });
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    setUploading(true);
+    try {
+      await scAPI.uploadBillFile(billId, fd);
+      toast.success('File uploaded');
+      qc.invalidateQueries({ queryKey: ['sc-bill-files', billId] });
+    } catch {
+      toast.error('Upload failed');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDelete = (fid, name) => {
+    if (!window.confirm(`Remove "${name}"?`)) return;
+    deleteMut.mutate(fid);
+  };
+
+  const fileIcon = (type) => {
+    if (!type) return '📄';
+    if (type.includes('pdf')) return '📕';
+    if (type.includes('image')) return '🖼️';
+    if (type.includes('excel') || type.includes('spreadsheet')) return '📊';
+    if (type.includes('word') || type.includes('document')) return '📝';
+    return '📄';
+  };
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Paperclip className="w-4 h-4 text-slate-400" />
+          <p className="text-sm font-bold text-slate-700">Attachments</p>
+          {files.length > 0 && (
+            <span className="text-xs font-bold text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">{files.length}</span>
+          )}
+        </div>
+        <div>
+          <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.docx" className="hidden" onChange={handleFileChange} />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-700 border border-indigo-200 hover:bg-indigo-50 transition disabled:opacity-60"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            {uploading ? 'Uploading…' : 'Upload'}
+          </button>
+        </div>
+      </div>
+      {isLoading ? (
+        <div className="p-4 text-sm text-slate-400">Loading…</div>
+      ) : files.length === 0 ? (
+        <div className="p-6 text-center">
+          <Paperclip className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+          <p className="text-sm text-slate-400">No attachments yet — upload invoices, log sheets, or other documents</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-slate-50">
+          {files.map(f => (
+            <div key={f.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50/60 transition group">
+              <span className="text-lg flex-shrink-0">{fileIcon(f.file_type)}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-slate-800 truncate">{f.file_name}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {f.file_size ? `${(f.file_size / 1024).toFixed(0)} KB` : ''}
+                  {f.onedrive_web_url && <span className="ml-2 text-sky-500 font-medium">• OneDrive</span>}
+                </p>
+              </div>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {f.onedrive_web_url ? (
+                  <a href={f.onedrive_web_url} target="_blank" rel="noopener noreferrer"
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-sky-600 hover:bg-sky-50 transition">
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                ) : (
+                  <a href={scAPI.serveBillFile(billId, f.id)} target="_blank" rel="noopener noreferrer"
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition">
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
+                <button onClick={() => handleDelete(f.id, f.file_name)}
+                  className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition opacity-0 group-hover:opacity-100">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1230,157 +1405,203 @@ function BillDetailPage({ billId, onClose }) {
   const tdsPct = num(b.tds_pct || b.wo_tds_pct || 2);
   const retPct = num(b.retention_pct || b.wo_ret_pct || 5);
 
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-slate-50 overflow-hidden">
+  const infoCards = [
+    { label: 'WO Number',     value: b.wo_number, Icon: FileText,     mono: true, tint: 'text-indigo-700', bg: 'bg-indigo-50', ic: 'text-indigo-500' },
+    { label: 'Bill Date',     value: b.bill_date ? dayjs(b.bill_date).format('DD MMM YYYY') : '—', Icon: CalendarDays, tint: 'text-slate-800', bg: 'bg-sky-50', ic: 'text-sky-500' },
+    { label: 'Bill Type',     value: (b.bill_type||'ra').toUpperCase(), Icon: Layers, tint: 'text-slate-800', bg: 'bg-violet-50', ic: 'text-violet-500' },
+    { label: 'Subcontractor', value: b.sc_name, Icon: HardHat, tint: 'text-slate-800', bg: 'bg-amber-50', ic: 'text-amber-500' },
+  ];
 
-      {/* ── Top bar ── */}
-      <div className="flex items-center justify-between px-6 py-4 flex-shrink-0 shadow-md"
-        style={{ background: `linear-gradient(135deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)` }}>
-        <div className="flex items-center gap-4 min-w-0">
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-slate-100 overflow-hidden">
+
+      {/* ── Top action bar — white, clean ── */}
+      <div className="bg-white border-b border-slate-200 flex-shrink-0 z-10">
+        <div className="flex items-center justify-between px-6 py-3">
           <button onClick={onClose}
-            className="flex items-center gap-1.5 text-white/70 hover:text-white text-xs font-semibold transition flex-shrink-0">
-            <X className="w-4 h-4" /> Close
+            className="flex items-center gap-1.5 text-slate-500 hover:text-slate-900 text-sm font-semibold transition group">
+            <span className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center group-hover:border-slate-400 group-hover:bg-slate-50 transition">
+              <X className="w-4 h-4" />
+            </span>
+            Back to Bills
           </button>
-          <div className="w-px h-5 bg-white/20" />
-          <div className="min-w-0">
-            <p className="font-bold text-white text-base font-mono">{b.bill_number || '…'}</p>
-            <p className="text-xs mt-0.5 text-white/60 truncate">{b.sc_name} · {b.project_name}</p>
+          <div className="flex items-center gap-2">
+            {!isLoading && b?.id && canDelete && (
+              <button onClick={handleDelete} disabled={deleteMut.isPending}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold text-red-600 border border-red-200 hover:bg-red-50 transition disabled:opacity-60">
+                <Trash2 className="w-4 h-4" /> {deleteMut.isPending ? 'Deleting…' : 'Delete'}
+              </button>
+            )}
+            {!isLoading && b?.id && canEdit && (
+              <button onClick={() => setShowEdit(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold text-slate-700 border border-slate-200 hover:bg-slate-50 transition">
+                <Pencil className="w-4 h-4" /> Edit Bill
+              </button>
+            )}
+            {!isLoading && b?.id && (
+              <button onClick={() => handlePrint()}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold text-slate-700 border border-slate-200 hover:bg-slate-50 transition">
+                <Printer className="w-4 h-4" /> Print RA Bill
+              </button>
+            )}
+            {b.status === 'draft' && (
+              <button onClick={() => submitMut.mutate()} disabled={submitMut.isPending}
+                className="flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition disabled:opacity-60">
+                <Send className="w-4 h-4" /> {submitMut.isPending ? 'Submitting…' : 'Submit for Approval'}
+              </button>
+            )}
           </div>
-          {b.status && (
-            <span className={clsx('text-xs px-2.5 py-1 rounded-full font-bold flex-shrink-0', sm.bg, sm.text)}>{sm.label}</span>
-          )}
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {!isLoading && b?.id && canDelete && (
-            <button onClick={handleDelete} disabled={deleteMut.isPending}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white transition disabled:opacity-60"
-              style={{ background: 'rgba(220,38,38,0.75)', border: '1px solid rgba(255,255,255,0.22)' }}>
-              <Trash2 className="w-3.5 h-3.5" /> {deleteMut.isPending ? 'Deleting…' : 'Delete Bill'}
-            </button>
-          )}
-          {!isLoading && b?.id && canEdit && (
-            <button onClick={() => setShowEdit(true)}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white transition"
-              style={{ background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.22)' }}>
-              <Pencil className="w-3.5 h-3.5" /> Edit Bill
-            </button>
-          )}
-          {!isLoading && b?.id && (
-            <button onClick={() => handlePrint()}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white transition"
-              style={{ background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.22)' }}>
-              <Printer className="w-3.5 h-3.5" /> Print RA Bill
-            </button>
-          )}
-          {b.status === 'draft' && (
-            <button onClick={() => submitMut.mutate()}
-              disabled={submitMut.isPending}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-white transition disabled:opacity-60">
-              <Send className="w-3.5 h-3.5" /> {submitMut.isPending ? 'Submitting…' : 'Submit for Approval'}
-            </button>
-          )}
         </div>
       </div>
 
       {/* ── Body ── */}
       <div className="flex-1 overflow-y-auto">
         {isLoading ? (
-          <div className="p-8 grid grid-cols-3 gap-4">
-            {[1,2,3,4,5,6].map(n => <div key={n} className="h-28 bg-white rounded-2xl animate-pulse border border-slate-100" />)}
+          <div className="p-8 max-w-7xl mx-auto space-y-4">
+            <div className="h-28 bg-white rounded-2xl animate-pulse border border-slate-100" />
+            <div className="grid grid-cols-4 gap-4">
+              {[1,2,3,4].map(n => <div key={n} className="h-24 bg-white rounded-xl animate-pulse border border-slate-100" />)}
+            </div>
+            <div className="grid grid-cols-3 gap-6">
+              <div className="col-span-2 h-72 bg-white rounded-xl animate-pulse border border-slate-100" />
+              <div className="h-72 bg-white rounded-xl animate-pulse border border-slate-100" />
+            </div>
           </div>
         ) : (
           <div className="p-6 max-w-7xl mx-auto space-y-6">
 
+            {/* ── Document header banner ── */}
+            <div className="rounded-2xl overflow-hidden shadow-lg"
+              style={{ background: `linear-gradient(120deg, ${Theme.navy} 0%, ${Theme.navyDark || '#152c47'} 100%)` }}>
+              <div className="px-7 py-6 flex items-start justify-between gap-6 flex-wrap">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 text-white/50 text-[11px] font-bold uppercase tracking-[0.2em] mb-2">
+                    <Receipt className="w-3.5 h-3.5" /> Subcontractor RA Bill
+                  </div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <h1 className="text-3xl font-black text-white font-mono tracking-tight">{b.bill_number || '…'}</h1>
+                    {b.status && (
+                      <span className={clsx('text-xs px-3 py-1 rounded-full font-bold', sm.bg, sm.text)}>{sm.label}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-white/70 mt-2.5 font-medium flex-wrap">
+                    <HardHat className="w-4 h-4 text-white/50" />
+                    <span className="font-semibold text-white/90">{b.sc_name || '—'}</span>
+                    <span className="text-white/30">•</span>
+                    <Building2 className="w-4 h-4 text-white/50" />
+                    <span>{b.project_name || '—'}</span>
+                  </div>
+                </div>
+                <div className="text-right flex-shrink-0 rounded-xl px-6 py-3" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-white/50 mb-1">Net Payable</p>
+                  <p className="text-3xl font-black text-white font-mono tabular-nums">{fmt2(b.net_payable)}</p>
+                </div>
+              </div>
+            </div>
+
             {/* ── Info cards row ── */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {[
-                { label: 'WO Number',   value: b.wo_number,  mono: true, color: 'text-indigo-700' },
-                { label: 'Bill Date',   value: b.bill_date ? dayjs(b.bill_date).format('DD MMM YYYY') : '—' },
-                { label: 'Bill Type',   value: (b.bill_type||'ra').toUpperCase() },
-                { label: 'Subcontractor', value: b.sc_name },
-              ].map(({ label, value, mono, color }) => (
-                <div key={label} className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{label}</p>
-                  <p className={clsx('text-sm font-bold text-slate-800 truncate', mono && 'font-mono', color)}>{value || '—'}</p>
+              {infoCards.map(({ label, value, mono, tint, bg, ic, Icon }) => (
+                <div key={label} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center gap-3">
+                  <div className={clsx('w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0', bg)}>
+                    <Icon className={clsx('w-5 h-5', ic)} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">{label}</p>
+                    <p className={clsx('text-[15px] font-bold truncate', mono && 'font-mono', tint)}>{value || '—'}</p>
+                  </div>
                 </div>
               ))}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-              {/* ── Left: BOQ items ── */}
-              <div className="lg:col-span-2 space-y-4">
-                <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
-                  <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-                    <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">BOQ Items ({items.length})</p>
+            {/* ── BOQ Items — full width so amounts never clip ── */}
+            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                  <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-slate-400" />
+                    <p className="text-sm font-bold text-slate-700">BOQ Items</p>
+                    <span className="text-xs font-bold text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">{items.length}</span>
                   </div>
                   {items.length === 0 ? (
-                    <p className="text-sm text-slate-400 text-center py-8">No items</p>
+                    <p className="text-base text-slate-400 text-center py-10">No items</p>
                   ) : (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
+                      <table className="w-full text-sm border-collapse">
                         <thead>
-                          <tr className="bg-slate-50 border-b border-slate-100">
-                            <th className="text-left px-4 py-2.5 font-semibold text-slate-500">Description</th>
-                            <th className="text-center px-3 py-2.5 font-semibold text-slate-500">Unit</th>
-                            <th className="text-right px-3 py-2.5 font-semibold text-slate-500">Rate</th>
-                            <th className="text-right px-3 py-2.5 font-semibold text-slate-500">Prev Qty</th>
-                            <th className="text-right px-3 py-2.5 font-semibold text-slate-500">This Bill Qty</th>
-                            <th className="text-right px-3 py-2.5 font-semibold text-slate-500 pr-4">Amount</th>
+                          <tr className="bg-slate-50 border-b border-slate-200">
+                            <th className="text-left px-5 py-3 font-bold text-slate-500 text-[11px] uppercase tracking-wider">Description</th>
+                            <th className="text-center px-3 py-3 font-bold text-slate-500 text-[11px] uppercase tracking-wider whitespace-nowrap">Unit</th>
+                            <th className="text-right px-3 py-3 font-bold text-slate-500 text-[11px] uppercase tracking-wider whitespace-nowrap">Rate</th>
+                            <th className="text-right px-3 py-3 font-bold text-slate-500 text-[11px] uppercase tracking-wider whitespace-nowrap">Prev Qty</th>
+                            <th className="text-right px-3 py-3 font-bold text-slate-500 text-[11px] uppercase tracking-wider whitespace-nowrap">This Bill Qty</th>
+                            <th className="text-right px-5 py-3 font-bold text-slate-500 text-[11px] uppercase tracking-wider whitespace-nowrap">Amount</th>
                           </tr>
                         </thead>
                         <tbody>
                           {items.map((it, i) => (
-                            <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
-                              <td className="px-4 py-2.5">
-                                <p className="font-semibold text-slate-800">{it.description || it.wo_item_desc}</p>
+                            <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60 transition-colors">
+                              <td className="px-5 py-3.5 min-w-[180px]">
+                                <p className="font-semibold text-slate-800 leading-snug">{it.description || it.wo_item_desc}</p>
                               </td>
-                              <td className="text-center px-3 py-2.5 text-slate-500">{it.unit || '—'}</td>
-                              <td className="text-right px-3 py-2.5 font-mono text-slate-600">{fmt2(it.rate)}</td>
-                              <td className="text-right px-3 py-2.5 font-mono text-slate-400">
+                              <td className="text-center px-3 py-3.5 text-slate-500 font-medium whitespace-nowrap">{it.unit || '—'}</td>
+                              <td className="text-right px-3 py-3.5 font-mono font-semibold text-slate-600 whitespace-nowrap tabular-nums">{fmt2(it.rate)}</td>
+                              <td className="text-right px-3 py-3.5 font-mono text-slate-400 whitespace-nowrap tabular-nums">
                                 {num(it.cum_prev_qty ?? it.prev_qty ?? 0).toFixed(3)}
                               </td>
-                              <td className="text-right px-3 py-2.5 font-mono font-bold text-indigo-700">
+                              <td className="text-right px-3 py-3.5 font-mono font-bold text-indigo-700 whitespace-nowrap tabular-nums">
                                 {num(it.curr_qty ?? it.current_qty ?? 0).toFixed(3)}
                               </td>
-                              <td className="text-right px-4 py-2.5 font-mono font-bold text-slate-800">
+                              <td className="text-right px-5 py-3.5 font-mono font-bold text-slate-900 whitespace-nowrap tabular-nums">
                                 {fmt2(num(it.curr_qty ?? it.current_qty ?? 0) * num(it.rate))}
                               </td>
                             </tr>
                           ))}
                         </tbody>
                         <tfoot>
-                          <tr className="border-t-2 border-slate-200 bg-indigo-50">
-                            <td colSpan={5} className="px-4 py-3 font-bold text-slate-700 text-xs">Gross Work Amount</td>
-                            <td className="text-right px-4 py-3 font-bold text-indigo-800 font-mono text-sm">{fmt2(b.gross_amount)}</td>
+                          <tr className="border-t-2 border-slate-200" style={{ background: `${Theme.navy}0d` }}>
+                            <td colSpan={5} className="px-5 py-4 font-bold text-slate-700 whitespace-nowrap">Gross Work Amount</td>
+                            <td className="text-right px-5 py-4 font-black font-mono text-lg whitespace-nowrap tabular-nums" style={{ color: Theme.navy }}>{fmt2(b.gross_amount)}</td>
                           </tr>
                         </tfoot>
                       </table>
                     </div>
                   )}
-                </div>
+            </div>
 
+            {/* ── Attachments ── */}
+            <BillAttachmentsPanel billId={billId} />
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+              {/* ── Left: approval trail + payments ── */}
+              <div className="lg:col-span-2 space-y-6">
                 {/* Approval trail */}
                 {approvals.length > 0 && (
-                  <div className="bg-white border border-slate-100 rounded-2xl shadow-sm">
-                    <div className="px-5 py-3 border-b border-slate-100">
-                      <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">Approval Trail</p>
+                  <div className="bg-white border border-slate-200 rounded-2xl shadow-sm">
+                    <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-slate-400" />
+                      <p className="text-sm font-bold text-slate-700">Approval Trail</p>
                     </div>
-                    <div className="p-5 space-y-3">
+                    <div className="p-5">
                       {approvals.map((a, i) => (
-                        <div key={i} className="flex gap-3">
-                          <div className={clsx('w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-white text-[10px] font-bold',
+                        <div key={i} className="flex gap-4 relative">
+                          {i < approvals.length - 1 && (
+                            <div className="absolute left-4 top-9 bottom-0 w-px bg-slate-200" />
+                          )}
+                          <div className={clsx('w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-sm font-bold z-10 ring-4 ring-white',
                             a.action==='approved' ? 'bg-emerald-500' : a.action==='rejected' ? 'bg-red-500' : 'bg-amber-500')}>
-                            {a.action==='approved' ? '✓' : a.action==='rejected' ? '✗' : '?'}
+                            {i + 1}
                           </div>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-sm font-bold text-slate-700 capitalize">{a.action}</span>
-                              <span className="text-xs text-slate-400">by {a.actor_name || 'System'}</span>
-                              <span className="text-xs text-slate-400 capitalize">({(a.stage||'').replace(/_/g,' ')})</span>
-                              <span className="text-xs text-slate-400 ml-auto">{dayjs(a.created_at).format('DD MMM YYYY · HH:mm')}</span>
+                          <div className={clsx('flex-1 pb-5', i < approvals.length - 1 && 'border-b border-slate-100 mb-1')}>
+                            <div className="flex items-start justify-between gap-2 flex-wrap">
+                              <div>
+                                <span className="font-bold text-slate-800 capitalize">{a.action}</span>
+                                <span className="text-slate-500 text-sm ml-2">by {a.actor_name || 'System'}</span>
+                                {a.stage && <span className="text-slate-400 text-sm ml-1 capitalize">({(a.stage||'').replace(/_/g,' ')})</span>}
+                              </div>
+                              <span className="text-sm text-slate-400 whitespace-nowrap">{dayjs(a.created_at).format('DD MMM YYYY · HH:mm')}</span>
                             </div>
-                            {a.comments && <p className="text-xs text-slate-500 mt-1 italic bg-slate-50 rounded px-2 py-1">"{a.comments}"</p>}
+                            {a.comments && (
+                              <p className="text-sm text-slate-500 mt-2 italic bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">"{a.comments}"</p>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -1390,16 +1611,17 @@ function BillDetailPage({ billId, onClose }) {
 
                 {/* Payments */}
                 {payments.length > 0 && (
-                  <div className="bg-white border border-slate-100 rounded-2xl shadow-sm">
-                    <div className="px-5 py-3 border-b border-slate-100">
-                      <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">Payment History</p>
+                  <div className="bg-white border border-slate-200 rounded-2xl shadow-sm">
+                    <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+                      <IndianRupee className="w-4 h-4 text-slate-400" />
+                      <p className="text-sm font-bold text-slate-700">Payment History</p>
                     </div>
                     <div className="p-5 space-y-2">
                       {payments.map((p, i) => (
-                        <div key={i} className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 flex justify-between items-center">
+                        <div key={i} className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3 flex justify-between items-center">
                           <div>
-                            <p className="text-sm font-bold text-emerald-800">{fmt2(p.amount)}</p>
-                            <p className="text-xs text-emerald-600">{dayjs(p.payment_date).format('DD MMM YYYY')} · {p.payment_mode?.replace('_',' ')}</p>
+                            <p className="font-bold text-emerald-800">{fmt2(p.amount)}</p>
+                            <p className="text-xs text-emerald-600 mt-0.5">{dayjs(p.payment_date).format('DD MMM YYYY')} · {p.payment_mode?.replace('_',' ')}</p>
                             {p.reference_no && <p className="text-xs text-slate-500 mt-0.5">Ref: {p.reference_no}</p>}
                           </div>
                         </div>
@@ -1410,46 +1632,48 @@ function BillDetailPage({ billId, onClose }) {
               </div>
 
               {/* ── Right: Bill Abstract ── */}
-              <div className="space-y-4">
-                <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden sticky top-4">
-                  <div className="px-5 py-3 border-b border-slate-100">
-                    <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">Bill Abstract</p>
+              <div>
+                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden sticky top-4">
+                  <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-slate-400" />
+                    <p className="text-sm font-bold text-slate-700">Bill Abstract</p>
                   </div>
-                  <div className="divide-y divide-slate-50">
+                  <div className="px-5 py-4 space-y-1">
                     {[
-                      { l: 'Gross Work Amount', v: b.gross_amount, bold: true, c: 'text-slate-800' },
+                      { l: 'Gross Work Amount', v: b.gross_amount, bold: true, c: 'text-slate-900' },
                       num(b.cgst_amount) > 0
-                        ? { l: `CGST (${(gstPct/2).toFixed(1)}%)`, v: b.cgst_amount, c: 'text-indigo-600', sub: true }
+                        ? { l: `CGST (${(gstPct/2).toFixed(1)}%)`, v: b.cgst_amount, c: 'text-indigo-600' }
                         : null,
                       num(b.sgst_amount) > 0
-                        ? { l: `SGST (${(gstPct/2).toFixed(1)}%)`, v: b.sgst_amount, c: 'text-indigo-600', sub: true }
+                        ? { l: `SGST (${(gstPct/2).toFixed(1)}%)`, v: b.sgst_amount, c: 'text-indigo-600' }
                         : null,
                       num(b.igst_amount) > 0
-                        ? { l: `IGST (${gstPct}%)`, v: b.igst_amount, c: 'text-indigo-600', sub: true }
+                        ? { l: `IGST (${gstPct}%)`, v: b.igst_amount, c: 'text-indigo-600' }
                         : null,
                       (!num(b.cgst_amount) && !num(b.igst_amount))
-                        && { l: `GST (${gstPct}%)`, v: b.gst_amount, c: 'text-indigo-600', sub: true },
+                        && { l: `GST (${gstPct}%)`, v: b.gst_amount, c: 'text-indigo-600' },
                       num(b.retention_release_amount) > 0
-                        && { l: '+ Retention Release', v: b.retention_release_amount, c: 'text-emerald-600', sub: true },
-                      { l: `TDS (${tdsPct}%)`,       v: -b.tds_amount,       c: 'text-red-500', sub: true },
-                      { l: `Retention (${retPct}%)`, v: -b.retention_amount, c: 'text-orange-500', sub: true },
-                      num(b.labour_cess_amount) > 0 && { l: 'Labour Cess', v: -b.labour_cess_amount, c: 'text-amber-600', sub: true },
-                      num(b.advance_recovery)   > 0 && { l: 'Advance Recovery', v: -b.advance_recovery, c: 'text-red-500', sub: true },
-                      num(b.material_recovery)  > 0 && { l: 'Material Recovery', v: -b.material_recovery, c: 'text-red-500', sub: true },
-                      num(b.penalty_amount)     > 0 && { l: 'Penalty', v: -b.penalty_amount, c: 'text-red-500', sub: true },
-                      num(b.other_deductions)   > 0 && { l: 'Other Deductions', v: -b.other_deductions, c: 'text-red-500', sub: true },
-                    ].filter(Boolean).map(({ l, v, c, sub, bold }) => (
-                      <div key={l} className={clsx('flex justify-between px-5 py-2.5 text-sm', sub && 'bg-slate-50/60 pl-8')}>
-                        <span className="text-slate-600">{l}</span>
-                        <span className={clsx('font-semibold tabular-nums', c, bold && 'font-bold text-slate-900')}>
+                        && { l: 'Retention Release', v: b.retention_release_amount, c: 'text-emerald-600' },
+                      { l: `TDS (${tdsPct}%)`,       v: -b.tds_amount,       c: 'text-red-500' },
+                      { l: `Retention (${retPct}%)`, v: -b.retention_amount, c: 'text-orange-500' },
+                      num(b.labour_cess_amount) > 0 && { l: 'Labour Cess', v: -b.labour_cess_amount, c: 'text-amber-600' },
+                      num(b.advance_recovery)   > 0 && { l: 'Advance Recovery', v: -b.advance_recovery, c: 'text-red-500' },
+                      num(b.material_recovery)  > 0 && { l: 'Material Recovery', v: -b.material_recovery, c: 'text-red-500' },
+                      num(b.penalty_amount)     > 0 && { l: 'Penalty', v: -b.penalty_amount, c: 'text-red-500' },
+                      num(b.other_deductions)   > 0 && { l: 'Other Deductions', v: -b.other_deductions, c: 'text-red-500' },
+                    ].filter(Boolean).map(({ l, v, c, bold }, idx) => (
+                      <div key={l} className={clsx('flex justify-between items-center py-2.5', idx > 0 && 'border-t border-slate-50')}>
+                        <span className={clsx('text-sm', bold ? 'font-bold text-slate-800' : 'text-slate-500')}>{l}</span>
+                        <span className={clsx('font-bold tabular-nums font-mono whitespace-nowrap', c, bold ? 'text-base' : 'text-sm')}>
                           {num(v) < 0 ? `(${fmt2(Math.abs(num(v)))})` : fmt2(Math.abs(num(v)))}
                         </span>
                       </div>
                     ))}
-                    <div className="flex justify-between px-5 py-4 bg-indigo-50">
-                      <span className="font-bold text-slate-800 text-sm">Net Payable</span>
-                      <span className="text-lg font-black" style={{ color: Theme.navy }}>{fmt2(b.net_payable)}</span>
-                    </div>
+                  </div>
+                  <div className="flex justify-between items-center px-5 py-5 text-white"
+                    style={{ background: `linear-gradient(120deg, ${Theme.navy} 0%, ${Theme.navyDark || '#152c47'} 100%)` }}>
+                    <span className="font-bold text-sm uppercase tracking-wider text-white/80">Net Payable</span>
+                    <span className="text-2xl font-black font-mono tabular-nums">{fmt2(b.net_payable)}</span>
                   </div>
                 </div>
               </div>

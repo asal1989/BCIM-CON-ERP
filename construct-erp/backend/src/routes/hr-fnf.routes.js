@@ -244,7 +244,7 @@ router.get('/calculate-gratuity', authorize(...HR_ALL), async (req, res) => {
   const { employee_id, last_working_day } = req.query;
   const { rows } = await query(
     `SELECT ep.date_of_joining,
-            (SELECT gross_monthly FROM hr_employee_salaries WHERE user_id=ep.user_id AND effective_to IS NULL ORDER BY effective_from DESC LIMIT 1) AS basic_salary
+            (SELECT basic FROM hr_employee_salaries WHERE user_id=ep.user_id AND effective_to IS NULL ORDER BY effective_from DESC LIMIT 1) AS basic_salary
      FROM employee_profiles ep WHERE ep.user_id=$1 AND ep.company_id=$2`,
     [employee_id, req.user.company_id]
   );

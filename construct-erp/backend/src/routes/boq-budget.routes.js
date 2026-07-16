@@ -89,7 +89,7 @@ router.get('/:project_id', async (req, res) => {
       FROM sc_bill_items bi
       JOIN sc_bills sb ON sb.id = bi.bill_id
       JOIN sc_wo_items swi ON swi.id = bi.wo_item_id
-      WHERE sb.project_id = $1 AND sb.status IN ('approved','paid') AND swi.boq_item_id IS NOT NULL
+      WHERE sb.project_id = $1 AND sb.status IN ('submitted','approved','paid') AND swi.boq_item_id IS NOT NULL
       GROUP BY swi.boq_item_id, COALESCE(bi.cost_head, 'Sub Con')
     `, [project_id]);
 
@@ -402,7 +402,7 @@ router.get('/:project_id', async (req, res) => {
       FROM sc_bill_items bi
       JOIN sc_bills sb ON sb.id = bi.bill_id
       LEFT JOIN sc_wo_items swi ON swi.id = bi.wo_item_id
-      WHERE sb.project_id = $1 AND sb.status IN ('approved','paid')
+      WHERE sb.project_id = $1 AND sb.status IN ('submitted','approved','paid')
         AND (swi.id IS NULL OR swi.boq_item_id IS NULL)
     `, [project_id]);
 
@@ -729,7 +729,7 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
     const scActuals = await query(`
       SELECT COALESCE(bi.cost_head, 'Sub Con') AS cost_head, SUM(bi.curr_qty * bi.rate * (1 + COALESCE(sb.gst_pct, 18) / 100.0)) AS actual
       FROM sc_bill_items bi JOIN sc_bills sb ON sb.id = bi.bill_id
-      WHERE sb.project_id=$1 AND sb.status IN ('approved','paid')
+      WHERE sb.project_id=$1 AND sb.status IN ('submitted','approved','paid')
       GROUP BY COALESCE(bi.cost_head, 'Sub Con')`, [project_id]);
     // Paid: actual cash paid against SC bills (mapped to "Sub Con" — SC bill
     // items are essentially all Sub Con, and paid_amount isn't split by head).
@@ -827,28 +827,80 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
         WHERE project_id=$1 AND status != 'cancelled'`, [project_id]);
     } catch (_) {}
 
-    // "Received" = value of bills logged (RA/SC/TQS/PO), any approval stage.
+    // Finance module invoices (Vendor Payments page) — Bills Received / Total Spent.
+    // Consistent with TQS bills: any non-cancelled/rejected invoice counts (including
+    // 'pending' — Finance invoices are not auto-promoted to 'paid' when a payment is
+    // recorded, so filtering to verified/authorized/paid would silently miss most).
+    // Cost head inferred from linked PO items; falls back to 'Material'.
+    // Excludes invoices whose payment was linked to a TQS bill (already counted via tqsActuals).
+    const finInvActuals = await query(`
+      SELECT
+        COALESCE(
+          (SELECT pi.cost_head
+           FROM po_items pi
+           WHERE pi.po_id = i.po_id AND pi.cost_head IS NOT NULL
+           ORDER BY pi.sort_order LIMIT 1),
+          'Material'
+        ) AS cost_head,
+        SUM(i.net_amount) AS actual
+      FROM invoices i
+      WHERE i.project_id = $1
+        AND i.status NOT IN ('cancelled', 'rejected')
+        AND NOT EXISTS (
+          SELECT 1 FROM payments pay
+          WHERE pay.invoice_id = i.id AND pay.tqs_bill_id IS NOT NULL
+        )
+      GROUP BY 1
+    `, [project_id]);
+
+    // Finance module payments (Vendor Payments page) — Bills Paid.
+    // Uses payments.cost_head when set; otherwise falls back to the linked
+    // invoice's PO item cost_head; finally defaults to 'Material'.
+    // Excludes payments already counted via tqsPaid (tqs_bill_id IS NOT NULL
+    // means the payment was synced back to a TQS bill, so it's already in the
+    // tqsPaid/tqsActuals bucket via workflow_status='paid' on tqs_bills).
+    const finPayActuals = await query(`
+      SELECT
+        COALESCE(
+          pay.cost_head,
+          (SELECT pi.cost_head
+           FROM invoices inv
+           JOIN po_items pi ON pi.po_id = inv.po_id
+           WHERE inv.id = pay.invoice_id AND pi.cost_head IS NOT NULL
+           ORDER BY pi.sort_order LIMIT 1),
+          'Material'
+        ) AS cost_head,
+        SUM(pay.net_amount) AS actual
+      FROM payments pay
+      WHERE pay.project_id = $1
+        AND pay.tqs_bill_id IS NULL
+        AND COALESCE(pay.pc_number, '') = ''
+        AND pay.status = 'paid'
+      GROUP BY 1
+    `, [project_id]);
+
+    // "Received" = value of bills logged (RA/SC/TQS/PO/Finance invoices).
     const receivedMap = {};
-    for (const rows of [raActuals.rows, scActuals.rows, tqsActuals.rows, poFallbackActuals.rows]) {
+    for (const rows of [raActuals.rows, scActuals.rows, tqsActuals.rows, poFallbackActuals.rows, finInvActuals.rows]) {
       for (const r of rows) {
         if (!r.cost_head) continue;
         receivedMap[r.cost_head] = (receivedMap[r.cost_head] || 0) + parseFloat(r.actual || 0);
       }
     }
     // "Paid" = cash actually disbursed: the paid portion of those same bills,
-    // plus advances/petty cash (cash out with no corresponding bill received).
+    // plus advances/petty cash (cash out with no corresponding bill received),
+    // plus Finance module payments (Vendor Payments page).
     const paidMap = {};
-    for (const rows of [raPaid.rows, scPaid.rows, tqsPaid.rows, poFallbackPaid.rows, advActuals.rows, advTrackerActuals.rows, btAdvActuals.rows, spcActuals.rows, spcRemainder.rows, storePCAdvActuals.rows]) {
+    for (const rows of [raPaid.rows, scPaid.rows, tqsPaid.rows, poFallbackPaid.rows, advActuals.rows, advTrackerActuals.rows, btAdvActuals.rows, spcActuals.rows, spcRemainder.rows, storePCAdvActuals.rows, finPayActuals.rows]) {
       for (const r of rows) {
         if (!r.cost_head) continue;
         paidMap[r.cost_head] = (paidMap[r.cost_head] || 0) + parseFloat(r.actual || 0);
       }
     }
     // actualMap = total cost incurred (received bills + advances/petty cash that
-    // have no bill of their own) — drives Profit/Contingency derivation below,
-    // same total as before this Received/Paid split was added. Excludes
-    // raPaid/scPaid/tqsPaid/poFallbackPaid since those are already inside
-    // receivedMap (they're the paid subset of the same bills, not extra money).
+    // have no bill of their own) — drives Profit/Contingency derivation below.
+    // Finance invoices are already in receivedMap; finPayActuals excluded here
+    // since they're the paid subset of those invoices (same as raPaid/scPaid).
     const actualMap = { ...receivedMap };
     for (const rows of [advActuals.rows, advTrackerActuals.rows, btAdvActuals.rows, spcActuals.rows, spcRemainder.rows, storePCAdvActuals.rows]) {
       for (const r of rows) {

@@ -1,0 +1,65 @@
+name: Build Frontend
+
+# Runs whenever frontend source files change on main.
+# Rebuilds the Vite bundle and commits frontend/build/ back to main so
+# Railway always deploys an up-to-date bundle without a manual build step.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'construct-erp/frontend/src/**'
+      - 'construct-erp/frontend/public/**'
+      - 'construct-erp/frontend/index.html'
+      - 'construct-erp/frontend/package*.json'
+      - 'construct-erp/frontend/vite.config.*'
+      - 'construct-erp/frontend/tailwind.config.*'
+      - 'construct-erp/frontend/postcss.config.*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to push the build commit back
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Use the default GITHUB_TOKEN — it can push back to main.
+          # GitHub will NOT re-trigger this workflow on the bot commit.
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: construct-erp/frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: construct-erp/frontend
+        run: npm ci
+
+      - name: Build (Vite)
+        working-directory: construct-erp/frontend
+        run: npm run build
+
+      - name: Commit & push build output
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Pull latest in case another commit landed during the build
+          git pull --rebase origin main
+
+          git add construct-erp/frontend/build/
+
+          if git diff --cached --quiet; then
+            echo "Build output unchanged — nothing to commit."
+          else
+            git commit -m "ci: rebuild frontend bundle [skip ci]"
+            git push origin main
+            echo "Build committed and pushed."
+          fi

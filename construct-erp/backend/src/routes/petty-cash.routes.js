@@ -344,18 +344,20 @@ router.get('/dashboard', async (req, res) => {
   try {
     const { project_id } = req.query;
     const cid = req.user.company_id;
-    const projFilter = project_id ? `AND project_id = '${project_id}'` : '';
+    // Use parameterised placeholder to avoid SQL injection
+    const projFilter = project_id ? `AND project_id = $2` : '';
+    const projParams = project_id ? [cid, project_id] : [cid];
 
     const [balance, pending, monthly, siteWise, categories, recentReq, recentExp] = await Promise.all([
       // Cash balance across all accounts
       query(`SELECT COALESCE(SUM(current_balance),0) AS total_balance,
                COUNT(*) AS account_count FROM pc_accounts
-             WHERE company_id=$1 AND status='active' ${projFilter}`, [cid]),
+             WHERE company_id=$1 AND status='active' ${projFilter}`, projParams),
       // Pending approvals
       query(`SELECT
                COUNT(*) FILTER (WHERE status='submitted') AS pending_requests,
                COUNT(*) FILTER (WHERE status='submitted') AS pending_expenses
-             FROM pc_requests WHERE company_id=$1 ${projFilter}`, [cid]),
+             FROM pc_requests WHERE company_id=$1 ${projFilter}`, projParams),
       // Monthly expenses (last 6 months)
       query(`SELECT TO_CHAR(expense_date,'YYYY-MM') AS month,
                SUM(amount) AS total
@@ -363,7 +365,7 @@ router.get('/dashboard', async (req, res) => {
              WHERE company_id=$1 AND status='approved'
                AND expense_date >= CURRENT_DATE - INTERVAL '6 months'
                ${projFilter}
-             GROUP BY 1 ORDER BY 1`, [cid]),
+             GROUP BY 1 ORDER BY 1`, projParams),
       // Site-wise utilization
       query(`SELECT COALESCE(site_location,'Unknown') AS site,
                SUM(amount) AS total, COUNT(*) AS count
@@ -371,7 +373,7 @@ router.get('/dashboard', async (req, res) => {
              WHERE company_id=$1 AND status='approved'
                AND expense_date >= DATE_TRUNC('month',CURRENT_DATE)
                ${projFilter}
-             GROUP BY 1 ORDER BY 2 DESC LIMIT 8`, [cid]),
+             GROUP BY 1 ORDER BY 2 DESC LIMIT 8`, projParams),
       // Category breakdown
       query(`SELECT c.category_name, SUM(e.amount) AS total, COUNT(e.id) AS count
              FROM pc_expenses e
@@ -379,7 +381,7 @@ router.get('/dashboard', async (req, res) => {
              WHERE e.company_id=$1 AND e.status='approved'
                AND e.expense_date >= DATE_TRUNC('month',CURRENT_DATE)
                ${projFilter}
-             GROUP BY c.category_name ORDER BY 2 DESC LIMIT 6`, [cid]),
+             GROUP BY c.category_name ORDER BY 2 DESC LIMIT 6`, projParams),
       // Recent requests
       query(`SELECT r.*, p.name AS project_name,
                COALESCE(u.name, r.requested_by::text) AS requestor_name
@@ -398,7 +400,7 @@ router.get('/dashboard', async (req, res) => {
     ]);
 
     const pendingExpQ = await query(
-      `SELECT COUNT(*) AS cnt FROM pc_expenses WHERE company_id=$1 AND status='submitted' ${projFilter}`, [cid]
+      `SELECT COUNT(*) AS cnt FROM pc_expenses WHERE company_id=$1 AND status='submitted' ${projFilter}`, projParams
     );
 
     res.json({

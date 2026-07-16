@@ -321,7 +321,7 @@ export default function ComparativeStatementPage() {
       {/* ── Printable Document ──────────────────────────────────── */}
       <div className="max-w-[1600px] mx-auto px-6 pt-5 no-print">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <DecisionCard icon={Award} label="Recommended L1 Vendor" value={recommendedVendor?.vendor_name || 'Not available'} sub={recommendedVendor ? `${recommendedVendor.level} · Rs ${inr0(recommendedVendor.grand_total)}` : 'Enter vendor quotes to rank'} tone="emerald" />
+          <DecisionCard icon={Award} label="Recommended L1 Vendor" value={recommendedVendor?.vendor_name ? recommendedVendor.vendor_name.toUpperCase() : 'Not available'} sub={recommendedVendor ? `${recommendedVendor.level} · Rs ${inr0(recommendedVendor.grand_total)}` : 'Enter vendor quotes to rank'} tone="emerald" />
           <DecisionCard icon={IndianRupee} label="Lowest Grand Total" value={recommendedVendor ? `Rs ${inr0(recommendedVendor.grand_total)}` : 'Rs 0'} sub={`Basic Rs ${inr0(recommendedVendor?.basic_total || 0)} · GST Rs ${inr0(recommendedVendor?.gst_total || 0)}`} tone="indigo" />
           <DecisionCard icon={Building2} label="Vendors Compared" value={String(vendors.length)} sub={`${vendorSummary.length} quotation${vendorSummary.length === 1 ? '' : 's'} received`} tone="blue" />
           <DecisionCard icon={FileText} label="Item-wise L1" value={`${itemL1.length}/${items.length}`} sub="Lowest item rates identified" tone="amber" />
@@ -338,7 +338,7 @@ export default function ComparativeStatementPage() {
                   {vendorSummary.map(v => (
                     <tr key={v.vendor_id} className={v.rank === 1 ? 'bg-emerald-50/60' : 'bg-white'}>
                       <td className="px-4 py-2 font-bold text-slate-900">{v.level}</td>
-                      <td className="px-4 py-2 font-bold text-slate-900">{v.vendor_name}</td>
+                      <td className="px-4 py-2 font-bold text-slate-900">{(v.vendor_name || '').toUpperCase()}</td>
                       <td className="px-4 py-2 font-mono">Rs {inr0(v.basic_total)}</td>
                       <td className="px-4 py-2 font-mono">Rs {inr0(v.discount_total)}</td>
                       <td className="px-4 py-2 font-mono">Rs {inr0(v.gst_total)}</td>
@@ -398,7 +398,7 @@ export default function ComparativeStatementPage() {
                     COMPANY: BCIM ENGINEERING PRIVATE LIMITED
                   </div>
                   <div style={{ fontSize: '11px', marginTop: '2px' }}>
-                    <strong>PROJECT:</strong> {indent.project_name || '—'} &nbsp;|&nbsp;
+                    <strong>PROJECT:</strong> {(indent.project_name || '—').toUpperCase()} &nbsp;|&nbsp;
                     <strong>SUBJECT: COMMERCIAL RATE APPROVAL</strong>
                   </div>
                   <div style={{ fontSize: '10px', marginTop: '2px' }}>
@@ -412,7 +412,7 @@ export default function ComparativeStatementPage() {
                 <td style={{ border: '1.5px solid #000', padding: '6px 10px', width: '20%', fontSize: '10px', verticalAlign: 'top' }}>
                   <div><strong>DATE:</strong> {fmt(indent.created_at)}</div>
                   <div style={{ marginTop: '3px' }}><strong>Indent No./Dt:</strong> {indent.serial_no_formatted || indent.mrs_number}</div>
-                  <div style={{ marginTop: '3px' }}><strong>LOCATION:</strong> {indent.head_office_project_name || indent.project_name || '—'}</div>
+                  <div style={{ marginTop: '3px' }}><strong>LOCATION:</strong> {(indent.head_office_project_name || indent.project_name || '—').toUpperCase()}</div>
                   <div style={{ marginTop: '3px' }}><strong>Department:</strong> {indent.department || '—'}</div>
                 </td>
               </tr>
@@ -465,7 +465,7 @@ export default function ComparativeStatementPage() {
                 {/* One cell per vendor — colSpan=5 to match 5 sub-columns */}
                 {vendors.map((v, vi) => (
                   <td key={v.id} colSpan={5} style={{ border: '1.5px solid #000', padding: '5px 8px', textAlign: 'center', verticalAlign: 'top', background: vi % 2 === 0 ? '#fafafa' : '#fff' }}>
-                    <div style={{ fontWeight: 'bold', fontSize: '11px' }}>M/s. {v.vendor_name}</div>
+                    <div style={{ fontWeight: 'bold', fontSize: '11px' }}>M/s. {(v.vendor_name || '').toUpperCase()}</div>
                     {v.notes && <div style={{ fontSize: '9px', marginTop: '2px', color: '#333' }}>{v.notes}</div>}
                     <div style={{ marginTop: '3px', fontSize: '9px' }}>
                       <div><strong>Quote Ref:</strong> {v.quotation_number}</div>

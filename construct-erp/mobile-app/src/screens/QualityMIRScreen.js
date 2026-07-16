@@ -9,4 +9,5 @@ export default makeListScreen({
   primary: (item) => item.mir_number || `MIR #${item.id}`,
   secondary: (item) => item.material_name,
   status: (item) => item.status,
+  detailScreen: 'MIRDetail',
 });

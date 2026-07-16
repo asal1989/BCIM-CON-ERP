@@ -36,8 +36,7 @@ router.get('/vendors', requireSyncKey, async (req, res) => {
     const result = await query(
       `SELECT
          id, vendor_code, name, gstin, pan, vendor_type,
-         contact_person, phone, email, address, city, state,
-         bank_name, account_number, ifsc_code
+         contact_person, phone, email, address, city, state
        FROM vendors
        WHERE company_id = $1 AND is_active = true
        ORDER BY name`,

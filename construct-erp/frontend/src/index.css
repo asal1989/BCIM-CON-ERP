@@ -394,3 +394,36 @@ html { scrollbar-gutter: stable; }
   .no-print { display: none !important; }
   body { background: #fff !important; }
 }
+
+/* HR & Admin module: render all text uppercase (labels, staff/worker names,
+   values). Purely visual — form field values, API payloads and stored data
+   are untouched; only the rendered text-transform changes. Icons are SVG
+   (lucide-react) so they're unaffected by text-transform. */
+.hr-admin-uppercase,
+.hr-admin-uppercase * {
+  text-transform: uppercase;
+}
+
+/* HR & Admin sizing: the module's pages were designed at a larger scale than
+   the rest of the ERP and read as "overzoomed" on laptop screens. zoom scales
+   the entire subtree (text, paddings, icons, tables) uniformly — cleaner than
+   chasing hundreds of individual px values across ~40 pages. */
+.hr-admin-uppercase {
+  zoom: 0.85;
+}
+
+/* Wide register tables: keep horizontal scroll inside the table card (visible
+   scrollbar), and cap very long tables to the viewport with their own vertical
+   scrollbar so the page itself doesn't become one endless scroll. */
+.hr-admin-uppercase .overflow-x-auto {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 72vh;
+  scrollbar-width: thin;
+}
+.hr-admin-uppercase .overflow-x-auto thead {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #F9FAFB;
+}

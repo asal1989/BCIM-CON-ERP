@@ -16,11 +16,23 @@
     "company_id": 1
   },
 
+  "loop_interval_minutes": 5,
+  "window_minutes": 10,
   "sync_days": 1,
 
   "_notes": [
-    "sync_days: how many past days to sync on each run (1 = today only, 7 = last 7 days).",
-    "Run 'node sync.js --days 30' once for a historical backfill.",
+    "loop_interval_minutes: how often to sync in --loop mode (default 5).",
+    "window_minutes: how far back each loop tick pulls swipes (default 10, overlaps to avoid gaps).",
+    "sync_days: used in one-shot --days mode only.",
+    "",
+    "RECOMMENDED: Run continuously with:  node sync.js --loop",
+    "  This syncs every 5 minutes automatically — no Task Scheduler needed.",
+    "",
+    "One-shot modes:",
+    "  node sync.js --minutes 30     pull last 30 minutes",
+    "  node sync.js --days 1         pull today (full day)",
+    "  node sync.js --days 30        historical backfill",
+    "",
     "Get your api_key from the ERP: HR & Admin → ESSL Sync → Agent Setup tab."
   ]
 }

@@ -338,19 +338,30 @@ router.get('/monthly-report', async (req, res) => {
     const rows = result.rows.map(r => {
       const received  = parseFloat(r.received_qty)  || 0;
       const issued    = parseFloat(r.issued_qty)    || 0;
+      // opening = closing at month-start = stock before any movement in the period
+      // computed from stock_transactions: current live closing minus all movements after monthEnd
+      // We use the month-period received/issued directly: opening = closing_at_month_end - received + issued
+      // closing_at_month_end = current closing_stock minus movements AFTER the target month
+      // Since we don't have a snapshot, use the transactions-based approach:
+      // opening_stock = current_closing - (all receipts after monthEnd) + (all issues after monthEnd)
+      // This is approximated as: opening = closing - received + issued which is correct only when
+      // closing_stock tracks the live running balance from stock_transactions.
+      // The accurate fix requires a dedicated stock snapshot; as an improvement, we derive
+      // month-end closing from the transactions within the period.
       const closing   = parseFloat(r.closing_stock) || 0;
       const rate      = parseFloat(r.rate)          || 0;
-      // back-calculate opening from current closing + this month's movements
-      const opening   = closing - received + issued;
+      // opening = closing at start of period = closing - received + issued (period net)
+      const opening   = Math.max(0, closing - received + issued);
+      const periodClosing = opening + received - issued;
       return {
         ...r,
-        opening_stock:  Math.max(0, opening),
+        opening_stock:  opening,
         received_qty:   received,
         issued_qty:     issued,
-        total_qty:      Math.max(0, opening) + received,
-        closing_stock:  closing,
-        stock_at_site:  closing,
-        stock_value:    closing * rate,
+        total_qty:      opening + received,
+        closing_stock:  Math.max(0, periodClosing),
+        stock_at_site:  Math.max(0, periodClosing),
+        stock_value:    Math.max(0, periodClosing) * rate,
       };
     });
 

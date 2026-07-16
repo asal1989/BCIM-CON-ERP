@@ -1911,6 +1911,7 @@ export default function StoresPettyCashPage() {
   const [printModal,      setPrintModal]      = useState(null); // null | { from: '', to: '' }
   const [weeklyModal,     setWeeklyModal]     = useState(null); // null | { from: '', to: '' }
   const [mdModal,         setMdModal]         = useState(null); // null | { from: '', to: '' }
+  const [reportsPeriod,   setReportsPeriod]   = useState({ from: dayjs().startOf('month').format('YYYY-MM-DD'), to: dayjs().format('YYYY-MM-DD') });
   const setFilter = (k, v) => setFilters(f => ({ ...f, [k]: v }));
 
   useEffect(() => {
@@ -2141,6 +2142,7 @@ export default function StoresPettyCashPage() {
     { id: 'ledger',       label: 'Ledger',          Icon: Rows3       },
     { id: 'analytics',    label: 'Analytics',       Icon: TrendingUp  },
     { id: 'budgets',      label: 'Budgets',         Icon: BookOpen    },
+    { id: 'reports',      label: 'Reports',         Icon: FileDown    },
   ];
 
   const balanceColor = cashInHand < 0 ? 'text-red-600' : cashInHand < 5000 ? 'text-amber-600' : 'text-green-700';
@@ -3165,6 +3167,326 @@ export default function StoresPettyCashPage() {
             </div>
           </div>
         )}
+
+        {/* ══ REPORTS ══ */}
+        {tab === 'reports' && (() => {
+          const rFrom = reportsPeriod.from ? dayjs(reportsPeriod.from) : null;
+          const rTo   = reportsPeriod.to   ? dayjs(reportsPeriod.to)   : null;
+          const inRange = (dateStr) => {
+            if (!dateStr) return false;
+            const d = dayjs(dateStr);
+            if (rFrom && d.isBefore(rFrom, 'day')) return false;
+            if (rTo   && d.isAfter(rTo,   'day')) return false;
+            return true;
+          };
+          const rReceipts = receipts.filter(r => inRange(r.receipt_date));
+          const rEntries  = approvedEntries.filter(e => inRange(e.entry_date));
+          const rAdvances = advances.filter(a => inRange(a.advance_date));
+          const rScAdv    = scAdvances.filter(s => inRange(s.advance_date));
+          const totalRec   = rReceipts.reduce((s, r) => s + Number(r.amount), 0);
+          const totalLP    = rEntries.reduce((s, e) => s + Number(e.amount), 0);
+          const totalAdv   = rAdvances.reduce((s, a) => s + Number(a.amount), 0);
+          const totalScAdv = rScAdv.reduce((s, a) => s + Number(a.amount), 0);
+          const balance    = totalRec - totalLP - totalAdv - totalScAdv;
+          const period     = rFrom && rTo ? `${rFrom.format('DD-MM-YYYY')} to ${rTo.format('DD-MM-YYYY')}` : '';
+          const rCatSpend  = {};
+          rEntries.forEach(e => {
+            const cat = categoryOf(e.items?.[0]?.material_name || e.supplier || '');
+            rCatSpend[cat] = (rCatSpend[cat] || 0) + Number(e.amount);
+          });
+          const PRESETS = [
+            { label: 'This Week',  from: dayjs().startOf('week').add(1,'day').format('YYYY-MM-DD'), to: dayjs().format('YYYY-MM-DD') },
+            { label: 'This Month', from: dayjs().startOf('month').format('YYYY-MM-DD'), to: dayjs().format('YYYY-MM-DD') },
+            { label: 'Last Month', from: dayjs().subtract(1,'month').startOf('month').format('YYYY-MM-DD'), to: dayjs().subtract(1,'month').endOf('month').format('YYYY-MM-DD') },
+            { label: 'This Year',  from: dayjs().startOf('year').format('YYYY-MM-DD'), to: dayjs().format('YYYY-MM-DD') },
+          ];
+          return (
+            <div className="space-y-5">
+              {/* Header + export buttons */}
+              <div className="flex items-start justify-between flex-wrap gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-800">Petty Cash Reports</h2>
+                  <p className="text-sm text-slate-500 mt-0.5">Period-wise statement, category breakdown, and exports</p>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={() => printStatement({ entries: rEntries, advances: rAdvances, scAdvances: rScAdv, receipts: rReceipts, projectName: selectedProject?.name, period })}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-slate-700 text-white text-sm font-medium rounded-lg hover:bg-slate-800">
+                    <Printer className="w-4 h-4" /> Print Statement
+                  </button>
+                  <button
+                    onClick={() => exportPdf({ entries: rEntries, advances: rAdvances, scAdvances: rScAdv, receipts: rReceipts, projectName: selectedProject?.name, period })}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700">
+                    <FileDown className="w-4 h-4" /> Export PDF
+                  </button>
+                </div>
+              </div>
+
+              {/* Period picker */}
+              <div className="bg-white rounded-xl border border-slate-200 p-4">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Report Period</p>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <input type="date" value={reportsPeriod.from}
+                      onChange={e => setReportsPeriod(p => ({ ...p, from: e.target.value }))}
+                      className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white" />
+                    <span className="text-slate-400 text-sm">to</span>
+                    <input type="date" value={reportsPeriod.to}
+                      onChange={e => setReportsPeriod(p => ({ ...p, to: e.target.value }))}
+                      className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white" />
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    {PRESETS.map(({ label, from, to }) => (
+                      <button key={label} onClick={() => setReportsPeriod({ from, to })}
+                        className={clsx('text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors',
+                          reportsPeriod.from === from && reportsPeriod.to === to
+                            ? 'bg-indigo-600 text-white border-indigo-600'
+                            : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700')}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* KPI row */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <KpiCard label="Cash Received" value={inr(totalRec)} accent="border-green-500" valueClass="text-green-700" sub={`${rReceipts.length} receipt${rReceipts.length !== 1 ? 's' : ''}`} />
+                <KpiCard label="Local Purchases" value={inr(totalLP)} accent="border-blue-500" valueClass="text-blue-700" sub={`${rEntries.length} voucher${rEntries.length !== 1 ? 's' : ''}`} />
+                <KpiCard label="Salary Advances" value={inr(totalAdv)} accent="border-amber-500" valueClass="text-amber-700" sub={`${rAdvances.length} advance${rAdvances.length !== 1 ? 's' : ''}`} />
+                <KpiCard label="SC Advances" value={inr(totalScAdv)} accent="border-purple-500" valueClass="text-purple-700" sub={`${rScAdv.length} advance${rScAdv.length !== 1 ? 's' : ''}`} />
+              </div>
+
+              {/* Net balance */}
+              <div className={clsx('rounded-xl border p-4 flex items-center justify-between', balance < 0 ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-300')}>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Net Balance for Period</p>
+                  <p className={clsx('text-2xl font-bold mt-1', balance < 0 ? 'text-red-700' : 'text-green-700')}>
+                    {balance < 0 ? `(${inr(Math.abs(balance))}) OVERDRAWN` : inr(balance)}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">Receipts {inr(totalRec)} − Expenditure {inr(totalLP + totalAdv + totalScAdv)}</p>
+                </div>
+              </div>
+
+              {/* Receipts table + Category breakdown */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                {/* Receipts */}
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="px-5 py-3.5 border-b border-slate-100">
+                    <p className="text-sm font-semibold text-slate-700">HO Receipts in Period</p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-100">
+                          {['Date', 'Voucher No', 'Received By', 'Amount'].map(h => (
+                            <th key={h} className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-400 uppercase tracking-wider">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {rReceipts.length === 0
+                          ? <tr><td colSpan={4} className="px-4 py-6 text-center text-sm text-slate-400">No receipts in this period</td></tr>
+                          : rReceipts.map((r, i) => (
+                            <tr key={r.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                              <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">{dayjs(r.receipt_date).format('DD-MM-YYYY')}</td>
+                              <td className="px-4 py-2.5 font-mono text-slate-700 text-xs">{r.voucher_no || '—'}</td>
+                              <td className="px-4 py-2.5 text-slate-600">{r.received_by || '—'}</td>
+                              <td className="px-4 py-2.5 font-semibold text-green-700">{inr(r.amount)}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                      {rReceipts.length > 0 && (
+                        <tfoot>
+                          <tr className="bg-slate-50 border-t border-slate-200">
+                            <td colSpan={3} className="px-4 py-2.5 text-xs font-bold text-slate-600 uppercase">Total</td>
+                            <td className="px-4 py-2.5 font-bold text-green-700">{inr(totalRec)}</td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                </div>
+
+                {/* Category breakdown */}
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="px-5 py-3.5 border-b border-slate-100">
+                    <p className="text-sm font-semibold text-slate-700">Spending by Category in Period</p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-100">
+                          {['Category', 'Vouchers', 'Amount', '% of LP'].map(h => (
+                            <th key={h} className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-400 uppercase tracking-wider">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {Object.keys(rCatSpend).length === 0
+                          ? <tr><td colSpan={4} className="px-4 py-6 text-center text-sm text-slate-400">No approved purchases in this period</td></tr>
+                          : Object.entries(rCatSpend).sort((a, b) => b[1] - a[1]).map(([cat, amt], i) => {
+                            const count = rEntries.filter(e => categoryOf(e.items?.[0]?.material_name || e.supplier || '') === cat).length;
+                            const pct   = totalLP > 0 ? (amt / totalLP * 100).toFixed(1) : '0.0';
+                            return (
+                              <tr key={cat} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                                <td className="px-4 py-2.5"><CatBadge cat={cat} /></td>
+                                <td className="px-4 py-2.5 text-center text-slate-500">{count}</td>
+                                <td className="px-4 py-2.5 font-semibold text-slate-800">{inr(amt)}</td>
+                                <td className="px-4 py-2.5 text-slate-500">{pct}%</td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                      {Object.keys(rCatSpend).length > 0 && (
+                        <tfoot>
+                          <tr className="bg-slate-50 border-t border-slate-200">
+                            <td colSpan={2} className="px-4 py-2.5 text-xs font-bold text-slate-600 uppercase">Total LP</td>
+                            <td className="px-4 py-2.5 font-bold text-slate-800">{inr(totalLP)}</td>
+                            <td className="px-4 py-2.5 font-bold text-slate-500">100%</td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* Supplier-wise breakdown */}
+              {rEntries.length > 0 && (() => {
+                const supMap = {};
+                rEntries.forEach(e => {
+                  const key = (e.supplier || '—').trim();
+                  if (!supMap[key]) supMap[key] = { count: 0, total: 0, lastDate: e.entry_date, materials: new Set() };
+                  supMap[key].count++;
+                  supMap[key].total += Number(e.amount);
+                  if (e.entry_date > supMap[key].lastDate) supMap[key].lastDate = e.entry_date;
+                  (e.items || []).forEach(it => { if (it.material_name) supMap[key].materials.add(it.material_name); });
+                });
+                const rows = Object.entries(supMap).sort((a, b) => b[1].total - a[1].total);
+                return (
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+                      <p className="text-sm font-semibold text-slate-700">Supplier-wise Summary</p>
+                      <span className="text-xs text-slate-400">{rows.length} supplier{rows.length !== 1 ? 's' : ''} · {rEntries.length} voucher{rEntries.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-100">
+                            {['#', 'Supplier', 'Vouchers', 'Materials Purchased', 'Last Purchase', 'Total Amount'].map(h => (
+                              <th key={h} className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {rows.map(([sup, { count, total, lastDate, materials }], i) => (
+                            <tr key={sup} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                              <td className="px-4 py-2.5 text-slate-400 text-xs">{i + 1}</td>
+                              <td className="px-4 py-2.5 font-medium text-slate-800">
+                                {sup}
+                                {count >= 4 && <span className="ml-2 text-[10px] text-amber-600 font-semibold bg-amber-50 px-1.5 py-0.5 rounded-full">⚠ high freq</span>}
+                              </td>
+                              <td className="px-4 py-2.5 text-center text-slate-600">{count}</td>
+                              <td className="px-4 py-2.5 text-slate-500 text-xs max-w-[260px]">
+                                {[...materials].slice(0, 4).join(', ')}
+                                {materials.size > 4 && <span className="text-slate-400"> +{materials.size - 4} more</span>}
+                              </td>
+                              <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">{dayjs(lastDate).format('DD-MM-YYYY')}</td>
+                              <td className="px-4 py-2.5 font-semibold text-slate-800 text-right">{inr(total)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-slate-50 border-t border-slate-200">
+                            <td colSpan={5} className="px-4 py-2.5 text-xs font-bold text-slate-600 uppercase">Total</td>
+                            <td className="px-4 py-2.5 font-bold text-slate-800 text-right">{inr(totalLP)}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Advances summary */}
+              {(rAdvances.length > 0 || rScAdv.length > 0) && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  {/* Salary advances */}
+                  {rAdvances.length > 0 && (
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                      <div className="px-5 py-3.5 border-b border-slate-100">
+                        <p className="text-sm font-semibold text-slate-700">Salary Advances in Period</p>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-100">
+                              {['Date', 'Name', 'Description', 'Amount'].map(h => (
+                                <th key={h} className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-400 uppercase">{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50">
+                            {rAdvances.map((a, i) => (
+                              <tr key={a.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                                <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">{dayjs(a.advance_date).format('DD-MM-YYYY')}</td>
+                                <td className="px-4 py-2.5 font-medium text-slate-800">{a.payee_name || '—'}</td>
+                                <td className="px-4 py-2.5 text-slate-500 max-w-[160px] truncate">{a.description || '—'}</td>
+                                <td className="px-4 py-2.5 font-semibold text-amber-700">{inr(a.amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-slate-50 border-t border-slate-200">
+                              <td colSpan={3} className="px-4 py-2.5 text-xs font-bold text-slate-600 uppercase">Total</td>
+                              <td className="px-4 py-2.5 font-bold text-amber-700">{inr(totalAdv)}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                  {/* SC advances */}
+                  {rScAdv.length > 0 && (
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                      <div className="px-5 py-3.5 border-b border-slate-100">
+                        <p className="text-sm font-semibold text-slate-700">SC Advances in Period</p>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-100">
+                              {['Date', 'Sub-Contractor', 'WO No', 'Amount'].map(h => (
+                                <th key={h} className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-400 uppercase">{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50">
+                            {rScAdv.map((a, i) => (
+                              <tr key={a.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                                <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">{dayjs(a.advance_date).format('DD-MM-YYYY')}</td>
+                                <td className="px-4 py-2.5 font-medium text-slate-800">{a.vendor_name || '—'}</td>
+                                <td className="px-4 py-2.5 font-mono text-xs text-slate-600">{a.wo_number || '—'}</td>
+                                <td className="px-4 py-2.5 font-semibold text-purple-700">{inr(a.amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-slate-50 border-t border-slate-200">
+                              <td colSpan={3} className="px-4 py-2.5 text-xs font-bold text-slate-600 uppercase">Total</td>
+                              <td className="px-4 py-2.5 font-bold text-purple-700">{inr(totalScAdv)}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ══ BUDGETS ══ */}
         {tab === 'budgets' && (

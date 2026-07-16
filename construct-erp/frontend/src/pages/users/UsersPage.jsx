@@ -423,6 +423,7 @@ const MENU_CONFIG = {
     { to:'/users',              label:'Team Members' },
     { to:'/accounts/settings',  label:'Company Profile' },
     { to:'/audit-log',          label:'Audit Log' },
+    { to:'/mail-center',        label:'Mail Center' },
     { to:'/role-permissions',   label:'Roles & Module Access' },
   ],
   'Automation Ideas': [

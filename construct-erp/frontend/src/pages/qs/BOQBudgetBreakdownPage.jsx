@@ -2271,7 +2271,7 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
   });
 
   return (
-    <div style={embedded ? {} : { background: Theme.pageBg, minHeight: '100vh' }}>
+    <div style={embedded ? { fontFamily: "'Times New Roman', Times, serif" } : { background: Theme.pageBg, minHeight: '100vh', fontFamily: "'Times New Roman', Times, serif" }}>
       {!embedded && (
         <PageHeader
           title={pageTitle || 'BOQ Budget Breakdown'}

@@ -15,6 +15,7 @@ import {
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
 import { subcontractorAPI, vendorAPI, projectAPI, companySettingsAPI, mrsAPI } from '../../api/client';
+import { PageHeader, Theme } from '../../theme';
 import { FIELD_HL } from '../../constants/fieldStyles';
 import SearchableSelect from '../../components/shared/SearchableSelect';
 import VendorSelect from '../../components/shared/VendorSelect';
@@ -446,7 +447,7 @@ function PdfImportModal({ onClose, vendors, projects, onImported }) {
                     <option value="">Select vendor…</option>
                     {(vendors || []).map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                   </select>
-                  {extracted?.header?.vendor_name && <p className="text-[11px] text-slate-900 font-medium mt-1">Extracted: <em>{extracted.header.vendor_name}</em></p>}
+                  {extracted?.header?.vendor_name && <p className="text-[11px] text-slate-900 font-medium mt-1">Extracted: <em>{(extracted.header.vendor_name || '').toUpperCase()}</em></p>}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-900 font-medium mb-1">WO Number</label>
@@ -779,7 +780,7 @@ function CreateWOModal({ onClose, vendors, projects, mrsList = [], onCreate, onU
               <div className="mx-4 mb-4 rounded-md border border-blue-100 bg-blue-50/50 p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Building2 className="w-4 h-4 text-blue-600" />
-                  <p className="text-sm font-bold text-slate-800">{vendor.name}</p>
+                  <p className="text-sm font-bold text-slate-800">{(vendor.name || '').toUpperCase()}</p>
                   {vendor.vendor_type && <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">{vendor.vendor_type.replace(/_/g,' ')}</span>}
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
@@ -957,8 +958,8 @@ function CreateWOModal({ onClose, vendors, projects, mrsList = [], onCreate, onU
         {/* ── Footer ── */}
         <div className="flex items-center justify-between px-6 py-3.5 border-t border-slate-200 bg-white flex-shrink-0">
           <div className="text-xs text-slate-400">
-            {project && <span className="font-medium text-slate-600">{project.name}</span>}
-            {vendor && <span> · {vendor.name}</span>}
+            {project && <span className="font-medium text-slate-600">{(project.name || '').toUpperCase()}</span>}
+            {vendor && <span> · {(vendor.name || '').toUpperCase()}</span>}
             <span className="ml-2 font-mono font-bold text-blue-700">₹{inr(grandTotal)}</span>
           </div>
           <div className="flex items-center gap-2">
@@ -991,6 +992,56 @@ function CreateWOModal({ onClose, vendors, projects, mrsList = [], onCreate, onU
   );
 }
 
+/* ─── WO Terminate Modal ─── */
+function WOTerminateModal({ wo, onClose, onConfirm, isPending }) {
+  const [reason, setReason] = useState('');
+  const canSubmit = reason.trim().length > 0;
+  return (
+    <div className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center">
+              <XCircle className="w-4 h-4 text-orange-500" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Terminate Work Order</p>
+              <p className="text-xs text-slate-500">{wo?.wo_number}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="px-5 py-4 space-y-3">
+          <div className="bg-orange-50 border border-orange-200 rounded-xl px-3 py-2.5 text-sm">
+            <p className="font-semibold text-orange-800">{(wo?.vendor_name || '').toUpperCase()}</p>
+            <p className="text-xs text-orange-600 mt-0.5">₹{inr(wo?.total_value || wo?.contract_amount)} — Work stopped midway</p>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5">Reason for Termination <span className="text-red-500">*</span></label>
+            <textarea
+              rows={3}
+              autoFocus
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              placeholder="e.g. Vendor abandoned site, non-performance, financial default…"
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-50 resize-none transition-all"
+            />
+            {!canSubmit && <p className="text-[11px] text-slate-400 mt-1">Reason is required to record why the work was stopped.</p>}
+          </div>
+        </div>
+        <div className="flex gap-3 px-5 pb-5">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors">Cancel</button>
+          <button onClick={() => onConfirm(reason.trim())} disabled={isPending || !canSubmit}
+            className="flex-1 py-2.5 rounded-xl text-white text-sm font-black disabled:opacity-50 transition-all"
+            style={{ background: 'linear-gradient(135deg,#F97316,#EA580C)' }}>
+            {isPending ? 'Terminating…' : 'Terminate WO'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── WO Reject Reason Modal ─── */
 function WORejectModal({ wo, onClose, onConfirm, isPending }) {
   const [reason, setReason] = useState('');
@@ -1012,7 +1063,7 @@ function WORejectModal({ wo, onClose, onConfirm, isPending }) {
         </div>
         <div className="px-5 py-4 space-y-3">
           <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-sm">
-            <p className="font-semibold text-red-800">{wo?.vendor_name}</p>
+            <p className="font-semibold text-red-800">{(wo?.vendor_name || '').toUpperCase()}</p>
             <p className="text-xs text-red-600 mt-0.5">₹{inr(wo?.total_value || wo?.contract_amount)}</p>
           </div>
           <div>
@@ -1042,8 +1093,9 @@ function WORejectModal({ wo, onClose, onConfirm, isPending }) {
 }
 
 /* ── WO Detail Panel — Full-Screen Modal ────────────────────────────────── */
-function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, isApproving, isMDApproving, isRejecting, user, company }) {
-  const [rejectModal, setRejectModal] = useState(false);
+function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, onTerminate, isApproving, isMDApproving, isRejecting, isTerminating, user, company }) {
+  const [rejectModal, setRejectModal]       = useState(false);
+  const [terminateModal, setTerminateModal] = useState(false);
   const { data: detail, isLoading: detailLoading } = useQuery({
     queryKey: ['work-order-detail', wo?.id],
     queryFn: () => subcontractorAPI.getWorkOrder(wo.id).then(r => r.data),
@@ -1112,7 +1164,7 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
             <div>
               <p className="text-base font-medium text-slate-900 font-mono">{displayWO.wo_number}</p>
               <p className="text-xs text-slate-900 font-medium mt-0.5">
-                {displayWO.vendor_name || '—'} · {displayWO.start_date ? dayjs(displayWO.start_date).format('DD-MM-YYYY') : (displayWO.created_at ? dayjs(displayWO.created_at).format('DD-MM-YYYY') : '—')}
+                {(displayWO.vendor_name || '—').toUpperCase()} · {displayWO.start_date ? dayjs(displayWO.start_date).format('DD-MM-YYYY') : (displayWO.created_at ? dayjs(displayWO.created_at).format('DD-MM-YYYY') : '—')}
                 {displayWO.mrs_number && <> · Against MR <span className="font-mono">{displayWO.mrs_number}</span></>}
               </p>
             </div>
@@ -1159,8 +1211,8 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
           {/* Info grid */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
-              ['Vendor / Sub-Con', displayWO.vendor_name || '—'],
-              ['Project',          displayWO.project_name || '—'],
+              ['Vendor / Sub-Con', (displayWO.vendor_name || '—').toUpperCase()],
+              ['Project',          (displayWO.project_name || '—').toUpperCase()],
               ['Start Date',       displayWO.start_date ? dayjs(displayWO.start_date).format('DD-MM-YYYY') : '—'],
               ['End Date',         displayWO.end_date   ? dayjs(displayWO.end_date).format('DD-MM-YYYY')   : '—'],
               ['Contract Amount',  `₹ ${inr(displayWO.contract_amount || val)}`],
@@ -1401,6 +1453,30 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
           </div>{/* end right column */}
         </div>{/* end two-column body */}
 
+        {/* Terminate button — visible for active/approved WOs */}
+        {['active','approved'].includes(liveStatus) && (
+          <div className="px-6 py-3 border-t border-slate-100 bg-orange-50 flex items-center justify-between gap-3">
+            <p className="text-xs text-orange-700 font-medium">Vendor stopped work or abandoned site?</p>
+            <button
+              onClick={() => setTerminateModal(true)}
+              disabled={isTerminating}
+              className="shrink-0 px-4 h-8 rounded-lg border border-orange-300 bg-white text-orange-700 text-xs font-semibold hover:bg-orange-100 transition-colors disabled:opacity-50">
+              {isTerminating ? 'Terminating…' : '✕ Terminate WO'}
+            </button>
+          </div>
+        )}
+
+        {/* Termination reason — shown once terminated */}
+        {liveStatus === 'terminated' && displayWO.rejection_reason && (
+          <div className="px-6 py-3 border-t border-slate-100 bg-orange-50 flex items-start gap-2">
+            <XCircle className="w-4 h-4 text-orange-500 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-xs font-semibold text-orange-800">Terminated</p>
+              <p className="text-xs text-orange-700 mt-0.5">{displayWO.rejection_reason}</p>
+            </div>
+          </div>
+        )}
+
         {/* Attachments */}
         <div className="px-6 py-4 border-t border-slate-100 bg-white">
           <RecordAttachments
@@ -1423,6 +1499,14 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
         isPending={isRejecting}
         onClose={() => setRejectModal(false)}
         onConfirm={(reason) => { onReject(wo.id, reason); setRejectModal(false); }}
+      />
+    )}
+    {terminateModal && (
+      <WOTerminateModal
+        wo={displayWO}
+        isPending={isTerminating}
+        onClose={() => setTerminateModal(false)}
+        onConfirm={(reason) => { onTerminate(wo.id, reason); setTerminateModal(false); }}
       />
     )}
     </>
@@ -1510,6 +1594,11 @@ export default function WorkOrderPage() {
     onSuccess: () => { toast.success('Work Order rejected'); setSelectedWO(null); qc.invalidateQueries({ queryKey: ['work-orders'] }); },
     onError: e => toast.error(e?.response?.data?.error || 'Rejection failed'),
   });
+  const terminateMutation = useMutation({
+    mutationFn: ({ id, reason }) => subcontractorAPI.terminateWorkOrder(id, { reason }),
+    onSuccess: () => { toast.success('Work Order terminated'); setSelectedWO(null); qc.invalidateQueries({ queryKey: ['work-orders'] }); },
+    onError: e => toast.error(e?.response?.data?.error || 'Termination failed'),
+  });
 
   const allWOs = woData;
   const today  = dayjs();
@@ -1589,125 +1678,71 @@ export default function WorkOrderPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#f5f6fa]">
+    <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
 
-      {/* ── Page Header ── */}
-      <div className="bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
-        <div className="max-w-[1400px] mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium mb-1.5">
-              <Hammer className="w-3 h-3" />
-              <span>Procurement</span>
-              <ChevronRight className="w-3 h-3" />
-              <span className="text-slate-500 font-semibold">Work Orders</span>
-            </div>
-            <h1 className="text-[22px] font-bold text-slate-900 tracking-tight">Work Orders</h1>
-            <p className="text-xs text-slate-400 mt-0.5">Subcontractor & labour work order management</p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
+      <PageHeader
+        title="Work Orders"
+        subtitle="Subcontractor & labour work order management"
+        breadcrumbs={[{ label: 'Procurement' }, { label: 'Work Orders' }]}
+        actions={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button onClick={() => setShowPdfImport(true)}
-              className="flex items-center gap-1.5 px-3 h-8 bg-white border border-slate-200 text-slate-600 text-xs font-medium rounded-lg hover:bg-slate-50 transition-colors">
-              <FileText className="w-3.5 h-3.5" /> Import PDF
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              <FileText size={13} /> Import PDF
             </button>
             <button onClick={() => setShowExcelImport(true)}
-              className="flex items-center gap-1.5 px-3 h-8 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium rounded-lg hover:bg-emerald-100 transition-colors">
-              <FileSpreadsheet className="w-3.5 h-3.5" /> Import Excel
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              <FileSpreadsheet size={13} /> Import Excel
             </button>
             <button onClick={() => setShowCreate(true)}
-              className="flex items-center gap-1.5 px-4 h-8 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm">
-              <Plus className="w-3.5 h-3.5" /> New Work Order
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 9, background: '#fff', color: Theme.navyDark, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
+              <Plus size={13} /> New Work Order
             </button>
           </div>
-        </div>
-      </div>
+        }
+      />
 
-      <div className="max-w-[1400px] mx-auto px-6 py-5 space-y-5">
+      <div className="max-w-[1600px] mx-auto px-6 py-6 space-y-5">
 
         {/* ── KPI Cards ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {/* Total WOs */}
-          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center">
-                <FileText className="w-4 h-4 text-indigo-600" />
-              </div>
-              <span className="text-[10px] font-semibold text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded-full">TOTAL</span>
+        {(() => {
+          const kpiStats = [
+            { key: '',           label: 'Work Orders',     count: allWOs.length,            icon: FileText,    iconBg: 'bg-indigo-50', iconText: 'text-indigo-600' },
+            { key: '__value__',  label: 'Contract Value',  value: `₹${(totalValue/100000).toFixed(1)}L`, icon: IndianRupee, iconBg: 'bg-blue-50',    iconText: 'text-blue-600' },
+            { key: 'active',     label: 'Active',          count: activeWOs.length,         icon: Activity,    iconBg: 'bg-teal-50',   iconText: 'text-teal-600'   },
+            { key: '__pending__',label: 'Pending Approval',count: pendingApproval.length,   icon: Clock,       iconBg: 'bg-amber-50',  iconText: 'text-amber-600'  },
+            { key: '__expire__', label: 'Expiring Soon',   count: expiringSoon.length,      icon: AlertCircle, iconBg: 'bg-orange-50', iconText: 'text-orange-500' },
+            { key: 'completed',  label: overdueWOs.length > 0 ? 'Overdue' : 'Completed', count: overdueWOs.length > 0 ? overdueWOs.length : completedWOs.length, icon: overdueWOs.length > 0 ? XCircle : CheckCircle2, iconBg: overdueWOs.length > 0 ? 'bg-red-50' : 'bg-emerald-50', iconText: overdueWOs.length > 0 ? 'text-red-500' : 'text-emerald-600' },
+          ];
+          const isClickable = s => s.key !== '__value__' && s.key !== '__expire__';
+          const isActive = s => filterStatus === s.key || (s.key === '' && !filterStatus) || (s.key === '__pending__' && filterStatus === 'pending');
+          const handleKpiClick = s => {
+            if (!isClickable(s)) return;
+            if (s.key === '') setFilterStatus('');
+            else if (s.key === '__pending__') setFilterStatus('pending');
+            else setFilterStatus(prev => prev === s.key ? '' : s.key);
+          };
+          return (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {kpiStats.map(s => (
+                <button key={s.key} onClick={() => handleKpiClick(s)}
+                  className={clsx(
+                    'bg-white border rounded-xl p-4 shadow-sm text-left transition-colors',
+                    isClickable(s) ? 'cursor-pointer' : 'cursor-default',
+                    isActive(s) ? 'border-indigo-400 ring-1 ring-indigo-100' : 'border-slate-200 hover:border-slate-300'
+                  )}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className={clsx('w-8 h-8 rounded-md flex items-center justify-center', s.iconBg)}>
+                      <s.icon className={clsx('w-4 h-4', s.iconText)} />
+                    </div>
+                  </div>
+                  <div className="text-2xl font-semibold text-slate-800">{s.value ?? s.count}</div>
+                  <div className="text-xs text-slate-400 mt-0.5">{s.label}</div>
+                </button>
+              ))}
             </div>
-            <div className="text-2xl font-bold text-slate-900 font-mono">{allWOs.length}</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Work Orders</div>
-          </div>
-
-          {/* Total Contract Value */}
-          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
-                <IndianRupee className="w-4 h-4 text-blue-600" />
-              </div>
-              <span className="text-[10px] font-semibold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded-full">VALUE</span>
-            </div>
-            <div className="text-base font-bold text-slate-900 font-mono leading-tight">₹{Number(totalValue/100000).toFixed(1)}L</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Contract Value</div>
-          </div>
-
-          {/* Active */}
-          <div className="bg-white border border-teal-200 rounded-xl p-4 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center">
-                <Activity className="w-4 h-4 text-teal-600" />
-              </div>
-              <span className="text-[10px] font-semibold text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded-full">ACTIVE</span>
-            </div>
-            <div className="text-2xl font-bold text-teal-700 font-mono">{activeWOs.length}</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">₹{Number(activeValue/100000).toFixed(1)}L ongoing</div>
-          </div>
-
-          {/* Pending Approval */}
-          <div className={clsx('bg-white border rounded-xl p-4 shadow-sm', pendingApproval.length > 0 ? 'border-amber-300' : 'border-slate-200')}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
-                <Clock className="w-4 h-4 text-amber-600" />
-              </div>
-              {pendingApproval.length > 0 && (
-                <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full animate-pulse">ACTION</span>
-              )}
-            </div>
-            <div className={clsx('text-2xl font-bold font-mono', pendingApproval.length > 0 ? 'text-amber-600' : 'text-slate-900')}>{pendingApproval.length}</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Pending Approval</div>
-          </div>
-
-          {/* Expiring Soon */}
-          <div className={clsx('bg-white border rounded-xl p-4 shadow-sm', expiringSoon.length > 0 ? 'border-orange-300' : 'border-slate-200')}>
-            <div className="flex items-center justify-between mb-3">
-              <div className={clsx('w-8 h-8 rounded-lg flex items-center justify-center', expiringSoon.length > 0 ? 'bg-orange-50' : 'bg-slate-50')}>
-                <AlertCircle className={clsx('w-4 h-4', expiringSoon.length > 0 ? 'text-orange-500' : 'text-slate-400')} />
-              </div>
-              {expiringSoon.length > 0 && (
-                <span className="text-[10px] font-semibold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-full">≤30 DAYS</span>
-              )}
-            </div>
-            <div className={clsx('text-2xl font-bold font-mono', expiringSoon.length > 0 ? 'text-orange-600' : 'text-slate-900')}>{expiringSoon.length}</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Expiring Soon</div>
-          </div>
-
-          {/* Overdue / Completed */}
-          <div className={clsx('bg-white border rounded-xl p-4 shadow-sm', overdueWOs.length > 0 ? 'border-red-300' : 'border-slate-200')}>
-            <div className="flex items-center justify-between mb-3">
-              <div className={clsx('w-8 h-8 rounded-lg flex items-center justify-center', overdueWOs.length > 0 ? 'bg-red-50' : 'bg-emerald-50')}>
-                {overdueWOs.length > 0
-                  ? <XCircle className="w-4 h-4 text-red-500" />
-                  : <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
-              </div>
-              <span className={clsx('text-[10px] font-semibold px-1.5 py-0.5 rounded-full',
-                overdueWOs.length > 0 ? 'text-red-600 bg-red-50' : 'text-emerald-600 bg-emerald-50')}>
-                {overdueWOs.length > 0 ? 'OVERDUE' : 'DONE'}
-              </span>
-            </div>
-            <div className={clsx('text-2xl font-bold font-mono', overdueWOs.length > 0 ? 'text-red-600' : 'text-emerald-700')}>
-              {overdueWOs.length > 0 ? overdueWOs.length : completedWOs.length}
-            </div>
-            <div className="text-[11px] text-slate-500 mt-0.5">{overdueWOs.length > 0 ? 'Overdue WOs' : 'Completed'}</div>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* ── Series Filter Pills ── */}
         <div className="flex items-center gap-1.5">
@@ -1819,9 +1854,9 @@ export default function WorkOrderPage() {
         {/* ── Table ── */}
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50">
+            <table className="w-full text-sm">
+            <thead>
+                <tr className="border-b border-slate-100 bg-slate-50">
                   {[
                     { label: 'WO Number',     key: 'wo_number',    w: 'w-[130px]' },
                     { label: 'Subject / Scope', key: 'subject',    w: 'min-w-[180px]' },
@@ -1833,7 +1868,7 @@ export default function WorkOrderPage() {
                     { label: 'Status',        key: 'status',       w: 'w-[140px]' },
                     { label: '',              key: null,           w: 'w-[80px]' },
                   ].map(h => (
-                    <th key={h.label || 'act'} className={clsx('px-4 py-3 text-left font-semibold text-[10px] uppercase tracking-wider text-slate-500 whitespace-nowrap', h.w)}>
+                    <th key={h.label || 'act'} className={clsx('px-5 py-3.5 text-left font-medium text-xs uppercase tracking-wider text-slate-400 whitespace-nowrap', h.w)}>
                       {h.key ? (
                         <button onClick={() => toggleSort(h.key)} className="inline-flex items-center gap-1 hover:text-indigo-600 transition-colors group">
                           {h.label} <SortIcon col={h.key} />
@@ -1869,7 +1904,7 @@ export default function WorkOrderPage() {
                               'hover:bg-indigo-50/30'
                             )}>
                             {/* WO Number */}
-                            <td className="px-4 py-3">
+                            <td className="px-5 py-3.5">
                               <div className="flex items-center gap-2">
                                 <div className={clsx(
                                   'w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0',
@@ -1884,27 +1919,27 @@ export default function WorkOrderPage() {
                               </div>
                             </td>
                             {/* Subject */}
-                            <td className="px-4 py-3 max-w-[220px]">
-                              <p className="text-xs font-medium text-slate-800 truncate leading-tight">{wo.subject || '—'}</p>
+                            <td className="px-5 py-3.5 max-w-[220px]">
+                              <p className="text-sm font-medium text-slate-800 truncate leading-tight">{wo.subject || '—'}</p>
                               {wo.tower_block && <p className="text-[10px] text-slate-400 truncate mt-0.5">{wo.tower_block}</p>}
                             </td>
                             {/* Contractor */}
-                            <td className="px-4 py-3">
-                              <p className="font-semibold text-slate-800 truncate max-w-[140px]">{wo.vendor_name || '—'}</p>
+                            <td className="px-5 py-3.5">
+                              <p className="font-semibold text-slate-800 truncate max-w-[140px]">{(wo.vendor_name || '—').toUpperCase()}</p>
                               {wo.vendor_type && <p className="text-[10px] text-slate-400 capitalize mt-0.5">{wo.vendor_type.replace(/_/g,' ')}</p>}
                             </td>
                             {/* Project */}
-                            <td className="px-4 py-3">
-                              <p className="text-slate-600 truncate max-w-[130px]">{wo.project_name || '—'}</p>
+                            <td className="px-5 py-3.5">
+                              <p className="text-slate-600 truncate max-w-[130px]">{(wo.project_name || '—').toUpperCase()}</p>
                             </td>
                             {/* Category */}
-                            <td className="px-4 py-3">
+                            <td className="px-5 py-3.5">
                               {wo.work_category
                                 ? <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-semibold">{wo.work_category}</span>
                                 : <span className="text-slate-300">—</span>}
                             </td>
                             {/* Period */}
-                            <td className="px-4 py-3 whitespace-nowrap">
+                            <td className="px-5 py-3.5 whitespace-nowrap">
                               <div className="text-[11px] text-slate-600">
                                 {wo.start_date ? dayjs(wo.start_date).format('DD MMM YY') : '—'}
                                 {wo.end_date && <span className="text-slate-400"> → {dayjs(wo.end_date).format('DD MMM YY')}</span>}
@@ -1923,12 +1958,12 @@ export default function WorkOrderPage() {
                               )}
                             </td>
                             {/* Value */}
-                            <td className="px-4 py-3 whitespace-nowrap">
+                            <td className="px-5 py-3.5 whitespace-nowrap">
                               <span className="font-bold font-mono text-slate-800 text-xs">₹{inr(wo.total_value)}</span>
                               {wo.cost_head && <div className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[120px]">{wo.cost_head}</div>}
                             </td>
                             {/* Status */}
-                            <td className="px-4 py-3 whitespace-nowrap">
+                            <td className="px-5 py-3.5 whitespace-nowrap">
                               <StatusBadge status={wo.status} />
                               {wo.mrs_number && (
                                 <div className="flex items-center gap-1 mt-1">
@@ -1938,7 +1973,7 @@ export default function WorkOrderPage() {
                               )}
                             </td>
                             {/* Actions */}
-                            <td className="px-4 py-3 whitespace-nowrap text-right" onClick={e => e.stopPropagation()}>
+                            <td className="px-5 py-3.5 whitespace-nowrap text-right" onClick={e => e.stopPropagation()}>
                               <div className="flex items-center justify-end gap-1">
                                 <button
                                   onClick={() => setAttachWOId(attachWOId === wo.id ? null : wo.id)}
@@ -1947,9 +1982,10 @@ export default function WorkOrderPage() {
                                     'flex items-center gap-1 px-2 py-1 rounded-md border text-[10px] font-semibold transition-all',
                                     attachWOId === wo.id
                                       ? 'bg-indigo-600 text-white border-indigo-600'
-                                      : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600 opacity-0 group-hover:opacity-100'
+                                      : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 opacity-0 group-hover:opacity-100'
                                   )}>
                                   <Upload className="w-2.5 h-2.5" />
+                                  {attachWOId === wo.id ? 'Close' : 'Attach'}
                                 </button>
                                 <div className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-indigo-100 transition-colors">
                                   <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-indigo-500 transition-colors" />
@@ -2039,8 +2075,10 @@ export default function WorkOrderPage() {
           onEdit={wo => setEditingWO(wo)}
           onApprove={id => approveMutation.mutate(id)} onMDApprove={id => mdApproveMutation.mutate(id)}
           onReject={(id, reason) => rejectMutation.mutate({ id, reason })}
+          onTerminate={(id, reason) => terminateMutation.mutate({ id, reason })}
           isApproving={approveMutation.isPending} isMDApproving={mdApproveMutation.isPending}
-          isRejecting={rejectMutation.isPending} user={user} company={companyData}
+          isRejecting={rejectMutation.isPending} isTerminating={terminateMutation.isPending}
+          user={user} company={companyData}
         />
       )}
       {editingWO && (

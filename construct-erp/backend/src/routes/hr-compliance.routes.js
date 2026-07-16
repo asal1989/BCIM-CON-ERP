@@ -5,10 +5,13 @@
 'use strict';
 const express = require('express');
 const router  = express.Router();
-const { authenticate }  = require('../middleware/auth');
-const { query }         = require('../config/database');
+const { authenticate, authorize }  = require('../middleware/auth');
+const { query }                    = require('../config/database');
+
+const HR_ROLES = ['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager'];
 
 router.use(authenticate);
+router.use(authorize(...HR_ROLES));
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 const PF_WAGE_CEILING = 15000;   // PF applies on basic up to ₹15,000
@@ -681,9 +684,9 @@ router.get('/bocw-register', async (req, res) => {
       FROM workers w
       LEFT JOIN vendors v ON v.id = w.contractor_id
       LEFT JOIN projects p ON p.id = w.project_id
-      WHERE 1=1
+      WHERE w.company_id = $1
     `;
-    const params = [];
+    const params = [req.user.company_id];
     if (project_id) { sql += ` AND w.project_id = $${params.length+1}`; params.push(project_id); }
     sql += ' ORDER BY w.name';
     const { rows } = await query(sql, params);
@@ -755,7 +758,7 @@ router.put('/bocw-cess/:id', async (req, res) => {
 
 router.delete('/bocw-cess/:id', async (req, res) => {
   try {
-    await query('DELETE FROM bocw_cess_records WHERE id=$1', [req.params.id]);
+    await query('DELETE FROM bocw_cess_records WHERE id=$1 AND company_id=$2', [req.params.id, req.user.company_id]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

@@ -539,6 +539,39 @@ router.get('/assets/lookup', async (req, res) => {
   }
 });
 
+// ── Recent biometric swipes from ESSL device logs ────────────────────────────
+router.get('/swipes', async (req, res) => {
+  try {
+    const userId    = ownUser(req);
+    const companyId = ownCompany(req);
+    const days      = Math.min(parseInt(req.query.days, 10) || 30, 90);
+
+    // Get the logged-in user's employee_code
+    const userRow = await query(
+      `SELECT employee_code FROM users WHERE id = $1 AND company_id = $2`,
+      [userId, companyId]
+    );
+    const empCode = userRow.rows[0]?.employee_code;
+    if (!empCode) return res.json({ data: [] });
+
+    const { rows } = await query(
+      `SELECT swipe_time, direction, source
+       FROM essl_device_logs
+       WHERE company_id = $1
+         AND LOWER(TRIM(emp_code)) = LOWER(TRIM($2))
+         AND swipe_time >= NOW() - ($3 || ' days')::interval
+       ORDER BY swipe_time DESC
+       LIMIT 200`,
+      [companyId, empCode, days]
+    );
+    res.json({ data: rows });
+  } catch (err) {
+    // essl_device_logs may not exist on setups without ESSL integration
+    if (err.message?.includes('does not exist')) return res.json({ data: [] });
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/notifications', async (req, res) => {
   try {
     const persisted = await query(
@@ -655,7 +688,7 @@ router.patch('/onboarding/:id', async (req, res) => {
        SET status = $1,
            remarks = $2,
            completed_at = CASE WHEN $1 = 'completed' THEN NOW() ELSE NULL END,
-           completed_by = CASE WHEN $1 = 'completed' THEN $3 ELSE NULL END
+           completed_by = CASE WHEN $1 = 'completed' THEN $3::uuid ELSE NULL END
        WHERE id = $4 AND user_id = $5 AND company_id = $6
        RETURNING *`,
       [status, remarks || null, ownUser(req), req.params.id, ownUser(req), ownCompany(req)]

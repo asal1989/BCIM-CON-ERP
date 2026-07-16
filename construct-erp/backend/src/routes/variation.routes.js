@@ -13,11 +13,44 @@ router.use(loadProjectScope);
 router.get('/', async (req, res) => {
   try {
     const { project_id, status } = req.query;
-    let sql = `SELECT vo.*, p.name as project_name, u.name as requested_by_name
-               FROM variation_orders vo
-               JOIN projects p ON vo.project_id = p.id
-               LEFT JOIN users u ON vo.requested_by = u.id
-               WHERE p.company_id = $1`;
+    let sql = `
+      SELECT vo.*,
+             p.name as project_name,
+             u.name as requested_by_name,
+             COALESCE(p.contract_value, 0) as original_contract_value,
+             -- sum of all APPROVED VOs for this project approved strictly BEFORE this VO's approval/creation
+             COALESCE((
+               SELECT SUM(vo2.total_variation_amount)
+               FROM variation_orders vo2
+               WHERE vo2.project_id = vo.project_id
+                 AND vo2.status = 'approved'
+                 AND vo2.id != vo.id
+                 AND vo2.created_at < vo.created_at
+             ), 0) AS previous_variation_total,
+             COALESCE(p.contract_value, 0)
+               + COALESCE((
+               SELECT SUM(vo2.total_variation_amount)
+               FROM variation_orders vo2
+               WHERE vo2.project_id = vo.project_id
+                 AND vo2.status = 'approved'
+                 AND vo2.id != vo.id
+                 AND vo2.created_at < vo.created_at
+             ), 0) AS previous_order_value,
+             COALESCE(p.contract_value, 0)
+               + COALESCE((
+               SELECT SUM(vo2.total_variation_amount)
+               FROM variation_orders vo2
+               WHERE vo2.project_id = vo.project_id
+                 AND vo2.status = 'approved'
+                 AND vo2.id != vo.id
+                 AND vo2.created_at < vo.created_at
+             ), 0)
+               + CASE WHEN vo.status = 'approved' THEN COALESCE(vo.total_variation_amount, 0) ELSE 0 END
+             AS current_order_value
+        FROM variation_orders vo
+        JOIN projects p ON vo.project_id = p.id
+        LEFT JOIN users u ON vo.requested_by = u.id
+       WHERE p.company_id = $1`;
     let params = [req.user.company_id];
     let idx = 2;
 

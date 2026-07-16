@@ -64,10 +64,11 @@ export const projectAPI = {
 };
 
 export const mrsAPI = {
-  list:   (projectId) => api.get('/stores/mrs', { params: { project_id: projectId, limit: 50 } }),
-  detail: (id)         => api.get(`/stores/mrs/${id}`),
-  create: (data)       => api.post('/stores/mrs', data),
-  reject: (id, reason) => api.patch(`/stores/mrs/${id}/reject`, { reason }),
+  list:    (projectId) => api.get('/stores/mrs', { params: { project_id: projectId, limit: 50 } }),
+  detail:  (id)        => api.get(`/stores/mrs/${id}`),
+  create:  (data)      => api.post('/stores/mrs', data),
+  reject:  (id, reason)=> api.patch(`/stores/mrs/${id}/reject`, { reason }),
+  approve: (id, stage) => api.patch(`/stores/mrs/${id}/${stage}`),
 };
 
 export const storesAPI = {
@@ -75,9 +76,13 @@ export const storesAPI = {
 };
 
 export const ignAPI = {
-  list:   (projectId) => api.get('/ign', { params: { project_id: projectId, limit: 50 } }),
-  detail: (id)         => api.get(`/ign/${id}`),
-  create: (data)        => api.post('/ign', data),
+  list:    (projectId) => api.get('/ign', { params: { project_id: projectId, limit: 50 } }),
+  detail:  (id)        => api.get(`/ign/${id}`),
+  create:  (data)      => api.post('/ign', data),
+  receive: (id)        => api.patch(`/ign/${id}/receive`),
+  inspect: (id)        => api.patch(`/ign/${id}/inspect`),
+  approve: (id)        => api.patch(`/ign/${id}/approve`),
+  cancel:  (id)        => api.patch(`/ign/${id}/cancel`),
 };
 
 export const grsAPI = {
@@ -100,13 +105,18 @@ export const vendorAPI = {
 };
 
 export const poAPI = {
-  list:   (projectId) => api.get('/purchase-orders', { params: { project_id: projectId, limit: 50 } }),
-  detail: (id)         => api.get(`/purchase-orders/${id}`),
+  list:    (projectId) => api.get('/purchase-orders', { params: { project_id: projectId, limit: 50 } }),
+  detail:  (id)        => api.get(`/purchase-orders/${id}`),
+  bills:   (id)        => api.get(`/purchase-orders/${id}/bills`),
+  approve: (id, stage) => api.patch(`/purchase-orders/${id}/${stage}`),
+  reject:  (id, reason) => api.patch(`/purchase-orders/${id}/reject`, { reason }),
 };
 
 export const workOrderAPI = {
-  list:   (projectId) => api.get('/sc/work-orders', { params: { project_id: projectId, limit: 50 } }),
-  detail: (id)         => api.get(`/sc/work-orders/${id}`),
+  list:    (projectId) => api.get('/sc/work-orders', { params: { project_id: projectId, limit: 50 } }),
+  detail:  (id)        => api.get(`/sc/work-orders/${id}`),
+  approve: (id)        => api.patch(`/sc/work-orders/${id}/approve`),
+  close:   (id)        => api.patch(`/sc/work-orders/${id}/close`),
 };
 
 export const boqAPI = {
@@ -120,19 +130,26 @@ export const boqBudgetAPI = {
 };
 
 export const raBillAPI = {
-  list:   (projectId) => api.get('/ra-bills', { params: { project_id: projectId } }),
-  detail: (id)         => api.get(`/ra-bills/${id}`),
+  list:    (projectId) => api.get('/ra-bills', { params: { project_id: projectId } }),
+  detail:  (id)        => api.get(`/ra-bills/${id}`),
+  verify:  (id)        => api.patch(`/ra-bills/${id}/verify`),
+  approve: (id)        => api.patch(`/ra-bills/${id}/approve`),
+  reject:  (id, reason)=> api.patch(`/ra-bills/${id}/reject`, { reason }),
+  pay:     (id)        => api.patch(`/ra-bills/${id}/pay`),
 };
 
 export const variationAPI = {
-  list:   (projectId) => api.get('/variations', { params: { project_id: projectId } }),
-  detail: (id)         => api.get(`/variations/${id}`),
+  list:    (projectId) => api.get('/variations', { params: { project_id: projectId } }),
+  detail:  (id)        => api.get(`/variations/${id}`),
+  approve: (id)        => api.patch(`/variations/${id}/approve`),
 };
 
 export const invoiceAPI = {
-  list:      (projectId) => api.get('/invoices', { params: { project_id: projectId } }),
-  detail:    (id)         => api.get(`/invoices/${id}`),
-  gstSummary:(projectId)  => api.get('/invoices/gst-summary', { params: { project_id: projectId } }),
+  list:       (projectId) => api.get('/invoices', { params: { project_id: projectId } }),
+  detail:     (id)        => api.get(`/invoices/${id}`),
+  gstSummary: (projectId) => api.get('/invoices/gst-summary', { params: { project_id: projectId } }),
+  verify:     (id)        => api.patch(`/invoices/${id}/verify`),
+  authorize:  (id)        => api.patch(`/invoices/${id}/authorize`),
 };
 
 export const chartOfAccountsAPI = {
@@ -157,15 +174,21 @@ export const tenderAPI = {
 };
 
 export const incidentAPI = {
-  list: (projectId) => api.get('/incidents', { params: { project_id: projectId } }),
+  list:   (projectId) => api.get('/incidents', { params: { project_id: projectId } }),
+  detail: (id)        => api.get(`/incidents/${id}`),
+  create: (data)      => api.post('/incidents', data),
+  close:  (id)        => api.patch(`/incidents/${id}/close`),
 };
 
 export const itAssetAPI = {
-  list: (projectId) => api.get('/it-assets', { params: { project_id: projectId } }),
+  list:           (projectId) => api.get('/it-assets', { params: { project_id: projectId } }),
+  detail:         (id)        => api.get(`/it-assets/${id}`),
+  addMaintenance: (id, data)  => api.post(`/it-assets/${id}/maintenance`, data),
 };
 
 export const plantAPI = {
-  list: (projectId) => api.get('/plant/equipment', { params: { project_id: projectId } }),
+  list:   (projectId) => api.get('/plant/equipment', { params: { project_id: projectId } }),
+  detail: (id)        => api.get(`/plant/equipment/${id}`),
 };
 
 export const hireRentalAPI = {
@@ -199,19 +222,30 @@ export const projectsAPI = {
 };
 
 export const vendorPaymentsAPI = {
-  list: (projectId) => api.get('/payments', { params: { project_id: projectId } }),
+  list:   (projectId) => api.get('/payments', { params: { project_id: projectId } }),
+  detail: (id)        => api.get(`/payments/${id}`),
+  create: (data)      => api.post('/payments', data),
 };
 
 export const storeLedgerAPI = {
-  list: (projectId) => api.get('/inventory', { params: { project_id: projectId, limit: 100 } }),
+  list:   (projectId)   => api.get('/inventory', { params: { project_id: projectId, limit: 100 } }),
+  ledger: (inventoryId) => api.get('/inventory/ledger', { params: { inventory_id: inventoryId } }),
 };
 
 export const pettyCashAPI = {
-  list: (projectId) => api.get('/stores-petty-cash/entries', { params: { project_id: projectId } }),
+  list:         (projectId) => api.get('/stores-petty-cash/entries', { params: { project_id: projectId, limit: 200 } }),
+  detail:       (id)        => api.get(`/stores-petty-cash/entries/${id}`),
+  create:       (data)      => api.post('/stores-petty-cash/entries', data),
+  updateStatus: (id, data)  => api.patch(`/stores-petty-cash/entries/${id}/status`, data),
 };
 
 export const gatePassAPI = {
-  list: (projectId) => api.get('/gate-passes', { params: { project_id: projectId } }),
+  list:   (projectId) => api.get('/gate-passes', { params: { project_id: projectId } }),
+  detail: (id)         => api.get(`/gate-passes/${id}`),
+  create: (data)       => api.post('/gate-passes', data),
+  return: (id)         => api.patch(`/gate-passes/${id}/return`),
+  close:  (id)         => api.patch(`/gate-passes/${id}/close`),
+  cancel: (id)         => api.patch(`/gate-passes/${id}/cancel`),
 };
 
 export const payrollAPI = {
@@ -223,21 +257,35 @@ export const employeeDirectoryAPI = {
 };
 
 export const qualityAPI = {
-  itp:    (projectId) => api.get('/quality/itp',    { params: { project_id: projectId } }),
-  mir:    (projectId) => api.get('/quality/mir',    { params: { project_id: projectId } }),
-  audits: (projectId) => api.get('/quality/audits', { params: { project_id: projectId } }),
+  itp:               (projectId) => api.get('/quality/itp',    { params: { project_id: projectId } }),
+  itpDetail:         (id)        => api.get(`/quality/itp/${id}`),
+  itpApprove:        (id)        => api.patch(`/quality/itp/${id}/approve`),
+  mir:               (projectId) => api.get('/quality/mir',    { params: { project_id: projectId } }),
+  mirDetail:         (id)        => api.get(`/quality/mir/${id}`),
+  mirStartInspection:(id)        => api.patch(`/quality/mir/${id}/start-inspection`),
+  mirApprove:        (id)        => api.patch(`/quality/mir/${id}/approve`),
+  mirReject:         (id, reason)=> api.patch(`/quality/mir/${id}/reject`, { reason }),
+  audits:            (projectId) => api.get('/quality/audits', { params: { project_id: projectId } }),
 };
 
 export const permitAPI = {
-  list: (projectId) => api.get('/permits', { params: { project_id: projectId } }),
+  list:   (projectId) => api.get('/permits', { params: { project_id: projectId } }),
+  create: (data)      => api.post('/permits', data),
+  close:  (id)        => api.patch(`/permits/${id}/close`),
 };
 
 export const ppeAPI = {
-  list: (projectId) => api.get('/ppe', { params: { project_id: projectId } }),
+  list:   (projectId) => api.get('/ppe', { params: { project_id: projectId } }),
+  create: (data)      => api.post('/ppe', data),
+  return: (id)        => api.patch(`/ppe/${id}/return`),
 };
 
 export const itTicketAPI = {
-  list: () => api.get('/it-tickets'),
+  list:    ()          => api.get('/it-tickets'),
+  detail:  (id)        => api.get(`/it-tickets/${id}`),
+  create:  (data)      => api.post('/it-tickets', data),
+  update:  (id, data)  => api.patch(`/it-tickets/${id}`, data),
+  resolve: (id, notes) => api.patch(`/it-tickets/${id}/resolve`, { resolution_notes: notes }),
 };
 
 export const lookAheadAPI = {
@@ -245,7 +293,9 @@ export const lookAheadAPI = {
 };
 
 export const engineerLogAPI = {
-  list: (projectId) => api.get('/engineer-logs', { params: { project_id: projectId } }),
+  list:   (projectId) => api.get('/engineer-logs', { params: { project_id: projectId } }),
+  detail: (id)        => api.get(`/engineer-logs/${id}`),
+  create: (data)      => api.post('/engineer-logs', data),
 };
 
 export const methodStatementAPI = {
@@ -277,8 +327,9 @@ export const reportsAPI = {
 };
 
 export const billsAPI = {
-  list:   (projectId) => api.get('/tqs/bills', { params: { project_id: projectId, limit: 50 } }),
-  detail: (id)         => api.get(`/tqs/bills/${id}`),
+  list:          (projectId) => api.get('/tqs/bills', { params: { project_id: projectId, limit: 50 } }),
+  detail:        (id)        => api.get(`/tqs/bills/${id}`),
+  advanceStage:  (id)        => api.patch(`/tqs/bills/${id}/advance-stage`),
 };
 
 export const assetAPI = {
@@ -358,6 +409,34 @@ export const approvalsAPI = {
 
 export const notificationsAPI = {
   registerDevice: (token, platform) => api.post('/notifications/devices', { token, platform, enabled: true }),
+};
+
+// ── Team Chat ─────────────────────────────────────────────────────────────────
+export const chatAPI = {
+  previews:   ()                          => api.get('/chat/previews'),
+  messages:   (channel, limit = 100)      => api.get('/chat/messages', { params: { channel, limit } }),
+  send:       (payload)                    => api.post('/chat/messages', payload),
+  react:      (id, emoji)                  => api.patch(`/chat/messages/${id}/react`, { emoji }),
+  pin:        (id)                         => api.patch(`/chat/messages/${id}/pin`),
+  search:     (q, channel, limit = 100)    => api.get('/chat/search', { params: { q, channel, limit } }),
+  markRead:   (channel)                    => api.post('/chat/messages/mark-read', { channel }),
+  callLogs:   (limit = 100)                => api.get('/chat/call-logs', { params: { limit } }),
+  saveCallLog:(data)                       => api.post('/chat/call-logs', data),
+  pendingCall:()                           => api.get('/chat/pending-call'),
+  meetings:   (limit = 30)                 => api.get('/chat/meetings', { params: { limit } }),
+};
+
+export const uploadAPI = {
+  // React Native FormData file entries take a {uri, name, type} object rather
+  // than a browser File — see expo-document-picker's DocumentPickerAsset shape.
+  single: (file, onProgress) => {
+    const fd = new FormData();
+    fd.append('file', { uri: file.uri, name: file.name, type: file.mimeType || 'application/octet-stream' });
+    return api.post('/upload/single', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: onProgress ? (e) => onProgress(e.total ? Math.round((e.loaded * 100) / e.total) : 0) : undefined,
+    });
+  },
 };
 
 export default api;

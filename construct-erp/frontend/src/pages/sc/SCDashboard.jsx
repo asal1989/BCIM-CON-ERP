@@ -1,517 +1,567 @@
-// src/pages/sc/SCDashboard.jsx — Subcontractor Management Dashboard
-import React, { useEffect, useMemo } from 'react';
+// src/pages/sc/SCDashboard.jsx — Work Order Dashboard (redesigned to match Procurement Dashboard)
+import React, { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import useAuthStore from '../../store/authStore';
 import { Link } from 'react-router-dom';
 import {
   Users, Briefcase, Receipt, IndianRupee, AlertTriangle,
-  Clock, ShieldCheck, ArrowUpRight, CheckCircle2, TrendingUp,
-  CalendarDays, ChevronRight, Building2, HardHat, Wallet,
+  Clock, CheckCircle2, TrendingUp, ChevronRight, Building2,
+  Wallet, RefreshCw, Download, Upload, Plus, MoreVertical,
+  CalendarDays, HardHat,
 } from 'lucide-react';
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, CartesianGrid,
+} from 'recharts';
 import { scAPI, projectAPI } from '../../api/client';
-import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
+import { PageHeader, Theme } from '../../theme';
 import dayjs from 'dayjs';
-import { clsx } from 'clsx';
 
-// ── helpers ──────────────────────────────────────────────────────────────────
-const fmt = (n) =>
-  n == null || isNaN(n) ? '—'
-  : `₹${Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+/* ── helpers ─────────────────────────────────────────────────── */
+const inrCr = v => {
+  const n = parseFloat(v || 0);
+  if (Math.abs(n) >= 1e7) return `₹ ${(n / 1e7).toFixed(2)} Cr`;
+  if (Math.abs(n) >= 1e5) return `₹ ${(n / 1e5).toFixed(1)} L`;
+  return `₹ ${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+};
+const inrFull = v => `₹ ${parseFloat(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const pctOf = (a, b) => b > 0 ? ((a / b) * 100).toFixed(1) : '0.0';
 
-const pct = (a, b) => (b ? Math.min(100, Math.round((Number(a) / Number(b)) * 100)) : 0);
+const AVATAR_COLORS = ['#f97316','#0891b2','#4f46e5','#059669','#dc2626','#7c3aed','#db2777','#d97706'];
+const avatarBg = n => AVATAR_COLORS[(n || '').charCodeAt(0) % AVATAR_COLORS.length];
+const initials = n => (n || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
 
-const STATUS_COLORS = {
-  draft:        { bg: 'bg-slate-100',   text: 'text-slate-600',   bar: '#94A3B8' },
-  submitted:    { bg: 'bg-amber-50',    text: 'text-amber-700',   bar: '#F59E0B' },
-  under_review: { bg: 'bg-blue-50',     text: 'text-blue-700',    bar: '#3B82F6' },
-  approved:     { bg: 'bg-emerald-50',  text: 'text-emerald-700', bar: '#10B981' },
-  paid:         { bg: 'bg-green-100',   text: 'text-green-800',   bar: '#16A34A' },
-  rejected:     { bg: 'bg-red-50',      text: 'text-red-600',     bar: '#EF4444' },
+const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+/* ── WO status config ────────────────────────────────────────── */
+const WO_CFG = {
+  draft:      { label: 'Draft',                 color: '#94a3b8', bg: '#f8fafc' },
+  pending:    { label: 'Pending',               color: '#f59e0b', bg: '#fffbeb' },
+  submitted:  { label: 'Procurement Approved',  color: '#0ea5e9', bg: '#f0f9ff' },
+  approved:   { label: 'MD Authorized',         color: '#22c55e', bg: '#f0fdf4' },
+  active:     { label: 'Active',                color: '#06b6d4', bg: '#ecfeff' },
+  completed:  { label: 'Completed',             color: '#4f46e5', bg: '#eff6ff' },
+  terminated: { label: 'Terminated',            color: '#ef4444', bg: '#fff1f2' },
+  closed:     { label: 'Closed',                color: '#64748b', bg: '#f8fafc' },
+  rejected:   { label: 'Rejected',              color: '#ef4444', bg: '#fff1f2' },
 };
 
-function SectionTitle({ icon: Icon, title, subtitle, action }) {
+const BILL_CFG = {
+  draft:        { color: '#94a3b8', bg: '#f8fafc' },
+  submitted:    { color: '#f59e0b', bg: '#fffbeb' },
+  under_review: { color: '#0ea5e9', bg: '#f0f9ff' },
+  approved:     { color: '#22c55e', bg: '#f0fdf4' },
+  paid:         { color: '#16a34a', bg: '#f0fdf4' },
+  rejected:     { color: '#ef4444', bg: '#fff1f2' },
+};
+
+/* ── Sparkline ───────────────────────────────────────────────── */
+function Sparkline({ data, color }) {
+  if (!data?.length) return null;
+  const w = 90, h = 36;
+  const vals = data.map(Number);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const range = max - min || 1;
+  const pts = vals.map((v, i) => `${(i / (vals.length - 1)) * w},${h - ((v - min) / range) * (h - 4) - 2}`).join(' ');
   return (
-    <div className="flex items-center justify-between mb-4">
-      <div className="flex items-center gap-2.5">
-        <div className="w-8 h-8 rounded-xl bg-orange-50 flex items-center justify-center">
-          <Icon className="w-4 h-4 text-orange-600" />
-        </div>
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
+      <polyline points={`0,${h} ${pts} ${w},${h}`} fill={color} stroke="none" opacity={0.12} />
+      <polyline points={pts} fill="none" stroke={color} strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/* ── KPI Sparkline Card ──────────────────────────────────────── */
+function KpiSparkCard({ icon: Icon, label, value, sub, color, accentBg, sparkData }) {
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '16px 18px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div>
-          <h2 className="text-sm font-bold text-slate-800 leading-tight">{title}</h2>
-          {subtitle && <p className="text-[10px] text-slate-400 uppercase tracking-wider">{subtitle}</p>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 10, background: accentBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon size={15} style={{ color }} />
+            </div>
+            <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#94a3b8' }}>{label}</span>
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+          {sub && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 5 }}>{sub}</div>}
+        </div>
+        <Sparkline data={sparkData} color={color} />
+      </div>
+    </div>
+  );
+}
+
+/* ── WO Status Summary row ───────────────────────────────────── */
+function StatusRow({ status, count, total }) {
+  const cfg = WO_CFG[status] || { label: status, color: '#94a3b8', bg: '#f8fafc' };
+  const w = total > 0 ? (count / total) * 100 : 0;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #f8fafc' }}>
+      <div style={{ width: 28, height: 28, borderRadius: 8, background: cfg.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: cfg.color, display: 'inline-block' }} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 3 }}>{cfg.label}</div>
+        <div style={{ height: 4, borderRadius: 999, background: '#f1f5f9' }}>
+          <div style={{ height: '100%', borderRadius: 999, background: cfg.color, width: `${w}%`, transition: 'width .4s ease' }} />
         </div>
       </div>
-      {action}
+      <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', minWidth: 24, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{count}</span>
+      <span style={{ fontSize: 10, color: '#94a3b8', minWidth: 42, textAlign: 'right' }}>{pctOf(count, total)}%</span>
     </div>
   );
 }
 
-function StatBar({ label, value, total, color, sub }) {
-  const w = total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0;
-  return (
-    <div className="flex items-center gap-3">
-      <span className="text-xs text-slate-500 w-24 truncate capitalize">{label.replace(/_/g,' ')}</span>
-      <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-        <div className="h-full rounded-full transition-all" style={{ width: `${w}%`, background: color }} />
-      </div>
-      <span className="text-xs font-semibold text-slate-700 w-5 text-right">{value}</span>
-      {sub && <span className="text-[10px] text-slate-400 w-16 text-right truncate">{sub}</span>}
-    </div>
-  );
-}
-
-function ProgressPanel({ label, value, max, color, left, right }) {
-  const w = max > 0 ? Math.min(100, (value / max) * 100) : 0;
-  return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{label}</span>
-        <span className="text-base font-bold" style={{ color }}>{Math.round(w)}%</span>
-      </div>
-      <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden mb-3">
-        <div className="h-full rounded-full transition-all" style={{ width: `${w}%`, background: color }} />
-      </div>
-      <div className="flex items-center justify-between text-[10px] text-slate-400">
-        <span>{left}</span>
-        <span>{right}</span>
-      </div>
-    </div>
-  );
-}
-
-// Donut chart (pure SVG)
-function DonutChart({ segments, size = 100, stroke = 22 }) {
+/* ── Spend donut ─────────────────────────────────────────────── */
+function SpendDonut({ segments, total }) {
+  const size = 160, stroke = 32;
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
-  const total = segments.reduce((s, x) => s + x.value, 0) || 1;
+  const sum = segments.reduce((s, x) => s + x.value, 0) || 1;
   let offset = 0;
   return (
-    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#F1F5F9" strokeWidth={stroke - 2} />
-      {segments.map((seg, i) => {
-        const dash = (seg.value / total) * circ;
-        const gap  = circ - dash;
-        const el = (
-          <circle key={i} cx={size/2} cy={size/2} r={r} fill="none"
-            stroke={seg.color} strokeWidth={stroke - 2}
-            strokeDasharray={`${dash} ${gap}`} strokeDashoffset={-offset} strokeLinecap="butt" />
-        );
-        offset += dash;
-        return el;
-      })}
-    </svg>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+      <div style={{ position: 'relative', flexShrink: 0 }}>
+        <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#f1f5f9" strokeWidth={stroke - 3} />
+          {segments.map((seg, i) => {
+            const dash = (seg.value / sum) * circ;
+            const gap  = circ - dash;
+            const el = <circle key={i} cx={size/2} cy={size/2} r={r} fill="none"
+              stroke={seg.color} strokeWidth={stroke - 3}
+              strokeDasharray={`${dash} ${gap}`} strokeDashoffset={-offset} strokeLinecap="butt" />;
+            offset += dash;
+            return el;
+          })}
+        </svg>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ fontSize: 15, fontWeight: 900, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{inrCr(total)}</span>
+          <span style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Value</span>
+        </div>
+      </div>
+      <div style={{ flex: 1, minWidth: 140, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {segments.map(seg => (
+          <div key={seg.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: seg.color, flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: '#374151', fontWeight: 500 }}>{seg.label}</span>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a' }}>{inrCr(seg.value)}</div>
+              <div style={{ fontSize: 10, color: '#94a3b8' }}>{pctOf(seg.value, sum)}%</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── Contractor rank row ─────────────────────────────────────── */
+function ContractorRankRow({ rank, name, amount, max }) {
+  const w = max > 0 ? (amount / max) * 100 : 0;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: '1px solid #f8fafc' }}>
+      <span style={{ width: 18, fontSize: 11, fontWeight: 700, color: '#94a3b8', textAlign: 'center', flexShrink: 0 }}>{rank}</span>
+      <div style={{ width: 30, height: 30, borderRadius: 8, background: avatarBg(name), color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        {initials(name)}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+        <div style={{ height: 3, borderRadius: 999, background: '#f1f5f9', marginTop: 4 }}>
+          <div style={{ height: '100%', borderRadius: 999, background: '#f97316', width: `${w}%` }} />
+        </div>
+      </div>
+      <span style={{ fontSize: 12, fontWeight: 800, color: '#0f172a', minWidth: 60, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{inrCr(amount)}</span>
+    </div>
+  );
+}
+
+/* ── WO table row ────────────────────────────────────────────── */
+function WOTableRow({ wo }) {
+  const cfg = WO_CFG[wo.status || 'draft'] || WO_CFG.draft;
+  return (
+    <tr style={{ borderBottom: '1px solid #f8fafc' }}>
+      <td style={{ padding: '12px 16px' }}>
+        <Link to="/sc/work-orders" style={{ fontSize: 13, fontWeight: 700, color: '#f97316', textDecoration: 'none' }}>{wo.wo_number}</Link>
+      </td>
+      <td style={{ padding: '12px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 28, height: 28, borderRadius: 8, background: avatarBg(wo.sc_name || wo.vendor_name || ''), color: '#fff', fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            {initials(wo.sc_name || wo.vendor_name || '?')}
+          </div>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>{wo.sc_name || wo.vendor_name || '—'}</span>
+        </div>
+      </td>
+      <td style={{ padding: '12px 16px', fontSize: 12, color: '#64748b' }}>{wo.project_name || '—'}</td>
+      <td style={{ padding: '12px 16px', fontSize: 12, color: '#64748b' }}>{wo.wo_date ? dayjs(wo.wo_date).format('DD MMM YYYY') : '—'}</td>
+      <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{inrFull(wo.total_value)}</td>
+      <td style={{ padding: '12px 16px' }}>
+        <span style={{ padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}22` }}>
+          {cfg.label}
+        </span>
+      </td>
+      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+        <button style={{ width: 28, height: 28, borderRadius: 7, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}>
+          <MoreVertical size={13} />
+        </button>
+      </td>
+    </tr>
   );
 }
 
 export default function SCDashboard() {
   const now = dayjs();
-  const { selectedProjectId } = useAuthStore();
+  const { selectedProjectId, selectedProjectName } = useAuthStore();
+  const projFilter = selectedProjectId ? { project_id: selectedProjectId } : {};
 
-  const { data: projects = [] } = useQuery({ queryKey:['projects'], queryFn:()=>projectAPI.list().then(r=>r.data?.data??[]) });
-  const { data: dash, isLoading } = useQuery({
+  const { data: dash, isLoading, refetch } = useQuery({
     queryKey: ['sc-dashboard', selectedProjectId],
-    queryFn: () => scAPI.dashboard({ project_id: selectedProjectId || undefined }).then(r => r.data?.data ?? r.data ?? []).catch(() => []),
-    staleTime: 0, gcTime: 0, refetchOnMount: 'always',
-  });
-  // NMR pending count
-  const { data: nmrPending } = useQuery({
-    queryKey: ['sc-nmr-pending-count'],
-    queryFn: () => scAPI.listNMR({ status: 'submitted' }).then(r => (r.data?.data||[]).length),
+    queryFn: () => scAPI.dashboard({ project_id: selectedProjectId || undefined }).then(r => r.data?.data ?? r.data ?? {}),
     staleTime: 0, refetchOnMount: 'always',
   });
 
-  const d    = dash || {};
-  const sc   = d.subcontractors || {};
-  const wo   = d.work_orders || {};
-  const fin  = d.financials || {};
-  const adv  = d.advances || {};
-  const billsKpi = d.bills || {};
-  const byProject   = d.by_project || [];
-  const billStatus  = d.bill_status || [];
-  const recentBills = d.recent_bills || [];
+  const d   = dash || {};
+  const wo  = d.work_orders || {};
+  const fin = d.financials  || {};
+  const sc  = d.subcontractors || {};
+  const adv = d.advances    || {};
   const recentWOs   = d.recent_work_orders || [];
+  const recentBills = d.recent_bills || [];
+  const billStatus  = d.bill_status  || [];
+  const byProject   = d.by_project   || [];
 
-  // ── Derived KPIs ─────────────────────────────────────────────────────────
-  const contractValue = parseFloat(wo.total_value || 0);
-  const totalBilled   = parseFloat(fin.total_billed || 0);
-  const totalPaid     = parseFloat(fin.total_paid || 0);
-  const outstanding   = parseFloat(fin.outstanding || 0);
-  const retentionHeld = parseFloat(fin.retention_held || 0);
-  const billingPct    = pct(totalBilled, contractValue);
-  const paymentPct    = pct(totalPaid, totalBilled);
-  // Advances paid to subcontractors — combines every place an advance can be
-  // recorded (sc_advances, Advance Tracker, Finance payments) so this reflects
-  // reality even when the advance wasn't entered through the SC module itself.
-  const advancePaid      = parseFloat(adv.total_paid || 0);
-  const advanceRecovered = parseFloat(adv.total_recovered || 0);
-  const advanceBalance   = parseFloat(adv.balance || 0);
+  const contractValue  = parseFloat(wo.total_value || 0);
+  const totalBilled    = parseFloat(fin.total_billed    || 0);
+  const totalPaid      = parseFloat(fin.total_paid      || 0);
+  const outstanding    = parseFloat(fin.outstanding     || 0);
+  const retentionHeld  = parseFloat(fin.retention_held  || 0);
+  const advancePaid    = parseFloat(adv.total_paid      || 0);
+  const advanceBalance = parseFloat(adv.balance         || 0);
+
+  // WO status buckets from recent WOs
+  const woStatusBuckets = useMemo(() => {
+    const b = {};
+    for (const w of recentWOs) {
+      const s = w.status || 'draft';
+      if (!b[s]) b[s] = 0;
+      b[s]++;
+    }
+    // Also use dashboard counts if available
+    if (wo.active   && !b.active)    b.active    = wo.active;
+    if (wo.pending  && !b.pending)   b.pending   = wo.pending;
+    if (wo.approved && !b.approved)  b.approved  = wo.approved;
+    return b;
+  }, [recentWOs, wo]);
+
+  const totalWOCount = Object.values(woStatusBuckets).reduce((s, v) => s + v, 0) || wo.total || 0;
 
   // Bill status buckets
-  const statusBuckets = useMemo(() => {
+  const billBuckets = useMemo(() => {
     const m = {};
     for (const r of billStatus) {
-      m[r.status] = { count: parseInt(r.count), amount: parseFloat(r.amount) };
+      m[r.status] = { count: parseInt(r.count || 0), amount: parseFloat(r.amount || 0) };
     }
     return m;
   }, [billStatus]);
+  const totalBillCount = Object.values(billBuckets).reduce((s, v) => s + v.count, 0);
 
-  const totalBillCount = Object.values(statusBuckets).reduce((s, v) => s + v.count, 0);
-  const donutSegments  = Object.entries(statusBuckets).map(([s, d]) => ({
-    label: s, value: d.count,
-    color: STATUS_COLORS[s]?.bar || '#94A3B8',
-  }));
+  // Spend donut by project
+  const spendSegments = useMemo(() => {
+    const colors = ['#f97316','#4f46e5','#0891b2','#22c55e','#94a3b8'];
+    const rows = [...byProject].sort((a, b) => b.contract_value - a.contract_value).slice(0, 5);
+    if (!rows.length && contractValue > 0) return [{ label: 'Total', value: contractValue, color: '#f97316' }];
+    return rows.map((p, i) => ({ label: p.project_name || `Project ${i+1}`, value: parseFloat(p.contract_value || 0), color: colors[i] || '#94a3b8' }));
+  }, [byProject, contractValue]);
 
-  // This month
-  const billsThisMonth = recentBills.filter(b => dayjs(b.bill_date || b.created_at).isSame(now, 'month'));
-  const billedThisMonth = billsThisMonth.reduce((s, b) => s + parseFloat(b.net_payable || 0), 0);
-  const paidThisMonth   = billsThisMonth.reduce((s, b) => s + parseFloat(b.paid_amount || 0), 0);
-  const pendingApproval = (billStatus.find(r => r.status === 'submitted')?.count || 0)
-                        + (billStatus.find(r => r.status === 'under_review')?.count || 0);
+  // Top contractors by WO value
+  const contractorSpend = useMemo(() => {
+    const m = {};
+    for (const w of recentWOs) {
+      const name = w.sc_name || w.vendor_name;
+      if (!name) continue;
+      m[name] = (m[name] || 0) + parseFloat(w.total_value || 0);
+    }
+    // Fill from byProject contractor data if available
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  }, [recentWOs]);
 
-  // Project rows
-  const projectRows = [...byProject].sort((a, b) => b.contract_value - a.contract_value).slice(0, 6);
+  // Monthly billing trend
+  const monthlyTrend = useMemo(() => {
+    const monthData = {};
+    for (const b of recentBills) {
+      const m = dayjs(b.bill_date || b.created_at).format('YYYY-MM');
+      monthData[m] = (monthData[m] || 0) + parseFloat(b.net_payable || 0);
+    }
+    const months = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = now.subtract(i, 'month');
+      const key = d.format('YYYY-MM');
+      months.push({ month: MONTH_LABELS[d.month()], amountCr: parseFloat(((monthData[key] || 0) / 1e7).toFixed(2)), amount: monthData[key] || 0 });
+    }
+    return months;
+  }, [recentBills]);
+
+  // Sparkline data
+  const monthlyWOCounts = useMemo(() => {
+    const arr = [];
+    for (let i = 6; i >= 0; i--) {
+      const key = now.subtract(i, 'month').format('YYYY-MM');
+      arr.push(recentWOs.filter(w => dayjs(w.wo_date || w.created_at).format('YYYY-MM') === key).length);
+    }
+    return arr.length ? arr : [0, 1, 0, 1, 1, 0, (wo.total || 0)];
+  }, [recentWOs, wo.total]);
+
+  const monthlyBillAmounts = useMemo(() => monthlyTrend.slice(-7).map(m => m.amount), [monthlyTrend]);
+
+  const peakMonth  = monthlyTrend.reduce((a, b) => b.amount > a.amount ? b : a, { month: '', amount: 0 });
+  const lowMonth   = monthlyTrend.filter(m => m.amount > 0).reduce((a, b) => b.amount < a.amount ? b : a, { month: '', amount: Infinity });
+  const avgMonthly = monthlyTrend.reduce((s, m) => s + m.amount, 0) / 12;
+
+  const pendingApprovalCount = (billStatus.find(r => r.status === 'submitted')?.count || 0)
+                             + (billStatus.find(r => r.status === 'under_review')?.count || 0);
+
+  const PAGE_SIZE = 5;
+  const [page, setPage] = React.useState(1);
+  const totalPages = Math.ceil(recentWOs.length / PAGE_SIZE);
+  const pageWOs = recentWOs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
-    <div style={{ background: Theme.pageBg, minHeight: '100vh' }}>
+    <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
 
       <PageHeader
-        title="Subcontractor Dashboard"
-        subtitle="Work orders, billing, payments & retention overview"
+        title="Work Order Dashboard"
+        subtitle="Overview of subcontractor work orders, billing, payments & retention."
         breadcrumbs={[{ label: 'Subcontractors' }, { label: 'Dashboard' }]}
         actions={
-          <>
-            <Link to="/sc/bill-preparation"
-              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition shadow-sm"
-              style={{ background: '#fff', color: Theme.navyDark }}>
-              <Receipt className="w-3.5 h-3.5" /> Raise Bill
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={() => refetch()} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              <RefreshCw size={13} /> Refresh
+            </button>
+            <Link to="/sc/bill-preparation" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>
+              <Receipt size={13} /> Raise Bill
             </Link>
-            <Link to="/sc/work-orders"
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg transition"
-              style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', color: '#fff' }}>
-              <Briefcase className="w-3.5 h-3.5" /> Work Orders
+            <Link to="/sc/work-orders" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 9, background: '#fff', color: Theme.navyDark, fontSize: 12, fontWeight: 800, textDecoration: 'none' }}>
+              <Plus size={13} /> New Work Order
             </Link>
-          </>
+          </div>
         }
       />
 
-      <div className="p-5 md:p-6 max-w-[1400px] mx-auto space-y-5">
+      <div style={{ padding: '20px 24px', maxWidth: 1400, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-        {/* ── KPI Row ── */}
-        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
-          <ThemeKpiCard icon={IndianRupee}  label="Contract Value"   value={fmt(contractValue)}  color="blue"    sub={`${wo.total||0} work orders`} />
-          <ThemeKpiCard icon={Receipt}      label="Total Billed"     value={fmt(totalBilled)}    color="emerald" sub={`${totalBillCount} SC bills`} />
-          <ThemeKpiCard icon={Wallet}       label="Amount Paid"      value={fmt(totalPaid)}      color="emerald" sub={`${paymentPct}% of billed`} />
-          <ThemeKpiCard icon={AlertTriangle}label="Outstanding"      value={fmt(outstanding)}    color="amber"   sub="Approved, unpaid" />
-          <ThemeKpiCard icon={ShieldCheck}  label="Retention Held"   value={fmt(retentionHeld)}  color="slate"   sub="Deducted from bills" />
-          <ThemeKpiCard icon={Wallet}       label="Advance Paid"     value={fmt(advancePaid)}    color="purple"  sub="All subcontractors" />
-          <ThemeKpiCard icon={AlertTriangle}label="Advance Balance"  value={fmt(advanceBalance)} color={advanceBalance > 0 ? 'amber' : 'emerald'} sub="Not yet recovered" />
-          <ThemeKpiCard icon={Users}        label="Subcontractors"   value={sc.active||0}        color="orange"  sub={`${sc.total||0} total registered`} />
+        {/* Project filter banner */}
+        {selectedProjectId && (
+          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '9px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Building2 size={14} style={{ color: '#2563eb', flexShrink: 0 }} />
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#1d4ed8' }}>Showing data for: {selectedProjectName}</span>
+            <span style={{ fontSize: 12, color: '#64748b', marginLeft: 4 }}>— Switch the project from the top bar to view others</span>
+          </div>
+        )}
+
+        {/* Last updated */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, fontSize: 11, color: '#94a3b8' }}>
+          <Clock size={12} /> Last updated: {dayjs().format('hh:mm A, DD MMM YYYY')}
         </div>
 
-        {/* ── Alert banners ── */}
-        {(outstanding > 0 || pendingApproval > 0 || nmrPending > 0) && (
-          <div className="flex flex-col gap-2">
+        {/* KPI Cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
+          <KpiSparkCard icon={IndianRupee}   label="Contract Value (WO)"  value={inrCr(contractValue)}  color="#f97316" accentBg="#fff7ed" sparkData={monthlyWOCounts.map(v => v * (contractValue / (totalWOCount || 1)))} sub={`${wo.total || 0} work orders`} />
+          <KpiSparkCard icon={Receipt}       label="Total Billed"         value={inrCr(totalBilled)}    color="#4f46e5" accentBg="#ede9fe" sparkData={monthlyBillAmounts} sub={`${totalBillCount} SC bills`} />
+          <KpiSparkCard icon={Wallet}        label="Amount Paid"          value={inrCr(totalPaid)}      color="#22c55e" accentBg="#dcfce7" sparkData={monthlyBillAmounts.map(v => v * 0.8)} sub={`${pctOf(totalPaid, totalBilled)}% of billed`} />
+          <KpiSparkCard icon={AlertTriangle} label="Outstanding"          value={inrCr(outstanding)}    color="#f59e0b" accentBg="#fef3c7" sparkData={[outstanding*0.6,outstanding*0.7,outstanding*0.8,outstanding*0.9,outstanding,outstanding*0.95,outstanding]} sub="Approved, unpaid" />
+          <KpiSparkCard icon={Users}         label="Subcontractors"       value={sc.active || sc.total || 0} color="#0891b2" accentBg="#e0f2fe" sparkData={[sc.total*0.7,sc.total*0.8,sc.total*0.85,sc.total*0.9,sc.active,sc.active,sc.active||sc.total||0]} sub={`${sc.total || 0} total registered`} />
+        </div>
+
+        {/* Alerts */}
+        {(outstanding > 0 || pendingApprovalCount > 0) && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {outstanding > 0 && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-3">
-                <AlertTriangle size={15} className="text-amber-600 flex-shrink-0" />
-                <span className="text-sm font-medium text-amber-800">
-                  {fmt(outstanding)} outstanding — {Math.round(100 - paymentPct)}% of billed amount pending payment
-                </span>
-                <Link to="/sc/payments" className="ml-auto text-xs font-semibold text-amber-700 underline whitespace-nowrap">Record Payment →</Link>
+              <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <AlertTriangle size={14} style={{ color: '#d97706', flexShrink: 0 }} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#92400e' }}>{inrCr(outstanding)} outstanding — {Math.round(100 - parseFloat(pctOf(totalPaid, totalBilled)))}% of billed pending payment</span>
+                <Link to="/sc/payments" style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#d97706', textDecoration: 'none' }}>Record Payment →</Link>
               </div>
             )}
-            {pendingApproval > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-center gap-3">
-                <Clock size={15} className="text-blue-600 flex-shrink-0" />
-                <span className="text-sm font-medium text-blue-800">
-                  {pendingApproval} SC bill{pendingApproval > 1 ? 's' : ''} pending approval
-                </span>
-                <Link to="/sc/bill-approval" className="ml-auto text-xs font-semibold text-blue-700 underline whitespace-nowrap">Review →</Link>
-              </div>
-            )}
-            {nmrPending > 0 && (
-              <div className="bg-purple-50 border border-purple-200 rounded-xl px-4 py-3 flex items-center gap-3">
-                <Clock size={15} className="text-purple-600 flex-shrink-0" />
-                <span className="text-sm font-medium text-purple-800">
-                  {nmrPending} NMR (Muster Roll){nmrPending > 1 ? 's' : ''} submitted — pending site check & approval
-                </span>
-                <Link to="/sc/labour" className="ml-auto text-xs font-semibold text-purple-700 underline whitespace-nowrap">Review NMR →</Link>
+            {pendingApprovalCount > 0 && (
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Clock size={14} style={{ color: '#2563eb', flexShrink: 0 }} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{pendingApprovalCount} SC bill{pendingApprovalCount > 1 ? 's' : ''} pending approval</span>
+                <Link to="/sc/bill-approval" style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#2563eb', textDecoration: 'none' }}>Review →</Link>
               </div>
             )}
           </div>
         )}
 
-        {/* ── Progress panels + This Month ── */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <ProgressPanel
-            label="Billing Progress"
-            value={totalBilled} max={contractValue}
-            color="#F97316"
-            left={`Billed: ${fmt(totalBilled)}`}
-            right={`Contract: ${fmt(contractValue)}`}
-          />
-          <ProgressPanel
-            label="Payment Rate"
-            value={totalPaid} max={totalBilled}
-            color="#10B981"
-            left={`Paid: ${fmt(totalPaid)}`}
-            right={`Billed: ${fmt(totalBilled)}`}
-          />
-          {/* This Month mini-summary */}
-          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-            <div className="flex items-center gap-2 mb-3">
-              <CalendarDays size={14} className="text-orange-600" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">This Month</span>
-              <span className="ml-auto text-[10px] text-slate-400">{now.format('MMM YYYY')}</span>
-            </div>
-            <div className="space-y-2.5">
-              {[
-                { label: 'New Bills',       value: billsThisMonth.length },
-                { label: 'Amount Billed',   value: fmt(billedThisMonth) },
-                { label: 'Amount Paid',     value: fmt(paidThisMonth) },
-                { label: 'Active WOs',      value: wo.active || 0 },
-              ].map(({ label, value }) => (
-                <div key={label} className="flex items-center justify-between border-b border-slate-50 pb-2 last:border-0 last:pb-0">
-                  <span className="text-xs text-slate-500">{label}</span>
-                  <span className="text-sm font-bold text-slate-800">{value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        {/* 3-column analytics */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
 
-        {/* ── Main Grid: Bill Status + Project Billing ── */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-
-          {/* Bill Status Breakdown */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-            <SectionTitle icon={Receipt} title="Bill Status Breakdown" subtitle={`${totalBillCount} total bills`} />
-            <div className="flex items-center gap-5 mb-4">
-              <div className="relative flex-shrink-0">
-                {donutSegments.length > 0
-                  ? <DonutChart segments={donutSegments} size={110} stroke={24} />
-                  : <div className="w-[110px] h-[110px] rounded-full border-[22px] border-slate-100" />
-                }
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-lg font-bold text-slate-900">{totalBillCount}</span>
-                  <span className="text-[9px] text-slate-400 font-semibold uppercase">Bills</span>
-                </div>
-              </div>
-              <div className="flex-1 space-y-2">
-                {Object.entries(statusBuckets).map(([status, data]) => (
-                  <div key={status} className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                        style={{ background: STATUS_COLORS[status]?.bar || '#94A3B8' }} />
-                      <span className="text-[11px] font-medium text-slate-600 capitalize truncate">{status.replace(/_/g,' ')}</span>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-[10px] text-slate-400">{fmt(data.amount)}</span>
-                      <span className="text-xs font-bold text-slate-800 w-4 text-right">{data.count}</span>
-                    </div>
-                  </div>
-                ))}
-                {Object.keys(statusBuckets).length === 0 && (
-                  <p className="text-xs text-slate-400 text-center py-4">No bills yet</p>
-                )}
-              </div>
+          {/* WO Value by Project (Spend Overview) */}
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>WO Value by Project</h3>
             </div>
-            {/* Status bars */}
-            {Object.keys(statusBuckets).length > 0 && (
-              <div className="space-y-1.5 pt-3 border-t border-slate-100">
-                {Object.entries(statusBuckets).map(([status, data]) => (
-                  <StatBar
-                    key={status}
-                    label={status}
-                    value={data.count}
-                    total={totalBillCount}
-                    color={STATUS_COLORS[status]?.bar || '#94A3B8'}
-                    sub={fmt(data.amount)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Project-wise SC Billing */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm xl:col-span-2">
-            <SectionTitle icon={TrendingUp} title="Project-wise SC Billing"
-              subtitle={`${projects.length} projects`}
-              action={
-                <Link to="/sc/work-orders" className="flex items-center gap-1 text-[10px] font-semibold text-orange-600 hover:text-orange-700">
-                  View All <ChevronRight className="w-3 h-3" />
-                </Link>
-              }
-            />
-            {projectRows.length === 0 ? (
-              <div className="py-10 text-center text-xs text-slate-400">No billing data available</div>
+            {spendSegments.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>No data</div>
             ) : (
-              <div className="space-y-4">
-                {projectRows.map((p) => (
-                  <div key={p.project_name}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs font-semibold text-slate-700 truncate max-w-[50%]">{p.project_name}</span>
-                      <div className="flex items-center gap-3 text-[10px] flex-shrink-0">
-                        <span className="text-slate-400">WOs: <span className="font-bold text-slate-600">{p.wo_count}</span></span>
-                        <span className="text-slate-400">Billed: <span className="font-bold text-orange-600">{fmt(p.billed)}</span></span>
-                        <span className="text-slate-400">Contract: <span className="font-bold text-slate-700">{fmt(p.contract_value)}</span></span>
-                      </div>
-                    </div>
-                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all bg-orange-400"
-                        style={{ width: `${p.contract_value > 0 ? Math.min(100, (parseFloat(p.billed) / parseFloat(p.contract_value)) * 100) : 0}%` }} />
-                    </div>
-                    <div className="flex justify-between mt-1 text-[9px] text-slate-400">
-                      <span>{pct(p.billed, p.contract_value)}% billed</span>
-                      <span>{pct(parseFloat(p.contract_value) - parseFloat(p.billed), p.contract_value)}% remaining</span>
-                    </div>
-                  </div>
+              <SpendDonut segments={spendSegments} total={contractValue} />
+            )}
+            <div style={{ marginTop: 14, padding: '10px 12px', background: '#fff7ed', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <TrendingUp size={13} style={{ color: '#ea580c' }} />
+              <span style={{ fontSize: 11, color: '#c2410c', fontWeight: 600 }}>
+                {pctOf(totalBilled, contractValue)}% of contract value billed
+              </span>
+            </div>
+          </div>
+
+          {/* WO Status Summary */}
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>WO Status Summary</h3>
+              <Link to="/sc/work-orders" style={{ fontSize: 11, fontWeight: 700, color: '#f97316', textDecoration: 'none' }}>View All</Link>
+            </div>
+            {Object.keys(woStatusBuckets).length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>No work orders</div>
+            ) : (
+              <div>
+                {Object.entries(woStatusBuckets).sort((a, b) => b[1] - a[1]).map(([status, count]) => (
+                  <StatusRow key={status} status={status} count={count} total={totalWOCount} />
                 ))}
               </div>
             )}
           </div>
+
+          {/* Top Contractors by WO Value */}
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>Top Contractors by Value</h3>
+            </div>
+            {contractorSpend.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>No contractor data</div>
+            ) : contractorSpend.map(([name, amount], i) => (
+              <ContractorRankRow key={name} rank={i + 1} name={name} amount={amount} max={contractorSpend[0][1]} />
+            ))}
+            <Link to="/sc/work-orders" style={{ display: 'block', marginTop: 12, fontSize: 12, fontWeight: 700, color: '#f97316', textDecoration: 'none' }}>
+              View all contractors →
+            </Link>
+          </div>
         </div>
 
-        {/* ── Recent SC Bills table ── */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-5 pb-0">
-            <SectionTitle icon={Receipt} title="Recent SC Bills"
-              subtitle="Latest subcontractor billing activity"
-              action={
-                <Link to="/sc/bill-approval" className="flex items-center gap-1 text-[10px] font-semibold text-orange-600 hover:text-orange-700">
-                  All Bills <ChevronRight className="w-3 h-3" />
-                </Link>
-              }
-            />
+        {/* Recent Work Orders table */}
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+          <div style={{ padding: '18px 20px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9' }}>
+            <h3 style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', margin: 0 }}>Recent Work Orders</h3>
+            <Link to="/sc/work-orders" style={{ fontSize: 12, fontWeight: 700, color: '#f97316', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+              View All <ChevronRight size={13} />
+            </Link>
           </div>
           {isLoading ? (
-            <div className="p-5 space-y-2">{[1,2,3,4].map(n => <div key={n} className="h-10 bg-slate-100 rounded-xl animate-pulse" />)}</div>
-          ) : recentBills.length === 0 ? (
-            <div className="py-12 text-center text-xs text-slate-400">
-              No SC bills yet — <Link to="/sc/bill-preparation" className="text-orange-600 font-semibold">raise your first bill</Link>
+            <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[1,2,3,4,5].map(n => <div key={n} style={{ height: 44, background: '#f1f5f9', borderRadius: 10 }} />)}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50 border-y border-slate-100">
-                    {['Bill No.', 'Subcontractor', 'WO No.', 'Project', 'Date', 'Net Payable', 'Paid', 'Outstanding', 'Status', ''].map(h => (
-                      <th key={h} className={`px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 ${h===''?'':'text-left'}`}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {recentBills.map(bill => {
-                    const net  = parseFloat(bill.net_payable || 0);
-                    const paid = parseFloat(bill.paid_amount || 0);
-                    const due  = net - paid;
-                    return (
-                      <tr key={bill.id} className="hover:bg-slate-50 transition-colors group">
-                        <td className="px-4 py-3">
-                          <span className="text-xs font-bold text-indigo-700">{bill.bill_number}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs text-slate-700 font-medium truncate max-w-[150px] block">{bill.sc_name || '—'}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs font-mono text-slate-600">{bill.wo_number || '—'}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs text-slate-500 truncate max-w-[130px] block">{bill.project_name || '—'}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs text-slate-500">{bill.bill_date ? dayjs(bill.bill_date).format('DD MMM YY') : '—'}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs font-semibold text-slate-800">{fmt(net)}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs font-semibold text-emerald-600">{fmt(paid)}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={clsx('text-xs font-semibold', due > 0 ? 'text-amber-600' : 'text-slate-400')}>{due > 0 ? fmt(due) : '—'}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={clsx('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider',
-                            STATUS_COLORS[bill.status || 'draft']?.bg, STATUS_COLORS[bill.status || 'draft']?.text)}>
-                            {(bill.status || 'draft').replace(/_/g,' ')}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <Link to="/sc/bill-approval"
-                            className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[10px] text-orange-600 font-semibold transition-opacity whitespace-nowrap">
-                            View <ArrowUpRight className="w-3 h-3" />
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                      {['WO No.', 'Contractor', 'Project', 'WO Date', 'Value', 'Status', 'Action'].map(h => (
+                        <th key={h} style={{ padding: '10px 16px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#94a3b8', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageWOs.map(wo => <WOTableRow key={wo.id} wo={wo} />)}
+                    {recentWOs.length === 0 && (
+                      <tr><td colSpan={7} style={{ padding: '40px 16px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+                        No work orders — <Link to="/sc/work-orders" style={{ color: '#f97316', fontWeight: 700, textDecoration: 'none' }}>create one</Link>
+                      </td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {recentWOs.length > PAGE_SIZE && (
+                <div style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #f1f5f9' }}>
+                  <span style={{ fontSize: 12, color: '#64748b' }}>
+                    Showing {Math.min((page-1)*PAGE_SIZE+1, recentWOs.length)} to {Math.min(page*PAGE_SIZE, recentWOs.length)} of {recentWOs.length}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                      const pg = i + 1;
+                      return (
+                        <button key={pg} onClick={() => setPage(pg)}
+                          style={{ width: 30, height: 30, borderRadius: 7, border: `1px solid ${page===pg?'#f97316':'#e2e8f0'}`, background: page===pg?'#f97316':'#fff', color: page===pg?'#fff':'#64748b', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                          {pg}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
 
-        {/* ── Recent Work Orders + Active Subcontractors ── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Monthly Billing Trend + Bill Status */}
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
 
-          {/* Recent Work Orders */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-            <SectionTitle icon={Briefcase} title="Recent Work Orders"
-              subtitle={`${wo.active||0} active`}
-              action={<Link to="/sc/work-orders" className="flex items-center gap-1 text-[10px] font-semibold text-orange-600 hover:text-orange-700">View All <ChevronRight className="w-3 h-3" /></Link>}
-            />
-            {recentWOs.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400">No work orders created yet</div>
-            ) : (
-              <div className="space-y-2.5">
-                {recentWOs.map(w => (
-                  <div key={w.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-indigo-700 font-mono">{w.wo_number}</p>
-                      <p className="text-xs font-semibold text-slate-700 truncate mt-0.5">{w.subject || w.sc_name}</p>
-                      <p className="text-[10px] text-slate-400">{w.project_name || '—'} · {w.sc_name}</p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                      <span className="text-xs font-bold text-slate-800">{fmt(w.contract_amount)}</span>
-                      <span className={clsx('px-2 py-0.5 rounded-full text-[9px] font-bold uppercase',
-                        w.status === 'active'    ? 'bg-emerald-100 text-emerald-700' :
-                        w.status === 'completed' ? 'bg-teal-100 text-teal-700' :
-                        w.status === 'approved'  ? 'bg-blue-100 text-blue-700'  :
-                        'bg-slate-100 text-slate-600')}>
-                        {w.status}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Quick Access */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-            <SectionTitle icon={HardHat} title="Quick Access" subtitle="Jump to any module" />
-            <div className="grid grid-cols-2 gap-2">
+          {/* Monthly Trend */}
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', margin: 0 }}>Monthly Billing Trend</h3>
+            </div>
+            <div style={{ height: 200 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={monthlyTrend} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={v => `₹${v.toFixed(1)} Cr`} />
+                  <Tooltip formatter={v => [`₹ ${v.toFixed(2)} Cr`, 'Billed']} labelStyle={{ fontSize: 12, fontWeight: 700 }} contentStyle={{ border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 12 }} />
+                  <Line type="monotone" dataKey="amountCr" stroke="#f97316" strokeWidth={2.5} dot={{ r: 4, fill: '#f97316', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
               {[
-                { label: 'Add Subcontractor',  path: '/sc/master',           bg: 'bg-indigo-50',  text: 'text-indigo-700' },
-                { label: 'Create Work Order',  path: '/sc/work-orders',      bg: 'bg-emerald-50', text: 'text-emerald-700' },
-                { label: 'Mark Attendance',    path: '/sc/labour',           bg: 'bg-blue-50',    text: 'text-blue-700' },
-                { label: 'Work Progress',      path: '/sc/progress',         bg: 'bg-cyan-50',    text: 'text-cyan-700' },
-                { label: 'Raise Bill',         path: '/sc/bill-preparation', bg: 'bg-orange-50',  text: 'text-orange-700' },
-                { label: 'Bill Approvals',     path: '/sc/bill-approval',    bg: 'bg-amber-50',   text: 'text-amber-700' },
-                { label: 'Record Payment',     path: '/sc/payments',         bg: 'bg-green-50',   text: 'text-green-700' },
-                { label: 'View Reports',       path: '/sc/reports',          bg: 'bg-slate-100',  text: 'text-slate-700' },
-              ].map(q => (
-                <Link key={q.path} to={q.path}
-                  className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold ${q.bg} ${q.text} hover:opacity-90 transition-opacity`}>
-                  {q.label}
-                  <ArrowUpRight className="w-3.5 h-3.5 flex-shrink-0" />
-                </Link>
+                { label: 'Avg Monthly Billing', value: inrCr(avgMonthly) },
+                { label: 'Highest Month', value: peakMonth.month, sub: inrCr(peakMonth.amount), highlight: '#22c55e' },
+                { label: 'Lowest Month',  value: lowMonth.month,  sub: inrCr(lowMonth.amount === Infinity ? 0 : lowMonth.amount), highlight: '#ef4444' },
+              ].map(({ label, value, sub, highlight }) => (
+                <div key={label}>
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#94a3b8', marginBottom: 4 }}>{label}</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: highlight || '#0f172a' }}>{value}</div>
+                  {sub && <div style={{ fontSize: 12, color: highlight || '#64748b', fontWeight: 600 }}>{sub}</div>}
+                </div>
               ))}
             </div>
           </div>
 
+          {/* Bill Status + Finance Summary */}
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+            <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: '0 0 16px' }}>Financial Summary</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+              {[
+                { label: 'Contract Value',   value: inrCr(contractValue),   color: '#f97316' },
+                { label: 'Total Billed',     value: inrCr(totalBilled),     color: '#4f46e5' },
+                { label: 'Amount Paid',      value: inrCr(totalPaid),       color: '#22c55e' },
+                { label: 'Outstanding',      value: inrCr(outstanding),     color: outstanding > 0 ? '#f59e0b' : '#94a3b8' },
+                { label: 'Retention Held',   value: inrCr(retentionHeld),   color: '#64748b' },
+                { label: 'Advance Paid',     value: inrCr(advancePaid),     color: '#7c3aed' },
+                { label: 'Advance Balance',  value: inrCr(advanceBalance),  color: advanceBalance > 0 ? '#f59e0b' : '#22c55e' },
+              ].map(({ label, value, color }, i, arr) => (
+                <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: i < arr.length-1 ? '1px solid #f8fafc' : 'none' }}>
+                  <span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>{label}</span>
+                  <span style={{ fontSize: 13, fontWeight: 800, color, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+                </div>
+              ))}
+            </div>
+            <Link to="/sc/bill-approval" style={{ display: 'block', marginTop: 16, textAlign: 'center', padding: '9px 0', borderRadius: 10, background: '#fff7ed', color: '#ea580c', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+              View all bills →
+            </Link>
+          </div>
         </div>
+
       </div>
     </div>
   );

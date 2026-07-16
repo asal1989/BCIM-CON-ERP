@@ -170,11 +170,18 @@ router.get('/generated', authorize(...HR_ALL), async (req, res) => {
   res.json({ data: rows });
 });
 
-// Interpolate template with employee + extra data
-function interpolate(html, data) {
-  return html.replace(/\{\{(\w+)\}\}/g, (_, key) =>
-    data[key] !== undefined && data[key] !== null ? data[key] : `{{${key}}}`
-  );
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// Interpolate template with employee + extra data.
+// Employee record fields (from DB) are trusted HTML; extra_data values are user-supplied and must be escaped.
+function interpolate(html, data, trustedKeys = new Set()) {
+  return html.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+    if (data[key] === undefined || data[key] === null) return `{{${key}}}`;
+    return trustedKeys.has(key) ? data[key] : escHtml(data[key]);
+  });
 }
 
 router.post('/generate', authorize(...HR_ROLES), async (req, res) => {
@@ -200,8 +207,10 @@ router.post('/generate', authorize(...HR_ROLES), async (req, res) => {
   const { rows: [{ nextval }] } = await query(`SELECT nextval('hr_letter_ref_seq')`);
   const ref = `LTR/${new Date().getFullYear()}/${String(nextval).padStart(4,'0')}`;
   const data = { ...emp, ...extra_data, reference_no: ref };
-  const content_html = interpolate(tmpl.body_html, data);
-  const subject = interpolate(tmpl.subject || '', data);
+  // Keys from emp (DB-sourced) and reference_no are trusted HTML; extra_data keys are escaped
+  const trustedKeys = new Set([...Object.keys(emp), 'reference_no']);
+  const content_html = interpolate(tmpl.body_html, data, trustedKeys);
+  const subject = interpolate(tmpl.subject || '', data, trustedKeys);
   const { rows } = await query(
     `INSERT INTO hr_employee_letters(company_id,employee_id,template_id,letter_type,reference_no,generated_on,subject,content_html,extra_data,issued_by)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,

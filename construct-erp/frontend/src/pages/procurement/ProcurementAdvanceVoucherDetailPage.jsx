@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { procurementAdvanceAPI, projectAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
@@ -369,6 +369,8 @@ function EditPanel({ voucher, projects, onCancel, onSaved }) {
 export default function ProcurementAdvanceVoucherDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const listPath = location.pathname.startsWith('/qs/') ? '/qs/advance-tracker' : '/procurement/advance-tracker';
   const qc = useQueryClient();
   const { user } = useAuthStore();
   const canProcureApprove = ['super_admin', 'admin', 'procurement_manager', 'project_manager'].includes(user?.role);
@@ -417,7 +419,7 @@ export default function ProcurementAdvanceVoucherDetailPage() {
       <div className="text-center">
         <AlertTriangle size={40} className="mx-auto text-red-400 mb-3" />
         <p className="text-sm font-medium text-gray-600">Voucher not found</p>
-        <button onClick={() => navigate('/procurement/advance-tracker')} className="mt-3 text-sm text-blue-600 hover:underline">Back to list</button>
+        <button onClick={() => navigate(listPath)} className="mt-3 text-sm text-blue-600 hover:underline">Back to list</button>
       </div>
     </div>
   );
@@ -434,7 +436,7 @@ export default function ProcurementAdvanceVoucherDetailPage() {
       {/* ── Header ── */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         {/* Breadcrumb */}
-        <button onClick={() => navigate('/procurement/advance-tracker')}
+        <button onClick={() => navigate(listPath)}
           className="flex items-center gap-1.5 text-xs text-slate-900 font-medium hover:text-blue-600 mb-3 transition-colors">
           <ArrowLeft size={13} /> Back to Advance Tracker
         </button>

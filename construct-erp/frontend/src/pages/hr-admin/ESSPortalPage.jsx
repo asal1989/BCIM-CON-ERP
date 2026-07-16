@@ -321,14 +321,42 @@ function normaliseStatus(raw) {
   return u.slice(0, 2);
 }
 
+/* ─── swipe direction label ─── */
+function SwipeDir({ direction }) {
+  const isIn  = String(direction||'').toLowerCase().includes('in')  || direction === '0';
+  const isOut = String(direction||'').toLowerCase().includes('out') || direction === '1';
+  if (isIn)  return <span style={{ display:'inline-block', padding:'1px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#dcfce7', color:'#15803d' }}>IN</span>;
+  if (isOut) return <span style={{ display:'inline-block', padding:'1px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#fee2e2', color:'#b91c1c' }}>OUT</span>;
+  return <span style={{ display:'inline-block', padding:'1px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#f1f5f9', color:'#64748b' }}>—</span>;
+}
+
+function fmtSwipeTime(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  return d.toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', hour12:true });
+}
+
+/* ─── group swipes by calendar date ─── */
+function groupByDate(swipes) {
+  const groups = {};
+  for (const s of swipes) {
+    const day = String(s.swipe_time || '').slice(0, 10);
+    if (!groups[day]) groups[day] = [];
+    groups[day].push(s);
+  }
+  return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
+}
+
 function AttendanceTab({ leaveTypes }) {
   const qc = useQueryClient();
   const now = new Date();
   const [calYear,  setCalYear]  = useState(now.getFullYear());
   const [calMonth, setCalMonth] = useState(now.getMonth()); // 0-indexed
+  const [swipeDays, setSwipeDays] = useState(14);
 
   const attendance  = useQuery({ queryKey: ['ess-attendance'],   queryFn: () => essAPI.attendance().then(unwrap) });
   const corrections = useQuery({ queryKey: ['ess-corrections'],  queryFn: () => essAPI.attendanceCorrections().then(unwrap) });
+  const swipes      = useQuery({ queryKey: ['ess-swipes', swipeDays], queryFn: () => essAPI.swipes({ days: swipeDays }).then(unwrap) });
 
   const [correction, setCorrection] = useState({
     attendance_date: today(), requested_status: 'present',
@@ -339,6 +367,7 @@ function AttendanceTab({ leaveTypes }) {
   const createCorrection = useMutation({
     mutationFn: essAPI.createCorrection,
     onSuccess: () => { toast.success('Correction requested'); setCorrection({ ...correction, reason: '' }); refresh(); },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to submit correction request'),
   });
 
   /* build day→status map */
@@ -478,6 +507,90 @@ function AttendanceTab({ leaveTypes }) {
           ]}
           rows={corrections.data || []}
         />
+      </SectionCard>
+
+      {/* ── Recent Swipes from Biometric Device ── */}
+      <SectionCard
+        title="Biometric Swipe Logs"
+        subtitle="All punches recorded by the ESSL device for your card"
+      >
+        {/* Range selector */}
+        <div className="mb-4 flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Show last</span>
+          {[7, 14, 30, 60].map(d => (
+            <button
+              key={d}
+              onClick={() => setSwipeDays(d)}
+              className="text-xs font-bold px-3 py-1 rounded-full border transition"
+              style={{
+                background: swipeDays === d ? NAVY : '#fff',
+                color: swipeDays === d ? '#fff' : '#64748b',
+                borderColor: swipeDays === d ? NAVY : '#d1d5db',
+              }}
+            >
+              {d} days
+            </button>
+          ))}
+        </div>
+
+        {swipes.isLoading ? (
+          <p className="text-sm text-gray-400 py-4 text-center">Loading swipes…</p>
+        ) : !(swipes.data || []).length ? (
+          <div className="py-8 text-center">
+            <p className="text-sm font-semibold text-gray-400">No swipe records found for the last {swipeDays} days</p>
+            <p className="text-xs text-gray-300 mt-1">Biometric data syncs automatically from the ESSL device</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {groupByDate(swipes.data || []).map(([date, daySwipes]) => {
+              const d = new Date(date + 'T00:00:00');
+              const dayLabel = d.toLocaleDateString('en-IN', { weekday:'short', day:'2-digit', month:'short', year:'numeric' });
+              const firstIn  = daySwipes.find(s => String(s.direction||'').toLowerCase().includes('in')  || s.direction === '0');
+              const lastOut  = [...daySwipes].reverse().find(s => String(s.direction||'').toLowerCase().includes('out') || s.direction === '1');
+              const totalPunches = daySwipes.length;
+
+              return (
+                <div key={date} className="rounded-xl border border-gray-100 overflow-hidden">
+                  {/* Day header */}
+                  <div className="flex items-center justify-between px-4 py-2.5" style={{ background: NAVY }}>
+                    <span className="text-xs font-bold text-white">{dayLabel}</span>
+                    <div className="flex items-center gap-3">
+                      {firstIn && (
+                        <span className="text-[11px] text-blue-200">
+                          First In: <span className="font-bold text-white">{new Date(firstIn.swipe_time).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true })}</span>
+                        </span>
+                      )}
+                      {lastOut && (
+                        <span className="text-[11px] text-blue-200">
+                          Last Out: <span className="font-bold text-white">{new Date(lastOut.swipe_time).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true })}</span>
+                        </span>
+                      )}
+                      <span className="text-[11px] bg-white/20 text-white rounded-full px-2 py-0.5 font-bold">{totalPunches} punch{totalPunches !== 1 ? 'es' : ''}</span>
+                    </div>
+                  </div>
+
+                  {/* Swipe timeline */}
+                  <div className="divide-y divide-gray-50 bg-white">
+                    {daySwipes.map((s, i) => {
+                      const t = new Date(s.swipe_time);
+                      const timeStr = t.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:true });
+                      return (
+                        <div key={i} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors">
+                          <div className="w-8 text-center text-xs font-black text-gray-400 tabular-nums">{i + 1}</div>
+                          <SwipeDir direction={s.direction} />
+                          <span className="text-sm font-bold text-gray-800 tabular-nums">{timeStr}</span>
+                          {s.source && (
+                            <span className="ml-auto text-[10px] text-gray-300 uppercase tracking-wide">{s.source}</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </SectionCard>
     </div>
   );

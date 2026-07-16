@@ -109,14 +109,20 @@ router.post('/', authorize('super_admin','admin','qs_engineer','project_manager'
 router.put('/:id', authorize('super_admin','admin','qs_engineer'), async (req, res) => {
   const { sr_no, description, short_description, quantity, rate, remarks, chapter_name, chapter_no } = req.body;
   const result = await query(
-    'UPDATE boq_items SET sr_no=$1,description=$2,short_description=$3,quantity=$4,rate=$5,remarks=$6,chapter_name=$7,chapter_no=$8,updated_at=NOW() WHERE id=$9 RETURNING *',
-    [sr_no, description, short_description || null, quantity, rate, remarks, chapter_name || null, chapter_no || null, req.params.id]
+    `UPDATE boq_items SET sr_no=$1,description=$2,short_description=$3,quantity=$4,rate=$5,remarks=$6,chapter_name=$7,chapter_no=$8,updated_at=NOW()
+     WHERE id=$9 AND project_id IN (SELECT id FROM projects WHERE company_id=$10) RETURNING *`,
+    [sr_no, description, short_description || null, quantity, rate, remarks, chapter_name || null, chapter_no || null, req.params.id, req.user.company_id]
   );
+  if (!result.rowCount) return res.status(404).json({ error: 'BOQ item not found' });
   res.json({ data: result.rows[0] });
 });
 
 router.delete('/:id', authorize('super_admin','admin'), async (req, res) => {
-  await query('UPDATE boq_items SET is_active=false WHERE id=$1', [req.params.id]);
+  const r = await query(
+    `UPDATE boq_items SET is_active=false WHERE id=$1 AND project_id IN (SELECT id FROM projects WHERE company_id=$2)`,
+    [req.params.id, req.user.company_id]
+  );
+  if (!r.rowCount) return res.status(404).json({ error: 'BOQ item not found' });
   res.json({ message: 'BOQ item deleted.' });
 });
 

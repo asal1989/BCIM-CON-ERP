@@ -1,6 +1,6 @@
 import { rest } from 'msw';
 
-const BASE = '/api/v1';
+const BASE = 'http://localhost/api/v1';
 
 export const handlers = [
   // Auth

@@ -114,7 +114,7 @@ const PrintTemplate = React.forwardRef(({ t }, ref) => {
               <td style={{ border: '1px solid #999', padding: '3px 6px', textAlign: 'center' }}>{fmtDate(item.invoice_date)}</td>
               <td style={{ border: '1px solid #999', padding: '3px 6px' }}>{item.po_wo_ref || ''}</td>
               <td style={{ border: '1px solid #999', padding: '3px 6px', textAlign: 'center' }}>{fmtDate(item.po_wo_date)}</td>
-              <td style={{ border: '1px solid #999', padding: '3px 6px' }}>{item.vendor_name || ''}</td>
+              <td style={{ border: '1px solid #999', padding: '3px 6px' }}>{(item.vendor_name || '').toUpperCase()}</td>
               <td style={{ border: '1px solid #999', padding: '3px 6px', textAlign: 'right' }}>{fmt(item.amount)}</td>
               <td style={{ border: '1px solid #999', padding: '3px 6px' }}>{item.item_remarks || ''}</td>
             </tr>
@@ -381,7 +381,7 @@ function CreateModal({ onClose, onCreated }) {
                         <td className="px-3 py-2 font-medium">{b.inv_number || '—'}</td>
                         <td className="px-3 py-2">{fmtDate(b.inv_date)}</td>
                         <td className="px-3 py-2">{b.po_number || '—'}</td>
-                        <td className="px-3 py-2">{b.vendor_name || '—'}</td>
+                        <td className="px-3 py-2">{(b.vendor_name || '').toUpperCase() || '—'}</td>
                         <td className="px-3 py-2 text-right">₹{fmt(b.amount)}</td>
                         <td className="px-3 py-2">
                           <StatusBadge status={
@@ -651,7 +651,7 @@ function DetailView({ id, onBack, onRefresh }) {
                 <td className="px-4 py-2">{fmtDate(item.invoice_date)}</td>
                 <td className="px-4 py-2">{item.po_wo_ref || '—'}</td>
                 <td className="px-4 py-2">{fmtDate(item.po_wo_date)}</td>
-                <td className="px-4 py-2">{item.vendor_name || '—'}</td>
+                <td className="px-4 py-2">{(item.vendor_name || '').toUpperCase() || '—'}</td>
                 <td className="px-4 py-2 text-right font-medium">₹{fmt(item.amount)}</td>
                 <td className="px-4 py-2 text-slate-900 font-medium text-xs">{item.item_remarks || ''}</td>
               </tr>

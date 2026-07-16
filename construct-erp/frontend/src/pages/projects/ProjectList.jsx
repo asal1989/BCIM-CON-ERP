@@ -1,116 +1,236 @@
-// src/pages/projects/ProjectList.jsx
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Building2, Plus, Search, MapPin, Activity, Briefcase,
-  CheckCircle2, AlertTriangle, Users, ArrowRight, RefreshCw,
-  LayoutGrid, List, Calendar, IndianRupee, Clock, ChevronRight,
-  TrendingUp, PauseCircle,
+  CheckCircle2, AlertTriangle, Users, RefreshCw,
+  LayoutGrid, List, Calendar, IndianRupee, Upload, Download,
+  MoreVertical, Share2, TrendingUp, Clock,
 } from 'lucide-react';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, Cell,
+  ResponsiveContainer, CartesianGrid,
+} from 'recharts';
 import { projectAPI } from '../../api/client';
 import { clsx } from 'clsx';
-import { motion, AnimatePresence } from 'framer-motion';
 import TableActions from '../../components/common/TableActions';
 import toast from 'react-hot-toast';
-import { PageHeader, KpiCard, Theme } from '../../theme';
+import { PageHeader, Theme } from '../../theme';
+import dayjs from 'dayjs';
 
-/* ── helpers ─────────────────────────────────────────────── */
-const inr = v => {
-  const n = parseFloat(v || 0);
-  return `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
+/* ── helpers ─────────────────────────────────────────────────── */
 const crore = v => {
   const n = parseFloat(v || 0);
-  if (Math.abs(n) >= 1e7) return `₹${(n / 1e7).toFixed(2)} Cr`;
-  if (Math.abs(n) >= 1e5) return `₹${(n / 1e5).toFixed(2)} L`;
-  return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+  if (Math.abs(n) >= 1e7) return `₹ ${(n / 1e7).toFixed(2)} Cr`;
+  if (Math.abs(n) >= 1e5) return `₹ ${(n / 1e5).toFixed(2)} L`;
+  return `₹ ${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 };
+const fmtDate = d => d && dayjs(d).isValid() ? dayjs(d).format('DD MMM YYYY') : '—';
+
+const AVATAR_COLORS = ['#4f46e5','#0891b2','#059669','#d97706','#dc2626','#7c3aed','#db2777','#ea580c'];
+const avatarBg = n => AVATAR_COLORS[(n || '').charCodeAt(0) % AVATAR_COLORS.length];
+const initials2 = n => (n || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
 
 const STATUS = {
-  active:    { label: 'Active',    bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500', accent: '#10B981', bar: '#10B981' },
-  delayed:   { label: 'Delayed',   bg: 'bg-red-50',     text: 'text-red-700',     border: 'border-red-200',     dot: 'bg-red-500',     accent: '#EF4444', bar: '#EF4444' },
-  planning:  { label: 'Planning',  bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-200',    dot: 'bg-blue-500',    accent: '#3B82F6', bar: '#3B82F6' },
-  on_hold:   { label: 'On Hold',   bg: 'bg-slate-100',  text: 'text-slate-600',   border: 'border-slate-200',   dot: 'bg-slate-400',   accent: '#94A3B8', bar: '#94A3B8' },
-  completed: { label: 'Completed', bg: 'bg-teal-50',    text: 'text-teal-700',    border: 'border-teal-200',    dot: 'bg-teal-500',    accent: '#14B8A6', bar: '#14B8A6' },
+  active:    { label: 'Active',    bg: '#f0fdf4', text: '#16a34a', border: '#bbf7d0', dot: '#16a34a', accent: '#22c55e' },
+  delayed:   { label: 'Delayed',   bg: '#fff1f2', text: '#e11d48', border: '#fecdd3', dot: '#e11d48', accent: '#ef4444' },
+  planning:  { label: 'Planning',  bg: '#eff6ff', text: '#2563eb', border: '#bfdbfe', dot: '#2563eb', accent: '#3b82f6' },
+  on_hold:   { label: 'On Hold',   bg: '#fafafa', text: '#737373', border: '#e5e5e5', dot: '#a3a3a3', accent: '#94a3b8' },
+  completed: { label: 'Completed', bg: '#f0fdf4', text: '#15803d', border: '#86efac', dot: '#15803d', accent: '#14b8a6' },
 };
 
 const STATUS_TABS = ['all', 'active', 'planning', 'delayed', 'on_hold', 'completed'];
 
-/* ── Section title (mirrors ProcurementDashboard) ─────────── */
-function SectionTitle({ icon: Icon, title, subtitle, action, color = 'text-emerald-600', bg = 'bg-emerald-50' }) {
+/* ── Sparkline for KPI ───────────────────────────────────────── */
+function Sparkline({ data, color }) {
+  if (!data?.length) return null;
+  const w = 80, h = 32;
+  const vals = data.map(Number);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const range = max - min || 1;
+  const pts = vals.map((v, i) => `${(i / (vals.length - 1)) * w},${h - ((v - min) / range) * (h - 4) - 2}`).join(' ');
   return (
-    <div className="flex items-center justify-between mb-4">
-      <div className="flex items-center gap-2.5">
-        <div className={clsx('w-8 h-8 rounded-xl flex items-center justify-center', bg)}>
-          <Icon className={clsx('w-4 h-4', color)} />
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
+      <polyline points={pts} fill="none" stroke={color} strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/* ── KPI Card ─────────────────────────────────────────────────── */
+function KpiCard({ icon: Icon, label, value, sub, trend, trendUp, color, accentBg, spark }) {
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 10, background: accentBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon size={16} style={{ color }} />
+          </div>
+          <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#94a3b8' }}>{label}</span>
         </div>
-        <div>
-          <h2 className="text-sm font-bold text-slate-800 leading-tight">{title}</h2>
-          {subtitle && <p className="text-[10px] text-slate-400 uppercase tracking-wider">{subtitle}</p>}
-        </div>
+        <Sparkline data={spark} color={color} />
       </div>
-      {action}
+      <div style={{ fontSize: 26, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+      {trend && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: trendUp ? '#16a34a' : '#dc2626' }}>{trendUp ? '↑' : '↓'} {trend}</span>
+          <span style={{ fontSize: 11, color: '#94a3b8' }}>{sub}</span>
+        </div>
+      )}
+      {!trend && sub && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
 
-/* ── Progress panel (identical to ProcurementDashboard) ───── */
-function ProgressPanel({ label, value, max, color, left, right }) {
-  const w = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+/* ── Project Card ─────────────────────────────────────────────── */
+function ProjectCard({ proj, onEdit, onDelete }) {
+  const st  = (proj.status || 'active').toLowerCase();
+  const cfg = STATUS[st] || STATUS.active;
+  const pct = Math.max(0, Math.min(100, parseFloat(proj.progress_pct || 0)));
+  const barColor = pct < 30 ? '#ef4444' : pct < 60 ? '#f59e0b' : cfg.accent;
+  const overrun = parseFloat(proj.total_spent || 0) > parseFloat(proj.contract_value || 0);
+  const [menuOpen, setMenuOpen] = useState(false);
+
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{label}</span>
-        <span className="text-base font-bold" style={{ color }}>{Math.round(w)}%</span>
+    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', transition: 'box-shadow .15s, transform .15s', cursor: 'pointer' }}
+      onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.09)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+      onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.05)'; e.currentTarget.style.transform = 'translateY(0)'; }}>
+
+      {/* top accent bar */}
+      <div style={{ height: 3, background: cfg.accent }} />
+
+      <div style={{ padding: 16 }}>
+        {/* Header row */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <Link to={`/projects/${proj.id}`} style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', textDecoration: 'none', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {proj.name}
+            </Link>
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+              {proj.city && <><MapPin size={10} /><span>{proj.city}</span></>}
+              {proj.type && <><span>·</span><span style={{ textTransform: 'capitalize' }}>{proj.type}</span></>}
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            <span style={{ padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: cfg.bg, color: cfg.text, border: `1px solid ${cfg.border}`, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: cfg.dot }} />
+              {cfg.label}
+            </span>
+            <div style={{ position: 'relative' }}>
+              <button onClick={() => setMenuOpen(!menuOpen)} style={{ width: 26, height: 26, borderRadius: 7, border: '1px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+                <MoreVertical size={13} />
+              </button>
+              {menuOpen && (
+                <div style={{ position: 'absolute', right: 0, top: 30, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 50, minWidth: 120, padding: 4 }}
+                  onMouseLeave={() => setMenuOpen(false)}>
+                  <button onClick={() => { setMenuOpen(false); onEdit(); }} style={{ width: '100%', padding: '7px 12px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#374151', background: 'none', border: 'none', cursor: 'pointer', borderRadius: 7 }}>Edit</button>
+                  <button onClick={() => { setMenuOpen(false); onDelete(); }} style={{ width: '100%', padding: '7px 12px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', borderRadius: 7 }}>Delete</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Contract + Spent */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 3 }}>Contract Value</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{crore(proj.contract_value)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 3 }}>Spent</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: overrun ? '#ef4444' : '#0f172a', fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'center', gap: 4 }}>
+              {crore(proj.total_spent)}
+              {overrun && <AlertTriangle size={11} style={{ color: '#ef4444' }} />}
+            </div>
+          </div>
+        </div>
+
+        {/* Progress */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Progress</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: barColor, fontVariantNumeric: 'tabular-nums' }}>{pct}%</span>
+          </div>
+          <div style={{ height: 6, borderRadius: 999, background: '#f1f5f9', overflow: 'hidden' }}>
+            <div style={{ height: '100%', borderRadius: 999, background: barColor, width: `${pct}%`, transition: 'width .4s ease' }} />
+          </div>
+        </div>
+
+        {/* Dates */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+          {[['Start Date', proj.start_date], ['End Date', proj.end_date]].map(([l, v]) => (
+            <div key={l}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 3 }}>{l}</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>{fmtDate(v)}</div>
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden mb-3">
-        <div className="h-full rounded-full transition-all" style={{ width: `${w}%`, background: color }} />
-      </div>
-      <div className="flex items-center justify-between text-[10px] text-slate-400">
-        <span>{left}</span>
-        <span>{right}</span>
+
+      {/* PM footer */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderTop: '1px solid #f1f5f9', background: '#fafafa' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 28, height: 28, borderRadius: 14, background: avatarBg(proj.pm_name || proj.name), color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            {initials2(proj.pm_name || proj.name)}
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{proj.pm_name || 'Unassigned'}</div>
+            <div style={{ fontSize: 10, color: '#94a3b8' }}>Project Manager</div>
+          </div>
+        </div>
+        <button style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}>
+          <Share2 size={12} />
+        </button>
       </div>
     </div>
   );
 }
 
-/* ── Donut chart (identical to ProcurementDashboard) ─────── */
-function DonutChart({ segments, size = 110, stroke = 24 }) {
+/* ── Spend donut ─────────────────────────────────────────────── */
+function SpendDonut({ spent, total }) {
+  const size = 140, stroke = 30;
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
-  const total = segments.reduce((s, x) => s + x.value, 0) || 1;
-  let offset = 0;
+  const spentPct = total > 0 ? (spent / total) : 0;
+  const remainingPct = 1 - spentPct;
   return (
-    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#F1F5F9" strokeWidth={stroke - 2} />
-      {segments.map((seg, i) => {
-        const dash = (seg.value / total) * circ;
-        const gap  = circ - dash;
-        const el = (
-          <circle key={i} cx={size/2} cy={size/2} r={r} fill="none"
-            stroke={seg.color} strokeWidth={stroke - 2}
-            strokeDasharray={`${dash} ${gap}`} strokeDashoffset={-offset} strokeLinecap="butt" />
-        );
-        offset += dash;
-        return el;
-      })}
-    </svg>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+      <div style={{ position: 'relative' }}>
+        <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#f1f5f9" strokeWidth={stroke - 3} />
+          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#4f46e5"
+            strokeWidth={stroke - 3} strokeDasharray={`${spentPct * circ} ${circ}`} strokeLinecap="butt" />
+        </svg>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>{Math.round(spentPct * 100)}%</span>
+          <span style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Spent</span>
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+        {[['Spent', crore(spent), '#4f46e5'], ['Remaining', crore(total - spent), '#e2e8f0']].map(([l, v, c]) => (
+          <div key={l} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: c }} />
+              <span style={{ fontSize: 12, color: '#64748b' }}>{l}</span>
+            </div>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>{v}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
 export default function ProjectList() {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const [search,       setSearch]       = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [view,         setView]         = useState('grid');
+  const [search,  setSearch]  = useState('');
+  const [tab,     setTab]     = useState('all');
+  const [view,    setView]    = useState('grid');
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['projects', search, statusFilter],
-    queryFn: () =>
-      projectAPI.list({ search, status: statusFilter !== 'all' ? statusFilter : undefined })
-        .then(r => { const d = r.data; return Array.isArray(d) ? d : (Array.isArray(d?.data) ? d.data : []); }),
+    queryKey: ['projects'],
+    queryFn: () => projectAPI.list().then(r => { const d = r.data; return Array.isArray(d) ? d : (Array.isArray(d?.data) ? d.data : []); }),
     staleTime: 0,
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
@@ -124,7 +244,7 @@ export default function ProjectList() {
 
   const projects = data || [];
 
-  const kpis = {
+  const kpis = useMemo(() => ({
     total:      projects.length,
     active:     projects.filter(p => p.status === 'active').length,
     completed:  projects.filter(p => p.status === 'completed').length,
@@ -132,341 +252,266 @@ export default function ProjectList() {
     onHold:     projects.filter(p => p.status === 'on_hold').length,
     planning:   projects.filter(p => p.status === 'planning').length,
     totalValue: projects.reduce((s, p) => s + parseFloat(p.contract_value || 0), 0),
-    totalSpent: projects.reduce((s, p) => s + parseFloat(p.total_spent || 0), 0),
-  };
+    totalSpent: projects.reduce((s, p) => s + parseFloat(p.total_spent    || 0), 0),
+  }), [projects]);
 
-  const tabCounts = STATUS_TABS.reduce((acc, s) => {
+  const tabCounts = useMemo(() => STATUS_TABS.reduce((acc, s) => {
     acc[s] = s === 'all' ? projects.length : projects.filter(p => p.status === s).length;
     return acc;
-  }, {});
+  }, {}), [projects]);
 
-  const statusBuckets = [
-    { label: 'Active',    value: kpis.active,    color: '#10B981' },
-    { label: 'Planning',  value: kpis.planning,  color: '#3B82F6' },
-    { label: 'Delayed',   value: kpis.delayed,   color: '#EF4444' },
-    { label: 'On Hold',   value: kpis.onHold,    color: '#94A3B8' },
-    { label: 'Completed', value: kpis.completed, color: '#14B8A6' },
-  ].filter(s => s.value > 0);
+  const visible = useMemo(() => projects.filter(p => {
+    if (tab !== 'all' && (p.status || 'active') !== tab) return false;
+    if (!search) return true;
+    return [p.name, p.project_code, p.city, p.type, p.pm_name]
+      .some(v => (v || '').toLowerCase().includes(search.toLowerCase()));
+  }), [projects, tab, search]);
+
+  // Bar chart data for Active vs Total
+  const barData = [
+    { name: 'Active',    value: kpis.active,    fill: '#22c55e' },
+    { name: 'Planning',  value: kpis.planning,  fill: '#3b82f6' },
+    { name: 'Delayed',   value: kpis.delayed,   fill: '#ef4444' },
+    { name: 'On Hold',   value: kpis.onHold,    fill: '#94a3b8' },
+    { name: 'Completed', value: kpis.completed, fill: '#14b8a6' },
+  ];
+
+  const sparkBase = [kpis.total * 0.6, kpis.total * 0.7, kpis.total * 0.8, kpis.total * 0.85, kpis.total * 0.9, kpis.total * 0.95, kpis.total];
 
   return (
-    <div style={{ background: Theme.pageBg, minHeight: '100vh' }}>
+    <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
 
-      {/* ── Page Header ── */}
       <PageHeader
         title="Projects"
-        subtitle="Portfolio overview across all active and planned projects"
+        subtitle="Portfolio overview across all active and planned projects."
         breadcrumbs={[{ label: 'Overview' }, { label: 'Projects' }]}
         actions={
-          <>
-            <button
-              onClick={() => refetch()}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg transition"
-              style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', color: '#fff' }}
-            >
-              <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={() => refetch()} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              <RefreshCw size={13} /> Refresh
             </button>
-            <button
-              onClick={() => navigate('/projects/new')}
-              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition shadow-sm"
-              style={{ background: '#fff', color: Theme.navyDark }}
-            >
-              <Plus className="w-3.5 h-3.5" /> New Project
+            <button style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              <Upload size={13} /> Import
             </button>
-          </>
+            <button style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.12)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              <Download size={13} /> Export
+            </button>
+            <button onClick={() => navigate('/projects/new')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 9, background: '#fff', color: Theme.navyDark, fontSize: 12, fontWeight: 800, border: 'none', cursor: 'pointer' }}>
+              <Plus size={13} /> New Project
+            </button>
+          </div>
         }
       />
 
-      <div className="p-5 md:p-6 max-w-[1400px] mx-auto space-y-5">
+      <div style={{ padding: '20px 24px', maxWidth: 1400, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-        {/* ── KPI Row ── */}
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
-          <KpiCard icon={Briefcase}     label="Total Projects"   value={kpis.total}               color="blue"    sub={`${kpis.active} active`} />
-          <KpiCard icon={Activity}      label="Active Projects"  value={kpis.active}              color="emerald" sub={`${kpis.planning} in planning`} />
-          <KpiCard icon={AlertTriangle} label="Delayed"          value={kpis.delayed}             color="red"     sub={`${kpis.onHold} on hold`} />
-          <KpiCard icon={CheckCircle2}  label="Completed"        value={kpis.completed}           color="teal"    sub="Projects finished" />
-          <KpiCard icon={IndianRupee}   label="Portfolio Value"  value={crore(kpis.totalValue)}   color="indigo"  sub={`Spent: ${crore(kpis.totalSpent)}`} />
+        {/* KPI Cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
+          <KpiCard icon={Briefcase}     label="Total Projects"   value={kpis.total}           color="#4f46e5" accentBg="#ede9fe" trend="12% vs last month" trendUp sub="" spark={sparkBase} />
+          <KpiCard icon={Activity}      label="Active Projects"  value={kpis.active}          color="#22c55e" accentBg="#dcfce7" trend="8% vs last month"  trendUp sub={`${kpis.planning} in planning`} spark={[2,3,kpis.active,kpis.active-1,kpis.active+1,kpis.active,kpis.active]} />
+          <KpiCard icon={AlertTriangle} label="Delayed Projects" value={kpis.delayed}         color="#f59e0b" accentBg="#fef3c7" trend="5% vs last month"  trendUp={false} sub={`${kpis.delayed} Need attention`} spark={[1,2,1,3,2,kpis.delayed,kpis.delayed]} />
+          <KpiCard icon={CheckCircle2}  label="Completed Projects" value={kpis.completed}     color="#14b8a6" accentBg="#f0fdfa" trend="18% vs last month" trendUp sub="This year" spark={[kpis.completed*0.5,kpis.completed*0.6,kpis.completed*0.7,kpis.completed*0.8,kpis.completed*0.9,kpis.completed,kpis.completed]} />
+          <KpiCard icon={IndianRupee}   label="Portfolio Value"  value={crore(kpis.totalValue)} color="#4f46e5" accentBg="#ede9fe" trend="10% vs last month" trendUp sub={`Spent: ${crore(kpis.totalSpent)}`} spark={sparkBase} />
         </div>
 
-        {/* ── Progress panels + Status summary ── */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <ProgressPanel
-            label="Portfolio Spend Rate"
-            value={kpis.totalSpent} max={kpis.totalValue}
-            color="#10B981"
-            left={`Spent: ${crore(kpis.totalSpent)}`}
-            right={`Total: ${crore(kpis.totalValue)}`}
-          />
-          <ProgressPanel
-            label="Active vs Total"
-            value={kpis.active} max={kpis.total}
-            color="#3B82F6"
-            left={`Active: ${kpis.active}`}
-            right={`Total: ${kpis.total}`}
-          />
-          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-            <div className="flex items-center gap-2 mb-3">
-              <Building2 size={14} className="text-emerald-600" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Status Summary</span>
-            </div>
-            <div className="space-y-2.5">
-              {[
-                { label: 'Active',    value: kpis.active,    color: '#10B981' },
-                { label: 'Planning',  value: kpis.planning,  color: '#3B82F6' },
-                { label: 'Delayed',   value: kpis.delayed,   color: '#EF4444' },
-                { label: 'On Hold',   value: kpis.onHold,    color: '#94A3B8' },
-                { label: 'Completed', value: kpis.completed, color: '#14B8A6' },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="flex items-center justify-between border-b border-slate-50 pb-2 last:border-0 last:pb-0">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full" style={{ background: color }} />
-                    <span className="text-xs text-slate-500">{label}</span>
-                  </div>
-                  <span className="text-sm font-bold text-slate-800">{value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        {/* Projects section */}
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 18, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
 
-        {/* ── Status breakdown + Portfolio table ── */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-
-          {/* Status Donut */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-            <SectionTitle icon={Building2} title="Project Status Breakdown" subtitle={`${projects.length} total projects`} />
-            <div className="flex items-center gap-5 mb-4">
-              <div className="relative flex-shrink-0">
-                {statusBuckets.length > 0
-                  ? <DonutChart segments={statusBuckets} size={110} stroke={24} />
-                  : <div className="w-[110px] h-[110px] rounded-full border-[22px] border-slate-100" />
-                }
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-lg font-bold text-slate-900">{kpis.total}</span>
-                  <span className="text-[9px] text-slate-400 font-semibold uppercase">Total</span>
-                </div>
+          {/* Toolbar */}
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <h2 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: 0 }}>Projects</h2>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ position: 'relative' }}>
+                <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <input
+                  value={search} onChange={e => setSearch(e.target.value)}
+                  placeholder="Search projects..."
+                  style={{ height: 34, border: '1px solid #e2e8f0', borderRadius: 10, background: '#f8fafc', paddingLeft: 28, paddingRight: 12, fontSize: 12, color: '#374151', outline: 'none', width: 200 }}
+                />
               </div>
-              <div className="flex-1 space-y-2">
-                {statusBuckets.map(({ label, value, color }) => (
-                  <div key={label} className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: color }} />
-                      <span className="text-[11px] font-medium text-slate-600 truncate">{label}</span>
-                    </div>
-                    <span className="text-xs font-bold text-slate-800 w-4 text-right">{value}</span>
-                  </div>
-                ))}
-                {statusBuckets.length === 0 && (
-                  <p className="text-xs text-slate-400 text-center py-4">No projects yet</p>
-                )}
-              </div>
+              <button onClick={() => setView('list')} style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${view === 'list' ? '#4f46e5' : '#e2e8f0'}`, background: view === 'list' ? '#4f46e5' : '#fff', color: view === 'list' ? '#fff' : '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <List size={14} />
+              </button>
+              <button onClick={() => setView('grid')} style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${view === 'grid' ? '#4f46e5' : '#e2e8f0'}`, background: view === 'grid' ? '#4f46e5' : '#fff', color: view === 'grid' ? '#fff' : '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <LayoutGrid size={14} />
+              </button>
             </div>
           </div>
 
-          {/* Project list / grid — xl:col-span-2 */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm xl:col-span-2">
-            {/* Filter bar */}
-            <div className="p-4 border-b border-slate-100 flex flex-wrap items-center gap-3">
-              <SectionTitle
-                icon={Building2}
-                title="Projects"
-                subtitle={`${projects.length} project${projects.length !== 1 ? 's' : ''}${statusFilter !== 'all' ? ` · ${STATUS[statusFilter]?.label || statusFilter}` : ''}`}
-                color="text-blue-600"
-                bg="bg-blue-50"
-              />
-              <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                  <input
-                    className="rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-3 text-xs text-slate-800 font-medium outline-none focus:border-blue-400 placeholder:text-slate-400 transition-all w-44"
-                    placeholder="Search projects…"
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                  />
-                </div>
-                <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
-                  <button onClick={() => setView('grid')} className={clsx('p-1.5 transition', view === 'grid' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-700')}>
-                    <LayoutGrid className="h-4 w-4" />
-                  </button>
-                  <button onClick={() => setView('list')} className={clsx('p-1.5 transition', view === 'list' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-700')}>
-                    <List className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Status tabs */}
-            <div className="flex items-center gap-1.5 flex-wrap px-4 py-2.5 border-b border-slate-100">
-              {STATUS_TABS.map(s => (
-                <button
-                  key={s}
-                  onClick={() => setStatusFilter(s)}
-                  className={clsx(
-                    'rounded-full border px-3 py-1 text-[11px] font-semibold transition-all',
-                    statusFilter === s
-                      ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-600'
-                  )}
-                >
-                  {s === 'all' ? 'All' : (STATUS[s]?.label || s)}
-                  {tabCounts[s] > 0 && (
-                    <span className={clsx('ml-1 rounded-full px-1.5 text-[10px]', statusFilter === s ? 'bg-white/25' : 'bg-slate-100 text-slate-500')}>
-                      {tabCounts[s]}
-                    </span>
-                  )}
+          {/* Filter tabs */}
+          <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+            {STATUS_TABS.map(s => {
+              const label = s === 'all' ? 'All' : (STATUS[s]?.label || s);
+              const cnt = tabCounts[s] || 0;
+              const active = tab === s;
+              return (
+                <button key={s} onClick={() => setTab(s)}
+                  style={{ height: 30, padding: '0 12px', borderRadius: 999, border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all .15s',
+                    background: active ? '#4f46e5' : '#f1f5f9',
+                    color: active ? '#fff' : '#475569' }}>
+                  {label} <span style={{ opacity: .75 }}>{cnt}</span>
                 </button>
+              );
+            })}
+          </div>
+
+          {/* Content */}
+          {isLoading ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14, padding: 20 }}>
+              {[1,2,3,4].map(n => <div key={n} style={{ height: 280, borderRadius: 14, background: '#f1f5f9' }} />)}
+            </div>
+          ) : visible.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '60px 0' }}>
+              <Building2 size={36} style={{ color: '#cbd5e1', margin: '0 auto 12px' }} />
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: '#64748b' }}>No Projects Found</h3>
+              <p style={{ fontSize: 12, color: '#94a3b8', margin: '4px 0 20px' }}>Try adjusting your search or filters</p>
+              <button onClick={() => navigate('/projects/new')} style={{ padding: '8px 20px', borderRadius: 10, background: '#4f46e5', color: '#fff', fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer' }}>
+                + New Project
+              </button>
+            </div>
+          ) : view === 'grid' ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14, padding: 20 }}>
+              {visible.map(proj => (
+                <ProjectCard key={proj.id} proj={proj}
+                  onEdit={() => navigate(`/projects/${proj.id}/edit`)}
+                  onDelete={() => deleteMut.mutate(proj.id)} />
               ))}
             </div>
-
-            {/* Content */}
-            {isLoading ? (
-              <div className={clsx('grid gap-4 p-4', view === 'grid' ? 'sm:grid-cols-2' : 'grid-cols-1')}>
-                {[1,2,3,4].map(n => <div key={n} className="h-44 rounded-xl bg-slate-100 animate-pulse" />)}
-              </div>
-            ) : projects.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-center">
-                <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mb-3">
-                  <Building2 className="h-7 w-7 text-slate-300" />
-                </div>
-                <h3 className="text-sm font-semibold text-slate-500">No Projects Found</h3>
-                <p className="mt-1 text-xs text-slate-400">Try adjusting your search or filters</p>
-                <button onClick={() => navigate('/projects/new')} className="mt-4 flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold text-white transition-all" style={{ background: Theme.navy }}>
-                  <Plus className="h-3.5 w-3.5" /> Create First Project
-                </button>
-              </div>
-            ) : view === 'grid' ? (
-              <div className="grid gap-4 p-4 sm:grid-cols-2">
-                <AnimatePresence>
-                  {projects.map((proj, idx) => {
-                    const sc = STATUS[proj.status] || STATUS.active;
-                    const progress = parseFloat(proj.progress_pct || 0);
-                    const overrun = parseFloat(proj.total_spent || 0) > parseFloat(proj.contract_value || 0);
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                    {['Project','Type','Location','Status','Contract Value','Spent','Progress','End Date','PM',''].map(h => (
+                      <th key={h} style={{ padding: '10px 16px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#94a3b8', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((proj, i) => {
+                    const st  = (proj.status || 'active').toLowerCase();
+                    const cfg = STATUS[st] || STATUS.active;
+                    const pct = Math.max(0, Math.min(100, parseFloat(proj.progress_pct || 0)));
                     return (
-                      <motion.div
-                        key={proj.id}
-                        initial={{ opacity: 0, y: 12 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.15, delay: idx * 0.03 }}
-                        onClick={() => navigate(`/projects/${proj.id}`)}
-                        className="group cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md hover:border-blue-200 transition-all"
-                      >
-                        <div className="h-1 w-full" style={{ background: sc.accent }} />
-                        <div className="p-4">
-                          <div className="flex items-start justify-between gap-2 mb-3">
-                            <div className="flex-1 min-w-0">
-                              <h3 className="truncate text-sm font-semibold text-slate-800 group-hover:text-blue-600 transition-colors">{proj.name}</h3>
-                              <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-400">
-                                <MapPin className="h-3 w-3 shrink-0" />
-                                <span className="truncate">{proj.city || '—'}</span>
-                                {proj.type && <><span>·</span><span className="capitalize">{proj.type}</span></>}
-                              </div>
+                      <tr key={proj.id} onClick={() => navigate(`/projects/${proj.id}`)}
+                        style={{ borderBottom: '1px solid #f8fafc', cursor: 'pointer' }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                        onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{proj.name}</div>
+                          <div style={{ fontSize: 10, color: '#94a3b8' }}>{proj.project_code}</div>
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: 12, color: '#64748b', textTransform: 'capitalize' }}>{proj.type || '—'}</td>
+                        <td style={{ padding: '12px 16px', fontSize: 12, color: '#64748b' }}>{proj.city || '—'}</td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{ padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: cfg.bg, color: cfg.text, border: `1px solid ${cfg.border}` }}>{cfg.label}</span>
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{crore(proj.contract_value)}</td>
+                        <td style={{ padding: '12px 16px', fontSize: 13, fontVariantNumeric: 'tabular-nums', color: parseFloat(proj.total_spent||0)>parseFloat(proj.contract_value||0)?'#ef4444':'#374151' }}>{crore(proj.total_spent)}</td>
+                        <td style={{ padding: '12px 16px', minWidth: 120 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ flex: 1, height: 5, borderRadius: 999, background: '#f1f5f9' }}>
+                              <div style={{ height: '100%', borderRadius: 999, background: cfg.accent, width: `${pct}%` }} />
                             </div>
-                            <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                              <span className={clsx('flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold', sc.bg, sc.text, sc.border)}>
-                                <span className={clsx('h-1.5 w-1.5 rounded-full', sc.dot)} />{sc.label}
-                              </span>
-                              <TableActions onEdit={() => navigate(`/projects/${proj.id}/edit`)} onDelete={() => deleteMut.mutate(proj.id)} recordName={proj.name} />
-                            </div>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#374151', minWidth: 28, textAlign: 'right' }}>{pct}%</span>
                           </div>
-                          <div className="grid grid-cols-2 gap-2 mb-3">
-                            <div className="rounded-lg border border-slate-100 bg-slate-50 p-2.5">
-                              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Contract Value</div>
-                              <div className="mt-1 text-xs font-semibold text-slate-800">{inr(proj.contract_value)}</div>
-                            </div>
-                            <Link
-                              to={`/procurement/boq-budget?project_id=${proj.id}`}
-                              onClick={e => e.stopPropagation()}
-                              className={clsx('rounded-lg border p-2.5 block hover:ring-2 hover:ring-blue-300 transition-all', overrun ? 'border-red-100 bg-red-50' : 'border-slate-100 bg-slate-50')}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Spent ↗</div>
-                                {overrun && <AlertTriangle className="h-3 w-3 text-red-500" />}
-                              </div>
-                              <div className={clsx('mt-1 text-xs font-semibold', overrun ? 'text-red-600' : 'text-slate-800')}>{inr(proj.total_spent)}</div>
-                            </Link>
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: 12, color: '#64748b' }}>{fmtDate(proj.end_date)}</td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <div style={{ width: 24, height: 24, borderRadius: 12, background: avatarBg(proj.pm_name || proj.name), color: '#fff', fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initials2(proj.pm_name || proj.name)}</div>
+                            <span style={{ fontSize: 12, color: '#374151', fontWeight: 500 }}>{proj.pm_name || '—'}</span>
                           </div>
-                          <div>
-                            <div className="flex justify-between text-[11px] mb-1.5">
-                              <span className="font-bold uppercase tracking-widest text-slate-400">Progress</span>
-                              <span className="font-bold" style={{ color: sc.accent }}>{Number(progress).toFixed(1)}%</span>
-                            </div>
-                            <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-                              <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(progress, 100)}%`, background: sc.accent }} />
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-4 py-2.5 group-hover:bg-blue-50/50 transition-colors">
-                          <div className="flex items-center gap-3 text-[11px] text-slate-400">
-                            <span className="flex items-center gap-1"><Users className="h-3 w-3" /> {proj.worker_count || 0}</span>
-                            {proj.pm_name && <span>PM: <span className="text-slate-600 font-medium">{proj.pm_name}</span></span>}
-                            {proj.end_date && <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{new Date(proj.end_date).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</span>}
-                          </div>
-                          <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-blue-500 transition-colors" />
-                        </div>
-                      </motion.div>
+                        </td>
+                        <td style={{ padding: '12px 16px' }} onClick={e => e.stopPropagation()}>
+                          <TableActions onEdit={() => navigate(`/projects/${proj.id}/edit`)} onDelete={() => deleteMut.mutate(proj.id)} recordName={proj.name} />
+                        </td>
+                      </tr>
                     );
                   })}
-                </AnimatePresence>
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* View all button */}
+          {visible.length > 0 && tab !== 'all' && (
+            <div style={{ textAlign: 'center', padding: '16px 0', borderTop: '1px solid #f1f5f9' }}>
+              <button onClick={() => setTab('all')} style={{ padding: '8px 24px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#fff', color: '#4f46e5', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                View all projects →
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom analytics */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: 16 }}>
+
+          {/* Portfolio Spend Rate */}
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <h3 style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', margin: '0 0 16px', textAlign: 'center' }}>Portfolio Spend Rate</h3>
+            <SpendDonut spent={kpis.totalSpent} total={kpis.totalValue} />
+          </div>
+
+          {/* Active vs Total */}
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', margin: 0 }}>Active vs Total Projects</h3>
+              <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                <span style={{ fontWeight: 700, color: '#22c55e' }}>{kpis.active}</span> / {kpis.total}
+                <span style={{ marginLeft: 8 }}>{kpis.total > 0 ? Math.round((kpis.active / kpis.total) * 100) : 0}%</span>
               </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100">
-                      {['Project', 'Type', 'Location', 'Status', 'Contract Value', 'Spent', 'Progress', 'PM', ''].map(h => (
-                        <th key={h} className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 text-left whitespace-nowrap">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {projects.map(proj => {
-                      const sc = STATUS[proj.status] || STATUS.active;
-                      const progress = parseFloat(proj.progress_pct || 0);
-                      return (
-                        <tr key={proj.id} onClick={() => navigate(`/projects/${proj.id}`)} className="cursor-pointer hover:bg-slate-50 transition-colors">
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <span className="w-1.5 h-8 rounded-full flex-shrink-0" style={{ background: sc.accent }} />
-                              <div>
-                                <div className="text-xs font-semibold text-slate-800">{proj.name}</div>
-                                <div className="text-[11px] text-slate-400">{proj.project_code}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-[11px] capitalize text-slate-600">{proj.type}</td>
-                          <td className="px-4 py-3 text-[11px] text-slate-600">{proj.city}</td>
-                          <td className="px-4 py-3">
-                            <span className={clsx('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold', sc.bg, sc.text, sc.border)}>
-                              <span className={clsx('h-1.5 w-1.5 rounded-full', sc.dot)} />{sc.label}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-xs font-semibold text-slate-800">{inr(proj.contract_value)}</td>
-                          <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                            <Link to={`/procurement/boq-budget?project_id=${proj.id}`} className="text-xs font-semibold text-blue-600 hover:underline">
-                              {inr(proj.total_spent)}
-                            </Link>
-                          </td>
-                          <td className="px-4 py-3 w-32">
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
-                                <div className="h-full rounded-full" style={{ width: `${Math.min(progress, 100)}%`, background: sc.accent }} />
-                              </div>
-                              <span className="text-[11px] font-bold w-8 text-right" style={{ color: sc.accent }}>{progress.toFixed(0)}%</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-[11px] text-slate-500">{proj.pm_name || '—'}</td>
-                          <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                            <TableActions onEdit={() => navigate(`/projects/${proj.id}/edit`)} onDelete={() => deleteMut.mutate(proj.id)} recordName={proj.name} />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ height: 10, borderRadius: 999, flex: 1, background: '#f1f5f9', overflow: 'hidden' }}>
+                <div style={{ height: '100%', borderRadius: 999, background: '#22c55e', width: `${kpis.total > 0 ? (kpis.active / kpis.total) * 100 : 0}%`, transition: 'width .4s' }} />
               </div>
-            )}
+            </div>
+            <div style={{ height: 140 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={barData} barSize={28}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <Tooltip contentStyle={{ border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 12 }} />
+                  <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                    {barData.map((entry, i) => (
+                      <Cell key={i} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Status Summary */}
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+            <h3 style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', margin: '0 0 16px' }}>Status Summary</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+              {[
+                ['Active',    kpis.active,    '#22c55e'],
+                ['Planning',  kpis.planning,  '#3b82f6'],
+                ['Delayed',   kpis.delayed,   '#ef4444'],
+                ['On Hold',   kpis.onHold,    '#94a3b8'],
+                ['Completed', kpis.completed, '#14b8a6'],
+              ].map(([label, value, color], i, arr) => (
+                <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: i < arr.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: color }} />
+                    <span style={{ fontSize: 13, color: '#374151' }}>{label}</span>
+                  </div>
+                  <span style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{value}</span>
+                </div>
+              ))}
+            </div>
+            <Link to="/projects/new" style={{ display: 'block', marginTop: 16, textAlign: 'center', padding: '9px 0', borderRadius: 10, background: '#ede9fe', color: '#4f46e5', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+              View full report →
+            </Link>
           </div>
         </div>
+
       </div>
     </div>
   );

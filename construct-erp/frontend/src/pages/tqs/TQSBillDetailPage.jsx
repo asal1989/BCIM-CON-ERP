@@ -554,6 +554,7 @@ function AccountsTab({ bill, billId }) {
 
 function ProcurementTab({ bill, billId }) {
   const qc  = useQueryClient();
+  const navigate = useNavigate();
   const upd = bill.bill_updates || {};
   const [form, setForm] = useState({
     proc_received_from_accounts_date: upd.proc_received_from_accounts_date?.slice(0, 10) || '',
@@ -575,14 +576,25 @@ function ProcurementTab({ bill, billId }) {
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <SectionTitle>Procurement Handoff</SectionTitle>
-        <a
-          href={`/tqs/bills/${billId}/payment-cert`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="px-3 py-2 bg-orange-50 hover:bg-orange-100 text-orange-700 text-xs font-medium rounded-lg flex items-center gap-1.5 border border-orange-200"
-        >
-          <FileText className="w-3.5 h-3.5" /> View Certification (Claim Summary)
-        </a>
+        <div className="flex items-center gap-2 flex-wrap">
+          {upd.certification_id && (
+            <button
+              onClick={() => navigate(`/tqs/vendor-certifications/${upd.certification_id}`)}
+              className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium rounded-lg flex items-center gap-1.5 border border-blue-200"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              {upd.pc_number ? `PC: ${upd.pc_number}` : 'View Certification'}
+            </button>
+          )}
+          <a
+            href={`/tqs/bills/${billId}/payment-cert`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-2 bg-orange-50 hover:bg-orange-100 text-orange-700 text-xs font-medium rounded-lg flex items-center gap-1.5 border border-orange-200"
+          >
+            <FileText className="w-3.5 h-3.5" /> View Certification (Claim Summary)
+          </a>
+        </div>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <div>
@@ -1137,9 +1149,9 @@ export default function TQSBillDetailPage() {
               )}
             </div>
             <p className="text-xs mt-1 truncate" style={{ color: 'rgba(255,255,255,0.65)' }}>
-              <span className="font-medium text-white">{bill.vendor_name}</span>
+              <span className="font-medium text-white">{(bill.vendor_name || '').toUpperCase()}</span>
               <span className="mx-2" style={{ color: 'rgba(255,255,255,0.30)' }}>·</span>
-              <span>{bill.inv_number}</span>
+              <span>{(bill.inv_number || '').toUpperCase()}</span>
             </p>
           </div>
 
@@ -1223,7 +1235,7 @@ export default function TQSBillDetailPage() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-5 pb-5 border-b border-slate-200">
                   {[
                     { label: 'PO / WO #',      value: bill.po_number,  mono: true },
-                    { label: 'Invoice #',       value: bill.inv_number, mono: true },
+                    { label: 'Invoice #',       value: (bill.inv_number || '').toUpperCase(), mono: true },
                     { label: 'Invoice Date',    value: fmt(bill.inv_date) },
                     { label: 'Received Date',   value: fmt(bill.received_date) },
                   ].map(f => (

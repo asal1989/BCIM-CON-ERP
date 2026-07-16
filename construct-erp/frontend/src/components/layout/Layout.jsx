@@ -15,7 +15,8 @@ import {
   CalendarOff, FileBarChart, Star, UserCheck, Fingerprint, PackageCheck, ArrowLeftRight,
   Landmark, FileSignature, CircleSlash, ShieldCheck, Clock3, Lightbulb,
   Gavel, Target, Send, Coins, Replace, Link2, Wrench, Layers, MapPin, TrendingDown, FolderOpen, Calculator, UserRound,
-  Cog, Fuel, Gauge, BarChart2, History, GitBranch, MinusCircle, FolderKanban, Sparkles, MessageSquare
+  Cog, Fuel, Gauge, BarChart2, History, GitBranch, MinusCircle, FolderKanban, Sparkles, MessageSquare, Mail,
+  RefreshCw, Shuffle
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import CommandPalette from './CommandPalette';
@@ -199,48 +200,74 @@ const navGroups = [
     { to: '/accounts/settings',                         icon: Settings,        label: 'Settings' },
   ]},
   { label: 'HR & Admin', items: [
+    // ── Overview ──
     { to: '/hr-admin',                   icon: LayoutDashboard, label: 'HR Dashboard' },
+    { to: '/hr-admin/analytics',         icon: BarChart2,       label: 'Analytics Hub' },
     { to: '/hr-admin/checklist',         icon: ClipboardList,   label: 'HR Checklist' },
     { to: '/hr-admin/ops-checklist',     icon: ClipboardCheck,  label: 'HR Ops Checklist' },
-    { to: '/hr-admin/analytics',         icon: BarChart2,       label: 'Analytics Hub' },
-    { to: '/hr-admin/directory',         icon: Users,           label: 'Employee Directory' },
-    { to: '/hr-admin/org-chart',         icon: GitBranch,       label: 'Organization Chart' },
+    { to: '/ess',                        icon: UserCheck,       label: 'ESS Portal' },
+    // ── People ──
     { to: '/hr-admin/employees',         icon: Users,           label: 'Employees' },
     { to: '/hr-admin/project-staff',     icon: FolderKanban,    label: 'Project-wise Staff' },
-    { to: '/hr-admin/attendance',        icon: Clock,           label: 'Attendance' },
+    { to: '/hr-admin/directory',         icon: Users,           label: 'Employee Directory' },
+    { to: '/hr-admin/org-chart',         icon: GitBranch,       label: 'Organization Chart' },
+    { to: '/hr-admin/departments',       icon: Building2,       label: 'Departments' },
+    // ── Attendance ──
+    { to: '/hr-admin/attendance',              icon: Clock,           label: 'Attendance' },
+    { to: '/hr-admin/attendance/dashboard',    icon: LayoutDashboard, label: 'Attendance Dashboard' },
+    { to: '/hr-admin/attendance/biometric',    icon: Fingerprint,     label: 'Biometric Attendance' },
+    { to: '/hr-admin/attendance/regularization', icon: ClipboardCheck, label: 'Attendance Regularization' },
+    { to: '/hr-admin/attendance/timesheet',    icon: FileSpreadsheet, label: 'Timesheet Report' },
+    { to: '/hr-admin/shifts',                  icon: Clock,           label: 'Shift Management' },
+    // ── Leaves & Holidays ──
     { to: '/hr-admin/leaves',            icon: CalendarOff,     label: 'Leave Management' },
     { to: '/hr-admin/holidays',          icon: CalendarDays,    label: 'Holiday Calendar' },
+    // ── Payroll ──
     { to: '/hr-admin/payroll',           icon: CreditCard,      label: 'Payroll' },
     { to: '/hr-admin/payroll-reports',   icon: FileText,        label: 'Payroll Reports' },
     { to: '/hr-admin/salary-structures', icon: Banknote,        label: 'Salary Structures' },
-    { to: '/hr-admin/employee-salaries',  icon: IndianRupee,     label: 'Employee Salaries' },
+    { to: '/hr-admin/employee-salaries', icon: IndianRupee,     label: 'Employee Salaries' },
     { to: '/hr-admin/loans',             icon: Wallet,          label: 'Loans & Advances' },
     { to: '/hr-admin/expenses',          icon: Receipt,         label: 'Expense Claims' },
-    { to: '/hr-admin/departments',       icon: Building2,       label: 'Departments' },
+    { to: '/hr-admin/lop-days',          icon: MinusCircle,     label: 'LOP Days' },
+    { to: '/hr-admin/stop-salary',       icon: CircleSlash,     label: 'Stop Salary' },
+    { to: '/hr-admin/fnf',               icon: Wallet,          label: 'Full & Final' },
+    // ── Performance & Growth ──
     { to: '/hr-admin/appraisals',        icon: Star,            label: 'Appraisals' },
     { to: '/hr-admin/performance',       icon: ClipboardList,   label: 'Performance Evaluation' },
+    { to: '/hr-admin/recruitment',       icon: Briefcase,       label: 'Recruitment' },
+    { to: '/hr-admin/training',          icon: BookOpen,        label: 'Training' },
     { to: '/hr-admin/advanced',          icon: Briefcase,       label: 'Advanced HR' },
-    { to: '/hr-admin/shifts',           icon: Clock,           label: 'Shifts & OT' },
-    { to: '/hr-admin/lop-days',         icon: MinusCircle,     label: 'LOP Days' },
-    { to: '/hr-admin/stop-salary',      icon: CircleSlash,     label: 'Stop Salary' },
-    { to: '/hr-admin/fnf',              icon: Wallet,          label: 'Full & Final' },
-    { to: '/hr-admin/letters',          icon: FileText,        label: 'Letter Generation' },
-    { to: '/hr-admin/policies',         icon: FileText,        label: 'Company Policies & Forms' },
-    { to: '/hr-admin/segments',         icon: Users,           label: 'Employee Segment' },
-    { to: '/hr-admin/emp-filters',      icon: Users,           label: 'Employee Filter' },
-    { to: '/hr-admin/training',         icon: BookOpen,        label: 'Training' },
-    { to: '/hr-admin/emp-assets',       icon: Package,         label: 'Employee Assets' },
-    { to: '/hr-admin/travel',           icon: MapPin,          label: 'Travel Requests' },
-    { to: '/hr-admin/recruitment',      icon: Briefcase,       label: 'Recruitment' },
+    // ── Employee Services ──
+    { to: '/hr-admin/letters',           icon: FileText,        label: 'Letter Generation' },
+    { to: '/hr-admin/policies',          icon: FileText,        label: 'Company Policies & Forms' },
+    { to: '/hr-admin/emp-assets',        icon: Package,         label: 'Employee Assets' },
+    { to: '/hr-admin/travel',            icon: MapPin,          label: 'Travel Requests' },
+    { to: '/hr-admin/segments',          icon: Users,           label: 'Employee Segment' },
+    { to: '/hr-admin/emp-filters',       icon: Users,           label: 'Employee Filter' },
+    // ── Site Workers ──
     { to: '/hr/workers',                 icon: HardHat,         label: 'Site Workers' },
     { to: '/hr/attendance',              icon: Clock3,          label: 'Worker Attendance' },
     { to: '/hr/payroll',                 icon: Banknote,        label: 'Worker Payroll' },
-    { to: '/hr-admin/essl-sync',         icon: Fingerprint,     label: 'ESSL Biometric' },
-    { to: '/hr-admin/import',            icon: Upload,          label: 'Import Data' },
-    { to: '/hr-admin/reports',           icon: FileBarChart,    label: 'HR Reports' },
-    { to: '/ess',                        icon: UserCheck,       label: 'ESS Portal' },
-    { to: '/hr-admin/documents',         icon: FolderSearch,    label: 'Documents' },
-    { to: '/hr-admin/compliance',        icon: ShieldCheck,     label: 'Compliance' },
+    // ── Reports ──
+    { to: '/hr-admin/reports',                    icon: FileBarChart,    label: 'HR Reports' },
+    { to: '/hr-admin/reports/daily-attendance',   icon: ClipboardList,   label: 'Daily Attendance Report' },
+    { to: '/hr-admin/reports/monthly-status',     icon: BarChart2,       label: 'Monthly Status' },
+    { to: '/hr-admin/reports/yearly-summary',     icon: CalendarDays,    label: 'Yearly Summary' },
+    { to: '/hr-admin/reports/attendance-summary', icon: FileBarChart,    label: 'Attendance Summary Report' },
+    { to: '/hr-admin/reports/leave-summary',      icon: CalendarOff,     label: 'Leave Summary' },
+    { to: '/hr-admin/reports/employee-details',   icon: Users,           label: 'Employee Details' },
+    { to: '/hr-admin/reports/shift-schedule',     icon: Clock,           label: 'Shift Scheduler' },
+    { to: '/hr-admin/reports/department-summary', icon: Building2,       label: 'Department Summary' },
+    { to: '/hr-admin/reports/log-records',        icon: ScrollText,      label: 'Log Records' },
+    { to: '/hr-admin/reports/random-check',       icon: Shuffle,         label: 'Random Check Report' },
+    // ── Setup & Tools ──
+    { to: '/hr-admin/essl-sync',          icon: Fingerprint,     label: 'ESSL Biometric' },
+    { to: '/hr-admin/attendance/recalculate', icon: RefreshCw,   label: 'Re-calculate Attendance' },
+    { to: '/hr-admin/import',             icon: Upload,          label: 'Import Data' },
+    { to: '/hr-admin/documents',          icon: FolderSearch,    label: 'Documents' },
+    { to: '/hr-admin/compliance',         icon: ShieldCheck,     label: 'Compliance' },
+    { to: '/hr-admin/compliance-tracker', icon: ShieldCheck,     label: 'Compliance Tracker' },
   ]},
   { label: 'Bill Tracker', items: [
     { to: '/tqs',                       icon: LayoutDashboard, label: 'Bill Tracker Dashboard' },
@@ -342,6 +369,7 @@ const navGroups = [
     { to: '/sc/bill-preparation', icon: Receipt,         label: 'Bill Preparation' },
     { to: '/sc/hire-usage-tracker', icon: Truck,         label: 'Hire Usage Tracker' },
     { to: '/sc/bill-approval',    icon: ShieldCheck,     label: 'Bill Approval' },
+    { to: '/sc/payment-recommendations', icon: Send,       label: 'Payment Recommendations' },
     { to: '/sc/payments',         icon: CreditCard,      label: 'Payment Tracking' },
     { to: '/sc/deductions',       icon: Calculator,      label: 'Retention / Deductions' },
     { to: '/sc/documents',        icon: FolderSearch,    label: 'Documents' },
@@ -352,6 +380,7 @@ const navGroups = [
     { to: '/users', icon: Users, label: 'Team Members' },
     { to: '/accounts/settings', icon: Building2, label: 'Company Profile' },
     { to: '/audit-log', icon: History, label: 'Audit Log' },
+    { to: '/mail-center', icon: Mail, label: 'Mail Center' },
     { to: '/role-permissions', icon: ShieldCheck, label: 'Roles & Module Access' },
   ]},
   { label: 'Automation Ideas', items: [
@@ -438,16 +467,16 @@ const NAV_SECTIONS = {
     { label: 'Settings',    paths: ['/accounts/settings'] },
   ],
   'HR & Admin': [
-    { label: 'People',       paths: ['/hr-admin','/hr-admin/analytics','/hr-admin/directory','/hr-admin/org-chart','/hr-admin/employees','/hr-admin/project-staff','/ess'] },
-    { label: 'Time',         paths: ['/hr-admin/attendance','/hr-admin/leaves','/hr-admin/holidays'] },
-    { label: 'Payroll',      paths: ['/hr-admin/payroll','/hr-admin/payroll-reports','/hr-admin/salary-structures','/hr-admin/employee-salaries','/hr-admin/loans','/hr-admin/expenses','/hr-admin/lop-days','/hr-admin/stop-salary'] },
-    { label: 'Admin',        paths: ['/hr-admin/departments','/hr-admin/appraisals','/hr-admin/performance','/hr-admin/advanced'] },
-    { label: 'Setup',        paths: ['/hr-admin/letters','/hr-admin/policies','/hr-admin/segments','/hr-admin/emp-filters'] },
-    { label: 'Talent',       paths: ['/hr-admin/shifts','/hr-admin/fnf','/hr-admin/letters','/hr-admin/training','/hr-admin/emp-assets','/hr-admin/travel','/hr-admin/recruitment'] },
-    { label: 'Site Workers', paths: ['/hr/workers','/hr/attendance','/hr/payroll'] },
-    { label: 'Integrate',    paths: ['/hr-admin/essl-sync','/hr-admin/import'] },
-    { label: 'Reports',      paths: ['/hr-admin/reports'] },
-    { label: 'Documents',    paths: ['/hr-admin/documents'] },
+    { label: 'Overview',          paths: ['/hr-admin','/hr-admin/analytics','/hr-admin/checklist','/hr-admin/ops-checklist','/ess'] },
+    { label: 'People',            paths: ['/hr-admin/employees','/hr-admin/project-staff','/hr-admin/directory','/hr-admin/org-chart','/hr-admin/departments'] },
+    { label: 'Attendance',        paths: ['/hr-admin/attendance','/hr-admin/attendance/dashboard','/hr-admin/attendance/biometric','/hr-admin/attendance/regularization','/hr-admin/attendance/timesheet','/hr-admin/shifts'] },
+    { label: 'Leaves & Holidays', paths: ['/hr-admin/leaves','/hr-admin/holidays'] },
+    { label: 'Payroll',           paths: ['/hr-admin/payroll','/hr-admin/payroll-reports','/hr-admin/salary-structures','/hr-admin/employee-salaries','/hr-admin/loans','/hr-admin/expenses','/hr-admin/lop-days','/hr-admin/stop-salary','/hr-admin/fnf'] },
+    { label: 'Performance',       paths: ['/hr-admin/appraisals','/hr-admin/performance','/hr-admin/recruitment','/hr-admin/training','/hr-admin/advanced'] },
+    { label: 'Emp. Services',     paths: ['/hr-admin/letters','/hr-admin/policies','/hr-admin/emp-assets','/hr-admin/travel','/hr-admin/segments','/hr-admin/emp-filters'] },
+    { label: 'Site Workers',      paths: ['/hr/workers','/hr/attendance','/hr/payroll'] },
+    { label: 'Reports',           paths: ['/hr-admin/reports','/hr-admin/reports/daily-attendance','/hr-admin/reports/monthly-status','/hr-admin/reports/yearly-summary','/hr-admin/reports/attendance-summary','/hr-admin/reports/leave-summary','/hr-admin/reports/employee-details','/hr-admin/reports/shift-schedule','/hr-admin/reports/department-summary','/hr-admin/reports/log-records','/hr-admin/reports/random-check'] },
+    { label: 'Setup & Tools',     paths: ['/hr-admin/essl-sync','/hr-admin/attendance/recalculate','/hr-admin/import','/hr-admin/documents','/hr-admin/compliance','/hr-admin/compliance-tracker'] },
   ],
   'Bill Tracker': [
     { label: 'Bills',      paths: ['/tqs','/tqs/bills','/tqs/transmittal'] },
@@ -462,6 +491,7 @@ const NAV_SECTIONS = {
     { label: 'Purchase Orders',      paths: ['/qs/po','/qs/po-register'] },
     { label: 'Work Orders',          paths: ['/qs/work-orders','/qs/wo-register'] },
     { label: 'Vendor Certification', paths: ['/qs/vendor-certifications','/qs/retention-releases'] },
+    { label: 'Advance Vouchers',     paths: ['/qs/advance-tracker'] },
     { label: 'Controls',             paths: ['/qs/variations','/qs/material-recon','/qs/norms','/qs/reports'] },
     { label: 'Documents',            paths: ['/qs/documents'] },
   ],
@@ -497,7 +527,7 @@ const NAV_SECTIONS = {
     { label: 'Work Orders', paths: ['/sc/work-orders'] },
     { label: 'Site Work',   paths: ['/sc/labour','/sc/progress'] },
     { label: 'Billing',     paths: ['/sc/bill-preparation','/sc/bill-approval'] },
-    { label: 'Payments',    paths: ['/sc/payments','/sc/deductions'] },
+    { label: 'Payments',    paths: ['/sc/payment-recommendations','/sc/payments','/sc/deductions'] },
     { label: 'More',        paths: ['/sc/reports','/sc/documents','/sc/settings'] },
   ],
 };
@@ -1021,6 +1051,8 @@ const MD_SHORTCUTS = [
   { label: 'GRN / IGN',         to: '/stores/ign',                            icon: ClipboardCheck },
   { label: 'DPR',               to: '/planning/dpr-console',                  icon: FileText },
   { label: 'Liability Register', to: '/tqs/liability-register',              icon: BookOpen },
+  { label: 'Payment Recommendations', to: '/sc/payment-recommendations',      icon: Send },
+  { label: 'Mail Center',       to: '/mail-center',                          icon: Mail },
   { label: 'Team Chat',         to: '/chat',                                  icon: MessageSquare },
 ];
 
@@ -1972,6 +2004,7 @@ export default function Layout() {
   const [langOpen,    setLangOpen]    = useState(false);
   const [notifOpen,   setNotifOpen]   = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
+  const [activeTool,  setActiveTool]  = useState(null); // null | 'pdf' | 'senddrive'
   const [now,          setNow]         = useState(() => new Date());
   const notifCount = useNotificationCount();
   const recentPages = useRecentPages();
@@ -2099,7 +2132,7 @@ export default function Layout() {
   const MD_NAV_ORDER = ['Overview', 'Procurement', 'Stores', 'QS & Billing', 'Planning', 'Bill Tracker'];
   const isMDNavUser = (() => {
     const r = String(user?.role || '').toLowerCase();
-    return ['md', 'managing_director'].includes(r)
+    return ['md', 'managing_director', 'super_admin'].includes(r)
       || ['stephen@bcim.in', 'it@bcim.in'].includes(String(user?.email || '').toLowerCase());
   })();
   const isProcurementUser = (() => {
@@ -2435,7 +2468,7 @@ export default function Layout() {
           floating popup (or jumps to /chat for a channel) instead of always
           navigating to the full chat page. ── */}
       {location.pathname !== '/chat' && (
-        <div ref={chatMenuRef} className="hidden md:block fixed bottom-6 right-6 z-40 print:hidden">
+        <div ref={chatMenuRef} className="block fixed bottom-[58px] md:bottom-6 right-4 md:right-6 z-40 print:hidden">
           {chatMenuOpen && (
             <div style={{
               position: 'absolute', bottom: 56, right: 0, width: 320, maxHeight: 420,
@@ -2488,7 +2521,7 @@ export default function Layout() {
           <button
             onClick={() => setChatMenuOpen(v => !v)}
             title="Team Chat"
-            className="flex w-11 h-11 rounded-full items-center justify-center text-white shadow-lg transition-transform hover:scale-105 relative"
+            className="flex w-9 h-9 md:w-11 md:h-11 rounded-full items-center justify-center text-white shadow-lg transition-transform active:scale-95 hover:scale-105 relative"
             style={{ background: 'linear-gradient(135deg, #4F46E5, #4338CA)', boxShadow: '0 8px 24px rgba(79,70,229,0.4)' }}
           >
             <MessageSquare className="w-5 h-5" />
@@ -2501,34 +2534,85 @@ export default function Layout() {
         </div>
       )}
 
-      {/* ── Floating Send Drive launcher — quick access to the external large-file
-          transfer tool, stacked above the Team Chat bubble. Opens in a new tab.
-          Passes the logged-in user's email as ?from= so Send Drive can
-          pre-fill the sender field — Send Drive has no login of its own, this
-          just saves re-typing who you are; nothing security-sensitive rides
-          on it. ── */}
+      {/* ── Floating Send Drive launcher — visible on all screen sizes ── */}
       <button
-        onClick={() => window.open(
-          `https://senddrive.bcim.in/${user?.email ? `?from=${encodeURIComponent(user.email)}` : ''}`,
-          '_blank', 'noopener,noreferrer'
-        )}
+        onClick={() => setActiveTool(t => t === 'senddrive' ? null : 'senddrive')}
         title="Send Drive — send large files"
-        className="hidden md:flex fixed bottom-[84px] right-6 z-40 w-11 h-11 rounded-full items-center justify-center text-white shadow-lg transition-transform hover:scale-105 print:hidden"
-        style={{ background: 'linear-gradient(135deg, #059669, #047857)', boxShadow: '0 8px 24px rgba(5,150,105,0.4)' }}
+        className="flex fixed bottom-[108px] md:bottom-[84px] right-4 md:right-6 z-40 w-9 h-9 md:w-11 md:h-11 rounded-full items-center justify-center text-white shadow-lg transition-transform active:scale-95 hover:scale-105 print:hidden"
+        style={{ background: activeTool === 'senddrive' ? '#047857' : 'linear-gradient(135deg, #059669, #047857)', boxShadow: '0 8px 24px rgba(5,150,105,0.4)' }}
       >
-        <Send className="w-4 h-4" />
+        <Send className="w-3.5 h-3.5 md:w-4 md:h-4" />
       </button>
 
-      {/* ── Floating PDF Tool launcher — quick access to the external PDF utility
-          app, stacked above Send Drive. Opens in a new tab. ── */}
+      {/* ── Floating PDF Tool launcher — visible on all screen sizes ── */}
       <button
-        onClick={() => window.open('https://pdf.bcim.in/', '_blank', 'noopener,noreferrer')}
+        onClick={() => setActiveTool(t => t === 'pdf' ? null : 'pdf')}
         title="PDF Tools — merge, split, convert"
-        className="hidden md:flex fixed bottom-[144px] right-6 z-40 w-11 h-11 rounded-full items-center justify-center text-white shadow-lg transition-transform hover:scale-105 print:hidden"
-        style={{ background: 'linear-gradient(135deg, #DC2626, #B91C1C)', boxShadow: '0 8px 24px rgba(220,38,38,0.4)' }}
+        className="flex fixed bottom-[156px] md:bottom-[144px] right-4 md:right-6 z-40 w-9 h-9 md:w-11 md:h-11 rounded-full items-center justify-center text-white shadow-lg transition-transform active:scale-95 hover:scale-105 print:hidden"
+        style={{ background: activeTool === 'pdf' ? '#B91C1C' : 'linear-gradient(135deg, #DC2626, #B91C1C)', boxShadow: '0 8px 24px rgba(220,38,38,0.4)' }}
       >
-        <FileText className="w-4 h-4" />
+        <FileText className="w-3.5 h-3.5 md:w-4 md:h-4" />
       </button>
+
+      {/* ── Embedded Tool Panel — full-screen on mobile, side panel on desktop ── */}
+      {activeTool && createPortal(
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-[60] bg-black/20 backdrop-blur-[1px] print:hidden"
+            onClick={() => setActiveTool(null)}
+          />
+          {/* Panel */}
+          <div
+            className="fixed top-0 right-0 bottom-0 z-[61] flex flex-col bg-white shadow-2xl print:hidden w-full md:w-[780px] md:max-w-[92vw]"
+            style={{ animation: 'slideInFromRight 0.25s cubic-bezier(0.32,0.72,0,1)' }}
+          >
+            {/* Panel header */}
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 flex-shrink-0"
+              style={{ background: activeTool === 'pdf' ? 'linear-gradient(135deg,#DC2626,#B91C1C)' : 'linear-gradient(135deg,#059669,#047857)' }}>
+              <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0">
+                {activeTool === 'pdf' ? <FileText className="w-4 h-4 text-white" /> : <Send className="w-4 h-4 text-white" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-white leading-none">
+                  {activeTool === 'pdf' ? 'PDF Toolkit' : 'Send Drive'}
+                </p>
+                <p className="text-xs text-white/70 mt-0.5 truncate">
+                  {activeTool === 'pdf' ? 'Merge · Split · Convert · Compress' : 'Send large files securely'}
+                </p>
+              </div>
+              <a
+                href={activeTool === 'pdf' ? 'https://pdf.bcim.in/' : `https://senddrive.bcim.in/${user?.email ? `?from=${encodeURIComponent(user.email)}` : ''}`}
+                target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-medium transition-colors flex-shrink-0"
+                title="Open in new tab"
+              >
+                <ArrowUpRight className="w-3.5 h-3.5" /> New tab
+              </a>
+              <button
+                onClick={() => setActiveTool(null)}
+                className="w-8 h-8 rounded-lg bg-white/15 hover:bg-white/25 flex items-center justify-center text-white transition-colors flex-shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* iframe */}
+            <iframe
+              key={activeTool}
+              src={activeTool === 'pdf'
+                ? 'https://pdf.bcim.in/'
+                : `https://senddrive.bcim.in/${user?.email ? `?from=${encodeURIComponent(user.email)}` : ''}`
+              }
+              title={activeTool === 'pdf' ? 'PDF Toolkit' : 'Send Drive'}
+              className="flex-1 w-full border-0"
+              allow="clipboard-read; clipboard-write; downloads"
+            />
+          </div>
+          <style>{`@keyframes slideInFromRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`}</style>
+        </>,
+        document.body
+      )}
 
       <CommandPalette
         isOpen={paletteOpen}
@@ -2651,6 +2735,50 @@ export default function Layout() {
         main *::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
         main::-webkit-scrollbar-thumb:hover,
         main *::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+        /* ── PRINT: unfold all layout containers so content flows across pages ── */
+        @media print {
+          html, body {
+            height: auto !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          /* Root layout div (height:100vh, overflow:hidden) */
+          .erp-layout-enter {
+            height: auto !important;
+            overflow: visible !important;
+            display: block !important;
+          }
+          /* Top header, sidebar, bottom nav, quick-access bars */
+          header, .desktop-sidebar, .print\\:hidden,
+          nav[class*="bottom"], [class*="QuickAccess"],
+          [class*="quick-access"] {
+            display: none !important;
+          }
+          /* Content wrapper (flex:1, overflow:hidden) */
+          .erp-layout-enter > div:last-of-type {
+            overflow: visible !important;
+            height: auto !important;
+            display: block !important;
+            flex: none !important;
+          }
+          /* Main content area */
+          main {
+            overflow: visible !important;
+            height: auto !important;
+            position: static !important;
+            flex: none !important;
+            width: 100% !important;
+          }
+          main > * {
+            animation: none !important;
+          }
+          /* Tables: allow wrapping for print */
+          main table {
+            min-width: 0 !important;
+          }
+        }
       `}</style>
     </div>
   );

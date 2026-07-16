@@ -472,7 +472,7 @@ function LiveTrackerTab({ projectFilter, search }) {
                     </td>
                     {/* Vendor */}
                     <td className="px-4 py-3 text-xs text-slate-900 max-w-[110px] truncate">
-                      {row.vendor_name || <span className="text-slate-300">—</span>}
+                      {row.vendor_name ? (row.vendor_name).toUpperCase() : <span className="text-slate-300">—</span>}
                     </td>
                     {/* Ordered Qty */}
                     <td className="px-4 py-3 text-xs text-slate-900 whitespace-nowrap">
@@ -639,7 +639,7 @@ function ManualTrackerTab({ projectFilter, search, projects }) {
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-900 whitespace-nowrap">{fmt(it.mr_date)}</td>
                     <td className="px-4 py-3 font-mono text-xs text-slate-600">{it.po_number || '—'}</td>
-                    <td className="px-4 py-3 text-xs text-slate-900 max-w-[100px] truncate">{it.vendor_name || '—'}</td>
+                    <td className="px-4 py-3 text-xs text-slate-900 max-w-[100px] truncate">{(it.vendor_name || '').toUpperCase() || '—'}</td>
                     <td className="px-4 py-3 text-xs font-medium text-slate-700">{it.total_po_value ? `₹${inr(it.total_po_value)}` : '—'}</td>
                     <td className="px-4 py-3 text-xs text-slate-600">
                       {it.material_received_qty ? (

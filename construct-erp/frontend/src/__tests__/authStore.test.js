@@ -10,7 +10,7 @@ const resetStore = () => useAuthStore.setState({
 const originalLocation = window.location;
 beforeAll(() => {
   delete window.location;
-  window.location = { href: '', assign: vi.fn(), replace: vi.fn() };
+  window.location = { href: '', pathname: '/', assign: vi.fn(), replace: vi.fn() };
 });
 afterAll(() => {
   window.location = originalLocation;
@@ -33,10 +33,10 @@ describe('authStore.login()', () => {
     expect(state.user).not.toBeNull();
     expect(state.user.email).toBe('admin@test.com');
     expect(state.accessToken).toBe('mock-access-token');
-    expect(sessionStorage.getItem('accessToken')).toBe('mock-access-token');
-    expect(sessionStorage.getItem('refreshToken')).toBe('mock-refresh-token');
-    expect(localStorage.getItem('accessToken')).toBeNull();
-    expect(localStorage.getItem('refreshToken')).toBeNull();
+    expect(localStorage.getItem('accessToken')).toBe('mock-access-token');
+    expect(localStorage.getItem('refreshToken')).toBe('mock-refresh-token');
+    expect(sessionStorage.getItem('accessToken')).toBeNull();
+    expect(sessionStorage.getItem('refreshToken')).toBeNull();
   });
 
   it('returns error message on wrong credentials', async () => {
@@ -52,7 +52,7 @@ describe('authStore.login()', () => {
     const { server } = await import('../mocks/server');
     const { rest } = await import('msw');
     server.use(
-      rest.post('/api/v1/auth/login', (req, res) => res.networkError('Connection refused'))
+      rest.post('http://localhost/api/v1/auth/login', (req, res) => res.networkError('Connection refused'))
     );
 
     const result = await useAuthStore.getState().login('admin@test.com', 'Test@1234');
@@ -93,7 +93,7 @@ describe('authStore.logout()', () => {
 
 describe('authStore.initialize()', () => {
   it('sets isInitialized=true and fetches user when token is valid', async () => {
-    sessionStorage.setItem('accessToken', 'mock-access-token');
+    localStorage.setItem('accessToken', 'mock-access-token');
     useAuthStore.setState({ accessToken: 'mock-access-token' });
 
     await useAuthStore.getState().initialize();
@@ -104,8 +104,8 @@ describe('authStore.initialize()', () => {
 
   it('sets isInitialized=true and clears state when token is invalid', async () => {
     // Use a refresh-token-style token so the interceptor navigates instead of retrying
-    sessionStorage.setItem('accessToken', 'bad-token-no-refresh');
-    sessionStorage.removeItem('refreshToken');
+    localStorage.setItem('accessToken', 'bad-token-no-refresh');
+    localStorage.removeItem('refreshToken');
     useAuthStore.setState({ accessToken: 'bad-token-no-refresh' });
 
     await useAuthStore.getState().initialize();
