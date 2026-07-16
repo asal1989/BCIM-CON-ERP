@@ -330,20 +330,33 @@ function SwipeDir({ direction }) {
   return <span style={{ display:'inline-block', padding:'1px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#f1f5f9', color:'#64748b' }}>—</span>;
 }
 
+// ESSL stores IST device-local time as if it were UTC — read UTC components
+// to recover the actual punch time the device recorded.
+function esslTime(ts) {
+  if (!ts) return null;
+  const d = new Date(ts);
+  return { h: d.getUTCHours(), m: d.getUTCMinutes(), s: d.getUTCSeconds(), dateStr: d.toISOString().slice(0, 10) };
+}
+function fmt12(h, m, s = 0) {
+  const period = h >= 12 ? 'pm' : 'am';
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${String(h12).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} ${period}`;
+}
 function fmtSwipeTime(ts) {
   if (!ts) return '—';
-  const d = new Date(ts);
-  return d.toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', hour12:true });
+  const t = esslTime(ts);
+  return `${t.dateStr} ${fmt12(t.h, t.m)}`;
 }
 
-/* ─── group swipes by LOCAL calendar date, sorted chronologically within each day ─── */
+/* ─── group swipes by device IST date, sorted chronologically within each day ─── */
 function groupByDate(swipes) {
   const groups = {};
   for (const s of swipes) {
-    // Use local date (browser timezone) so night-shift workers see their date correctly
-    const localDay = new Date(s.swipe_time).toLocaleDateString('en-CA'); // YYYY-MM-DD
-    if (!groups[localDay]) groups[localDay] = [];
-    groups[localDay].push(s);
+    // ESSL stores IST device-local time as if it were UTC — read UTC date
+    // components to recover the actual calendar date the device recorded.
+    const dayKey = new Date(s.swipe_time).toISOString().slice(0, 10);
+    if (!groups[dayKey]) groups[dayKey] = [];
+    groups[dayKey].push(s);
   }
   // Sort each day's swipes chronologically (earliest first)
   for (const day of Object.keys(groups)) {
@@ -573,12 +586,12 @@ function AttendanceTab({ leaveTypes }) {
                     <div className="flex items-center gap-3">
                       {firstIn && (
                         <span className="text-[11px] text-blue-200">
-                          First In: <span className="font-bold text-white">{new Date(firstIn.swipe_time).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true })}</span>
+                          First In: <span className="font-bold text-white">{(() => { const t = esslTime(firstIn.swipe_time); return fmt12(t.h, t.m); })()}</span>
                         </span>
                       )}
                       {lastOut && (
                         <span className="text-[11px] text-blue-200">
-                          Last Out: <span className="font-bold text-white">{new Date(lastOut.swipe_time).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true })}</span>
+                          Last Out: <span className="font-bold text-white">{(() => { const t = esslTime(lastOut.swipe_time); return fmt12(t.h, t.m); })()}</span>
                         </span>
                       )}
                       <span className="text-[11px] bg-white/20 text-white rounded-full px-2 py-0.5 font-bold">{totalPunches} punch{totalPunches !== 1 ? 'es' : ''}</span>
@@ -588,8 +601,8 @@ function AttendanceTab({ leaveTypes }) {
                   {/* Swipe timeline */}
                   <div className="divide-y divide-gray-50 bg-white">
                     {daySwipes.map((s, i) => {
-                      const t = new Date(s.swipe_time);
-                      const timeStr = t.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:true });
+                      const et = esslTime(s.swipe_time);
+                      const timeStr = fmt12(et.h, et.m, et.s);
                       return (
                         <div key={i} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors">
                           <div className="w-8 text-center text-xs font-black text-gray-400 tabular-nums">{i + 1}</div>
