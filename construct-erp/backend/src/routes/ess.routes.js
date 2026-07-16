@@ -93,18 +93,40 @@ router.get('/summary', async (req, res) => {
         [userId, companyId]
       ),
       query(
-        `SELECT
-           COUNT(*) FILTER (WHERE status='present') AS present,
-           COUNT(*) FILTER (WHERE status='absent') AS absent,
+        `WITH reconciled AS (
+           -- ESSL records with approved leave overlay
+           SELECT
+             CASE WHEN lr.id IS NOT NULL AND a.status IN ('absent','half_day') THEN 'leave' ELSE a.status END AS status,
+             a.late_minutes
+           FROM hr_attendance a
+           LEFT JOIN hr_leave_requests lr
+             ON  lr.user_id = a.user_id AND lr.company_id = a.company_id
+             AND lr.status = 'approved'
+             AND a.attendance_date BETWEEN lr.from_date AND lr.to_date
+           WHERE a.company_id = $1 AND a.user_id = $2
+             AND EXTRACT(MONTH FROM a.attendance_date) = $3
+             AND EXTRACT(YEAR  FROM a.attendance_date) = $4
+           UNION ALL
+           -- Approved leave days with no ESSL record
+           SELECT 'leave' AS status, 0 AS late_minutes
+           FROM hr_leave_requests lr
+           CROSS JOIN generate_series(lr.from_date, lr.to_date, '1 day'::interval) d
+           WHERE lr.company_id = $1 AND lr.user_id = $2 AND lr.status = 'approved'
+             AND EXTRACT(MONTH FROM d) = $3 AND EXTRACT(YEAR FROM d) = $4
+             AND NOT EXISTS (
+               SELECT 1 FROM hr_attendance a2
+               WHERE a2.user_id = $2 AND a2.company_id = $1 AND a2.attendance_date = d::date
+             )
+         )
+         SELECT
+           COUNT(*) FILTER (WHERE status='present')  AS present,
+           COUNT(*) FILTER (WHERE status='absent')   AS absent,
            COUNT(*) FILTER (WHERE status='half_day') AS half_day,
-           COUNT(*) FILTER (WHERE status='leave') AS on_leave,
-           COUNT(*) FILTER (WHERE status='holiday') AS holidays,
+           COUNT(*) FILTER (WHERE status='leave')    AS on_leave,
+           COUNT(*) FILTER (WHERE status='holiday')  AS holidays,
            COUNT(*) FILTER (WHERE status='week_off') AS week_off,
-           COALESCE(SUM(late_minutes),0) AS late_minutes
-         FROM hr_attendance
-         WHERE company_id = $1 AND user_id = $2
-           AND EXTRACT(MONTH FROM attendance_date) = $3
-           AND EXTRACT(YEAR FROM attendance_date) = $4`,
+           COALESCE(SUM(late_minutes),0)             AS late_minutes
+         FROM reconciled`,
         [companyId, userId, month, year]
       ),
       query(
@@ -134,10 +156,18 @@ router.get('/summary', async (req, res) => {
       ).catch(() => ({ rows: [{ unread: 0 }] })),
     ]);
 
+    // Pending correction count for dashboard action card
+    const attRow = attendance.rows[0] || {};
+    const pendingCorr = await query(
+      `SELECT COUNT(*)::int AS cnt FROM hr_attendance_correction_requests
+       WHERE company_id=$1 AND user_id=$2 AND status='pending'`,
+      [companyId, userId]
+    ).catch(() => ({ rows: [{ cnt: 0 }] }));
+
     res.json({
       data: {
         profile: profile.rows[0] || null,
-        attendance: attendance.rows[0] || {},
+        attendance: { ...attRow, pending_corrections: pendingCorr.rows[0]?.cnt || 0 },
         leave: leave.rows[0] || {},
         payroll: payroll.rows[0] || null,
         notifications: notifications.rows[0] || { unread: 0 },
@@ -150,18 +180,75 @@ router.get('/summary', async (req, res) => {
 
 router.get('/attendance', async (req, res) => {
   try {
-    const month = parseInt(req.query.month, 10) || new Date().getMonth() + 1;
-    const year = parseInt(req.query.year, 10) || new Date().getFullYear();
-    const { rows } = await query(
-      `SELECT id, attendance_date, status, in_time, out_time, late_minutes, early_exit_minutes, source, remarks
-       FROM hr_attendance
-       WHERE company_id = $1 AND user_id = $2
-         AND EXTRACT(MONTH FROM attendance_date) = $3
-         AND EXTRACT(YEAR FROM attendance_date) = $4
-       ORDER BY attendance_date DESC`,
-      [ownCompany(req), ownUser(req), month, year]
+    const month     = parseInt(req.query.month, 10) || new Date().getMonth() + 1;
+    const year      = parseInt(req.query.year,  10) || new Date().getFullYear();
+    const userId    = ownUser(req);
+    const companyId = ownCompany(req);
+
+    // ESSL attendance records, with approved leave overlaid:
+    // - If ESSL recorded absent/half_day but there's an approved leave for that date → show as 'leave'
+    // - If there's an approved leave date with no ESSL record at all → synthesise a 'leave' row
+    const { rows: attRows } = await query(`
+      SELECT
+        a.id,
+        a.attendance_date,
+        CASE
+          WHEN lr.id IS NOT NULL AND a.status IN ('absent','half_day') THEN 'leave'
+          ELSE a.status
+        END                      AS status,
+        a.in_time,
+        a.out_time,
+        a.late_minutes,
+        a.early_exit_minutes,
+        a.source,
+        a.remarks,
+        lt.name                  AS leave_type_name,
+        lr.id                    AS leave_request_id
+      FROM hr_attendance a
+      LEFT JOIN hr_leave_requests lr
+        ON  lr.user_id    = a.user_id
+        AND lr.company_id = a.company_id
+        AND lr.status     = 'approved'
+        AND a.attendance_date BETWEEN lr.from_date AND lr.to_date
+      LEFT JOIN hr_leave_types lt ON lt.id = lr.leave_type_id
+      WHERE a.company_id = $1
+        AND a.user_id    = $2
+        AND EXTRACT(MONTH FROM a.attendance_date) = $3
+        AND EXTRACT(YEAR  FROM a.attendance_date) = $4
+    `, [companyId, userId, month, year]);
+
+    // Also add approved-leave days that have no ESSL record (pre-approved or holiday coverage)
+    const { rows: leaveOnlyRows } = await query(`
+      SELECT DISTINCT
+        NULL::uuid               AS id,
+        d::date                  AS attendance_date,
+        'leave'                  AS status,
+        NULL::time               AS in_time,
+        NULL::time               AS out_time,
+        0                        AS late_minutes,
+        0                        AS early_exit_minutes,
+        'leave_request'          AS source,
+        lr.reason                AS remarks,
+        lt.name                  AS leave_type_name,
+        lr.id                    AS leave_request_id
+      FROM hr_leave_requests lr
+      JOIN hr_leave_types lt ON lt.id = lr.leave_type_id
+      CROSS JOIN generate_series(lr.from_date, lr.to_date, '1 day'::interval) d
+      WHERE lr.company_id = $1
+        AND lr.user_id    = $2
+        AND lr.status     = 'approved'
+        AND EXTRACT(MONTH FROM d) = $3
+        AND EXTRACT(YEAR  FROM d) = $4
+    `, [companyId, userId, month, year]);
+
+    // Merge: ESSL records take precedence; add leave-only rows for dates not already covered
+    const coveredDates = new Set(attRows.map(r => String(r.attendance_date).slice(0, 10)));
+    const extras = leaveOnlyRows.filter(r => !coveredDates.has(String(r.attendance_date).slice(0, 10)));
+    const combined = [...attRows, ...extras].sort((a, b) =>
+      String(b.attendance_date).localeCompare(String(a.attendance_date))
     );
-    res.json({ data: rows });
+
+    res.json({ data: combined });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

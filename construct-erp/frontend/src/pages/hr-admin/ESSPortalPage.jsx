@@ -370,12 +370,12 @@ function AttendanceTab({ leaveTypes }) {
     onError: (e) => toast.error(e?.response?.data?.error || 'Failed to submit correction request'),
   });
 
-  /* build day→status map */
+  /* build day→{status, leaveType} map */
   const statusMap = useMemo(() => {
     const m = {};
     for (const row of (attendance.data || [])) {
       const d = String(row.attendance_date || '').slice(0, 10);
-      if (d) m[d] = normaliseStatus(row.status);
+      if (d) m[d] = { code: normaliseStatus(row.status), leaveType: row.leave_type_name || null, inTime: row.in_time, lateMin: row.late_minutes };
     }
     return m;
   }, [attendance.data]);
@@ -424,13 +424,20 @@ function AttendanceTab({ leaveTypes }) {
           <div className="grid grid-cols-7 gap-1">
             {cells.map((day, idx) => {
               if (!day) return <div key={`empty-${idx}`} />;
-              const dateStr = formatDay(day);
-              const status  = statusMap[dateStr];
-              const style   = status ? STATUS_STYLE[status] : null;
-              const isToday = dateStr === today();
+              const dateStr  = formatDay(day);
+              const entry    = statusMap[dateStr];
+              const status   = entry?.code;
+              const style    = status ? STATUS_STYLE[status] : null;
+              const isToday  = dateStr === today();
+              const tipParts = [];
+              if (entry?.leaveType) tipParts.push(entry.leaveType);
+              if (entry?.inTime)    tipParts.push(`In: ${String(entry.inTime).slice(0,5)}`);
+              if (entry?.lateMin > 0) tipParts.push(`Late: ${entry.lateMin}m`);
+              const tip = tipParts.join(' · ');
               return (
                 <div
                   key={dateStr}
+                  title={tip || undefined}
                   className={`flex flex-col items-center rounded-lg py-2 border ${isToday ? 'border-green-400' : 'border-transparent'}`}
                 >
                   <span className={`text-xs font-semibold ${isToday ? 'text-green-700' : 'text-gray-700'}`}>{day}</span>
