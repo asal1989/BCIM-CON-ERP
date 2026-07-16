@@ -48,7 +48,7 @@ async function fetchLateArrivals(companyId, targetDate) {
       u.name            AS employee_name,
       u.employee_code   AS emp_id,
       dep.name          AS department,
-      ep.designation,
+      COALESCE(des.name, u.designation) AS designation,
       COALESCE(c.name, 'BCIM') AS company_name,
       TO_CHAR(s.start_time, 'HH12:MI AM')  AS shift_start,
       TO_CHAR(a.in_time,   'HH12:MI AM')   AS in_time,
@@ -58,6 +58,7 @@ async function fetchLateArrivals(companyId, targetDate) {
     JOIN companies c ON c.id = a.company_id
     LEFT JOIN employee_profiles ep ON ep.user_id = a.user_id
     LEFT JOIN hr_departments dep ON dep.id = ep.department_id
+    LEFT JOIN hr_designations des ON des.id = ep.designation_id
     LEFT JOIN LATERAL (
       SELECT hs.start_time
       FROM hr_employee_shifts es
