@@ -187,14 +187,19 @@ export default function TimesheetReportPage() {
   const [statusFilter, setStatusF]  = useState('all');
   const [companyFilter, setCompany] = useState('');
 
-  // Drag-to-scroll on the table wrapper
+  // Drag-to-scroll (both axes) on the table wrapper
   const tableWrapRef = useRef(null);
-  const dragState    = useRef({ active: false, startX: 0, scrollLeft: 0 });
+  const dragState    = useRef({ active: false, startX: 0, startY: 0, scrollLeft: 0, scrollTop: 0 });
 
   const onMouseDown = (e) => {
+    if (e.button !== 0) return;
     const el = tableWrapRef.current;
     if (!el) return;
-    dragState.current = { active: true, startX: e.pageX - el.offsetLeft, scrollLeft: el.scrollLeft };
+    dragState.current = {
+      active: true,
+      startX: e.clientX, startY: e.clientY,
+      scrollLeft: el.scrollLeft, scrollTop: el.scrollTop,
+    };
     el.style.cursor = 'grabbing';
     el.style.userSelect = 'none';
   };
@@ -203,8 +208,8 @@ export default function TimesheetReportPage() {
     if (!ds.active) return;
     const el = tableWrapRef.current;
     if (!el) return;
-    const walk = (e.pageX - el.offsetLeft) - ds.startX;
-    el.scrollLeft = ds.scrollLeft - walk;
+    el.scrollLeft = ds.scrollLeft - (e.clientX - ds.startX);
+    el.scrollTop  = ds.scrollTop  - (e.clientY - ds.startY);
   };
   const onMouseUp = () => {
     dragState.current.active = false;
@@ -663,7 +668,7 @@ export default function TimesheetReportPage() {
             onMouseMove={onMouseMove}
             onMouseUp={onMouseUp}
             onMouseLeave={onMouseUp}
-            style={{ overflowX:'auto', marginTop:8, cursor:'grab' }}
+            style={{ overflowX:'auto', overflowY:'auto', maxHeight:'65vh', marginTop:8, cursor:'grab' }}
           >
             <table className="print-table" style={{
               borderCollapse:'collapse', width:'100%', fontSize:12,
@@ -898,13 +903,14 @@ export default function TimesheetReportPage() {
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
-        .ts-scroll::-webkit-scrollbar { height: 10px; }
+        .ts-scroll::-webkit-scrollbar { height: 10px; width: 10px; }
         .ts-scroll::-webkit-scrollbar-track { background: #F1F5F9; border-radius: 8px; }
         .ts-scroll::-webkit-scrollbar-thumb {
           background: #94A3B8; border-radius: 8px;
           border: 2px solid #F1F5F9;
         }
         .ts-scroll::-webkit-scrollbar-thumb:hover { background: #475569; }
+        .ts-scroll::-webkit-scrollbar-corner { background: #F1F5F9; }
         .ts-scroll { scrollbar-width: auto; scrollbar-color: #94A3B8 #F1F5F9; }
       `}</style>
     </div>
