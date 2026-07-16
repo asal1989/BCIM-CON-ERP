@@ -2149,6 +2149,7 @@ export const essAPI = {
   attendance:           (params)       => api.get('/ess/attendance', { params }),
   attendanceCorrections:()             => api.get('/ess/attendance/corrections'),
   createCorrection:     (data)         => api.post('/ess/attendance/corrections', data),
+  swipes:               (params)       => api.get('/ess/swipes', { params }),
   leaveBalances:        (params)       => api.get('/ess/leave/balances', { params }),
   leaveRequests:        ()             => api.get('/ess/leave/requests'),
   createLeaveRequest:   (data)         => api.post('/ess/leave/requests', data),
