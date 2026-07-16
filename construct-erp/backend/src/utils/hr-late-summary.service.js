@@ -54,6 +54,8 @@ async function fetchLateArrivals(companyId, targetDate) {
       dep.name          AS department,
       COALESCE(des.name, u.designation) AS designation,
       COALESCE(c.name, 'BCIM') AS company_name,
+      COALESCE(proj.name, 'Head Office / General') AS project_name,
+      proj.project_code,
       TO_CHAR(s.start_time, 'HH12:MI AM')  AS shift_start,
       TO_CHAR(a.in_time,   'HH12:MI AM')   AS in_time,
       a.late_minutes
@@ -63,6 +65,7 @@ async function fetchLateArrivals(companyId, targetDate) {
     LEFT JOIN employee_profiles ep ON ep.user_id = a.user_id
     LEFT JOIN hr_departments dep ON dep.id = ep.department_id
     LEFT JOIN hr_designations des ON des.id = ep.designation_id
+    LEFT JOIN projects proj ON proj.id = ep.project_id
     LEFT JOIN LATERAL (
       SELECT hs.start_time
       FROM hr_employee_shifts es
@@ -78,7 +81,7 @@ async function fetchLateArrivals(companyId, targetDate) {
       AND a.late_minutes >= $3
       AND a.status IN ('present', 'half_day')
       AND u.is_active = TRUE
-    ORDER BY a.late_minutes DESC
+    ORDER BY proj.name NULLS LAST, a.late_minutes DESC
   `, [companyId, targetDate, MIN_LATE_MINUTES]);
   return rows;
 }
@@ -90,29 +93,66 @@ function buildSummaryEmail(companyName, rows, targetDate) {
   const td = `padding:8px 12px;font-size:12px;color:#1e293b;border:1px solid #e2e8f0;vertical-align:middle`;
   const tdR = `${td};color:#b91c1c;font-weight:700;white-space:nowrap`;
 
-  const rowsHtml = rows.map((r, i) => `
-    <tr style="background:${i % 2 === 0 ? '#fff' : '#f8fafc'}">
-      <td style="${td};text-align:center;color:#94a3b8;font-size:11px">${i + 1}</td>
-      <td style="${td};font-weight:700;color:#0f172a">${r.employee_name}</td>
-      <td style="${td};color:#475569">${r.emp_id || '—'}</td>
-      <td style="${td}">${r.designation || '—'}</td>
-      <td style="${td}">${r.department || '—'}</td>
-      <td style="${td};font-size:11px">
-        <span style="background:${r.company_name?.toLowerCase().includes('bcim') ? '#dbeafe' : '#ffedd5'};
-          color:${r.company_name?.toLowerCase().includes('bcim') ? '#1d4ed8' : '#c2410c'};
-          border-radius:3px;padding:1px 6px;font-weight:700;font-size:10px">
-          ${r.company_name}
-        </span>
-      </td>
-      <td style="${td};color:#475569;white-space:nowrap">${r.shift_start || '—'}</td>
-      <td style="${tdR}">${r.in_time || '—'}</td>
-      <td style="${tdR};text-align:center">
-        <span style="background:#fee2e2;color:#b91c1c;border-radius:12px;padding:3px 10px;font-size:11px;font-weight:800">
-          ${fmtLate(r.late_minutes)}
-        </span>
-      </td>
-    </tr>
-  `).join('');
+  // Group rows by project
+  const projectMap = new Map();
+  rows.forEach(r => {
+    const key = r.project_name || 'Head Office / General';
+    if (!projectMap.has(key)) projectMap.set(key, []);
+    projectMap.get(key).push(r);
+  });
+
+  let globalIdx = 0;
+  let rowsHtml = '';
+  for (const [projectName, pRows] of projectMap) {
+    const lateCount = pRows.length;
+    const maxLate   = Math.max(...pRows.map(r => parseInt(r.late_minutes) || 0));
+    // Project header row
+    rowsHtml += `
+      <tr>
+        <td colspan="9" style="padding:10px 14px;background:#1e3a8a;border:1px solid #1e40af">
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td>
+                <span style="color:#fff;font-size:12px;font-weight:800;letter-spacing:0.5px">
+                  📍 ${projectName}
+                </span>
+              </td>
+              <td align="right">
+                <span style="background:#dc2626;color:#fff;border-radius:10px;padding:2px 10px;font-size:11px;font-weight:700">
+                  ${lateCount} late · max ${fmtLate(maxLate)}
+                </span>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>`;
+    // Employee rows under this project
+    pRows.forEach((r, i) => {
+      globalIdx++;
+      rowsHtml += `
+        <tr style="background:${i % 2 === 0 ? '#fff' : '#f8fafc'}">
+          <td style="${td};text-align:center;color:#94a3b8;font-size:11px">${globalIdx}</td>
+          <td style="${td};font-weight:700;color:#0f172a">${r.employee_name}</td>
+          <td style="${td};color:#475569">${r.emp_id || '—'}</td>
+          <td style="${td}">${r.designation || '—'}</td>
+          <td style="${td}">${r.department || '—'}</td>
+          <td style="${td};font-size:11px">
+            <span style="background:${r.company_name?.toLowerCase().includes('bcim') ? '#dbeafe' : '#ffedd5'};
+              color:${r.company_name?.toLowerCase().includes('bcim') ? '#1d4ed8' : '#c2410c'};
+              border-radius:3px;padding:1px 6px;font-weight:700;font-size:10px">
+              ${r.company_name}
+            </span>
+          </td>
+          <td style="${td};color:#475569;white-space:nowrap">${r.shift_start || '—'}</td>
+          <td style="${tdR}">${r.in_time || '—'}</td>
+          <td style="${tdR};text-align:center">
+            <span style="background:#fee2e2;color:#b91c1c;border-radius:12px;padding:3px 10px;font-size:11px;font-weight:800">
+              ${fmtLate(r.late_minutes)}
+            </span>
+          </td>
+        </tr>`;
+    });
+  }
 
   const subject = rows.length > 0
     ? `⏰ Late Arrivals Report — ${rows.length} employee(s) — ${dateStr}`
@@ -184,8 +224,17 @@ function buildSummaryEmail(companyName, rows, targetDate) {
 
       ${rows.length > 0 ? `
       <!-- TABLE -->
+      <!-- PROJECT SUMMARY CHIPS -->
+      <div style="margin-bottom:14px;display:flex;flex-wrap:wrap;gap:8px">
+        ${[...projectMap.entries()].map(([proj, pRows]) => `
+          <span style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:20px;padding:4px 12px;font-size:11px;color:#1e40af;font-weight:700">
+            📍 ${proj} &nbsp;·&nbsp; <span style="color:#dc2626">${pRows.length} late</span>
+          </span>
+        `).join('')}
+      </div>
+
       <div style="overflow-x:auto">
-        <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;min-width:600px">
+        <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;min-width:620px">
           <thead>
             <tr>
               <th style="${th};width:32px">#</th>
@@ -205,10 +254,10 @@ function buildSummaryEmail(companyName, rows, targetDate) {
           <tfoot>
             <tr style="background:#f0f7ff">
               <td colspan="7" style="${td};font-weight:700;color:#1e40af;border-top:2px solid #bfdbfe;text-align:right">
-                Total Late: ${rows.length} employee(s)
+                Total Late: ${rows.length} employee(s) across ${projectMap.size} project(s)
               </td>
               <td colspan="2" style="${td};font-weight:700;color:#b91c1c;border-top:2px solid #bfdbfe;text-align:center">
-                Max: ${fmtLate(Math.max(...rows.map(r => r.late_minutes)))}
+                Max: ${fmtLate(Math.max(...rows.map(r => parseInt(r.late_minutes)||0)))}
               </td>
             </tr>
           </tfoot>
