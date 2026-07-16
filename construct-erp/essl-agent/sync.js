@@ -93,15 +93,34 @@ async function existingTables(conn, tables) {
   return result;
 }
 
+// ── Detect which direction column the ESSL DB uses ───────────────────────────
+// ESSL etimetracklite versions differ: some use "Direction", some "IoType".
+// Values: 0 = Entry/IN, 1 = Exit/OUT.
+// Falls back to hour-of-day approximation only if neither column exists.
+async function detectDirectionExpr(conn, table) {
+  for (const col of ['Direction', 'IoType', 'InOutMode']) {
+    try {
+      await conn.request().query(`SELECT TOP 1 [${col}] FROM [${table}] WHERE 1=0`);
+      return `CASE WHEN d.[${col}] = 0 THEN 'in' WHEN d.[${col}] = 1 THEN 'out' ELSE NULL END`;
+    } catch (_) {}
+  }
+  // Fallback — hour-based approximation (inaccurate for shift workers)
+  console.warn('[ESSL Agent] Warning: no Direction/IoType/InOutMode column found; using hour-based approximation.');
+  return `CASE WHEN DATEPART(HOUR, d.LogDate) < 12 THEN 'in' ELSE 'out' END`;
+}
+
 // ── Pull swipe data from ESSL ─────────────────────────────────────────────────
 async function pullSwipes(conn, tables, fromDT, toDT) {
   if (!tables.length) return [];
 
+  // Detect direction column once using the first available table
+  const dirExpr = await detectDirectionExpr(conn, tables[0]);
+
   const unionSQL = tables.map(t => `
     SELECT
-      e.EmployeeCode                                                    AS emp_code,
-      CONVERT(VARCHAR(23), d.LogDate, 121)                              AS swipe_time,
-      CASE WHEN DATEPART(HOUR, d.LogDate) < 12 THEN 'in' ELSE 'out' END AS direction
+      e.EmployeeCode                       AS emp_code,
+      CONVERT(VARCHAR(23), d.LogDate, 121) AS swipe_time,
+      ${dirExpr}                           AS direction
     FROM [${t}] d
     JOIN Employees e ON e.NumericCode = d.UserId
     WHERE d.LogDate BETWEEN @from AND @to

@@ -336,14 +336,20 @@ function fmtSwipeTime(ts) {
   return d.toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', hour12:true });
 }
 
-/* ─── group swipes by calendar date ─── */
+/* ─── group swipes by LOCAL calendar date, sorted chronologically within each day ─── */
 function groupByDate(swipes) {
   const groups = {};
   for (const s of swipes) {
-    const day = String(s.swipe_time || '').slice(0, 10);
-    if (!groups[day]) groups[day] = [];
-    groups[day].push(s);
+    // Use local date (browser timezone) so night-shift workers see their date correctly
+    const localDay = new Date(s.swipe_time).toLocaleDateString('en-CA'); // YYYY-MM-DD
+    if (!groups[localDay]) groups[localDay] = [];
+    groups[localDay].push(s);
   }
+  // Sort each day's swipes chronologically (earliest first)
+  for (const day of Object.keys(groups)) {
+    groups[day].sort((a, b) => new Date(a.swipe_time) - new Date(b.swipe_time));
+  }
+  // Return days newest-first
   return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
 }
 
@@ -552,8 +558,11 @@ function AttendanceTab({ leaveTypes }) {
             {groupByDate(swipes.data || []).map(([date, daySwipes]) => {
               const d = new Date(date + 'T00:00:00');
               const dayLabel = d.toLocaleDateString('en-IN', { weekday:'short', day:'2-digit', month:'short', year:'numeric' });
-              const firstIn  = daySwipes.find(s => String(s.direction||'').toLowerCase().includes('in')  || s.direction === '0');
-              const lastOut  = [...daySwipes].reverse().find(s => String(s.direction||'').toLowerCase().includes('out') || s.direction === '1');
+              const isIn  = s => String(s.direction||'').toLowerCase().includes('in')  || s.direction === '0';
+              const isOut = s => String(s.direction||'').toLowerCase().includes('out') || s.direction === '1';
+              // daySwipes is ASC-sorted, so .find() = first occurrence, .findLast() = last
+              const firstIn = daySwipes.find(isIn);
+              const lastOut = [...daySwipes].reverse().find(isOut);
               const totalPunches = daySwipes.length;
 
               return (
