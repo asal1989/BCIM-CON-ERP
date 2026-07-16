@@ -4,7 +4,7 @@ const multer  = require('multer');
 const path    = require('path');
 const fs      = require('fs');
 const wa      = require('../services/whatsapp.service');
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate } = require('../middleware/auth');
 const { loadProjectScope, userCanAccessProject, applyProjectScope, scopedProjectIds } = require('../middleware/projectScope');
 const { query, withTransaction } = require('../config/database');
 const { uploadToOneDrive, getFreshDownloadUrl, isConfigured } = require('../services/onedrive.service');
@@ -4515,30 +4515,6 @@ router.post('/backfill-jv', async (req, res) => {
   } catch (err) {
     console.error('[backfill-jv]', err);
     res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ── POST /tqs/bills/bulk-stage — super_admin only, sets workflow_status for a list of inv_numbers ──
-router.post('/bulk-stage', authorize('super_admin', 'admin'), async (req, res) => {
-  try {
-    const { inv_numbers, workflow_status } = req.body;
-    const VALID = ['pending','stores','document_controller','qs','accounts','qs_sign','paid','partial','rejected'];
-    if (!Array.isArray(inv_numbers) || !inv_numbers.length)
-      return res.status(400).json({ error: 'inv_numbers array required' });
-    if (!VALID.includes(workflow_status))
-      return res.status(400).json({ error: `Invalid status. Use: ${VALID.join(', ')}` });
-
-    const { rows } = await query(
-      `UPDATE tqs_bills SET workflow_status=$1, updated_at=NOW()
-       WHERE company_id=$2 AND inv_number = ANY($3)
-       RETURNING sl_number, inv_number, vendor_name, workflow_status`,
-      [workflow_status, req.user.company_id, inv_numbers]
-    );
-
-    const notFound = inv_numbers.filter(n => !rows.some(r => r.inv_number === n));
-    res.json({ updated: rows.length, rows, not_found: notFound });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
   }
 });
 
