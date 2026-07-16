@@ -145,6 +145,21 @@ async function initTable() {
   `);
   // Add push_api_key column for local agent authentication
   await query(`ALTER TABLE hr_essl_config ADD COLUMN IF NOT EXISTS push_api_key TEXT`);
+
+  // Raw biometric punch log — one row per swipe from the ESSL device
+  await query(`
+    CREATE TABLE IF NOT EXISTS essl_device_logs (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id  UUID NOT NULL,
+      emp_code    TEXT NOT NULL,
+      swipe_time  TIMESTAMPTZ NOT NULL,
+      direction   TEXT,
+      source      TEXT DEFAULT 'agent',
+      created_at  TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (company_id, emp_code, swipe_time)
+    )
+  `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_essl_logs_emp ON essl_device_logs(company_id, emp_code, swipe_time DESC)`);
 }
 runSchemaInit('hr-essl', initTable);
 
