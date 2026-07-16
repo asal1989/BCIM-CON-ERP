@@ -69,12 +69,13 @@ router.get('/', async (req, res) => {
       SELECT e.*,
              u.name  AS employee_name, u.employee_code,
              ev.name AS evaluator_name,
-             ep.designation AS emp_designation,
+             des.name AS emp_designation,
              dep.name AS dept_name
       FROM hr_performance_evaluations e
       JOIN users u ON u.id = e.employee_id
       LEFT JOIN users ev ON ev.id = e.evaluator_id
       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+      LEFT JOIN hr_designations des ON des.id = ep.designation_id
       LEFT JOIN hr_departments dep ON dep.id = ep.department_id
       WHERE e.company_id = $1`;
     const params = [req.user.company_id];
@@ -94,12 +95,13 @@ router.get('/:id', async (req, res) => {
       `SELECT e.*,
               u.name  AS employee_name, u.employee_code,
               ev.name AS evaluator_name,
-              ep.designation AS emp_designation,
+              des.name AS emp_designation,
               dep.name AS dept_name
        FROM hr_performance_evaluations e
        JOIN users u ON u.id = e.employee_id
        LEFT JOIN users ev ON ev.id = e.evaluator_id
        LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+       LEFT JOIN hr_designations des ON des.id = ep.designation_id
        LEFT JOIN hr_departments dep ON dep.id = ep.department_id
        WHERE e.id = $1 AND e.company_id = $2`,
       [req.params.id, req.user.company_id]
