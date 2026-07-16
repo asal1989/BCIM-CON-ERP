@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hrAttendanceAPI, projectAPI } from '../../../api/client';
-import { Printer, Download, RefreshCw, Filter } from 'lucide-react';
+import { Printer, Download, RefreshCw, Filter, ChevronRight } from 'lucide-react';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -30,6 +30,19 @@ function Pill({ status }) {
     }}>
       {STATUS_LABEL[s] || s.toUpperCase()}
     </span>
+  );
+}
+
+function Avatar({ name }) {
+  const initials = (name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const colors = ['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#06B6D4','#84CC16'];
+  const idx = (name || '').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % colors.length;
+  return (
+    <span style={{
+      display:'inline-flex', alignItems:'center', justifyContent:'center',
+      width:26, height:26, borderRadius:'50%', background:colors[idx],
+      color:'#fff', fontSize:10, fontWeight:700, flexShrink:0,
+    }}>{initials}</span>
   );
 }
 
@@ -229,79 +242,128 @@ export default function TimesheetReportPage() {
     URL.revokeObjectURL(a.href);
   };
 
+  const kpiCards = [
+    { label:'Total Strength', val:summary.total,   accent:'#3B82F6', icon:'👥' },
+    { label:'Present',        val:summary.present, accent:'#10B981', icon:'✅' },
+    { label:'Half Day',       val:summary.half||0, accent:'#6366F1', icon:'⏰' },
+    { label:'Absent',         val:summary.absent,  accent:'#EF4444', icon:'❌' },
+    { label:'On Leave',       val:summary.leave,   accent:'#F59E0B', icon:'🏖' },
+  ];
+
   return (
     <div style={{ background:'#F8FAFC', minHeight:'100vh' }}>
-
       <style>{PRINT_CSS}</style>
 
-      {/* SCREEN TOOLBAR */}
+      {/* TOP HEADER BAR */}
       <div className="no-print" style={{
-        background:'#fff', borderBottom:'1px solid #E5E7EB',
-        padding:'12px 24px', display:'flex', alignItems:'center', gap:10, flexWrap:'wrap',
+        background:'#fff',
+        borderBottom:'0.5px solid #E5E7EB',
+        padding:'12px 24px',
+        display:'flex', alignItems:'center', justifyContent:'space-between', gap:12,
       }}>
-        <div style={{ flex:1 }}>
-          <h2 style={{ margin:0, fontSize:17, fontWeight:700, color:'#111827' }}>Daily Timesheet Report</h2>
-          <p style={{ margin:0, fontSize:12, color:'#6B7280' }}>
+        <div>
+          <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
+            <span style={{ fontSize:12, color:'#9CA3AF' }}>HR Admin</span>
+            <ChevronRight size={12} color="#9CA3AF"/>
+            <span style={{ fontSize:12, color:'#9CA3AF' }}>Attendance</span>
+            <ChevronRight size={12} color="#9CA3AF"/>
+            <span style={{ fontSize:12, color:'#1A56DB', fontWeight:600 }}>Daily Timesheet</span>
+          </div>
+          <h2 style={{ margin:0, fontSize:18, fontWeight:700, color:'#111827', letterSpacing:-0.3 }}>
+            Daily Timesheet Report
+          </h2>
+          <p style={{ margin:0, fontSize:12, color:'#6B7280', marginTop:2 }}>
             Attendance record for {fmtDate(date)}
           </p>
         </div>
-        <Filter size={14} color="#6B7280"/>
-        <input type="date" value={date} onChange={e=>setDate(e.target.value)}
-          style={{ border:'1px solid #D1D5DB', borderRadius:6, padding:'5px 10px', fontSize:13 }}/>
-        <select value={category} onChange={e=>setCategory(e.target.value)}
-          style={{ border:'1px solid #D1D5DB', borderRadius:6, padding:'5px 10px', fontSize:13 }}>
+        <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+          <button onClick={load} style={{
+            display:'flex', alignItems:'center', gap:5,
+            background:'#F9FAFB', color:'#374151', border:'0.5px solid #D1D5DB',
+            borderRadius:7, padding:'6px 14px', fontSize:13, cursor:'pointer', fontWeight:500,
+          }}>
+            <RefreshCw size={13}/> Refresh
+          </button>
+          <button onClick={handleExport} style={{
+            display:'flex', alignItems:'center', gap:5,
+            background:'#F0FDF4', color:'#15803D', border:'0.5px solid #86EFAC',
+            borderRadius:7, padding:'6px 14px', fontSize:13, cursor:'pointer', fontWeight:500,
+          }}>
+            <Download size={13}/> Export CSV
+          </button>
+          <button onClick={() => window.print()} style={{
+            display:'flex', alignItems:'center', gap:5,
+            background:'#1A56DB', color:'#fff', border:'none',
+            borderRadius:7, padding:'6px 14px', fontSize:13, cursor:'pointer', fontWeight:600,
+          }}>
+            <Printer size={13}/> Print / PDF
+          </button>
+        </div>
+      </div>
+
+      {/* FILTER BAR */}
+      <div className="no-print" style={{
+        background:'#fff',
+        borderBottom:'0.5px solid #E5E7EB',
+        padding:'10px 24px',
+        display:'flex', alignItems:'center', gap:10, flexWrap:'wrap',
+      }}>
+        <Filter size={13} color="#6B7280"/>
+        <span style={{ fontSize:12, color:'#6B7280', fontWeight:500 }}>Filters:</span>
+        <input
+          type="date" value={date} onChange={e => setDate(e.target.value)}
+          style={{
+            border:'0.5px solid #D1D5DB', borderRadius:6,
+            padding:'5px 10px', fontSize:13, color:'#374151',
+            background:'#F9FAFB', outline:'none',
+          }}
+        />
+        <select
+          value={category} onChange={e => setCategory(e.target.value)}
+          style={{
+            border:'0.5px solid #D1D5DB', borderRadius:6,
+            padding:'5px 10px', fontSize:13, color:'#374151',
+            background:'#F9FAFB', outline:'none',
+          }}
+        >
           <option value="staff">Staff Only</option>
           <option value="labour">Labour / SC Workers</option>
           <option value="all">All (Staff + Labour)</option>
         </select>
-        <select value={projectFilter} onChange={e=>setProject(e.target.value)}
-          style={{ border:'1px solid #D1D5DB', borderRadius:6, padding:'5px 10px', fontSize:13, minWidth:160 }}>
+        <select
+          value={projectFilter} onChange={e => setProject(e.target.value)}
+          style={{
+            border:'0.5px solid #D1D5DB', borderRadius:6,
+            padding:'5px 10px', fontSize:13, color:'#374151',
+            background:'#F9FAFB', outline:'none', minWidth:180,
+          }}
+        >
           <option value="">All Projects</option>
-          <option value="HEAD_OFFICE">🏢 Head Office</option>
-          {projects.map(p=>(
+          <option value="HEAD_OFFICE">Head Office</option>
+          {projects.map(p => (
             <option key={p.id} value={p.id}>
               {p.project_code ? `[${p.project_code}] ` : ''}{p.name}
             </option>
           ))}
         </select>
-        <button onClick={load} style={{
-          display:'flex', alignItems:'center', gap:5,
-          background:'#2563EB', color:'#fff', border:'none',
-          borderRadius:6, padding:'6px 14px', fontSize:13, cursor:'pointer', fontWeight:600,
-        }}>
-          <RefreshCw size={13}/> Refresh
-        </button>
-        <button onClick={handleExport} style={{
-          display:'flex', alignItems:'center', gap:5,
-          background:'#F0FDF4', color:'#15803D', border:'1px solid #86EFAC',
-          borderRadius:6, padding:'6px 14px', fontSize:13, cursor:'pointer', fontWeight:600,
-        }}>
-          <Download size={13}/> Export CSV
-        </button>
-        <button onClick={()=>window.print()} style={{
-          display:'flex', alignItems:'center', gap:5,
-          background:'#F5F3FF', color:'#7C3AED', border:'1px solid #C4B5FD',
-          borderRadius:6, padding:'6px 14px', fontSize:13, cursor:'pointer', fontWeight:600,
-        }}>
-          <Printer size={13}/> Print / PDF
-        </button>
       </div>
 
-      {/* SCREEN KPI CARDS */}
+      {/* KPI CARDS */}
       <div className="no-print" style={{ padding:'16px 24px 0', display:'flex', gap:12, flexWrap:'wrap' }}>
-        {[
-          { label:'Total',    val:summary.total,   bg:'#F0F9FF', border:'#BAE6FD', text:'#0369A1' },
-          { label:'Present',  val:summary.present, bg:'#F0FDF4', border:'#86EFAC', text:'#15803D' },
-          { label:'Half Day', val:summary.half||0, bg:'#EFF6FF', border:'#BFDBFE', text:'#1D4ED8' },
-          { label:'Absent',   val:summary.absent,  bg:'#FEF2F2', border:'#FECACA', text:'#B91C1C' },
-          { label:'On Leave', val:summary.leave,   bg:'#FFFBEB', border:'#FDE68A', text:'#B45309' },
-        ].map(k=>(
+        {kpiCards.map(k => (
           <div key={k.label} style={{
-            background:k.bg, border:`1px solid ${k.border}`,
-            borderRadius:8, padding:'10px 20px', minWidth:110, textAlign:'center',
+            background:'#fff',
+            border:'0.5px solid #E5E7EB',
+            borderLeft:`3px solid ${k.accent}`,
+            borderRadius:10,
+            padding:'12px 20px',
+            minWidth:130,
+            display:'flex', flexDirection:'column', gap:4,
           }}>
-            <div style={{ fontSize:24, fontWeight:800, color:k.text }}>{k.val}</div>
-            <div style={{ fontSize:11, color:k.text, fontWeight:600, marginTop:2 }}>{k.label}</div>
+            <div style={{ fontSize:11, color:'#6B7280', fontWeight:500 }}>{k.label}</div>
+            <div style={{ fontSize:26, fontWeight:800, color:'#111827', lineHeight:1.1 }}>
+              {loading ? <span style={{ fontSize:16, color:'#D1D5DB' }}>—</span> : k.val}
+            </div>
           </div>
         ))}
       </div>
@@ -339,7 +401,7 @@ export default function TimesheetReportPage() {
                   ['Half Day (HD)',  summary.half||0],
                   ['Absent (A)',     summary.absent],
                   ['On Leave (L)',   summary.leave],
-                ].map(([l,v])=>(
+                ].map(([l,v]) => (
                   <tr key={l}>
                     <td style={{ padding:'3px 8px', borderBottom:'1px solid #ccc', borderRight:'1px solid #ccc', fontWeight:600 }}>{l}</td>
                     <td style={{ padding:'3px 10px', borderBottom:'1px solid #ccc', textAlign:'center', fontWeight:700, color:'#1B3A6B' }}>{v}</td>
@@ -352,11 +414,13 @@ export default function TimesheetReportPage() {
 
         {/* LOADING / ERROR */}
         {loading && (
-          <div className="no-print" style={{ textAlign:'center', padding:48, color:'#6B7280' }}>Loading...</div>
+          <div className="no-print" style={{ textAlign:'center', padding:48, color:'#6B7280' }}>
+            Loading...
+          </div>
         )}
         {error && (
           <div style={{
-            background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:8,
+            background:'#FEF2F2', border:'0.5px solid #FECACA', borderRadius:8,
             padding:16, color:'#B91C1C', marginBottom:16,
           }}>
             {error}
@@ -365,33 +429,34 @@ export default function TimesheetReportPage() {
 
         {/* TABLE */}
         {!loading && !error && (
-          <div className="ts-table-wrap" style={{ overflowX:'auto' }}>
+          <div className="ts-table-wrap" style={{ overflowX:'auto', marginTop:16 }}>
             <table className="print-table" style={{
               borderCollapse:'collapse', width:'100%', fontSize:12,
-              background:'#fff', borderRadius:8,
-              boxShadow:'0 1px 6px rgba(0,0,0,0.07)',
+              background:'#fff', borderRadius:10,
+              boxShadow:'0 1px 4px rgba(0,0,0,0.06)',
             }}>
               <thead>
-                <tr style={{ background:'#1B3A6B', color:'#fff' }}>
+                <tr style={{ background:'#F9FAFB', borderBottom:'1.5px solid #E5E7EB' }}>
                   {['S.No','EMP ID','Name','Designation','Department','Company',
                     'P/A','In Time','Out Time','Late\nMin','Hrs','OT','Shift','Location','Emp Status','Reason',
-                  ].map(h=>{
+                  ].map(h => {
                     const key = COL_KEYS[h];
                     const active = sortKey === key;
                     return (
-                      <th key={h} onClick={()=>handleSort(h)} style={{
-                        padding:'7px 8px', whiteSpace:'pre', textAlign:'left',
-                        fontWeight:700, fontSize:11, letterSpacing:0.3,
-                        borderRight:'1px solid #2d527a',
+                      <th key={h} onClick={() => handleSort(h)} style={{
+                        padding:'9px 10px', whiteSpace:'pre', textAlign:'left',
+                        fontWeight:600, fontSize:11, color: active ? '#1A56DB' : '#6B7280',
+                        letterSpacing:0.2,
+                        borderBottom:'none',
+                        background: active ? '#EFF6FF' : undefined,
                         cursor: key ? 'pointer' : 'default',
                         userSelect:'none',
-                        background: active ? '#2d527a' : undefined,
                       }}>
                         <span style={{ display:'flex', alignItems:'center', gap:4 }}>
                           {h}
                           {key && (
                             <span style={{ opacity: active ? 1 : 0.35, fontSize:9, lineHeight:1 }}>
-                              {active ? (sortDir==='asc' ? '▲' : '▼') : '⇅'}
+                              {active ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}
                             </span>
                           )}
                         </span>
@@ -403,49 +468,85 @@ export default function TimesheetReportPage() {
               <tbody>
                 {sortedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={16} style={{ textAlign:'center', padding:40, color:'#6B7280', fontSize:13 }}>
+                    <td colSpan={16} style={{ textAlign:'center', padding:48, color:'#9CA3AF', fontSize:13 }}>
                       No records found for {date}
                     </td>
                   </tr>
-                ) : sortedRows.map((r,i)=>(
-                  <tr key={r.user_id||i} style={{ background: i%2===0 ? '#fff' : '#F8FAFC' }}>
-                    <td style={td}>{i+1}</td>
-                    <td style={{ ...td, fontWeight:600, color:'#2563EB' }}>{r.emp_id||'—'}</td>
-                    <td style={{ ...td, fontWeight:600, whiteSpace:'nowrap' }}>{r.name}</td>
-                    <td style={td}>{r.designation}</td>
-                    <td style={td}>{r.department}</td>
-                    <td style={td}>{r.company}</td>
-                    <td style={{ ...td, textAlign:'center' }}><Pill status={r.attendance_status}/></td>
-                    <td style={td}>{r.in_time||'—'}</td>
-                    <td style={td}>{r.out_time||'—'}</td>
-                    <td style={{ ...td, textAlign:'center', color:r.late_minutes>0?'#DC2626':'#111' }}>
-                      {r.late_minutes>0 ? r.late_minutes : '—'}
+                ) : sortedRows.map((r, i) => (
+                  <tr key={r.user_id || i} style={{
+                    background: i % 2 === 0 ? '#fff' : '#FAFAFA',
+                    borderBottom:'0.5px solid #F3F4F6',
+                  }}>
+                    <td style={td}><span style={{ color:'#9CA3AF', fontSize:11 }}>{i+1}</span></td>
+                    <td style={{ ...td, fontWeight:600, color:'#1A56DB', fontSize:11 }}>{r.emp_id || '—'}</td>
+                    <td style={{ ...td, whiteSpace:'nowrap' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <Avatar name={r.name}/>
+                        <div>
+                          <div style={{ fontWeight:600, color:'#111827', fontSize:12 }}>{r.name}</div>
+                          {r.company && (
+                            <span style={{
+                              fontSize:9, fontWeight:700, letterSpacing:0.3,
+                              background: r.company?.toLowerCase().includes('bcim') ? '#EFF6FF' : '#FFF7ED',
+                              color: r.company?.toLowerCase().includes('bcim') ? '#1D4ED8' : '#C2410C',
+                              borderRadius:3, padding:'0 5px', display:'inline-block',
+                            }}>
+                              {r.company?.toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </td>
-                    <td style={{ ...td, textAlign:'center', color:'#475569' }}>
-                      {r.hours_worked>0 ? r.hours_worked : '—'}
+                    <td style={{ ...td, color:'#374151' }}>{r.designation}</td>
+                    <td style={{ ...td, color:'#374151' }}>{r.department}</td>
+                    <td style={td}>
+                      <span style={{
+                        fontSize:10, fontWeight:700, letterSpacing:0.2,
+                        background: r.company?.toLowerCase().includes('bcim') ? '#EFF6FF' : '#FFF7ED',
+                        color: r.company?.toLowerCase().includes('bcim') ? '#1D4ED8' : '#C2410C',
+                        borderRadius:3, padding:'1px 6px', display:'inline-block',
+                      }}>
+                        {r.company}
+                      </span>
+                    </td>
+                    <td style={{ ...td, textAlign:'center' }}><Pill status={r.attendance_status}/></td>
+                    <td style={{ ...td, color:'#374151', fontVariantNumeric:'tabular-nums' }}>{r.in_time || '—'}</td>
+                    <td style={{ ...td, color:'#374151', fontVariantNumeric:'tabular-nums' }}>{r.out_time || '—'}</td>
+                    <td style={{ ...td, textAlign:'center', fontVariantNumeric:'tabular-nums' }}>
+                      {r.late_minutes > 0
+                        ? <span style={{ color:'#DC2626', fontWeight:700 }}>{r.late_minutes}m</span>
+                        : <span style={{ color:'#D1D5DB' }}>—</span>}
+                    </td>
+                    <td style={{ ...td, textAlign:'center', color:'#475569', fontVariantNumeric:'tabular-nums' }}>
+                      {r.hours_worked > 0 ? r.hours_worked : <span style={{ color:'#D1D5DB' }}>—</span>}
                     </td>
                     <td style={{ ...td, textAlign:'center' }}>
-                      {r.overtime_hours>0
+                      {r.overtime_hours > 0
                         ? <span style={{ background:'#FEF3C7', color:'#92400E', borderRadius:3, padding:'1px 6px', fontSize:10, fontWeight:700 }}>+{r.overtime_hours}h</span>
-                        : '—'}
+                        : <span style={{ color:'#D1D5DB' }}>—</span>}
                     </td>
-                    <td style={td}>{r.shift}</td>
-                    <td style={td}>{r.location}</td>
+                    <td style={{ ...td, color:'#374151' }}>{r.shift}</td>
+                    <td style={{ ...td, color:'#374151' }}>{r.location}</td>
                     <td style={td}>
-                      <span style={{ fontSize:10, fontWeight:700, color:r.status==='ACTIVE'?'#15803D':'#B91C1C' }}>
+                      <span style={{
+                        fontSize:10, fontWeight:700,
+                        color: r.status === 'ACTIVE' ? '#15803D' : '#B91C1C',
+                        background: r.status === 'ACTIVE' ? '#F0FDF4' : '#FEF2F2',
+                        borderRadius:3, padding:'1px 6px', display:'inline-block',
+                      }}>
                         {r.status}
                       </span>
                     </td>
                     <td style={{ ...td, color:'#6B7280', maxWidth:120, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                      {r.reason||'—'}
+                      {r.reason || <span style={{ color:'#D1D5DB' }}>—</span>}
                     </td>
                   </tr>
                 ))}
               </tbody>
               {rows.length > 0 && (
                 <tfoot>
-                  <tr style={{ background:'#EFF6FF', fontWeight:700 }}>
-                    <td colSpan={6} style={{ ...td, textAlign:'right', color:'#1E40AF', fontWeight:700 }}>
+                  <tr style={{ background:'#F0F7FF', borderTop:'1.5px solid #BFDBFE' }}>
+                    <td colSpan={6} style={{ ...td, textAlign:'right', color:'#1E40AF', fontWeight:700, fontSize:12 }}>
                       Grand Total
                     </td>
                     <td style={{ ...td, textAlign:'center' }}>
@@ -467,16 +568,13 @@ export default function TimesheetReportPage() {
         }}>
           <div style={{ display:'flex', justifyContent:'space-between', gap:20 }}>
             {[
-              { role:'Prepared By', name:'HR Executive' },
-              { role:'Verified By', name:'HR Manager / Admin' },
+              { role:'Prepared By',  name:'HR Executive' },
+              { role:'Verified By',  name:'HR Manager / Admin' },
               { role:'Site Incharge', name:'Project Manager' },
-              { role:'Approved By', name:'Management / Director' },
-            ].map(sig=>(
+              { role:'Approved By',  name:'Management / Director' },
+            ].map(sig => (
               <div key={sig.role} style={{ flex:1, textAlign:'center' }}>
-                <div style={{
-                  borderBottom:'1.5px solid #333', marginBottom:6,
-                  height:40,
-                }}/>
+                <div style={{ borderBottom:'1.5px solid #333', marginBottom:6, height:40 }}/>
                 <div style={{ fontSize:9, fontWeight:700, color:'#1B3A6B' }}>{sig.role}</div>
                 <div style={{ fontSize:8, color:'#555', marginTop:2 }}>{sig.name}</div>
                 <div style={{ fontSize:8, color:'#888', marginTop:2 }}>Date: ____________</div>
@@ -494,10 +592,9 @@ export default function TimesheetReportPage() {
 }
 
 const td = {
-  padding:'6px 8px',
-  borderBottom:'1px solid #E5E7EB',
-  borderRight:'1px solid #F3F4F6',
+  padding:'8px 10px',
+  borderBottom:'0.5px solid #F3F4F6',
   color:'#111827',
-  fontSize:11,
+  fontSize:12,
   verticalAlign:'middle',
 };
