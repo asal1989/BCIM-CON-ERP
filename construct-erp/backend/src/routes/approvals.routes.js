@@ -136,8 +136,10 @@ function scBillScopeForRole(role) {
 // GET /api/v1/approvals/pending
 // Returns all items across all modules that need this user's action
 // ════════════════════════════════════════════════════════════════════════════
-// Emails that get full admin-level approvals feed regardless of DB role
-const FULL_APPROVALS_EMAILS = ['stephen@bcim.in', 'it@bcim.in'];
+// it@bcim.in is the system/IT admin and always gets the full feed.
+// stephen@bcim.in is the MD — they must use their DB role (managing_director)
+// so that stage filtering works correctly. Do NOT add stephen here.
+const FULL_APPROVALS_EMAILS = ['it@bcim.in'];
 
 router.get('/pending', async (req, res) => {
   try {
