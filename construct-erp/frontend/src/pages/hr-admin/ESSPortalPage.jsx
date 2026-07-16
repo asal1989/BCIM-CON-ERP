@@ -4,7 +4,7 @@ import {
   BadgeIndianRupee, Bell, CalendarCheck, CalendarOff, CheckCircle2,
   FileText, FolderUp, Headphones, Monitor, ShieldCheck, UserRound, Printer,
   ChevronLeft, ChevronRight, Upload,
-  LayoutDashboard, Clock, LogOut, Search, Menu, Users, Award, BookOpen,
+  LayoutDashboard, Clock, Users, Award, BookOpen,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { essAPI, hrAdvancedAPI } from '../../api/client';
@@ -179,179 +179,47 @@ function groupByDate(swipes) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   LEFT NAV SIDEBAR
+   HORIZONTAL TAB NAV (replaces the standalone sidebar)
 ═══════════════════════════════════════════════════════════════ */
-const NAV_SECTIONS = [
-  {
-    label: 'MAIN',
-    items: [
-      { id: 'dashboard',   label: 'Dashboard',     Icon: LayoutDashboard },
-      { id: 'profile',     label: 'Profile',        Icon: UserRound       },
-      { id: 'attendance',  label: 'My Attendance',  Icon: CalendarCheck   },
-      { id: 'leave',       label: 'Leave',          Icon: CalendarOff     },
-      { id: 'payslips',    label: 'Payroll',        Icon: BadgeIndianRupee},
-      { id: 'documents',   label: 'My Documents',   Icon: FileText        },
-      { id: 'hr-requests', label: 'My Requests',    Icon: FolderUp        },
-    ],
-  },
-  {
-    label: null,
-    items: [
-      { id: 'timesheet',   label: 'Timesheet',      Icon: Clock           },
-      { id: 'training',    label: 'Training',       Icon: Award           },
-      { id: 'assets',      label: 'Assets',         Icon: Monitor         },
-      { id: 'helpdesk',    label: 'Helpdesk',       Icon: Headphones      },
-      { id: 'knowledge',   label: 'Knowledge Base', Icon: BookOpen        },
-      { id: 'manager',     label: 'Manager Desk',   Icon: CheckCircle2    },
-    ],
-  },
+const TAB_ITEMS = [
+  { id: 'dashboard',   label: 'Dashboard',     Icon: LayoutDashboard },
+  { id: 'profile',     label: 'Profile',        Icon: UserRound       },
+  { id: 'attendance',  label: 'My Attendance',  Icon: CalendarCheck   },
+  { id: 'leave',       label: 'Leave',          Icon: CalendarOff     },
+  { id: 'payslips',    label: 'Payroll',        Icon: BadgeIndianRupee},
+  { id: 'documents',   label: 'My Documents',   Icon: FileText        },
+  { id: 'hr-requests', label: 'My Requests',    Icon: FolderUp        },
+  { id: 'manager',     label: 'Manager Desk',   Icon: CheckCircle2    },
+  { id: 'timesheet',   label: 'Timesheet',      Icon: Clock           },
+  { id: 'training',    label: 'Training',       Icon: Award           },
+  { id: 'assets',      label: 'Assets',         Icon: Monitor         },
+  { id: 'helpdesk',    label: 'Helpdesk',       Icon: Headphones      },
+  { id: 'knowledge',   label: 'Knowledge Base', Icon: BookOpen        },
 ];
 
-function LeftNavSidebar({ active, setActive }) {
+function ESSTabNav({ active, setActive }) {
   return (
-    <aside
-      className="flex h-screen w-56 shrink-0 flex-col overflow-y-auto"
-      style={{ backgroundColor: NAVY, zIndex: 10 }}
+    <div
+      className="flex items-center overflow-x-auto border-b border-gray-200 bg-white px-2 shrink-0"
+      style={{ scrollbarWidth: 'none' }}
     >
-      {/* Logo */}
-      <div className="flex items-center gap-2.5 px-5 py-5 border-b border-white/10">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ background: GREEN }}>
-          <span className="text-sm font-black text-white">C</span>
-        </div>
-        <div>
-          <p className="text-sm font-bold text-white leading-tight">Construct ERP</p>
-          <p className="text-[10px] font-semibold tracking-widest text-blue-300 uppercase">ESS Portal</p>
-        </div>
-      </div>
-
-      {/* Nav items */}
-      <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
-        {NAV_SECTIONS.map((section, si) => (
-          <div key={si}>
-            {section.label && (
-              <p className="mb-1.5 px-2 text-[10px] font-bold uppercase tracking-widest text-blue-300/50">
-                {section.label}
-              </p>
-            )}
-            <div className="space-y-0.5">
-              {section.items.map(({ id, label, Icon }) => {
-                const isActive = active === id;
-                return (
-                  <button
-                    key={id}
-                    onClick={() => setActive(id)}
-                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all text-left"
-                    style={{
-                      color:           isActive ? '#fff' : 'rgba(147,197,253,0.7)',
-                      backgroundColor: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
-                      borderLeft:      `3px solid ${isActive ? GREEN : 'transparent'}`,
-                    }}
-                    onMouseEnter={e => { if (!isActive) { e.currentTarget.style.color = '#fff'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.07)'; }}}
-                    onMouseLeave={e => { if (!isActive) { e.currentTarget.style.color = 'rgba(147,197,253,0.7)'; e.currentTarget.style.backgroundColor = 'transparent'; }}}
-                  >
-                    <Icon size={16} className="shrink-0" />
-                    <span className="truncate">{label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </nav>
-
-      {/* Need Help box */}
-      <div className="px-3 pb-3 pt-2 border-t border-white/10">
-        <div className="rounded-xl p-3 mb-2" style={{ background: 'rgba(22,163,74,0.18)' }}>
-          <div className="flex items-center gap-2 mb-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-green-600/30">
-              <Headphones size={13} className="text-green-400" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-white leading-tight">Need Help?</p>
-              <p className="text-[10px] text-blue-300">Raise a request to HR</p>
-            </div>
-          </div>
+      {TAB_ITEMS.map(({ id, label, Icon }) => {
+        const isActive = active === id;
+        return (
           <button
-            onClick={() => setActive('hr-requests')}
-            className="w-full rounded-lg py-1.5 text-xs font-bold text-white transition hover:opacity-90"
-            style={{ backgroundColor: GREEN }}
+            key={id}
+            onClick={() => setActive(id)}
+            className="flex shrink-0 items-center gap-1.5 px-3.5 py-3 text-xs font-semibold transition-all whitespace-nowrap border-b-2"
+            style={{
+              color:       isActive ? NAVY  : '#6b7280',
+              borderColor: isActive ? GREEN : 'transparent',
+            }}
           >
-            Create Ticket
+            <Icon size={14} className="shrink-0" />
+            {label}
           </button>
-        </div>
-        <button
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition"
-          style={{ color: 'rgba(147,197,253,0.7)' }}
-          onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.07)'; }}
-          onMouseLeave={e => { e.currentTarget.style.color = 'rgba(147,197,253,0.7)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
-        >
-          <LogOut size={16} />
-          <span>Logout</span>
-        </button>
-      </div>
-    </aside>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   TOP BAR
-═══════════════════════════════════════════════════════════════ */
-function TopBar({ profile, notifications }) {
-  const unread   = (notifications || []).filter(n => !n.is_read).length;
-  const name     = profile?.name || 'Employee';
-  const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
-
-  return (
-    <div className="flex h-14 shrink-0 items-center gap-4 border-b border-gray-200 bg-white px-5">
-      <button className="text-gray-500 hover:text-gray-700 transition">
-        <Menu size={20} />
-      </button>
-
-      {/* Search */}
-      <div className="flex flex-1 max-w-md items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-        <Search size={14} className="text-gray-400 shrink-0" />
-        <input
-          className="flex-1 bg-transparent text-sm outline-none placeholder-gray-400"
-          placeholder="Search for applications, documents..."
-          readOnly
-        />
-      </div>
-
-      <div className="flex items-center gap-3 ml-auto">
-        {/* Bell */}
-        <button className="relative text-gray-500 hover:text-gray-700 transition">
-          <Bell size={20} />
-          {unread > 0 && (
-            <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white leading-none">
-              {Math.min(unread, 99)}
-            </span>
-          )}
-        </button>
-
-        {/* App grid */}
-        <button className="text-gray-500 hover:text-gray-700 transition">
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor">
-            <rect x="0" y="0" width="7" height="7" rx="1.5"/>
-            <rect x="9" y="0" width="7" height="7" rx="1.5" opacity=".7"/>
-            <rect x="0" y="9" width="7" height="7" rx="1.5" opacity=".7"/>
-            <rect x="9" y="9" width="7" height="7" rx="1.5" opacity=".4"/>
-          </svg>
-        </button>
-
-        {/* User chip */}
-        <div className="flex items-center gap-2.5 border-l border-gray-200 pl-3">
-          <div
-            className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white shrink-0"
-            style={{ background: `linear-gradient(135deg, ${NAVY} 0%, #2d6a9f 100%)` }}
-          >
-            {initials}
-          </div>
-          <div className="hidden sm:block leading-tight">
-            <p className="text-sm font-semibold text-gray-900">{name}</p>
-            <p className="text-[10px] text-gray-500">Employee ID : {profile?.employee_code || '—'}</p>
-          </div>
-        </div>
-      </div>
+        );
+      })}
     </div>
   );
 }
@@ -1484,40 +1352,33 @@ export default function ESSPortalPage() {
 
   const profile = summary.data?.profile || {};
 
-  // Nav items that have no functional tab yet — show "coming soon"
-  const navLabel = NAV_SECTIONS.flatMap(s => s.items).find(i => i.id === active)?.label || active;
+  const navLabel = TAB_ITEMS.find(i => i.id === active)?.label || active;
 
   return (
-    <div className="flex" style={{ minHeight: '100vh', backgroundColor: BG }}>
-      {/* Left Nav Sidebar */}
-      <LeftNavSidebar active={active} setActive={setActive} />
+    <div className="flex flex-col min-h-screen" style={{ backgroundColor: BG }}>
+      {/* Horizontal tab navigation — sits inside the existing app shell */}
+      <ESSTabNav active={active} setActive={setActive} />
 
-      {/* Main column */}
-      <div className="flex flex-1 flex-col min-w-0">
-        {/* Top Bar */}
-        <TopBar profile={profile} notifications={notifications.data || []} />
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-5" style={{ backgroundColor: BG }}>
-          {active === 'dashboard' && (
-            <DashboardTab
-              summary={summary.data || {}}
-              balances={balances.data || []}
-              serviceRequests={serviceRequests.data || []}
-              notifications={notifications.data || []}
-              profile={profile}
-              setActive={setActive}
-            />
-          )}
-          {active === 'profile'     && <ProfileTab profile={profile} balances={balances.data || []} />}
-          {active === 'attendance'  && <AttendanceTab leaveTypes={derivedLeaveTypes} />}
-          {active === 'leave'       && <LeaveTab leaveTypes={derivedLeaveTypes} />}
-          {active === 'payslips'    && <PayslipsTab />}
-          {active === 'documents'   && <DocumentsTab policies={policies.data || []} userId={userId} />}
-          {active === 'hr-requests' && <HRRequestsTab serviceRequests={serviceRequests.data || []} />}
-          {active === 'manager'     && <ManagerDeskTab />}
-          {!FUNCTIONAL_TABS.has(active) && <ComingSoon label={navLabel} />}
-        </div>
+      {/* Page content */}
+      <div className="flex-1 p-5">
+        {active === 'dashboard' && (
+          <DashboardTab
+            summary={summary.data || {}}
+            balances={balances.data || []}
+            serviceRequests={serviceRequests.data || []}
+            notifications={notifications.data || []}
+            profile={profile}
+            setActive={setActive}
+          />
+        )}
+        {active === 'profile'     && <ProfileTab profile={profile} balances={balances.data || []} />}
+        {active === 'attendance'  && <AttendanceTab leaveTypes={derivedLeaveTypes} />}
+        {active === 'leave'       && <LeaveTab leaveTypes={derivedLeaveTypes} />}
+        {active === 'payslips'    && <PayslipsTab />}
+        {active === 'documents'   && <DocumentsTab policies={policies.data || []} userId={userId} />}
+        {active === 'hr-requests' && <HRRequestsTab serviceRequests={serviceRequests.data || []} />}
+        {active === 'manager'     && <ManagerDeskTab />}
+        {!FUNCTIONAL_TABS.has(active) && <ComingSoon label={navLabel} />}
       </div>
     </div>
   );
