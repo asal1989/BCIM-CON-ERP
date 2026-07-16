@@ -438,7 +438,7 @@ export default function AttendanceDashboardPage() {
                 {/* Threshold selector */}
                 <div className="flex items-center gap-1.5 bg-slate-100 rounded-lg px-2 py-1">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Late by ≥</span>
-                  {[5, 10, 15, 30].map(m => (
+                  {[1, 5, 10, 15, 30].map(m => (
                     <button key={m} onClick={() => setMinLate(m)}
                       className="text-[11px] font-bold px-2 py-0.5 rounded-md transition-colors"
                       style={{
