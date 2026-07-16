@@ -280,24 +280,26 @@ router.get('/pending', async (req, res) => {
     }
 
     // ── 5. Quality NCRs (open) ────────────────────────────────────────────────
-    try {
-      const r = await query(`
-        SELECT n.id, n.ncr_number AS ref_no, n.issued_date AS doc_date,
-               0 AS amount, n.status, n.created_at,
-               n.status AS current_stage,
-               n.contractor_name AS party_name, p.name AS project_name,
-               u.name AS submitted_by,
-               n.description AS extra_info,
-               'NCR' AS doc_type, 'ncr' AS entity_type,
-               '/quality/ncr' AS action_url
-        FROM quality_ncrs n
-        JOIN projects p ON p.id=n.project_id
-        LEFT JOIN users u ON u.id=n.raised_by
-        WHERE n.project_id IN (SELECT id FROM projects WHERE company_id=$1)
-          AND n.status IN ('open','in_progress')
-        ORDER BY n.created_at ASC`, [cid]);
-      items.push(...r.rows);
-    } catch (e) { console.error('[approvals/pending] NCR feed failed:', e.message); }
+    if (['qa_qc_engineer','hse_officer','project_manager','admin','super_admin'].includes(role)) {
+      try {
+        const r = await query(`
+          SELECT n.id, n.ncr_number AS ref_no, n.issued_date AS doc_date,
+                 0 AS amount, n.status, n.created_at,
+                 n.status AS current_stage,
+                 n.contractor_name AS party_name, p.name AS project_name,
+                 u.name AS submitted_by,
+                 n.description AS extra_info,
+                 'NCR' AS doc_type, 'ncr' AS entity_type,
+                 '/quality/ncr' AS action_url
+          FROM quality_ncrs n
+          JOIN projects p ON p.id=n.project_id
+          LEFT JOIN users u ON u.id=n.raised_by
+          WHERE n.project_id IN (SELECT id FROM projects WHERE company_id=$1)
+            AND n.status IN ('open','in_progress')
+          ORDER BY n.created_at ASC`, [cid]);
+        items.push(...r.rows);
+      } catch (e) { console.error('[approvals/pending] NCR feed failed:', e.message); }
+    }
 
     // ── 6. Quality Submittals (pending review) ────────────────────────────────
     if (['qs_engineer','project_manager','admin','super_admin'].includes(role)) {
