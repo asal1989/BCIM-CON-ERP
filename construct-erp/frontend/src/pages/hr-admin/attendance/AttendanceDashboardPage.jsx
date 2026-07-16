@@ -242,6 +242,7 @@ export default function AttendanceDashboardPage() {
   const [year,  setYear]       = useState(now.getFullYear());
   const [trendRange, setRange] = useState('month');
   const [regRec, setRegRec]    = useState(null);   // record being regularized
+  const [minLate, setMinLate]  = useState(10);     // minimum late minutes to show
   const lateRef = useRef(null);
   const qc = useQueryClient();
 
@@ -273,10 +274,15 @@ export default function AttendanceDashboardPage() {
   const depts       = deptData?.data    || [];
   const todayRows   = Array.isArray(todayData) ? todayData : [];
 
-  // Late arrivals today
+  // Late arrivals today — only those >= minLate threshold
   const lateToday = useMemo(() =>
-    todayRows.filter(r => (parseInt(r.late_minutes)||0) > 0)
+    todayRows.filter(r => (parseInt(r.late_minutes)||0) >= minLate)
              .sort((a,b) => (parseInt(b.late_minutes)||0) - (parseInt(a.late_minutes)||0)),
+  [todayRows, minLate]);
+
+  // Total late count (all > 0, for the raw stat chip)
+  const lateTotalRaw = useMemo(() =>
+    todayRows.filter(r => (parseInt(r.late_minutes)||0) > 0).length,
   [todayRows]);
 
   // Monthly trend
@@ -364,7 +370,7 @@ export default function AttendanceDashboardPage() {
               { label:'Present', val: todayPresent, color:'#10b981' },
               { label:'Absent',  val: todayAbsent,  color:'#ef4444' },
               { label:'On Leave',val: todayLeave,   color:'#8b5cf6' },
-              { label:'Late',    val: isCurrentMonth ? lateToday.length : '—', color:'#f59e0b' },
+              { label:'Late',    val: isCurrentMonth ? lateTotalRaw : '—', color:'#f59e0b' },
               { label:'Att%',    val: `${attPct}%`, color:'#38bdf8' },
             ].map(s => (
               <div key={s.label} style={{ background:'rgba(255,255,255,0.1)', backdropFilter:'blur(4px)', borderRadius:8, padding:'4px 12px', display:'flex', alignItems:'center', gap:8 }}>
@@ -392,9 +398,13 @@ export default function AttendanceDashboardPage() {
             label="Absent Today"   value={todayAbsent}
             sub="Unplanned absences" delta={1.2} deltaUp={false}/>
           <KpiCard icon={Clock}     iconColor="#F59E0B" bg="#FFFBEB" accent="#F59E0B"
-            label="Late Arrivals Today" value={isCurrentMonth ? lateToday.length : '—'}
-            sub={isCurrentMonth ? (lateToday.length > 0 ? `Click to regularize ↓` : 'All on time today 🎉') : 'Current month only'}
-            onClick={isCurrentMonth && lateToday.length > 0 ? scrollToLate : undefined}/>
+            label="Late Arrivals Today" value={isCurrentMonth ? lateTotalRaw : '—'}
+            sub={isCurrentMonth
+              ? lateTotalRaw > 0
+                ? `${lateToday.length} significant (≥${minLate}m) · click to review`
+                : 'All on time today'
+              : 'Current month only'}
+            onClick={isCurrentMonth && lateTotalRaw > 0 ? scrollToLate : undefined}/>
         </div>
 
         {/* ── TODAY'S LATE ARRIVALS ───────────────────────────────────────── */}
@@ -411,21 +421,39 @@ export default function AttendanceDashboardPage() {
                 </div>
                 <div>
                   <p className="text-[13px] font-black text-slate-800">
-                    {lateToday.length > 0 ? `${lateToday.length} Late Arrival${lateToday.length>1?'s':''} Today` : 'All Employees On Time Today'}
+                    {lateToday.length > 0
+                      ? `${lateToday.length} Late Arrival${lateToday.length>1?'s':''} Today`
+                      : lateTotalRaw > 0
+                        ? `No significant late arrivals (${lateTotalRaw} under ${minLate}m threshold)`
+                        : 'All Employees On Time Today'}
                   </p>
                   <p className="text-[11px] text-slate-400 mt-0.5">
                     {lateToday.length > 0
-                      ? `${today} · Admin can regularize attendance directly`
-                      : `${today} · Perfect attendance — no action needed`}
+                      ? `${today} · Showing employees late by ≥ ${minLate} min · Admin can regularize directly`
+                      : `${today} · Shift grace threshold: ${minLate} minutes`}
                   </p>
                 </div>
               </div>
-              {lateToday.length > 0 && (
+              <div className="flex items-center gap-2">
+                {/* Threshold selector */}
+                <div className="flex items-center gap-1.5 bg-slate-100 rounded-lg px-2 py-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Late by ≥</span>
+                  {[5, 10, 15, 30].map(m => (
+                    <button key={m} onClick={() => setMinLate(m)}
+                      className="text-[11px] font-bold px-2 py-0.5 rounded-md transition-colors"
+                      style={{
+                        background: minLate === m ? '#1e3a8a' : 'transparent',
+                        color: minLate === m ? '#fff' : '#64748b',
+                      }}>
+                      {m}m
+                    </button>
+                  ))}
+                </div>
                 <button onClick={refetchToday}
                   className="flex items-center gap-1.5 text-[12px] text-slate-500 border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 transition-colors">
                   <RefreshCw size={11}/> Refresh
                 </button>
-              )}
+              </div>
             </div>
 
             {/* Late table */}
