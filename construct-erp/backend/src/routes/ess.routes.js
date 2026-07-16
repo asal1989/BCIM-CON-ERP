@@ -5,6 +5,7 @@ const multer = require('multer');
 const { authenticate } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
+const { sendMail } = require('../services/mail.service');
 
 const router = express.Router();
 router.use(authenticate);
@@ -71,6 +72,45 @@ function workingDays(fromDate, toDate, halfDay) {
     cur.setDate(cur.getDate() + 1);
   }
   return count;
+}
+
+const fmtDate = (d) => d ? String(d).slice(0, 10) : '';
+const ERP_URL = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || 'https://erp.bcim.in').replace(/\/$/, '');
+
+function mailHeader(title) {
+  return `<div style="background:#1e3a5f;padding:18px 28px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">${title}</h2></div>`;
+}
+function mailFooter() {
+  return `<hr style="border:none;border-top:1px solid #e2e8f0;margin:18px 0"><p style="font-size:12px;color:#94a3b8;margin:0">— BCIM ConstructERP</p>`;
+}
+function mailRow(k, v) {
+  return `<tr><td style="padding:8px 12px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;width:36%">${k}</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${v}</td></tr>`;
+}
+function mailWrap(header, body) {
+  return `<div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto;color:#0f172a">${header}<div style="background:#fff;padding:22px 28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px">${body}${mailFooter()}</div></div>`;
+}
+function statusBadge(status) {
+  const color = status === 'approved' ? '#16a34a' : '#dc2626';
+  return `<span style="display:inline-block;background:${color};color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:700">${status.toUpperCase()}</span>`;
+}
+
+async function notifyHR(companyId, subject, html) {
+  try {
+    const { rows } = await query(
+      `SELECT DISTINCT email FROM users WHERE company_id=$1 AND role IN ('hr','hr_admin','hr_manager') AND is_active=true AND email IS NOT NULL`,
+      [companyId]
+    );
+    if (!rows.length) return;
+    sendMail({ to: rows.map(r => r.email), subject, html }).catch(e => console.error('[ESS mail] HR notify error:', e.message));
+  } catch (e) { console.error('[ESS mail] notifyHR error:', e.message); }
+}
+
+async function notifyEmployee(userId, companyId, subject, html) {
+  try {
+    const { rows } = await query(`SELECT email FROM users WHERE id=$1 AND company_id=$2 AND email IS NOT NULL`, [userId, companyId]);
+    if (!rows[0]?.email) return;
+    sendMail({ to: rows[0].email, subject, html }).catch(e => console.error('[ESS mail] Employee notify error:', e.message));
+  } catch (e) { console.error('[ESS mail] notifyEmployee error:', e.message); }
 }
 
 router.get('/summary', async (req, res) => {
@@ -277,6 +317,25 @@ router.post('/attendance/corrections', async (req, res) => {
       ]
     );
     res.status(201).json({ data: rows[0] });
+
+    // Notify HR about new correction request
+    const empName = req.user.name || req.user.email;
+    notifyHR(ownCompany(req),
+      `Attendance Correction Request: ${empName} — ${fmtDate(attendance_date)}`,
+      mailWrap(
+        mailHeader('Attendance Correction Request'),
+        `<p style="margin-top:0"><strong>${empName}</strong> has submitted an attendance correction request.</p>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:14px">
+          ${mailRow('Employee', empName)}
+          ${mailRow('Date', fmtDate(attendance_date))}
+          ${mailRow('Requested Status', requested_status || '—')}
+          ${mailRow('In Time', requested_in_time || '—')}
+          ${mailRow('Out Time', requested_out_time || '—')}
+          ${mailRow('Reason', reason)}
+        </table>
+        <p>Please review and action this request in the <a href="${ERP_URL}/ess-portal" style="color:#1e3a5f;font-weight:600">ESS Manager Desk</a>.</p>`
+      )
+    );
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -360,7 +419,7 @@ router.post('/leave/requests', async (req, res) => {
       `SELECT closing_balance FROM hr_leave_balances WHERE user_id = $1 AND leave_type_id = $2 AND year = $3`,
       [ownUser(req), leave_type_id, year]
     );
-    const type = await query(`SELECT is_paid FROM hr_leave_types WHERE id = $1 AND company_id = $2`, [leave_type_id, ownCompany(req)]);
+    const type = await query(`SELECT is_paid, name FROM hr_leave_types WHERE id = $1 AND company_id = $2`, [leave_type_id, ownCompany(req)]);
     if (!type.rows.length) return res.status(404).json({ error: 'Leave type not found' });
 
     const available = parseFloat(balance.rows[0]?.closing_balance || 0);
@@ -376,6 +435,26 @@ router.post('/leave/requests', async (req, res) => {
       [ownCompany(req), ownUser(req), leave_type_id, from_date, to_date, days, Boolean(half_day), half_day_session || null, reason || null]
     );
     res.status(201).json({ data: rows[0] });
+
+    // Notify HR about new leave application
+    const leaveTypeName = type.rows[0]?.name || 'Leave';
+    const empName = req.user.name || req.user.email;
+    notifyHR(ownCompany(req),
+      `Leave Request: ${empName} — ${leaveTypeName} (${fmtDate(from_date)} to ${fmtDate(to_date)})`,
+      mailWrap(
+        mailHeader('New Leave Request'),
+        `<p style="margin-top:0"><strong>${empName}</strong> has applied for leave.</p>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:14px">
+          ${mailRow('Employee', empName)}
+          ${mailRow('Leave Type', leaveTypeName)}
+          ${mailRow('From', fmtDate(from_date))}
+          ${mailRow('To', fmtDate(to_date))}
+          ${mailRow('Days', half_day ? '0.5 (Half Day)' : days)}
+          ${mailRow('Reason', reason || '—')}
+        </table>
+        <p>Please review and action this request in the <a href="${ERP_URL}/ess-portal" style="color:#1e3a5f;font-weight:600">ESS Manager Desk</a>.</p>`
+      )
+    );
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -507,6 +586,28 @@ router.patch('/manager/leave-requests/:id/:action', requireManager, async (req, 
 
     await client.query('COMMIT');
     res.json({ data: leave });
+
+    // Notify employee of leave decision
+    const ltRes = await query(`SELECT name FROM hr_leave_types WHERE id=$1`, [leave.leave_type_id]).catch(() => ({ rows: [] }));
+    const ltName = ltRes.rows[0]?.name || 'Leave';
+    const actionWord = action === 'approve' ? 'Approved' : 'Rejected';
+    const accentColor = action === 'approve' ? '#16a34a' : '#dc2626';
+    notifyEmployee(leave.user_id, leave.company_id,
+      `Your ${ltName} request has been ${actionWord}`,
+      mailWrap(
+        `<div style="background:${accentColor};padding:18px 28px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">Leave Request ${actionWord}</h2></div>`,
+        `<p style="margin-top:0">Your leave request has been <strong>${actionWord.toLowerCase()}</strong>.</p>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:14px">
+          ${mailRow('Leave Type', ltName)}
+          ${mailRow('From', fmtDate(leave.from_date))}
+          ${mailRow('To', fmtDate(leave.to_date))}
+          ${mailRow('Days', leave.days)}
+          ${mailRow('Status', statusBadge(action === 'approve' ? 'approved' : 'rejected'))}
+          ${leave.rejection_reason ? mailRow('Reason', leave.rejection_reason) : ''}
+        </table>
+        <p>View your leave history in the <a href="${ERP_URL}/ess-portal" style="color:#1e3a5f;font-weight:600">ESS Portal</a>.</p>`
+      )
+    );
   } catch (err) {
     await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
@@ -576,6 +677,26 @@ router.patch('/manager/attendance-corrections/:id/:action', requireManager, asyn
     }
     await client.query('COMMIT');
     res.json({ data: correction });
+
+    // Notify employee of correction decision
+    const corrActionWord = action === 'approve' ? 'Approved' : 'Rejected';
+    const corrAccent = action === 'approve' ? '#16a34a' : '#dc2626';
+    notifyEmployee(correction.user_id, correction.company_id,
+      `Your attendance correction for ${fmtDate(correction.attendance_date)} has been ${corrActionWord}`,
+      mailWrap(
+        `<div style="background:${corrAccent};padding:18px 28px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">Attendance Correction ${corrActionWord}</h2></div>`,
+        `<p style="margin-top:0">Your attendance correction request has been <strong>${corrActionWord.toLowerCase()}</strong>.</p>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:14px">
+          ${mailRow('Date', fmtDate(correction.attendance_date))}
+          ${mailRow('Requested Status', correction.requested_status || '—')}
+          ${mailRow('In Time', correction.requested_in_time || '—')}
+          ${mailRow('Out Time', correction.requested_out_time || '—')}
+          ${mailRow('Status', statusBadge(action === 'approve' ? 'approved' : 'rejected'))}
+          ${correction.rejection_reason ? mailRow('Reason', correction.rejection_reason) : ''}
+        </table>
+        <p>View your attendance in the <a href="${ERP_URL}/ess-portal" style="color:#1e3a5f;font-weight:600">ESS Portal</a>.</p>`
+      )
+    );
   } catch (err) {
     await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
