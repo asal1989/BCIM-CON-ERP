@@ -151,37 +151,47 @@ export function useWebRTC({ socketRef, connected, currentUser }) {
   // ── Start outgoing call ──────────────────────────────────────────────────────
   const startCall = useCallback(async (peer, callType = 'video') => {
     if (callStateRef.current !== CALL_STATE.IDLE) return;
-    const stream = await getUserMedia(callType);
-    setLocalStream(stream);
-    localStreamRef.current = stream;
+    try {
+      const stream = await getUserMedia(callType);
+      setLocalStream(stream);
+      localStreamRef.current = stream;
 
-    const pc = createPC(peer.id);
-    stream.getTracks().forEach(t => pc.addTrack(t, stream));
+      const pc = createPC(peer.id);
+      stream.getTracks().forEach(t => pc.addTrack(t, stream));
 
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
 
-    callInitTimeRef.current = Date.now();
-    isCallerRef.current     = true;
+      callInitTimeRef.current = Date.now();
+      isCallerRef.current     = true;
 
-    setCallState(CALL_STATE.CALLING);
-    setCallInfo({ peerId: peer.id, peerName: peer.full_name || peer.name || 'User', peerPhoto: peer.profile_photo_url, callType });
+      setCallState(CALL_STATE.CALLING);
+      setCallInfo({ peerId: peer.id, peerName: peer.full_name || peer.name || 'User', peerPhoto: peer.profile_photo_url, callType });
 
-    socketRef.current?.emit('call:offer', {
-      to: peer.id, offer,
-      callerName:  currentUser?.full_name || currentUser?.name,
-      callerPhoto: currentUser?.profile_photo_url,
-      callType,
-    });
+      socketRef.current?.emit('call:offer', {
+        to: peer.id, offer,
+        callerName:  currentUser?.full_name || currentUser?.name,
+        callerPhoto: currentUser?.profile_photo_url,
+        callType,
+      });
 
-    callTimeoutRef.current = setTimeout(() => {
-      if (callStateRef.current === CALL_STATE.CALLING) {
-        toast.error('No answer — call ended');
-        const info = callInfoRef.current;
-        if (info?.peerId) socketRef.current?.emit('call:end', { to: info.peerId });
-        cleanup('cancelled');
-      }
-    }, CALL_TIMEOUT_MS);
+      callTimeoutRef.current = setTimeout(() => {
+        if (callStateRef.current === CALL_STATE.CALLING) {
+          toast.error('No answer — call ended');
+          const info = callInfoRef.current;
+          if (info?.peerId) socketRef.current?.emit('call:end', { to: info.peerId });
+          cleanup('cancelled');
+        }
+      }, CALL_TIMEOUT_MS);
+    } catch (err) {
+      console.error('[WebRTC] startCall failed:', err);
+      toast.error(
+        err?.name === 'NotAllowedError' ? 'Camera/microphone access denied — allow it in your browser settings to make calls'
+        : err?.name === 'NotFoundError' ? 'No camera/microphone found on this device'
+        : 'Could not start the call — check your camera/microphone'
+      );
+      cleanup(null);
+    }
   }, [getUserMedia, createPC, socketRef, currentUser, cleanup]);
 
   // ── Accept incoming call ─────────────────────────────────────────────────────
@@ -189,27 +199,42 @@ export function useWebRTC({ socketRef, connected, currentUser }) {
     const info = callInfoRef.current;
     if (callStateRef.current !== CALL_STATE.INCOMING || !info) return;
 
-    const stream = await getUserMedia(info.callType);
-    setLocalStream(stream);
-    localStreamRef.current = stream;
+    try {
+      const stream = await getUserMedia(info.callType);
+      setLocalStream(stream);
+      localStreamRef.current = stream;
 
-    const pc = createPC(info.peerId);
-    stream.getTracks().forEach(t => pc.addTrack(t, stream));
+      const pc = createPC(info.peerId);
+      stream.getTracks().forEach(t => pc.addTrack(t, stream));
 
-    await pc.setRemoteDescription(new RTCSessionDescription(info.offer));
-    for (const c of pendingCandidates.current) {
-      await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+      await pc.setRemoteDescription(new RTCSessionDescription(info.offer));
+      for (const c of pendingCandidates.current) {
+        await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+      }
+      pendingCandidates.current = [];
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socketRef.current?.emit('call:answer', { to: info.peerId, answer });
+
+      callStartTimeRef.current = Date.now();
+      setCallState(CALL_STATE.ACTIVE);
+      durationTimerRef.current = setInterval(() => setDuration(d => d + 1), 1000);
+    } catch (err) {
+      // Without this, a denied/unavailable camera/mic left the accept button
+      // doing nothing visible — the modal just sat there while the caller's
+      // own 60s timeout eventually fired "No answer". Now the callee sees why
+      // it failed, and the caller is told immediately instead of waiting it out.
+      console.error('[WebRTC] answerCall failed:', err);
+      toast.error(
+        err?.name === 'NotAllowedError' ? 'Camera/microphone access denied — allow it in your browser settings to answer calls'
+        : err?.name === 'NotFoundError' ? 'No camera/microphone found on this device'
+        : 'Could not answer the call — check your camera/microphone'
+      );
+      if (info?.peerId) socketRef.current?.emit('call:end', { to: info.peerId });
+      cleanup(null);
     }
-    pendingCandidates.current = [];
-
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    socketRef.current?.emit('call:answer', { to: info.peerId, answer });
-
-    callStartTimeRef.current = Date.now();
-    setCallState(CALL_STATE.ACTIVE);
-    durationTimerRef.current = setInterval(() => setDuration(d => d + 1), 1000);
-  }, [getUserMedia, createPC, socketRef]);
+  }, [getUserMedia, createPC, socketRef, cleanup]);
 
   // ── End / reject calls ───────────────────────────────────────────────────────
   const endCall = useCallback(() => {
