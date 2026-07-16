@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  BadgeIndianRupee, Bell, Briefcase, CalendarCheck, CalendarOff, CheckCircle2,
-  FileText, FolderUp, Headphones, Monitor, ShieldCheck, UserRound, Printer, ExternalLink,
+  BadgeIndianRupee, Bell, CalendarCheck, CalendarOff, CheckCircle2,
+  FileText, FolderUp, Headphones, Monitor, ShieldCheck, UserRound, Printer,
   ChevronLeft, ChevronRight, Upload,
+  LayoutDashboard, Clock, Users, Award, BookOpen,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { essAPI, hrAdvancedAPI } from '../../api/client';
@@ -11,7 +12,7 @@ import { useNavigate } from 'react-router-dom';
 
 /* ─── helpers ─── */
 const unwrap = (res) => res?.data?.data || [];
-const today = () => new Date().toISOString().slice(0, 10);
+const today  = () => new Date().toISOString().slice(0, 10);
 
 const MONTH_NAMES = [
   'January','February','March','April','May','June',
@@ -23,7 +24,7 @@ const GREEN = '#16a34a';
 const NAVY  = '#1e3a5f';
 const BG    = '#F0F2F5';
 
-/* ─── tiny primitives ─── */
+/* ─── primitives ─── */
 const inputCls = 'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100 transition';
 const labelCls = 'mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide';
 
@@ -31,7 +32,6 @@ function Field({ title, children }) {
   return <div><label className={labelCls}>{title}</label>{children}</div>;
 }
 
-/* ─── reusable Table ─── */
 function Table({ columns, rows, empty = 'No records found' }) {
   return (
     <div className="overflow-auto rounded-lg border border-gray-200">
@@ -64,7 +64,6 @@ function Table({ columns, rows, empty = 'No records found' }) {
   );
 }
 
-/* ─── status badge ─── */
 function StatusBadge({ value }) {
   const map = {
     paid:        'bg-green-50 text-green-700 border-green-200',
@@ -85,7 +84,6 @@ function StatusBadge({ value }) {
   );
 }
 
-/* ─── green primary button ─── */
 function GreenBtn({ children, disabled, onClick, className = '' }) {
   return (
     <button
@@ -99,14 +97,16 @@ function GreenBtn({ children, disabled, onClick, className = '' }) {
   );
 }
 
-/* ─── section card ─── */
-function SectionCard({ title, subtitle, children, noPad }) {
+function SectionCard({ title, subtitle, children, noPad, action }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
       {(title || subtitle) && (
-        <div className="border-b border-gray-100 px-5 py-4">
-          {title && <h3 className="text-base font-bold text-gray-900">{title}</h3>}
-          {subtitle && <p className="mt-0.5 text-xs text-gray-500">{subtitle}</p>}
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+          <div>
+            {title && <h3 className="text-sm font-bold text-gray-900">{title}</h3>}
+            {subtitle && <p className="mt-0.5 text-xs text-gray-500">{subtitle}</p>}
+          </div>
+          {action}
         </div>
       )}
       <div className={noPad ? '' : 'p-5'}>{children}</div>
@@ -114,183 +114,545 @@ function SectionCard({ title, subtitle, children, noPad }) {
   );
 }
 
+/* ─── attendance status ─── */
+const STATUS_STYLE = {
+  P:  { bg: 'bg-green-100',  text: 'text-green-700',  label: 'P'  },
+  A:  { bg: 'bg-red-100',    text: 'text-red-700',    label: 'A'  },
+  L:  { bg: 'bg-blue-100',   text: 'text-blue-700',   label: 'L'  },
+  HD: { bg: 'bg-amber-100',  text: 'text-amber-700',  label: 'HD' },
+  WO: { bg: 'bg-gray-100',   text: 'text-gray-500',   label: 'WO' },
+  H:  { bg: 'bg-purple-100', text: 'text-purple-700', label: 'H'  },
+};
+
+function normaliseStatus(raw) {
+  if (!raw) return null;
+  const u = raw.toUpperCase();
+  if (u === 'PRESENT')                   return 'P';
+  if (u === 'ABSENT')                    return 'A';
+  if (u === 'LEAVE')                     return 'L';
+  if (u === 'HALF_DAY' || u === 'HD')    return 'HD';
+  if (u === 'WEEK_OFF' || u === 'WO' || u === 'WEEKOFF') return 'WO';
+  if (u === 'HOLIDAY'  || u === 'H')     return 'H';
+  return u.slice(0, 2);
+}
+
+function SwipeDir({ direction }) {
+  const isIn  = String(direction||'').toLowerCase().includes('in')  || direction === '0';
+  const isOut = String(direction||'').toLowerCase().includes('out') || direction === '1';
+  if (isIn)  return <span style={{ display:'inline-block', padding:'1px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#dcfce7', color:'#15803d' }}>IN</span>;
+  if (isOut) return <span style={{ display:'inline-block', padding:'1px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#fee2e2', color:'#b91c1c' }}>OUT</span>;
+  return       <span style={{ display:'inline-block', padding:'1px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#f1f5f9', color:'#64748b' }}>—</span>;
+}
+
+// ESSL stores IST device-local time as if it were UTC — read UTC components
+// to recover the actual punch time the device recorded.
+function esslTime(ts) {
+  if (!ts) return null;
+  const d = new Date(ts);
+  return { h: d.getUTCHours(), m: d.getUTCMinutes(), s: d.getUTCSeconds(), dateStr: d.toISOString().slice(0, 10) };
+}
+function fmt12(h, m, s = 0) {
+  const period = h >= 12 ? 'pm' : 'am';
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${String(h12).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} ${period}`;
+}
+function fmtSwipeTime(ts) {
+  if (!ts) return '—';
+  const t = esslTime(ts);
+  return `${t.dateStr} ${fmt12(t.h, t.m)}`;
+}
+
+/* ─── group swipes by device IST date, sorted chronologically within each day ─── */
+function groupByDate(swipes) {
+  const groups = {};
+  for (const s of swipes) {
+    // ESSL stores IST device-local time as if it were UTC — read UTC date
+    // components to recover the actual calendar date the device recorded.
+    const dayKey = new Date(s.swipe_time).toISOString().slice(0, 10);
+    if (!groups[dayKey]) groups[dayKey] = [];
+    groups[dayKey].push(s);
+  }
+  for (const day of Object.keys(groups)) {
+    groups[day].sort((a, b) => new Date(a.swipe_time) - new Date(b.swipe_time));
+  }
+  return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
+}
+
 /* ═══════════════════════════════════════════════════════════════
-   SIDEBAR
+   HORIZONTAL TAB NAV (replaces the standalone sidebar)
 ═══════════════════════════════════════════════════════════════ */
-function Sidebar({ profile, balances }) {
-  const name = profile?.name || 'Employee';
-  const initials = name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+const TAB_ITEMS = [
+  { id: 'dashboard',   label: 'Dashboard',     Icon: LayoutDashboard },
+  { id: 'profile',     label: 'Profile',        Icon: UserRound       },
+  { id: 'attendance',  label: 'My Attendance',  Icon: CalendarCheck   },
+  { id: 'leave',       label: 'Leave',          Icon: CalendarOff     },
+  { id: 'payslips',    label: 'Payroll',        Icon: BadgeIndianRupee},
+  { id: 'documents',   label: 'My Documents',   Icon: FileText        },
+  { id: 'hr-requests', label: 'My Requests',    Icon: FolderUp        },
+  { id: 'manager',     label: 'Manager Desk',   Icon: CheckCircle2    },
+  { id: 'timesheet',   label: 'Timesheet',      Icon: Clock           },
+  { id: 'training',    label: 'Training',       Icon: Award           },
+  { id: 'assets',      label: 'Assets',         Icon: Monitor         },
+  { id: 'helpdesk',    label: 'Helpdesk',       Icon: Headphones      },
+  { id: 'knowledge',   label: 'Knowledge Base', Icon: BookOpen        },
+];
+
+function ESSTabNav({ active, setActive }) {
   return (
-    <aside className="w-64 shrink-0">
-      <div className="sticky top-6 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-        {/* avatar band */}
-        <div className="flex flex-col items-center px-5 py-6" style={{ background: `linear-gradient(135deg, ${NAVY} 0%, #2d6a9f 100%)` }}>
-          <div
-            className="flex h-20 w-20 items-center justify-center rounded-full text-2xl font-bold text-white shadow-lg"
-            style={{ background: 'linear-gradient(135deg, #16a34a 0%, #059669 100%)' }}
+    <div
+      className="flex items-center overflow-x-auto border-b border-gray-200 bg-white px-2 shrink-0"
+      style={{ scrollbarWidth: 'none' }}
+    >
+      {TAB_ITEMS.map(({ id, label, Icon }) => {
+        const isActive = active === id;
+        return (
+          <button
+            key={id}
+            onClick={() => setActive(id)}
+            className="flex shrink-0 items-center gap-1.5 px-3.5 py-3 text-xs font-semibold transition-all whitespace-nowrap border-b-2"
+            style={{
+              color:       isActive ? NAVY  : '#6b7280',
+              borderColor: isActive ? GREEN : 'transparent',
+            }}
           >
-            {initials}
-          </div>
-          <p className="mt-3 text-center text-base font-bold text-white leading-tight">{profile?.name || '-'}</p>
-          <p className="mt-1 text-xs text-blue-200">{profile?.employee_code || '-'}</p>
-        </div>
-
-        {/* details */}
-        <div className="px-4 py-4 space-y-2">
-          {[
-            ['Designation', profile?.designation_name],
-            ['Department', profile?.department_name],
-            ['Joining', String(profile?.date_of_joining || '').slice(0, 10)],
-            ['Location', profile?.work_location],
-          ].map(([k, v]) => (
-            <div key={k} className="flex justify-between gap-2 text-xs">
-              <span className="text-gray-500 shrink-0">{k}</span>
-              <span className="font-semibold text-gray-800 text-right">{v || '-'}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* leave balance mini-list */}
-        {(balances || []).length > 0 && (
-          <>
-            <div className="mx-4 border-t border-gray-100" />
-            <div className="px-4 py-4">
-              <p className="mb-3 text-[11px] font-bold uppercase tracking-wide text-gray-500">Leave Balances</p>
-              <div className="space-y-2">
-                {(balances || []).map((b) => (
-                  <div key={b.leave_type_id} className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-gray-700 truncate">{b.leave_type_name}</span>
-                    <span
-                      className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold text-white"
-                      style={{ backgroundColor: GREEN }}
-                    >
-                      {Number(b.closing_balance ?? 0).toFixed(1)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-    </aside>
+            <Icon size={14} className="shrink-0" />
+            {label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
 /* ═══════════════════════════════════════════════════════════════
    DASHBOARD TAB
 ═══════════════════════════════════════════════════════════════ */
-function DashboardTab({ summary, balances, serviceRequests }) {
-  const attendance = summary?.attendance || {};
-  const payroll    = summary?.payroll   || {};
-  const leave      = summary?.leave     || {};
+const QUOTES = [
+  { text: 'The only way to do great work is to love what you do.', author: 'Steve Jobs' },
+  { text: 'Success usually comes to those who are too busy to be looking for it.', author: 'Henry David Thoreau' },
+  { text: 'The future depends on what you do today.', author: 'Mahatma Gandhi' },
+  { text: 'Opportunities don\'t happen. You create them.', author: 'Chris Grosser' },
+  { text: 'Don\'t watch the clock; do what it does. Keep going.', author: 'Sam Levenson' },
+];
+
+const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function DashboardTab({ summary, balances, serviceRequests, notifications, profile, setActive }) {
   const navigate   = useNavigate();
+  const attendance = summary?.attendance || {};
+  const payroll    = summary?.payroll    || {};
+  const leave      = summary?.leave      || {};
+  const now        = new Date();
+  const todayStr   = today();
+  const quote      = QUOTES[now.getDate() % QUOTES.length];
 
-  const nowDate  = new Date();
-  const monthLabel = MONTH_NAMES[nowDate.getMonth()];
+  /* attendance data for calendar + today's status */
+  const attQ = useQuery({
+    queryKey: ['ess-attendance-dash'],
+    queryFn:  () => essAPI.attendance().then(unwrap),
+  });
+  const statusMap = useMemo(() => {
+    const m = {};
+    for (const row of (attQ.data || [])) {
+      const d = String(row.attendance_date || '').slice(0, 10);
+      if (d) m[d] = { code: normaliseStatus(row.status), inTime: row.in_time };
+    }
+    return m;
+  }, [attQ.data]);
 
-  /* latest payslip query comes via summary.payroll */
+  /* recent leave requests */
+  const leavesQ = useQuery({
+    queryKey: ['ess-leave-requests-dash'],
+    queryFn:  () => essAPI.leaveRequests().then(unwrap),
+  });
+
+  /* calendar state */
+  const [calYear,  setCalYear]  = useState(now.getFullYear());
+  const [calMonth, setCalMonth] = useState(now.getMonth());
+  const prevMonth = () => { if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1); } else setCalMonth(m => m - 1); };
+  const nextMonth = () => { if (calMonth === 11) { setCalMonth(0); setCalYear(y => y + 1); } else setCalMonth(m => m + 1); };
+  const firstDay    = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  const fmtCell = (d) => `${calYear}-${String(calMonth + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+
+  /* derived values */
+  const todayRec     = statusMap[todayStr];
+  const todayInTime  = todayRec?.inTime ? String(todayRec.inTime).slice(0, 5) : null;
+  const totalBalance = (balances || []).reduce((s, b) => s + Number(b.closing_balance ?? 0), 0);
+  const casualBal    = (balances || []).find(b => /casual/i.test(b.leave_type_name))?.closing_balance ?? 0;
+  const earnedBal    = (balances || []).find(b => /earned|privilege/i.test(b.leave_type_name))?.closing_balance ?? 0;
+  const pendingLeave = leave.pending ?? 0;
+  const pendingCorr  = attendance.pending_corrections ?? 0;
+  const pendingTotal = pendingLeave + pendingCorr;
+  const workDays     = attendance.working_days || 0;
+  const presentDays  = attendance.present || 0;
+  const attPct       = workDays > 0 ? Math.round((presentDays / workDays) * 100) : 0;
+  const announcements = (notifications || []).slice(0, 6);
+
+  const todayStatusColor = { P: GREEN, A: '#ef4444', L: '#8b5cf6', H: '#3b82f6', HD: '#f59e0b' };
+  const todayStatusLabel = { P: 'Present', A: 'Absent', L: 'On Leave', H: 'Holiday', HD: 'Half Day' };
+
+  const calDotColor = (code) => ({ P: GREEN, A: '#ef4444', HD: '#f59e0b', L: '#8b5cf6', H: '#3b82f6', WO: '#d1d5db' }[code] || null);
+
+  const quickActions = [
+    { label: 'Apply Leave',               Icon: CalendarOff,   tab: 'leave'       },
+    { label: 'Attendance Reg.',           Icon: CalendarCheck, tab: 'attendance'  },
+    { label: 'View Payslip',              Icon: BadgeIndianRupee,  tab: 'payslips'    },
+    { label: 'View Attendance',           Icon: CheckCircle2,  tab: 'attendance'  },
+    { label: 'My Documents',             Icon: FileText,      tab: 'documents'   },
+    { label: 'Company Directory',         Icon: Users,         tab: null          },
+    { label: 'Raise Request',             Icon: FolderUp,      tab: 'hr-requests' },
+    { label: 'Helpdesk',                  Icon: Headphones,    tab: 'hr-requests' },
+  ];
+
   return (
     <div className="space-y-5">
-      {/* 1 ── Attendance summary bar */}
-      <div className="rounded-xl border border-gray-200 bg-white px-6 py-4 shadow-sm">
-        <p className="mb-4 text-xs font-bold uppercase tracking-wide text-gray-500">{monthLabel} — Attendance Summary</p>
-        <div className="flex flex-wrap gap-0">
-          {[
-            ['Working Days', attendance.working_days ?? '-'],
-            ['Present',      attendance.present      ?? 0],
-            ['Absent',       attendance.absent       ?? 0],
-            ['Late',         attendance.late         ?? 0],
-            ['On Leave',     attendance.on_leave     ?? 0],
-          ].map(([label, val], i, arr) => (
-            <div key={label} className={`flex flex-col items-center px-8 py-2 ${i < arr.length - 1 ? 'border-r border-gray-200' : ''}`}>
-              <span className="text-2xl font-extrabold text-gray-900">{val}</span>
-              <span className="mt-1 text-xs text-gray-500">{label}</span>
-            </div>
-          ))}
+
+      {/* ── Welcome + Quote ── */}
+      <div className="flex items-center gap-5">
+        <div className="flex-1">
+          <h2 className="text-xl font-bold text-gray-900">
+            Welcome back, {profile?.name?.split(' ')[0] || 'Employee'}! 👋
+          </h2>
+          <p className="mt-1 text-sm text-gray-500">Here's what's happening with you today.</p>
+        </div>
+        <div
+          className="relative hidden xl:flex w-72 min-h-[72px] items-center rounded-xl px-5 py-4 overflow-hidden"
+          style={{ background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)' }}
+        >
+          <span className="absolute right-3 top-0 text-7xl font-black leading-none select-none"
+            style={{ color: GREEN, opacity: 0.12 }}>❝</span>
+          <div className="relative">
+            <p className="text-xs italic text-gray-700 leading-relaxed">"{quote.text}"</p>
+            <p className="mt-1 text-[11px] font-semibold" style={{ color: GREEN }}>— {quote.author}</p>
+          </div>
         </div>
       </div>
 
-      {/* 2 ── Leave balance cards */}
-      <div>
-        <p className="mb-3 text-sm font-bold text-gray-700">Leave Balances</p>
-        <div className="flex gap-4 overflow-x-auto pb-1">
-          {(balances || []).map((b) => {
-            const taken    = Number(b.taken   ?? 0);
-            const accrued  = Number(b.accrued ?? 0);
-            const avail    = Number(b.closing_balance ?? 0);
-            const pct      = accrued > 0 ? Math.min(100, Math.round((taken / accrued) * 100)) : 0;
-            return (
-              <div key={b.leave_type_id} className="min-w-[150px] rounded-xl border border-gray-200 bg-white p-4 shadow-sm shrink-0">
-                <p className="text-xs font-semibold text-gray-500 truncate">{b.leave_type_name}</p>
-                <p className="mt-2 text-3xl font-extrabold" style={{ color: GREEN }}>{avail.toFixed(1)}</p>
-                <p className="text-[11px] text-gray-400">Available</p>
-                <div className="mt-3 h-1.5 w-full rounded-full bg-gray-100">
-                  <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, backgroundColor: GREEN }} />
-                </div>
-                <p className="mt-1 text-[10px] text-gray-400">{taken} taken / {accrued} accrued</p>
-              </div>
-            );
-          })}
-          {!(balances || []).length && (
-            <p className="text-sm text-gray-400">No leave balances found.</p>
-          )}
-        </div>
-      </div>
+      {/* ── 4 Stat cards ── */}
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
 
-      {/* 3 ── Bottom row: Latest Payslip + Pending Actions */}
-      <div className="grid gap-5 md:grid-cols-2">
-        {/* Latest Payslip */}
-        <SectionCard title="Latest Payslip">
-          {payroll?.month ? (
-            <div className="space-y-3">
-              <p className="text-xs text-gray-500">{MONTH_NAMES[(payroll.month || 1) - 1]} {payroll.year}</p>
-              <div className="grid grid-cols-3 gap-3 text-center">
-                {[
-                  ['Gross',       `₹${Number(payroll.gross  || 0).toLocaleString('en-IN')}`],
-                  ['Deductions',  `₹${Number(payroll.deductions || 0).toLocaleString('en-IN')}`],
-                  ['Net Pay',     `₹${Number(payroll.net_pay || 0).toLocaleString('en-IN')}`, true],
-                ].map(([lbl, val, highlight]) => (
-                  <div key={lbl} className="rounded-lg bg-gray-50 p-3">
-                    <p className="text-[11px] text-gray-500">{lbl}</p>
-                    <p className={`mt-1 text-base font-bold ${highlight ? '' : 'text-gray-900'}`} style={highlight ? { color: GREEN } : {}}>{val}</p>
-                  </div>
-                ))}
-              </div>
-              <GreenBtn
-                onClick={() => payroll.id && navigate(`/hr-admin/payroll/${payroll.id}/payslip`)}
-                className="mt-1"
-              >
-                <Printer className="h-4 w-4" /> Print Payslip
-              </GreenBtn>
+        {/* Today's Attendance */}
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-gray-500">Today's Attendance</p>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50">
+              <CalendarCheck size={16} style={{ color: GREEN }} />
             </div>
+          </div>
+          {todayRec?.code ? (
+            <span
+              className="inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold text-white mb-1"
+              style={{ backgroundColor: todayStatusColor[todayRec.code] || '#9ca3af' }}
+            >
+              {todayStatusLabel[todayRec.code] || todayRec.code}
+            </span>
           ) : (
-            <p className="text-sm text-gray-400">No payslip available yet.</p>
+            <span className="inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-gray-200 text-gray-600 mb-1">
+              Not Marked
+            </span>
           )}
-        </SectionCard>
+          {todayInTime && (
+            <p className="text-xl font-extrabold text-gray-900 mt-0.5">{todayInTime} <span className="text-sm font-medium text-gray-400">Checked In</span></p>
+          )}
+          {!todayInTime && <p className="text-xs text-gray-400 mt-1">No check-in recorded</p>}
+          {profile?.work_location && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <p className="text-[10px] uppercase tracking-wide text-gray-400">Location</p>
+              <p className="text-xs font-semibold text-gray-700">{profile.work_location}</p>
+            </div>
+          )}
+          <button onClick={() => setActive('attendance')} className="mt-3 text-xs font-semibold hover:underline" style={{ color: GREEN }}>
+            View Details →
+          </button>
+        </div>
 
-        {/* Pending Actions */}
-        <SectionCard title="Pending Actions">
-          <div className="space-y-3">
-            {[
-              ['Pending Leave Requests', leave.pending ?? 0, 'leave'],
-              ['Pending Corrections',    attendance.pending_corrections ?? 0, 'attendance'],
-              ['Open HR Requests',       (serviceRequests || []).filter((r) => ['open','in_progress'].includes(r.status)).length, 'service'],
-            ].map(([label, count, tab]) => (
-              <div key={label} className="flex items-center justify-between rounded-lg border border-gray-100 px-4 py-3">
-                <div>
-                  <p className="text-sm font-semibold text-gray-800">{label}</p>
-                  <p className="text-xs text-gray-400">{count} item{count !== 1 ? 's' : ''}</p>
+        {/* Leave Balance */}
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-gray-500">Leave Balance</p>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50">
+              <CalendarOff size={16} className="text-blue-600" />
+            </div>
+          </div>
+          <p className="text-2xl font-extrabold text-gray-900">{Number(totalBalance).toFixed(1)}</p>
+          <p className="text-xs text-gray-400 mb-3">Days Available</p>
+          <div className="flex gap-4 pt-3 border-t border-gray-100">
+            {casualBal > 0 && <div><p className="text-[10px] uppercase tracking-wide text-gray-400">Casual Leave</p><p className="text-sm font-bold text-gray-700">{Number(casualBal).toFixed(1)}</p></div>}
+            {earnedBal > 0 && <div><p className="text-[10px] uppercase tracking-wide text-gray-400">Earned Leave</p><p className="text-sm font-bold text-gray-700">{Number(earnedBal).toFixed(1)}</p></div>}
+          </div>
+          <button onClick={() => setActive('leave')} className="mt-3 text-xs font-semibold hover:underline" style={{ color: GREEN }}>
+            View Leave Balance →
+          </button>
+        </div>
+
+        {/* Latest Payslip */}
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-gray-500">Latest Payslip</p>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-yellow-50">
+              <BadgeIndianRupee size={16} className="text-yellow-600" />
+            </div>
+          </div>
+          {payroll?.month ? (
+            <>
+              <p className="text-xs text-gray-400">{MONTH_NAMES[(payroll.month || 1) - 1]} {payroll.year}</p>
+              <p className="text-2xl font-extrabold text-gray-900">₹{Number(payroll.net_pay || 0).toLocaleString('en-IN')}</p>
+              <p className="text-xs text-gray-400 mb-3">Net Salary</p>
+              <button onClick={() => payroll.id && navigate(`/hr-admin/payroll/${payroll.id}/payslip`)}
+                className="text-xs font-semibold hover:underline" style={{ color: GREEN }}>
+                View Payslip →
+              </button>
+            </>
+          ) : (
+            <p className="text-sm text-gray-400 mt-2">No payslip available yet.</p>
+          )}
+        </div>
+
+        {/* My Requests */}
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-gray-500">My Requests</p>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-50">
+              <FolderUp size={16} className="text-orange-500" />
+            </div>
+          </div>
+          <p className="text-2xl font-extrabold text-gray-900">{pendingTotal}</p>
+          <p className="text-xs text-gray-400 mb-3">Pending Requests</p>
+          <div className="flex gap-5 pt-3 border-t border-gray-100">
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-gray-400">Leave Requests</p>
+              <p className="text-sm font-bold text-gray-700">{pendingLeave}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-gray-400">Regularization</p>
+              <p className="text-sm font-bold text-gray-700">{pendingCorr}</p>
+            </div>
+          </div>
+          <button onClick={() => setActive('hr-requests')} className="mt-3 text-xs font-semibold hover:underline" style={{ color: GREEN }}>
+            View All Requests →
+          </button>
+        </div>
+      </div>
+
+      {/* ── Middle row: Quick Actions | Calendar | Announcements ── */}
+      <div className="grid gap-5 lg:grid-cols-3">
+
+        {/* Quick Actions */}
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="border-b border-gray-100 px-5 py-4">
+            <h3 className="text-sm font-bold text-gray-900">Quick Actions</h3>
+          </div>
+          <div className="p-4 grid grid-cols-4 gap-y-4">
+            {quickActions.map(({ label, Icon, tab }) => (
+              <button
+                key={label}
+                onClick={() => tab && setActive(tab)}
+                className="flex flex-col items-center gap-1.5 rounded-xl p-2 hover:bg-gray-50 transition"
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white shadow-sm">
+                  <Icon size={18} className="text-gray-600" />
                 </div>
-                <span
-                  className="rounded-full px-2.5 py-1 text-sm font-bold text-white"
-                  style={{ backgroundColor: count > 0 ? '#dc2626' : '#9ca3af' }}
-                >
-                  {count}
-                </span>
-              </div>
+                <span className="text-[10px] font-medium text-gray-600 leading-tight text-center">{label}</span>
+              </button>
             ))}
           </div>
+        </div>
+
+        {/* My Calendar */}
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center gap-2 border-b border-gray-100 px-5 py-3.5">
+            <h3 className="text-sm font-bold text-gray-900 flex-1">My Calendar</h3>
+            <button onClick={prevMonth} className="rounded-lg border border-gray-200 p-1 hover:bg-gray-50 transition">
+              <ChevronLeft size={13} className="text-gray-500" />
+            </button>
+            <span className="text-xs font-semibold text-gray-700 px-1">{MONTH_NAMES[calMonth].slice(0,3)} {calYear}</span>
+            <button onClick={nextMonth} className="rounded-lg border border-gray-200 p-1 hover:bg-gray-50 transition">
+              <ChevronRight size={13} className="text-gray-500" />
+            </button>
+            <button onClick={() => { setCalMonth(now.getMonth()); setCalYear(now.getFullYear()); }}
+              className="text-xs font-semibold hover:underline ml-1" style={{ color: GREEN }}>Today</button>
+          </div>
+          <div className="p-3">
+            <div className="grid grid-cols-7 mb-1">
+              {DAYS_OF_WEEK.map(d => (
+                <div key={d} className="py-1 text-center text-[10px] font-bold uppercase text-gray-400">{d}</div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-y-0.5">
+              {cells.map((day, idx) => {
+                if (!day) return <div key={`e-${idx}`} />;
+                const ds       = fmtCell(day);
+                const rec      = statusMap[ds];
+                const code     = rec?.code;
+                const isToday  = ds === todayStr;
+                const isWknd   = new Date(ds).getDay() === 0 || new Date(ds).getDay() === 6;
+                const dotColor = code ? calDotColor(code) : (isWknd ? '#d1d5db' : null);
+                return (
+                  <div key={day} className="flex flex-col items-center py-0.5">
+                    <div
+                      className="flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold"
+                      style={{
+                        backgroundColor: isToday ? NAVY : 'transparent',
+                        color:           isToday ? '#fff' : isWknd ? '#9ca3af' : '#374151',
+                      }}
+                    >
+                      {day}
+                    </div>
+                    {dotColor && <div className="h-1.5 w-1.5 rounded-full mt-0.5" style={{ backgroundColor: dotColor }} />}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 border-t border-gray-100 pt-2.5">
+              {[['Leave','#8b5cf6'],['Holiday','#22c55e'],['Event','#f59e0b'],['Weekend','#d1d5db']].map(([l,c]) => (
+                <div key={l} className="flex items-center gap-1">
+                  <div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: c }} />
+                  <span className="text-[10px] text-gray-500">{l}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Announcements */}
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm flex flex-col">
+          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+            <h3 className="text-sm font-bold text-gray-900">Announcements</h3>
+            <button className="text-xs font-semibold hover:underline" style={{ color: GREEN }}>View All</button>
+          </div>
+          <div className="flex-1 divide-y divide-gray-50 overflow-y-auto">
+            {announcements.length ? announcements.map((n, i) => (
+              <div key={n.id || i} className="flex items-start gap-3 px-4 py-3.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-50">
+                  <Bell size={13} className="text-orange-500" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-gray-800 truncate">{n.title || (n.message || '').slice(0,40) || 'Notification'}</p>
+                  <p className="mt-0.5 text-[11px] text-gray-500 line-clamp-2">{n.message}</p>
+                  <p className="mt-1 text-[10px] text-gray-400">
+                    {n.created_at ? new Date(n.created_at).toLocaleDateString('en-IN', { day:'2-digit', month:'short' }) : ''}
+                    {n.created_at && ' ago'}
+                  </p>
+                </div>
+                {!n.is_read && <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500" />}
+              </div>
+            )) : (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <Bell size={24} className="text-gray-300 mb-2" />
+                <p className="text-sm text-gray-400">No announcements</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Attendance Summary + Upcoming Events ── */}
+      <div className="grid gap-5 lg:grid-cols-3">
+
+        {/* Attendance Summary */}
+        <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+            <h3 className="text-sm font-bold text-gray-900">My Attendance Summary</h3>
+            <span className="rounded-lg border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600">
+              {MONTH_NAMES[now.getMonth()]} {now.getFullYear()}
+            </span>
+          </div>
+          <div className="p-5">
+            <div className="grid grid-cols-5 gap-3 mb-5">
+              {[
+                { label: 'Total Days', val: attendance.working_days ?? '-', color: '#64748b' },
+                { label: 'Present',    val: attendance.present      ?? 0,   color: GREEN     },
+                { label: 'Absent',     val: attendance.absent       ?? 0,   color: '#ef4444' },
+                { label: 'Half Day',   val: attendance.half_day     ?? 0,   color: '#f59e0b' },
+                { label: 'Leave',      val: attendance.on_leave     ?? 0,   color: '#8b5cf6' },
+              ].map(({ label, val, color }) => (
+                <div key={label} className="rounded-xl border border-gray-100 p-3 text-center">
+                  <p className="text-2xl font-extrabold" style={{ color }}>{val}</p>
+                  <p className="mt-1 text-[11px] text-gray-500">{label}</p>
+                </div>
+              ))}
+            </div>
+            <div>
+              <div className="mb-1.5 flex items-center justify-between">
+                <p className="text-xs text-gray-500">Attendance Percentage</p>
+                <p className="text-sm font-bold" style={{ color: GREEN }}>{attPct}%</p>
+              </div>
+              <div className="h-2.5 w-full overflow-hidden rounded-full bg-gray-100">
+                <div
+                  className="h-2.5 rounded-full transition-all duration-500"
+                  style={{ width: `${attPct}%`, backgroundColor: GREEN }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Upcoming Events */}
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+            <h3 className="text-sm font-bold text-gray-900">Upcoming Events</h3>
+            <button className="text-xs font-semibold hover:underline" style={{ color: GREEN }}>View Full Calendar</button>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {announcements.slice(0, 4).map((n, i) => {
+              const d = n.created_at ? new Date(n.created_at) : null;
+              return (
+                <div key={n.id || i} className="flex items-start gap-3 px-4 py-3.5">
+                  {d && (
+                    <div className="w-10 shrink-0 rounded-lg text-center py-2 bg-blue-50">
+                      <p className="text-[9px] font-bold uppercase text-blue-400 leading-tight">
+                        {d.toLocaleDateString('en-IN', { month: 'short' })}
+                      </p>
+                      <p className="text-lg font-extrabold leading-tight text-blue-700">{d.getDate()}</p>
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-gray-800">{n.title || 'Event'}</p>
+                    <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-2">{n.message}</p>
+                  </div>
+                </div>
+              );
+            })}
+            {!announcements.length && (
+              <div className="px-4 py-8 text-center text-sm text-gray-400">No upcoming events</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Leave History + Recent Requests ── */}
+      <div className="grid gap-5 lg:grid-cols-2">
+        <SectionCard
+          title="Leave History"
+          action={<button onClick={() => setActive('leave')} className="text-xs font-semibold hover:underline" style={{ color: GREEN }}>View All</button>}
+        >
+          <Table
+            columns={[
+              { key: 'leave_type_name', label: 'Type' },
+              { key: 'from_date', label: 'From', render: r => String(r.from_date||'').slice(0,10) },
+              { key: 'to_date',   label: 'To',   render: r => String(r.to_date  ||'').slice(0,10) },
+              { key: 'status', label: 'Status', render: r => <StatusBadge value={r.status} /> },
+            ]}
+            rows={(leavesQ.data || []).slice(0, 5)}
+          />
+        </SectionCard>
+
+        <SectionCard
+          title="Recent Requests"
+          action={<button onClick={() => setActive('hr-requests')} className="text-xs font-semibold hover:underline" style={{ color: GREEN }}>View All</button>}
+        >
+          <Table
+            columns={[
+              { key: 'request_type', label: 'Type' },
+              { key: 'subject',      label: 'Subject' },
+              { key: 'status', label: 'Status', render: r => <StatusBadge value={r.status} /> },
+            ]}
+            rows={(serviceRequests || []).slice(0, 5)}
+          />
         </SectionCard>
       </div>
     </div>
@@ -298,64 +660,83 @@ function DashboardTab({ summary, balances, serviceRequests }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   PROFILE TAB
+═══════════════════════════════════════════════════════════════ */
+function ProfileTab({ profile, balances }) {
+  const name     = profile?.name || 'Employee';
+  const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+
+  return (
+    <div className="space-y-5">
+      <SectionCard>
+        <div className="flex items-start gap-6 p-2">
+          <div
+            className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full text-2xl font-bold text-white shadow"
+            style={{ background: `linear-gradient(135deg, ${NAVY} 0%, #2d6a9f 100%)` }}
+          >
+            {initials}
+          </div>
+          <div>
+            <p className="text-xl font-bold text-gray-900">{name}</p>
+            <p className="text-sm text-gray-500">{profile?.designation_name || '—'}</p>
+            <p className="mt-1 text-xs font-semibold text-gray-400">{profile?.employee_code}</p>
+          </div>
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-4 border-t border-gray-100 pt-5">
+          {[
+            ['Department',    profile?.department_name],
+            ['Date of Joining', String(profile?.date_of_joining||'').slice(0,10)],
+            ['Work Location', profile?.work_location],
+            ['Email',         profile?.email],
+          ].map(([lbl, val]) => val && (
+            <div key={lbl}>
+              <p className="text-[10px] uppercase tracking-wide text-gray-400">{lbl}</p>
+              <p className="text-sm font-semibold text-gray-800 mt-0.5">{val || '—'}</p>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      {/* Leave balances */}
+      {(balances || []).length > 0 && (
+        <SectionCard title="Leave Balances">
+          <div className="flex flex-wrap gap-4">
+            {(balances || []).map((b) => {
+              const taken   = Number(b.taken   ?? 0);
+              const accrued = Number(b.accrued ?? 0);
+              const avail   = Number(b.closing_balance ?? 0);
+              const pct     = accrued > 0 ? Math.min(100, Math.round((taken / accrued) * 100)) : 0;
+              return (
+                <div key={b.leave_type_id} className="min-w-[150px] rounded-xl border border-gray-200 p-4 bg-gray-50">
+                  <p className="text-xs font-semibold text-gray-500 truncate">{b.leave_type_name}</p>
+                  <p className="mt-2 text-3xl font-extrabold" style={{ color: GREEN }}>{avail.toFixed(1)}</p>
+                  <p className="text-[11px] text-gray-400">Available</p>
+                  <div className="mt-2 h-1.5 w-full rounded-full bg-gray-200">
+                    <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, backgroundColor: GREEN }} />
+                  </div>
+                  <p className="mt-1 text-[10px] text-gray-400">{taken} taken / {accrued} accrued</p>
+                </div>
+              );
+            })}
+          </div>
+        </SectionCard>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
    ATTENDANCE TAB
 ═══════════════════════════════════════════════════════════════ */
-const STATUS_STYLE = {
-  P:   { bg: 'bg-green-100',  text: 'text-green-700',  label: 'P'  },
-  A:   { bg: 'bg-red-100',    text: 'text-red-700',    label: 'A'  },
-  L:   { bg: 'bg-blue-100',   text: 'text-blue-700',   label: 'L'  },
-  HD:  { bg: 'bg-amber-100',  text: 'text-amber-700',  label: 'HD' },
-  WO:  { bg: 'bg-gray-100',   text: 'text-gray-500',   label: 'WO' },
-  H:   { bg: 'bg-purple-100', text: 'text-purple-700', label: 'H'  },
-};
-
-function normaliseStatus(raw) {
-  if (!raw) return null;
-  const u = raw.toUpperCase();
-  if (u === 'PRESENT')   return 'P';
-  if (u === 'ABSENT')    return 'A';
-  if (u === 'LEAVE')     return 'L';
-  if (u === 'HALF_DAY' || u === 'HD') return 'HD';
-  if (u === 'WEEK_OFF' || u === 'WO' || u === 'WEEKOFF') return 'WO';
-  if (u === 'HOLIDAY' || u === 'H')  return 'H';
-  return u.slice(0, 2);
-}
-
-/* ─── swipe direction label ─── */
-function SwipeDir({ direction }) {
-  const isIn  = String(direction||'').toLowerCase().includes('in')  || direction === '0';
-  const isOut = String(direction||'').toLowerCase().includes('out') || direction === '1';
-  if (isIn)  return <span style={{ display:'inline-block', padding:'1px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#dcfce7', color:'#15803d' }}>IN</span>;
-  if (isOut) return <span style={{ display:'inline-block', padding:'1px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#fee2e2', color:'#b91c1c' }}>OUT</span>;
-  return <span style={{ display:'inline-block', padding:'1px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#f1f5f9', color:'#64748b' }}>—</span>;
-}
-
-function fmtSwipeTime(ts) {
-  if (!ts) return '—';
-  const d = new Date(ts);
-  return d.toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', hour12:true });
-}
-
-/* ─── group swipes by calendar date ─── */
-function groupByDate(swipes) {
-  const groups = {};
-  for (const s of swipes) {
-    const day = String(s.swipe_time || '').slice(0, 10);
-    if (!groups[day]) groups[day] = [];
-    groups[day].push(s);
-  }
-  return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
-}
-
 function AttendanceTab({ leaveTypes }) {
   const qc = useQueryClient();
   const now = new Date();
   const [calYear,  setCalYear]  = useState(now.getFullYear());
-  const [calMonth, setCalMonth] = useState(now.getMonth()); // 0-indexed
+  const [calMonth, setCalMonth] = useState(now.getMonth());
   const [swipeDays, setSwipeDays] = useState(14);
 
-  const attendance  = useQuery({ queryKey: ['ess-attendance'],   queryFn: () => essAPI.attendance().then(unwrap) });
-  const corrections = useQuery({ queryKey: ['ess-corrections'],  queryFn: () => essAPI.attendanceCorrections().then(unwrap) });
+  const attendance  = useQuery({ queryKey: ['ess-attendance'],  queryFn: () => essAPI.attendance().then(unwrap) });
+  const corrections = useQuery({ queryKey: ['ess-corrections'], queryFn: () => essAPI.attendanceCorrections().then(unwrap) });
   const swipes      = useQuery({ queryKey: ['ess-swipes', swipeDays], queryFn: () => essAPI.swipes({ days: swipeDays }).then(unwrap) });
 
   const [correction, setCorrection] = useState({
@@ -363,14 +744,13 @@ function AttendanceTab({ leaveTypes }) {
     requested_in_time: '09:30', requested_out_time: '18:00', reason: '',
   });
 
-  const refresh = () => ['ess-attendance','ess-corrections','ess-summary'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+  const refresh = () => ['ess-attendance','ess-corrections','ess-summary','ess-attendance-dash'].forEach(k => qc.invalidateQueries({ queryKey: [k] }));
   const createCorrection = useMutation({
     mutationFn: essAPI.createCorrection,
     onSuccess: () => { toast.success('Correction requested'); setCorrection({ ...correction, reason: '' }); refresh(); },
-    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to submit correction request'),
+    onError:   (e) => toast.error(e?.response?.data?.error || 'Failed to submit correction request'),
   });
 
-  /* build day→{status, leaveType} map */
   const statusMap = useMemo(() => {
     const m = {};
     for (const row of (attendance.data || [])) {
@@ -380,8 +760,7 @@ function AttendanceTab({ leaveTypes }) {
     return m;
   }, [attendance.data]);
 
-  /* calendar grid */
-  const firstDay = new Date(calYear, calMonth, 1).getDay(); // 0=Sun
+  const firstDay    = new Date(calYear, calMonth, 1).getDay();
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
   const cells = [];
   for (let i = 0; i < firstDay; i++) cells.push(null);
@@ -390,74 +769,59 @@ function AttendanceTab({ leaveTypes }) {
 
   const prevMonth = () => { if (calMonth === 0) { setCalMonth(11); setCalYear(y => y-1); } else setCalMonth(m => m-1); };
   const nextMonth = () => { if (calMonth === 11) { setCalMonth(0); setCalYear(y => y+1); } else setCalMonth(m => m+1); };
-
-  const formatDay = (day) => {
-    const mm = String(calMonth + 1).padStart(2,'0');
-    const dd = String(day).padStart(2,'0');
-    return `${calYear}-${mm}-${dd}`;
-  };
-
-  const DAYS_OF_WEEK = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const formatDay = (day) => `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  const todayStr  = today();
 
   return (
     <div className="space-y-5">
       {/* Calendar */}
       <SectionCard>
-        {/* Month nav */}
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
           <button onClick={prevMonth} className="rounded-lg border border-gray-200 p-1.5 hover:bg-gray-50 transition">
-            <ChevronLeft className="h-4 w-4 text-gray-600" />
+            <ChevronLeft size={16} className="text-gray-600" />
           </button>
           <h3 className="text-base font-bold text-gray-900">{MONTH_NAMES[calMonth]} {calYear}</h3>
           <button onClick={nextMonth} className="rounded-lg border border-gray-200 p-1.5 hover:bg-gray-50 transition">
-            <ChevronRight className="h-4 w-4 text-gray-600" />
+            <ChevronRight size={16} className="text-gray-600" />
           </button>
         </div>
         <div className="p-4">
-          {/* Day headers */}
           <div className="grid grid-cols-7 mb-2">
-            {DAYS_OF_WEEK.map((d) => (
+            {DAYS_OF_WEEK.map(d => (
               <div key={d} className="py-1 text-center text-[11px] font-bold uppercase text-gray-400">{d}</div>
             ))}
           </div>
-          {/* Day cells */}
           <div className="grid grid-cols-7 gap-1">
             {cells.map((day, idx) => {
-              if (!day) return <div key={`empty-${idx}`} />;
-              const dateStr  = formatDay(day);
-              const entry    = statusMap[dateStr];
-              const status   = entry?.code;
-              const style    = status ? STATUS_STYLE[status] : null;
-              const isToday  = dateStr === today();
-              const tipParts = [];
-              if (entry?.leaveType) tipParts.push(entry.leaveType);
-              if (entry?.inTime)    tipParts.push(`In: ${String(entry.inTime).slice(0,5)}`);
-              if (entry?.lateMin > 0) tipParts.push(`Late: ${entry.lateMin}m`);
-              const tip = tipParts.join(' · ');
+              if (!day) return <div key={`e-${idx}`} />;
+              const ds      = formatDay(day);
+              const rec     = statusMap[ds];
+              const st      = rec?.code ? (STATUS_STYLE[rec.code] || STATUS_STYLE.P) : null;
+              const isToday = ds === todayStr;
               return (
                 <div
-                  key={dateStr}
-                  title={tip || undefined}
-                  className={`flex flex-col items-center rounded-lg py-2 border ${isToday ? 'border-green-400' : 'border-transparent'}`}
+                  key={day}
+                  title={rec ? `${rec.code}${rec.inTime ? ' — In: ' + String(rec.inTime).slice(0,5) : ''}${rec.lateMin ? ' — Late: ' + rec.lateMin + 'm' : ''}` : undefined}
+                  className={`relative flex h-9 w-full flex-col items-center justify-center rounded-lg text-xs font-semibold transition ${
+                    st ? `${st.bg} ${st.text}` : isToday ? 'ring-2 text-gray-700' : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                  style={isToday ? { ringColor: GREEN } : {}}
                 >
-                  <span className={`text-xs font-semibold ${isToday ? 'text-green-700' : 'text-gray-700'}`}>{day}</span>
-                  {style ? (
-                    <span className={`mt-0.5 rounded px-1 text-[10px] font-bold ${style.bg} ${style.text}`}>{style.label}</span>
-                  ) : (
-                    <span className="mt-0.5 text-[10px] text-transparent">-</span>
+                  {isToday && !st && (
+                    <span className="absolute inset-0 rounded-lg ring-2 pointer-events-none" style={{ ringColor: GREEN, outlineColor: GREEN, outline: `2px solid ${GREEN}` }} />
                   )}
+                  {day}
+                  {st && <span className="text-[9px] font-bold leading-none">{st.label}</span>}
                 </div>
               );
             })}
           </div>
           {/* Legend */}
-          <div className="mt-4 flex flex-wrap gap-3">
-            {Object.entries(STATUS_STYLE).map(([code, s]) => (
-              <div key={code} className="flex items-center gap-1">
-                <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${s.bg} ${s.text}`}>{s.label}</span>
-                <span className="text-[10px] text-gray-500">
-                  {code === 'P' ? 'Present' : code === 'A' ? 'Absent' : code === 'L' ? 'Leave' : code === 'HD' ? 'Half Day' : code === 'WO' ? 'Week Off' : 'Holiday'}
-                </span>
+          <div className="mt-4 flex flex-wrap gap-4 border-t border-gray-100 pt-3">
+            {Object.entries(STATUS_STYLE).map(([k, v]) => (
+              <div key={k} className="flex items-center gap-1.5">
+                <span className={`inline-flex h-5 w-8 items-center justify-center rounded text-[10px] font-bold ${v.bg} ${v.text}`}>{v.label}</span>
+                <span className="text-xs text-gray-500">{{ P:'Present',A:'Absent',L:'Leave',HD:'Half Day',WO:'Week Off',H:'Holiday' }[k]}</span>
               </div>
             ))}
           </div>
@@ -466,35 +830,31 @@ function AttendanceTab({ leaveTypes }) {
 
       {/* Correction form */}
       <SectionCard title="Attendance Correction" subtitle="Missed punch or wrong status — raise a correction request">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Field title="Date">
             <input type="date" className={inputCls} value={correction.attendance_date}
-              onChange={(e) => setCorrection({ ...correction, attendance_date: e.target.value })} />
+              onChange={e => setCorrection({ ...correction, attendance_date: e.target.value })} />
           </Field>
-          <Field title="Status">
+          <Field title="Requested Status">
             <select className={inputCls} value={correction.requested_status}
-              onChange={(e) => setCorrection({ ...correction, requested_status: e.target.value })}>
+              onChange={e => setCorrection({ ...correction, requested_status: e.target.value })}>
               <option value="present">Present</option>
               <option value="half_day">Half Day</option>
-              <option value="leave">Leave</option>
-              <option value="absent">Absent</option>
+              <option value="on_duty">On Duty</option>
             </select>
           </Field>
           <Field title="In Time">
             <input type="time" className={inputCls} value={correction.requested_in_time}
-              onChange={(e) => setCorrection({ ...correction, requested_in_time: e.target.value })} />
+              onChange={e => setCorrection({ ...correction, requested_in_time: e.target.value })} />
           </Field>
           <Field title="Out Time">
             <input type="time" className={inputCls} value={correction.requested_out_time}
-              onChange={(e) => setCorrection({ ...correction, requested_out_time: e.target.value })} />
+              onChange={e => setCorrection({ ...correction, requested_out_time: e.target.value })} />
           </Field>
-          <div className="sm:col-span-2 lg:col-span-4">
-            <Field title="Reason">
-              <input className={inputCls} value={correction.reason}
-                placeholder="Brief reason for correction"
-                onChange={(e) => setCorrection({ ...correction, reason: e.target.value })} />
-            </Field>
-          </div>
+          <Field title="Reason">
+            <input className={inputCls} value={correction.reason} placeholder="Reason for correction"
+              onChange={e => setCorrection({ ...correction, reason: e.target.value })} />
+          </Field>
         </div>
         <div className="mt-4">
           <GreenBtn disabled={!correction.reason} onClick={() => createCorrection.mutate(correction)}>
@@ -504,24 +864,23 @@ function AttendanceTab({ leaveTypes }) {
       </SectionCard>
 
       {/* Correction history */}
-      <SectionCard title="Correction Requests" subtitle="My correction history">
+      <SectionCard title="My Correction Requests">
         <Table
           columns={[
-            { key: 'attendance_date', label: 'Date',      render: (r) => String(r.attendance_date || '').slice(0,10) },
-            { key: 'requested_status', label: 'Requested' },
-            { key: 'reason',           label: 'Reason'    },
-            { key: 'status',           label: 'Status',   render: (r) => <StatusBadge value={r.status} /> },
+            { key: 'attendance_date',  label: 'Date',    render: r => String(r.attendance_date||'').slice(0,10) },
+            { key: 'requested_status', label: 'Status'  },
+            { key: 'reason',           label: 'Reason'  },
+            { key: 'status',           label: 'Approval', render: r => <StatusBadge value={r.status} /> },
           ]}
           rows={corrections.data || []}
         />
       </SectionCard>
 
-      {/* ── Recent Swipes from Biometric Device ── */}
+      {/* Biometric Swipe Logs */}
       <SectionCard
         title="Biometric Swipe Logs"
         subtitle="All punches recorded by the ESSL device for your card"
       >
-        {/* Range selector */}
         <div className="mb-4 flex items-center gap-2 flex-wrap">
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Show last</span>
           {[7, 14, 30, 60].map(d => (
@@ -530,8 +889,8 @@ function AttendanceTab({ leaveTypes }) {
               onClick={() => setSwipeDays(d)}
               className="text-xs font-bold px-3 py-1 rounded-full border transition"
               style={{
-                background: swipeDays === d ? NAVY : '#fff',
-                color: swipeDays === d ? '#fff' : '#64748b',
+                background:  swipeDays === d ? NAVY : '#fff',
+                color:       swipeDays === d ? '#fff' : '#64748b',
                 borderColor: swipeDays === d ? NAVY : '#d1d5db',
               }}
             >
@@ -550,37 +909,36 @@ function AttendanceTab({ leaveTypes }) {
         ) : (
           <div className="space-y-4">
             {groupByDate(swipes.data || []).map(([date, daySwipes]) => {
-              const d = new Date(date + 'T00:00:00');
+              const d        = new Date(date + 'T00:00:00');
               const dayLabel = d.toLocaleDateString('en-IN', { weekday:'short', day:'2-digit', month:'short', year:'numeric' });
-              const firstIn  = daySwipes.find(s => String(s.direction||'').toLowerCase().includes('in')  || s.direction === '0');
-              const lastOut  = [...daySwipes].reverse().find(s => String(s.direction||'').toLowerCase().includes('out') || s.direction === '1');
+              const isIn     = s => String(s.direction||'').toLowerCase().includes('in')  || s.direction === '0';
+              const isOut    = s => String(s.direction||'').toLowerCase().includes('out') || s.direction === '1';
+              const firstIn  = daySwipes.find(isIn);
+              const lastOut  = [...daySwipes].reverse().find(isOut);
               const totalPunches = daySwipes.length;
 
               return (
                 <div key={date} className="rounded-xl border border-gray-100 overflow-hidden">
-                  {/* Day header */}
                   <div className="flex items-center justify-between px-4 py-2.5" style={{ background: NAVY }}>
                     <span className="text-xs font-bold text-white">{dayLabel}</span>
                     <div className="flex items-center gap-3">
                       {firstIn && (
                         <span className="text-[11px] text-blue-200">
-                          First In: <span className="font-bold text-white">{new Date(firstIn.swipe_time).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true })}</span>
+                          First In: <span className="font-bold text-white">{(() => { const t = esslTime(firstIn.swipe_time); return fmt12(t.h, t.m); })()}</span>
                         </span>
                       )}
                       {lastOut && (
                         <span className="text-[11px] text-blue-200">
-                          Last Out: <span className="font-bold text-white">{new Date(lastOut.swipe_time).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true })}</span>
+                          Last Out: <span className="font-bold text-white">{(() => { const t = esslTime(lastOut.swipe_time); return fmt12(t.h, t.m); })()}</span>
                         </span>
                       )}
                       <span className="text-[11px] bg-white/20 text-white rounded-full px-2 py-0.5 font-bold">{totalPunches} punch{totalPunches !== 1 ? 'es' : ''}</span>
                     </div>
                   </div>
-
-                  {/* Swipe timeline */}
                   <div className="divide-y divide-gray-50 bg-white">
                     {daySwipes.map((s, i) => {
-                      const t = new Date(s.swipe_time);
-                      const timeStr = t.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:true });
+                      const et      = esslTime(s.swipe_time);
+                      const timeStr = fmt12(et.h, et.m, et.s);
                       return (
                         <div key={i} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors">
                           <div className="w-8 text-center text-xs font-black text-gray-400 tabular-nums">{i + 1}</div>
@@ -607,11 +965,11 @@ function AttendanceTab({ leaveTypes }) {
    LEAVE TAB
 ═══════════════════════════════════════════════════════════════ */
 function LeaveTab({ leaveTypes }) {
-  const qc = useQueryClient();
-  const balances = useQuery({ queryKey: ['ess-leave-balances'], queryFn: () => essAPI.leaveBalances().then(unwrap) });
-  const requests = useQuery({ queryKey: ['ess-leave-requests'], queryFn: () => essAPI.leaveRequests().then(unwrap) });
+  const qc      = useQueryClient();
+  const balances = useQuery({ queryKey: ['ess-leave-balances'],  queryFn: () => essAPI.leaveBalances().then(unwrap) });
+  const requests = useQuery({ queryKey: ['ess-leave-requests'],  queryFn: () => essAPI.leaveRequests().then(unwrap) });
   const [leave, setLeave] = useState({ leave_type_id: '', from_date: today(), to_date: today(), reason: '' });
-  const refresh = () => ['ess-leave-balances','ess-leave-requests','ess-summary'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+  const refresh = () => ['ess-leave-balances','ess-leave-requests','ess-summary','ess-leave-requests-dash'].forEach(k => qc.invalidateQueries({ queryKey: [k] }));
   const createLeave = useMutation({
     mutationFn: essAPI.createLeaveRequest,
     onSuccess: () => { toast.success('Leave requested'); setLeave({ ...leave, reason: '' }); refresh(); },
@@ -620,7 +978,6 @@ function LeaveTab({ leaveTypes }) {
 
   return (
     <div className="space-y-5">
-      {/* Balance cards */}
       <div className="flex gap-4 overflow-x-auto pb-1">
         {(balances.data || []).map((b) => {
           const taken   = Number(b.taken   ?? 0);
@@ -641,27 +998,26 @@ function LeaveTab({ leaveTypes }) {
         })}
       </div>
 
-      {/* Apply form */}
       <SectionCard title="Apply Leave" subtitle="Submit a new leave request">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Field title="Leave Type">
             <select className={inputCls} value={leave.leave_type_id}
-              onChange={(e) => setLeave({ ...leave, leave_type_id: e.target.value })}>
+              onChange={e => setLeave({ ...leave, leave_type_id: e.target.value })}>
               <option value="">Select leave type</option>
-              {leaveTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              {leaveTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </Field>
           <Field title="From Date">
             <input type="date" className={inputCls} value={leave.from_date}
-              onChange={(e) => setLeave({ ...leave, from_date: e.target.value })} />
+              onChange={e => setLeave({ ...leave, from_date: e.target.value })} />
           </Field>
           <Field title="To Date">
             <input type="date" className={inputCls} value={leave.to_date}
-              onChange={(e) => setLeave({ ...leave, to_date: e.target.value })} />
+              onChange={e => setLeave({ ...leave, to_date: e.target.value })} />
           </Field>
           <Field title="Reason">
             <input className={inputCls} value={leave.reason} placeholder="Reason for leave"
-              onChange={(e) => setLeave({ ...leave, reason: e.target.value })} />
+              onChange={e => setLeave({ ...leave, reason: e.target.value })} />
           </Field>
         </div>
         <div className="mt-4">
@@ -671,16 +1027,15 @@ function LeaveTab({ leaveTypes }) {
         </div>
       </SectionCard>
 
-      {/* Request history */}
       <SectionCard title="Leave Request History">
         <Table
           columns={[
             { key: 'leave_type_name', label: 'Type'   },
-            { key: 'from_date', label: 'From', render: (r) => String(r.from_date||'').slice(0,10) },
-            { key: 'to_date',   label: 'To',   render: (r) => String(r.to_date  ||'').slice(0,10) },
+            { key: 'from_date', label: 'From', render: r => String(r.from_date||'').slice(0,10) },
+            { key: 'to_date',   label: 'To',   render: r => String(r.to_date  ||'').slice(0,10) },
             { key: 'days',      label: 'Days'  },
-            { key: 'status',    label: 'Status', render: (r) => <StatusBadge value={r.status} /> },
-            { key: 'actions',   label: 'Action', render: (r) => r.status === 'pending'
+            { key: 'status',    label: 'Status', render: r => <StatusBadge value={r.status} /> },
+            { key: 'actions',   label: 'Action', render: r => r.status === 'pending'
                 ? <button onClick={() => cancelLeave.mutate(r.id)}
                     className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-100 transition">
                     Cancel
@@ -707,19 +1062,19 @@ function PayslipsTab() {
         columns={[
           { key: 'month',            label: 'Month' },
           { key: 'year',             label: 'Year'  },
-          { key: 'gross_earnings',   label: 'Gross',       render: (r) => `₹${Number(r.gross_earnings  ||0).toLocaleString('en-IN')}` },
-          { key: 'total_deductions', label: 'Deductions',  render: (r) => `₹${Number(r.total_deductions||0).toLocaleString('en-IN')}` },
-          { key: 'net_pay',          label: 'Net Pay',     render: (r) => (
+          { key: 'gross_earnings',   label: 'Gross',      render: r => `₹${Number(r.gross_earnings  ||0).toLocaleString('en-IN')}` },
+          { key: 'total_deductions', label: 'Deductions', render: r => `₹${Number(r.total_deductions||0).toLocaleString('en-IN')}` },
+          { key: 'net_pay',          label: 'Net Pay',    render: r => (
             <span className="font-bold" style={{ color: GREEN }}>₹{Number(r.net_pay||0).toLocaleString('en-IN')}</span>
           )},
-          { key: 'status', label: 'Status', render: (r) => <StatusBadge value={r.status} /> },
-          { key: 'actions', label: 'Payslip', render: (r) => (
+          { key: 'status', label: 'Status', render: r => <StatusBadge value={r.status} /> },
+          { key: 'actions', label: 'Payslip', render: r => (
             <button
               onClick={() => navigate(`/hr-admin/payroll/${r.id}/payslip`)}
               className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
               style={{ backgroundColor: GREEN }}
             >
-              <Printer className="h-3 w-3" /> Print
+              <Printer size={12} /> Print
             </button>
           )},
         ]}
@@ -749,15 +1104,14 @@ function DocumentsTab({ policies, userId }) {
     mutationFn: (id) => hrAdvancedAPI.acknowledgePolicy(id, {}),
     onSuccess:  () => { toast.success('Policy acknowledged'); qc.invalidateQueries({ queryKey: ['ess-policy-acks'] }); },
   });
-  const acked = new Set((acks.data || []).map((a) => a.policy_id));
+  const acked = new Set((acks.data || []).map(a => a.policy_id));
 
   return (
     <div className="space-y-5">
-      {/* Upload */}
       <SectionCard title="Upload Document" subtitle="Upload profile and HR documents">
         <div className="grid gap-3 sm:grid-cols-3">
           <Field title="Document Type">
-            <select className={inputCls} value={doc.doc_type} onChange={(e) => setDoc({ ...doc, doc_type: e.target.value })}>
+            <select className={inputCls} value={doc.doc_type} onChange={e => setDoc({ ...doc, doc_type: e.target.value })}>
               <option value="employee_document">Employee Document</option>
               <option value="id_proof">ID Proof</option>
               <option value="address_proof">Address Proof</option>
@@ -765,40 +1119,38 @@ function DocumentsTab({ policies, userId }) {
             </select>
           </Field>
           <Field title="Document Name">
-            <input className={inputCls} value={doc.doc_name} onChange={(e) => setDoc({ ...doc, doc_name: e.target.value })} />
+            <input className={inputCls} value={doc.doc_name} onChange={e => setDoc({ ...doc, doc_name: e.target.value })} />
           </Field>
           <Field title="File">
-            <input type="file" className={inputCls} onChange={(e) => setDoc({ ...doc, file: e.target.files?.[0] || null })} />
+            <input type="file" className={inputCls} onChange={e => setDoc({ ...doc, file: e.target.files?.[0] || null })} />
           </Field>
         </div>
         <div className="mt-4">
           <GreenBtn disabled={!doc.file} onClick={() => upload.mutate()}>
-            <Upload className="h-4 w-4" /> Upload Document
+            <Upload size={16} /> Upload Document
           </GreenBtn>
         </div>
       </SectionCard>
 
-      {/* My documents */}
       <SectionCard title="My Documents">
         <Table
           columns={[
             { key: 'doc_type',    label: 'Type' },
             { key: 'doc_name',    label: 'Name' },
-            { key: 'uploaded_at', label: 'Uploaded', render: (r) => String(r.uploaded_at||'').slice(0,10) },
+            { key: 'uploaded_at', label: 'Uploaded', render: r => String(r.uploaded_at||'').slice(0,10) },
           ]}
           rows={documents.data || []}
         />
       </SectionCard>
 
-      {/* Policy Acknowledgement */}
       <SectionCard title="Policy Acknowledgement" subtitle="Read and acknowledge published company policies">
         <Table
           columns={[
             { key: 'title',          label: 'Policy'   },
             { key: 'category',       label: 'Category' },
             { key: 'version',        label: 'Version'  },
-            { key: 'effective_date', label: 'Effective', render: (r) => String(r.effective_date||'').slice(0,10) },
-            { key: 'actions',        label: 'Status',   render: (r) => acked.has(r.id)
+            { key: 'effective_date', label: 'Effective', render: r => String(r.effective_date||'').slice(0,10) },
+            { key: 'actions', label: 'Status', render: r => acked.has(r.id)
                 ? <span className="rounded-full border border-green-200 bg-green-50 px-2.5 py-0.5 text-[11px] font-semibold text-green-700">Acknowledged</span>
                 : <button className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100 transition"
                     onClick={() => acknowledge.mutate(r.id)}>Acknowledge</button>
@@ -819,14 +1171,14 @@ function HRRequestsTab({ serviceRequests }) {
   const [reqForm, setReqForm] = useState({ request_type: 'certificate', priority: 'normal', subject: '', description: '' });
   const createRequest = useMutation({
     mutationFn: () => hrAdvancedAPI.createServiceRequest(reqForm),
-    onSuccess: () => { toast.success('HR request created'); setReqForm({ request_type: 'certificate', priority: 'normal', subject: '', description: '' }); qc.invalidateQueries({ queryKey: ['ess-hr-requests'] }); },
+    onSuccess:  () => { toast.success('HR request created'); setReqForm({ request_type: 'certificate', priority: 'normal', subject: '', description: '' }); qc.invalidateQueries({ queryKey: ['ess-hr-requests'] }); },
   });
   return (
     <div className="space-y-5">
       <SectionCard title="Raise HR Request" subtitle="Certificates, payroll queries, corrections, document support">
         <div className="grid gap-3 sm:grid-cols-2">
           <Field title="Request Type">
-            <select className={inputCls} value={reqForm.request_type} onChange={(e) => setReqForm({ ...reqForm, request_type: e.target.value })}>
+            <select className={inputCls} value={reqForm.request_type} onChange={e => setReqForm({ ...reqForm, request_type: e.target.value })}>
               <option value="certificate">Certificate / Letter</option>
               <option value="payroll">Payroll Query</option>
               <option value="attendance">Attendance Issue</option>
@@ -836,7 +1188,7 @@ function HRRequestsTab({ serviceRequests }) {
             </select>
           </Field>
           <Field title="Priority">
-            <select className={inputCls} value={reqForm.priority} onChange={(e) => setReqForm({ ...reqForm, priority: e.target.value })}>
+            <select className={inputCls} value={reqForm.priority} onChange={e => setReqForm({ ...reqForm, priority: e.target.value })}>
               <option value="low">Low</option>
               <option value="normal">Normal</option>
               <option value="high">High</option>
@@ -845,11 +1197,11 @@ function HRRequestsTab({ serviceRequests }) {
           </Field>
           <Field title="Subject">
             <input className={inputCls} value={reqForm.subject} placeholder="Brief subject"
-              onChange={(e) => setReqForm({ ...reqForm, subject: e.target.value })} />
+              onChange={e => setReqForm({ ...reqForm, subject: e.target.value })} />
           </Field>
           <Field title="Description">
             <input className={inputCls} value={reqForm.description} placeholder="Details"
-              onChange={(e) => setReqForm({ ...reqForm, description: e.target.value })} />
+              onChange={e => setReqForm({ ...reqForm, description: e.target.value })} />
           </Field>
         </div>
         <div className="mt-4">
@@ -866,7 +1218,7 @@ function HRRequestsTab({ serviceRequests }) {
             { key: 'request_type', label: 'Type'     },
             { key: 'subject',      label: 'Subject'  },
             { key: 'priority',     label: 'Priority' },
-            { key: 'status',       label: 'Status',  render: (r) => <StatusBadge value={r.status} /> },
+            { key: 'status',       label: 'Status',  render: r => <StatusBadge value={r.status} /> },
           ]}
           rows={serviceRequests}
         />
@@ -879,10 +1231,10 @@ function HRRequestsTab({ serviceRequests }) {
    MANAGER DESK TAB
 ═══════════════════════════════════════════════════════════════ */
 function ManagerDeskTab() {
-  const qc = useQueryClient();
+  const qc          = useQueryClient();
   const leaves      = useQuery({ queryKey: ['ess-manager-leaves'],      queryFn: () => essAPI.managerLeaveRequests({ status: 'pending' }).then(unwrap), retry: false });
   const corrections = useQuery({ queryKey: ['ess-manager-corrections'], queryFn: () => essAPI.managerCorrections({ status: 'pending' }).then(unwrap), retry: false });
-  const refresh = () => { qc.invalidateQueries({ queryKey: ['ess-manager-leaves'] }); qc.invalidateQueries({ queryKey: ['ess-manager-corrections'] }); };
+  const refresh     = () => { qc.invalidateQueries({ queryKey: ['ess-manager-leaves'] }); qc.invalidateQueries({ queryKey: ['ess-manager-corrections'] }); };
   const leaveAction      = useMutation({ mutationFn: ({ id, action }) => essAPI.managerLeaveAction(id, action),      onSuccess: refresh });
   const correctionAction = useMutation({ mutationFn: ({ id, action }) => essAPI.managerCorrectionAction(id, action), onSuccess: refresh });
 
@@ -897,7 +1249,7 @@ function ManagerDeskTab() {
   const ActionButtons = ({ onApprove, onReject }) => (
     <div className="flex gap-2">
       <button onClick={onApprove} className="rounded-md border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700 hover:bg-green-100 transition">Approve</button>
-      <button onClick={onReject}  className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-100 transition">Reject</button>
+      <button onClick={onReject}  className="rounded-md border border-red-200   bg-red-50   px-2.5 py-1 text-xs font-semibold text-red-600   hover:bg-red-100   transition">Reject</button>
     </div>
   );
 
@@ -906,12 +1258,12 @@ function ManagerDeskTab() {
       <SectionCard title="Leave Approvals" subtitle="Pending team leave requests">
         <Table
           columns={[
-            { key: 'employee_name',    label: 'Employee' },
-            { key: 'leave_type_name',  label: 'Type'     },
-            { key: 'from_date', label: 'From', render: (r) => String(r.from_date||'').slice(0,10) },
-            { key: 'to_date',   label: 'To',   render: (r) => String(r.to_date  ||'').slice(0,10) },
-            { key: 'days',             label: 'Days'     },
-            { key: 'actions', label: 'Action', render: (r) => (
+            { key: 'employee_name',   label: 'Employee' },
+            { key: 'leave_type_name', label: 'Type'     },
+            { key: 'from_date', label: 'From', render: r => String(r.from_date||'').slice(0,10) },
+            { key: 'to_date',   label: 'To',   render: r => String(r.to_date  ||'').slice(0,10) },
+            { key: 'days',            label: 'Days'     },
+            { key: 'actions', label: 'Action', render: r => (
               <ActionButtons
                 onApprove={() => leaveAction.mutate({ id: r.id, action: 'approve' })}
                 onReject={()  => leaveAction.mutate({ id: r.id, action: 'reject'  })}
@@ -926,10 +1278,10 @@ function ManagerDeskTab() {
         <Table
           columns={[
             { key: 'employee_name',    label: 'Employee' },
-            { key: 'attendance_date',  label: 'Date',      render: (r) => String(r.attendance_date||'').slice(0,10) },
-            { key: 'requested_status', label: 'Status'    },
-            { key: 'reason',           label: 'Reason'    },
-            { key: 'actions', label: 'Action', render: (r) => (
+            { key: 'attendance_date',  label: 'Date',    render: r => String(r.attendance_date||'').slice(0,10) },
+            { key: 'requested_status', label: 'Status'   },
+            { key: 'reason',           label: 'Reason'   },
+            { key: 'actions', label: 'Action', render: r => (
               <ActionButtons
                 onApprove={() => correctionAction.mutate({ id: r.id, action: 'approve' })}
                 onReject={()  => correctionAction.mutate({ id: r.id, action: 'reject'  })}
@@ -944,26 +1296,253 @@ function ManagerDeskTab() {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   ROOT PAGE
+   TRAINING TAB
 ═══════════════════════════════════════════════════════════════ */
-const TABS = [
-  { id: 'dashboard',   label: 'Dashboard'    },
-  { id: 'attendance',  label: 'Attendance'   },
-  { id: 'leave',       label: 'Leave'        },
-  { id: 'payslips',    label: 'Payslips'     },
-  { id: 'documents',   label: 'Documents'    },
-  { id: 'hr-requests', label: 'HR Requests'  },
-  { id: 'manager',     label: 'Manager Desk' },
+const TRAINING_CATEGORIES = [
+  'Safety & HSE',
+  'Technical Skills',
+  'Quality Assurance',
+  'Housekeeping & 5S',
+  'Soft Skills / Leadership',
+  'Induction / Onboarding',
+  'Compliance & Statutory',
+  'Equipment Operation',
+  'First Aid / Emergency',
+  'Other',
 ];
 
+const STATUS_COLORS = {
+  pending:   { bg: 'bg-amber-50',   text: 'text-amber-700',   label: 'Pending'   },
+  approved:  { bg: 'bg-green-50',   text: 'text-green-700',   label: 'Approved'  },
+  rejected:  { bg: 'bg-red-50',     text: 'text-red-700',     label: 'Rejected'  },
+  completed: { bg: 'bg-blue-50',    text: 'text-blue-700',    label: 'Completed' },
+};
+
+function TrainingTab() {
+  const qc = useQueryClient();
+
+  const requirements = useQuery({
+    queryKey: ['ess-training-requirements'],
+    queryFn:  () => essAPI.trainingRequirements().then(unwrap),
+  });
+  const requests = useQuery({
+    queryKey: ['ess-training-requests'],
+    queryFn:  () => essAPI.trainingRequests().then(unwrap),
+  });
+
+  const [form, setForm] = useState({ training_name: '', category: '', reason: '', preferred_date: '' });
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const submit = useMutation({
+    mutationFn: () => essAPI.createTrainingRequest(form),
+    onSuccess: () => {
+      toast.success('Training request submitted');
+      setForm({ training_name: '', category: '', reason: '', preferred_date: '' });
+      qc.invalidateQueries({ queryKey: ['ess-training-requests'] });
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to submit'),
+  });
+
+  const reqs = requirements.data || [];
+  const myRequests = requests.data || [];
+
+  return (
+    <div className="space-y-5 max-w-5xl mx-auto">
+
+      {/* Header */}
+      <div className="rounded-2xl p-6 text-white" style={{ background: `linear-gradient(135deg, ${NAVY}, #1e5a8a)` }}>
+        <div className="flex items-center gap-3 mb-1">
+          <Award size={22} className="text-white/80" />
+          <h2 className="text-xl font-bold">Training & Development</h2>
+        </div>
+        <p className="text-white/60 text-sm">View your training requirements and request new training programs</p>
+      </div>
+
+      {/* Training requirements from performance evaluation */}
+      {reqs.length > 0 && (
+        <SectionCard
+          title="Training Required (from Performance Review)"
+          subtitle="Training needs identified by your reporting manager"
+        >
+          <div className="space-y-3">
+            {reqs.map(r => (
+              <div key={r.id} className="flex gap-4 p-4 rounded-xl bg-amber-50 border border-amber-100">
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-200 flex items-center justify-center">
+                  <Award size={18} className="text-amber-700" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className="text-xs font-bold text-amber-800 uppercase tracking-wide">
+                      {r.eval_period} · {r.review_type === 'quarterly' ? 'Quarterly' : 'Monthly'} Review
+                    </span>
+                    {r.overall_rating && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white border border-amber-200 text-amber-700">
+                        {r.overall_rating}
+                      </span>
+                    )}
+                    {r.eval_date && (
+                      <span className="text-[10px] text-amber-500">
+                        {String(r.eval_date).slice(0, 10)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{r.training_required}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      )}
+
+      {/* Request Training Form */}
+      <SectionCard title="Request Training" subtitle="Submit a request for a training program you need">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="md:col-span-2">
+            <label className={labelCls}>Training / Course Name *</label>
+            <input className={inputCls} value={form.training_name}
+              onChange={e => set('training_name', e.target.value)}
+              placeholder="e.g. Fire Safety, Crane Operation, First Aid…" />
+          </div>
+          <div>
+            <label className={labelCls}>Category</label>
+            <select className={inputCls} value={form.category} onChange={e => set('category', e.target.value)}>
+              <option value="">Select category…</option>
+              {TRAINING_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Preferred Date</label>
+            <input type="date" className={inputCls} value={form.preferred_date}
+              onChange={e => set('preferred_date', e.target.value)} />
+          </div>
+          <div className="md:col-span-2">
+            <label className={labelCls}>Reason / Justification</label>
+            <textarea rows={3} className={inputCls} value={form.reason}
+              onChange={e => set('reason', e.target.value)}
+              placeholder="Why do you need this training?" />
+          </div>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <button
+            disabled={!form.training_name || submit.isPending}
+            onClick={() => submit.mutate()}
+            className="px-6 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50"
+            style={{ background: GREEN }}
+          >
+            {submit.isPending ? 'Submitting…' : 'Submit Request'}
+          </button>
+        </div>
+      </SectionCard>
+
+      {/* My Training Requests */}
+      <SectionCard title="My Training Requests" subtitle="Track the status of your submitted training requests">
+        {requests.isLoading ? (
+          <p className="text-sm text-gray-400 py-4 text-center">Loading…</p>
+        ) : myRequests.length === 0 ? (
+          <div className="text-center py-8 text-gray-400">
+            <Award size={32} className="mx-auto mb-2 opacity-30" />
+            <p className="text-sm">No training requests submitted yet</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left py-2.5 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Training</th>
+                  <th className="text-left py-2.5 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Category</th>
+                  <th className="text-left py-2.5 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Preferred Date</th>
+                  <th className="text-left py-2.5 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                  <th className="text-left py-2.5 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Actioned By</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {myRequests.map(r => {
+                  const sc = STATUS_COLORS[r.status] || STATUS_COLORS.pending;
+                  return (
+                    <tr key={r.id} className="hover:bg-gray-50">
+                      <td className="py-3 px-3">
+                        <p className="font-medium text-gray-800">{r.training_name}</p>
+                        {r.reason && <p className="text-xs text-gray-400 mt-0.5 truncate max-w-[220px]">{r.reason}</p>}
+                      </td>
+                      <td className="py-3 px-3 text-gray-600 text-xs">{r.category || '—'}</td>
+                      <td className="py-3 px-3 text-gray-600 text-xs">
+                        {r.preferred_date ? String(r.preferred_date).slice(0, 10) : '—'}
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${sc.bg} ${sc.text}`}>
+                          {sc.label}
+                        </span>
+                        {r.rejection_reason && (
+                          <p className="text-[10px] text-red-400 mt-0.5">{r.rejection_reason}</p>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 text-gray-500 text-xs">{r.actioned_by_name || '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionCard>
+
+      {/* Training categories reference */}
+      <SectionCard title="Training Categories Available" subtitle="Types of training programs offered at BCIM">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {[
+            { label: 'Safety & HSE',          icon: '🦺', color: 'bg-red-50 border-red-100 text-red-700'      },
+            { label: 'Technical Skills',       icon: '⚙️', color: 'bg-blue-50 border-blue-100 text-blue-700'   },
+            { label: 'Quality Assurance',      icon: '✅', color: 'bg-green-50 border-green-100 text-green-700'},
+            { label: 'Housekeeping & 5S',      icon: '🧹', color: 'bg-yellow-50 border-yellow-100 text-yellow-700'},
+            { label: 'Soft Skills',            icon: '🤝', color: 'bg-purple-50 border-purple-100 text-purple-700'},
+            { label: 'Induction',              icon: '📋', color: 'bg-indigo-50 border-indigo-100 text-indigo-700'},
+            { label: 'Compliance',             icon: '⚖️', color: 'bg-gray-50 border-gray-200 text-gray-700'   },
+            { label: 'Equipment Operation',    icon: '🏗️', color: 'bg-orange-50 border-orange-100 text-orange-700'},
+            { label: 'First Aid / Emergency',  icon: '🩺', color: 'bg-pink-50 border-pink-100 text-pink-700'   },
+            { label: 'Other',                  icon: '📚', color: 'bg-teal-50 border-teal-100 text-teal-700'   },
+          ].map(({ label, icon, color }) => (
+            <div key={label} className={`flex flex-col items-center gap-2 p-3 rounded-xl border text-center cursor-pointer ${color}`}
+              onClick={() => { set('category', label); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
+              <span className="text-2xl">{icon}</span>
+              <span className="text-xs font-semibold leading-tight">{label}</span>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-gray-400 mt-3 text-center">Click a category to pre-fill your training request above</p>
+      </SectionCard>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   COMING SOON PLACEHOLDER
+═══════════════════════════════════════════════════════════════ */
+function ComingSoon({ label }) {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="text-center">
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100">
+          <Clock size={28} className="text-gray-400" />
+        </div>
+        <p className="text-lg font-bold text-gray-400">{label}</p>
+        <p className="mt-1 text-sm text-gray-300">This section is under development</p>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ROOT PAGE
+═══════════════════════════════════════════════════════════════ */
+const FUNCTIONAL_TABS = new Set(['dashboard','profile','attendance','leave','payslips','documents','hr-requests','manager','training']);
+
 export default function ESSPortalPage() {
-  const now = new Date();
+  const now     = new Date();
   const [active, setActive] = useState('dashboard');
 
-  /* ── queries (keep all existing keys) ── */
   const summary = useQuery({
     queryKey: ['ess-summary'],
-    queryFn:  () => essAPI.summary({ month: now.getMonth() + 1, year: now.getFullYear() }).then((r) => r.data.data),
+    queryFn:  () => essAPI.summary({ month: now.getMonth() + 1, year: now.getFullYear() }).then(r => r.data.data),
   });
   const userId = summary.data?.profile?.id;
 
@@ -980,85 +1559,46 @@ export default function ESSPortalPage() {
     queryFn:  () => hrAdvancedAPI.listPolicies({ status: 'published' }).then(unwrap),
   });
 
-  /* bootstrap leave balances for sidebar + derived leave types */
   const balances = useQuery({
     queryKey: ['ess-leave-balances-bootstrap'],
     queryFn:  () => essAPI.leaveBalances().then(unwrap),
   });
 
   const derivedLeaveTypes = useMemo(
-    () => (balances.data || []).map((b) => ({ id: b.leave_type_id, name: b.leave_type_name })),
+    () => (balances.data || []).map(b => ({ id: b.leave_type_id, name: b.leave_type_name })),
     [balances.data],
   );
 
   const profile = summary.data?.profile || {};
 
+  const navLabel = TAB_ITEMS.find(i => i.id === active)?.label || active;
+
   return (
-    <div className="min-h-screen" style={{ backgroundColor: BG }}>
-      {/* ── top header bar ── */}
-      <div className="px-6 py-4 text-white" style={{ backgroundColor: NAVY }}>
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-blue-300">Employee Self Service</p>
-        <h1 className="mt-0.5 text-xl font-bold">ESS Portal</h1>
-      </div>
+    <div className="flex flex-col min-h-screen" style={{ backgroundColor: BG }}>
+      {/* Horizontal tab navigation — sits inside the existing app shell */}
+      <ESSTabNav active={active} setActive={setActive} />
 
-      <div className="flex gap-5 px-6 py-5">
-        {/* ── Sidebar ── */}
-        <Sidebar profile={profile} balances={balances.data || []} />
-
-        {/* ── Main area ── */}
-        <div className="min-w-0 flex-1">
-          {/* Tab bar */}
-          <div className="mb-5 rounded-xl border border-gray-200 bg-white shadow-sm">
-            <div className="flex overflow-x-auto">
-              {TABS.map((t) => {
-                const isActive = active === t.id;
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => setActive(t.id)}
-                    className={`relative shrink-0 px-5 py-3.5 text-sm font-semibold transition whitespace-nowrap ${
-                      isActive
-                        ? 'text-green-700'
-                        : 'text-gray-500 hover:text-gray-800'
-                    }`}
-                    style={isActive ? { color: GREEN } : {}}
-                  >
-                    {t.label}
-                    {isActive && (
-                      <span
-                        className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t"
-                        style={{ backgroundColor: GREEN }}
-                      />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Tab content */}
-          {active === 'dashboard' && (
-            <DashboardTab
-              summary={summary.data || {}}
-              balances={balances.data || []}
-              serviceRequests={serviceRequests.data || []}
-            />
-          )}
-          {active === 'attendance' && (
-            <AttendanceTab leaveTypes={derivedLeaveTypes} />
-          )}
-          {active === 'leave' && (
-            <LeaveTab leaveTypes={derivedLeaveTypes} />
-          )}
-          {active === 'payslips' && <PayslipsTab />}
-          {active === 'documents' && (
-            <DocumentsTab policies={policies.data || []} userId={userId} />
-          )}
-          {active === 'hr-requests' && (
-            <HRRequestsTab serviceRequests={serviceRequests.data || []} />
-          )}
-          {active === 'manager' && <ManagerDeskTab />}
-        </div>
+      {/* Page content */}
+      <div className="flex-1 p-5">
+        {active === 'dashboard' && (
+          <DashboardTab
+            summary={summary.data || {}}
+            balances={balances.data || []}
+            serviceRequests={serviceRequests.data || []}
+            notifications={notifications.data || []}
+            profile={profile}
+            setActive={setActive}
+          />
+        )}
+        {active === 'profile'     && <ProfileTab profile={profile} balances={balances.data || []} />}
+        {active === 'attendance'  && <AttendanceTab leaveTypes={derivedLeaveTypes} />}
+        {active === 'leave'       && <LeaveTab leaveTypes={derivedLeaveTypes} />}
+        {active === 'payslips'    && <PayslipsTab />}
+        {active === 'documents'   && <DocumentsTab policies={policies.data || []} userId={userId} />}
+        {active === 'hr-requests' && <HRRequestsTab serviceRequests={serviceRequests.data || []} />}
+        {active === 'manager'     && <ManagerDeskTab />}
+        {active === 'training'    && <TrainingTab />}
+        {!FUNCTIONAL_TABS.has(active) && <ComingSoon label={navLabel} />}
       </div>
     </div>
   );

@@ -12,6 +12,7 @@ import {
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
 import { authAPI, projectAPI } from '../../api/client';
+import { CursorSpotlight } from '../../components/ui/cursor-spotlight';
 
 const schema = z.object({
   email:    z.string().email('Enter a valid email address'),
@@ -644,7 +645,14 @@ export default function LoginPage() {
       <div className={`lp-root${mounted ? ' lp-mounted' : ''}`}>
 
         {/* ════════════ LEFT — Navy Brand Panel ════════════ */}
-        <div className="lp-left">
+        <CursorSpotlight
+          className="lp-left"
+          baseColor="transparent"
+          spotlightSize={320}
+          spotlightOpacity={0.1}
+          falloff="65%"
+          childrenClassName="absolute inset-0 flex flex-col"
+        >
           <div className="lp-pattern" />
           <div className="lp-diagonal" />
           <div className="lp-gold-bar" />
@@ -715,7 +723,7 @@ export default function LoginPage() {
             </div>
 
           </div>
-        </div>
+        </CursorSpotlight>
 
         {/* ════════════ RIGHT — Login Form ════════════ */}
         <div className="lp-right">

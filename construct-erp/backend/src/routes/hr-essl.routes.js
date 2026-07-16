@@ -110,7 +110,8 @@ router.post('/agent-push', async (req, res) => {
         await query(
           `INSERT INTO essl_device_logs (company_id, emp_code, swipe_time, direction, source)
            VALUES ($1,$2,$3,$4,'agent')
-           ON CONFLICT (company_id, emp_code, swipe_time) DO NOTHING`,
+           ON CONFLICT (company_id, emp_code, swipe_time)
+           DO UPDATE SET direction=$4, source='agent'`,
           [company_id, String(s.emp_code).trim(), s.swipe_time, s.direction || null]
         ).catch(() => {});
       }

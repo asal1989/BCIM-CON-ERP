@@ -1,5 +1,5 @@
 // src/pages/hr-admin/PerformancePage.jsx
-// Staff Performance Evaluation Form — KRA/KPI scoring with self + manager assessment
+// BCIM Employee Performance Review Form — Monthly / Quarterly
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -10,14 +10,27 @@ import { hrEvaluationsAPI, hrEmployeesAPI } from '../../api/client';
 import dayjs from 'dayjs';
 import toast from 'react-hot-toast';
 
-// ── helpers ──────────────────────────────────────────────────────────────────
-const RATING_CFG = {
-  'Outstanding':           { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500',  pct: 100 },
-  'Exceeds Expectations':  { bg: 'bg-blue-50',    text: 'text-blue-700',    dot: 'bg-blue-500',     pct: 80  },
-  'Meets Expectations':    { bg: 'bg-indigo-50',  text: 'text-indigo-700',  dot: 'bg-indigo-500',   pct: 60  },
-  'Below Expectations':    { bg: 'bg-amber-50',   text: 'text-amber-700',   dot: 'bg-amber-500',    pct: 40  },
-  'Unsatisfactory':        { bg: 'bg-red-50',     text: 'text-red-700',     dot: 'bg-red-500',      pct: 20  },
+// ── constants ─────────────────────────────────────────────────────────────────
+const NAVY = '#0A1F5C';
+const inp  = 'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100';
+const lbl  = 'text-xs font-semibold text-gray-600 uppercase tracking-wide block mb-1';
+
+const SCORE_LABELS = {
+  1: 'Unsatisfactory',
+  2: 'Needs Improvement',
+  3: 'Meets Expectations',
+  4: 'Exceeds Expectations',
+  5: 'Outstanding',
 };
+
+const RATING_CFG = {
+  'Outstanding':       { bg: 'bg-emerald-50', text: 'text-emerald-700', pct: 95 },
+  'Very Good':         { bg: 'bg-blue-50',    text: 'text-blue-700',    pct: 85 },
+  'Good':              { bg: 'bg-indigo-50',  text: 'text-indigo-700',  pct: 75 },
+  'Satisfactory':      { bg: 'bg-amber-50',   text: 'text-amber-700',   pct: 65 },
+  'Needs Improvement': { bg: 'bg-red-50',     text: 'text-red-700',     pct: 30 },
+};
+
 const STATUS_CFG = {
   draft:            { label: 'Draft',            bg: 'bg-gray-100',    text: 'text-gray-600'    },
   self_submitted:   { label: 'Self Submitted',   bg: 'bg-blue-50',     text: 'text-blue-700'    },
@@ -25,14 +38,29 @@ const STATUS_CFG = {
   approved:         { label: 'Approved',         bg: 'bg-emerald-50',  text: 'text-emerald-700' },
   acknowledged:     { label: 'Acknowledged',     bg: 'bg-teal-50',     text: 'text-teal-700'    },
 };
-const SCORE_LABELS = { 1: 'Poor', 2: 'Below Avg', 3: 'Average', 4: 'Good', 5: 'Excellent' };
-const inp  = 'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100';
-const lbl  = 'text-xs font-semibold text-gray-600 uppercase tracking-wide block mb-1';
-const NAVY = '#0A1F5C';
 
+// Rating scale legend (matches document)
+const RATING_SCALE = [
+  { score: 5, label: 'Outstanding'         },
+  { score: 4, label: 'Exceeds Expectations'},
+  { score: 3, label: 'Meets Expectations'  },
+  { score: 2, label: 'Needs Improvement'   },
+  { score: 1, label: 'Unsatisfactory'      },
+];
+
+// Overall performance rating bands (matches document)
+const OVERALL_BANDS = [
+  { label: 'Outstanding',       range: '90–100' },
+  { label: 'Very Good',         range: '80–89'  },
+  { label: 'Good',              range: '70–79'  },
+  { label: 'Satisfactory',      range: '60–69'  },
+  { label: 'Needs Improvement', range: 'Below 60' },
+];
+
+// ── Print CSS ─────────────────────────────────────────────────────────────────
 const PERF_PRINT_CSS = `
 @media print {
-  @page { size: A4 portrait; margin: 12mm; }
+  @page { size: A4 portrait; margin: 10mm; }
   html, body {
     margin:0 !important; padding:0 !important; background:#fff !important;
     -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important;
@@ -55,76 +83,52 @@ const PERF_PRINT_CSS = `
     border-radius:0 !important;
   }
   .print-only { display:block !important; }
-  .perf-sig-section { page-break-inside:avoid !important; margin-top:32px !important; }
+  .perf-sig-section { page-break-inside:avoid !important; margin-top:24px !important; }
 }
 @media screen {
   .print-only { display:none !important; }
 }
 `;
 
-const calcWeightedScore = (kras) => {
-  if (!kras?.length) return 0;
-  let total = 0, wTotal = 0;
-  kras.forEach(k => {
-    const s = parseFloat(k.manager_score || k.self_score || 0);
-    total  += s * (k.weight / 100) * 20; // 1-5 scale → 0-100
-    wTotal += k.weight;
-  });
-  return wTotal > 0 ? Math.round((total / wTotal) * wTotal) : 0;
-};
-
-const ScoreDot = ({ score }) => (
-  <div className="flex gap-1 items-center">
-    {[1,2,3,4,5].map(n => (
-      <div key={n} className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold
-        ${n <= score ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-400'}`}>{n}</div>
-    ))}
-  </div>
-);
-
-// ── KRA Evaluation Table inside the form ─────────────────────────────────────
+// ── KRA Table ─────────────────────────────────────────────────────────────────
 function KRATable({ kras, onChange }) {
   const handleScore = (idx, field, val) => {
-    const updated = kras.map((k, i) => i === idx ? { ...k, [field]: Number(val) } : k);
-    onChange(updated);
+    onChange(kras.map((k, i) => i === idx ? { ...k, [field]: Number(val) } : k));
   };
   const handleRemarks = (idx, val) => {
-    const updated = kras.map((k, i) => i === idx ? { ...k, remarks: val } : k);
-    onChange(updated);
+    onChange(kras.map((k, i) => i === idx ? { ...k, remarks: val } : k));
   };
 
-  const selfTotal    = useMemo(() => {
-    if (!kras.length) return 0;
-    return kras.reduce((s, k) => s + (parseFloat(k.self_score || 0) * k.weight / 100) * 20, 0).toFixed(1);
-  }, [kras]);
-  const managerTotal = useMemo(() => {
-    if (!kras.length) return 0;
-    return kras.reduce((s, k) => s + (parseFloat(k.manager_score || 0) * k.weight / 100) * 20, 0).toFixed(1);
-  }, [kras]);
+  const selfTotal = useMemo(() =>
+    kras.reduce((s, k) => s + (parseFloat(k.self_score || 0) * k.weight / 100) * 20, 0).toFixed(1), [kras]);
+  const managerTotal = useMemo(() =>
+    kras.reduce((s, k) => s + (parseFloat(k.manager_score || 0) * k.weight / 100) * 20, 0).toFixed(1), [kras]);
 
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200">
       <table className="w-full text-sm">
         <thead>
           <tr style={{ background: NAVY }}>
-            <th className="text-left px-4 py-3 text-white text-xs font-semibold w-[32%]">KRA / KPI</th>
-            <th className="text-center px-3 py-3 text-white text-xs font-semibold w-[8%]">Weight</th>
-            <th className="text-center px-3 py-3 text-white text-xs font-semibold w-[20%]">Self Score (1–5)</th>
-            <th className="text-center px-3 py-3 text-white text-xs font-semibold w-[20%]">Manager Score (1–5)</th>
+            <th className="text-left px-4 py-3 text-white text-xs font-semibold w-8">Sl.</th>
+            <th className="text-left px-4 py-3 text-white text-xs font-semibold">Performance Parameter</th>
+            <th className="text-center px-3 py-3 text-white text-xs font-semibold w-24">Weightage</th>
+            <th className="text-center px-3 py-3 text-white text-xs font-semibold w-40">Rating (1–5)</th>
+            <th className="text-center px-3 py-3 text-white text-xs font-semibold w-40">Manager Score (1–5)</th>
             <th className="text-left px-3 py-3 text-white text-xs font-semibold">Remarks</th>
           </tr>
         </thead>
         <tbody>
           {kras.map((k, i) => (
             <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+              <td className="px-4 py-3 text-center text-gray-500 font-medium">{i + 1}</td>
               <td className="px-4 py-3 font-medium text-gray-800">{k.kra}</td>
-              <td className="px-3 py-3 text-center text-gray-600 font-semibold">{k.weight}%</td>
+              <td className="px-3 py-3 text-center font-semibold text-gray-700">{k.weight}</td>
               <td className="px-3 py-3">
                 <div className="flex flex-col gap-1 items-center">
                   <select value={k.self_score || ''} onChange={e => handleScore(i, 'self_score', e.target.value)}
-                    className="w-24 text-center px-2 py-1.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:border-blue-400">
+                    className="w-28 text-center px-2 py-1.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:border-blue-400">
                     <option value="">—</option>
-                    {[1,2,3,4,5].map(n => <option key={n} value={n}>{n} – {SCORE_LABELS[n]}</option>)}
+                    {[5,4,3,2,1].map(n => <option key={n} value={n}>{n} – {SCORE_LABELS[n]}</option>)}
                   </select>
                   {k.self_score ? <span className="text-[10px] text-blue-600 font-medium">{SCORE_LABELS[k.self_score]}</span> : null}
                 </div>
@@ -132,24 +136,24 @@ function KRATable({ kras, onChange }) {
               <td className="px-3 py-3">
                 <div className="flex flex-col gap-1 items-center">
                   <select value={k.manager_score || ''} onChange={e => handleScore(i, 'manager_score', e.target.value)}
-                    className="w-24 text-center px-2 py-1.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:border-blue-400">
+                    className="w-28 text-center px-2 py-1.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:border-blue-400">
                     <option value="">—</option>
-                    {[1,2,3,4,5].map(n => <option key={n} value={n}>{n} – {SCORE_LABELS[n]}</option>)}
+                    {[5,4,3,2,1].map(n => <option key={n} value={n}>{n} – {SCORE_LABELS[n]}</option>)}
                   </select>
                   {k.manager_score ? <span className="text-[10px] text-purple-600 font-medium">{SCORE_LABELS[k.manager_score]}</span> : null}
                 </div>
               </td>
               <td className="px-3 py-3">
                 <input value={k.remarks || ''} onChange={e => handleRemarks(i, e.target.value)}
-                  placeholder="Optional remarks…" className={inp} />
+                  placeholder="Optional…" className={inp} />
               </td>
             </tr>
           ))}
         </tbody>
         <tfoot>
-          <tr className="border-t-2 border-gray-300 bg-gray-50">
-            <td className="px-4 py-3 font-bold text-gray-800">Weighted Total Score</td>
-            <td className="px-3 py-3 text-center font-bold text-gray-600">100%</td>
+          <tr className="border-t-2 border-gray-300 bg-gray-100">
+            <td colSpan={2} className="px-4 py-3 font-bold text-gray-800">Total Score</td>
+            <td className="px-3 py-3 text-center font-bold text-gray-700">100</td>
             <td className="px-3 py-3 text-center">
               <span className="inline-block px-3 py-1 bg-blue-100 text-blue-700 rounded-full font-bold text-sm">
                 {selfTotal} / 100
@@ -170,21 +174,21 @@ function KRATable({ kras, onChange }) {
 
 // ── Detail / Print View ───────────────────────────────────────────────────────
 function DetailView({ ev, onClose }) {
-  const rc = RATING_CFG[ev.overall_rating] || RATING_CFG['Meets Expectations'];
+  const rc = RATING_CFG[ev.overall_rating] || RATING_CFG['Satisfactory'];
   const sc = STATUS_CFG[ev.status] || STATUS_CFG.draft;
   const kras = ev.kra_scores || [];
-
-  const handlePrint = () => window.print();
+  const reviewLabel = ev.review_type === 'quarterly' ? 'Quarterly' : 'Monthly';
 
   return (
-    <div id="perf-print-root" className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center overflow-y-auto py-8 px-4">
+    <div id="perf-print-root" className="fixed inset-0 z-50 bg-black/50 flex items-stretch justify-center overflow-hidden">
       <style>{PERF_PRINT_CSS}</style>
-      <div id="perf-print-card" className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl">
-        {/* Header (screen only) */}
+      <div id="perf-print-card" className="bg-white w-full flex flex-col" style={{ maxWidth: '100vw' }}>
+
+        {/* Screen header */}
         <div className="no-print flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="font-bold text-gray-800 text-lg">Performance Evaluation Report</h2>
+          <h2 className="font-bold text-gray-800 text-lg">Performance Review Report</h2>
           <div className="flex gap-2">
-            <button onClick={handlePrint}
+            <button onClick={() => window.print()}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition-colors">
               <Printer size={14}/> Print
             </button>
@@ -192,130 +196,191 @@ function DetailView({ ev, onClose }) {
           </div>
         </div>
 
-        {/* Letterhead (print only) */}
-        <div className="print-only" style={{ borderBottom: '3px solid #0A1F5C', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 16 }}>
-          <img src="/bcim-logo.png" alt="BCIM Logo" style={{ height: 54, width: 'auto', objectFit: 'contain', flexShrink: 0 }} />
+        {/* Print letterhead */}
+        <div className="print-only" style={{ borderBottom: `3px solid ${NAVY}`, padding: '14px 24px', display: 'flex', alignItems: 'center', gap: 16 }}>
+          <img src="/bcim-logo.png" alt="BCIM" style={{ height: 52, width: 'auto', objectFit: 'contain', flexShrink: 0 }} />
           <div style={{ flex: 1, textAlign: 'center' }}>
-            <div style={{ fontSize: 9, fontWeight: 600, color: '#555', letterSpacing: 2, textTransform: 'uppercase' }}>
-              BCIM ENGINEERING PVT LTD
-            </div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: '#0A1F5C', letterSpacing: 0.5, margin: '2px 0' }}>
-              PERFORMANCE EVALUATION REPORT
-            </div>
-            <div style={{ fontSize: 9, color: '#444' }}>
-              Eval Period: <strong>{ev.eval_period || '—'}</strong>&emsp;|&emsp;
-              Eval Date: <strong>{ev.eval_date ? dayjs(ev.eval_date).format('DD MMM YYYY') : '—'}</strong>
-            </div>
+            <div style={{ fontSize: 8, fontWeight: 600, color: '#555', letterSpacing: 2, textTransform: 'uppercase' }}>BCIM Engineering Private Limited</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: NAVY, margin: '2px 0' }}>EMPLOYEE PERFORMANCE REVIEW FORM</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#333' }}>(MONTHLY / QUARTERLY)</div>
+            <div style={{ fontSize: 9, color: '#666', marginTop: 3 }}>Applicable to All Department Employees</div>
           </div>
         </div>
 
-        <div className="p-6 space-y-6">
-          {/* Employee Info */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-xl">
-            <div><p className="text-xs text-gray-500 mb-0.5">Employee</p><p className="font-semibold text-gray-800">{ev.employee_name}</p></div>
-            <div><p className="text-xs text-gray-500 mb-0.5">Emp Code</p><p className="font-semibold text-gray-800">{ev.employee_code || '—'}</p></div>
-            <div><p className="text-xs text-gray-500 mb-0.5">Department</p><p className="font-semibold text-gray-800">{ev.dept_name || ev.department || '—'}</p></div>
-            <div><p className="text-xs text-gray-500 mb-0.5">Designation</p><p className="font-semibold text-gray-800">{ev.emp_designation || ev.designation || '—'}</p></div>
-            <div><p className="text-xs text-gray-500 mb-0.5">Eval Period</p><p className="font-semibold text-gray-800">{ev.eval_period || '—'}</p></div>
-            <div><p className="text-xs text-gray-500 mb-0.5">Eval Date</p><p className="font-semibold text-gray-800">{ev.eval_date ? dayjs(ev.eval_date).format('DD MMM YYYY') : '—'}</p></div>
-            <div><p className="text-xs text-gray-500 mb-0.5">Evaluator</p><p className="font-semibold text-gray-800">{ev.evaluator_name || '—'}</p></div>
-            <div>
-              <p className="text-xs text-gray-500 mb-0.5">Status</p>
-              <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${sc.bg} ${sc.text}`}>{sc.label}</span>
-            </div>
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          {/* Review type badge */}
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Review Type:</span>
+            <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${ev.review_type === 'quarterly' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+              {reviewLabel}
+            </span>
+            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${sc.bg} ${sc.text}`}>{sc.label}</span>
           </div>
 
-          {/* Overall Score */}
-          <div className="flex items-center justify-between p-4 rounded-xl" style={{ background: `${NAVY}10` }}>
-            <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Overall Rating</p>
-              <span className={`inline-block px-4 py-1.5 rounded-full text-sm font-bold ${rc.bg} ${rc.text}`}>{ev.overall_rating || '—'}</span>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-gray-500 mb-1">Self Score</p>
-              <p className="text-2xl font-bold text-blue-600">{parseFloat(ev.self_total || 0).toFixed(1)}<span className="text-sm text-gray-400">/100</span></p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-gray-500 mb-1">Manager Score</p>
-              <p className="text-2xl font-bold text-purple-600">{parseFloat(ev.manager_total || 0).toFixed(1)}<span className="text-sm text-gray-400">/100</span></p>
-            </div>
-            {ev.increment_recommended > 0 && (
-              <div className="text-right">
-                <p className="text-xs text-gray-500 mb-1">Increment Recommended</p>
-                <p className="text-2xl font-bold text-emerald-600">{ev.increment_recommended}%</p>
+          {/* Employee info */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-4 bg-gray-50 rounded-xl border border-gray-100">
+            {[
+              ['Employee Name', ev.employee_name],
+              ['Emp. ID / Code', ev.employee_code || '—'],
+              ['Designation', ev.emp_designation || ev.designation || '—'],
+              ['Department', ev.dept_name || ev.department || '—'],
+              ['Project / Site', ev.project_site || '—'],
+              ['Review Period', ev.eval_period || '—'],
+              ['Review Date', ev.eval_date ? dayjs(ev.eval_date).format('DD MMM YYYY') : '—'],
+              ['Reporting Manager', ev.evaluator_name || '—'],
+            ].map(([k, v]) => (
+              <div key={k}>
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">{k}</p>
+                <p className="text-sm font-semibold text-gray-800">{v}</p>
               </div>
-            )}
+            ))}
           </div>
 
-          {/* KRA Table */}
+          {/* Rating scale legend */}
+          <div className="p-3 bg-amber-50 rounded-xl border border-amber-100">
+            <p className="text-xs font-bold text-amber-800 mb-2">Rating Scale</p>
+            <div className="flex flex-wrap gap-3">
+              {RATING_SCALE.map(r => (
+                <span key={r.score} className="text-xs text-amber-700">
+                  <strong>{r.score}</strong> = {r.label}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* KRA scores table */}
           {kras.length > 0 && (
             <div>
-              <h3 className="font-semibold text-gray-700 mb-3">KRA / KPI Scores</h3>
+              <h3 className="font-semibold text-gray-700 mb-3">KRA / KPI Scoring</h3>
               <div className="overflow-x-auto rounded-xl border border-gray-200">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-gray-100">
-                      <th className="text-left px-4 py-2.5 text-gray-600 font-semibold text-xs">KRA</th>
-                      <th className="text-center px-3 py-2.5 text-gray-600 font-semibold text-xs">Weight</th>
-                      <th className="text-center px-3 py-2.5 text-blue-600 font-semibold text-xs">Self</th>
-                      <th className="text-center px-3 py-2.5 text-purple-600 font-semibold text-xs">Manager</th>
-                      <th className="text-left px-3 py-2.5 text-gray-600 font-semibold text-xs">Remarks</th>
+                    <tr style={{ background: NAVY }}>
+                      <th className="text-left px-3 py-2.5 text-white text-xs font-semibold w-8">Sl.</th>
+                      <th className="text-left px-3 py-2.5 text-white text-xs font-semibold">Performance Parameter</th>
+                      <th className="text-center px-3 py-2.5 text-white text-xs font-semibold">Wt.</th>
+                      <th className="text-center px-3 py-2.5 text-white text-xs font-semibold">Self</th>
+                      <th className="text-center px-3 py-2.5 text-white text-xs font-semibold">Manager</th>
+                      <th className="text-left px-3 py-2.5 text-white text-xs font-semibold">Remarks</th>
                     </tr>
                   </thead>
                   <tbody>
                     {kras.map((k, i) => (
                       <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="px-4 py-2.5 font-medium text-gray-800">{k.kra}</td>
-                        <td className="px-3 py-2.5 text-center text-gray-500">{k.weight}%</td>
+                        <td className="px-3 py-2.5 text-center text-gray-500">{i + 1}</td>
+                        <td className="px-3 py-2.5 font-medium text-gray-800">{k.kra}</td>
+                        <td className="px-3 py-2.5 text-center text-gray-600">{k.weight}</td>
                         <td className="px-3 py-2.5 text-center">
                           <span className="font-bold text-blue-600">{k.self_score || '—'}</span>
-                          {k.self_score ? <span className="text-gray-400 text-xs"> ({SCORE_LABELS[k.self_score]})</span> : null}
+                          {k.self_score ? <span className="text-gray-400 text-xs block">{SCORE_LABELS[k.self_score]}</span> : null}
                         </td>
                         <td className="px-3 py-2.5 text-center">
                           <span className="font-bold text-purple-600">{k.manager_score || '—'}</span>
-                          {k.manager_score ? <span className="text-gray-400 text-xs"> ({SCORE_LABELS[k.manager_score]})</span> : null}
+                          {k.manager_score ? <span className="text-gray-400 text-xs block">{SCORE_LABELS[k.manager_score]}</span> : null}
                         </td>
                         <td className="px-3 py-2.5 text-gray-500 text-xs">{k.remarks || '—'}</td>
                       </tr>
                     ))}
                   </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-gray-300 bg-gray-100">
+                      <td colSpan={2} className="px-3 py-2.5 font-bold text-gray-800">Total Score</td>
+                      <td className="px-3 py-2.5 text-center font-bold">100</td>
+                      <td className="px-3 py-2.5 text-center">
+                        <span className="font-bold text-blue-700">{parseFloat(ev.self_total || 0).toFixed(1)} / 100</span>
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <span className="font-bold text-purple-700">{parseFloat(ev.manager_total || 0).toFixed(1)} / 100</span>
+                      </td>
+                      <td />
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             </div>
           )}
 
+          {/* Overall rating */}
+          <div className="p-4 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Overall Performance Rating</p>
+            <div className="flex flex-wrap gap-3 mb-3">
+              {OVERALL_BANDS.map(b => (
+                <span key={b.label}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold border ${ev.overall_rating === b.label
+                    ? `${RATING_CFG[b.label]?.bg} ${RATING_CFG[b.label]?.text} border-current`
+                    : 'bg-white text-gray-400 border-gray-200'}`}>
+                  {b.label} ({b.range})
+                </span>
+              ))}
+            </div>
+            {ev.increment_recommended > 0 && (
+              <p className="text-sm text-emerald-700 font-semibold">Increment Recommended: {ev.increment_recommended}%</p>
+            )}
+          </div>
+
           {/* Qualitative fields */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {[
-              { label: 'Key Strengths',             val: ev.strengths },
-              { label: 'Areas of Improvement',      val: ev.areas_of_improvement },
-              { label: 'Goals for Next Period',      val: ev.goals_next_period },
-            ].map(({ label, val }) => val ? (
-              <div key={label} className="p-4 bg-gray-50 rounded-xl">
+              { label: 'Major Strengths',        val: ev.strengths },
+              { label: 'Areas for Improvement',  val: ev.areas_of_improvement },
+              { label: 'Training Required',       val: ev.training_required },
+            ].map(({ label, val }) => (
+              <div key={label} className="p-4 bg-gray-50 rounded-xl border border-gray-100">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{label}</p>
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">{val}</p>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap min-h-[48px]">{val || '—'}</p>
               </div>
-            ) : null)}
+            ))}
           </div>
 
-          {/* Signature section (print only) */}
-          <div className="print-only perf-sig-section" style={{ marginTop: 32, borderTop: '1px solid #ccc', paddingTop: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20 }}>
+          {/* Goals & Comments */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {ev.goals_next_period && (
+              <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+                <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2">Goals for Next Period</p>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">{ev.goals_next_period}</p>
+              </div>
+            )}
+            {ev.comments_remarks && (
+              <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
+                <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Comments / Remarks</p>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">{ev.comments_remarks}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Signature section */}
+          <div className="print-only perf-sig-section" style={{ borderTop: '1px solid #ccc', paddingTop: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
               {[
-                { role: 'Employee Signature', name: ev.employee_name || '' },
-                { role: 'Evaluator / Reporting Manager', name: ev.evaluator_name || '' },
-                { role: 'HR Head / Approving Authority', name: '' },
+                { role: 'Employee Signature',    name: ev.employee_name || '' },
+                { role: 'Reporting Manager',     name: ev.evaluator_name || '' },
+                { role: 'Department Head',       name: '' },
+                { role: 'HR Department',         name: '' },
+                { role: 'Managing Director',     name: '' },
               ].map(sig => (
                 <div key={sig.role} style={{ flex: 1, textAlign: 'center' }}>
-                  <div style={{ borderBottom: '1.5px solid #333', marginBottom: 6, height: 40 }} />
-                  <div style={{ fontSize: 9, fontWeight: 700, color: '#0A1F5C' }}>{sig.role}</div>
-                  <div style={{ fontSize: 8, color: '#555', marginTop: 2 }}>{sig.name}</div>
-                  <div style={{ fontSize: 8, color: '#888', marginTop: 2 }}>Date: ____________</div>
+                  <div style={{ borderBottom: '1.5px solid #333', marginBottom: 5, height: 36 }} />
+                  <div style={{ fontSize: 8, fontWeight: 700, color: NAVY }}>{sig.role}</div>
+                  {sig.name && <div style={{ fontSize: 7, color: '#555', marginTop: 2 }}>{sig.name}</div>}
+                  <div style={{ fontSize: 7, color: '#888', marginTop: 2 }}>Date: ____________</div>
                 </div>
               ))}
             </div>
-            <div style={{ textAlign: 'center', marginTop: 12, fontSize: 8, color: '#888' }}>
-              This is a system-generated report - BCIM Engineering Pvt Ltd | Printed on: {new Date().toLocaleString('en-IN')}
+            <div style={{ textAlign: 'center', marginTop: 10, fontSize: 7, color: '#aaa' }}>
+              System-generated · BCIM Engineering Pvt Ltd · {new Date().toLocaleString('en-IN')}
+            </div>
+          </div>
+
+          {/* Screen signature section */}
+          <div className="no-print border-t pt-4">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Signatures (on print)</p>
+            <div className="grid grid-cols-5 gap-3">
+              {['Employee', 'Reporting Manager', 'Department Head', 'HR Department', 'Managing Director'].map(role => (
+                <div key={role} className="text-center p-3 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                  <p className="text-xs text-gray-500 font-medium">{role}</p>
+                  <div className="mt-2 h-6 border-b border-gray-300"/>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -339,28 +404,25 @@ function EvalFormModal({ editing, onClose }) {
     queryFn:  () => hrEvaluationsAPI.kraTemplate().then(r => r.data),
   });
 
-  const defaultKras = useMemo(() => {
-    const tpl = tplData?.data || [];
-    if (editing?.kra_scores?.length) {
-      return editing.kra_scores.map(k => ({ ...k }));
-    }
-    return tpl.map(k => ({ ...k, self_score: '', manager_score: '', remarks: '' }));
-  }, [tplData, editing]);
-
   const [form, setForm] = useState(() => ({
     employee_id:           editing?.employee_id           || '',
     eval_period:           editing?.eval_period           || '',
     eval_date:             editing?.eval_date ? dayjs(editing.eval_date).format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
+    review_type:           editing?.review_type           || 'monthly',
+    project_site:          editing?.project_site          || '',
     strengths:             editing?.strengths             || '',
     areas_of_improvement:  editing?.areas_of_improvement  || '',
     goals_next_period:     editing?.goals_next_period     || '',
+    training_required:     editing?.training_required     || '',
+    comments_remarks:      editing?.comments_remarks      || '',
     increment_recommended: editing?.increment_recommended || '',
-    kra_scores:            [],
   }));
 
-  const [kras, setKras] = useState(defaultKras);
+  const [kras, setKras] = useState(() => {
+    if (editing?.kra_scores?.length) return editing.kra_scores.map(k => ({ ...k }));
+    return [];
+  });
 
-  // Update kras when template loads (for new form)
   React.useEffect(() => {
     if (!editing && tplData?.data?.length && kras.length === 0) {
       setKras(tplData.data.map(k => ({ ...k, self_score: '', manager_score: '', remarks: '' })));
@@ -377,7 +439,7 @@ function EvalFormModal({ editing, onClose }) {
       ? hrEvaluationsAPI.update(editing.id, payload)
       : hrEvaluationsAPI.create(payload),
     onSuccess: () => {
-      toast.success(editing ? 'Evaluation updated' : 'Evaluation created');
+      toast.success(editing ? 'Evaluation updated' : 'Evaluation saved');
       qc.invalidateQueries(['hr-evaluations']);
       onClose();
     },
@@ -387,7 +449,7 @@ function EvalFormModal({ editing, onClose }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!form.employee_id) return toast.error('Select an employee');
-    if (!form.eval_period) return toast.error('Enter evaluation period');
+    if (!form.eval_period) return toast.error('Enter review period');
     saveMut.mutate({
       ...form,
       kra_scores:    kras,
@@ -396,48 +458,82 @@ function EvalFormModal({ editing, onClose }) {
     });
   };
 
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center overflow-y-auto py-8 px-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="font-bold text-gray-800 text-lg flex items-center gap-2">
-            <ClipboardList size={20} style={{ color: NAVY }}/> {editing ? 'Edit Evaluation' : 'New Performance Evaluation'}
-          </h2>
-          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg"><X size={18}/></button>
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-stretch justify-center overflow-hidden">
+      <div className="bg-white w-full flex flex-col" style={{ maxWidth: '100vw' }}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b" style={{ background: NAVY, borderRadius: '16px 16px 0 0' }}>
+          <div>
+            <h2 className="font-bold text-white text-base">
+              {editing ? 'Edit Evaluation' : 'New Performance Evaluation'}
+            </h2>
+            <p className="text-white/60 text-xs mt-0.5">BCIM Engineering Pvt Ltd — Monthly / Quarterly Review</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-white/10 rounded-lg"><X size={18} className="text-white"/></button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Basic Info */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+
+          {/* Review type */}
+          <div className="flex items-center gap-6 p-3 bg-blue-50 rounded-xl">
+            <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">Review Period:</span>
+            {['monthly', 'quarterly'].map(type => (
+              <label key={type} className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="review_type" value={type}
+                  checked={form.review_type === type}
+                  onChange={e => set('review_type', e.target.value)}
+                  className="accent-blue-600" />
+                <span className="text-sm font-semibold text-gray-700 capitalize">{type === 'monthly' ? '☐ Monthly' : '☐ Quarterly'}</span>
+              </label>
+            ))}
+          </div>
+
+          {/* Employee info */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="md:col-span-2">
-              <label className={lbl}>Employee *</label>
-              <select value={form.employee_id} onChange={e => setForm(f => ({ ...f, employee_id: e.target.value }))} className={inp} required>
+              <label className={lbl}>Employee Name *</label>
+              <select value={form.employee_id} onChange={e => set('employee_id', e.target.value)} className={inp} required>
                 <option value="">Select employee…</option>
                 {employees.map(e => (
-                  <option key={e.id} value={e.id}>{e.name} {e.employee_code ? `(${e.employee_code})` : ''}</option>
+                  <option key={e.id} value={e.id}>{e.name}{e.employee_code ? ` (${e.employee_code})` : ''}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className={lbl}>Eval Period *</label>
-              <input value={form.eval_period} onChange={e => setForm(f => ({ ...f, eval_period: e.target.value }))}
-                placeholder="e.g. FY 2025-26 / Q1 2026" className={inp} required />
+              <label className={lbl}>Review Month / Quarter *</label>
+              <input value={form.eval_period} onChange={e => set('eval_period', e.target.value)}
+                placeholder="e.g. July 2026 / Q2 2026" className={inp} required />
             </div>
             <div>
-              <label className={lbl}>Eval Date</label>
-              <input type="date" value={form.eval_date} onChange={e => setForm(f => ({ ...f, eval_date: e.target.value }))} className={inp} />
+              <label className={lbl}>Review Date</label>
+              <input type="date" value={form.eval_date} onChange={e => set('eval_date', e.target.value)} className={inp} />
+            </div>
+            <div className="md:col-span-2">
+              <label className={lbl}>Project / Site</label>
+              <input value={form.project_site} onChange={e => set('project_site', e.target.value)}
+                placeholder="e.g. Godrej Ascend, HO" className={inp} />
+            </div>
+          </div>
+
+          {/* Rating scale reference */}
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-100">
+            <p className="text-xs font-bold text-amber-800 mb-1.5">Rating Scale</p>
+            <div className="flex flex-wrap gap-4">
+              {RATING_SCALE.map(r => (
+                <span key={r.score} className="text-xs text-amber-700"><strong>{r.score}</strong> = {r.label}</span>
+              ))}
             </div>
           </div>
 
           {/* KRA Table */}
           <div>
             <h3 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
-              <Star size={16} className="text-amber-500"/> KRA / KPI Scoring
-              <span className="text-xs text-gray-400 font-normal ml-1">(Score 1 = Poor … 5 = Excellent)</span>
+              <Star size={15} className="text-amber-500"/> KRA / KPI Scoring
             </h3>
             <KRATable kras={kras} onChange={setKras} />
-
-            {/* Live score summary */}
             <div className="mt-3 flex gap-4 justify-end text-sm">
               <span className="px-3 py-1 bg-blue-50 rounded-lg text-blue-700 font-semibold">
                 Self Total: <strong>{selfTotal}</strong>/100
@@ -448,32 +544,55 @@ function EvalFormModal({ editing, onClose }) {
             </div>
           </div>
 
-          {/* Qualitative */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className={lbl}>Key Strengths</label>
-              <textarea rows={3} value={form.strengths} onChange={e => setForm(f => ({ ...f, strengths: e.target.value }))}
-                className={inp} placeholder="List key strengths…" />
-            </div>
-            <div>
-              <label className={lbl}>Areas of Improvement</label>
-              <textarea rows={3} value={form.areas_of_improvement} onChange={e => setForm(f => ({ ...f, areas_of_improvement: e.target.value }))}
-                className={inp} placeholder="Development areas…" />
-            </div>
-            <div>
-              <label className={lbl}>Goals for Next Period</label>
-              <textarea rows={3} value={form.goals_next_period} onChange={e => setForm(f => ({ ...f, goals_next_period: e.target.value }))}
-                className={inp} placeholder="Targets / KPIs for next period…" />
+          {/* Overall rating bands reference */}
+          <div className="p-3 rounded-xl bg-gray-50 border border-gray-200">
+            <p className="text-xs font-bold text-gray-600 mb-1.5">Overall Performance Rating</p>
+            <div className="flex flex-wrap gap-2">
+              {OVERALL_BANDS.map(b => (
+                <span key={b.label} className={`px-2 py-0.5 rounded-full text-xs font-semibold ${RATING_CFG[b.label]?.bg} ${RATING_CFG[b.label]?.text}`}>
+                  {b.label} ({b.range})
+                </span>
+              ))}
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="w-48">
-              <label className={lbl}>Increment Recommended (%)</label>
-              <input type="number" min="0" max="100" step="0.5"
-                value={form.increment_recommended} onChange={e => setForm(f => ({ ...f, increment_recommended: e.target.value }))}
-                className={inp} placeholder="0" />
+          {/* Qualitative fields */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className={lbl}>Major Strengths</label>
+              <textarea rows={3} value={form.strengths} onChange={e => set('strengths', e.target.value)}
+                className={inp} placeholder="List key strengths…" />
             </div>
+            <div>
+              <label className={lbl}>Areas for Improvement</label>
+              <textarea rows={3} value={form.areas_of_improvement} onChange={e => set('areas_of_improvement', e.target.value)}
+                className={inp} placeholder="Development areas…" />
+            </div>
+            <div>
+              <label className={lbl}>Training Required</label>
+              <textarea rows={3} value={form.training_required} onChange={e => set('training_required', e.target.value)}
+                className={inp} placeholder="Training needs identified…" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className={lbl}>Goals for Next Period</label>
+              <textarea rows={3} value={form.goals_next_period} onChange={e => set('goals_next_period', e.target.value)}
+                className={inp} placeholder="Targets / KPIs for next period…" />
+            </div>
+            <div>
+              <label className={lbl}>Comments / Remarks (MD / Department Head)</label>
+              <textarea rows={3} value={form.comments_remarks} onChange={e => set('comments_remarks', e.target.value)}
+                className={inp} placeholder="Management comments…" />
+            </div>
+          </div>
+
+          <div className="w-48">
+            <label className={lbl}>Increment Recommended (%)</label>
+            <input type="number" min="0" max="100" step="0.5"
+              value={form.increment_recommended} onChange={e => set('increment_recommended', e.target.value)}
+              className={inp} placeholder="0" />
           </div>
 
           <div className="flex justify-end gap-3 pt-2 border-t">
@@ -482,7 +601,7 @@ function EvalFormModal({ editing, onClose }) {
             </button>
             <button type="submit" disabled={saveMut.isPending}
               className="px-6 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: NAVY }}>
-              {saveMut.isPending ? 'Saving…' : editing ? 'Update Evaluation' : 'Save Evaluation'}
+              {saveMut.isPending ? 'Saving…' : editing ? 'Update' : 'Save Evaluation'}
             </button>
           </div>
         </form>
@@ -519,17 +638,17 @@ export default function PerformancePage() {
 
   const filtered = filterStatus ? rows.filter(r => r.status === filterStatus) : rows;
 
-  // KPI stats
-  const totalEvals  = rows.length;
-  const pendingMgr  = rows.filter(r => r.status === 'self_submitted').length;
-  const approved    = rows.filter(r => r.status === 'approved').length;
-  const avgScore    = rows.length
+  const totalEvals = rows.length;
+  const pendingMgr = rows.filter(r => r.status === 'self_submitted').length;
+  const approved   = rows.filter(r => r.status === 'approved').length;
+  const avgScore   = rows.length
     ? (rows.reduce((s, r) => s + parseFloat(r.manager_total || r.self_total || 0), 0) / rows.length).toFixed(1)
     : '—';
 
   return (
     <div className="p-6 space-y-6 min-h-screen" style={{ background: '#F8FAFC' }}>
-      {/* Page Header */}
+
+      {/* Page header */}
       <div className="relative overflow-hidden rounded-2xl" style={{ background: `linear-gradient(135deg, ${NAVY}, #1e3a8a)` }}>
         <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-[0.07]"
           style={{ background: 'radial-gradient(circle,#fff,transparent 70%)', transform: 'translate(25%,-25%)' }}/>
@@ -542,7 +661,7 @@ export default function PerformancePage() {
               <span className="text-white/70 text-sm font-medium">HR & Admin</span>
             </div>
             <h1 className="text-2xl font-bold text-white">Performance Evaluation</h1>
-            <p className="text-white/60 text-sm mt-0.5">Structured KRA/KPI evaluation forms for all staff</p>
+            <p className="text-white/60 text-sm mt-0.5">Monthly / Quarterly KRA-based review for all department employees</p>
           </div>
           <button onClick={() => { setEditing(null); setShowForm(true); }}
             className="flex items-center gap-2 px-5 py-2.5 bg-white/15 hover:bg-white/25 border border-white/20 rounded-xl text-white text-sm font-semibold transition-colors">
@@ -572,7 +691,7 @@ export default function PerformancePage() {
       </div>
 
       {/* Filter */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <span className="text-sm text-gray-500 font-medium">Filter:</span>
         {['', 'draft', 'self_submitted', 'manager_reviewed', 'approved', 'acknowledged'].map(s => {
           const cfg = s ? STATUS_CFG[s] : null;
@@ -605,7 +724,7 @@ export default function PerformancePage() {
               <tr className="border-b bg-gray-50">
                 <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Employee</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Period</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Evaluator</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Type</th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-blue-500 uppercase tracking-wide">Self</th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-purple-500 uppercase tracking-wide">Manager</th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Rating</th>
@@ -621,15 +740,19 @@ export default function PerformancePage() {
                   <tr key={ev.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-5 py-3">
                       <p className="font-semibold text-gray-800">{ev.employee_name}</p>
-                      <p className="text-xs text-gray-400">{ev.employee_code} · {ev.dept_name || ev.department || '—'}</p>
+                      <p className="text-xs text-gray-400">{ev.employee_code} · {ev.dept_name || '—'}</p>
                     </td>
                     <td className="px-4 py-3 text-gray-700">{ev.eval_period || '—'}</td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">{ev.evaluator_name || '—'}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${ev.review_type === 'quarterly' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
+                        {ev.review_type === 'quarterly' ? 'Quarterly' : 'Monthly'}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-center font-semibold text-blue-600">
-                      {ev.self_total ? `${parseFloat(ev.self_total).toFixed(1)}` : '—'}
+                      {ev.self_total ? parseFloat(ev.self_total).toFixed(1) : '—'}
                     </td>
                     <td className="px-4 py-3 text-center font-semibold text-purple-600">
-                      {ev.manager_total ? `${parseFloat(ev.manager_total).toFixed(1)}` : '—'}
+                      {ev.manager_total ? parseFloat(ev.manager_total).toFixed(1) : '—'}
                     </td>
                     <td className="px-4 py-3 text-center">
                       {ev.overall_rating
@@ -642,24 +765,24 @@ export default function PerformancePage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
                         <button onClick={() => setViewing(ev)} title="View"
-                          className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-500 transition-colors"><Eye size={14}/></button>
+                          className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-500"><Eye size={14}/></button>
                         <button onClick={() => { setEditing(ev); setShowForm(true); }} title="Edit"
-                          className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"><FileText size={14}/></button>
+                          className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500"><FileText size={14}/></button>
                         {ev.status === 'draft' && (
                           <button onClick={() => statusMut.mutate({ id: ev.id, status: 'self_submitted' })} title="Submit"
-                            className="p-1.5 hover:bg-emerald-50 rounded-lg text-emerald-500 transition-colors"><ChevronRight size={14}/></button>
+                            className="p-1.5 hover:bg-emerald-50 rounded-lg text-emerald-500"><ChevronRight size={14}/></button>
                         )}
                         {ev.status === 'self_submitted' && (
                           <button onClick={() => statusMut.mutate({ id: ev.id, status: 'manager_reviewed' })} title="Mark Reviewed"
-                            className="p-1.5 hover:bg-purple-50 rounded-lg text-purple-500 transition-colors"><CheckCircle size={14}/></button>
+                            className="p-1.5 hover:bg-purple-50 rounded-lg text-purple-500"><CheckCircle size={14}/></button>
                         )}
                         {ev.status === 'manager_reviewed' && (
                           <button onClick={() => statusMut.mutate({ id: ev.id, status: 'approved' })} title="Approve"
-                            className="p-1.5 hover:bg-teal-50 rounded-lg text-teal-500 transition-colors"><Award size={14}/></button>
+                            className="p-1.5 hover:bg-teal-50 rounded-lg text-teal-500"><Award size={14}/></button>
                         )}
                         {ev.status === 'draft' && (
                           <button onClick={() => { if (window.confirm('Delete this draft?')) deleteMut.mutate(ev.id); }}
-                            title="Delete" className="p-1.5 hover:bg-red-50 rounded-lg text-red-400 transition-colors"><Trash2 size={14}/></button>
+                            title="Delete" className="p-1.5 hover:bg-red-50 rounded-lg text-red-400"><Trash2 size={14}/></button>
                         )}
                       </div>
                     </td>
@@ -671,9 +794,8 @@ export default function PerformancePage() {
         )}
       </div>
 
-      {/* Modals */}
-      {showForm  && <EvalFormModal editing={editing} onClose={() => { setShowForm(false); setEditing(null); }} />}
-      {viewing   && <DetailView ev={viewing} onClose={() => setViewing(null)} />}
+      {showForm && <EvalFormModal editing={editing} onClose={() => { setShowForm(false); setEditing(null); }} />}
+      {viewing  && <DetailView ev={viewing} onClose={() => setViewing(null)} />}
     </div>
   );
 }

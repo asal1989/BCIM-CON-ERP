@@ -51,8 +51,8 @@ function buildMssqlCfg() {
       instanceName:           cfg.essl.instance || undefined,
       encrypt:                false,
       trustServerCertificate: true,
-      connectTimeout:         15000,
-      requestTimeout:         120000,
+      connectTimeout:         20000,
+      requestTimeout:         600000,  // 10 min — large backfills scan many DeviceLogs tables
     },
   };
   if (!cfg.essl.instance) c.port = parseInt(cfg.essl.port) || 1433;
@@ -93,15 +93,34 @@ async function existingTables(conn, tables) {
   return result;
 }
 
+// ── Detect which direction column the ESSL DB uses ───────────────────────────
+// ESSL etimetracklite versions differ: some use "Direction", some "IoType".
+// Values: 0 = Entry/IN, 1 = Exit/OUT.
+// Falls back to hour-of-day approximation only if neither column exists.
+async function detectDirectionExpr(conn, table) {
+  for (const col of ['Direction', 'IoType', 'InOutMode']) {
+    try {
+      await conn.request().query(`SELECT TOP 1 [${col}] FROM [${table}] WHERE 1=0`);
+      return `CASE WHEN d.[${col}] = 0 THEN 'in' WHEN d.[${col}] = 1 THEN 'out' ELSE NULL END`;
+    } catch (_) {}
+  }
+  // Fallback — hour-based approximation (inaccurate for shift workers)
+  console.warn('[ESSL Agent] Warning: no Direction/IoType/InOutMode column found; using hour-based approximation.');
+  return `CASE WHEN DATEPART(HOUR, d.LogDate) < 12 THEN 'in' ELSE 'out' END`;
+}
+
 // ── Pull swipe data from ESSL ─────────────────────────────────────────────────
 async function pullSwipes(conn, tables, fromDT, toDT) {
   if (!tables.length) return [];
 
+  // Detect direction column once using the first available table
+  const dirExpr = await detectDirectionExpr(conn, tables[0]);
+
   const unionSQL = tables.map(t => `
     SELECT
-      e.EmployeeCode                                                    AS emp_code,
-      CONVERT(VARCHAR(23), d.LogDate, 121)                              AS swipe_time,
-      CASE WHEN DATEPART(HOUR, d.LogDate) < 12 THEN 'in' ELSE 'out' END AS direction
+      e.EmployeeCode                       AS emp_code,
+      CONVERT(VARCHAR(23), d.LogDate, 121) AS swipe_time,
+      ${dirExpr}                           AS direction
     FROM [${t}] d
     JOIN Employees e ON e.NumericCode = d.UserId
     WHERE d.LogDate BETWEEN @from AND @to
@@ -252,14 +271,34 @@ async function main() {
       fromDT = toDateTimeStr(from);
       toDT   = toDateTimeStr(now);
       label  = `last ${windowMin} minutes`;
+
+      await runSync({ fromDT, toDT, label });
+
     } else {
-      const days = daysArg >= 0 ? parseInt(args[daysArg + 1]) || 1 : cfg.sync_days || 1;
-      toDT   = toDateStr(new Date()) + ' 23:59:59';
-      fromDT = toDateStr(addDays(new Date(), -days)) + ' 00:00:00';
-      label  = `${fromDT.slice(0, 10)} to ${toDT.slice(0, 10)} (${days} day(s))`;
+      const days      = daysArg >= 0 ? parseInt(args[daysArg + 1]) || 1 : cfg.sync_days || 1;
+      const CHUNK     = 7; // process 7 days at a time to avoid SQL timeout
+
+      if (days <= CHUNK) {
+        toDT   = toDateStr(new Date()) + ' 23:59:59';
+        fromDT = toDateStr(addDays(new Date(), -days)) + ' 00:00:00';
+        label  = `${fromDT.slice(0, 10)} to ${toDT.slice(0, 10)}`;
+        await runSync({ fromDT, toDT, label });
+      } else {
+        // Break into 7-day chunks, oldest first
+        console.log(`[ESSL Agent] Backfill ${days} days in chunks of ${CHUNK}…`);
+        const endDate  = new Date();
+        for (let offset = days; offset > 0; offset -= CHUNK) {
+          const chunkDays = Math.min(offset, CHUNK);
+          const chunkEnd  = addDays(endDate, -(offset - chunkDays));
+          const chunkStart= addDays(chunkEnd, -chunkDays);
+          const cFromDT   = toDateStr(chunkStart) + ' 00:00:00';
+          const cToDT     = toDateStr(chunkEnd)   + ' 23:59:59';
+          await runSync({ fromDT: cFromDT, toDT: cToDT, label: `${cFromDT.slice(0,10)} → ${cToDT.slice(0,10)}` });
+        }
+        console.log(`[ESSL Agent] Backfill complete.`);
+      }
     }
 
-    await runSync({ fromDT, toDT, label });
     // Close pool after one-shot
     if (pool) { try { await pool.close(); } catch (_) {} }
   }

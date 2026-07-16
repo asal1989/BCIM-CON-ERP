@@ -54,6 +54,12 @@ const HR_ALL   = [...HR_ROLES, 'hr', 'manager', 'department_head'];
     created_by UUID REFERENCES users(id),
     created_at TIMESTAMPTZ DEFAULT NOW()
   )`);
+  // Add missing columns to existing tables (safe to run on every boot)
+  await safe(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS code VARCHAR(20)`);
+  await safe(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS grace_minutes INT DEFAULT 10`);
+  await safe(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS ot_after_minutes INT DEFAULT 0`);
+  await safe(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT TRUE`);
+  await safe(`ALTER TABLE hr_employee_shifts ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id)`);
   await safe(`CREATE TABLE IF NOT EXISTS hr_comp_off (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL,
