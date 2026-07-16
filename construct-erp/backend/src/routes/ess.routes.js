@@ -94,15 +94,8 @@ function statusBadge(status) {
   return `<span style="display:inline-block;background:${color};color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:700">${status.toUpperCase()}</span>`;
 }
 
-async function notifyHR(companyId, subject, html) {
-  try {
-    const { rows } = await query(
-      `SELECT DISTINCT email FROM users WHERE company_id=$1 AND role IN ('hr','hr_admin','hr_manager') AND is_active=true AND email IS NOT NULL`,
-      [companyId]
-    );
-    if (!rows.length) return;
-    sendMail({ to: rows.map(r => r.email), subject, html }).catch(e => console.error('[ESS mail] HR notify error:', e.message));
-  } catch (e) { console.error('[ESS mail] notifyHR error:', e.message); }
+async function notifyHR(_companyId, subject, html) {
+  sendMail({ to: 'surendra@bcim.in', subject, html }).catch(e => console.error('[ESS mail] HR notify error:', e.message));
 }
 
 async function notifyEmployee(userId, companyId, subject, html) {
