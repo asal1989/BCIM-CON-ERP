@@ -578,7 +578,7 @@ export default function StoreLedgerPage() {
   // Summary totals for footer
   const totalOpeningValue  = filteredSummary.reduce((sum, s) => sum + (rq3(s.opening_stock) * parseFloat(s.unit_rate || 0)), 0);
   const totalIssuedValue   = filteredSummary.reduce((sum, s) => {
-    const issued = Math.max(0, rq3(s.opening_stock) - rq3(s.closing_stock));
+    const issued = parseFloat(s.total_issued || 0);
     return sum + issued * parseFloat(s.unit_rate || 0);
   }, 0);
   const totalClosingValue  = filteredSummary.reduce((sum, s) => sum + (rq3(s.closing_stock) * parseFloat(s.unit_rate || 0)), 0);
@@ -632,7 +632,7 @@ export default function StoreLedgerPage() {
       const rate       = parseFloat(s.unit_rate  || 0);
       const opening    = rq3(s.opening_stock);
       const closing    = rq3(s.closing_stock);
-      const issued     = Math.max(0, opening - closing);
+      const issued     = parseFloat(s.total_issued || 0);
       const issuedVal  = (issued   * rate).toFixed(2);
       const openingVal = (opening  * rate).toFixed(2);
       const closingVal = (closing  * rate).toFixed(2);
@@ -725,7 +725,7 @@ export default function StoreLedgerPage() {
         const rate = parseFloat(s.unit_rate || 0);
         const opening = rq3(s.opening_stock);
         const closing = rq3(s.closing_stock);
-        const issued = Math.max(0, opening - closing);
+        const issued = parseFloat(s.total_issued || 0);
         const issuedVal = issued * rate;
         const openingVal = opening * rate;
         const closingVal = closing * rate;
@@ -1276,7 +1276,7 @@ export default function StoreLedgerPage() {
                     const rate       = parseFloat(s.unit_rate || 0);
                     const opening    = rq3(s.opening_stock);
                     const closing    = rq3(s.closing_stock);
-                    const issued     = Math.max(0, opening - closing);
+                    const issued     = parseFloat(s.total_issued || 0);
                     const closingVal = closing * rate;
                     const grandTotal = closingVal * (1 + GST_RATE);
                     const badge      = stockStatus(closing, s.min_stock, s.reorder_level);

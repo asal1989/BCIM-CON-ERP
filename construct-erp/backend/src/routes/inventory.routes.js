@@ -190,9 +190,23 @@ router.get('/', async (req, res) => {
   try {
     const { project_id } = req.query;
     let sql = `
-      SELECT i.*, p.name AS project_name
+      SELECT i.*, p.name AS project_name,
+        COALESCE(iss.total_issued, 0) AS total_issued,
+        COALESCE(rec.total_received, 0) AS total_received
       FROM inventory i
       JOIN projects p ON i.project_id = p.id
+      LEFT JOIN (
+        SELECT inventory_id, SUM(quantity) AS total_issued
+        FROM stock_transactions
+        WHERE transaction_type IN ('issue', 'transfer_out')
+        GROUP BY inventory_id
+      ) iss ON iss.inventory_id = i.id
+      LEFT JOIN (
+        SELECT inventory_id, SUM(quantity) AS total_received
+        FROM stock_transactions
+        WHERE transaction_type IN ('grn', 'transfer_in', 'adjustment')
+        GROUP BY inventory_id
+      ) rec ON rec.inventory_id = i.id
       WHERE p.company_id = $1`;
     let params = [req.user.company_id];
     if (project_id) { sql += ` AND i.project_id = $2`; params.push(project_id); }
