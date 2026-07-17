@@ -16,6 +16,7 @@ import {
 } from 'recharts';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import { boqBudgetAPI, projectAPI, raBillAPI, tqsBillsAPI, clientAdvanceAPI } from '../../api/client';
+import useAuthStore from '../../store/authStore';
 import BOQSummaryPrintTemplate from './BOQSummaryPrintTemplate';
 import bcimLogo from '../../assets/bcim-logo.png';
 
@@ -2187,7 +2188,8 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
 }
 
 export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = null, pageTitle = null, pageSubtitle = null }) {
-  const [projectId, setProjectId] = useState('');
+  const { selectedProjectId } = useAuthStore();
+  const projectId = selectedProjectId || '';
   const [mode, setMode] = useState('amount'); // 'amount' | 'pct'
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState({});
@@ -2500,26 +2502,21 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
 
       <div className="p-5 md:p-6 max-w-[1700px] mx-auto space-y-5">
 
-        {/* Project selector + search */}
-        <div className="flex flex-wrap gap-3">
-          <select value={projectId} onChange={e => setProjectId(e.target.value)}
-            className="border border-slate-200 bg-white rounded-xl px-3 py-2 text-sm shadow-sm focus:outline-none min-w-64">
-            <option value="">— Select Project —</option>
-            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          {projectId && (
+        {/* Search — project comes from the top bar's project selector */}
+        {projectId && (
+          <div className="flex flex-wrap gap-3">
             <div className="relative flex-1 min-w-52">
               <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search BOQ items…"
                 className="pl-9 pr-3 py-2 border border-slate-200 bg-white rounded-xl text-sm w-full focus:outline-none shadow-sm" />
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {!projectId && (
           <div className="bg-white rounded-2xl border border-slate-200 py-20 text-center shadow-sm">
             <Layers className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-            <p className="text-slate-500 font-semibold">Select a project to view its budget breakdown</p>
+            <p className="text-slate-500 font-semibold">Select a project from the top bar to view its budget breakdown</p>
             <p className="text-xs text-slate-400 mt-1">Allocate each BOQ item's budget across cost heads</p>
           </div>
         )}
