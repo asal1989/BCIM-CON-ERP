@@ -605,6 +605,7 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!form.vendor_name?.trim()) return toast.error('Vendor is required');
+    if (form.bill_type === 'po' && !form.po_id) return toast.error('PO link is mandatory for material bills — select an approved PO');
     if (!form.inv_number?.trim()) return toast.error('Invoice number is required');
     if (!form.inv_date) return toast.error('Invoice date is required');
     if (form.bill_type === 'hire') {
@@ -831,9 +832,9 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
               {/* Link to Procurement PO (auto-fills vendor/po#/date) */}
               {form.bill_type === 'po' && (
                 <div className="col-span-2 md:col-span-3 space-y-2">
-                  <Lbl>Link to Approved PO <span className="text-[10px] text-slate-400 font-normal">(optional — auto-fills vendor & PO details)</span></Lbl>
-                  <select className={F} value={form.po_id} onChange={e => handlePOPick(e.target.value)}>
-                    <option value="">Manual entry (no PO link)</option>
+                  <Lbl req>Link to Approved PO <span className="text-[10px] text-slate-400 font-normal">(auto-fills vendor &amp; PO details)</span></Lbl>
+                  <select className={F} value={form.po_id} onChange={e => handlePOPick(e.target.value)} required>
+                    <option value="" disabled>— Select Approved PO —</option>
                     {availablePOs.map(po => (
                       <option key={po.id} value={po.id}>
                         {po.is_fully_billed ? '🔒 [CLOSED] ' : ''}{po.po_number} — {po.vendor_name} — ₹{inr(po.total_amount)}
