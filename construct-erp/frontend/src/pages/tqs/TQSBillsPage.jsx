@@ -136,17 +136,17 @@ function POWOWarningBanner({ warning }) {
 // Z_CARD/Z_HEAD text-only headers.
 function SectionCard({ icon: Icon, title, subtitle, badge, right, children }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-100 bg-slate-50/60">
+    <div className="bg-white border border-slate-200/60 rounded-2xl shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-slate-100">
         <div className="flex items-center gap-3 min-w-0">
           {Icon && (
-            <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center flex-shrink-0">
-              <Icon className="w-4 h-4 text-blue-600" />
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(59,130,246,0.08)' }}>
+              <Icon className="w-[18px] h-[18px] text-blue-600" />
             </div>
           )}
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h3 className="text-[13.5px] font-semibold text-slate-800 truncate">{title}</h3>
+              <h3 className="text-sm font-semibold text-slate-800 tracking-tight truncate">{title}</h3>
               {badge}
             </div>
             {subtitle && <p className="text-[11px] text-slate-400 mt-0.5 truncate">{subtitle}</p>}
@@ -154,7 +154,7 @@ function SectionCard({ icon: Icon, title, subtitle, badge, right, children }) {
         </div>
         {right}
       </div>
-      <div className="p-4">{children}</div>
+      <div className="p-5">{children}</div>
     </div>
   );
 }
@@ -166,10 +166,10 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
   // Record Advance below. Shadows the module-level FIELD_HL/F/Lbl so every
   // input, label and table cell in this form picks it up automatically
   // without touching Edit Bill or Record Advance.
-  const FIELD_HL = 'border-slate-300 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30';
-  const F = 'w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30';
+  const FIELD_HL = 'border-slate-200 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 shadow-sm';
+  const F = 'w-full h-10 rounded-lg border border-slate-200 bg-white px-3.5 text-sm text-slate-800 placeholder:text-slate-300 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 shadow-sm';
   function Lbl({ children, req }) {
-    return <label className="block text-xs font-medium text-slate-500 mb-1">{children}{req && <span className="text-red-500 ml-0.5">*</span>}</label>;
+    return <label className="block text-[10.5px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{children}{req && <span className="text-red-500 ml-0.5">*</span>}</label>;
   }
 
   const qc = useQueryClient();
@@ -667,33 +667,39 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-white" style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
+    <div className="fixed inset-0 z-50 flex flex-col" style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
 
       {/* ── Page header ── */}
-      <div className="flex items-center justify-between px-6 py-4 flex-shrink-0 bg-white border-b border-slate-200">
+      <div className="flex items-center justify-between px-6 py-4 flex-shrink-0" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div>
-          <div className="text-xs text-slate-400 mb-1">Bill Tracker <span className="text-slate-300">›</span> Bills <span className="text-slate-300">›</span> <b className="text-slate-500">New Bill</b></div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-lg font-semibold text-slate-900">New Bill</h1>
-            <span className={clsx('text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border',
-              form.bill_type === 'wo' ? 'bg-orange-50 text-orange-700 border-orange-200'
-                : form.bill_type === 'hire' ? 'bg-purple-50 text-purple-700 border-purple-200'
-                : 'bg-blue-50 text-blue-700 border-blue-200')}>
+          <div className="text-[11px] text-slate-500 mb-1.5 flex items-center gap-1.5">
+            <span>Bill Tracker</span>
+            <ChevronRight className="w-3 h-3 text-slate-600" />
+            <span>Bills</span>
+            <ChevronRight className="w-3 h-3 text-slate-600" />
+            <span className="text-slate-300 font-medium">New Bill</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-[22px] font-bold text-white tracking-tight leading-none">New Bill</h1>
+            <span className={clsx('text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full',
+              form.bill_type === 'wo' ? 'bg-orange-500/20 text-orange-300 ring-1 ring-inset ring-orange-500/30'
+                : form.bill_type === 'hire' ? 'bg-purple-500/20 text-purple-300 ring-1 ring-inset ring-purple-500/30'
+                : 'bg-blue-500/20 text-blue-300 ring-1 ring-inset ring-blue-500/30')}>
               {form.bill_type === 'wo' ? 'Work Order' : form.bill_type === 'hire' ? 'Hire / Rental' : 'Purchase Order'}
             </span>
           </div>
         </div>
         <button
           onClick={onClose}
-          className="w-8 h-8 rounded-md flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+          className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
         >
-          <X className="w-4 h-4" />
+          <X className="w-5 h-5" />
         </button>
       </div>
 
       {/* ── Scrollable body ── */}
-      <div className="flex-1 overflow-y-auto bg-slate-50">
-        <div className="w-full max-w-[1600px] mx-auto px-6 py-6 space-y-5">
+      <div className="flex-1 overflow-y-auto" style={{ background: '#f1f5f9' }}>
+        <div className="w-full max-w-[1440px] mx-auto px-6 py-6 space-y-4">
 
           {/* ── SECTION 1: Vendor & PO Info ── */}
           <SectionCard icon={Building2} title="Vendor & PO Information" subtitle="Who you're billing from, and the linked PO / WO">
@@ -1028,9 +1034,10 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                 const entered = parseFloat(it.quantity || 0);
                 const exceeded = rem !== null && rem !== undefined && entered > rem + 0.0001;
                 return (
-                  <div key={i} className="border border-slate-200 rounded-xl bg-white p-3.5 space-y-3">
+                  <div key={i} className="border border-slate-100 rounded-2xl bg-white p-4 space-y-3 shadow-sm">
                     {/* Row 1 — item search + category badge + remove */}
                     <div className="flex items-start gap-2.5">
+                      <span className="shrink-0 mt-[26px] w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-400">{i + 1}</span>
                       <div className="flex-1 min-w-0">
                         <Lbl>Item / Material</Lbl>
                         <MaterialCombobox
@@ -1245,12 +1252,12 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
           </SectionCard>
 
           {/* ── SECTION 5: Invoice Totals (read-only) ── */}
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-xl shadow-sm p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-white border border-blue-200 flex items-center justify-center flex-shrink-0">
-                <IndianRupee className="w-4 h-4 text-blue-600" />
+          <div className="border border-blue-100 rounded-2xl shadow-sm p-5 overflow-hidden" style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #eef2ff 100%)' }}>
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-sm shadow-blue-200">
+                <IndianRupee className="w-[18px] h-[18px] text-white" />
               </div>
-              <h3 className="text-[13.5px] font-semibold text-blue-900">Invoice Totals (Live)</h3>
+              <h3 className="text-sm font-bold text-blue-900 tracking-tight">Invoice Totals (Live)</h3>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
               <div className="text-center">
@@ -1285,9 +1292,9 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                 </div>
               )}
             </div>
-            <div className="border-t border-blue-200 pt-3 text-right">
-              <span className="text-sm text-slate-900 mr-3">Total Invoice Amount:</span>
-              <span className="text-xl font-medium text-blue-700">Rs {inr(grandTotal)}</span>
+            <div className="border-t border-blue-200 pt-3 flex items-center justify-end gap-3">
+              <span className="text-sm font-medium text-slate-600">Total Invoice Amount:</span>
+              <span className="text-2xl font-bold text-blue-700 tracking-tight">₹{inr(grandTotal)}</span>
             </div>
           </div>
 
@@ -1303,38 +1310,39 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
       </div>{/* /scrollable body */}
 
       {/* ── Sticky footer ── */}
-      <div style={{ flexShrink: 0, background: '#ffffff', borderTop: '1px solid #e2e8f0' }}
-        className="px-6 py-4 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
-        <div className="w-full max-w-[1600px] mx-auto flex items-center justify-between gap-4">
+      <div style={{ flexShrink: 0, background: '#0f172a', borderTop: '1px solid rgba(255,255,255,0.06)' }}
+        className="px-6 py-3.5">
+        <div className="w-full max-w-[1440px] mx-auto flex items-center justify-between gap-4">
           {/* Grand total preview */}
           <div className="flex items-center gap-6">
             <div className="text-[11px] text-slate-500 font-medium">
-              Basic: <span className="font-medium text-slate-700 text-sm ml-1">
+              Basic: <span className="font-semibold text-slate-300 text-sm ml-1">
                 ₹{inr(effectBasic)}
               </span>
             </div>
             <div className="text-[11px] text-slate-500 font-medium">
-              GST: <span className="font-medium text-slate-700 text-sm ml-1">
+              GST: <span className="font-semibold text-slate-300 text-sm ml-1">
                 ₹{inr(totalGST)}
               </span>
             </div>
-            <div className="text-[11px] text-slate-500 font-medium">
-              Grand Total: <span className="font-medium text-blue-700 text-lg ml-1">
+            <div className="flex items-center gap-2 pl-5 border-l border-slate-700">
+              <span className="text-[11px] text-slate-400 font-medium">Grand Total</span>
+              <span className="font-bold text-white text-xl tracking-tight">
                 ₹{inr(grandTotal)}
               </span>
             </div>
           </div>
           {/* Actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <button type="button" onClick={onClose}
-              className="px-4 h-9 rounded-md border border-slate-300 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+              className="px-4 h-9 rounded-lg border border-slate-700 text-sm font-medium text-slate-400 hover:bg-white/5 hover:text-slate-200 transition-colors">
               Cancel
             </button>
             <button type="button" onClick={handleSubmit}
               disabled={mutation.isPending || poWarning?.type === 'closed'}
               title={poWarning?.type === 'closed' ? `PO ${poWarning.po_number} is fully billed — cannot create bill` : undefined}
-              className={clsx('inline-flex items-center gap-2 px-5 h-9 rounded-md text-white text-sm font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed',
-                poWarning?.type === 'closed' ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700')}>
+              className={clsx('inline-flex items-center gap-2 px-6 h-10 rounded-lg text-white text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg',
+                poWarning?.type === 'closed' ? 'bg-slate-600' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/40')}>
               {mutation.isPending
                 ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Saving…</>
                 : poWarning?.type === 'closed'
