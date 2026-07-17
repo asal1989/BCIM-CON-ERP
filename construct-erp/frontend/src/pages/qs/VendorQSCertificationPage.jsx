@@ -236,15 +236,13 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
     setSummaryRows([]);
   };
 
-  // Auto-calculate tds_amount on invoice total whenever rate or selection changes.
-  // Always use the INVOICE total_amount (what the user sees in the list),
-  // NOT summaryRows (WO item rates differ from invoice amounts).
+  // TDS is deducted on basic amount only (excl. GST) per CBDT Circular 23/2017.
   useEffect(() => {
     const rate = Number(form.tds_rate || 0);
     if (!rate) { set('tds_amount', ''); return; }
     const tdsBase = invoices
       .filter(b => selectedBillIds.includes(b.id))
-      .reduce((s, b) => s + Number(b.total_amount || 0), 0);
+      .reduce((s, b) => s + Number(b.basic_amount || 0), 0);
     if (!tdsBase) return;
     set('tds_amount', String(Math.round(tdsBase * rate / 100)));
   // eslint-disable-next-line react-hooks/exhaustive-deps
