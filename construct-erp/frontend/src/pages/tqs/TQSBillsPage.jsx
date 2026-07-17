@@ -571,7 +571,8 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
   const transportAmt = parseFloat(form.transport_charges) || 0;
   const transportGST = transportAmt * (parseFloat(form.transport_gst_pct) || 0) / 100;
   const otherAmt     = parseFloat(form.other_charges) || 0;
-  const preTcsTotal  = effectBasic + totalGST + transportAmt + transportGST + otherAmt;
+  const creditVal    = parseFloat(form.credit_note_val) || 0;
+  const preTcsTotal  = effectBasic + totalGST + transportAmt + transportGST + otherAmt - creditVal;
   // TCS is charged on the basic (ex-GST) amount only, not the full invoice value
   const tcsAmt       = effectBasic * (parseFloat(form.tcs_pct) || 0) / 100;
   const grandTotal   = preTcsTotal + tcsAmt;
@@ -1283,6 +1284,12 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                 <div className="text-center">
                   <p className="text-xs text-slate-500 mb-0.5">Extra Charges</p>
                   <p className="font-medium text-slate-700">Rs {inr(transportAmt + transportGST + otherAmt)}</p>
+                </div>
+              )}
+              {creditVal > 0 && (
+                <div className="text-center">
+                  <p className="text-xs text-slate-500 mb-0.5">Credit Note</p>
+                  <p className="font-medium text-rose-600">− Rs {inr(creditVal)}</p>
                 </div>
               )}
               {tcsAmt > 0 && (
