@@ -936,8 +936,13 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
     `, [project_id]);
 
     // "Received" = value of bills logged (RA/SC/TQS/PO/Finance invoices).
+    // Petty Cash is included here too — unlike a PO/WO bill, the petty-cash
+    // receipt/bill is only collected AFTER the cash is paid out, so payment
+    // itself is the record; Received and Paid should read the same for this
+    // head instead of Received showing "—" until a bill that never arrives
+    // separately gets logged.
     const receivedMap = {};
-    for (const rows of [raActuals.rows, scActuals.rows, tqsActuals.rows, poFallbackActuals.rows, finInvActuals.rows]) {
+    for (const rows of [raActuals.rows, scActuals.rows, tqsActuals.rows, poFallbackActuals.rows, finInvActuals.rows, spcActuals.rows, spcRemainder.rows]) {
       for (const r of rows) {
         if (!r.cost_head) continue;
         receivedMap[r.cost_head] = (receivedMap[r.cost_head] || 0) + parseFloat(r.actual || 0);
@@ -975,12 +980,14 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
     for (const h of new Set([...Object.keys(paidInvoiceMap), ...Object.keys(paidAdvanceMap)])) {
       paidMap[h] = (paidInvoiceMap[h] || 0) + (paidAdvanceMap[h] || 0);
     }
-    // actualMap = total cost incurred (received bills + advances/petty cash that
-    // have no bill of their own) — drives Profit/Contingency derivation below.
-    // Finance invoices are already in receivedMap; finPayActuals excluded here
-    // since they're the paid subset of those invoices (same as raPaid/scPaid).
+    // actualMap = total cost incurred (received bills + advances that have no
+    // bill of their own) — drives Profit/Contingency derivation below. Finance
+    // invoices and Petty Cash are already in receivedMap (see above); Petty
+    // Cash is deliberately NOT re-added here, or it would double-count now that
+    // it's part of receivedMap. finPayActuals excluded here since it's the
+    // paid subset of those invoices (same as raPaid/scPaid).
     const actualMap = { ...receivedMap };
-    for (const rows of [advActuals.rows, advTrackerActuals.rows, btAdvActuals.rows, spcActuals.rows, spcRemainder.rows, storePCAdvActuals.rows]) {
+    for (const rows of [advActuals.rows, advTrackerActuals.rows, btAdvActuals.rows, storePCAdvActuals.rows]) {
       for (const r of rows) {
         if (!r.cost_head) continue;
         actualMap[r.cost_head] = (actualMap[r.cost_head] || 0) + parseFloat(r.actual || 0);
