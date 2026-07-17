@@ -1423,6 +1423,14 @@ router.post('/:id/payment', async (req, res) => {
       const totalTds = billsRes.rows.reduce((s, b) => s + n(b.tds_deduction), 0);
       const netPaid  = Math.max(0, totalPaid - totalTds);
 
+      // Only link tqs_bill_id when the cert covers exactly one bill — the column
+      // is a single FK and can't represent a multi-bill cert. Without this, the
+      // Budget Control "Bills Paid" figure double-counts: once via the bill's own
+      // workflow_status='paid', and again via this Finance payment record, since
+      // the costhead-summary dedup guard only excludes payments whose tqs_bill_id
+      // is set.
+      const singleBillId = billsRes.rows.length === 1 ? billsRes.rows[0].bill_id : null;
+
       let finance_payment_id = null;
       if (firstBill.project_id) {
         const fp = await client.query(`
@@ -1430,8 +1438,8 @@ router.post('/:id/payment', async (req, res) => {
             (project_id, payment_type, entity_name,
              amount, tds_deducted, net_amount,
              payment_date, payment_mode, reference_number, bank_name,
-             cost_head, remarks, created_by, source)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+             cost_head, remarks, created_by, source, tqs_bill_id)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
           RETURNING id
         `, [
           firstBill.project_id, payType, cert.vendor_name,
@@ -1439,7 +1447,7 @@ router.post('/:id/payment', async (req, res) => {
           payment_date, payment_mode, reference_number || null, bank_name || null,
           costHead,
           `QS Cert ${cert.cert_number} (${cert.ra_bill_number || ''}) — ${billsRes.rows.length} bill(s)${remarks ? ': ' + remarks : ''}`,
-          req.user.id, 'tqs_cert',
+          req.user.id, 'tqs_cert', singleBillId,
         ]);
         finance_payment_id = fp.rows[0].id;
       }
