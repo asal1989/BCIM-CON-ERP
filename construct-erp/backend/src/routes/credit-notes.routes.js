@@ -332,6 +332,54 @@ router.patch('/:id/status', authenticate, async (req, res) => {
       `UPDATE credit_notes SET status = $1, updated_at = NOW() WHERE id = $2`,
       [status, req.params.id]
     );
+
+    // Sync credit note value to tqs_bills when applied; clear when cancelled/refunded
+    const billId       = existing.bill_id;
+    const invoiceNum   = existing.invoice_number;
+    const companyId    = req.user.company_id;
+
+    if (status === 'applied') {
+      // Find the linked tqs_bill — prefer bill_id, fall back to invoice_number match
+      let billRow = null;
+      if (billId) {
+        const r = await query(`SELECT id FROM tqs_bills WHERE id = $1 AND company_id = $2`, [billId, companyId]);
+        billRow = r.rows[0] || null;
+      }
+      if (!billRow && invoiceNum) {
+        const r = await query(
+          `SELECT id FROM tqs_bills WHERE company_id = $1 AND inv_number ILIKE $2 AND is_deleted = FALSE LIMIT 1`,
+          [companyId, `%${invoiceNum.trim()}%`]
+        );
+        billRow = r.rows[0] || null;
+      }
+      if (billRow) {
+        await query(
+          `UPDATE tqs_bills SET credit_note_num = $1, credit_note_val = COALESCE(credit_note_val,0) + $2, updated_at = NOW() WHERE id = $3`,
+          [existing.cn_number, parseFloat(existing.total_amount) || 0, billRow.id]
+        );
+      }
+    } else if (['cancelled', 'refunded'].includes(status) && existing.status === 'applied') {
+      // Clear from the linked bill when un-applying
+      let billRow = null;
+      if (billId) {
+        const r = await query(`SELECT id FROM tqs_bills WHERE id = $1 AND company_id = $2`, [billId, companyId]);
+        billRow = r.rows[0] || null;
+      }
+      if (!billRow && invoiceNum) {
+        const r = await query(
+          `SELECT id FROM tqs_bills WHERE company_id = $1 AND credit_note_num = $2 AND is_deleted = FALSE LIMIT 1`,
+          [companyId, existing.cn_number]
+        );
+        billRow = r.rows[0] || null;
+      }
+      if (billRow) {
+        await query(
+          `UPDATE tqs_bills SET credit_note_num = NULL, credit_note_val = 0, updated_at = NOW() WHERE id = $1`,
+          [billRow.id]
+        );
+      }
+    }
+
     const full = await getCN(req.params.id, req.user.company_id);
     res.json({ data: full });
   } catch (err) {
