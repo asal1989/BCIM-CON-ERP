@@ -9,8 +9,8 @@ const logger = require('./logger');
 const { query } = require('../config/database');
 const { sendMail } = require('../services/mail.service');
 
-// Default: 9:00 AM IST every day. Override via HR_LATE_SUMMARY_CRON env var.
-const DEFAULT_CRON     = '0 9 * * *';
+// Default: 9:45 AM IST every day. Override via HR_LATE_SUMMARY_CRON env var.
+const DEFAULT_CRON     = '45 9 * * *';
 const MIN_LATE_MINUTES = parseInt(process.env.HR_LATE_SUMMARY_MIN_MINUTES, 10) || 1;
 
 // Read recipients fresh every call so Railway env var changes take effect without restart
