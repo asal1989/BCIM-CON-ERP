@@ -2424,7 +2424,7 @@ router.post('/', async (req, res) => {
 // ── PATCH /tqs/bills/:id/meta — update project, package description & (admin) workflow_status / inv_number
 router.patch('/:id/meta', async (req, res) => {
   try {
-    const { project_id, work_desc, workflow_status, inv_number, vendor_name, po_number } = req.body;
+    const { project_id, work_desc, workflow_status, inv_number, vendor_name, po_number, po_id } = req.body;
     await getAccessibleBill(req, req.params.id);
     if (project_id && !userCanAccessProject(req, project_id)) {
       return res.status(403).json({ error: 'Access denied for this project.' });
@@ -2433,12 +2433,13 @@ router.patch('/:id/meta', async (req, res) => {
     const VALID_STATUSES = ['pending','stores','document_controller','qs','accounts','procurement','qs_sign','paid'];
     const canOverrideStatus = req.user && DQS_FULL_ACCESS_ROLES.includes(req.user.role);
 
-    if ((inv_number || vendor_name || po_number) && canOverrideStatus) {
+    if ((inv_number || vendor_name || po_number || po_id !== undefined) && canOverrideStatus) {
       const sets = [];
       const vals = [];
-      if (inv_number)  { sets.push(`inv_number=$${sets.length+1}`);  vals.push(inv_number.trim()); }
-      if (vendor_name) { sets.push(`vendor_name=$${sets.length+1}`); vals.push(vendor_name.trim()); }
-      if (po_number)   { sets.push(`po_number=$${sets.length+1}`);   vals.push(po_number.trim()); }
+      if (inv_number)          { sets.push(`inv_number=$${sets.length+1}`);  vals.push(inv_number.trim()); }
+      if (vendor_name)         { sets.push(`vendor_name=$${sets.length+1}`); vals.push(vendor_name.trim()); }
+      if (po_number)           { sets.push(`po_number=$${sets.length+1}`);   vals.push(po_number.trim()); }
+      if (po_id !== undefined) { sets.push(`po_id=$${sets.length+1}`);       vals.push(po_id || null); }
       sets.push(`updated_at=NOW()`);
       vals.push(req.params.id);
       await query(`UPDATE tqs_bills SET ${sets.join(', ')} WHERE id=$${vals.length}`, vals);
