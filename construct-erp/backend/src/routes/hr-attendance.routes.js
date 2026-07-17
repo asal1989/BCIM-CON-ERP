@@ -951,7 +951,7 @@ router.post('/recalculate', async (req, res) => {
           WHEN ha.status IN ('leave','holiday','week_off') THEN ha.status
           WHEN ha.in_time IS NOT NULL AND ha.out_time IS NOT NULL
                AND ha.out_time != ha.in_time THEN 'present'
-          WHEN ha.in_time IS NOT NULL OR ha.out_time IS NOT NULL THEN 'half_day'
+          WHEN ha.in_time IS NOT NULL OR ha.out_time IS NOT NULL THEN 'present'
           ELSE 'absent'
         END,
         late_minutes = CASE
@@ -985,7 +985,7 @@ router.post('/recalculate', async (req, res) => {
         status = CASE
           WHEN sa.in_time IS NOT NULL AND sa.out_time IS NOT NULL
                AND sa.out_time != sa.in_time THEN 'present'
-          WHEN sa.in_time IS NOT NULL OR sa.out_time IS NOT NULL THEN 'half_day'
+          WHEN sa.in_time IS NOT NULL OR sa.out_time IS NOT NULL THEN 'present'
           ELSE sa.status
         END,
         hours_worked = CASE

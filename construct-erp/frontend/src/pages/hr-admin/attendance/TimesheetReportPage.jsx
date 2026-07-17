@@ -12,23 +12,26 @@ const fmtDate = (d) =>
 
 const STATUS_COLOR = {
   present:  { bg: '#D1FAE5', color: '#065F46' },
+  sp:       { bg: '#FFF7ED', color: '#C2410C' }, // single punch — present but missing out-punch
   absent:   { bg: '#FEE2E2', color: '#991B1B' },
   leave:    { bg: '#FEF3C7', color: '#92400E' },
   half_day: { bg: '#DBEAFE', color: '#1E40AF' },
   holiday:  { bg: '#EDE9FE', color: '#5B21B6' },
 };
-const STATUS_LABEL = { present:'P', absent:'A', leave:'L', half_day:'HD', holiday:'H' };
+const STATUS_LABEL = { present:'P', sp:'SP', absent:'A', leave:'L', half_day:'HD', holiday:'H' };
 
-function Pill({ status }) {
+function Pill({ status, out_time }) {
   const s = (status || 'absent').toLowerCase();
-  const { bg, color } = STATUS_COLOR[s] || STATUS_COLOR.absent;
+  // SP = present but missing out-punch (forgot to punch out)
+  const key = (s === 'present' && !out_time) ? 'sp' : s;
+  const { bg, color } = STATUS_COLOR[key] || STATUS_COLOR.absent;
   return (
     <span style={{
       background: bg, color, border: `1px solid ${color}33`,
       borderRadius: 3, padding: '2px 8px', fontWeight: 700,
       fontSize: 10, letterSpacing: 0.5, display: 'inline-block',
     }}>
-      {STATUS_LABEL[s] || s.toUpperCase()}
+      {STATUS_LABEL[key] || key.toUpperCase()}
     </span>
   );
 }
@@ -259,7 +262,9 @@ export default function TimesheetReportPage() {
         (row.designation || '').toLowerCase().includes(q)
       );
     }
-    if (statusFilter !== 'all') {
+    if (statusFilter === 'sp') {
+      r = r.filter(row => (row.attendance_status || '').toLowerCase() === 'present' && !row.out_time);
+    } else if (statusFilter !== 'all') {
       r = r.filter(row => (row.attendance_status || '').toLowerCase() === statusFilter);
     }
     return r;
@@ -354,6 +359,7 @@ export default function TimesheetReportPage() {
   const qFilters = [
     { key:'all',      label:'All' },
     { key:'present',  label:'Present',  color:'#10B981' },
+    { key:'sp',       label:'Single Punch', color:'#F97316' },
     { key:'absent',   label:'Absent',   color:'#EF4444' },
     { key:'half_day', label:'Half Day', color:'#6366F1' },
     { key:'leave',    label:'Leave',    color:'#F59E0B' },
@@ -497,10 +503,11 @@ export default function TimesheetReportPage() {
               />
               <div style={{ display:'flex', gap:8, marginTop:6 }}>
                 {[
-                  { label:'P', color:'#10B981', val:summary.present },
-                  { label:'A', color:'#EF4444', val:summary.absent },
-                  { label:'HD',color:'#6366F1', val:summary.half||0 },
-                  { label:'L', color:'#F59E0B', val:summary.leave },
+                  { label:'P',  color:'#10B981', val:summary.present },
+                  { label:'SP', color:'#F97316', val:rows.filter(r=>r.attendance_status==='present'&&!r.out_time).length },
+                  { label:'A',  color:'#EF4444', val:summary.absent },
+                  { label:'HD', color:'#6366F1', val:summary.half||0 },
+                  { label:'L',  color:'#F59E0B', val:summary.leave },
                 ].map(s => (
                   <span key={s.label} style={{ fontSize:10, color:'#374151' }}>
                     <span style={{ color:s.color, fontWeight:700 }}>{s.label}</span> {s.val}
@@ -748,7 +755,7 @@ export default function TimesheetReportPage() {
                           {r.company}
                         </span>
                       </td>
-                      <td style={{ ...td, textAlign:'center' }}><Pill status={r.attendance_status}/></td>
+                      <td style={{ ...td, textAlign:'center' }}><Pill status={r.attendance_status} out_time={r.out_time}/></td>
                       <td style={{ ...td, color:'#374151', fontVariantNumeric:'tabular-nums', whiteSpace:'nowrap' }}>
                         {r.in_time || <span style={{ color:'#D1D5DB' }}>—</span>}
                       </td>
