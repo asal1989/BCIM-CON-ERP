@@ -916,6 +916,20 @@ router.post('/late-summary/run', authorize('super_admin','admin','hr','hr_admin'
 });
 
 // ═══════════════════════════════════════════════════════════
+// ABSENT SUMMARY — HR Manager daily digest (manual trigger)
+// POST /hr-admin/attendance/absent-summary/run
+// Body: { date?, recipients? }   (optional overrides)
+// ═══════════════════════════════════════════════════════════
+router.post('/absent-summary/run', authorize('super_admin','admin','hr','hr_admin','hr_manager'), async (req, res) => {
+  try {
+    const { runAbsentSummary } = require('../utils/hr-absent-summary.service');
+    const { date, recipients } = req.body;
+    const result = await runAbsentSummary({ date: date || undefined, manual: true, recipients: recipients || undefined });
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
 // RECALCULATE ATTENDANCE
 // POST /hr-admin/attendance/recalculate  { from, to }
 // Re-derives status/late_minutes from stored in_time/out_time for both staff and SC workers

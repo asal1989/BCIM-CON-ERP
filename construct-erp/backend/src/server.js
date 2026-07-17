@@ -1203,6 +1203,9 @@ if (require.main === module) {
 
     const { initLateSummary } = require('./utils/hr-late-summary.service');
     initLateSummary();
+
+    const { initAbsentSummary } = require('./utils/hr-absent-summary.service');
+    initAbsentSummary();
   });
   }); // end .finally()
 }
