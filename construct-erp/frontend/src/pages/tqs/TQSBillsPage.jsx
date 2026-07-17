@@ -698,37 +698,41 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
         </button>
       </div>
 
-      {/* ── Scrollable body ── */}
-      <div className="flex-1 overflow-y-auto" style={{ background: '#f1f5f9' }}>
-        <div className="w-full max-w-[1440px] mx-auto px-6 py-6 space-y-4">
+      {/* ── Sidebar + Main body ── */}
+      <div className="flex-1 flex overflow-hidden" style={{ background: '#f1f5f9' }}>
 
-          {/* ── SECTION 1: Vendor & PO Info ── */}
-          <SectionCard icon={Building2} title="Vendor & PO Information" subtitle="Who you're billing from, and the linked PO / WO">
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {/* Project */}
-              <div>
-                <Lbl req>Project</Lbl>
-                <SearchableSelect
-                  value={form.project_id}
-                  onChange={v => set('project_id', v)}
-                  options={projects.map(p => ({ value: p.id, label: p.name }))}
-                  placeholder="Select project…"
-                  searchPlaceholder="Search projects…"
-                />
+        {/* ══ SIDEBAR — vendor, PO/WO, invoice details, live totals ══ */}
+        <div className="w-[320px] flex-shrink-0 bg-white border-r border-slate-200 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+
+            <div>
+              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Project &amp; type</div>
+              <div className="space-y-3">
+                <div>
+                  <Lbl req>Project</Lbl>
+                  <SearchableSelect
+                    value={form.project_id}
+                    onChange={v => set('project_id', v)}
+                    options={projects.map(p => ({ value: p.id, label: p.name }))}
+                    placeholder="Select project…"
+                    searchPlaceholder="Search projects…"
+                  />
+                </div>
+                <div>
+                  <Lbl>Bill Type</Lbl>
+                  <select className={F} value={form.bill_type} onChange={e => { set('bill_type', e.target.value); setVendorSearch(''); set('vendor_name', ''); set('vendor_id', ''); }}>
+                    <option value="po">Purchase Order (PO)</option>
+                    <option value="wo">Work Order (WO)</option>
+                    <option value="hire">Hire / Rental</option>
+                  </select>
+                </div>
               </div>
+            </div>
 
-              {/* Bill Type */}
-              <div>
-                <Lbl>Bill Type</Lbl>
-                <select className={F} value={form.bill_type} onChange={e => { set('bill_type', e.target.value); setVendorSearch(''); set('vendor_name', ''); set('vendor_id', ''); }}>
-                  <option value="po">Purchase Order (PO)</option>
-                  <option value="wo">Work Order (WO)</option>
-                  <option value="hire">Hire / Rental</option>
-                </select>
-              </div>
-
+            <div className="border-t border-slate-100 pt-4">
+              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Vendor &amp; PO / WO</div>
               {/* Vendor combobox */}
-              <div className="relative col-span-2 md:col-span-3">
+              <div className="relative">
                 <Lbl req>Vendor / Supplier</Lbl>
                 <input
                   ref={vendorInputRef}
@@ -799,179 +803,244 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
 
               {/* Vendor outstanding summary card */}
               {vendorOutstanding && vendorOutstanding.bill_count > 0 && vendorOutstanding.total_outstanding > 0 && (
-                <div className="col-span-2 md:col-span-3 flex items-center gap-3 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs">
-                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                <div className="mt-3 flex items-center gap-2 px-2.5 py-2 bg-amber-50 border border-amber-200 rounded-lg text-[11px]">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                   <span className="text-amber-800">
-                    This vendor has <strong>{vendorOutstanding.bill_count} unpaid bill{vendorOutstanding.bill_count > 1 ? 's' : ''}</strong> with ₹{Number(vendorOutstanding.total_outstanding || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })} outstanding
-                    {vendorOutstanding.oldest_inv_date && ` — oldest since ${dayjs(vendorOutstanding.oldest_inv_date).format('DD MMM YYYY')}`}.
+                    <strong>{vendorOutstanding.bill_count}</strong> unpaid bill{vendorOutstanding.bill_count > 1 ? 's' : ''}, ₹{Number(vendorOutstanding.total_outstanding || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })} outstanding
                   </span>
                 </div>
               )}
 
-              {/* Work Description - only for WO */}
-              {form.bill_type === 'wo' && (
-                <div className="col-span-2 md:col-span-3">
-                  <Lbl req>Work Description</Lbl>
-                  <input className={F} placeholder="Brief description of work done"
-                    value={form.work_desc} onChange={e => set('work_desc', e.target.value)} />
-                </div>
-              )}
+              <div className="space-y-3 mt-3">
+                {/* Work Description - only for WO */}
+                {form.bill_type === 'wo' && (
+                  <div>
+                    <Lbl req>Work Description</Lbl>
+                    <input className={F} placeholder="Brief description of work done"
+                      value={form.work_desc} onChange={e => set('work_desc', e.target.value)} />
+                  </div>
+                )}
 
-              {/* Hire/Rental fields */}
-              {form.bill_type === 'hire' && (<>
-                <div className="col-span-2 md:col-span-3">
-                  <Lbl req>Equipment / Plant Description</Lbl>
-                  <input className={F} placeholder="e.g. JCB Excavator, Transit Mixer, Tower Crane"
-                    value={form.equipment_type} onChange={e => set('equipment_type', e.target.value)} />
-                </div>
-                <div>
-                  <Lbl req>Hire Period From</Lbl>
-                  <input type="date" className={F} value={form.hire_period_from}
-                    onChange={e => set('hire_period_from', e.target.value)} />
-                </div>
-                <div>
-                  <Lbl req>Hire Period To</Lbl>
-                  <input type="date" className={F} value={form.hire_period_to}
-                    onChange={e => set('hire_period_to', e.target.value)} />
-                </div>
-              </>)}
+                {/* Hire/Rental fields */}
+                {form.bill_type === 'hire' && (<>
+                  <div>
+                    <Lbl req>Equipment / Plant Description</Lbl>
+                    <input className={F} placeholder="e.g. JCB Excavator, Transit Mixer, Tower Crane"
+                      value={form.equipment_type} onChange={e => set('equipment_type', e.target.value)} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Lbl req>Hire From</Lbl>
+                      <input type="date" className={F} value={form.hire_period_from}
+                        onChange={e => set('hire_period_from', e.target.value)} />
+                    </div>
+                    <div>
+                      <Lbl req>Hire To</Lbl>
+                      <input type="date" className={F} value={form.hire_period_to}
+                        onChange={e => set('hire_period_to', e.target.value)} />
+                    </div>
+                  </div>
+                </>)}
 
-              {/* Link to Procurement PO (auto-fills vendor/po#/date) */}
-              {form.bill_type === 'po' && (
-                <div className="col-span-2 md:col-span-3 space-y-2">
-                  <Lbl req>Link to Approved PO <span className="text-[10px] text-slate-400 font-normal">(auto-fills vendor &amp; PO details)</span></Lbl>
-                  <select className={F} value={form.po_id} onChange={e => handlePOPick(e.target.value)} required>
-                    <option value="" disabled>— Select Approved PO —</option>
-                    {availablePOs.map(po => (
-                      <option key={po.id} value={po.id}>
-                        {po.is_fully_billed ? '🔒 [CLOSED] ' : ''}{po.po_number} — {po.vendor_name} — ₹{inr(po.total_amount)}
-                        {po.is_fully_billed ? ' — Fully Billed' : po.billed_amount > 0 ? ` — ₹${inr(po.billed_amount)} billed` : ''}
-                      </option>
-                    ))}
-                  </select>
-
-                  {/* PO Warning Banner */}
-                  {poWarning && <POWOWarningBanner warning={poWarning} />}
-                </div>
-              )}
-
-              {/* Link to Work Order — for WO and Hire bills */}
-              {(form.bill_type === 'wo' || form.bill_type === 'hire') && (
-                <div className="col-span-2 md:col-span-3 space-y-2">
-                  <Lbl>Link to Work Order <span className="text-[10px] text-slate-400 font-normal">(auto-fills vendor & WO details)</span></Lbl>
-                  <select className={F} value={form.po_number}
-                    onChange={e => handleWOPick(e.target.value)}>
-                    <option value="">Select Work Order…</option>
-                    {availableWOs.map(wo => {
-                      const billedPct = wo.total_amount > 0 ? Math.round((wo.billed_amount / wo.total_amount) * 100) : 0;
-                      const closed    = wo.is_fully_billed || billedPct >= 99;
-                      return (
-                        <option key={wo.id} value={wo.wo_number}>
-                          {closed ? '🔒 [CLOSED] ' : ''}{wo.wo_number} — {wo.vendor_name} — ₹{inr(wo.total_amount)}
-                          {closed ? ' — Fully Billed' : wo.billed_amount > 0 ? ` — ₹${inr(wo.billed_amount)} billed` : ''}
+                {/* Link to Procurement PO (auto-fills vendor/po#/date) */}
+                {form.bill_type === 'po' && (
+                  <div>
+                    <Lbl req>Link to Approved PO <span className="text-[10px] text-slate-400 font-normal">(auto-fills details)</span></Lbl>
+                    <select className={F} value={form.po_id} onChange={e => handlePOPick(e.target.value)} required>
+                      <option value="" disabled>— Select Approved PO —</option>
+                      {availablePOs.map(po => (
+                        <option key={po.id} value={po.id}>
+                          {po.is_fully_billed ? '🔒 [CLOSED] ' : ''}{po.po_number} — {po.vendor_name} — ₹{inr(po.total_amount)}
+                          {po.is_fully_billed ? ' — Fully Billed' : po.billed_amount > 0 ? ` — ₹${inr(po.billed_amount)} billed` : ''}
                         </option>
-                      );
-                    })}
-                  </select>
-                  {/* WO Warning Banner */}
-                  {poWarning && <POWOWarningBanner warning={poWarning} />}
+                      ))}
+                    </select>
+                    {/* PO Warning Banner */}
+                    {poWarning && <POWOWarningBanner warning={poWarning} />}
+                  </div>
+                )}
+
+                {/* Link to Work Order — for WO and Hire bills */}
+                {(form.bill_type === 'wo' || form.bill_type === 'hire') && (
+                  <div>
+                    <Lbl>Link to Work Order <span className="text-[10px] text-slate-400 font-normal">(auto-fills details)</span></Lbl>
+                    <select className={F} value={form.po_number}
+                      onChange={e => handleWOPick(e.target.value)}>
+                      <option value="">Select Work Order…</option>
+                      {availableWOs.map(wo => {
+                        const billedPct = wo.total_amount > 0 ? Math.round((wo.billed_amount / wo.total_amount) * 100) : 0;
+                        const closed    = wo.is_fully_billed || billedPct >= 99;
+                        return (
+                          <option key={wo.id} value={wo.wo_number}>
+                            {closed ? '🔒 [CLOSED] ' : ''}{wo.wo_number} — {wo.vendor_name} — ₹{inr(wo.total_amount)}
+                            {closed ? ' — Fully Billed' : wo.billed_amount > 0 ? ` — ₹${inr(wo.billed_amount)} billed` : ''}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    {/* WO Warning Banner */}
+                    {poWarning && <POWOWarningBanner warning={poWarning} />}
+                  </div>
+                )}
+
+                {/* PO/WO Number - editable but auto-filled from PO picker */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Lbl>
+                      {form.bill_type === 'hire' ? 'WO Number' : form.bill_type === 'wo' ? 'WO Number' : 'PO Number'}
+                      {form.bill_type !== 'hire' && <span className="text-red-500 ml-0.5">*</span>}
+                    </Lbl>
+                    <input className={F}
+                      placeholder={form.bill_type === 'hire' ? 'Optional' : form.bill_type === 'wo' ? 'WO-2025-001' : 'PO-2025-001'}
+                      list={form.bill_type === 'wo' || form.bill_type === 'hire' ? 'wo-number-options' : 'po-number-options'}
+                      value={form.po_number}
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (form.bill_type === 'wo' || form.bill_type === 'hire') handleWOPick(val);
+                        else {
+                          const po = availablePOs.find(p => p.po_number === val);
+                          if (po) handlePOPick(po.id);
+                          else set('po_number', val);
+                        }
+                      }} />
+                    <datalist id="wo-number-options">
+                      {availableWOs.map(wo => <option key={wo.id} value={wo.wo_number}>{wo.vendor_name}</option>)}
+                    </datalist>
+                    <datalist id="po-number-options">
+                      {availablePOs.map(po => <option key={po.id} value={po.po_number}>{po.vendor_name}</option>)}
+                    </datalist>
+                  </div>
+
+                  {/* PO Date */}
+                  <div>
+                    <Lbl>{form.bill_type === 'wo' || form.bill_type === 'hire' ? 'WO Date' : 'PO Date'}</Lbl>
+                    <input type="date" className={F} value={form.po_date} onChange={e => set('po_date', e.target.value)} />
+                  </div>
                 </div>
-              )}
 
-              {/* PO/WO Number - editable but auto-filled from PO picker */}
-              <div>
-                <Lbl>
-                  {form.bill_type === 'hire' ? 'WO Number (Hire)' : form.bill_type === 'wo' ? 'WO Number' : 'PO Number'}
-                  {form.bill_type !== 'hire' && <span className="text-red-500 ml-0.5">*</span>}
-                </Lbl>
-                <input className={F}
-                  placeholder={form.bill_type === 'hire' ? 'WO-2025-001 (optional)' : form.bill_type === 'wo' ? 'WO-2025-001' : 'PO-2025-001'}
-                  list={form.bill_type === 'wo' || form.bill_type === 'hire' ? 'wo-number-options' : 'po-number-options'}
-                  value={form.po_number}
-                  onChange={e => {
-                    const val = e.target.value;
-                    if (form.bill_type === 'wo' || form.bill_type === 'hire') handleWOPick(val);
-                    else {
-                      const po = availablePOs.find(p => p.po_number === val);
-                      if (po) handlePOPick(po.id);
-                      else set('po_number', val);
-                    }
-                  }} />
-                <datalist id="wo-number-options">
-                  {availableWOs.map(wo => <option key={wo.id} value={wo.wo_number}>{wo.vendor_name}</option>)}
-                </datalist>
-                <datalist id="po-number-options">
-                  {availablePOs.map(po => <option key={po.id} value={po.po_number}>{po.vendor_name}</option>)}
-                </datalist>
-              </div>
-
-
-              {/* PO Date */}
-              <div>
-                <Lbl>{form.bill_type === 'wo' || form.bill_type === 'hire' ? 'WO Date' : 'PO Date'}</Lbl>
-                <input type="date" className={F} value={form.po_date} onChange={e => set('po_date', e.target.value)} />
-              </div>
-
-              {/* IGN link (optional, shown only when PO linked and IGN/GRNs exist) */}
-              {form.bill_type === 'po' && form.po_id && availableGRNs.length > 0 && (
-                <div className="col-span-2 md:col-span-3">
-                  <Lbl>Link to IGN <span className="text-[10px] text-slate-400 font-normal">(optional - ties invoice to material receipt)</span></Lbl>
-                  <select className={F} value={form.grn_id} onChange={e => set('grn_id', e.target.value)}>
-                    <option value="">- No IGN/GRN link -</option>
-                    {availableGRNs.map(g => (
-                      <option key={g.id} value={g.id}>
-                        {g.serial_no_formatted || g.grn_number || g.ign_number} - {(g.grn_date || g.date_time) ? dayjs(g.grn_date || g.date_time).format('DD-MM-YYYY') : '—'} - Qty {Number(g.total_quantity||0).toLocaleString()}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Invoice Number */}
-              <div className="col-span-2 md:col-span-1">
-                <Lbl req>Invoice Number</Lbl>
-                <input className={`${F}${dupBills.length > 0 ? ' border-red-400 focus:border-red-500 focus:ring-red-500/30' : ''}`} placeholder="INV-001"
-                  value={form.inv_number} onChange={e => set('inv_number', e.target.value.toUpperCase())} required style={{ textTransform: 'uppercase' }} />
-                {dupBills.length > 0 && (
-                  <div className="mt-1.5 flex items-start gap-1.5 text-[11px] text-red-600 bg-red-50 border border-red-200 rounded-md px-2.5 py-2">
-                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                    <span>
-                      Duplicate: <strong>{form.inv_number}</strong> already exists for this vendor
-                      {dupBills.map(b => ` (SL ${b.sl_number}${b.project_name ? ` — ${b.project_name}` : ''})`).join(', ')}.
-                    </span>
+                {/* IGN link (optional, shown only when PO linked and IGN/GRNs exist) */}
+                {form.bill_type === 'po' && form.po_id && availableGRNs.length > 0 && (
+                  <div>
+                    <Lbl>Link to IGN <span className="text-[10px] text-slate-400 font-normal">(optional)</span></Lbl>
+                    <select className={F} value={form.grn_id} onChange={e => set('grn_id', e.target.value)}>
+                      <option value="">- No IGN/GRN link -</option>
+                      {availableGRNs.map(g => (
+                        <option key={g.id} value={g.id}>
+                          {g.serial_no_formatted || g.grn_number || g.ign_number} - {(g.grn_date || g.date_time) ? dayjs(g.grn_date || g.date_time).format('DD-MM-YYYY') : '—'} - Qty {Number(g.total_quantity||0).toLocaleString()}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )}
               </div>
+            </div>
 
-              {/* Invoice Date - auto-derives Invoice Month */}
-              <div>
-                <Lbl req>Invoice Date</Lbl>
-                <input type="date" className={F} value={form.inv_date}
-                  onChange={e => {
-                    const d = e.target.value;
-                    const autoMonth = d
-                      ? new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
-                          .toUpperCase().replace(' ', '-')
-                      : '';
-                    setForm(f => ({ ...f, inv_date: d, inv_month: autoMonth || f.inv_month }));
-                  }}
-                  required />
-              </div>
+            <div className="border-t border-slate-100 pt-4">
+              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Invoice details</div>
+              <div className="space-y-3">
+                {/* Invoice Number */}
+                <div>
+                  <Lbl req>Invoice Number</Lbl>
+                  <input className={`${F}${dupBills.length > 0 ? ' border-red-400 focus:border-red-500 focus:ring-red-500/30' : ''}`} placeholder="INV-001"
+                    value={form.inv_number} onChange={e => set('inv_number', e.target.value.toUpperCase())} required style={{ textTransform: 'uppercase' }} />
+                  {dupBills.length > 0 && (
+                    <div className="mt-1.5 flex items-start gap-1.5 text-[11px] text-red-600 bg-red-50 border border-red-200 rounded-md px-2.5 py-2">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      <span>
+                        Duplicate: <strong>{form.inv_number}</strong> already exists for this vendor
+                        {dupBills.map(b => ` (SL ${b.sl_number}${b.project_name ? ` — ${b.project_name}` : ''})`).join(', ')}.
+                      </span>
+                    </div>
+                  )}
+                </div>
 
-              {/* Invoice Month - auto-filled from date, editable */}
-              <div>
-                <Lbl>Invoice Month</Lbl>
-                <input className={F} placeholder="e.g. APRIL-2026"
-                  value={form.inv_month} onChange={e => set('inv_month', e.target.value)} />
-              </div>
+                {/* Invoice Date - auto-derives Invoice Month */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Lbl req>Invoice Date</Lbl>
+                    <input type="date" className={F} value={form.inv_date}
+                      onChange={e => {
+                        const d = e.target.value;
+                        const autoMonth = d
+                          ? new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+                              .toUpperCase().replace(' ', '-')
+                          : '';
+                        setForm(f => ({ ...f, inv_date: d, inv_month: autoMonth || f.inv_month }));
+                      }}
+                      required />
+                  </div>
 
-              {/* Received Date */}
-              <div>
-                <Lbl>Received Date</Lbl>
-                <input type="date" className={F} value={form.received_date} onChange={e => set('received_date', e.target.value)} />
+                  {/* Invoice Month - auto-filled from date, editable */}
+                  <div>
+                    <Lbl>Invoice Month</Lbl>
+                    <input className={F} placeholder="e.g. APRIL-2026"
+                      value={form.inv_month} onChange={e => set('inv_month', e.target.value)} />
+                  </div>
+                </div>
+
+                {/* Received Date */}
+                <div>
+                  <Lbl>Received Date</Lbl>
+                  <input type="date" className={F} value={form.received_date} onChange={e => set('received_date', e.target.value)} />
+                </div>
               </div>
             </div>
-          </SectionCard>
+
+          </div>
+
+          {/* Sidebar bottom — live totals + actions (dark) */}
+          <div className="flex-shrink-0 px-4 py-4" style={{ background: '#0f172a' }}>
+            <div className="text-[9px] text-slate-500 uppercase tracking-widest mb-1">Total invoice</div>
+            <div className="text-2xl font-bold text-white tracking-tight mb-3">₹{inr(grandTotal)}</div>
+            <div className="space-y-1 mb-3">
+              <div className="flex justify-between text-[11px]">
+                <span className="text-slate-500">Basic</span>
+                <span className="text-slate-300 font-medium">₹{inr(effectBasic)}</span>
+              </div>
+              <div className="flex justify-between text-[11px]">
+                <span className="text-slate-500">GST</span>
+                <span className="text-slate-300 font-medium">₹{inr(totalGST)}</span>
+              </div>
+              {(transportAmt > 0 || otherAmt > 0) && (
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-slate-500">Extra charges</span>
+                  <span className="text-slate-300 font-medium">₹{inr(transportAmt + transportGST + otherAmt)}</span>
+                </div>
+              )}
+              {tcsAmt > 0 && (
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-slate-500">TCS ({form.tcs_pct}%)</span>
+                  <span className="text-slate-300 font-medium">₹{inr(tcsAmt)}</span>
+                </div>
+              )}
+              {creditVal > 0 && (
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-slate-500">Credit note</span>
+                  <span className="text-rose-400 font-medium">− ₹{inr(creditVal)}</span>
+                </div>
+              )}
+            </div>
+            <button type="button" onClick={handleSubmit}
+              disabled={mutation.isPending || poWarning?.type === 'closed'}
+              title={poWarning?.type === 'closed' ? `PO ${poWarning.po_number} is fully billed — cannot create bill` : undefined}
+              className={clsx('w-full inline-flex items-center justify-center gap-2 h-10 rounded-lg text-white text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg mb-2',
+                poWarning?.type === 'closed' ? 'bg-slate-600' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/40')}>
+              {mutation.isPending
+                ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Saving…</>
+                : poWarning?.type === 'closed'
+                  ? <><span>🔒</span> PO Closed — Cannot Bill</>
+                  : <><FileText className="w-4 h-4" /> Create Bill</>}
+            </button>
+            <button type="button" onClick={onClose}
+              className="w-full h-9 rounded-lg border border-slate-700 text-sm font-medium text-slate-400 hover:bg-white/5 hover:text-slate-200 transition-colors">
+              Cancel
+            </button>
+          </div>
+        </div>
+
+        {/* ══ MAIN — line items, charges, credit note, remarks ══ */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-[980px] mx-auto px-6 py-6 space-y-4">
 
           {/* ── SECTION 2: Invoice Materials (Line Items) ── */}
           <SectionCard
@@ -1252,59 +1321,6 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
             </div>
           </SectionCard>
 
-          {/* ── SECTION 5: Invoice Totals (read-only) ── */}
-          <div className="border border-blue-100 rounded-2xl shadow-sm p-5 overflow-hidden" style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #eef2ff 100%)' }}>
-            <div className="flex items-center gap-2.5 mb-4">
-              <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-sm shadow-blue-200">
-                <IndianRupee className="w-[18px] h-[18px] text-white" />
-              </div>
-              <h3 className="text-sm font-bold text-blue-900 tracking-tight">Invoice Totals (Live)</h3>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
-              <div className="text-center">
-                <p className="text-xs text-slate-500 mb-0.5">Basic Amount</p>
-                <p className="font-medium text-slate-800">Rs {inr(effectBasic)}</p>
-              </div>
-              {taxMode === 'intrastate' ? (<>
-                <div className="text-center">
-                  <p className="text-xs text-slate-500 mb-0.5">CGST</p>
-                  <p className="font-medium text-slate-700">Rs {inr(totalGST / 2)}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-slate-500 mb-0.5">SGST</p>
-                  <p className="font-medium text-slate-700">Rs {inr(totalGST / 2)}</p>
-                </div>
-              </>) : (
-                <div className="text-center">
-                  <p className="text-xs text-slate-500 mb-0.5">IGST</p>
-                  <p className="font-medium text-slate-700">Rs {inr(totalGST)}</p>
-                </div>
-              )}
-              {(transportAmt > 0 || otherAmt > 0) && (
-                <div className="text-center">
-                  <p className="text-xs text-slate-500 mb-0.5">Extra Charges</p>
-                  <p className="font-medium text-slate-700">Rs {inr(transportAmt + transportGST + otherAmt)}</p>
-                </div>
-              )}
-              {creditVal > 0 && (
-                <div className="text-center">
-                  <p className="text-xs text-slate-500 mb-0.5">Credit Note</p>
-                  <p className="font-medium text-rose-600">− Rs {inr(creditVal)}</p>
-                </div>
-              )}
-              {tcsAmt > 0 && (
-                <div className="text-center">
-                  <p className="text-xs text-slate-500 mb-0.5">TCS ({form.tcs_pct}%)</p>
-                  <p className="font-medium text-slate-700">Rs {inr(tcsAmt)}</p>
-                </div>
-              )}
-            </div>
-            <div className="border-t border-blue-200 pt-3 flex items-center justify-end gap-3">
-              <span className="text-sm font-medium text-slate-600">Total Invoice Amount:</span>
-              <span className="text-2xl font-bold text-blue-700 tracking-tight">₹{inr(grandTotal)}</span>
-            </div>
-          </div>
-
           {/* ── SECTION 6: Remarks ── */}
           <SectionCard icon={StickyNote} title="Remarks">
             <Lbl>Remarks / Notes</Lbl>
@@ -1313,49 +1329,6 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
               value={form.remarks} onChange={e => set('remarks', e.target.value)} />
           </SectionCard>
 
-        </div>{/* /max-w-5xl */}
-      </div>{/* /scrollable body */}
-
-      {/* ── Sticky footer ── */}
-      <div style={{ flexShrink: 0, background: '#0f172a', borderTop: '1px solid rgba(255,255,255,0.06)' }}
-        className="px-6 py-3.5">
-        <div className="w-full max-w-[1440px] mx-auto flex items-center justify-between gap-4">
-          {/* Grand total preview */}
-          <div className="flex items-center gap-6">
-            <div className="text-[11px] text-slate-500 font-medium">
-              Basic: <span className="font-semibold text-slate-300 text-sm ml-1">
-                ₹{inr(effectBasic)}
-              </span>
-            </div>
-            <div className="text-[11px] text-slate-500 font-medium">
-              GST: <span className="font-semibold text-slate-300 text-sm ml-1">
-                ₹{inr(totalGST)}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 pl-5 border-l border-slate-700">
-              <span className="text-[11px] text-slate-400 font-medium">Grand Total</span>
-              <span className="font-bold text-white text-xl tracking-tight">
-                ₹{inr(grandTotal)}
-              </span>
-            </div>
-          </div>
-          {/* Actions */}
-          <div className="flex items-center gap-2.5">
-            <button type="button" onClick={onClose}
-              className="px-4 h-9 rounded-lg border border-slate-700 text-sm font-medium text-slate-400 hover:bg-white/5 hover:text-slate-200 transition-colors">
-              Cancel
-            </button>
-            <button type="button" onClick={handleSubmit}
-              disabled={mutation.isPending || poWarning?.type === 'closed'}
-              title={poWarning?.type === 'closed' ? `PO ${poWarning.po_number} is fully billed — cannot create bill` : undefined}
-              className={clsx('inline-flex items-center gap-2 px-6 h-10 rounded-lg text-white text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg',
-                poWarning?.type === 'closed' ? 'bg-slate-600' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/40')}>
-              {mutation.isPending
-                ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Saving…</>
-                : poWarning?.type === 'closed'
-                  ? <><span>🔒</span> PO Closed — Cannot Bill</>
-                  : <><FileText className="w-4 h-4" /> Create Bill</>}
-            </button>
           </div>
         </div>
       </div>
