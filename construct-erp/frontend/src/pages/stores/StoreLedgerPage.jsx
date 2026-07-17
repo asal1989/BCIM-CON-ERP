@@ -577,6 +577,7 @@ export default function StoreLedgerPage() {
 
   // Summary totals for footer
   const totalOpeningValue  = filteredSummary.reduce((sum, s) => sum + (rq3(s.opening_stock) * parseFloat(s.unit_rate || 0)), 0);
+  const totalIssuedQty     = filteredSummary.reduce((sum, s) => sum + parseFloat(s.total_issued || 0), 0);
   const totalIssuedValue   = filteredSummary.reduce((sum, s) => {
     const issued = parseFloat(s.total_issued || 0);
     return sum + issued * parseFloat(s.unit_rate || 0);
@@ -584,6 +585,10 @@ export default function StoreLedgerPage() {
   const totalClosingValue  = filteredSummary.reduce((sum, s) => sum + (rq3(s.closing_stock) * parseFloat(s.unit_rate || 0)), 0);
   const totalGST           = totalClosingValue * GST_RATE;
   const totalGrandTotal    = totalClosingValue + totalGST;
+  // Rows with at least some activity (received, issued, or in stock) — used in PDF/CSV exports
+  const activeForReport    = filteredSummary.filter(s =>
+    rq3(s.closing_stock) > 0 || parseFloat(s.total_issued || 0) > 0 || parseFloat(s.total_received || 0) > 0
+  );
 
   // Pagination for the Stock Report table
   const totalPages   = Math.max(1, Math.ceil(sortedSummary.length / PAGE_SIZE));
@@ -627,8 +632,8 @@ export default function StoreLedgerPage() {
   };
 
   const exportLedgerCSV = () => {
-    const headers = ['SL NO','Major Head','Category','Material Description','Unit','DC/IDC','Opening Stock','Closing Stock','Rate (₹)','Total Issued Stock Value','Opening Stock Value','Closing Stock Value','GST @18%','Grand Total'];
-    const rows = filteredSummary.map((s, idx) => {
+    const headers = ['SL NO','Major Head','Category','Material Description','Unit','DC/IDC','Opening Stock','Closing Stock','Issued Stock','Rate (₹)','Issued Stock Value','Opening Stock Value','Closing Stock Value','GST @18%','Grand Total'];
+    const rows = activeForReport.map((s, idx) => {
       const rate       = parseFloat(s.unit_rate  || 0);
       const opening    = rq3(s.opening_stock);
       const closing    = rq3(s.closing_stock);
@@ -638,7 +643,7 @@ export default function StoreLedgerPage() {
       const closingVal = (closing  * rate).toFixed(2);
       const gst        = (closing  * rate * GST_RATE).toFixed(2);
       const grand      = (closing  * rate * (1 + GST_RATE)).toFixed(2);
-      return [idx + 1, s.major_head || '', s.category || '', s.material_name, s.unit, s.dc_idc || '', opening, closing, rate, issuedVal, openingVal, closingVal, gst, grand];
+      return [idx + 1, s.major_head || '', s.category || '', s.material_name, s.unit, s.dc_idc || '', opening, closing, issued, rate, issuedVal, openingVal, closingVal, gst, grand];
     });
     const csv = [headers, ...rows].map(row => row.map(c => `"${c}"`).join(',')).join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
@@ -720,8 +725,8 @@ export default function StoreLedgerPage() {
 
     return {
       title: 'Store Ledger - Inventory Register',
-      columns: ['SL No', 'Major Head', 'Category', 'Material Description', 'Unit', 'DC/IDC', 'Opening Stock', 'Closing Stock', 'Rate', 'Issued Value', 'Opening Value', 'Closing Value', 'GST 18%', 'Grand Total'],
-      rows: filteredSummary.map((s, idx) => {
+      columns: ['SL No', 'Major Head', 'Category', 'Material Description', 'Unit', 'DC/IDC', 'Opening Stock', 'Closing Stock', 'Issued Stock', 'Rate', 'Issued Value', 'Opening Value', 'Closing Value', 'GST 18%', 'Grand Total'],
+      rows: activeForReport.map((s, idx) => {
         const rate = parseFloat(s.unit_rate || 0);
         const opening = rq3(s.opening_stock);
         const closing = rq3(s.closing_stock);
@@ -740,6 +745,7 @@ export default function StoreLedgerPage() {
           s.dc_idc || '',
           qty(opening),
           qty(closing),
+          qty(issued),
           inr(rate),
           inr(issuedVal),
           inr(openingVal),
@@ -748,7 +754,7 @@ export default function StoreLedgerPage() {
           inr(grand),
         ];
       }),
-      totals: ['Totals', '', '', '', '', '', '', '', '', inr(totalIssuedValue), inr(totalOpeningValue), inr(totalClosingValue), inr(totalGST), inr(totalGrandTotal)],
+      totals: ['Totals', '', '', '', '', '', '', '', qty(totalIssuedQty), '', inr(totalIssuedValue), inr(totalOpeningValue), inr(totalClosingValue), inr(totalGST), inr(totalGrandTotal)],
     };
   };
 
