@@ -2421,20 +2421,24 @@ router.post('/', async (req, res) => {
   }
 });
 
-// ── PATCH /tqs/bills/:id/meta — update project, package description & (admin) workflow_status
+// ── PATCH /tqs/bills/:id/meta — update project, package description & (admin) workflow_status / inv_number
 router.patch('/:id/meta', async (req, res) => {
   try {
-    const { project_id, work_desc, workflow_status } = req.body;
+    const { project_id, work_desc, workflow_status, inv_number } = req.body;
     await getAccessibleBill(req, req.params.id);
     if (project_id && !userCanAccessProject(req, project_id)) {
       return res.status(403).json({ error: 'Access denied for this project.' });
     }
 
-    // Allow admins/management to manually override workflow_status (e.g. to unstick a pending WO bill)
     const VALID_STATUSES = ['pending','stores','document_controller','qs','accounts','procurement','qs_sign','paid'];
     const canOverrideStatus = req.user && DQS_FULL_ACCESS_ROLES.includes(req.user.role);
 
-    if (workflow_status && canOverrideStatus && VALID_STATUSES.includes(workflow_status)) {
+    if (inv_number && canOverrideStatus) {
+      await query(
+        `UPDATE tqs_bills SET project_id=$1, work_desc=$2, inv_number=$3, updated_at=NOW() WHERE id=$4`,
+        [project_id || null, work_desc || null, inv_number.trim(), req.params.id]
+      );
+    } else if (workflow_status && canOverrideStatus && VALID_STATUSES.includes(workflow_status)) {
       await query(
         `UPDATE tqs_bills SET project_id=$1, work_desc=$2, workflow_status=$3, updated_at=NOW() WHERE id=$4`,
         [project_id || null, work_desc || null, workflow_status, req.params.id]
