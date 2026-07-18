@@ -1547,7 +1547,7 @@ function ClientBillingSummary({ projectId, contractValue }) {
   const advanceBalance = advanceReceived - advanceRecovered;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
       <ClientKPI label="Client Work Order Value" value={workOrderValue} icon={Building2} color="#0B2E59" />
       <ClientKPI label="Current RA Bill Certified" value={currentBill?.net_payable} sub={currentBill?.bill_number} icon={CheckCircle2} color="#059669" />
       <ClientKPI label="Cumulative RA Bill Value" value={cumulativeBilled} sub={`${certifiedBills.length} bill${certifiedBills.length !== 1 ? 's' : ''}`} icon={TrendingUp} color="#4F46E5" />
@@ -1570,16 +1570,16 @@ const inrCompact = (v) => {
 function ClientKPI({ label, value, sub, icon: Icon, color }) {
   const n = parseFloat(value);
   return (
-    <div className="bg-white rounded-xl border border-slate-200 px-4 py-3.5 shadow-sm flex items-start gap-3 min-w-0">
-      <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${color}1A` }}>
-        <Icon className="w-4.5 h-4.5" style={{ color }} />
+    <div className="bg-white rounded-lg border border-slate-200 px-2.5 py-2 shadow-sm flex items-start gap-2 min-w-0">
+      <div className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: `${color}1A` }}>
+        <Icon className="w-3.5 h-3.5" style={{ color }} />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="text-[12.5px] font-medium text-slate-500 leading-tight truncate">{label}</div>
-        <div className="text-[22px] font-semibold text-slate-800 mt-1 leading-tight" title={n > 0 ? `₹${Math.round(n).toLocaleString('en-IN')}` : ''}>
+        <div className="text-[10px] font-medium text-slate-500 leading-tight">{label}</div>
+        <div className="text-[15px] font-bold text-slate-800 mt-0.5 leading-tight" title={n > 0 ? `₹${Math.round(n).toLocaleString('en-IN')}` : ''}>
           {n > 0 ? inrCompact(n) : '—'}
         </div>
-        {sub ? <div className="text-[11px] text-slate-400 mt-1.5 truncate">{sub}</div> : null}
+        {sub ? <div className="text-[9.5px] text-slate-400 mt-0.5 truncate">{sub}</div> : null}
       </div>
     </div>
   );
