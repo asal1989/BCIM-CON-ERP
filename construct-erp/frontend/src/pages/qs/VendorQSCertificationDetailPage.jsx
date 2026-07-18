@@ -295,6 +295,16 @@ function AbstractSheet({ cert }) {
             );
           })}
 
+          {/* Basic Amount (before tax) */}
+          <tr style={{ background: '#FAFAFA' }}>
+            <td style={T.tdC}>—</td>
+            <td style={T.tdC}>—</td>
+            <td style={{...T.td, fontStyle:'italic', color:'#111', fontWeight:'600'}}>Basic Amount</td>
+            <td style={T.tdC}>—</td>
+            <td colSpan={14} style={{...T.tdC, color:'#444', fontSize:'10px', fontWeight:'500'}}>Certified quantity × rate, before tax</td>
+            <td style={{...T.tdR, fontWeight:'bold'}}>{raw(gross)}</td>
+          </tr>
+
           {/* GST / Tax */}
           {tax > 0 && (
             <tr style={{ background: '#FAFAFA' }}>
@@ -396,15 +406,17 @@ function PaymentCertificate({ cert }) {
     { no:  2, label: 'Net Change by Variation Orders',            value: null,                isDed: false },
     { no:  3, label: 'Final Contract Value to Date',              value: finalContract,       isDed: false },
     { no:  4, label: 'Advance Certified',                         value: advance || null,     isDed: false },
-    { no:  5, label: 'Gross Certified Till Date',                 value: grossTillDate,       isDed: false },
-    { no:  6, label: 'Deduction of Mobilisation Advance',        value: advance,             isDed: true  },
-    { no:  7, label: 'Deduction of Retention Amount',            value: retention,           isDed: true  },
-    { no:  8, label: payTdsLabel,                                 value: tds,                 isDed: true  },
-    { no:  9, label: 'Any Other Deductions',                     value: other,               isDed: true  },
-    { no: 10, label: 'Total Net Certified Till Date',            value: totalNetTillDate,    bold: true   },
-    { no: 11, label: 'Less Previous Certificates for Payments',  value: prev,                isDed: false },
-    { no: 12, label: 'Balance to Finish',                        value: balanceToFinish,     isDed: false },
-    { no: 13, label: 'Current Net Payment Due',                  value: currentDue,          highlight: true },
+    { no:  5, label: 'Basic Amount Certified (Current RA)',      value: n(cert.gross_amount), isDed: false },
+    { no:  6, label: 'GST / Tax Certified (Current RA)',         value: n(cert.tax_amount),   isDed: false },
+    { no:  7, label: 'Gross Certified Till Date',                 value: grossTillDate,       isDed: false },
+    { no:  8, label: 'Deduction of Mobilisation Advance',        value: advance,             isDed: true  },
+    { no:  9, label: 'Deduction of Retention Amount',            value: retention,           isDed: true  },
+    { no: 10, label: payTdsLabel,                                 value: tds,                 isDed: true  },
+    { no: 11, label: 'Any Other Deductions',                     value: other,               isDed: true  },
+    { no: 12, label: 'Total Net Certified Till Date',            value: totalNetTillDate,    bold: true   },
+    { no: 13, label: 'Less Previous Certificates for Payments',  value: prev,                isDed: false },
+    { no: 14, label: 'Balance to Finish',                        value: balanceToFinish,     isDed: false },
+    { no: 15, label: 'Current Net Payment Due',                  value: currentDue,          highlight: true },
   ];
 
   // Package description: use cert remarks as the work package label (same as AbstractSheet)
