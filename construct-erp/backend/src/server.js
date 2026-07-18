@@ -873,6 +873,21 @@ app.use((req, res) => {
 
 // Global error handler
 app.use((err, req, res, next) => {
+  // Multer errors (file too large, wrong field, too many files, etc.) happen in
+  // upload middleware BEFORE the route handler's own try/catch runs, so they
+  // always fell through to here — where production mode hid them behind a bare
+  // "Internal server error", giving no hint that the file itself was the problem
+  // (e.g. a >10MB scan on Employee Documents). Multer sets err.name itself, so
+  // this needs no extra dependency to detect.
+  if (err.name === 'MulterError') {
+    const messages = {
+      LIMIT_FILE_SIZE: 'File is too large. Please upload a file under 10MB.',
+      LIMIT_FILE_COUNT: 'Too many files — please upload fewer at a time.',
+      LIMIT_UNEXPECTED_FILE: 'Unexpected file field — please check what you\'re uploading.',
+    };
+    logger.error(`${err.status || 400} — Multer:${err.code} — ${req.originalUrl}`);
+    return res.status(400).json({ error: messages[err.code] || `Upload failed: ${err.message}` });
+  }
   logger.error(`${err.status || 500} — ${err.message} — ${req.originalUrl}`);
   res.status(err.status || 500).json({
     error: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
