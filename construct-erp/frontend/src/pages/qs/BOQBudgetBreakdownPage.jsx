@@ -1547,7 +1547,7 @@ function ClientBillingSummary({ projectId, contractValue }) {
   const advanceBalance = advanceReceived - advanceRecovered;
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
       <ClientKPI label="Client Work Order Value" value={workOrderValue} icon={Building2} color="#0B2E59" />
       <ClientKPI label="Current RA Bill Certified" value={currentBill?.net_payable} sub={currentBill?.bill_number} icon={CheckCircle2} color="#059669" />
       <ClientKPI label="Cumulative RA Bill Value" value={cumulativeBilled} sub={`${certifiedBills.length} bill${certifiedBills.length !== 1 ? 's' : ''}`} icon={TrendingUp} color="#4F46E5" />
@@ -1559,16 +1559,26 @@ function ClientBillingSummary({ projectId, contractValue }) {
   );
 }
 
+const inrCompact = (v) => {
+  const n = parseFloat(v) || 0;
+  const abs = Math.abs(n);
+  if (abs >= 1e7) return `₹${(n / 1e7).toFixed(2)} Cr`;
+  if (abs >= 1e5) return `₹${(n / 1e5).toFixed(2)} L`;
+  return `₹${Math.round(n).toLocaleString('en-IN')}`;
+};
+
 function ClientKPI({ label, value, sub, icon: Icon, color }) {
   const n = parseFloat(value);
   return (
-    <div className="bg-white rounded-xl border border-slate-200 px-4 py-3.5 shadow-sm flex items-start gap-3">
+    <div className="bg-white rounded-xl border border-slate-200 px-4 py-3.5 shadow-sm flex items-start gap-3 min-w-0">
       <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${color}1A` }}>
         <Icon className="w-4.5 h-4.5" style={{ color }} />
       </div>
-      <div className="min-w-0">
-        <div className="text-[12.5px] font-medium text-slate-500 leading-tight">{label}</div>
-        <div className="text-[28px] font-semibold text-slate-800 mt-1 truncate leading-none">{n > 0 ? `₹${Math.round(n).toLocaleString('en-IN')}` : '—'}</div>
+      <div className="min-w-0 flex-1">
+        <div className="text-[12.5px] font-medium text-slate-500 leading-tight truncate">{label}</div>
+        <div className="text-[22px] font-semibold text-slate-800 mt-1 leading-tight" title={n > 0 ? `₹${Math.round(n).toLocaleString('en-IN')}` : ''}>
+          {n > 0 ? inrCompact(n) : '—'}
+        </div>
         {sub ? <div className="text-[11px] text-slate-400 mt-1.5 truncate">{sub}</div> : null}
       </div>
     </div>
