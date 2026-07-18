@@ -320,37 +320,88 @@ function CustomTooltip({ active, payload, label }) {
   );
 }
 
-function PlanActualChart({ data }) {
+const CHART3D_SERIES = [
+  { key: 'planned',   name: 'Planned RA',   color: '#2563EB' },
+  { key: 'actual',    name: 'Actual RA',    color: '#16A34A' },
+  { key: 'remaining', name: 'Remaining BOQ', color: '#94A3B8' },
+];
+
+function PlanActualChart3D({ data }) {
+  const ref = useRef(null);
+  const chartRef = useRef(null);
+
+  React.useEffect(() => {
+    let disposed = false;
+    let ro;
+    (async () => {
+      const echarts = await import('echarts');
+      await import('echarts-gl');
+      if (disposed || !ref.current) return;
+      const chart = echarts.init(ref.current, null, { renderer: 'canvas' });
+      chartRef.current = chart;
+
+      const months = data.map((d) => d.month);
+      const gl3d = [];
+      data.forEach((d, xi) => {
+        CHART3D_SERIES.forEach((s, yi) => {
+          gl3d.push([xi, yi, Math.round(num(d[s.key]))]);
+        });
+      });
+
+      chart.setOption({
+        tooltip: {
+          formatter: (p) => {
+            const s = CHART3D_SERIES[p.value[1]];
+            return `<b>${months[p.value[0]]}</b><br/>${s.name}: ${inr(p.value[2])}`;
+          },
+        },
+        xAxis3D: { type: 'category', data: months, axisLabel: { textStyle: { color: T.textMuted, fontSize: 11 } }, axisLine: { lineStyle: { color: T.border } } },
+        yAxis3D: { type: 'category', data: CHART3D_SERIES.map((s) => s.name), axisLabel: { textStyle: { color: T.textMuted, fontSize: 11 } }, axisLine: { lineStyle: { color: T.border } } },
+        zAxis3D: { type: 'value', axisLabel: { formatter: (v) => inrCompact(v), textStyle: { color: T.textMuted, fontSize: 10 } }, axisLine: { lineStyle: { color: T.border } }, splitLine: { lineStyle: { color: '#F1F5F9' } } },
+        grid3D: {
+          boxWidth: 130, boxDepth: 55, boxHeight: 60,
+          viewControl: { projection: 'perspective', alpha: 24, beta: 32, distance: 165, autoRotate: true, autoRotateSpeed: 4, damping: 0.85 },
+          light: { main: { intensity: 1.15, shadow: true, shadowQuality: 'medium', alpha: 40 }, ambient: { intensity: 0.35 } },
+          environment: '#FFFFFF',
+          postEffect: { enable: true, SSAO: { enable: true, quality: 'medium', radius: 2 } },
+          temporalSuperSampling: { enable: true },
+        },
+        series: [{
+          type: 'bar3D',
+          data: gl3d,
+          shading: 'lambert',
+          bevelSize: 0.25,
+          bevelSmoothness: 4,
+          itemStyle: { color: (p) => CHART3D_SERIES[p.value[1]].color, opacity: 0.94 },
+          emphasis: { itemStyle: { color: '#F59E0B' } },
+          animationDurationUpdate: 800,
+          animationEasing: 'cubicOut',
+        }],
+      });
+
+      ro = new ResizeObserver(() => chart.resize());
+      ro.observe(ref.current);
+    })();
+
+    return () => {
+      disposed = true;
+      ro?.disconnect();
+      chartRef.current?.dispose();
+    };
+  }, [data]);
+
   return (
-    <ResponsiveContainer width="100%" height={340}>
-      <BarChart data={data} barGap={6} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-        <defs>
-          <linearGradient id="gradPlanned" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#60A5FA" />
-            <stop offset="100%" stopColor="#2563EB" />
-          </linearGradient>
-          <linearGradient id="gradActual" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#4ADE80" />
-            <stop offset="100%" stopColor="#16A34A" />
-          </linearGradient>
-          <linearGradient id="gradRemaining" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#CBD5E1" />
-            <stop offset="100%" stopColor="#94A3B8" />
-          </linearGradient>
-          <filter id="barShadow" x="-40%" y="-20%" width="180%" height="150%">
-            <feDropShadow dx="0" dy="3" stdDeviation="4" floodColor="#0F172A" floodOpacity="0.16" />
-          </filter>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-        <XAxis dataKey="month" tick={{ fontSize: 11, fill: T.textMuted }} axisLine={{ stroke: T.border }} tickLine={false} />
-        <YAxis tickFormatter={(v) => inrCompact(v)} tick={{ fontSize: 10.5, fill: T.textMuted }} axisLine={false} tickLine={false} width={64} />
-        <Tooltip content={<CustomTooltip />} cursor={{ fill: '#F8FAFC' }} />
-        <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} iconType="circle" />
-        <Bar name="Planned RA" dataKey="planned" fill="url(#gradPlanned)" radius={[8, 8, 3, 3]} filter="url(#barShadow)" isAnimationActive animationDuration={1100} />
-        <Bar name="Actual RA" dataKey="actual" fill="url(#gradActual)" radius={[8, 8, 3, 3]} filter="url(#barShadow)" isAnimationActive animationDuration={1100} animationBegin={120} />
-        <Bar name="Remaining BOQ" dataKey="remaining" fill="url(#gradRemaining)" radius={[8, 8, 3, 3]} filter="url(#barShadow)" isAnimationActive animationDuration={1100} animationBegin={240} />
-      </BarChart>
-    </ResponsiveContainer>
+    <div>
+      <div ref={ref} style={{ width: '100%', height: 360 }} />
+      <div className="flex items-center justify-center gap-5 pt-1 text-[11.5px]" style={{ color: T.textMuted }}>
+        {CHART3D_SERIES.map((s) => (
+          <span key={s.key} className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full" style={{ background: s.color }} /> {s.name}
+          </span>
+        ))}
+        <span className="text-[10.5px]" style={{ color: T.textMuted }}>· drag to rotate</span>
+      </div>
+    </div>
   );
 }
 
@@ -692,7 +743,7 @@ export default function BudgetControlDashboard() {
             {/* ── Main chart + right panel ── */}
             <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6">
               <Panel title="Plan vs Actual RA Billing" subtitle="Monthly planned, actual and remaining BOQ value (RA1–RA9)" delay={0.05}>
-                <PlanActualChart data={chartData} />
+                <PlanActualChart3D data={chartData} />
               </Panel>
 
               <div className="flex flex-col gap-6">

@@ -14,6 +14,8 @@
     "clsx": "^2.1.1",
     "dayjs": "^1.11.10",
     "dompurify": "^3.4.12",
+    "echarts": "^6.1.0",
+    "echarts-gl": "^2.1.0",
     "framer-motion": "^12.38.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
