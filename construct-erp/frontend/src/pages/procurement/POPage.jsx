@@ -2241,6 +2241,8 @@ export default function POPage() {
     po_date:      p => (p.po_date ? new Date(p.po_date).getTime() : 0),
     delivery:    p => (p.delivery_date ? new Date(p.delivery_date).getTime() : 0),
     grand_total: p => (parseFloat(p.grand_total) || 0),
+    billed_amount: p => (parseFloat(p.billed_amount) || 0),
+    paid_amount:   p => (parseFloat(p.paid_amount) || 0),
     status:      p => (p.status || '').toLowerCase(),
   };
   const sorted = [...filtered].sort((a, b) => {
@@ -2256,10 +2258,10 @@ export default function POPage() {
       : { key, dir: 'asc' });
 
   const exportCSV = () => {
-    const headers = ['PO Number', 'Vendor', 'Project', 'PO Date', 'Grand Total', 'Status'];
+    const headers = ['PO Number', 'Vendor', 'Project', 'PO Date', 'Grand Total', 'Billed', 'Paid', 'Status'];
     const rows = filtered.map(p => [
       p.po_ref_no || p.po_number || p.serial_no_formatted, p.vendor_name, p.project_name,
-      fmt(p.po_date), p.grand_total, p.status,
+      fmt(p.po_date), p.grand_total, p.billed_amount || 0, p.paid_amount || 0, p.status,
     ]);
     const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
@@ -2442,6 +2444,8 @@ export default function POPage() {
                   { label: 'Delivery',       key: 'delivery' },
                   { label: 'Receipt',        key: null },
                   { label: 'Total with GST', key: 'grand_total' },
+                  { label: 'Billed',         key: 'billed_amount' },
+                  { label: 'Paid',           key: 'paid_amount' },
                   { label: 'Status',         key: 'status' },
                   { label: '',               key: null },
                 ].map(h => (
@@ -2494,6 +2498,18 @@ export default function POPage() {
                   <td className="px-5 py-3.5 whitespace-nowrap">
                     <div className="text-sm font-medium text-slate-800">{inr(po.grand_total)}</div>
                     <div className="text-xs text-slate-400">{po.gst_inclusive ? 'Tax inclusive' : 'Basic + GST'}</div>
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap">
+                    <div className="text-sm font-medium text-blue-700">{inrCompact(po.billed_amount)}</div>
+                    {parseFloat(po.grand_total) > 0 && (
+                      <div className="text-xs text-slate-400">{((parseFloat(po.billed_amount || 0) / parseFloat(po.grand_total)) * 100).toFixed(0)}% of PO</div>
+                    )}
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap">
+                    <div className="text-sm font-medium text-green-700">{inrCompact(po.paid_amount)}</div>
+                    {parseFloat(po.billed_amount) > 0 && (
+                      <div className="text-xs text-slate-400">{((parseFloat(po.paid_amount || 0) / parseFloat(po.billed_amount)) * 100).toFixed(0)}% of billed</div>
+                    )}
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap">
                     <StatusBadge status={po.status} />

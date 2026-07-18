@@ -379,11 +379,20 @@ router.get('/', async (req, res) => {
     applyProjectScope(req, conditions, params, 'po', project_id);
     let sql = `
       WITH recv AS (
-        SELECT gi.po_item_id, SUM(gi.quantity_received) AS qty
-        FROM grn_items gi
-        JOIN grn g ON g.id = gi.grn_id
-        WHERE g.quality_status NOT IN ('rejected')
-        GROUP BY gi.po_item_id
+        SELECT po_item_id, SUM(qty) AS qty FROM (
+          SELECT ii.po_item_id, SUM(ii.qty_inspected - COALESCE(ii.qty_rejected, 0)) AS qty
+          FROM ign_items ii
+          JOIN ign i ON i.id = ii.ign_id
+          WHERE i.status != 'cancelled' AND ii.po_item_id IS NOT NULL
+          GROUP BY ii.po_item_id
+          UNION ALL
+          SELECT gi.po_item_id, SUM(gi.quantity_received) AS qty
+          FROM grn_items gi
+          JOIN grn g ON g.id = gi.grn_id
+          WHERE g.quality_status NOT IN ('rejected')
+          GROUP BY gi.po_item_id
+        ) combined
+        GROUP BY po_item_id
       ),
       po_rcv AS (
         SELECT
