@@ -459,7 +459,8 @@ router.post('/summary-items', async (req, res) => {
     }
 
     const billsRes = await query(`
-      SELECT id, inv_number, sl_number, bill_type, gst_amount, total_amount
+      SELECT id, inv_number, sl_number, bill_type, gst_amount, total_amount,
+             transport_charges, transport_gst_amt, other_charges
       FROM tqs_bills
       WHERE id = ANY($1::uuid[])
         AND company_id = $2
@@ -547,6 +548,35 @@ router.post('/summary-items', async (req, res) => {
       });
     });
     const items = Array.from(grouped.values());
+
+    // Append synthetic line items for header-level transport and other charges
+    // (these fields live on tqs_bills, not in tqs_bill_line_items)
+    for (const b of billsRes.rows) {
+      if (n(b.transport_charges) > 0) {
+        items.push({
+          bill_id: b.id, bill_ids: [b.id], bill_line_item_id: null, bill_line_item_ids: [],
+          source_inv_number: b.inv_number || b.sl_number,
+          item_ref_id: null, description: 'Transport Charges', unit: 'LS',
+          order_qty: 1, order_rate: n(b.transport_charges),
+          inv_prev_qty: 0, inv_pres_qty: 1, qs_prev_qty: 0, qs_pres_qty: 1,
+          tax_amount: round2(n(b.transport_gst_amt)),
+          amount: round2(n(b.transport_charges)),
+          balance_qty: 0, remarks: '',
+        });
+      }
+      if (n(b.other_charges) > 0) {
+        items.push({
+          bill_id: b.id, bill_ids: [b.id], bill_line_item_id: null, bill_line_item_ids: [],
+          source_inv_number: b.inv_number || b.sl_number,
+          item_ref_id: null, description: 'Other Charges', unit: 'LS',
+          order_qty: 1, order_rate: n(b.other_charges),
+          inv_prev_qty: 0, inv_pres_qty: 1, qs_prev_qty: 0, qs_pres_qty: 1,
+          tax_amount: 0,
+          amount: round2(n(b.other_charges)),
+          balance_qty: 0, remarks: '',
+        });
+      }
+    }
 
     res.json({ data: { bills: billsRes.rows, items } });
   } catch (err) {
@@ -688,8 +718,17 @@ router.post('/', async (req, res) => {
             };
           })
         : systemItems;
-      const gross = mappedItems.reduce((s, it) => s + it.amount, 0);
-      const itemTax = mappedItems.reduce((s, it) => s + n(it.tax_amount), 0);
+      // When using systemItems (no summary_items from frontend), header-level transport/other
+      // charges are not in line items and must be added separately.
+      // When summary_items ARE provided they already include synthetic transport items.
+      const headerExtras = summary_items.length === 0
+        ? billsRes.rows.reduce((s, b) => s + n(b.transport_charges) + n(b.other_charges), 0)
+        : 0;
+      const headerExtraGst = summary_items.length === 0
+        ? billsRes.rows.reduce((s, b) => s + n(b.transport_gst_amt), 0)
+        : 0;
+      const gross = mappedItems.reduce((s, it) => s + it.amount, 0) + headerExtras;
+      const itemTax = mappedItems.reduce((s, it) => s + n(it.tax_amount), 0) + headerExtraGst;
       // Use gst_tax override if explicitly provided (even 0 = vendor has no GST)
       const billTax = (gst_tax !== undefined && gst_tax !== '' && gst_tax !== null)
         ? n(gst_tax)
