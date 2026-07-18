@@ -13,6 +13,7 @@ import {
   Mail, Send, Edit2, ChevronsUpDown, ChevronUp, ChevronDown, Lock,
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { motion } from 'framer-motion';
 import dayjs from 'dayjs';
 import { poAPI, vendorAPI, projectAPI, mrsAPI, inventoryAPI, companySettingsAPI, boqAPI } from '../../api/client';
 import MaterialCombobox from '../../components/shared/MaterialCombobox';
@@ -74,6 +75,60 @@ const inrCompact = v => {
   return `₹${Math.round(n).toLocaleString('en-IN')}`;
 };
 const fmt  = d => d ? dayjs(d).format('DD-MM-YYYY') : '—';
+
+/* ─── Kpi3DCard — tilt-on-hover 3D stat tile ─── */
+function Kpi3DCard({ icon: Icon, value, label, sub, iconBg, iconText, active, onClick, index = 0, title }) {
+  const ref = useRef(null);
+  const [tilt, setTilt] = useState({ rx: 0, ry: 0, gx: 50, gy: 50 });
+
+  const handleMove = (e) => {
+    const r = ref.current.getBoundingClientRect();
+    const px = (e.clientX - r.left) / r.width;
+    const py = (e.clientY - r.top) / r.height;
+    setTilt({ rx: (0.5 - py) * 12, ry: (px - 0.5) * 12, gx: px * 100, gy: py * 100 });
+  };
+  const handleLeave = () => setTilt({ rx: 0, ry: 0, gx: 50, gy: 50 });
+
+  const Tag = onClick ? motion.button : motion.div;
+  return (
+    <Tag
+      ref={ref}
+      type={onClick ? 'button' : undefined}
+      onClick={onClick}
+      onMouseMove={handleMove}
+      onMouseLeave={handleLeave}
+      title={title}
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: index * 0.035, ease: 'easeOut' }}
+      style={{ perspective: 700 }}
+      className="relative text-left"
+    >
+      <motion.div
+        animate={{ rotateX: tilt.rx, rotateY: tilt.ry, scale: tilt.rx || tilt.ry ? 1.03 : 1 }}
+        transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+        style={{ transformStyle: 'preserve-3d' }}
+        className={clsx(
+          'relative bg-white border rounded-2xl p-4 overflow-hidden',
+          active ? 'border-indigo-400 ring-2 ring-indigo-100 shadow-lg' : 'border-slate-200 shadow-sm hover:shadow-xl'
+        )}
+      >
+        <div className="pointer-events-none absolute inset-0 rounded-2xl transition-opacity duration-200"
+          style={{
+            opacity: tilt.rx || tilt.ry ? 1 : 0,
+            background: `radial-gradient(circle at ${tilt.gx}% ${tilt.gy}%, rgba(99,102,241,0.14), transparent 62%)`,
+          }} />
+        <div className={clsx('w-9 h-9 rounded-xl flex items-center justify-center mb-3 shadow-sm', iconBg)}
+          style={{ transform: 'translateZ(24px)' }}>
+          <Icon className={clsx('w-4.5 h-4.5', iconText)} style={{ transform: 'translateZ(4px)' }} />
+        </div>
+        <div className="text-2xl font-bold text-slate-800 leading-tight" style={{ transform: 'translateZ(18px)' }}>{value}</div>
+        <div className="text-xs text-slate-400 mt-0.5" style={{ transform: 'translateZ(10px)' }}>{label}</div>
+        {sub && <div className="text-[11px] text-slate-400 mt-1 truncate" style={{ transform: 'translateZ(10px)' }}>{sub}</div>}
+      </motion.div>
+    </Tag>
+  );
+}
 
 /* ─── Signature Pad Modal ─── */
 function SignaturePadModal({ signerName, signerRole, onSave, onClose }) {
@@ -2337,35 +2392,19 @@ export default function POPage() {
 
       {/* Financial summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">
-        {financeCards.map(({ label, value, sub, icon: Icon, iconBg, iconText, full }) => (
-          <div key={label} className="bg-white border border-slate-200 rounded-md p-4" title={full}>
-            <div className={clsx('w-8 h-8 rounded-md flex items-center justify-center mb-3', iconBg)}>
-              <Icon className={clsx('w-4 h-4', iconText)} />
-            </div>
-            <div className="text-2xl font-semibold text-slate-800">{value}</div>
-            <div className="text-xs text-slate-400 mt-0.5">{label}</div>
-            {sub && <div className="text-[11px] text-slate-400 mt-1 truncate">{sub}</div>}
-          </div>
+        {financeCards.map(({ label, value, sub, icon, iconBg, iconText, full }, i) => (
+          <Kpi3DCard key={label} index={i} icon={icon} value={value} label={label} sub={sub} iconBg={iconBg} iconText={iconText} title={full} />
         ))}
       </div>
 
       {/* Workflow stage KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-        {stats.map(({ key, label, icon: Icon, iconBg, iconText }) => {
+        {stats.map(({ key, label, icon, iconBg, iconText }, i) => {
           const count = poData.filter(p => p.status === key).length;
           return (
-            <button key={key}
-              onClick={() => setStatusFilter(statusFilter === key ? 'all' : key)}
-              className={clsx(
-                'bg-white border rounded-md p-4 text-left transition-colors',
-                statusFilter === key ? 'border-blue-400 ring-1 ring-blue-100' : 'border-slate-200 hover:border-slate-300'
-              )}>
-              <div className={clsx('w-8 h-8 rounded-md flex items-center justify-center mb-3', iconBg)}>
-                <Icon className={clsx('w-4 h-4', iconText)} />
-              </div>
-              <div className="text-2xl font-semibold text-slate-800">{count}</div>
-              <div className="text-xs text-slate-400 mt-0.5">{label}</div>
-            </button>
+            <Kpi3DCard key={key} index={i + financeCards.length} icon={icon} value={count} label={label}
+              iconBg={iconBg} iconText={iconText} active={statusFilter === key}
+              onClick={() => setStatusFilter(statusFilter === key ? 'all' : key)} />
           );
         })}
       </div>
