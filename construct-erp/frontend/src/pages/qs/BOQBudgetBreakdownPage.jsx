@@ -2550,7 +2550,7 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
               {[
                 { id: 'breakdown',     label: 'Budget Breakdown',    icon: LayoutList },
                 { id: 'summary',       label: 'BOQ Summary',         icon: FileText },
-                { id: 'ra_comparison', label: 'RA Bills Comparison', icon: TrendingUp },
+                { id: 'ra_comparison', label: 'RA Bills Comparison (Planned vs Actual)', icon: TrendingUp },
               ].map(t => (
                 <button key={t.id} onClick={() => setView(t.id)}
                   className={clsx('flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg border transition',
