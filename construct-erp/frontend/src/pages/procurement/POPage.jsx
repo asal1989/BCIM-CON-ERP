@@ -10,7 +10,7 @@ import {
   Package, Building2, Calendar, BadgeCheck, FileText,
   CheckCircle2, UserCheck, Landmark, XCircle, Upload,
   Receipt, TrendingUp, IndianRupee, FileSpreadsheet,
-  Mail, Send, Edit2, ChevronsUpDown, ChevronUp, ChevronDown, Lock,
+  Mail, Send, Edit2, ChevronsUpDown, ChevronUp, ChevronDown, Lock, AlertTriangle,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { motion } from 'framer-motion';
@@ -2267,13 +2267,20 @@ export default function POPage() {
     onError: e => toast.error(e?.response?.data?.error || 'Failed to update PO'),
   });
 
+  const isRecvUnbilled = p => {
+    const recv = parseFloat(p.received_value) || 0;
+    const billed = parseFloat(p.billed_amount) || 0;
+    return recv > 0 && recv > billed + 100;
+  };
+
   const filtered = poData.filter(p => {
     if (filterSeries) {
       const ref = (p.po_ref_no || p.serial_no_formatted || p.po_number || '').toUpperCase();
       if (!ref.startsWith(filterSeries.toUpperCase())) return false;
     }
     if (projectFilter !== 'all' && String(p.project_id) !== String(projectFilter)) return false;
-    if (statusFilter !== 'all' && p.status !== statusFilter) return false;
+    if (statusFilter === 'recv_unbilled') { if (!isRecvUnbilled(p)) return false; }
+    else if (statusFilter !== 'all' && p.status !== statusFilter) return false;
     if (search) {
       const q = search.toLowerCase();
       const match =
@@ -2340,15 +2347,22 @@ export default function POPage() {
   const totalPOValue    = poData.reduce((s, p) => s + (parseFloat(p.grand_total) || 0), 0);
   const totalBilled     = poData.reduce((s, p) => s + (parseFloat(p.billed_amount) || 0), 0);
   const totalPaid       = poData.reduce((s, p) => s + (parseFloat(p.paid_amount) || 0), 0);
-  const pendingBilling  = Math.max(totalPOValue - totalBilled, 0);
   const billedPct       = totalPOValue > 0 ? (totalBilled / totalPOValue) * 100 : 0;
 
+  const recvUnbilledList = poData.filter(isRecvUnbilled);
+  const recvUnbilledGap  = recvUnbilledList.reduce((s, p) =>
+    s + Math.max((parseFloat(p.received_value) || 0) - (parseFloat(p.billed_amount) || 0), 0), 0);
+
   const financeCards = [
-    { label: 'Total POs',       value: poData.length,              sub: projectFilter === 'all' ? 'All projects' : 'This project', icon: ShoppingCart, iconBg: 'bg-slate-100',  iconText: 'text-slate-600' },
-    { label: 'Total PO Value',  value: inrCompact(totalPOValue),    sub: inr(totalPOValue),  icon: IndianRupee,  iconBg: 'bg-indigo-50',  iconText: 'text-indigo-600', full: inr(totalPOValue) },
-    { label: 'Total Billed',    value: inrCompact(totalBilled),     sub: `${billedPct.toFixed(1)}% of PO value`, icon: Receipt, iconBg: 'bg-blue-50', iconText: 'text-blue-600', full: inr(totalBilled) },
-    { label: 'Total Paid',      value: inrCompact(totalPaid),       sub: totalBilled > 0 ? `${((totalPaid / totalBilled) * 100).toFixed(1)}% of billed` : '—', icon: CheckCircle2, iconBg: 'bg-green-50', iconText: 'text-green-600', full: inr(totalPaid) },
-    { label: 'Pending Billing', value: inrCompact(pendingBilling),  sub: 'PO value not yet invoiced', icon: TrendingUp, iconBg: 'bg-amber-50', iconText: 'text-amber-600', full: inr(pendingBilling) },
+    { label: 'Total POs',        value: poData.length,              sub: projectFilter === 'all' ? 'All projects' : 'This project', icon: ShoppingCart,    iconBg: 'bg-slate-100',  iconText: 'text-slate-600' },
+    { label: 'Total PO Value',   value: inrCompact(totalPOValue),   sub: inr(totalPOValue),  icon: IndianRupee,     iconBg: 'bg-indigo-50',  iconText: 'text-indigo-600', full: inr(totalPOValue) },
+    { label: 'Total Billed',     value: inrCompact(totalBilled),    sub: `${billedPct.toFixed(1)}% of PO value`, icon: Receipt,         iconBg: 'bg-blue-50',    iconText: 'text-blue-600',   full: inr(totalBilled) },
+    { label: 'Total Paid',       value: inrCompact(totalPaid),      sub: totalBilled > 0 ? `${((totalPaid / totalBilled) * 100).toFixed(1)}% of billed` : '—', icon: CheckCircle2, iconBg: 'bg-green-50',   iconText: 'text-green-600',  full: inr(totalPaid) },
+    { label: 'Recv\'d Unbilled', value: recvUnbilledList.length > 0 ? `${recvUnbilledList.length} PO${recvUnbilledList.length > 1 ? 's' : ''}` : '—',
+      sub: recvUnbilledList.length > 0 ? `${inrCompact(recvUnbilledGap)} gap` : 'All receipts invoiced',
+      icon: AlertTriangle,       iconBg: recvUnbilledList.length > 0 ? 'bg-amber-50' : 'bg-slate-50',
+      iconText: recvUnbilledList.length > 0 ? 'text-amber-600' : 'text-slate-400',
+      filterKey: 'recv_unbilled', full: recvUnbilledList.length > 0 ? `${recvUnbilledList.length} POs with ${inr(recvUnbilledGap)} received but not yet invoiced` : 'No unbilled receipts' },
   ];
 
   return (
@@ -2392,8 +2406,11 @@ export default function POPage() {
 
       {/* Financial summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">
-        {financeCards.map(({ label, value, sub, icon, iconBg, iconText, full }, i) => (
-          <Kpi3DCard key={label} index={i} icon={icon} value={value} label={label} sub={sub} iconBg={iconBg} iconText={iconText} title={full} />
+        {financeCards.map(({ label, value, sub, icon, iconBg, iconText, full, filterKey }, i) => (
+          <Kpi3DCard key={label} index={i} icon={icon} value={value} label={label} sub={sub}
+            iconBg={iconBg} iconText={iconText} title={full}
+            active={filterKey && statusFilter === filterKey}
+            onClick={filterKey ? () => setStatusFilter(statusFilter === filterKey ? 'all' : filterKey) : undefined} />
         ))}
       </div>
 
@@ -2542,6 +2559,14 @@ export default function POPage() {
                     <div className="text-sm font-medium text-blue-700">{inrCompact(po.billed_amount)}</div>
                     {parseFloat(po.grand_total) > 0 && (
                       <div className="text-xs text-slate-400">{((parseFloat(po.billed_amount || 0) / parseFloat(po.grand_total)) * 100).toFixed(0)}% of PO</div>
+                    )}
+                    {isRecvUnbilled(po) && (
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <AlertTriangle className="w-3 h-3 text-amber-500 flex-shrink-0" />
+                        <span className="text-[10px] font-medium text-amber-600">
+                          {inrCompact((parseFloat(po.received_value) || 0) - (parseFloat(po.billed_amount) || 0))} recv'd unbilled
+                        </span>
+                      </div>
                     )}
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap">

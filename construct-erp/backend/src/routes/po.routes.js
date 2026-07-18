@@ -403,7 +403,8 @@ router.get('/', async (req, res) => {
         SELECT
           poi.po_id,
           COUNT(*) AS items_total,
-          COUNT(*) FILTER (WHERE COALESCE(r.qty, 0) >= poi.quantity) AS items_received
+          COUNT(*) FILTER (WHERE COALESCE(r.qty, 0) >= poi.quantity) AS items_received,
+          SUM(LEAST(COALESCE(r.qty, 0), poi.quantity) * COALESCE(poi.rate, 0)) AS received_value
         FROM po_items poi
         LEFT JOIN recv r ON r.po_item_id = poi.id
         GROUP BY poi.po_id
@@ -423,10 +424,11 @@ router.get('/', async (req, res) => {
         GROUP BY tb.po_id
       )
       SELECT po.*, v.name AS vendor_name, p.name AS project_name,
-             COALESCE(rc.items_total, 0)    AS items_total,
-             COALESCE(rc.items_received, 0) AS items_received,
-             COALESCE(pb.billed_amount, 0)  AS billed_amount,
-             COALESCE(pb.paid_amount, 0)    AS paid_amount
+             COALESCE(rc.items_total, 0)     AS items_total,
+             COALESCE(rc.items_received, 0)  AS items_received,
+             COALESCE(rc.received_value, 0)  AS received_value,
+             COALESCE(pb.billed_amount, 0)   AS billed_amount,
+             COALESCE(pb.paid_amount, 0)     AS paid_amount
       FROM purchase_orders po
       JOIN vendors v ON po.vendor_id = v.id
       JOIN projects p ON po.project_id = p.id
