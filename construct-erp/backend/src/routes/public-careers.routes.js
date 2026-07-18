@@ -2,7 +2,29 @@
 const express = require('express');
 const router  = express.Router();
 const crypto  = require('crypto');
+const multer  = require('multer');
 const { query } = require('../config/database');
+
+// Ensure resume columns exist
+(async () => {
+  await query(`
+    ALTER TABLE hr_candidates
+      ADD COLUMN IF NOT EXISTS resume_filename  VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS resume_data      BYTEA,
+      ADD COLUMN IF NOT EXISTS resume_mimetype  VARCHAR(100),
+      ADD COLUMN IF NOT EXISTS cover_note       TEXT
+  `);
+})().catch(() => {});
+
+const resumeUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ok = ['application/pdf', 'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    cb(null, ok.includes(file.mimetype));
+  },
+});
 
 async function requireApiKey(req, res, next) {
   const raw = req.headers['x-api-key'] ||
@@ -48,29 +70,38 @@ router.get('/jobs', requireApiKey, async (req, res) => {
   }
 });
 
-// POST /api/public/careers/apply
-router.post('/apply', requireApiKey, async (req, res) => {
+// POST /api/public/careers/apply  (multipart/form-data)
+router.post('/apply', requireApiKey, resumeUpload.single('resume'), async (req, res) => {
   try {
-    const { job_id, name, email, phone, experience_years, current_company, expected_ctc } = req.body;
-    if (!job_id || !name?.trim())
-      return res.status(400).json({ error: 'job_id and name are required' });
+    const { job_id, name, email, phone, experience_years, current_company, expected_ctc, note } = req.body;
+    if (!name?.trim())
+      return res.status(400).json({ error: 'name is required' });
 
-    const jobCheck = await query(
-      `SELECT id FROM hr_job_openings WHERE id=$1 AND company_id=$2 AND status='open'`,
-      [job_id, req.company_id]
-    );
-    if (!jobCheck.rows.length)
-      return res.status(404).json({ error: 'Job not found or no longer open' });
+    if (job_id) {
+      const jobCheck = await query(
+        `SELECT id FROM hr_job_openings WHERE id=$1 AND company_id=$2 AND status='open'`,
+        [job_id, req.company_id]
+      );
+      if (!jobCheck.rows.length)
+        return res.status(404).json({ error: 'Job not found or no longer open' });
+    }
 
+    const resume = req.file;
     const { rows } = await query(
       `INSERT INTO hr_candidates
          (company_id, job_id, name, email, phone, experience_years,
-          current_company, expected_ctc, source)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'portal') RETURNING id`,
+          current_company, expected_ctc, source,
+          resume_filename, resume_data, resume_mimetype, cover_note)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'portal',$9,$10,$11,$12) RETURNING id`,
       [
-        req.company_id, job_id, name.trim(),
-        email || null, phone || null, experience_years || 0,
+        req.company_id, job_id || null, name.trim(),
+        email || null, phone || null,
+        experience_years ? Number(experience_years) : 0,
         current_company || null, expected_ctc || null,
+        resume?.originalname ?? null,
+        resume?.buffer ?? null,
+        resume?.mimetype ?? null,
+        note?.trim() || null,
       ]
     );
     res.status(201).json({ data: { id: rows[0].id } });
