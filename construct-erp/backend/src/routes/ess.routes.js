@@ -33,9 +33,12 @@ const managerRoles = [
   'department_head',
 ];
 
+// Separate migration so it runs even if 'ess-mobile' was already applied
+runSchemaInit('employee-profiles-add-company-id-v2', async () => {
+  await query(`ALTER TABLE employee_profiles ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES companies(id)`);
+});
+
 runSchemaInit('ess-mobile', async () => {
-  // Backfill company_id on employee_profiles if the table predates this column
-  await query(`ALTER TABLE employee_profiles ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES companies(id)`).catch(() => {});
   await query(`
     CREATE TABLE IF NOT EXISTS hr_attendance_correction_requests (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -932,12 +935,12 @@ router.post('/profile/photo', async (req, res) => {
       return res.status(400).json({ error: 'Image is too large. Please choose a smaller photo.' });
     }
     const { rows } = await query(
-      `INSERT INTO employee_profiles (user_id, company_id, profile_photo_url, updated_at)
-       VALUES ($1, $2, $3, NOW())
+      `INSERT INTO employee_profiles (user_id, profile_photo_url, updated_at)
+       VALUES ($1, $2, NOW())
        ON CONFLICT (user_id) DO UPDATE
          SET profile_photo_url = EXCLUDED.profile_photo_url, updated_at = NOW()
        RETURNING profile_photo_url`,
-      [ownUser(req), ownCompany(req), photo]
+      [ownUser(req), photo]
     );
     res.json({ data: { profile_photo_url: rows[0].profile_photo_url } });
   } catch (err) {
@@ -948,8 +951,8 @@ router.post('/profile/photo', async (req, res) => {
 router.delete('/profile/photo', async (req, res) => {
   try {
     await query(
-      `UPDATE employee_profiles SET profile_photo_url = NULL, updated_at = NOW() WHERE user_id = $1 AND company_id = $2`,
-      [ownUser(req), ownCompany(req)]
+      `UPDATE employee_profiles SET profile_photo_url = NULL, updated_at = NOW() WHERE user_id = $1`,
+      [ownUser(req)]
     );
     res.json({ data: { profile_photo_url: null } });
   } catch (err) {
