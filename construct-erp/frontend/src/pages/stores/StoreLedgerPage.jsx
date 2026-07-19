@@ -636,18 +636,20 @@ export default function StoreLedgerPage() {
   };
 
   const exportLedgerCSV = () => {
-    const headers = ['SL NO','Major Head','Category','Material Description','Unit','DC/IDC','Opening Stock','Closing Stock','Issued Stock','Rate (₹)','Issued Stock Value','Opening Stock Value','Closing Stock Value','GST @18%','Grand Total'];
+    const headers = ['SL NO','Major Head','Category','Material Description','Unit','DC/IDC','Opening Qty','Received Qty','Issued Qty','Closing Qty','Rate (₹)','Opening Value (₹)','Received Value (₹)','Issued Value (₹)','Closing Value (₹)','GST @18% (₹)','Grand Total (₹)'];
     const rows = activeForReport.map((s, idx) => {
-      const rate       = parseFloat(s.unit_rate  || 0);
-      const opening    = rq3(s.opening_stock);
-      const closing    = rq3(s.closing_stock);
-      const issued     = parseFloat(s.total_issued || 0);
-      const issuedVal  = (issued   * rate).toFixed(2);
-      const openingVal = (opening  * rate).toFixed(2);
-      const closingVal = (closing  * rate).toFixed(2);
-      const gst        = (closing  * rate * GST_RATE).toFixed(2);
-      const grand      = (closing  * rate * (1 + GST_RATE)).toFixed(2);
-      return [idx + 1, s.major_head || '', s.category || '', s.material_name, s.unit, s.dc_idc || '', opening, closing, issued, rate, issuedVal, openingVal, closingVal, gst, grand];
+      const rate        = parseFloat(s.unit_rate || 0);
+      const opening     = rq3(s.opening_stock);
+      const received    = parseFloat(s.total_received || 0);
+      const issued      = parseFloat(s.total_issued || 0);
+      const closing     = rq3(s.closing_stock);
+      const openingVal  = (opening  * rate).toFixed(2);
+      const receivedVal = (received * rate).toFixed(2);
+      const issuedVal   = (issued   * rate).toFixed(2);
+      const closingVal  = (closing  * rate).toFixed(2);
+      const gst         = (closing  * rate * GST_RATE).toFixed(2);
+      const grand       = (closing  * rate * (1 + GST_RATE)).toFixed(2);
+      return [idx + 1, s.major_head || '', s.category || '', s.material_name, s.unit, s.dc_idc || '', opening, received, issued, closing, rate, openingVal, receivedVal, issuedVal, closingVal, gst, grand];
     });
     const csv = [headers, ...rows].map(row => row.map(c => `"${c}"`).join(',')).join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
@@ -727,18 +729,30 @@ export default function StoreLedgerPage() {
       };
     }
 
+    const totOpQty = activeForReport.reduce((s, r) => s + rq3(r.opening_stock), 0);
+    const totRxQty = activeForReport.reduce((s, r) => s + parseFloat(r.total_received || 0), 0);
+    const totIxQty = activeForReport.reduce((s, r) => s + parseFloat(r.total_issued || 0), 0);
+    const totClQty = activeForReport.reduce((s, r) => s + rq3(r.closing_stock), 0);
+    const totOpVal = activeForReport.reduce((s, r) => s + rq3(r.opening_stock) * parseFloat(r.unit_rate || 0), 0);
+    const totRxVal = activeForReport.reduce((s, r) => s + parseFloat(r.total_received || 0) * parseFloat(r.unit_rate || 0), 0);
+    const totIxVal = activeForReport.reduce((s, r) => s + parseFloat(r.total_issued || 0) * parseFloat(r.unit_rate || 0), 0);
+    const totClVal = activeForReport.reduce((s, r) => s + rq3(r.closing_stock) * parseFloat(r.unit_rate || 0), 0);
+    const totGst   = totClVal * GST_RATE;
+    const totGrand = totClVal + totGst;
     return {
       title: 'Store Ledger - Inventory Register',
-      columns: ['SL No', 'Major Head', 'Category', 'Material Description', 'Unit', 'DC/IDC', 'Opening Stock', 'Closing Stock', 'Issued Stock', 'Rate', 'Issued Value', 'Opening Value', 'Closing Value', 'GST 18%', 'Grand Total'],
+      columns: ['SL No', 'Major Head', 'Category', 'Material Description', 'Unit', 'DC/IDC', 'Opening Qty', 'Received Qty', 'Issued Qty', 'Closing Qty', 'Rate (₹)', 'Opening Value (₹)', 'Received Value (₹)', 'Issued Value (₹)', 'Closing Value (₹)', 'GST 18% (₹)', 'Grand Total (₹)'],
       rows: activeForReport.map((s, idx) => {
-        const rate = parseFloat(s.unit_rate || 0);
-        const opening = rq3(s.opening_stock);
-        const closing = rq3(s.closing_stock);
-        const issued = parseFloat(s.total_issued || 0);
-        const issuedVal = issued * rate;
-        const openingVal = opening * rate;
-        const closingVal = closing * rate;
-        const gst = closingVal * GST_RATE;
+        const rate        = parseFloat(s.unit_rate || 0);
+        const opening     = rq3(s.opening_stock);
+        const received    = parseFloat(s.total_received || 0);
+        const issued      = parseFloat(s.total_issued || 0);
+        const closing     = rq3(s.closing_stock);
+        const openingVal  = opening  * rate;
+        const receivedVal = received * rate;
+        const issuedVal   = issued   * rate;
+        const closingVal  = closing  * rate;
+        const gst   = closingVal * GST_RATE;
         const grand = closingVal + gst;
         return [
           idx + 1,
@@ -748,17 +762,19 @@ export default function StoreLedgerPage() {
           s.unit || '',
           s.dc_idc || '',
           qty(opening),
-          qty(closing),
+          qty(received),
           qty(issued),
+          qty(closing),
           inr(rate),
-          inr(issuedVal),
           inr(openingVal),
+          inr(receivedVal),
+          inr(issuedVal),
           inr(closingVal),
           inr(gst),
           inr(grand),
         ];
       }),
-      totals: ['Totals', '', '', '', '', '', '', '', qty(totalIssuedQty), '', inr(totalIssuedValue), inr(totalOpeningValue), inr(totalClosingValue), inr(totalGST), inr(totalGrandTotal)],
+      totals: ['Totals', '', '', '', '', '', qty(totOpQty), qty(totRxQty), qty(totIxQty), qty(totClQty), '', inr(totOpVal), inr(totRxVal), inr(totIxVal), inr(totClVal), inr(totGst), inr(totGrand)],
     };
   };
 
