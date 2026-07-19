@@ -45,7 +45,20 @@
         swRefreshing = true;
         // Reload only when REPLACING an existing controller (a real update) —
         // not on the very first SW install for a brand-new visitor.
-        if (hadController) window.location.reload();
+        if (!hadController) return;
+        // Don't reload mid-login: a reload racing the login network call
+        // could land before the fresh session is written to storage,
+        // reloading into stale/old auth data and misreporting "session
+        // expired" right after a successful sign-in. Wait for the in-flight
+        // request to finish (checked by authStore.js) before reloading.
+        var waitAndReload = function () {
+          if (window.__authRequestInFlight) {
+            setTimeout(waitAndReload, 300);
+          } else {
+            window.location.reload();
+          }
+        };
+        waitAndReload();
       });
       window.addEventListener('load', function () {
         navigator.serviceWorker.register('/sw.js').then(function (reg) {

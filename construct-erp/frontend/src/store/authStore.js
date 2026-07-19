@@ -84,6 +84,11 @@ const useAuthStore = create(
 
       login: async (email, password) => {
         set({ isLoading: true, error: null });
+        // Tell the SW-update reload watcher (index.html) to hold off while a
+        // login is in flight — a reload racing the await below could fire
+        // before the fresh session is written to storage, reloading into
+        // stale/old auth data and misreporting "session expired".
+        window.__authRequestInFlight = true;
         try {
           clearAuthStorage();
           const { data } = await authAPI.login({ email, password });
@@ -110,6 +115,8 @@ const useAuthStore = create(
             : (err.response?.data?.error || 'Invalid email or password.');
           set({ error: msg, isLoading: false });
           return { success: false, error: msg };
+        } finally {
+          window.__authRequestInFlight = false;
         }
       },
 
