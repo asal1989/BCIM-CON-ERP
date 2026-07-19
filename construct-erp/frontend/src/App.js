@@ -369,6 +369,7 @@ const HRReportsShiftSchedulePage  = lazy(() => import('./pages/hr-admin/reports/
 const HRDepartmentSummaryPage     = lazy(() => import('./pages/hr-admin/reports/DepartmentSummaryPage'));
 const HRLogRecordsPage            = lazy(() => import('./pages/hr-admin/reports/LogRecordsPage'));
 const HRRandomCheckReportPage     = lazy(() => import('./pages/hr-admin/reports/RandomCheckReportPage'));
+const BCIMPortalPage               = lazy(() => import('./pages/BCIMPortalPage'));
 
 // ── Home route resolver — sends each user to their first accessible page ──────
 const MODULE_HOME = {
@@ -641,6 +642,7 @@ export default function App() {
               <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                 <Route index element={<HomeRedirect />} />
                 <Route path="approvals" element={<ProtectedRoute allowWithoutProject><ApprovalsPage /></ProtectedRoute>} />
+                <Route path="apps" element={<BCIMPortalPage />} />
                 <Route path="dashboard" element={<RequireModule module="Overview"><Dashboard /></RequireModule>} />
 
                 {/* Projects */}

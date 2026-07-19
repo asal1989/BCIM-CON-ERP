@@ -16,7 +16,7 @@ import {
   Landmark, FileSignature, CircleSlash, ShieldCheck, Clock3, Lightbulb,
   Gavel, Target, Send, Coins, Replace, Link2, Wrench, Layers, MapPin, TrendingDown, FolderOpen, Calculator, UserRound,
   Cog, Fuel, Gauge, BarChart2, History, GitBranch, MinusCircle, FolderKanban, Sparkles, MessageSquare, Mail,
-  RefreshCw, Shuffle
+  RefreshCw, Shuffle, Globe
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import CommandPalette from './CommandPalette';
@@ -37,6 +37,7 @@ const navGroups = [
     { to: '/approvals', icon: BadgeCheck,      label: 'My Approvals' },
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/projects',  icon: Building2,       label: 'Projects' },
+    { to: '/apps',      icon: Globe,           label: 'BCIM Apps' },
     { to: '/chat',      icon: MessageSquare,   label: 'Team Chat' },
   ]},
   { label: 'Planning', items: [
