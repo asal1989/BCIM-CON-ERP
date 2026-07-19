@@ -117,7 +117,13 @@ api.interceptors.response.use(
 
       const refreshToken = localStorage.getItem('refreshToken') || sessionStorage.getItem('refreshToken');
       if (!refreshToken) {
-        forceLogin('session_expired');
+        // Only force a redirect if this visitor actually had a session to begin
+        // with. Without this check, any stray authenticated-looking call made
+        // from a public page (login, register, reset-password, verification
+        // links) by a never-logged-in visitor would 401 and hard-redirect them
+        // to /login?reason=session_expired — a confusing false alarm.
+        const hadAccessToken = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+        if (hadAccessToken) forceLogin('session_expired');
         return Promise.reject(error);
       }
 
