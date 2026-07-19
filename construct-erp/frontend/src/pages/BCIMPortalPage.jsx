@@ -5,17 +5,17 @@ import {
   ArrowUpRight, Search, X,
 } from 'lucide-react';
 
-/* ── Theme tokens (matches LoginPage) ─────────────────── */
+/* ── Theme tokens (light) ──────────────────────────────── */
 const T = {
-  navy:    '#061230',
-  navyMid: '#0d2d6e',
-  gold:    '#c9a227',
-  goldLt:  '#f0d060',
-  goldMd:  '#e8c547',
-  border:  'rgba(255,255,255,0.08)',
-  text:    'rgba(255,255,255,0.9)',
-  muted:   'rgba(255,255,255,0.45)',
-  dim:     'rgba(255,255,255,0.22)',
+  navy:    '#f0f4fb',
+  navyMid: '#e2eaf8',
+  gold:    '#a97a10',
+  goldLt:  '#c9a227',
+  goldMd:  '#b8901a',
+  border:  'rgba(0,0,0,0.09)',
+  text:    '#0d1f42',
+  muted:   '#4b6090',
+  dim:     'rgba(0,0,0,0.35)',
 };
 
 /* ── App definitions ───────────────────────────────────── */
@@ -131,15 +131,15 @@ function AppCard({ app, delay }) {
         flexDirection: 'column',
         textDecoration: 'none',
         background: hovered
-          ? `linear-gradient(145deg, rgba(13,45,110,0.9), rgba(6,18,48,0.95))`
-          : 'rgba(255,255,255,0.04)',
+          ? `linear-gradient(145deg, #e8eef8, #dce6f5)`
+          : '#ffffff',
         border: `1px solid ${hovered ? app.accent + '55' : T.border}`,
         borderRadius: 14,
         padding: '22px 22px 20px',
         cursor: 'pointer',
         transition: 'all 0.22s ease',
         transform: hovered ? 'translateY(-3px)' : 'none',
-        boxShadow: hovered ? `0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px ${app.accent}22` : 'none',
+        boxShadow: hovered ? `0 8px 28px rgba(0,0,0,0.1), 0 0 0 1px ${app.accent}33` : '0 1px 4px rgba(0,0,0,0.07)',
         animationDelay: `${delay}ms`,
         animation: 'bp-fadeUp 0.45s ease both',
         position: 'relative',
@@ -249,8 +249,8 @@ export default function BCIMPortalPage() {
       <div style={{
         position: 'absolute', inset: 0, pointerEvents: 'none',
         backgroundImage: `
-          linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px)
+          linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px)
         `,
         backgroundSize: '52px 52px',
       }} />
@@ -259,8 +259,8 @@ export default function BCIMPortalPage() {
       <div style={{
         position: 'absolute', top: '-10%', right: '-5%',
         width: '40%', height: '130%',
-        background: `linear-gradient(180deg, #0d2d6e 0%, #061230 100%)`,
-        transform: 'skewX(-10deg)', opacity: 0.4, pointerEvents: 'none',
+        background: `linear-gradient(180deg, #dce8ff 0%, #eef3fc 100%)`,
+        transform: 'skewX(-10deg)', opacity: 0.6, pointerEvents: 'none',
       }} />
 
       {/* Gold bar top */}
@@ -282,7 +282,7 @@ export default function BCIMPortalPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{
               width: 48, height: 48, borderRadius: 10, overflow: 'hidden',
-              background: 'rgba(255,255,255,0.08)',
+              background: '#ffffff',
               border: `1px solid ${T.border}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               flexShrink: 0,
@@ -290,7 +290,7 @@ export default function BCIMPortalPage() {
               <img src="/bcim-logo.png" alt="BCIM" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             </div>
             <div>
-              <div style={{ fontSize: 17, fontWeight: 800, color: '#fff', letterSpacing: '-0.3px', lineHeight: 1.1 }}>
+              <div style={{ fontSize: 17, fontWeight: 800, color: T.text, letterSpacing: '-0.3px', lineHeight: 1.1 }}>
                 BCIM ENGINEERING
               </div>
               <div style={{
@@ -314,9 +314,9 @@ export default function BCIMPortalPage() {
               placeholder="Search apps…"
               style={{
                 width: '100%', padding: '9px 36px 9px 36px',
-                background: 'rgba(255,255,255,0.07)',
+                background: '#ffffff',
                 border: `1px solid ${T.border}`,
-                borderRadius: 10, color: '#fff', fontSize: 13,
+                borderRadius: 10, color: T.text, fontSize: 13,
                 outline: 'none', fontFamily: 'inherit',
               }}
             />
@@ -347,7 +347,7 @@ export default function BCIMPortalPage() {
           </div>
           <h1 style={{
             fontSize: 'clamp(26px,3.5vw,40px)', fontWeight: 800, letterSpacing: '-0.04em',
-            lineHeight: 1.1, color: '#fff', marginBottom: 8,
+            lineHeight: 1.1, color: T.text, marginBottom: 8,
           }}>
             {greeting()},&nbsp;
             <span style={{
@@ -373,10 +373,10 @@ export default function BCIMPortalPage() {
               onClick={() => setFilter(f.id)}
               style={{
                 padding: '7px 18px',
-                background: filter === f.id ? `linear-gradient(135deg, ${T.navyMid}, rgba(13,45,110,0.8))` : 'transparent',
-                border: `1px solid ${filter === f.id ? T.gold + '55' : T.border}`,
+                background: filter === f.id ? `linear-gradient(135deg, ${T.navyMid}, #d4dffa)` : 'transparent',
+                border: `1px solid ${filter === f.id ? T.gold + '88' : T.border}`,
                 borderRadius: 8,
-                color: filter === f.id ? T.goldLt : T.muted,
+                color: filter === f.id ? T.gold : T.muted,
                 fontSize: 12.5, fontWeight: 600,
                 cursor: 'pointer', fontFamily: 'inherit',
                 transition: 'all 0.18s',
