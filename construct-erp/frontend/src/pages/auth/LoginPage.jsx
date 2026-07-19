@@ -34,6 +34,17 @@ const STATS = [
   { icon: TrendingUp,  label: 'Crores Managed',   target: 42,   suffix: 'Cr+' },
 ];
 
+const ESS_MODULES = [
+  { icon: ClipboardList, label: 'Attendance & Leave'        },
+  { icon: FileText,      label: 'Payslips & Tax Documents'  },
+  { icon: Package,       label: 'Document Uploads'          },
+  { icon: Users,         label: 'HR Requests & Approvals'   },
+  { icon: HardHat,       label: 'Site & Duty Schedules'     },
+  { icon: ShieldCheck,   label: 'Compliance Acknowledgements' },
+];
+
+const isEssDomain = () => typeof window !== 'undefined' && window.location.hostname === 'bcimhr.bcim.in';
+
 const GLOBAL_ROLES = ['super_admin', 'admin', 'managing_director', 'director', 'ceo', 'cfo', 'md'];
 
 function isGlobalRole(role) {
@@ -688,19 +699,34 @@ export default function LoginPage() {
             </div>
 
             {/* Headline */}
-            <div className="lp-headline">
-              Enterprise ERP for<br />
-              <span className="lp-headline-accent">Construction Industry</span>
-            </div>
-            <p className="lp-tagline">
-              A fully integrated management platform purpose-built for construction companies —
-              covering projects, billing, procurement, HR and statutory compliance.
-            </p>
+            {isEssDomain() ? (
+              <>
+                <div className="lp-headline">
+                  Employee Self<br />
+                  <span className="lp-headline-accent">Service Portal</span>
+                </div>
+                <p className="lp-tagline">
+                  Your one-stop portal for attendance, leave, payslips, documents and HR
+                  requests — powered by the same BCIM ERP your organization runs on.
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="lp-headline">
+                  Enterprise ERP for<br />
+                  <span className="lp-headline-accent">Construction Industry</span>
+                </div>
+                <p className="lp-tagline">
+                  A fully integrated management platform purpose-built for construction companies —
+                  covering projects, billing, procurement, HR and statutory compliance.
+                </p>
+              </>
+            )}
 
             {/* Modules */}
-            <div className="lp-module-title">Integrated Modules</div>
+            <div className="lp-module-title">{isEssDomain() ? 'Self Service Features' : 'Integrated Modules'}</div>
             <div className="lp-modules">
-              {MODULES.map(({ icon: Icon, label }, idx) => (
+              {(isEssDomain() ? ESS_MODULES : MODULES).map(({ icon: Icon, label }, idx) => (
                 <div
                   className="lp-module-row"
                   key={label}
@@ -746,10 +772,10 @@ export default function LoginPage() {
             <div className="lp-welcome">
               <div className="lp-welcome-label">
                 <span className="lp-welcome-dot" />
-                <span className="lp-welcome-tag">ERP PORTAL</span>
+                <span className="lp-welcome-tag">{isEssDomain() ? 'ESS PORTAL' : 'ERP PORTAL'}</span>
               </div>
               <h2>Welcome Back</h2>
-              <p>Sign in with your credentials to access the system</p>
+              <p>{isEssDomain() ? 'Sign in with your employee credentials' : 'Sign in with your credentials to access the system'}</p>
             </div>
 
             {/* Session / token expiry banners */}
