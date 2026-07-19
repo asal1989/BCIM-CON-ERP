@@ -422,8 +422,15 @@ function isMDDashboardUser(user) {
   return !!user.can_access_executive_dashboard;
 }
 
+// Custom-domain ESS Portal: visitors on this hostname always land on /ess,
+// regardless of role — lets HR hand out a separate URL for staff self-service
+// while it's still the same deployment/login as the main ERP.
+const ESS_DOMAIN = 'bcimhr.bcim.in';
+const isEssDomain = () => typeof window !== 'undefined' && window.location.hostname === ESS_DOMAIN;
+
 function getHomeRoute(user) {
   if (!user) return '/login';
+  if (isEssDomain()) return '/ess';
   const role = String(user.role || '').toLowerCase();
   // Stores-specific roles → direct to their section
   if (role === 'security_guard') return '/stores/ign';
