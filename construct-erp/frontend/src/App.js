@@ -422,15 +422,18 @@ function isMDDashboardUser(user) {
   return !!user.can_access_executive_dashboard;
 }
 
-// Custom-domain ESS Portal: visitors on this hostname always land on /ess,
-// regardless of role — lets HR hand out a separate URL for staff self-service
-// while it's still the same deployment/login as the main ERP.
+// Custom-domain ESS Portal: visitors on this hostname land on /ess and see
+// only the ESS Portal — except HR/admin staff, who still need full ERP
+// access (managing the very HR data ESS reads) so they get the normal
+// role-based routing and menus even on this domain.
 const ESS_DOMAIN = 'bcimhr.bcim.in';
 const isEssDomain = () => typeof window !== 'undefined' && window.location.hostname === ESS_DOMAIN;
+const ESS_FULL_ACCESS_ROLES = ['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager'];
+const isEssFullAccessRole = (user) => ESS_FULL_ACCESS_ROLES.includes(String(user?.role || '').toLowerCase());
 
 function getHomeRoute(user) {
   if (!user) return '/login';
-  if (isEssDomain()) return '/ess';
+  if (isEssDomain() && !isEssFullAccessRole(user)) return '/ess';
   const role = String(user.role || '').toLowerCase();
   // Stores-specific roles → direct to their section
   if (role === 'security_guard') return '/stores/ign';
@@ -466,9 +469,10 @@ const ProtectedRoute = ({ children, allowWithoutProject = false }) => {
   if (!allowWithoutProject && !GLOBAL_ROLES.includes(user.role) && !isMDDashboardUser(user) && !selectedProjectId) {
     return <Navigate to="/select-project" replace />;
   }
-  // ESS custom domain: only the ESS Portal itself is reachable — every other
-  // ERP route (even ones a user's role would otherwise permit) bounces back.
-  if (isEssDomain() && location.pathname !== '/' && !location.pathname.startsWith('/ess')) {
+  // ESS custom domain: only the ESS Portal itself is reachable for regular
+  // employees — every other ERP route bounces back. HR/admin staff are
+  // exempt since they still need full ERP access on this domain.
+  if (isEssDomain() && !isEssFullAccessRole(user) && location.pathname !== '/' && !location.pathname.startsWith('/ess')) {
     return <Navigate to="/ess" replace />;
   }
   return children;

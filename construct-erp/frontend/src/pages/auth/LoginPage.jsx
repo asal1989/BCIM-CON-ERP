@@ -44,6 +44,10 @@ const ESS_MODULES = [
 ];
 
 const isEssDomain = () => typeof window !== 'undefined' && window.location.hostname === 'bcimhr.bcim.in';
+// HR/admin staff still need full ERP access (incl. project selection) even
+// on the ESS domain — only regular employees skip straight to the ESS Portal.
+const ESS_FULL_ACCESS_ROLES = ['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager'];
+const isEssFullAccessRole = (role) => ESS_FULL_ACCESS_ROLES.includes(String(role || '').toLowerCase());
 
 const GLOBAL_ROLES = ['super_admin', 'admin', 'managing_director', 'director', 'ceo', 'cfo', 'md'];
 
@@ -150,9 +154,10 @@ export default function LoginPage() {
   }, []);
 
   const loadProjectsForUser = async (currentUser) => {
-    // ESS domain has no project scoping — skip project selection entirely
-    // and go straight in (HomeRedirect/getHomeRoute sends them to /ess).
-    if (ess) {
+    // ESS domain: regular employees have no project scoping — skip project
+    // selection and go straight in. HR/admin staff still pick a project
+    // normally, same as on the main ERP domain.
+    if (ess && !isEssFullAccessRole(currentUser?.role)) {
       clearSelectedProject();
       navigate('/', { replace: true });
       return;
