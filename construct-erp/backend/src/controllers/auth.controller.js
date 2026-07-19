@@ -131,7 +131,7 @@ const normalizedEmail = (email || '').trim().toLowerCase();
     const tokens = generateTokens(user);
     await query(
       `INSERT INTO refresh_tokens (user_id, token, expires_at, login_at)
-       VALUES ($1, $2, NOW() + INTERVAL '8 hours', NOW())`,
+       VALUES ($1, $2, NOW() + INTERVAL '7 days', NOW())`,
       [user.id, hashRefreshToken(tokens.refreshToken)]
     );
 
@@ -178,24 +178,21 @@ const refreshToken = async (req, res) => {
       return res.status(401).json({ error: 'Session expired. Please log in again.', code: 'SESSION_EXPIRED' });
     }
 
-    // Enforce absolute session limit — login_at never resets on rotation
-    const SESSION_MAX_MS = parseInt(process.env.SESSION_MAX_HOURS || '8', 10) * 60 * 60 * 1000;
-    const sessionAgeMs = Date.now() - new Date(stored.rows[0].login_at).getTime();
-    if (sessionAgeMs > SESSION_MAX_MS) {
-      await query('DELETE FROM refresh_tokens WHERE token = $1', [tokenHash]);
-      return res.status(401).json({ error: 'Your session has expired. Please log in again.', code: 'SESSION_EXPIRED' });
-    }
+    // No absolute session cutoff — a session lasts as long as the refresh
+    // token row stays valid (expires_at, below), refreshed indefinitely on
+    // activity. Previously this hard-capped every session at 8 hours
+    // regardless of activity, which is the "session expired" users kept hitting.
 
     const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
     const user = await query('SELECT * FROM users WHERE id = $1', [decoded.id]);
     user.rows[0].role = canonicalizeRole(user.rows[0].role);
     const tokens = generateTokens(user.rows[0]);
 
-    // Rotate — carry login_at forward so the 8h clock is never reset
+    // Rotate — keep the row's own expires_at window (7 days), same as login.
     await query('DELETE FROM refresh_tokens WHERE token = $1', [tokenHash]);
     await query(
       `INSERT INTO refresh_tokens (user_id, token, expires_at, login_at)
-       VALUES ($1, $2, NOW() + INTERVAL '8 hours', $3)`,
+       VALUES ($1, $2, NOW() + INTERVAL '7 days', $3)`,
       [user.rows[0].id, hashRefreshToken(tokens.refreshToken), stored.rows[0].login_at]
     );
 
