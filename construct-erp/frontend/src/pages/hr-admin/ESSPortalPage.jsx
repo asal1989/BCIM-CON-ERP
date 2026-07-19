@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   BadgeIndianRupee, Bell, CalendarCheck, CalendarOff, CheckCircle2,
   FileText, FolderUp, Headphones, Monitor, ShieldCheck, UserRound, Printer,
-  ChevronLeft, ChevronRight, Upload,
+  ChevronLeft, ChevronRight, Upload, Camera, Trash2,
   LayoutDashboard, Clock, Users, Award, BookOpen,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -427,9 +427,17 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
         <div className="pointer-events-none absolute right-24 bottom-[-48px] h-32 w-32 rounded-full bg-white/10" />
         <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-lg font-bold text-white ring-1 ring-white/25">
-              {initials}
-            </div>
+            {profile?.profile_photo_url ? (
+              <img
+                src={profile.profile_photo_url}
+                alt={profile?.name || 'Employee'}
+                className="h-14 w-14 shrink-0 rounded-2xl object-cover ring-1 ring-white/40"
+              />
+            ) : (
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-lg font-bold text-white ring-1 ring-white/25">
+                {initials}
+              </div>
+            )}
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-white/70">{greeting}</p>
               <h2 className="text-xl font-bold text-white sm:text-2xl">{profile?.name?.split(' ')[0] || 'Employee'} 👋</h2>
@@ -719,20 +727,127 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
 /* ═══════════════════════════════════════════════════════════════
    PROFILE TAB
 ═══════════════════════════════════════════════════════════════ */
-function ProfileTab({ profile, balances }) {
+// Downscale + re-encode an image File to a small square JPEG data URI so the
+// stored avatar stays tiny (a few KB) regardless of the original photo size.
+function fileToAvatarDataUri(file, size = 256) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        // Center-crop to a square, then draw scaled into the canvas.
+        const min = Math.min(img.width, img.height);
+        const sx = (img.width - min) / 2;
+        const sy = (img.height - min) / 2;
+        ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Circular avatar showing the profile photo when present, else initials.
+// When `editable`, overlays a camera button to upload and (if a photo exists)
+// a small remove button.
+function ProfilePhotoAvatar({ profile, size = 80, editable = false }) {
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
   const name     = profile?.name || 'Employee';
   const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  const photo    = profile?.profile_photo_url;
+
+  const refresh = () => qc.invalidateQueries({ queryKey: ['ess-summary'] });
+
+  const onPick = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!/^image\//.test(file.type)) return toast.error('Please choose an image file.');
+    setBusy(true);
+    try {
+      const dataUri = await fileToAvatarDataUri(file);
+      await essAPI.uploadProfilePhoto(dataUri);
+      toast.success('Profile photo updated');
+      refresh();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Could not update photo');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onRemove = async () => {
+    setBusy(true);
+    try {
+      await essAPI.removeProfilePhoto();
+      toast.success('Profile photo removed');
+      refresh();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Could not remove photo');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      {photo ? (
+        <img
+          src={photo}
+          alt={name}
+          className="h-full w-full rounded-full object-cover shadow ring-2 ring-white"
+          style={{ width: size, height: size }}
+        />
+      ) : (
+        <div
+          className="flex h-full w-full items-center justify-center rounded-full font-bold text-white shadow"
+          style={{ width: size, height: size, fontSize: size * 0.3, background: `linear-gradient(135deg, ${ACCENT} 0%, ${TEAL} 100%)` }}
+        >
+          {initials}
+        </div>
+      )}
+      {editable && (
+        <>
+          <label
+            className="absolute -bottom-1 -right-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-2 border-white bg-white shadow"
+            title="Change photo"
+            style={{ color: ACCENT }}
+          >
+            {busy
+              ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300" style={{ borderTopColor: ACCENT }} />
+              : <Camera size={15} />}
+            <input type="file" accept="image/*" className="hidden" onChange={onPick} disabled={busy} />
+          </label>
+          {photo && !busy && (
+            <button
+              onClick={onRemove}
+              title="Remove photo"
+              className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-white text-red-500 shadow"
+            >
+              <Trash2 size={12} />
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function ProfileTab({ profile, balances }) {
+  const name = profile?.name || 'Employee';
 
   return (
     <div className="space-y-5">
       <SectionCard>
         <div className="flex items-start gap-6 p-2">
-          <div
-            className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full text-2xl font-bold text-white shadow"
-            style={{ background: `linear-gradient(135deg, ${DARK} 0%, #2d6a9f 100%)` }}
-          >
-            {initials}
-          </div>
+          <ProfilePhotoAvatar profile={profile} size={80} editable />
           <div>
             <p className="text-xl font-bold text-gray-900">{name}</p>
             <p className="text-sm text-gray-500">{profile?.designation_name || '—'}</p>

@@ -2198,6 +2198,8 @@ export const essAPI = {
   uploadDocument:       (file, data = {}) => { const fd = new FormData(); fd.append('file', file); Object.entries(data).forEach(([k, v]) => fd.append(k, v ?? '')); return api.post('/ess/documents', fd, multipart); },
   onboarding:           ()             => api.get('/ess/onboarding'),
   updateOnboarding:     (id, data)     => api.patch(`/ess/onboarding/${id}`, data),
+  uploadProfilePhoto:   (photo)        => api.post('/ess/profile/photo', { photo }),
+  removeProfilePhoto:   ()             => api.delete('/ess/profile/photo'),
 };
 
 export const notificationsAPI = {

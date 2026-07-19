@@ -117,7 +117,8 @@ router.get('/summary', async (req, res) => {
       query(
         `SELECT u.id, u.name, u.email, u.employee_code, u.role,
                 dep.name AS department_name, des.name AS designation_name,
-                ep.work_location, ep.date_of_joining, ep.employment_status
+                ep.work_location, ep.date_of_joining, ep.employment_status,
+                ep.profile_photo_url
          FROM users u
          LEFT JOIN employee_profiles ep ON ep.user_id = u.id
          LEFT JOIN hr_departments dep ON dep.id = ep.department_id
@@ -841,6 +842,46 @@ router.post('/documents', upload.single('file'), async (req, res) => {
       [ownUser(req), ownCompany(req), doc_name || req.file?.originalname || doc_type, ownUser(req)]
     ).catch(() => null);
     res.status(201).json({ data: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Profile photo ────────────────────────────────────────────────────────────
+// Stored as a base64 data URI in employee_profiles.profile_photo_url (same
+// pattern as signature_url), so it renders directly in an <img> without hitting
+// the JWT-protected /uploads static route. The client downscales before upload,
+// but we still cap the payload here as a safety net.
+router.post('/profile/photo', async (req, res) => {
+  try {
+    const { photo } = req.body || {};
+    if (!photo || typeof photo !== 'string' || !/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(photo)) {
+      return res.status(400).json({ error: 'A valid image is required.' });
+    }
+    if (photo.length > 3 * 1024 * 1024) {
+      return res.status(400).json({ error: 'Image is too large. Please choose a smaller photo.' });
+    }
+    const { rows } = await query(
+      `INSERT INTO employee_profiles (user_id, company_id, profile_photo_url, updated_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (user_id) DO UPDATE
+         SET profile_photo_url = EXCLUDED.profile_photo_url, updated_at = NOW()
+       RETURNING profile_photo_url`,
+      [ownUser(req), ownCompany(req), photo]
+    );
+    res.json({ data: { profile_photo_url: rows[0].profile_photo_url } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/profile/photo', async (req, res) => {
+  try {
+    await query(
+      `UPDATE employee_profiles SET profile_photo_url = NULL, updated_at = NOW() WHERE user_id = $1`,
+      [ownUser(req)]
+    );
+    res.json({ data: { profile_photo_url: null } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
