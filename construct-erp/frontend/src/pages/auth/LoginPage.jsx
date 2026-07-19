@@ -124,6 +124,15 @@ export default function LoginPage() {
 
   const { register, handleSubmit, formState: { errors } } = useForm({ resolver: zodResolver(schema) });
 
+  // ESS custom-domain theme: light, HR-SaaS-style palette instead of the
+  // dark navy/gold ERP branding. Computed once so scattered inline styles
+  // (which can't be reached by the .ess-theme CSS class alone) stay in sync.
+  const ess            = isEssDomain();
+  const accent         = ess ? '#2F6FED' : '#0a2057';
+  const accentSoft      = ess ? '#14B8A6' : '#c9a227';
+  const accentPale      = ess ? '#EAF1FF' : '#eef3fb';
+  const accentPaleHover = ess ? '#DCE9FF' : '#dbeafe';
+
   const filteredProjects = useMemo(() => {
     const q = projectSearch.trim().toLowerCase();
     if (!q) return projects;
@@ -651,9 +660,84 @@ export default function LoginPage() {
         .lp-footer { text-align:center; margin-top:12px; }
         .lp-footer-note { font-size:11px; color:#94a3b8; margin-bottom:6px; }
         .lp-version { position:absolute; bottom:10px; right:16px; font-size:10px; color:#cbd5e1; letter-spacing:0.05em; }
+
+        /* ═══════════════════════════════════════════════════════════
+           ESS PORTAL THEME — light HR-SaaS palette (Zoho People / GreytHR
+           style) instead of the dark navy/gold ERP branding. Scoped to
+           .ess-theme so the main ERP login is untouched.
+           ═══════════════════════════════════════════════════════════ */
+        .ess-theme.lp-root { background:#fff; }
+        .ess-theme .lp-left {
+          background: linear-gradient(160deg, #EEF4FF 0%, #F5F9FF 45%, #F6FBFA 100%);
+        }
+        .ess-theme .lp-pattern,
+        .ess-theme .lp-diagonal,
+        .ess-theme .lp-gold-bar,
+        .ess-theme .lp-left-edge,
+        .ess-theme .lp-ring,
+        .ess-theme .lp-particle { display:none; }
+
+        .ess-theme .lp-brand { border-bottom-color: rgba(15,23,42,0.08); }
+        .ess-theme .lp-brand-text-sub { color:#2F6FED; }
+        .ess-theme .lp-headline { color:#0f172a; }
+        .ess-theme .lp-headline-accent { color:#2F6FED; }
+        .ess-theme .lp-tagline { color:#5b6b85; }
+        .ess-theme .lp-module-title { color:#7c8aa5; }
+        .ess-theme .lp-module-row { background:#fff; border-color:#e6ecf7; box-shadow:0 1px 3px rgba(15,23,42,0.05); }
+        .ess-theme .lp-module-row::after { background:linear-gradient(90deg,transparent,rgba(47,111,237,0.08),transparent); }
+        .ess-theme .lp-module-row:hover { background:#f5f9ff; border-color:#2F6FED; }
+        .ess-theme .lp-module-icon { background:rgba(47,111,237,0.1); }
+        .ess-theme .lp-module-row:hover .lp-module-icon { background:rgba(47,111,237,0.18); }
+        .ess-theme .lp-module-name { color:#334155; }
+        .ess-theme .lp-module-dot { background:#14B8A6; }
+
+        /* Right panel accents */
+        .ess-theme .lp-right { background:#fbfcfe; }
+        .ess-theme .lp-right-top-bar { background:#2F6FED; }
+        .ess-theme .lp-welcome-label { background:#EAF1FF; border-color:#C9DCFF; }
+        .ess-theme .lp-welcome-dot { background:#2F6FED; }
+        .ess-theme .lp-welcome-tag { color:#2F6FED; }
+        .ess-theme .lp-welcome h2 { color:#0f172a; }
+        .ess-theme .lp-card { box-shadow:0 4px 24px rgba(47,111,237,0.08),0 1px 4px rgba(47,111,237,0.05); }
+        .ess-theme .lp-icon-box { background:#EAF1FF; }
+        .ess-theme .lp-input-wrap:focus-within .lp-icon-box { background:#DCE9FF; }
+        .ess-theme .lp-input:focus { border-color:#2F6FED; box-shadow:0 0 0 3px rgba(47,111,237,0.12); }
+        .ess-theme .lp-eye-btn:hover { color:#2F6FED; }
+        .ess-theme .lp-btn { background:#2F6FED; box-shadow:0 4px 16px rgba(47,111,237,0.3); }
+        .ess-theme .lp-btn:hover:not(:disabled) { background:#2557C7; box-shadow:0 10px 28px rgba(47,111,237,0.4); }
+        .ess-theme .lp-project-code { color:#2F6FED; background:#EAF1FF; border-color:#C9DCFF; }
+        .ess-theme .lp-project-card:hover:not(:disabled) { border-color:#2F6FED; box-shadow:0 8px 22px rgba(47,111,237,0.12); }
+        .ess-theme .lp-project-all { border-color:#14B8A6; background:#F0FDFA; }
+
+        /* Illustration */
+        .ess-blob { position:absolute; border-radius:50%; filter:blur(1px); opacity:0.6; pointer-events:none; }
+        .ess-blob-1 { width:220px; height:220px; background:radial-gradient(circle,#DCE9FF,transparent 70%); top:8%; right:6%; }
+        .ess-blob-2 { width:190px; height:190px; background:radial-gradient(circle,#D3F5EE,transparent 70%); bottom:16%; left:2%; }
+        .ess-blob-3 { width:150px; height:150px; background:radial-gradient(circle,#FEF3D6,transparent 70%); bottom:36%; right:18%; }
+
+        .ess-illustration { position:relative; margin:10px auto 26px; width:100%; max-width:300px; height:190px; z-index:5; }
+        .ess-illust-card {
+          position:absolute; inset:18px 28px; background:#fff; border-radius:16px;
+          box-shadow:0 20px 40px rgba(15,23,42,0.12); padding:16px;
+          animation: lp-bobFloat 6s ease-in-out infinite;
+        }
+        .ess-illust-card-header { display:flex; gap:5px; margin-bottom:14px; }
+        .ess-illust-dot { width:8px; height:8px; border-radius:50%; }
+        .ess-illust-row { height:9px; border-radius:5px; background:#EEF2F9; margin-bottom:9px; }
+        .ess-illust-row.short { width:60%; }
+        .ess-chip {
+          position:absolute; width:38px; height:38px; border-radius:11px; background:#fff;
+          display:flex; align-items:center; justify-content:center;
+          box-shadow:0 8px 20px rgba(15,23,42,0.14);
+          animation: lp-bobFloat 5s ease-in-out infinite;
+        }
+        .ess-chip-1 { top:-4px; left:-10px; color:#2F6FED; animation-delay:0.3s; }
+        .ess-chip-2 { top:14%; right:-16px; color:#14B8A6; animation-delay:1s; }
+        .ess-chip-3 { bottom:-8px; left:20%; color:#F59E0B; animation-delay:1.6s; }
+        .ess-chip-4 { bottom:16%; right:8%; color:#EC4899; animation-delay:0.7s; }
       `}</style>
 
-      <div className={`lp-root${mounted ? ' lp-mounted' : ''}`}>
+      <div className={`lp-root${mounted ? ' lp-mounted' : ''}${ess ? ' ess-theme' : ''}`}>
 
         {/* ════════════ LEFT — Navy Brand Panel ════════════ */}
         <CursorSpotlight
@@ -685,6 +769,31 @@ export default function LoginPage() {
             />
           ))}
 
+          {/* ESS theme: light illustration replacing the navy corporate decor */}
+          {ess && (
+            <>
+              <div className="ess-blob ess-blob-1" />
+              <div className="ess-blob ess-blob-2" />
+              <div className="ess-blob ess-blob-3" />
+              <div className="ess-illustration">
+                <div className="ess-illust-card">
+                  <div className="ess-illust-card-header">
+                    <span className="ess-illust-dot" style={{ background: '#2F6FED' }} />
+                    <span className="ess-illust-dot" style={{ background: '#14B8A6' }} />
+                    <span className="ess-illust-dot" style={{ background: '#F59E0B' }} />
+                  </div>
+                  <div className="ess-illust-row" />
+                  <div className="ess-illust-row short" />
+                  <div className="ess-illust-row" />
+                </div>
+                <div className="ess-chip ess-chip-1"><ClipboardList size={17} /></div>
+                <div className="ess-chip ess-chip-2"><FileText size={17} /></div>
+                <div className="ess-chip ess-chip-3"><Users size={17} /></div>
+                <div className="ess-chip ess-chip-4"><ShieldCheck size={17} /></div>
+              </div>
+            </>
+          )}
+
           <div className="lp-left-inner">
 
             {/* Brand */}
@@ -699,7 +808,7 @@ export default function LoginPage() {
             </div>
 
             {/* Headline */}
-            {isEssDomain() ? (
+            {ess ? (
               <>
                 <div className="lp-headline">
                   Employee Self<br />
@@ -724,16 +833,16 @@ export default function LoginPage() {
             )}
 
             {/* Modules */}
-            <div className="lp-module-title">{isEssDomain() ? 'Self Service Features' : 'Integrated Modules'}</div>
+            <div className="lp-module-title">{ess ? 'Self Service Features' : 'Integrated Modules'}</div>
             <div className="lp-modules">
-              {(isEssDomain() ? ESS_MODULES : MODULES).map(({ icon: Icon, label }, idx) => (
+              {(ess ? ESS_MODULES : MODULES).map(({ icon: Icon, label }, idx) => (
                 <div
                   className="lp-module-row"
                   key={label}
                   style={{ animationDelay: `${0.65 + idx * 0.08}s` }}
                 >
                   <div className="lp-module-icon">
-                    <Icon style={{ width: 14, height: 14, color: '#c9a227' }} />
+                    <Icon style={{ width: 14, height: 14, color: accentSoft }} />
                   </div>
                   <span className="lp-module-name">{label}</span>
                   <div className="lp-module-dot" style={{ animationDelay: `${idx * 0.4}s` }} />
@@ -741,12 +850,14 @@ export default function LoginPage() {
               ))}
             </div>
 
-            {/* Stats */}
-            <div className="lp-stats">
-              {STATS.map((stat, idx) => (
-                <StatCard key={stat.label} stat={stat} delay={idx * 150} />
-              ))}
-            </div>
+            {/* Stats — ERP only; not relevant to the employee-facing ESS portal */}
+            {!ess && (
+              <div className="lp-stats">
+                {STATS.map((stat, idx) => (
+                  <StatCard key={stat.label} stat={stat} delay={idx * 150} />
+                ))}
+              </div>
+            )}
 
           </div>
         </CursorSpotlight>
@@ -759,11 +870,11 @@ export default function LoginPage() {
 
             {/* Mobile brand */}
             <div className="lp-mobile-brand">
-              <div style={{ width:46,height:46,borderRadius:10,background:'#0a2057',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',padding:6 }}>
+              <div style={{ width:46,height:46,borderRadius:10,background:accent,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',padding:6 }}>
                 <img src="/bcim-logo.png" alt="BCIM" style={{ width:'100%',height:'100%',objectFit:'contain',filter:'brightness(0) invert(1)' }} />
               </div>
               <div>
-                <div style={{ fontSize:15,fontWeight:800,color:'#0a2057' }}>BCIM ENGINEERING</div>
+                <div style={{ fontSize:15,fontWeight:800,color:accent }}>BCIM ENGINEERING</div>
                 <div style={{ fontSize:10,color:'#64748b',letterSpacing:'0.08em',marginTop:2 }}>PRIVATE LIMITED</div>
               </div>
             </div>
@@ -772,10 +883,10 @@ export default function LoginPage() {
             <div className="lp-welcome">
               <div className="lp-welcome-label">
                 <span className="lp-welcome-dot" />
-                <span className="lp-welcome-tag">{isEssDomain() ? 'ESS PORTAL' : 'ERP PORTAL'}</span>
+                <span className="lp-welcome-tag">{ess ? 'ESS PORTAL' : 'ERP PORTAL'}</span>
               </div>
               <h2>Welcome Back</h2>
-              <p>{isEssDomain() ? 'Sign in with your employee credentials' : 'Sign in with your credentials to access the system'}</p>
+              <p>{ess ? 'Sign in with your employee credentials' : 'Sign in with your credentials to access the system'}</p>
             </div>
 
             {/* Session / token expiry banners */}
@@ -810,7 +921,7 @@ export default function LoginPage() {
                   <label className="lp-label">Email Address</label>
                   <div className="lp-input-wrap">
                     <div className="lp-icon-box">
-                      <Mail style={{ width:13,height:13,color:'#0a2057' }} />
+                      <Mail style={{ width:13,height:13,color:accent }} />
                     </div>
                     <input
                       {...register('email')}
@@ -833,7 +944,7 @@ export default function LoginPage() {
                   <label className="lp-label">Password</label>
                   <div className="lp-input-wrap">
                     <div className="lp-icon-box">
-                      <Lock style={{ width:13,height:13,color:'#0a2057' }} />
+                      <Lock style={{ width:13,height:13,color:accent }} />
                     </div>
                     <input
                       {...register('password')}
@@ -876,9 +987,9 @@ export default function LoginPage() {
                       type="button"
                       onClick={requestReset}
                       disabled={sendingReset}
-                      style={{ minWidth:112,border:'none',borderRadius:10,background:'#eef3fb',color:'#0a2057',fontSize:11,fontWeight:800,textTransform:'uppercase',cursor:sendingReset?'wait':'pointer',transition:'background 0.2s' }}
-                      onMouseEnter={e => e.currentTarget.style.background='#dbeafe'}
-                      onMouseLeave={e => e.currentTarget.style.background='#eef3fb'}
+                      style={{ minWidth:112,border:'none',borderRadius:10,background:accentPale,color:accent,fontSize:11,fontWeight:800,textTransform:'uppercase',cursor:sendingReset?'wait':'pointer',transition:'background 0.2s' }}
+                      onMouseEnter={e => e.currentTarget.style.background=accentPaleHover}
+                      onMouseLeave={e => e.currentTarget.style.background=accentPale}
                     >
                       {sendingReset ? 'Sending…' : 'Send Link'}
                     </button>
@@ -939,7 +1050,7 @@ export default function LoginPage() {
 
                   {projectLoading && (
                     <div className="lp-project-state">
-                      <Loader2 size={16} style={{ animation:'lp-spin 0.75s linear infinite', color:'#0a2057' }} />
+                      <Loader2 size={16} style={{ animation:'lp-spin 0.75s linear infinite', color:accent }} />
                       Loading active projects...
                     </div>
                   )}
