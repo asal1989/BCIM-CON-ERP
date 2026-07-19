@@ -271,6 +271,7 @@ const extraAllowedOrigins = [
   'http://bcim.ddns.net:3000',
   'https://bcim.ddns.net:3000',
   'https://erp.bcim.in',
+  'https://bcimhr.bcim.in',
 ];
 
 const isAllowedOrigin = (origin) => {
