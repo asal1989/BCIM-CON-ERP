@@ -295,6 +295,17 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
     queryKey: ['ess-attendance-dash'],
     queryFn:  () => essAPI.attendance().then(unwrap),
   });
+
+  /* team-today: on-leave / birthdays (HR-only) + next holiday (everyone) */
+  const teamQ = useQuery({
+    queryKey: ['ess-team-today'],
+    queryFn:  () => essAPI.teamToday().then(r => r.data.data),
+  });
+  const team          = teamQ.data || {};
+  const isHrView      = !!team.is_hr_view;
+  const onLeaveToday  = team.on_leave_today || [];
+  const birthdaysToday= team.birthdays_today || [];
+  const nextHoliday   = team.next_holiday || null;
   const statusMap = useMemo(() => {
     const m = {};
     for (const row of (attQ.data || [])) {
@@ -686,6 +697,73 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
               <div className="px-4 py-8 text-center text-sm text-gray-400">No upcoming events</div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* ── Team today (HR/super-admin only) + next holiday (everyone) ── */}
+      <div className={`grid gap-5 ${isHrView ? 'lg:grid-cols-3' : 'lg:grid-cols-1'}`}>
+        {isHrView && (
+          <div className="rounded-2xl border border-gray-100 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+              <h3 className="text-sm font-bold text-gray-900">On Leave Today</h3>
+              <span className="rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ background: '#EAF1FF', color: ACCENT }}>{onLeaveToday.length}</span>
+            </div>
+            <div className="divide-y divide-gray-50 max-h-56 overflow-y-auto">
+              {onLeaveToday.length ? onLeaveToday.map((p, i) => (
+                <div key={i} className="flex items-center gap-3 px-4 py-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white" style={{ background: `linear-gradient(135deg, ${ACCENT}, ${TEAL})` }}>
+                    {(p.name || '?').split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase()}
+                  </div>
+                  <span className="text-sm text-gray-800 truncate">{p.name}</span>
+                  <span className="ml-auto text-[11px] text-gray-500 shrink-0">{p.leave_type || 'Leave'}</span>
+                </div>
+              )) : (
+                <div className="px-4 py-8 text-center text-sm text-gray-400">Everyone's in today</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {isHrView && (
+          <div className="rounded-2xl border border-gray-100 bg-white shadow-sm">
+            <div className="border-b border-gray-100 px-5 py-4">
+              <h3 className="text-sm font-bold text-gray-900">Birthdays Today</h3>
+            </div>
+            <div className="divide-y divide-gray-50 max-h-56 overflow-y-auto">
+              {birthdaysToday.length ? birthdaysToday.map((p, i) => (
+                <div key={i} className="flex items-center gap-3 px-4 py-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: '#E1F5EE', color: '#0F6E56' }}>
+                    <Award size={15} />
+                  </div>
+                  <span className="text-sm text-gray-800 truncate">{p.name}</span>
+                  <span className="ml-auto text-[11px] font-semibold shrink-0" style={{ color: '#0F6E56' }}>🎂 Wish them</span>
+                </div>
+              )) : (
+                <div className="px-4 py-8 text-center text-sm text-gray-400">No birthdays today</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Next holiday — visible to everyone */}
+        <div className="rounded-2xl border p-5 flex items-center gap-4" style={{ background: '#FAEEDA', borderColor: '#FAC775' }}>
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-white" style={{ background: '#BA7517' }}>
+            <CalendarCheck size={22} />
+          </div>
+          {nextHoliday ? (
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#854F0B' }}>Upcoming Holiday</p>
+              <p className="text-base font-bold" style={{ color: '#663905' }}>{nextHoliday.name}</p>
+              <p className="text-xs" style={{ color: '#854F0B' }}>
+                {new Date(nextHoliday.holiday_date).toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+              </p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#854F0B' }}>Upcoming Holiday</p>
+              <p className="text-sm" style={{ color: '#854F0B' }}>No upcoming holidays scheduled</p>
+            </div>
+          )}
         </div>
       </div>
 

@@ -2200,6 +2200,7 @@ export const essAPI = {
   updateOnboarding:     (id, data)     => api.patch(`/ess/onboarding/${id}`, data),
   uploadProfilePhoto:   (photo)        => api.post('/ess/profile/photo', { photo }),
   removeProfilePhoto:   ()             => api.delete('/ess/profile/photo'),
+  teamToday:            ()             => api.get('/ess/team-today'),
 };
 
 export const notificationsAPI = {

@@ -847,6 +847,58 @@ router.post('/documents', upload.single('file'), async (req, res) => {
   }
 });
 
+// ── Team-today widgets ───────────────────────────────────────────────────────
+// "On leave today" and "birthdays today" are people-directory data, so they're
+// gated to HR roles + super_admin. The next company holiday is public and
+// returned for everyone.
+const HR_VIEW_ROLES = ['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager'];
+router.get('/team-today', async (req, res) => {
+  try {
+    const companyId = ownCompany(req);
+    const isHrView = HR_VIEW_ROLES.includes(String(req.user.role || '').toLowerCase());
+
+    const nextHoliday = await query(
+      `SELECT name, holiday_date FROM hr_holidays
+       WHERE company_id = $1 AND holiday_date >= CURRENT_DATE
+       ORDER BY holiday_date ASC LIMIT 1`,
+      [companyId]
+    ).catch(() => ({ rows: [] }));
+
+    let onLeaveToday = [];
+    let birthdaysToday = [];
+    if (isHrView) {
+      const leave = await query(
+        `SELECT u.name, lt.name AS leave_type
+         FROM hr_leave_requests lr
+         JOIN users u ON u.id = lr.user_id
+         LEFT JOIN hr_leave_types lt ON lt.id = lr.leave_type_id
+         WHERE lr.company_id = $1 AND lr.status = 'approved'
+           AND CURRENT_DATE BETWEEN lr.from_date AND lr.to_date
+         ORDER BY u.name LIMIT 12`,
+        [companyId]
+      ).catch(() => ({ rows: [] }));
+      onLeaveToday = leave.rows;
+
+      const bdays = await query(
+        `SELECT u.name
+         FROM employee_profiles ep
+         JOIN users u ON u.id = ep.user_id
+         WHERE ep.company_id = $1 AND u.is_active = true
+           AND ep.date_of_birth IS NOT NULL
+           AND EXTRACT(MONTH FROM ep.date_of_birth) = EXTRACT(MONTH FROM CURRENT_DATE)
+           AND EXTRACT(DAY   FROM ep.date_of_birth) = EXTRACT(DAY   FROM CURRENT_DATE)
+         ORDER BY u.name LIMIT 12`,
+        [companyId]
+      ).catch(() => ({ rows: [] }));
+      birthdaysToday = bdays.rows;
+    }
+
+    res.json({ data: { is_hr_view: isHrView, on_leave_today: onLeaveToday, birthdays_today: birthdaysToday, next_holiday: nextHoliday.rows[0] || null } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Profile photo ────────────────────────────────────────────────────────────
 // Stored as a base64 data URI in employee_profiles.profile_photo_url (same
 // pattern as signature_url), so it renders directly in an <img> without hitting
