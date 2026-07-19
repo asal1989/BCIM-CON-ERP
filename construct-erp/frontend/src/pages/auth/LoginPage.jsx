@@ -145,7 +145,7 @@ export default function LoginPage() {
       if (isGlobalRole(currentUser?.role)) {
         clearSelectedProject();
         toast.success('Welcome back!');
-        navigate('/dashboard', { replace: true });
+        navigate('/', { replace: true });
       } else {
         setProjectError(message);
       }
@@ -186,7 +186,7 @@ export default function LoginPage() {
   const openAllProjects = () => {
     clearSelectedProject();
     toast.success('All projects view selected');
-    navigate('/dashboard', { replace: true });
+    navigate('/', { replace: true });
   };
 
   const backToCredentials = async () => {
