@@ -615,7 +615,7 @@ function GroupDropdown({ group, onClose, pos, onKeepOpen, onStartClose }) {
     );
   };
 
-  const vw = window.innerWidth;
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
 
   // ── Accordion mode: group headers expand to their own sub-menus ──
   if (hasSubMenus) {

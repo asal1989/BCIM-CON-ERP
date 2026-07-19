@@ -89,7 +89,7 @@ const APPS = [
   {
     key: 'server',
     name: 'BCIM Server',
-    url: 'http://bcim.ddns.net:8080',
+    url: 'https://bcim.ddns.net:8080',
     display: 'bcim.ddns.net:8080',
     desc: 'Internal network server — site monitoring, cameras and remote system access.',
     icon: Server,

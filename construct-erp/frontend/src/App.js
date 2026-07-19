@@ -667,6 +667,7 @@ export default function App() {
               <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                 <Route index element={<HomeRedirect />} />
                 <Route path="approvals" element={<ProtectedRoute allowWithoutProject><ApprovalsPage /></ProtectedRoute>} />
+                {/* intentionally unrestricted — harmless launcher for all authenticated users */}
                 <Route path="apps" element={<BCIMPortalPage />} />
                 <Route path="dashboard" element={<RequireModule module="Overview"><Dashboard /></RequireModule>} />
 

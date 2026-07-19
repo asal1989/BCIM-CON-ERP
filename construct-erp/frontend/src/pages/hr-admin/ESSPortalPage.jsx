@@ -342,7 +342,7 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
   const pendingLeave = leave.pending ?? 0;
   const pendingCorr  = attendance.pending_corrections ?? 0;
   const pendingTotal = pendingLeave + pendingCorr;
-  const workDays     = attendance.working_days || 0;
+  const workDays     = (attendance.present||0) + (attendance.absent||0) + (attendance.half_day||0) + (attendance.on_leave||0);
   const presentDays  = attendance.present || 0;
   const attPct       = workDays > 0 ? Math.round((presentDays / workDays) * 100) : 0;
   const announcements = (notifications || []).slice(0, 6);
@@ -920,31 +920,101 @@ function ProfilePhotoAvatar({ profile, size = 80, editable = false }) {
 
 function ProfileTab({ profile, balances }) {
   const name = profile?.name || 'Employee';
+  const p = profile || {};
+
+  const fmtDate = (d) => d
+    ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+    : null;
+  const cap = (s) => s ? String(s).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : null;
+
+  // Field grid: renders only the rows that have a value, so partially-filled
+  // profiles never show a wall of dashes.
+  const InfoGrid = ({ fields }) => {
+    const rows = fields.filter(([, v]) => v !== null && v !== undefined && v !== '');
+    if (!rows.length) return <p className="text-sm text-gray-400">Not yet on file. Contact HR to update.</p>;
+    return (
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
+        {rows.map(([lbl, val]) => (
+          <div key={lbl}>
+            <p className="text-[10px] uppercase tracking-wide text-gray-400">{lbl}</p>
+            <p className="mt-0.5 text-sm font-semibold text-gray-800 break-words">{val}</p>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-5">
-      <SectionCard>
-        <div className="flex items-start gap-6 p-2">
-          <ProfilePhotoAvatar profile={profile} size={80} editable />
-          <div>
-            <p className="text-xl font-bold text-gray-900">{name}</p>
-            <p className="text-sm text-gray-500">{profile?.designation_name || '—'}</p>
-            <p className="mt-1 text-xs font-semibold text-gray-400">{profile?.employee_code}</p>
+      {/* Header card */}
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+        <div className="h-20" style={{ background: `linear-gradient(120deg, ${ACCENT}, ${TEAL})` }} />
+        <div className="px-6 pb-6">
+          <div className="-mt-10 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex items-end gap-4">
+              <div className="rounded-full bg-white p-1 shadow">
+                <ProfilePhotoAvatar profile={profile} size={84} editable />
+              </div>
+              <div className="pb-1">
+                <p className="text-xl font-bold text-gray-900">{name}</p>
+                <p className="text-sm text-gray-500">{p.designation_name || cap(p.role) || '—'}</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 pb-1">
+              {p.employee_code && <span className="rounded-full px-3 py-1 text-[11px] font-bold" style={{ background: '#EAF1FF', color: ACCENT }}>{p.employee_code}</span>}
+              {p.department_name && <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600">{p.department_name}</span>}
+              {p.employment_status && <span className="rounded-full px-3 py-1 text-[11px] font-semibold" style={{ background: '#E1F5EE', color: '#0F6E56' }}>{cap(p.employment_status)}</span>}
+            </div>
           </div>
         </div>
-        <div className="mt-5 grid grid-cols-2 gap-4 border-t border-gray-100 pt-5">
-          {[
-            ['Department',    profile?.department_name],
-            ['Date of Joining', String(profile?.date_of_joining||'').slice(0,10)],
-            ['Work Location', profile?.work_location],
-            ['Email',         profile?.email],
-          ].map(([lbl, val]) => val && (
-            <div key={lbl}>
-              <p className="text-[10px] uppercase tracking-wide text-gray-400">{lbl}</p>
-              <p className="text-sm font-semibold text-gray-800 mt-0.5">{val || '—'}</p>
-            </div>
-          ))}
-        </div>
+      </div>
+
+      <SectionCard title="Personal Information">
+        <InfoGrid fields={[
+          ['Full Name',      name],
+          ['Date of Birth',  fmtDate(p.date_of_birth)],
+          ['Gender',         cap(p.gender)],
+          ['Blood Group',    p.blood_group],
+          ['Marital Status', cap(p.marital_status)],
+          ['Nationality',    p.nationality],
+          ["Father's Name",  p.father_name],
+        ]} />
+      </SectionCard>
+
+      <SectionCard title="Contact Details">
+        <InfoGrid fields={[
+          ['Email',            p.email],
+          ['Phone',            p.phone],
+          ['Current Address',  p.current_address],
+          ['Permanent Address',p.permanent_address],
+          ['Emergency Contact',p.emergency_contact_name],
+          ['Emergency Phone',  p.emergency_contact_phone],
+        ]} />
+      </SectionCard>
+
+      <SectionCard title="Employment">
+        <InfoGrid fields={[
+          ['Designation',       p.designation_name],
+          ['Department',        p.department_name],
+          ['Reporting Manager', p.reporting_manager_name],
+          ['Work Location',     p.work_location],
+          ['Employee Category', cap(p.employee_category)],
+          ['Employment Type',   cap(p.employment_type)],
+          ['Date of Joining',   fmtDate(p.date_of_joining)],
+          ['Date of Confirmation', fmtDate(p.date_of_confirmation)],
+        ]} />
+      </SectionCard>
+
+      <SectionCard title="Bank & Statutory" subtitle="Sensitive details are partially masked">
+        <InfoGrid fields={[
+          ['Bank',        p.bank_name],
+          ['Account No.', p.bank_account_last4 ? `•••• ${p.bank_account_last4}` : null],
+          ['IFSC',        p.bank_ifsc],
+          ['PAN',         p.pan_number],
+          ['UAN',         p.uan_number],
+          ['PF Account',  p.pf_account_number],
+          ['ESI No.',     p.esi_number],
+        ]} />
       </SectionCard>
 
       {/* Leave balances */}
@@ -1224,7 +1294,7 @@ function LeaveTab({ leaveTypes }) {
     mutationFn: essAPI.createLeaveRequest,
     onSuccess: () => { toast.success('Leave requested'); setLeave({ ...leave, reason: '' }); refresh(); },
   });
-  const cancelLeave = useMutation({ mutationFn: essAPI.cancelLeaveRequest, onSuccess: refresh });
+  const cancelLeave = useMutation({ mutationFn: essAPI.cancelLeaveRequest, onSuccess: refresh, onError: (e) => toast.error(e?.response?.data?.error || 'Failed to cancel leave') });
 
   return (
     <div className="space-y-5">
@@ -1485,8 +1555,20 @@ function ManagerDeskTab() {
   const leaves      = useQuery({ queryKey: ['ess-manager-leaves'],      queryFn: () => essAPI.managerLeaveRequests({ status: 'pending' }).then(unwrap), retry: false });
   const corrections = useQuery({ queryKey: ['ess-manager-corrections'], queryFn: () => essAPI.managerCorrections({ status: 'pending' }).then(unwrap), retry: false });
   const refresh     = () => { qc.invalidateQueries({ queryKey: ['ess-manager-leaves'] }); qc.invalidateQueries({ queryKey: ['ess-manager-corrections'] }); };
-  const leaveAction      = useMutation({ mutationFn: ({ id, action }) => essAPI.managerLeaveAction(id, action),      onSuccess: refresh });
-  const correctionAction = useMutation({ mutationFn: ({ id, action }) => essAPI.managerCorrectionAction(id, action), onSuccess: refresh });
+  const leaveAction      = useMutation({ mutationFn: ({ id, action, rejection_reason }) => essAPI.managerLeaveAction(id, action, rejection_reason ? { rejection_reason } : {}),      onSuccess: refresh, onError: (e) => toast.error(e?.response?.data?.error || 'Action failed') });
+  const correctionAction = useMutation({ mutationFn: ({ id, action, rejection_reason }) => essAPI.managerCorrectionAction(id, action, rejection_reason ? { rejection_reason } : {}), onSuccess: refresh, onError: (e) => toast.error(e?.response?.data?.error || 'Action failed') });
+
+  const [rejectModal, setRejectModal] = useState({ open: false, type: null, id: null });
+  const [rejectReason, setRejectReason] = useState('');
+
+  const openReject = (type, id) => { setRejectReason(''); setRejectModal({ open: true, type, id }); };
+  const closeReject = () => setRejectModal({ open: false, type: null, id: null });
+  const submitReject = () => {
+    const { type, id } = rejectModal;
+    if (type === 'leave')      leaveAction.mutate({ id, action: 'reject', rejection_reason: rejectReason });
+    if (type === 'correction') correctionAction.mutate({ id, action: 'reject', rejection_reason: rejectReason });
+    closeReject();
+  };
 
   if (leaves.error?.response?.status === 403 && corrections.error?.response?.status === 403) {
     return (
@@ -1505,6 +1587,25 @@ function ManagerDeskTab() {
 
   return (
     <div className="space-y-5">
+      {rejectModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={closeReject}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-gray-800 mb-3">Reason for Rejection</h3>
+            <textarea
+              className="w-full rounded-lg border border-gray-300 p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-red-300"
+              rows={3}
+              placeholder="Enter reason (optional)"
+              value={rejectReason}
+              onChange={e => setRejectReason(e.target.value)}
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={closeReject} className="rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={submitReject} className="rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700">Reject</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <SectionCard title="Leave Approvals" subtitle="Pending team leave requests">
         <Table
           columns={[
@@ -1516,7 +1617,7 @@ function ManagerDeskTab() {
             { key: 'actions', label: 'Action', render: r => (
               <ActionButtons
                 onApprove={() => leaveAction.mutate({ id: r.id, action: 'approve' })}
-                onReject={()  => leaveAction.mutate({ id: r.id, action: 'reject'  })}
+                onReject={()  => openReject('leave', r.id)}
               />
             )},
           ]}
@@ -1534,7 +1635,7 @@ function ManagerDeskTab() {
             { key: 'actions', label: 'Action', render: r => (
               <ActionButtons
                 onApprove={() => correctionAction.mutate({ id: r.id, action: 'approve' })}
-                onReject={()  => correctionAction.mutate({ id: r.id, action: 'reject'  })}
+                onReject={()  => openReject('correction', r.id)}
               />
             )},
           ]}

@@ -68,7 +68,7 @@ function workingDays(fromDate, toDate, halfDay) {
   let count = 0;
   const cur = new Date(from);
   while (cur <= to) {
-    if (cur.getDay() !== 0) count += 1;
+    if (WORK_WEEK_DAYS.includes(cur.getDay())) count += 1;
     cur.setDate(cur.getDate() + 1);
   }
   return count;
@@ -94,9 +94,14 @@ function statusBadge(status) {
   return `<span style="display:inline-block;background:${color};color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:700">${status.toUpperCase()}</span>`;
 }
 
-async function notifyHR(_companyId, subject, html) {
-  sendMail({ to: 'surendra@bcim.in', subject, html }).catch(e => console.error('[ESS mail] HR notify error:', e.message));
+async function notifyHR(subject, html) {
+  const to = process.env.HR_NOTIFY_EMAIL || 'surendra@bcim.in';
+  sendMail({ to, subject, html }).catch(e => console.error('[ESS mail] HR notify error:', e.message));
 }
+
+// Work-week days: 1=Mon … 6=Sat. Construction sites typically work 6 days.
+// Change to [1,2,3,4,5] here (and in the approval loop below) for a 5-day week.
+const WORK_WEEK_DAYS = [1, 2, 3, 4, 5, 6];
 
 async function notifyEmployee(userId, companyId, subject, html) {
   try {
@@ -114,15 +119,20 @@ router.get('/summary', async (req, res) => {
     const companyId = ownCompany(req);
 
     const [profile, attendance, leave, payroll, notifications] = await Promise.all([
+      // Dashboard summary: only non-sensitive identity fields.
+      // Statutory/bank/contact details are behind GET /ess/profile/full.
       query(
-        `SELECT u.id, u.name, u.email, u.employee_code, u.role,
+        `SELECT u.id, u.name, u.email, u.employee_code, u.role, u.phone,
                 dep.name AS department_name, des.name AS designation_name,
-                ep.work_location, ep.date_of_joining, ep.employment_status,
-                ep.profile_photo_url
+                ep.work_location, ep.date_of_joining, ep.date_of_confirmation,
+                ep.employment_status, ep.employment_type, ep.employee_category,
+                ep.profile_photo_url, ep.gender,
+                mgr.name AS reporting_manager_name
          FROM users u
          LEFT JOIN employee_profiles ep ON ep.user_id = u.id
          LEFT JOIN hr_departments dep ON dep.id = ep.department_id
          LEFT JOIN hr_designations des ON des.id = ep.designation_id
+         LEFT JOIN users mgr ON mgr.id = ep.reporting_manager_id
          WHERE u.id = $1 AND u.company_id = $2`,
         [userId, companyId]
       ),
@@ -360,12 +370,13 @@ router.get('/leave/balances', async (req, res) => {
       [ownCompany(req)]
     );
 
-    for (const type of types) {
+    if (types.length) {
       await query(
         `INSERT INTO hr_leave_balances (user_id, leave_type_id, year, accrued, closing_balance)
-         VALUES ($1,$2,$3,$4,$4)
+         SELECT $1, lid, $2, dpd, dpd
+         FROM unnest($3::uuid[], $4::numeric[]) AS u(lid, dpd)
          ON CONFLICT (user_id, leave_type_id, year) DO NOTHING`,
-        [ownUser(req), type.id, year, type.days_per_year]
+        [ownUser(req), year, types.map(t => t.id), types.map(t => t.days_per_year)]
       );
     }
 
@@ -433,7 +444,7 @@ router.post('/leave/requests', async (req, res) => {
     // Notify HR about new leave application
     const leaveTypeName = type.rows[0]?.name || 'Leave';
     const empName = req.user.name || req.user.email;
-    notifyHR(ownCompany(req),
+    notifyHR(
       `Leave Request: ${empName} — ${leaveTypeName} (${fmtDate(from_date)} to ${fmtDate(to_date)})`,
       mailWrap(
         mailHeader('New Leave Request'),
@@ -520,7 +531,8 @@ router.get('/manager/leave-requests', requireManager, async (req, res) => {
        JOIN hr_leave_types lt ON lt.id = lr.leave_type_id
        WHERE lr.company_id = $1
          AND ($2::text = 'all' OR lr.status = $2::text)
-       ORDER BY lr.applied_at DESC`,
+       ORDER BY lr.applied_at DESC
+       LIMIT 200`,
       [ownCompany(req), status]
     );
     res.json({ data: rows });
@@ -561,20 +573,22 @@ router.patch('/manager/leave-requests/:id/:action', requireManager, async (req, 
         [leave.days, leave.user_id, leave.leave_type_id, year]
       );
 
-      const from = new Date(leave.from_date);
-      const to = new Date(leave.to_date);
-      const cur = new Date(from);
-      while (cur <= to) {
-        if (cur.getDay() !== 0) {
-          await client.query(
-            `INSERT INTO hr_attendance (user_id, company_id, attendance_date, status, leave_request_id, source, remarks)
-             VALUES ($1,$2,$3,'leave',$4,'ess_leave','Approved leave')
-             ON CONFLICT (user_id, attendance_date)
-             DO UPDATE SET status='leave', leave_request_id=$4, source='ess_leave', remarks='Approved leave'`,
-            [leave.user_id, leave.company_id, cur.toISOString().slice(0, 10), leave.id]
-          );
-        }
+      const leaveDates = [];
+      const cur = new Date(leave.from_date);
+      const toD = new Date(leave.to_date);
+      while (cur <= toD) {
+        if (WORK_WEEK_DAYS.includes(cur.getDay())) leaveDates.push(cur.toISOString().slice(0, 10));
         cur.setDate(cur.getDate() + 1);
+      }
+      if (leaveDates.length) {
+        await client.query(
+          `INSERT INTO hr_attendance (user_id, company_id, attendance_date, status, leave_request_id, source, remarks)
+           SELECT $1, $2, d::date, 'leave', $3, 'ess_leave', 'Approved leave'
+           FROM unnest($4::date[]) AS d
+           ON CONFLICT (user_id, attendance_date)
+           DO UPDATE SET status='leave', leave_request_id=$3, source='ess_leave', remarks='Approved leave'`,
+          [leave.user_id, leave.company_id, leave.id, leaveDates]
+        );
       }
     }
 
@@ -619,7 +633,8 @@ router.get('/manager/attendance-corrections', requireManager, async (req, res) =
        JOIN users u ON u.id = cr.user_id
        WHERE cr.company_id = $1
          AND ($2::text = 'all' OR cr.status = $2::text)
-       ORDER BY cr.created_at DESC`,
+       ORDER BY cr.created_at DESC
+       LIMIT 200`,
       [ownCompany(req), status]
     );
     res.json({ data: rows });
@@ -813,9 +828,9 @@ router.get('/documents', async (req, res) => {
     const { rows } = await query(
       `SELECT id, doc_type, doc_name, file_url, uploaded_at
        FROM employee_documents
-       WHERE user_id = $1
+       WHERE user_id = $1 AND company_id = $2
        ORDER BY uploaded_at DESC`,
-      [ownUser(req)]
+      [ownUser(req), ownCompany(req)]
     );
     res.json({ data: rows });
   } catch (err) {
@@ -826,8 +841,8 @@ router.get('/documents', async (req, res) => {
 router.post('/documents', upload.single('file'), async (req, res) => {
   try {
     const { doc_type = 'employee_document', doc_name } = req.body;
-    const fileUrl = req.file ? `/uploads/hr-docs/${req.file.filename}` : req.body.file_url;
-    if (!fileUrl) return res.status(400).json({ error: 'Document file is required' });
+    if (!req.file) return res.status(400).json({ error: 'Document file is required' });
+    const fileUrl = `/uploads/hr-docs/${req.file.filename}`;
 
     const { rows } = await query(
       `INSERT INTO employee_documents (user_id, doc_type, doc_name, file_url, uploaded_by)
@@ -910,7 +925,8 @@ router.post('/profile/photo', async (req, res) => {
     if (!photo || typeof photo !== 'string' || !/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(photo)) {
       return res.status(400).json({ error: 'A valid image is required.' });
     }
-    if (photo.length > 3 * 1024 * 1024) {
+    // base64 adds ~33% overhead; this cap corresponds to ~1.5 MB of actual image data
+    if (photo.length > Math.ceil(2 * 1024 * 1024 * 4 / 3)) {
       return res.status(400).json({ error: 'Image is too large. Please choose a smaller photo.' });
     }
     const { rows } = await query(
@@ -930,10 +946,41 @@ router.post('/profile/photo', async (req, res) => {
 router.delete('/profile/photo', async (req, res) => {
   try {
     await query(
-      `UPDATE employee_profiles SET profile_photo_url = NULL, updated_at = NOW() WHERE user_id = $1`,
-      [ownUser(req)]
+      `UPDATE employee_profiles SET profile_photo_url = NULL, updated_at = NOW() WHERE user_id = $1 AND company_id = $2`,
+      [ownUser(req), ownCompany(req)]
     );
     res.json({ data: { profile_photo_url: null } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Full profile including statutory/bank/contact PII — separate from /summary dashboard data.
+router.get('/profile/full', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT u.id, u.name, u.email, u.employee_code, u.role, u.phone,
+              dep.name AS department_name, des.name AS designation_name,
+              ep.work_location, ep.date_of_joining, ep.date_of_confirmation,
+              ep.employment_status, ep.employment_type, ep.employee_category,
+              ep.profile_photo_url, ep.gender, ep.date_of_birth, ep.blood_group,
+              ep.marital_status, ep.nationality, ep.father_name,
+              ep.current_address, ep.permanent_address,
+              ep.emergency_contact_name, ep.emergency_contact_phone,
+              ep.bank_name, ep.bank_ifsc,
+              RIGHT(ep.bank_account_number, 4) AS bank_account_last4,
+              ep.pan_number, ep.uan_number, ep.pf_account_number, ep.esi_number,
+              mgr.name AS reporting_manager_name
+       FROM users u
+       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+       LEFT JOIN hr_departments dep ON dep.id = ep.department_id
+       LEFT JOIN hr_designations des ON des.id = ep.designation_id
+       LEFT JOIN users mgr ON mgr.id = ep.reporting_manager_id
+       WHERE u.id = $1 AND u.company_id = $2`,
+      [ownUser(req), ownCompany(req)]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Profile not found' });
+    res.json({ data: rows[0] });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -950,15 +997,16 @@ router.get('/onboarding', async (req, res) => {
       { stage: 'onboarding', item_key: 'bank_pf_esi', title: 'Bank, PF and ESI details verified', owner_department: 'HR / Accounts' },
       { stage: 'onboarding', item_key: 'safety_induction', title: 'Safety / site induction completed', owner_department: 'HSE / Projects' },
     ];
-    for (const item of items) {
-      await query(
-        `INSERT INTO employee_lifecycle_checklist
-         (user_id, company_id, stage, item_key, title, owner_department)
-         VALUES ($1,$2,$3,$4,$5,$6)
-         ON CONFLICT (user_id, stage, item_key) DO NOTHING`,
-        [ownUser(req), ownCompany(req), item.stage, item.item_key, item.title, item.owner_department]
-      );
-    }
+    await query(
+      `INSERT INTO employee_lifecycle_checklist
+       (user_id, company_id, stage, item_key, title, owner_department)
+       SELECT $1, $2, u.stage, u.item_key, u.title, u.owner_dept
+       FROM unnest($3::text[], $4::text[], $5::text[], $6::text[]) AS u(stage, item_key, title, owner_dept)
+       ON CONFLICT (user_id, stage, item_key) DO NOTHING`,
+      [ownUser(req), ownCompany(req),
+       items.map(i => i.stage), items.map(i => i.item_key),
+       items.map(i => i.title), items.map(i => i.owner_department)]
+    );
 
     const { rows } = await query(
       `SELECT lc.*, u.name AS completed_by_name
@@ -974,7 +1022,7 @@ router.get('/onboarding', async (req, res) => {
   }
 });
 
-router.patch('/onboarding/:id', async (req, res) => {
+router.patch('/onboarding/:id', requireManager, async (req, res) => {
   try {
     const { status = 'completed', remarks } = req.body;
     const { rows } = await query(
