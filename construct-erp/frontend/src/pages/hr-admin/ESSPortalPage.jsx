@@ -980,99 +980,204 @@ function AttendanceTab({ leaveTypes }) {
   const formatDay = (day) => `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
   const todayStr  = today();
 
+  const balQ = useQuery({ queryKey: ['ess-leave-balances'], queryFn: () => essAPI.leaveBalances().then(unwrap) });
+
+  const C = {
+    P:  { bg:'rgba(16,185,129,.1)', fg:'#059669' },
+    A:  { bg:'rgba(239,68,68,.1)',  fg:'#DC2626' },
+    L:  { bg:'rgba(139,92,246,.1)',fg:'#7C3AED' },
+    HD: { bg:'rgba(245,158,11,.1)', fg:'#B45309' },
+    H:  { bg:'rgba(99,102,241,.1)',fg:'#4338CA' },
+    WO: { bg:'rgba(0,0,0,.03)',    fg:'#94A3B8' },
+  };
+  const GCA = { background:'rgba(255,255,255,0.88)', border:'1px solid rgba(255,255,255,0.95)', borderRadius:16, boxShadow:'0 2px 16px rgba(0,0,0,.055),0 1px 3px rgba(0,0,0,.04)' };
+  const STA = { fontSize:10.5, color:'#94A3B8', textTransform:'uppercase', letterSpacing:'0.1em', fontWeight:600, marginBottom:8, display:'block' };
+
+  const monthStats = useMemo(() => {
+    const prefix = `${calYear}-${String(calMonth+1).padStart(2,'0')}-`;
+    let P=0, A=0, HD=0, L=0;
+    for (const [ds, rec] of Object.entries(statusMap)) {
+      if (!ds.startsWith(prefix)) continue;
+      const dow = new Date(ds).getDay();
+      if (dow===0||dow===6) continue;
+      if (rec.code==='P') P++; else if (rec.code==='A') A++;
+      else if (rec.code==='HD') HD++; else if (rec.code==='L') L++;
+    }
+    const worked = P+A+HD+L;
+    return { P, A, HD, L, worked, pct: worked>0 ? Math.round((P/worked)*100) : 0 };
+  }, [statusMap, calYear, calMonth]);
+
   return (
-    <div className="space-y-5">
-      {/* Calendar */}
-      <SectionCard>
-        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-          <button onClick={prevMonth} className="rounded-lg border border-gray-200 p-1.5 hover:bg-gray-50 transition">
-            <ChevronLeft size={16} className="text-gray-600" />
-          </button>
-          <h3 className="text-base font-bold text-gray-900">{MONTH_NAMES[calMonth]} {calYear}</h3>
-          <button onClick={nextMonth} className="rounded-lg border border-gray-200 p-1.5 hover:bg-gray-50 transition">
-            <ChevronRight size={16} className="text-gray-600" />
-          </button>
-        </div>
-        <div className="p-4">
-          <div className="grid grid-cols-7 mb-2">
+    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+
+      {/* Stat chips */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:10 }}>
+        {[
+          { label:'Present',      val:monthStats.P,      fg:'#059669', border:'#059669', sub:`${monthStats.pct}% attendance` },
+          { label:'Absent',       val:monthStats.A,      fg:'#DC2626', border:'#EF4444', sub: monthStats.A>0 ? `${monthStats.A} day${monthStats.A>1?'s':''} this month` : 'None this month' },
+          { label:'Half Day',     val:monthStats.HD,     fg:'#B45309', border:'#F59E0B', sub: monthStats.HD>0 ? `${monthStats.HD} day${monthStats.HD>1?'s':''} this month` : 'None this month' },
+          { label:'On Leave',     val:monthStats.L,      fg:'#7C3AED', border:'#8B5CF6', sub: monthStats.L>0 ? `${monthStats.L} day${monthStats.L>1?'s':''} this month` : 'None this month' },
+          { label:'Working Days', val:monthStats.worked, fg:ACCENT,    border:ACCENT,    sub:`${MONTH_NAMES[calMonth].slice(0,3)} ${calYear}` },
+        ].map(({ label, val, fg, border, sub }) => (
+          <div key={label} style={{ ...GCA, padding:'14px 16px', borderBottom:`3px solid ${border}` }}>
+            <span style={STA}>{label}</span>
+            <span style={{ fontSize:22, fontWeight:700, color:fg, lineHeight:1, display:'block' }}>{val}</span>
+            <span style={{ fontSize:10.5, color:'#94A3B8', marginTop:4, display:'block' }}>{sub}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Two-column: Calendar | Side panel */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 300px', gap:16, alignItems:'start' }}>
+
+        {/* Calendar */}
+        <div style={{ ...GCA, padding:20 }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <button onClick={prevMonth} style={{ background:'rgba(0,0,0,0.04)', border:'1px solid rgba(0,0,0,0.07)', borderRadius:8, padding:'4px 8px', cursor:'pointer', display:'flex', alignItems:'center' }}>
+                <ChevronLeft size={15} color="#64748B" />
+              </button>
+              <span style={{ fontSize:15, fontWeight:700, color:'#1E293B', minWidth:140, textAlign:'center' }}>{MONTH_NAMES[calMonth]} {calYear}</span>
+              <button onClick={nextMonth} style={{ background:'rgba(0,0,0,0.04)', border:'1px solid rgba(0,0,0,0.07)', borderRadius:8, padding:'4px 8px', cursor:'pointer', display:'flex', alignItems:'center' }}>
+                <ChevronRight size={15} color="#64748B" />
+              </button>
+              <button onClick={() => { setCalMonth(now.getMonth()); setCalYear(now.getFullYear()); }}
+                style={{ fontSize:11, fontWeight:600, color:ACCENT, background:'none', border:'none', cursor:'pointer', marginLeft:4 }}>
+                Today
+              </button>
+            </div>
+            <div style={{ display:'flex', gap:10 }}>
+              {[['P','Present','#10B981'],['A','Absent','#EF4444'],['HD','Half Day','#F59E0B'],['L','Leave','#8B5CF6'],['H','Holiday','#6366F1']].map(([code,name,color]) => (
+                <span key={code} style={{ display:'flex', alignItems:'center', gap:3, fontSize:10.5, color:'#94A3B8' }}>
+                  <span style={{ width:8, height:8, borderRadius:2, background:color, display:'inline-block' }} />{name}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:3, marginBottom:3 }}>
             {DAYS_OF_WEEK.map(d => (
-              <div key={d} className="py-1 text-center text-[11px] font-bold uppercase text-gray-400">{d}</div>
+              <div key={d} style={{ textAlign:'center', fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.07em', color:'#94A3B8', padding:'3px 0' }}>{d}</div>
             ))}
           </div>
-          <div className="grid grid-cols-7 gap-1">
+
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:3 }}>
             {cells.map((day, idx) => {
               if (!day) return <div key={`e-${idx}`} />;
               const ds      = formatDay(day);
               const rec     = statusMap[ds];
-              const st      = rec?.code ? (STATUS_STYLE[rec.code] || STATUS_STYLE.P) : null;
+              const code    = rec?.code;
               const isToday = ds === todayStr;
+              const isWknd  = new Date(ds).getDay()===0 || new Date(ds).getDay()===6;
+              const cs      = isToday ? { bg:ACCENT, fg:'#fff' } :
+                              code && C[code] ? { bg:C[code].bg, fg:C[code].fg } :
+                              isWknd ? { bg:'rgba(0,0,0,0.03)', fg:'#CBD5E1' } :
+                              { bg:'rgba(0,0,0,0.01)', fg:'#94A3B8' };
               return (
-                <div
-                  key={day}
-                  title={rec ? `${rec.code}${rec.inTime ? ' â€” In: ' + String(rec.inTime).slice(0,5) : ''}${rec.lateMin ? ' â€” Late: ' + rec.lateMin + 'm' : ''}` : undefined}
-                  className={`relative flex h-9 w-full flex-col items-center justify-center rounded-lg text-xs font-semibold transition ${
-                    st ? `${st.bg} ${st.text}` : isToday ? 'ring-2 text-gray-700' : 'text-gray-600 hover:bg-gray-100'
-                  }`}
-                  style={isToday ? { ringColor: ACCENT } : {}}
+                <div key={day}
+                  title={rec ? `${code}${rec.inTime ? ' – In: '+String(rec.inTime).slice(0,5) : ''}${rec.lateMin ? ' – Late: '+rec.lateMin+'m' : ''}` : undefined}
+                  style={{ borderRadius:8, padding:'5px 5px 6px', minHeight:60, display:'flex', flexDirection:'column', gap:2, background:cs.bg }}
                 >
-                  {isToday && !st && (
-                    <span className="absolute inset-0 rounded-lg ring-2 pointer-events-none" style={{ ringColor: ACCENT, outlineColor: ACCENT, outline: `2px solid ${ACCENT}` }} />
+                  <div style={{ display:'flex', alignItems:'center', justifyContent: isToday ? 'space-between' : 'flex-start' }}>
+                    <span style={{ fontSize:11, fontWeight:700, color:cs.fg, lineHeight:1 }}>{day}</span>
+                    {isToday && <span style={{ fontSize:7.5, fontWeight:800, background:'rgba(255,255,255,0.25)', color:'#fff', padding:'1px 4px', borderRadius:3, letterSpacing:'0.04em' }}>TODAY</span>}
+                  </div>
+                  {code && <span style={{ fontSize:8.5, fontWeight:700, color: isToday ? 'rgba(255,255,255,0.9)' : cs.fg }}>{code}</span>}
+                  {rec?.inTime && (
+                    <span style={{ fontSize:8, color: isToday ? 'rgba(255,255,255,0.75)' : cs.fg, opacity: isToday?1:0.7, marginTop:'auto', fontVariantNumeric:'tabular-nums' }}>
+                      {String(rec.inTime).slice(0,5)}
+                    </span>
                   )}
-                  {day}
-                  {st && <span className="text-[9px] font-bold leading-none">{st.label}</span>}
                 </div>
               );
             })}
           </div>
-          {/* Legend */}
-          <div className="mt-4 flex flex-wrap gap-4 border-t border-gray-100 pt-3">
-            {Object.entries(STATUS_STYLE).map(([k, v]) => (
-              <div key={k} className="flex items-center gap-1.5">
-                <span className={`inline-flex h-5 w-8 items-center justify-center rounded text-[10px] font-bold ${v.bg} ${v.text}`}>{v.label}</span>
-                <span className="text-xs text-gray-500">{{ P:'Present',A:'Absent',L:'Leave',HD:'Half Day',WO:'Week Off',H:'Holiday' }[k]}</span>
+        </div>
+
+        {/* Right side panel */}
+        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+
+          {/* Leave Balance */}
+          <div style={{ ...GCA, padding:16 }}>
+            <span style={STA}>Leave Balance</span>
+            {!(balQ.data||[]).length ? (
+              <p style={{ fontSize:12, color:'#94A3B8' }}>No balance data</p>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:9 }}>
+                {(balQ.data||[]).map((b,i) => {
+                  const bal  = Number(b.closing_balance??0);
+                  const max  = Number(b.total_entitlement||b.closing_balance||20);
+                  const pct  = max>0 ? Math.min(100,Math.round((bal/max)*100)) : 0;
+                  const cols = ['#8B5CF6','#2F6FED','#10B981','#F59E0B','#EF4444'];
+                  const col  = cols[i%cols.length];
+                  return (
+                    <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
+                      <span style={{ fontSize:11.5, color:'#475569', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{b.leave_type_name}</span>
+                      <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                        <div style={{ width:56, height:3, background:'rgba(0,0,0,0.07)', borderRadius:99, overflow:'hidden' }}>
+                          <div style={{ width:`${pct}%`, height:'100%', background:col, borderRadius:99 }} />
+                        </div>
+                        <span style={{ fontSize:12, fontWeight:700, color:'#1E293B', fontVariantNumeric:'tabular-nums', minWidth:24, textAlign:'right' }}>{bal.toFixed(1)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
+            )}
           </div>
-        </div>
-      </SectionCard>
 
-      {/* Correction form */}
-      <SectionCard title="Attendance Correction" subtitle="Missed punch or wrong status â€” raise a correction request">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Field title="Date">
-            <input type="date" className={inputCls} value={correction.attendance_date}
-              onChange={e => setCorrection({ ...correction, attendance_date: e.target.value })} />
-          </Field>
-          <Field title="Requested Status">
-            <select className={inputCls} value={correction.requested_status}
-              onChange={e => setCorrection({ ...correction, requested_status: e.target.value })}>
-              <option value="present">Present</option>
-              <option value="half_day">Half Day</option>
-              <option value="on_duty">On Duty</option>
-            </select>
-          </Field>
-          <Field title="In Time">
-            <input type="time" className={inputCls} value={correction.requested_in_time}
-              onChange={e => setCorrection({ ...correction, requested_in_time: e.target.value })} />
-          </Field>
-          <Field title="Out Time">
-            <input type="time" className={inputCls} value={correction.requested_out_time}
-              onChange={e => setCorrection({ ...correction, requested_out_time: e.target.value })} />
-          </Field>
-          <Field title="Reason">
-            <input className={inputCls} value={correction.reason} placeholder="Reason for correction"
-              onChange={e => setCorrection({ ...correction, reason: e.target.value })} />
-          </Field>
-        </div>
-        <div className="mt-4">
-          <GreenBtn disabled={!correction.reason} onClick={() => createCorrection.mutate(correction)}>
-            Submit Correction
-          </GreenBtn>
-        </div>
-      </SectionCard>
+          {/* Correction Form */}
+          <div style={{ ...GCA, padding:16 }}>
+            <span style={STA}>Attendance Correction</span>
+            <p style={{ fontSize:11.5, color:'#64748B', marginBottom:12 }}>Missed punch or wrong status — raise a correction request.</p>
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              <div>
+                <label style={{ fontSize:10.5, color:'#94A3B8', fontWeight:600, display:'block', marginBottom:4 }}>Date</label>
+                <input type="date" className={inputCls} value={correction.attendance_date}
+                  onChange={e => setCorrection({ ...correction, attendance_date: e.target.value })} style={{ width:'100%' }} />
+              </div>
+              <div>
+                <label style={{ fontSize:10.5, color:'#94A3B8', fontWeight:600, display:'block', marginBottom:4 }}>Status</label>
+                <select className={inputCls} value={correction.requested_status}
+                  onChange={e => setCorrection({ ...correction, requested_status: e.target.value })} style={{ width:'100%' }}>
+                  <option value="present">Present</option>
+                  <option value="half_day">Half Day</option>
+                  <option value="on_duty">On Duty</option>
+                </select>
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                <div>
+                  <label style={{ fontSize:10.5, color:'#94A3B8', fontWeight:600, display:'block', marginBottom:4 }}>In Time</label>
+                  <input type="time" className={inputCls} value={correction.requested_in_time}
+                    onChange={e => setCorrection({ ...correction, requested_in_time: e.target.value })} style={{ width:'100%' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize:10.5, color:'#94A3B8', fontWeight:600, display:'block', marginBottom:4 }}>Out Time</label>
+                  <input type="time" className={inputCls} value={correction.requested_out_time}
+                    onChange={e => setCorrection({ ...correction, requested_out_time: e.target.value })} style={{ width:'100%' }} />
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize:10.5, color:'#94A3B8', fontWeight:600, display:'block', marginBottom:4 }}>Reason</label>
+                <input className={inputCls} value={correction.reason} placeholder="Reason for correction"
+                  onChange={e => setCorrection({ ...correction, reason: e.target.value })} style={{ width:'100%' }} />
+              </div>
+              <button
+                disabled={!correction.reason || createCorrection.isPending}
+                onClick={() => createCorrection.mutate(correction)}
+                style={{ marginTop:4, width:'100%', padding:'9px', borderRadius:10, border:'none', cursor: correction.reason ? 'pointer' : 'not-allowed', background: correction.reason ? ACCENT : 'rgba(0,0,0,0.06)', color: correction.reason ? '#fff' : '#94A3B8', fontSize:12.5, fontWeight:700 }}
+              >
+                {createCorrection.isPending ? 'Submitting…' : 'Submit Correction'}
+              </button>
+            </div>
+          </div>
 
-      {/* Correction history */}
-      <SectionCard title="My Correction Requests">
+        </div>
+      </div>
+
+      {/* Correction History */}
+      <div style={{ ...GCA, padding:20 }}>
+        <span style={{ fontSize:14, fontWeight:700, color:'#1E293B', marginBottom:14, display:'block' }}>My Correction Requests</span>
         <Table
           columns={[
             { key: 'attendance_date',  label: 'Date',    render: r => String(r.attendance_date||'').slice(0,10) },
@@ -1082,79 +1187,63 @@ function AttendanceTab({ leaveTypes }) {
           ]}
           rows={corrections.data || []}
         />
-      </SectionCard>
+      </div>
 
       {/* Biometric Swipe Logs */}
-      <SectionCard
-        title="Biometric Swipe Logs"
-        subtitle="All punches recorded by the ESSL device for your card"
-      >
-        <div className="mb-4 flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Show last</span>
-          {[7, 14, 30, 60].map(d => (
-            <button
-              key={d}
-              onClick={() => setSwipeDays(d)}
-              className="text-xs font-bold px-3 py-1 rounded-full border transition"
-              style={{
-                background:  swipeDays === d ? DARK : '#fff',
-                color:       swipeDays === d ? '#fff' : '#64748b',
-                borderColor: swipeDays === d ? DARK : '#d1d5db',
-              }}
-            >
-              {d} days
-            </button>
-          ))}
+      <div style={{ ...GCA, padding:20 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+          <div>
+            <span style={{ fontSize:14, fontWeight:700, color:'#1E293B' }}>Biometric Swipe Logs</span>
+            <p style={{ fontSize:11.5, color:'#94A3B8', marginTop:2 }}>All punches recorded by the ESSL device for your card</p>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <span style={{ fontSize:10.5, color:'#94A3B8', fontWeight:600 }}>Show last</span>
+            {[7,14,30,60].map(d => (
+              <button key={d} onClick={() => setSwipeDays(d)}
+                style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:20, border:'1px solid', cursor:'pointer',
+                  background: swipeDays===d ? ACCENT : 'transparent',
+                  color:      swipeDays===d ? '#fff'  : '#64748B',
+                  borderColor:swipeDays===d ? ACCENT  : '#d1d5db' }}
+              >{d}d</button>
+            ))}
+          </div>
         </div>
 
         {swipes.isLoading ? (
-          <p className="text-sm text-gray-400 py-4 text-center">Loading swipesâ€¦</p>
-        ) : !(swipes.data || []).length ? (
-          <div className="py-8 text-center">
-            <p className="text-sm font-semibold text-gray-400">No swipe records found for the last {swipeDays} days</p>
-            <p className="text-xs text-gray-300 mt-1">Biometric data syncs automatically from the ESSL device</p>
+          <p style={{ fontSize:12, color:'#94A3B8', textAlign:'center', padding:'20px 0' }}>Loading swipes…</p>
+        ) : !(swipes.data||[]).length ? (
+          <div style={{ padding:'24px 0', textAlign:'center' }}>
+            <p style={{ fontSize:13, color:'#94A3B8', fontWeight:600 }}>No swipe records for the last {swipeDays} days</p>
+            <p style={{ fontSize:11, color:'#CBD5E1', marginTop:4 }}>Biometric data syncs automatically from the ESSL device</p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {groupByDate(swipes.data || []).map(([date, daySwipes]) => {
-              const d        = new Date(date + 'T00:00:00');
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {groupByDate(swipes.data||[]).map(([date, daySwipes]) => {
+              const d        = new Date(date+'T00:00:00');
               const dayLabel = d.toLocaleDateString('en-IN', { weekday:'short', day:'2-digit', month:'short', year:'numeric' });
-              const isIn     = s => String(s.direction||'').toLowerCase().includes('in')  || s.direction === '0';
-              const isOut    = s => String(s.direction||'').toLowerCase().includes('out') || s.direction === '1';
+              const isIn     = s => String(s.direction||'').toLowerCase().includes('in')  || s.direction==='0';
+              const isOut    = s => String(s.direction||'').toLowerCase().includes('out') || s.direction==='1';
               const firstIn  = daySwipes.find(isIn);
               const lastOut  = [...daySwipes].reverse().find(isOut);
-              const totalPunches = daySwipes.length;
-
               return (
-                <div key={date} className="rounded-xl border border-gray-100 overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-2.5" style={{ background: DARK }}>
-                    <span className="text-xs font-bold text-white">{dayLabel}</span>
-                    <div className="flex items-center gap-3">
-                      {firstIn && (
-                        <span className="text-[11px] text-blue-200">
-                          First In: <span className="font-bold text-white">{(() => { const t = esslTime(firstIn.swipe_time); return fmt12(t.h, t.m); })()}</span>
-                        </span>
-                      )}
-                      {lastOut && (
-                        <span className="text-[11px] text-blue-200">
-                          Last Out: <span className="font-bold text-white">{(() => { const t = esslTime(lastOut.swipe_time); return fmt12(t.h, t.m); })()}</span>
-                        </span>
-                      )}
-                      <span className="text-[11px] bg-white/20 text-white rounded-full px-2 py-0.5 font-bold">{totalPunches} punch{totalPunches !== 1 ? 'es' : ''}</span>
+                <div key={date} style={{ borderRadius:12, overflow:'hidden', border:'1px solid rgba(0,0,0,0.07)' }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 14px', background:DARK }}>
+                    <span style={{ fontSize:12, fontWeight:700, color:'#fff' }}>{dayLabel}</span>
+                    <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                      {firstIn && <span style={{ fontSize:11, color:'rgba(255,255,255,0.65)' }}>In: <strong style={{ color:'#fff' }}>{(() => { const t=esslTime(firstIn.swipe_time); return fmt12(t.h,t.m); })()}</strong></span>}
+                      {lastOut && <span style={{ fontSize:11, color:'rgba(255,255,255,0.65)' }}>Out: <strong style={{ color:'#fff' }}>{(() => { const t=esslTime(lastOut.swipe_time); return fmt12(t.h,t.m); })()}</strong></span>}
+                      <span style={{ fontSize:10.5, background:'rgba(255,255,255,0.2)', color:'#fff', borderRadius:10, padding:'1px 8px', fontWeight:700 }}>{daySwipes.length} punch{daySwipes.length!==1?'es':''}</span>
                     </div>
                   </div>
-                  <div className="divide-y divide-gray-50 bg-white">
-                    {daySwipes.map((s, i) => {
-                      const et      = esslTime(s.swipe_time);
-                      const timeStr = fmt12(et.h, et.m, et.s);
+                  <div style={{ background:'rgba(255,255,255,0.6)' }}>
+                    {daySwipes.map((s,i) => {
+                      const et = esslTime(s.swipe_time);
                       return (
-                        <div key={i} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors">
-                          <div className="w-8 text-center text-xs font-black text-gray-400 tabular-nums">{i + 1}</div>
+                        <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 14px', borderBottom: i<daySwipes.length-1?'1px solid rgba(0,0,0,0.05)':undefined }}>
+                          <span style={{ width:24, textAlign:'center', fontSize:10.5, fontWeight:700, color:'#CBD5E1' }}>{i+1}</span>
                           <SwipeDir direction={s.direction} />
-                          <span className="text-sm font-bold text-gray-800 tabular-nums">{timeStr}</span>
-                          {s.source && (
-                            <span className="ml-auto text-[10px] text-gray-300 uppercase tracking-wide">{s.source}</span>
-                          )}
+                          <span style={{ fontSize:13, fontWeight:700, color:'#1E293B', fontVariantNumeric:'tabular-nums' }}>{fmt12(et.h,et.m,et.s)}</span>
+                          {s.source && <span style={{ marginLeft:'auto', fontSize:10, color:'#CBD5E1', textTransform:'uppercase', letterSpacing:'0.06em' }}>{s.source}</span>}
                         </div>
                       );
                     })}
@@ -1164,7 +1253,8 @@ function AttendanceTab({ leaveTypes }) {
             })}
           </div>
         )}
-      </SectionCard>
+      </div>
+
     </div>
   );
 }
