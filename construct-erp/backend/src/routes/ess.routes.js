@@ -1048,6 +1048,79 @@ router.patch('/onboarding/:id', requireManager, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
+//  TRAINING — requirements (from performance reviews) + requests
+// ═══════════════════════════════════════════════════════════════
+runSchemaInit('ess-training-requests', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS ess_training_requests (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID REFERENCES companies(id),
+      user_id UUID REFERENCES users(id),
+      training_name TEXT NOT NULL,
+      category TEXT,
+      reason TEXT,
+      preferred_date DATE,
+      status TEXT DEFAULT 'pending',
+      actioned_by UUID REFERENCES users(id),
+      actioned_at TIMESTAMPTZ,
+      rejection_reason TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+});
+
+// Training needs flagged by the employee's performance reviews
+router.get('/training/requirements', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT id, eval_period, eval_date, review_type, overall_rating, training_required
+         FROM hr_performance_evaluations
+        WHERE company_id = $1 AND employee_id = $2
+          AND training_required IS NOT NULL AND TRIM(training_required) <> ''
+        ORDER BY eval_date DESC NULLS LAST
+        LIMIT 20`,
+      [ownCompany(req), ownUser(req)]
+    ).catch(() => ({ rows: [] }));
+    res.json({ data: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/training/requests', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT t.id, t.training_name, t.category, t.reason, t.preferred_date,
+              t.status, t.rejection_reason, t.created_at,
+              u.name AS actioned_by_name
+         FROM ess_training_requests t
+         LEFT JOIN users u ON u.id = t.actioned_by
+        WHERE t.company_id = $1 AND t.user_id = $2
+        ORDER BY t.created_at DESC`,
+      [ownCompany(req), ownUser(req)]
+    );
+    res.json({ data: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/training/requests', async (req, res) => {
+  try {
+    const { training_name, category, reason, preferred_date } = req.body;
+    if (!training_name || !String(training_name).trim()) return res.status(400).json({ error: 'Training name is required' });
+    const { rows } = await query(
+      `INSERT INTO ess_training_requests (company_id, user_id, training_name, category, reason, preferred_date)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, training_name, status, created_at`,
+      [ownCompany(req), ownUser(req), training_name.trim(), category || null, reason || null, preferred_date || null]
+    );
+    res.status(201).json({ data: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
 //  ENGAGE — social feed (posts + kudos), reactions & comments
 // ═══════════════════════════════════════════════════════════════
 runSchemaInit('ess-engage', async () => {

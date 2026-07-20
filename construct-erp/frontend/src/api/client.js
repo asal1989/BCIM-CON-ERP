@@ -2212,6 +2212,10 @@ export const essAPI = {
   reactEngage:          (id, emoji)    => api.post(`/ess/engage/${id}/react`, { emoji }),
   engageComments:       (id)           => api.get(`/ess/engage/${id}/comments`),
   addEngageComment:     (id, body)     => api.post(`/ess/engage/${id}/comments`, { body }),
+  // Training
+  trainingRequirements: ()             => api.get('/ess/training/requirements'),
+  trainingRequests:     ()             => api.get('/ess/training/requests'),
+  createTrainingRequest:(data)         => api.post('/ess/training/requests', data),
   // Salary
   payrollYtd:           (params)       => api.get('/ess/payroll/ytd', { params }),
   loans:                ()             => api.get('/ess/loans'),
