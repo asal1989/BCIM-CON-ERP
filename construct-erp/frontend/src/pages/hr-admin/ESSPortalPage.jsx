@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   BadgeIndianRupee, Bell, CalendarCheck, CalendarOff, CheckCircle2,
@@ -11,7 +11,7 @@ import toast from 'react-hot-toast';
 import { essAPI, hrAdvancedAPI } from '../../api/client';
 import { useNavigate } from 'react-router-dom';
 
-/* ─── helpers ─── */
+/* â”€â”€â”€ helpers â”€â”€â”€ */
 const unwrap = (res) => res?.data?.data || [];
 const today  = () => new Date().toISOString().slice(0, 10);
 
@@ -20,14 +20,14 @@ const MONTH_NAMES = [
   'July','August','September','October','November','December',
 ];
 
-/* ─── design tokens — light HR-SaaS palette (Zoho People / GreytHR style),
-   matching the ESS login page's blue/teal theme instead of the ERP's navy/gold ─── */
-const ACCENT = '#2F6FED';   // primary accent — buttons, links, positive stats, progress bars
-const TEAL   = '#14B8A6';   // secondary accent — used sparingly for variety
+/* â”€â”€â”€ design tokens â€” light HR-SaaS palette (Zoho People / GreytHR style),
+   matching the ESS login page's blue/teal theme instead of the ERP's navy/gold â”€â”€â”€ */
+const ACCENT = '#2F6FED';   // primary accent â€” buttons, links, positive stats, progress bars
+const TEAL   = '#14B8A6';   // secondary accent â€” used sparingly for variety
 const DARK   = '#0F172A';   // dark text/highlight (was solid navy fills)
 const BG     = '#F4F6FB';
 
-/* ─── primitives ─── */
+/* â”€â”€â”€ primitives â”€â”€â”€ */
 const inputCls = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-[#2F6FED] focus:ring-2 focus:ring-blue-100 transition';
 const labelCls = 'mb-1 block text-xs font-semibold text-gray-600 uppercase tracking-wide';
 
@@ -117,7 +117,7 @@ function SectionCard({ title, subtitle, children, noPad, action }) {
   );
 }
 
-/* ─── attendance status ─── */
+/* â”€â”€â”€ attendance status â”€â”€â”€ */
 const STATUS_STYLE = {
   P:  { bg: 'bg-green-100',  text: 'text-green-700',  label: 'P'  },
   A:  { bg: 'bg-red-100',    text: 'text-red-700',    label: 'A'  },
@@ -144,10 +144,10 @@ function SwipeDir({ direction }) {
   const isOut = String(direction||'').toLowerCase().includes('out') || direction === '1';
   if (isIn)  return <span style={{ display:'inline-block', padding:'1px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#dcfce7', color:'#15803d' }}>IN</span>;
   if (isOut) return <span style={{ display:'inline-block', padding:'1px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#fee2e2', color:'#b91c1c' }}>OUT</span>;
-  return       <span style={{ display:'inline-block', padding:'1px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#f1f5f9', color:'#64748b' }}>—</span>;
+  return       <span style={{ display:'inline-block', padding:'1px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#f1f5f9', color:'#64748b' }}>â€”</span>;
 }
 
-// ESSL stores IST device-local time as if it were UTC — read UTC components
+// ESSL stores IST device-local time as if it were UTC â€” read UTC components
 // to recover the actual punch time the device recorded.
 function esslTime(ts) {
   if (!ts) return null;
@@ -160,16 +160,16 @@ function fmt12(h, m, s = 0) {
   return `${String(h12).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} ${period}`;
 }
 function fmtSwipeTime(ts) {
-  if (!ts) return '—';
+  if (!ts) return 'â€”';
   const t = esslTime(ts);
   return `${t.dateStr} ${fmt12(t.h, t.m)}`;
 }
 
-/* ─── group swipes by device IST date, sorted chronologically within each day ─── */
+/* â”€â”€â”€ group swipes by device IST date, sorted chronologically within each day â”€â”€â”€ */
 function groupByDate(swipes) {
   const groups = {};
   for (const s of swipes) {
-    // ESSL stores IST device-local time as if it were UTC — read UTC date
+    // ESSL stores IST device-local time as if it were UTC â€” read UTC date
     // components to recover the actual calendar date the device recorded.
     const dayKey = new Date(s.swipe_time).toISOString().slice(0, 10);
     if (!groups[dayKey]) groups[dayKey] = [];
@@ -181,9 +181,9 @@ function groupByDate(swipes) {
   return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    HORIZONTAL TAB NAV (replaces the standalone sidebar)
-═══════════════════════════════════════════════════════════════ */
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 const TAB_ITEMS = [
   { id: 'dashboard',     label: 'Dashboard',      Icon: LayoutDashboard },
   { id: 'engage',        label: 'Engage',         Icon: Radio           },
@@ -233,7 +233,7 @@ function ESSTabNav({ active, setActive }) {
   );
 }
 
-// Desktop vertical sidebar — the primary ESS Portal navigation for individual
+// Desktop vertical sidebar â€” the primary ESS Portal navigation for individual
 // staff logins (Zoho People / GreytHR style left nav instead of a top bar).
 function ESSSidebar({ active, setActive }) {
   return (
@@ -272,9 +272,9 @@ function ESSSidebar({ active, setActive }) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    DASHBOARD TAB
-═══════════════════════════════════════════════════════════════ */
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 const QUOTES = [
   { text: 'The only way to do great work is to love what you do.', author: 'Steve Jobs' },
   { text: 'Success usually comes to those who are too busy to be looking for it.', author: 'Henry David Thoreau' },
@@ -371,553 +371,437 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
   const hour = now.getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
+  // Glass card base style
+  const GC = { background:'rgba(255,255,255,0.88)', border:'1px solid rgba(255,255,255,0.95)', borderRadius:16, boxShadow:'0 2px 16px rgba(0,0,0,.055),0 1px 3px rgba(0,0,0,.04)' };
+  const ST = { fontSize:10.5, color:'#94A3B8', textTransform:'uppercase', letterSpacing:'0.1em', fontWeight:600, marginBottom:10, display:'block' };
+  const dotColorMap  = { P:'#10B981', A:'#EF4444', L:'#8B5CF6', H:'#6366F1', HD:'#F59E0B', WO:'rgba(0,0,0,0.06)' };
+  const dotBorderMap = { P:'rgba(16,185,129,.35)', A:'rgba(239,68,68,.3)', L:'rgba(139,92,246,.3)', H:'rgba(99,102,241,.25)', HD:'rgba(245,158,11,.3)', WO:'rgba(0,0,0,0.08)' };
+
+  // Current week Monâ€“Sat
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const weekDays = useMemo(() => {
+    const mon = new Date(now);
+    const dow = now.getDay();
+    mon.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1));
+    return ['Mon','Tue','Wed','Thu','Fri','Sat'].map((name, i) => {
+      const d = new Date(mon); d.setDate(mon.getDate() + i);
+      const ds = d.toISOString().slice(0, 10);
+      return { name, ds, isToday: ds === todayStr, isWknd: i >= 5, rec: statusMap[ds] };
+    });
+  }, [statusMap, todayStr]);
+
+  // Monthly dot grid
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const monthlyDots = useMemo(() => {
+    const yr = now.getFullYear(), mo = now.getMonth();
+    const dim = new Date(yr, mo + 1, 0).getDate();
+    const result = [];
+    for (let d = 1; d <= dim; d++) {
+      const ds = `${yr}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const wday = new Date(ds).getDay();
+      result.push({ d, ds, code: statusMap[ds]?.code, isWknd: wday===0||wday===6, isToday: ds===todayStr });
+    }
+    return result;
+  }, [statusMap, todayStr]);
+
   const statCards = [
     {
       label: 'Today\'s Attendance', bg: '#EAF1FF', fg: '#2F6FED', Icon: CalendarCheck,
-      body: todayRec?.code ? (
-        <>
-          <span className="inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold text-white mb-1.5"
-            style={{ backgroundColor: todayStatusColor[todayRec.code] || '#9ca3af' }}>
-            {todayStatusLabel[todayRec.code] || todayRec.code}
-          </span>
-          {todayInTime
-            ? <p className="text-xl font-extrabold text-gray-900">{todayInTime} <span className="text-sm font-medium text-gray-400">In</span></p>
-            : <p className="text-xs text-gray-400 mt-1">No check-in recorded</p>}
-        </>
-      ) : (
-        <span className="inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-gray-100 text-gray-500 mb-1">Not Marked</span>
-      ),
-      footer: profile?.work_location ? { label: 'Location', value: profile.work_location } : null,
-      cta: { label: 'View Details', onClick: () => setActive('attendance') },
+      body: todayRec?.code
+        ? <p style={{ fontSize:20, fontWeight:700, color: todayStatusColor[todayRec.code]||'#374151', lineHeight:1 }}>{todayInTime||todayStatusLabel[todayRec.code]||todayRec.code}</p>
+        : <span style={{ display:'inline-block', background:'#F1F5F9', color:'#64748B', fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:20 }}>Not Marked</span>,
+      sub: todayRec?.code ? (todayStatusLabel[todayRec.code]||todayRec.code) : (profile?.work_location||''),
+      cta: { label: 'View Attendance', onClick: () => setActive('attendance') },
     },
     {
       label: 'Leave Balance', bg: '#E3F5F1', fg: '#0D9488', Icon: CalendarOff,
-      body: (
-        <>
-          <p className="text-2xl font-extrabold text-gray-900">{Number(totalBalance).toFixed(1)}</p>
-          <p className="text-xs text-gray-400">Days available</p>
-        </>
-      ),
-      footer: (casualBal > 0 || earnedBal > 0) ? {
-        split: [
-          casualBal > 0 && { label: 'Casual', value: Number(casualBal).toFixed(1) },
-          earnedBal > 0 && { label: 'Earned', value: Number(earnedBal).toFixed(1) },
-        ].filter(Boolean),
-      } : null,
-      cta: { label: 'View Leave Balance', onClick: () => setActive('leave') },
+      body: <p style={{ fontSize:24, fontWeight:700, color:'#0F172A', lineHeight:1 }}>{Number(totalBalance).toFixed(1)}</p>,
+      sub: [casualBal>0&&`Casual ${Number(casualBal).toFixed(1)}`, earnedBal>0&&`Earned ${Number(earnedBal).toFixed(1)}`].filter(Boolean).join(' Â· ') || 'days available',
+      cta: { label: 'View Leave', onClick: () => setActive('leave') },
     },
     {
       label: 'Latest Payslip', bg: '#FEF3D6', fg: '#B45309', Icon: BadgeIndianRupee,
-      body: payroll?.month ? (
-        <>
-          <p className="text-[11px] text-gray-400">{MONTH_NAMES[(payroll.month || 1) - 1]} {payroll.year}</p>
-          <p className="text-2xl font-extrabold text-gray-900">₹{Number(payroll.net_pay || 0).toLocaleString('en-IN')}</p>
-          <p className="text-xs text-gray-400">Net salary</p>
-        </>
-      ) : <p className="text-sm text-gray-400 mt-2">No payslip available yet.</p>,
+      body: payroll?.month
+        ? <p style={{ fontSize:20, fontWeight:700, color:'#0F172A', lineHeight:1 }}>â‚¹{Number(payroll.net_pay||0).toLocaleString('en-IN')}</p>
+        : <p style={{ fontSize:12, color:'#94A3B8', marginTop:4 }}>No payslip yet</p>,
+      sub: payroll?.month ? `${MONTH_NAMES[(payroll.month||1)-1]} ${payroll.year} Â· Net pay` : 'Not processed',
       cta: payroll?.month ? { label: 'View Payslip', onClick: () => payroll.id && navigate(`/hr-admin/payroll/${payroll.id}/payslip`) } : null,
     },
     {
       label: 'My Requests', bg: '#FCE7F3', fg: '#DB2777', Icon: FolderUp,
-      body: (
-        <>
-          <p className="text-2xl font-extrabold text-gray-900">{pendingTotal}</p>
-          <p className="text-xs text-gray-400">Pending requests</p>
-        </>
-      ),
-      footer: { split: [{ label: 'Leave', value: pendingLeave }, { label: 'Reg.', value: pendingCorr }] },
-      cta: { label: 'View All Requests', onClick: () => setActive('hr-requests') },
+      body: <p style={{ fontSize:24, fontWeight:700, color:'#0F172A', lineHeight:1 }}>{pendingTotal}</p>,
+      sub: `Leave ${pendingLeave} Â· Reg. ${pendingCorr} pending`,
+      cta: { label: 'View Requests', onClick: () => setActive('hr-requests') },
     },
   ];
 
   return (
-    <div className="space-y-5">
+    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
 
-      {/* ── Hero banner ── */}
-      <div
-        className="relative overflow-hidden rounded-2xl p-6 sm:p-7"
-        style={{ background: 'linear-gradient(120deg, #2F6FED 0%, #2557C7 55%, #0F9E8E 140%)' }}
-      >
-        <div className="pointer-events-none absolute -right-8 -top-16 h-56 w-56 rounded-full bg-white/10" />
-        <div className="pointer-events-none absolute right-24 bottom-[-48px] h-32 w-32 rounded-full bg-white/10" />
-        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            {profile?.profile_photo_url ? (
-              <img
-                src={profile.profile_photo_url}
-                alt={profile?.name || 'Employee'}
-                className="h-14 w-14 shrink-0 rounded-2xl object-cover ring-1 ring-white/40"
-              />
-            ) : (
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-lg font-bold text-white ring-1 ring-white/25">
-                {initials}
-              </div>
-            )}
+      {/* â”€â”€ Row 1: Hero + Leave Donut â”€â”€ */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 220px', gap:12 }}>
+
+        {/* Hero */}
+        <div style={{ ...GC, padding:'20px 26px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:16,
+          borderTop:'2px solid transparent',
+          backgroundImage:'linear-gradient(white,white),linear-gradient(90deg,#4F46E5,#06B6D4)',
+          backgroundOrigin:'border-box', backgroundClip:'padding-box,border-box' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+            {profile?.profile_photo_url
+              ? <img src={profile.profile_photo_url} alt={profile?.name||''} style={{ width:50,height:50,borderRadius:'50%',objectFit:'cover',boxShadow:'0 0 0 3px rgba(79,70,229,.15)',flexShrink:0 }} />
+              : <div style={{ width:50,height:50,borderRadius:'50%',background:'linear-gradient(135deg,#4F46E5,#06B6D4)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:19,fontWeight:700,color:'#fff',boxShadow:'0 0 0 3px rgba(79,70,229,.15),0 4px 14px rgba(79,70,229,.2)',flexShrink:0 }}>{initials}</div>
+            }
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-white/70">{greeting}</p>
-              <h2 className="text-xl font-bold text-white sm:text-2xl">{profile?.name?.split(' ')[0] || 'Employee'} 👋</h2>
-              <p className="mt-0.5 text-sm text-white/80">{profile?.designation_name || "Here's what's happening today."}</p>
+              <div style={{ fontSize:10.5,color:'#94A3B8',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:2 }}>{greeting}</div>
+              <div style={{ fontSize:20,fontWeight:600,letterSpacing:'-0.02em',color:'#0F172A' }}>{profile?.name?.split(' ')[0]||'Employee'} ðŸ‘‹</div>
+              <div style={{ fontSize:11.5,color:'#94A3B8',marginTop:3,display:'flex',alignItems:'center',gap:5 }}>
+                <div style={{ width:6,height:6,borderRadius:'50%',background:'#10B981',flexShrink:0 }} />
+                {profile?.work_location||'Head Office'} Â· {now.toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short'})}
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-3 self-start rounded-xl bg-white/12 px-4 py-3 ring-1 ring-white/20 sm:self-auto">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/15">
-              <CalendarCheck size={17} className="text-white" />
-            </div>
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/60">Today</p>
-              <p className="text-sm font-bold text-white">
-                {todayRec?.code ? (todayStatusLabel[todayRec.code] || todayRec.code) : 'Not marked'}
-                {todayInTime && <span className="ml-1.5 font-medium text-white/70">· In {todayInTime}</span>}
-              </p>
-            </div>
+
+          {/* Week strip */}
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            {weekDays.map(({ name, ds, isToday, isWknd, rec }) => {
+              const code = rec?.code;
+              const inTime = rec?.inTime ? String(rec.inTime).slice(0,5) : null;
+              const boxBg  = code ? `${dotColorMap[code]}18` : isToday ? 'rgba(245,158,11,0.1)' : 'rgba(0,0,0,0.03)';
+              const boxBdr = code ? `1px solid ${dotBorderMap[code]}` : isToday ? '1px solid rgba(245,158,11,0.3)' : '1px solid rgba(0,0,0,0.07)';
+              const boxClr = code ? dotColorMap[code] : isToday ? '#D97706' : '#CBD5E1';
+              const label  = code==='P'?'âœ“':code==='A'?'âœ—':code==='H'?'H':code==='L'?'L':code==='HD'?'Â½':isToday?'â€”':'';
+              return (
+                <div key={ds} style={{ display:'flex',flexDirection:'column',alignItems:'center',gap:4 }}>
+                  <div style={{ fontSize:8.5,color:'#94A3B8',textTransform:'uppercase',letterSpacing:'0.05em' }}>{name}</div>
+                  <div style={{ width:34,height:34,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,background:boxBg,border:boxBdr,color:boxClr }}>{label}</div>
+                  <div style={{ fontSize:8.5,color:code==='P'?'#10B981':isToday?'#F59E0B':'#CBD5E1' }}>{inTime||(isToday?'Today':isWknd?'Off':'â€”')}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* CTA */}
+          <div style={{ display:'flex',flexDirection:'column',alignItems:'flex-end',gap:8,flexShrink:0 }}>
+            {!todayRec?.code && <div style={{ background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',color:'#B45309',fontSize:11,padding:'4px 11px',borderRadius:20 }}>âš  Not marked today</div>}
+            <button onClick={() => setActive('attendance')} style={{ background:'linear-gradient(135deg,#4F46E5,#06B6D4)',color:'#fff',fontSize:12.5,fontWeight:700,padding:'9px 18px',borderRadius:9,border:'none',cursor:'pointer',boxShadow:'0 4px 14px rgba(79,70,229,.3)',whiteSpace:'nowrap' }}>
+              {todayRec?.code ? `Marked Â· ${todayInTime||todayStatusLabel[todayRec.code]||''} â†—` : 'Mark Attendance â†’'}
+            </button>
           </div>
         </div>
-        <p className="relative mt-5 max-w-xl border-t border-white/15 pt-4 text-xs italic leading-relaxed text-white/75">
-          "{quote.text}" <span className="not-italic font-semibold text-white">— {quote.author}</span>
-        </p>
+
+        {/* Leave Donut */}
+        <div style={{ ...GC, padding:'18px 16px', display:'flex', flexDirection:'column', gap:14 }}>
+          <span style={ST}>Leave Balance</span>
+          <div style={{ display:'flex',flexDirection:'column',alignItems:'center',position:'relative' }}>
+            <svg width="120" height="120" viewBox="0 0 120 120">
+              <defs>
+                <linearGradient id="lgd" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#4F46E5"/><stop offset="100%" stopColor="#06B6D4"/>
+                </linearGradient>
+              </defs>
+              <circle cx="60" cy="60" r="46" fill="none" stroke="rgba(0,0,0,0.07)" strokeWidth="10"/>
+              <circle cx="60" cy="60" r="46" fill="none" stroke="url(#lgd)" strokeWidth="10"
+                strokeDasharray={2*Math.PI*46}
+                strokeDashoffset={2*Math.PI*46*(1-Math.min(1,totalBalance/25))}
+                strokeLinecap="round" transform="rotate(-90 60 60)"/>
+            </svg>
+            <div style={{ position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',textAlign:'center' }}>
+              <div style={{ fontSize:24,fontWeight:700,letterSpacing:'-0.03em',color:'#0F172A' }}>{Number(totalBalance).toFixed(1)}</div>
+              <div style={{ fontSize:9.5,color:'#94A3B8' }}>of 25 days</div>
+            </div>
+          </div>
+          <div style={{ display:'flex',flexDirection:'column',gap:7 }}>
+            {[casualBal>0&&['#4F46E5','Casual',casualBal],earnedBal>0&&['#06B6D4','Earned',earnedBal]].filter(Boolean).map(([clr,lbl,val]) => (
+              <div key={lbl} style={{ display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:12 }}>
+                <div style={{ color:'#64748B',display:'flex',alignItems:'center',gap:6 }}><div style={{ width:7,height:7,borderRadius:'50%',background:clr }} />{lbl}</div>
+                <div style={{ fontWeight:600,color:'#0F172A' }}>{Number(val).toFixed(1)}</div>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => setActive('leave')} style={{ fontSize:11.5,fontWeight:600,color:ACCENT,background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:0 }}>View Leave Balance â†’</button>
+        </div>
       </div>
 
-      {/* ── 4 Stat cards ── */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      {/* â”€â”€ Row 2: 4 Stat cards â”€â”€ */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
         {statCards.map((c) => (
-          <div key={c.label} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-xs font-semibold text-gray-500">{c.label}</p>
-              <div className="flex h-9 w-9 items-center justify-center rounded-full" style={{ background: c.bg }}>
-                <c.Icon size={16} style={{ color: c.fg }} />
-              </div>
+          <div key={c.label} style={{ ...GC, padding:'16px 18px', display:'flex', alignItems:'center', gap:13 }}>
+            <div style={{ width:42,height:42,borderRadius:11,background:c.bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,border:`1px solid ${c.fg}28` }}>
+              <c.Icon size={18} style={{ color:c.fg }} />
             </div>
-            {c.body}
-            {c.footer && (
-              <div className="mt-3 pt-3 border-t border-gray-100">
-                {c.footer.split ? (
-                  <div className="flex gap-5">
-                    {c.footer.split.map(f => (
-                      <div key={f.label}>
-                        <p className="text-[10px] uppercase tracking-wide text-gray-400">{f.label}</p>
-                        <p className="text-sm font-bold text-gray-700">{f.value}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <>
-                    <p className="text-[10px] uppercase tracking-wide text-gray-400">{c.footer.label}</p>
-                    <p className="text-xs font-semibold text-gray-700">{c.footer.value}</p>
-                  </>
-                )}
-              </div>
-            )}
-            {c.cta && (
-              <button onClick={c.cta.onClick} className="mt-3 text-xs font-semibold hover:underline" style={{ color: ACCENT }}>
-                {c.cta.label} →
-              </button>
-            )}
+            <div style={{ minWidth:0 }}>
+              {c.body}
+              <div style={{ fontSize:11,color:'#64748B',marginTop:3 }}>{c.label}</div>
+              {c.sub && <div style={{ fontSize:10.5,color:'#94A3B8',marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{c.sub}</div>}
+              {c.cta && <button onClick={c.cta.onClick} style={{ fontSize:10.5,fontWeight:600,color:ACCENT,background:'none',border:'none',cursor:'pointer',marginTop:4,padding:0 }}>{c.cta.label} â†’</button>}
+            </div>
           </div>
         ))}
       </div>
 
-      {/* ── Middle row: Quick Actions | Calendar | Announcements ── */}
-      <div className="grid gap-5 lg:grid-cols-3">
+      {/* â”€â”€ Row 3: Monthly dots | Recent Leave | Quick Actions + Pending â”€â”€ */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
 
-        {/* Quick Actions */}
-        <div className="rounded-2xl border border-gray-100 bg-white shadow-sm">
-          <div className="border-b border-gray-100 px-5 py-4">
-            <h3 className="text-sm font-bold text-gray-900">Quick Actions</h3>
+        {/* Monthly attendance dot grid */}
+        <div style={{ ...GC, padding:'18px 20px' }}>
+          <span style={ST}>{MONTH_NAMES[now.getMonth()]} {now.getFullYear()} â€” Attendance</span>
+          <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,marginBottom:12 }}>
+            {[
+              { label:'Present', val:attendance.present??0,   color:'#059669' },
+              { label:'Absent',  val:attendance.absent??0,    color:'#DC2626' },
+              { label:'Half Day',val:attendance.half_day??0,  color:'#D97706' },
+              { label:'Holiday', val:(attQ.data||[]).filter(r=>normaliseStatus(r.status)==='H').length, color:'#4F46E5' },
+            ].map(({ label,val,color }) => (
+              <div key={label} style={{ textAlign:'center',padding:'8px 4px',background:'rgba(0,0,0,0.03)',borderRadius:9,border:'1px solid rgba(0,0,0,0.06)' }}>
+                <div style={{ fontSize:16,fontWeight:700,color,lineHeight:1 }}>{val}</div>
+                <div style={{ fontSize:9,color:'#94A3B8',marginTop:2 }}>{label}</div>
+              </div>
+            ))}
           </div>
-          <div className="p-4 grid grid-cols-4 gap-y-4">
-            {quickActions.map(({ label, Icon, tab, bg, fg }) => (
-              <button
-                key={label}
-                onClick={() => tab && setActive(tab)}
-                className="flex flex-col items-center gap-1.5 rounded-xl p-2 transition hover:bg-gray-50"
-              >
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl transition group-hover:scale-105" style={{ background: bg }}>
-                  <Icon size={18} style={{ color: fg }} />
-                </div>
-                <span className="text-[10px] font-medium text-gray-600 leading-tight text-center">{label}</span>
-              </button>
+          <div style={{ display:'grid',gridTemplateColumns:'repeat(11,1fr)',gap:4,marginBottom:10 }}>
+            {monthlyDots.map(({ ds,code,isWknd,isToday }) => {
+              const bg  = code ? `${dotColorMap[code]}22` : 'rgba(0,0,0,0.04)';
+              const bdr = code ? `1px solid ${dotBorderMap[code]}` : '1px solid rgba(0,0,0,0.07)';
+              return <div key={ds} title={`${ds}: ${code||(isWknd?'WO':'â€”')}`} style={{ aspectRatio:'1',borderRadius:4,background:bg,border:bdr,outline:isToday?`2px solid ${ACCENT}`:undefined,outlineOffset:isToday?1:undefined }} />;
+            })}
+          </div>
+          <div style={{ display:'flex',gap:10,flexWrap:'wrap' }}>
+            {[['Present','#10B981'],['Absent','#EF4444'],['Leave','#8B5CF6'],['Holiday','#6366F1'],['Half Day','#F59E0B']].map(([l,c]) => (
+              <div key={l} style={{ display:'flex',alignItems:'center',gap:4,fontSize:10,color:'#64748B' }}>
+                <div style={{ width:8,height:8,borderRadius:3,background:c }} />{l}
+              </div>
             ))}
           </div>
         </div>
 
-        {/* My Calendar */}
-        <div className="rounded-2xl border border-gray-100 bg-white shadow-sm">
-          <div className="flex items-center gap-2 border-b border-gray-100 px-5 py-3.5">
-            <h3 className="text-sm font-bold text-gray-900 flex-1">My Calendar</h3>
-            <button onClick={prevMonth} className="rounded-lg border border-gray-200 p-1 hover:bg-gray-50 transition">
-              <ChevronLeft size={13} className="text-gray-500" />
-            </button>
-            <span className="text-xs font-semibold text-gray-700 px-1">{MONTH_NAMES[calMonth].slice(0,3)} {calYear}</span>
-            <button onClick={nextMonth} className="rounded-lg border border-gray-200 p-1 hover:bg-gray-50 transition">
-              <ChevronRight size={13} className="text-gray-500" />
-            </button>
-            <button onClick={() => { setCalMonth(now.getMonth()); setCalYear(now.getFullYear()); }}
-              className="text-xs font-semibold hover:underline ml-1" style={{ color: ACCENT }}>Today</button>
+        {/* Recent Requests */}
+        <div style={{ ...GC, padding:'18px 20px' }}>
+          <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12 }}>
+            <span style={{ ...ST, marginBottom:0 }}>Recent Leave Requests</span>
+            <button onClick={() => setActive('leave')} style={{ fontSize:10.5,fontWeight:600,color:ACCENT,background:'none',border:'none',cursor:'pointer' }}>View All â†’</button>
           </div>
-          <div className="p-3">
-            <div className="grid grid-cols-7 mb-1">
-              {DAYS_OF_WEEK.map(d => (
-                <div key={d} className="py-1 text-center text-[10px] font-bold uppercase text-gray-400">{d}</div>
-              ))}
-            </div>
-            <div className="grid grid-cols-7 gap-y-0.5">
-              {cells.map((day, idx) => {
-                if (!day) return <div key={`e-${idx}`} />;
-                const ds       = fmtCell(day);
-                const rec      = statusMap[ds];
-                const code     = rec?.code;
-                const isToday  = ds === todayStr;
-                const isWknd   = new Date(ds).getDay() === 0 || new Date(ds).getDay() === 6;
-                const dotColor = code ? calDotColor(code) : (isWknd ? '#d1d5db' : null);
-                return (
-                  <div key={day} className="flex flex-col items-center py-0.5">
-                    <div
-                      className="flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold"
-                      style={{
-                        backgroundColor: isToday ? ACCENT : 'transparent',
-                        color:           isToday ? '#fff' : isWknd ? '#9ca3af' : '#374151',
-                      }}
-                    >
-                      {day}
-                    </div>
-                    {dotColor && <div className="h-1.5 w-1.5 rounded-full mt-0.5" style={{ backgroundColor: dotColor }} />}
-                  </div>
-                );
-              })}
-            </div>
-            <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 border-t border-gray-100 pt-2.5">
-              {[['Leave','#8b5cf6'],['Holiday','#22c55e'],['Event','#f59e0b'],['Weekend','#d1d5db']].map(([l,c]) => (
-                <div key={l} className="flex items-center gap-1">
-                  <div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: c }} />
-                  <span className="text-[10px] text-gray-500">{l}</span>
+          <div style={{ display:'flex',flexDirection:'column',gap:6 }}>
+            {(leavesQ.data||[]).slice(0,4).length ? (leavesQ.data||[]).slice(0,4).map((r,i) => (
+              <div key={r.id||i} style={{ display:'flex',alignItems:'center',gap:10,padding:'9px 11px',background:'rgba(0,0,0,0.025)',border:'1px solid rgba(0,0,0,0.06)',borderRadius:10 }}>
+                <div style={{ width:30,height:30,borderRadius:8,background:'#EAF1FF',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                  <CalendarOff size={13} style={{ color:ACCENT }} />
                 </div>
-              ))}
+                <div style={{ flex:1,minWidth:0 }}>
+                  <div style={{ fontSize:12,fontWeight:500,color:'#1E293B',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{r.leave_type_name||'Leave'}</div>
+                  <div style={{ fontSize:10.5,color:'#94A3B8',marginTop:1 }}>{String(r.from_date||'').slice(0,10)} â†’ {String(r.to_date||'').slice(0,10)}</div>
+                </div>
+                <StatusBadge value={r.status} />
+              </div>
+            )) : (
+              <div style={{ textAlign:'center',padding:'20px 0',color:'#94A3B8',fontSize:12 }}>No leave requests</div>
+            )}
+          </div>
+          {(serviceRequests||[]).slice(0,2).map((r,i) => (
+            <div key={r.id||i} style={{ display:'flex',alignItems:'center',gap:10,padding:'9px 11px',background:'rgba(0,0,0,0.025)',border:'1px solid rgba(0,0,0,0.06)',borderRadius:10,marginTop:6 }}>
+              <div style={{ width:30,height:30,borderRadius:8,background:'#F3E8FF',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                <FolderUp size={13} style={{ color:'#7C3AED' }} />
+              </div>
+              <div style={{ flex:1,minWidth:0 }}>
+                <div style={{ fontSize:12,fontWeight:500,color:'#1E293B',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{r.subject||r.request_type||'Request'}</div>
+                <div style={{ fontSize:10.5,color:'#94A3B8',marginTop:1 }}>{r.request_type||''}</div>
+              </div>
+              <StatusBadge value={r.status} />
             </div>
+          ))}
+        </div>
+
+        {/* Quick Actions + Pending Actions */}
+        <div style={{ ...GC, padding:'18px 20px', display:'flex', flexDirection:'column', gap:14 }}>
+          <span style={ST}>Quick Actions</span>
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:6 }}>
+            {quickActions.slice(0,6).map(({ label,Icon,tab,bg,fg }) => (
+              <button key={label} onClick={() => tab && setActive(tab)}
+                style={{ display:'flex',alignItems:'center',gap:8,padding:'9px 10px',background:'rgba(0,0,0,0.03)',border:'1px solid rgba(0,0,0,0.06)',borderRadius:10,cursor:'pointer',textAlign:'left' }}>
+                <div style={{ width:26,height:26,borderRadius:7,background:bg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                  <Icon size={13} style={{ color:fg }} />
+                </div>
+                <span style={{ fontSize:11.5,color:'#334155',lineHeight:1.2 }}>{label}</span>
+              </button>
+            ))}
+          </div>
+          <div style={{ borderTop:'1px solid rgba(0,0,0,0.06)',paddingTop:12 }}>
+            <span style={{ ...ST, marginBottom:8 }}>Pending Actions</span>
+            <div style={{ display:'flex',flexDirection:'column',gap:6 }}>
+              {!todayRec?.code && (
+                <div style={{ display:'flex',alignItems:'center',gap:9,padding:'9px 12px',borderRadius:10,border:'1px solid rgba(245,158,11,0.2)',background:'rgba(245,158,11,0.05)' }}>
+                  <span>âš ï¸</span>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:11.5,fontWeight:500,color:'#1E293B' }}>Mark today's attendance</div>
+                    <div style={{ fontSize:10,color:'#94A3B8',marginTop:1 }}>Not yet checked in</div>
+                  </div>
+                  <button onClick={() => setActive('attendance')} style={{ fontSize:10.5,fontWeight:600,color:'#D97706',background:'none',border:'none',cursor:'pointer' }}>Mark â†’</button>
+                </div>
+              )}
+              {pendingCorr > 0 && (
+                <div style={{ display:'flex',alignItems:'center',gap:9,padding:'9px 12px',borderRadius:10,border:`1px solid ${ACCENT}22`,background:`${ACCENT}08` }}>
+                  <span>ðŸ“</span>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:11.5,fontWeight:500,color:'#1E293B' }}>{pendingCorr} regularization{pendingCorr>1?'s':''} pending</div>
+                    <div style={{ fontSize:10,color:'#94A3B8',marginTop:1 }}>Awaiting approval</div>
+                  </div>
+                  <button onClick={() => setActive('attendance')} style={{ fontSize:10.5,fontWeight:600,color:ACCENT,background:'none',border:'none',cursor:'pointer' }}>View â†’</button>
+                </div>
+              )}
+              {pendingLeave > 0 && (
+                <div style={{ display:'flex',alignItems:'center',gap:9,padding:'9px 12px',borderRadius:10,border:'1px solid rgba(139,92,246,0.2)',background:'rgba(139,92,246,0.05)' }}>
+                  <span>ðŸ–</span>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:11.5,fontWeight:500,color:'#1E293B' }}>{pendingLeave} leave request{pendingLeave>1?'s':''} pending</div>
+                    <div style={{ fontSize:10,color:'#94A3B8',marginTop:1 }}>Awaiting manager approval</div>
+                  </div>
+                  <button onClick={() => setActive('leave')} style={{ fontSize:10.5,fontWeight:600,color:'#7C3AED',background:'none',border:'none',cursor:'pointer' }}>View â†’</button>
+                </div>
+              )}
+              {todayRec?.code && pendingCorr===0 && pendingLeave===0 && (
+                <div style={{ textAlign:'center',padding:'12px 0',color:'#94A3B8',fontSize:11.5 }}>All clear â€” no pending actions âœ“</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* â”€â”€ Row 4: Calendar | Announcements | Team + Holiday â”€â”€ */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+
+        {/* Calendar */}
+        <div style={{ ...GC, padding:'18px 20px' }}>
+          <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14 }}>
+            <div>
+              <div style={{ fontSize:13.5,fontWeight:600,color:'#0F172A' }}>My Calendar</div>
+              <div style={{ fontSize:10.5,color:'#94A3B8',marginTop:1 }}>{MONTH_NAMES[calMonth]} {calYear}</div>
+            </div>
+            <div style={{ display:'flex',gap:4,alignItems:'center' }}>
+              <button onClick={prevMonth} style={{ width:26,height:26,borderRadius:7,background:'#fff',border:'1px solid rgba(0,0,0,0.09)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }}><ChevronLeft size={13} /></button>
+              <button onClick={nextMonth} style={{ width:26,height:26,borderRadius:7,background:'#fff',border:'1px solid rgba(0,0,0,0.09)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }}><ChevronRight size={13} /></button>
+              <button onClick={() => { setCalMonth(now.getMonth()); setCalYear(now.getFullYear()); }} style={{ fontSize:10.5,fontWeight:600,color:ACCENT,background:'none',border:'none',cursor:'pointer' }}>Today</button>
+            </div>
+          </div>
+          <div style={{ display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:4 }}>
+            {DAYS_OF_WEEK.map(d => <div key={d} style={{ fontSize:9.5,color:'#94A3B8',textAlign:'center',padding:'3px 0',fontWeight:600,textTransform:'uppercase' }}>{d}</div>)}
+          </div>
+          <div style={{ display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2 }}>
+            {cells.map((day,idx) => {
+              if (!day) return <div key={`e-${idx}`} />;
+              const ds = fmtCell(day);
+              const rec = statusMap[ds];
+              const code = rec?.code;
+              const isToday = ds === todayStr;
+              const isWknd = new Date(ds).getDay()===0||new Date(ds).getDay()===6;
+              const dotColor = code ? calDotColor(code) : (isWknd ? '#d1d5db' : null);
+              return (
+                <div key={day} style={{ display:'flex',flexDirection:'column',alignItems:'center',padding:'3px 2px' }}>
+                  <div style={{ width:24,height:24,borderRadius:7,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11.5,fontWeight:isToday?700:400,background:isToday?`linear-gradient(135deg,${ACCENT},#06B6D4)`:'transparent',color:isToday?'#fff':isWknd?'#9ca3af':'#475569',boxShadow:isToday?`0 3px 10px ${ACCENT}50`:undefined }}>
+                    {day}
+                  </div>
+                  {dotColor && <div style={{ width:3,height:3,borderRadius:'50%',background:dotColor,marginTop:2 }} />}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ marginTop:10,display:'flex',flexWrap:'wrap',gap:'8px 12px' }}>
+            {[['Present',ACCENT],['Leave','#8b5cf6'],['Holiday','#22c55e'],['Weekend','#d1d5db']].map(([l,c]) => (
+              <div key={l} style={{ display:'flex',alignItems:'center',gap:4,fontSize:10,color:'#64748B' }}>
+                <div style={{ width:6,height:6,borderRadius:'50%',background:c }} />{l}
+              </div>
+            ))}
           </div>
         </div>
 
         {/* Announcements */}
-        <div className="rounded-2xl border border-gray-100 bg-white shadow-sm flex flex-col">
-          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-            <h3 className="text-sm font-bold text-gray-900">Announcements</h3>
-            <button className="text-xs font-semibold hover:underline" style={{ color: ACCENT }}>View All</button>
+        <div style={{ ...GC, padding:'18px 20px', display:'flex', flexDirection:'column' }}>
+          <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12 }}>
+            <span style={{ ...ST,marginBottom:0 }}>Announcements</span>
+            <button style={{ fontSize:10.5,fontWeight:600,color:ACCENT,background:'none',border:'none',cursor:'pointer' }}>View All</button>
           </div>
-          <div className="flex-1 divide-y divide-gray-50 overflow-y-auto">
-            {announcements.length ? announcements.map((n, i) => (
-              <div key={n.id || i} className="relative flex items-start gap-3 px-4 py-3.5">
-                {!n.is_read && <span className="absolute left-0 top-3.5 bottom-3.5 w-[3px] rounded-full" style={{ background: ACCENT }} />}
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: '#FEF3D6' }}>
-                  <Bell size={13} style={{ color: '#B45309' }} />
+          <div style={{ flex:1,display:'flex',flexDirection:'column',gap:0,overflowY:'auto' }}>
+            {announcements.length ? announcements.map((n,i) => (
+              <div key={n.id||i} style={{ display:'flex',alignItems:'flex-start',gap:9,paddingBottom:10,marginBottom:10,borderBottom:i<announcements.length-1?'1px solid rgba(0,0,0,0.05)':undefined }}>
+                <div style={{ width:30,height:30,borderRadius:8,background:'#FEF3D6',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                  <Bell size={13} style={{ color:'#B45309' }} />
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-gray-800 truncate">{n.title || (n.message || '').slice(0,40) || 'Notification'}</p>
-                  <p className="mt-0.5 text-[11px] text-gray-500 line-clamp-2">{n.message}</p>
-                  <p className="mt-1 text-[10px] text-gray-400">
-                    {n.created_at ? new Date(n.created_at).toLocaleDateString('en-IN', { day:'2-digit', month:'short' }) : ''}
-                  </p>
+                <div style={{ flex:1,minWidth:0 }}>
+                  <div style={{ fontSize:12,fontWeight:500,color:'#1E293B' }}>{n.title||(n.message||'').slice(0,40)||'Notification'}</div>
+                  <div style={{ fontSize:10.5,color:'#94A3B8',marginTop:2,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical' }}>{n.message}</div>
+                  <div style={{ fontSize:10,color:'#CBD5E1',marginTop:3 }}>{n.created_at?new Date(n.created_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):''}</div>
                 </div>
               </div>
             )) : (
-              <div className="flex flex-col items-center justify-center py-10 text-center">
-                <Bell size={24} className="text-gray-300 mb-2" />
-                <p className="text-sm text-gray-400">No announcements</p>
+              <div style={{ flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,padding:'24px 0',color:'#94A3B8' }}>
+                <Bell size={24} style={{ color:'#D1D5DB' }} />
+                <div style={{ fontSize:12 }}>No announcements</div>
               </div>
             )}
           </div>
         </div>
-      </div>
 
-      {/* ── Attendance Summary + Upcoming Events ── */}
-      <div className="grid gap-5 lg:grid-cols-3">
-
-        {/* Attendance Summary */}
-        <div className="lg:col-span-2 rounded-2xl border border-gray-100 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-            <h3 className="text-sm font-bold text-gray-900">My Attendance Summary</h3>
-            <span className="rounded-lg border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600">
-              {MONTH_NAMES[now.getMonth()]} {now.getFullYear()}
-            </span>
+        {/* Holiday + Team */}
+        <div style={{ ...GC, padding:'18px 20px', display:'flex', flexDirection:'column', gap:14 }}>
+          {/* Next holiday */}
+          <div style={{ padding:'14px 16px',borderRadius:12,background:'#FAEEDA',border:'1px solid #FAC775' }}>
+            <div style={{ fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'#854F0B',marginBottom:6 }}>Upcoming Holiday</div>
+            {nextHoliday ? (
+              <>
+                <div style={{ fontSize:14,fontWeight:700,color:'#663905' }}>{nextHoliday.name}</div>
+                <div style={{ fontSize:11,color:'#854F0B',marginTop:3 }}>{new Date(nextHoliday.holiday_date).toLocaleDateString('en-IN',{weekday:'long',day:'2-digit',month:'long'})}</div>
+              </>
+            ) : <div style={{ fontSize:12,color:'#B45309' }}>No upcoming holidays</div>}
           </div>
-          <div className="p-5 flex flex-col sm:flex-row sm:items-center gap-5">
-            {/* Circular progress ring */}
-            <div className="relative mx-auto h-28 w-28 shrink-0 sm:mx-0">
-              <svg viewBox="0 0 100 100" className="h-28 w-28 -rotate-90">
-                <circle cx="50" cy="50" r="42" fill="none" stroke="#EEF2F9" strokeWidth="10" />
-                <circle
-                  cx="50" cy="50" r="42" fill="none" stroke={ACCENT} strokeWidth="10" strokeLinecap="round"
-                  strokeDasharray={`${2 * Math.PI * 42}`}
-                  strokeDashoffset={`${2 * Math.PI * 42 * (1 - attPct / 100)}`}
-                  style={{ transition: 'stroke-dashoffset 0.6s ease' }}
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-xl font-extrabold text-gray-900">{attPct}%</span>
-                <span className="text-[10px] text-gray-400">Present</span>
-              </div>
+
+          {birthdaysToday.length > 0 && (
+            <div>
+              <span style={ST}>Birthdays Today ðŸŽ‚</span>
+              {birthdaysToday.slice(0,3).map((p,i) => (
+                <div key={i} style={{ display:'flex',alignItems:'center',gap:9,padding:'7px 0',borderBottom:i<birthdaysToday.length-1?'1px solid rgba(0,0,0,0.05)':undefined }}>
+                  <div style={{ width:30,height:30,borderRadius:'50%',background:`linear-gradient(135deg,${ACCENT},${TEAL})`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:'#fff',flexShrink:0 }}>
+                    {(p.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}
+                  </div>
+                  <span style={{ fontSize:12.5,color:'#1E293B' }}>{p.name}</span>
+                </div>
+              ))}
             </div>
-            <div className="grid flex-1 grid-cols-2 sm:grid-cols-4 gap-3">
+          )}
+
+          {isHrView && onLeaveToday.length > 0 && (
+            <div>
+              <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8 }}>
+                <span style={{ ...ST,marginBottom:0 }}>On Leave Today</span>
+                <span style={{ background:'#EAF1FF',color:ACCENT,fontSize:10,padding:'1px 7px',borderRadius:10,fontWeight:700 }}>{onLeaveToday.length}</span>
+              </div>
+              {onLeaveToday.slice(0,4).map((p,i) => (
+                <div key={i} style={{ display:'flex',alignItems:'center',gap:9,padding:'6px 0',borderBottom:i<Math.min(3,onLeaveToday.length-1)?'1px solid rgba(0,0,0,0.05)':undefined }}>
+                  <div style={{ width:28,height:28,borderRadius:'50%',background:`linear-gradient(135deg,${ACCENT},${TEAL})`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:'#fff',flexShrink:0 }}>
+                    {(p.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}
+                  </div>
+                  <span style={{ fontSize:12,color:'#1E293B',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{p.name}</span>
+                  <span style={{ fontSize:10.5,color:'#94A3B8',flexShrink:0 }}>{p.leave_type||'Leave'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ borderTop:'1px solid rgba(0,0,0,0.06)',paddingTop:12 }}>
+            <span style={ST}>Month Summary</span>
+            <div style={{ display:'flex',gap:6 }}>
               {[
-                { label: 'Total Days', val: attendance.working_days ?? '-', color: '#64748b' },
-                { label: 'Present',    val: attendance.present      ?? 0,   color: ACCENT     },
-                { label: 'Absent',     val: attendance.absent       ?? 0,   color: '#ef4444' },
-                { label: 'Half Day',   val: attendance.half_day     ?? 0,   color: '#f59e0b' },
-              ].map(({ label, val, color }) => (
-                <div key={label} className="rounded-xl border border-gray-100 p-3 text-center">
-                  <p className="text-2xl font-extrabold" style={{ color }}>{val}</p>
-                  <p className="mt-1 text-[11px] text-gray-500">{label}</p>
+                { label:'Working',val:attendance.working_days??'â€”',color:'#64748B' },
+                { label:'Present', val:attendance.present??0,     color:'#059669' },
+                { label:'Absent',  val:attendance.absent??0,      color:'#DC2626' },
+              ].map(({ label,val,color }) => (
+                <div key={label} style={{ flex:1,textAlign:'center',padding:'8px 4px',background:'rgba(0,0,0,0.03)',borderRadius:9,border:'1px solid rgba(0,0,0,0.06)' }}>
+                  <div style={{ fontSize:16,fontWeight:700,color }}>{val}</div>
+                  <div style={{ fontSize:9,color:'#94A3B8',marginTop:2 }}>{label}</div>
                 </div>
               ))}
             </div>
           </div>
         </div>
-
-        {/* Upcoming Events */}
-        <div className="rounded-2xl border border-gray-100 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-            <h3 className="text-sm font-bold text-gray-900">Upcoming Events</h3>
-            <button className="text-xs font-semibold hover:underline" style={{ color: ACCENT }}>View Full Calendar</button>
-          </div>
-          <div className="divide-y divide-gray-50">
-            {announcements.slice(0, 4).map((n, i) => {
-              const d = n.created_at ? new Date(n.created_at) : null;
-              return (
-                <div key={n.id || i} className="flex items-start gap-3 px-4 py-3.5">
-                  {d && (
-                    <div className="w-10 shrink-0 rounded-lg text-center py-2" style={{ background: '#EAF1FF' }}>
-                      <p className="text-[9px] font-bold uppercase leading-tight" style={{ color: '#93B4F7' }}>
-                        {d.toLocaleDateString('en-IN', { month: 'short' })}
-                      </p>
-                      <p className="text-lg font-extrabold leading-tight" style={{ color: ACCENT }}>{d.getDate()}</p>
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-gray-800">{n.title || 'Event'}</p>
-                    <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-2">{n.message}</p>
-                  </div>
-                </div>
-              );
-            })}
-            {!announcements.length && (
-              <div className="px-4 py-8 text-center text-sm text-gray-400">No upcoming events</div>
-            )}
-          </div>
-        </div>
       </div>
 
-      {/* ── Team today (HR/super-admin only) + next holiday (everyone) ── */}
-      <div className={`grid gap-5 ${isHrView ? 'lg:grid-cols-3' : 'lg:grid-cols-1'}`}>
-        {isHrView && (
-          <div className="rounded-2xl border border-gray-100 bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-              <h3 className="text-sm font-bold text-gray-900">On Leave Today</h3>
-              <span className="rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ background: '#EAF1FF', color: ACCENT }}>{onLeaveToday.length}</span>
-            </div>
-            <div className="divide-y divide-gray-50 max-h-56 overflow-y-auto">
-              {onLeaveToday.length ? onLeaveToday.map((p, i) => (
-                <div key={i} className="flex items-center gap-3 px-4 py-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white" style={{ background: `linear-gradient(135deg, ${ACCENT}, ${TEAL})` }}>
-                    {(p.name || '?').split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase()}
-                  </div>
-                  <span className="text-sm text-gray-800 truncate">{p.name}</span>
-                  <span className="ml-auto text-[11px] text-gray-500 shrink-0">{p.leave_type || 'Leave'}</span>
-                </div>
-              )) : (
-                <div className="px-4 py-8 text-center text-sm text-gray-400">Everyone's in today</div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {isHrView && (
-          <div className="rounded-2xl border border-gray-100 bg-white shadow-sm">
-            <div className="border-b border-gray-100 px-5 py-4">
-              <h3 className="text-sm font-bold text-gray-900">Birthdays Today</h3>
-            </div>
-            <div className="divide-y divide-gray-50 max-h-56 overflow-y-auto">
-              {birthdaysToday.length ? birthdaysToday.map((p, i) => (
-                <div key={i} className="flex items-center gap-3 px-4 py-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: '#E1F5EE', color: '#0F6E56' }}>
-                    <Award size={15} />
-                  </div>
-                  <span className="text-sm text-gray-800 truncate">{p.name}</span>
-                  <span className="ml-auto text-[11px] font-semibold shrink-0" style={{ color: '#0F6E56' }}>🎂 Wish them</span>
-                </div>
-              )) : (
-                <div className="px-4 py-8 text-center text-sm text-gray-400">No birthdays today</div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Next holiday — visible to everyone */}
-        <div className="rounded-2xl border p-5 flex items-center gap-4" style={{ background: '#FAEEDA', borderColor: '#FAC775' }}>
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-white" style={{ background: '#BA7517' }}>
-            <CalendarCheck size={22} />
-          </div>
-          {nextHoliday ? (
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#854F0B' }}>Upcoming Holiday</p>
-              <p className="text-base font-bold" style={{ color: '#663905' }}>{nextHoliday.name}</p>
-              <p className="text-xs" style={{ color: '#854F0B' }}>
-                {new Date(nextHoliday.holiday_date).toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
-              </p>
-            </div>
-          ) : (
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#854F0B' }}>Upcoming Holiday</p>
-              <p className="text-sm" style={{ color: '#854F0B' }}>No upcoming holidays scheduled</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── Leave History + Recent Requests ── */}
-      <div className="grid gap-5 lg:grid-cols-2">
-        <SectionCard
-          title="Leave History"
-          action={<button onClick={() => setActive('leave')} className="text-xs font-semibold hover:underline" style={{ color: ACCENT }}>View All</button>}
-        >
-          <Table
-            columns={[
-              { key: 'leave_type_name', label: 'Type' },
-              { key: 'from_date', label: 'From', render: r => String(r.from_date||'').slice(0,10) },
-              { key: 'to_date',   label: 'To',   render: r => String(r.to_date  ||'').slice(0,10) },
-              { key: 'status', label: 'Status', render: r => <StatusBadge value={r.status} /> },
-            ]}
-            rows={(leavesQ.data || []).slice(0, 5)}
-          />
-        </SectionCard>
-
-        <SectionCard
-          title="Recent Requests"
-          action={<button onClick={() => setActive('hr-requests')} className="text-xs font-semibold hover:underline" style={{ color: ACCENT }}>View All</button>}
-        >
-          <Table
-            columns={[
-              { key: 'request_type', label: 'Type' },
-              { key: 'subject',      label: 'Subject' },
-              { key: 'status', label: 'Status', render: r => <StatusBadge value={r.status} /> },
-            ]}
-            rows={(serviceRequests || []).slice(0, 5)}
-          />
-        </SectionCard>
-      </div>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   PROFILE TAB
-═══════════════════════════════════════════════════════════════ */
-// Downscale + re-encode an image File to a small square JPEG data URI so the
-// stored avatar stays tiny (a few KB) regardless of the original photo size.
-function fileToAvatarDataUri(file, size = 256) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = size; canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        // Center-crop to a square, then draw scaled into the canvas.
-        const min = Math.min(img.width, img.height);
-        const sx = (img.width - min) / 2;
-        const sy = (img.height - min) / 2;
-        ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
-        resolve(canvas.toDataURL('image/jpeg', 0.85));
-      };
-      img.onerror = reject;
-      img.src = reader.result;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-// Circular avatar showing the profile photo when present, else initials.
-// When `editable`, overlays a camera button to upload and (if a photo exists)
-// a small remove button.
-function ProfilePhotoAvatar({ profile, size = 80, editable = false }) {
-  const qc = useQueryClient();
-  const [busy, setBusy] = useState(false);
-  const name     = profile?.name || 'Employee';
-  const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
-  const photo    = profile?.profile_photo_url;
-
-  const refresh = () => qc.invalidateQueries({ queryKey: ['ess-summary'] });
-
-  const onPick = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    if (!/^image\//.test(file.type)) return toast.error('Please choose an image file.');
-    setBusy(true);
-    try {
-      const dataUri = await fileToAvatarDataUri(file);
-      await essAPI.uploadProfilePhoto(dataUri);
-      toast.success('Profile photo updated');
-      refresh();
-    } catch (err) {
-      toast.error(err?.response?.data?.error || 'Could not update photo');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const onRemove = async () => {
-    setBusy(true);
-    try {
-      await essAPI.removeProfilePhoto();
-      toast.success('Profile photo removed');
-      refresh();
-    } catch (err) {
-      toast.error(err?.response?.data?.error || 'Could not remove photo');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="relative shrink-0" style={{ width: size, height: size }}>
-      {photo ? (
-        <img
-          src={photo}
-          alt={name}
-          className="h-full w-full rounded-full object-cover shadow ring-2 ring-white"
-          style={{ width: size, height: size }}
-        />
-      ) : (
-        <div
-          className="flex h-full w-full items-center justify-center rounded-full font-bold text-white shadow"
-          style={{ width: size, height: size, fontSize: size * 0.3, background: `linear-gradient(135deg, ${ACCENT} 0%, ${TEAL} 100%)` }}
-        >
-          {initials}
-        </div>
-      )}
-      {editable && (
-        <>
-          <label
-            className="absolute -bottom-1 -right-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-2 border-white bg-white shadow"
-            title="Change photo"
-            style={{ color: ACCENT }}
-          >
-            {busy
-              ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300" style={{ borderTopColor: ACCENT }} />
-              : <Camera size={15} />}
-            <input type="file" accept="image/*" className="hidden" onChange={onPick} disabled={busy} />
-          </label>
-          {photo && !busy && (
-            <button
-              onClick={onRemove}
-              title="Remove photo"
-              className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-white text-red-500 shadow"
-            >
-              <Trash2 size={12} />
-            </button>
-          )}
-        </>
-      )}
     </div>
   );
 }
@@ -961,7 +845,7 @@ function ProfileTab({ profile, balances }) {
               </div>
               <div className="pb-1">
                 <p className="text-xl font-bold text-gray-900">{name}</p>
-                <p className="text-sm text-gray-500">{p.designation_name || cap(p.role) || '—'}</p>
+                <p className="text-sm text-gray-500">{p.designation_name || cap(p.role) || 'â€”'}</p>
               </div>
             </div>
             <div className="flex flex-wrap gap-2 pb-1">
@@ -1012,7 +896,7 @@ function ProfileTab({ profile, balances }) {
       <SectionCard title="Bank & Statutory" subtitle="Sensitive details are partially masked">
         <InfoGrid fields={[
           ['Bank',        p.bank_name],
-          ['Account No.', p.bank_account_last4 ? `•••• ${p.bank_account_last4}` : null],
+          ['Account No.', p.bank_account_last4 ? `â€¢â€¢â€¢â€¢ ${p.bank_account_last4}` : null],
           ['IFSC',        p.bank_ifsc],
           ['PAN',         p.pan_number],
           ['UAN',         p.uan_number],
@@ -1049,9 +933,9 @@ function ProfileTab({ profile, balances }) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    ATTENDANCE TAB
-═══════════════════════════════════════════════════════════════ */
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 function AttendanceTab({ leaveTypes }) {
   const qc = useQueryClient();
   const now = new Date();
@@ -1125,7 +1009,7 @@ function AttendanceTab({ leaveTypes }) {
               return (
                 <div
                   key={day}
-                  title={rec ? `${rec.code}${rec.inTime ? ' — In: ' + String(rec.inTime).slice(0,5) : ''}${rec.lateMin ? ' — Late: ' + rec.lateMin + 'm' : ''}` : undefined}
+                  title={rec ? `${rec.code}${rec.inTime ? ' â€” In: ' + String(rec.inTime).slice(0,5) : ''}${rec.lateMin ? ' â€” Late: ' + rec.lateMin + 'm' : ''}` : undefined}
                   className={`relative flex h-9 w-full flex-col items-center justify-center rounded-lg text-xs font-semibold transition ${
                     st ? `${st.bg} ${st.text}` : isToday ? 'ring-2 text-gray-700' : 'text-gray-600 hover:bg-gray-100'
                   }`}
@@ -1153,7 +1037,7 @@ function AttendanceTab({ leaveTypes }) {
       </SectionCard>
 
       {/* Correction form */}
-      <SectionCard title="Attendance Correction" subtitle="Missed punch or wrong status — raise a correction request">
+      <SectionCard title="Attendance Correction" subtitle="Missed punch or wrong status â€” raise a correction request">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Field title="Date">
             <input type="date" className={inputCls} value={correction.attendance_date}
@@ -1224,7 +1108,7 @@ function AttendanceTab({ leaveTypes }) {
         </div>
 
         {swipes.isLoading ? (
-          <p className="text-sm text-gray-400 py-4 text-center">Loading swipes…</p>
+          <p className="text-sm text-gray-400 py-4 text-center">Loading swipesâ€¦</p>
         ) : !(swipes.data || []).length ? (
           <div className="py-8 text-center">
             <p className="text-sm font-semibold text-gray-400">No swipe records found for the last {swipeDays} days</p>
@@ -1285,9 +1169,9 @@ function AttendanceTab({ leaveTypes }) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    LEAVE TAB
-═══════════════════════════════════════════════════════════════ */
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 function LeaveTab({ leaveTypes }) {
   const qc      = useQueryClient();
   const balances = useQuery({ queryKey: ['ess-leave-balances'],  queryFn: () => essAPI.leaveBalances().then(unwrap) });
@@ -1374,9 +1258,9 @@ function LeaveTab({ leaveTypes }) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    PAYSLIPS TAB
-═══════════════════════════════════════════════════════════════ */
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 function PayslipsTab() {
   const navigate = useNavigate();
   const now = new Date();
@@ -1398,15 +1282,15 @@ function PayslipsTab() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="rounded-xl border border-gray-200 bg-white p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Gross Earnings</p>
-            <p className="mt-1 text-xl font-extrabold text-gray-800">₹{t.gross.toLocaleString('en-IN')}</p>
+            <p className="mt-1 text-xl font-extrabold text-gray-800">â‚¹{t.gross.toLocaleString('en-IN')}</p>
           </div>
           <div className="rounded-xl border border-gray-200 bg-white p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Total Deductions</p>
-            <p className="mt-1 text-xl font-extrabold text-red-500">₹{t.deductions.toLocaleString('en-IN')}</p>
+            <p className="mt-1 text-xl font-extrabold text-red-500">â‚¹{t.deductions.toLocaleString('en-IN')}</p>
           </div>
           <div className="rounded-xl border border-gray-200 bg-white p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Net Paid</p>
-            <p className="mt-1 text-xl font-extrabold" style={{ color: ACCENT }}>₹{t.net.toLocaleString('en-IN')}</p>
+            <p className="mt-1 text-xl font-extrabold" style={{ color: ACCENT }}>â‚¹{t.net.toLocaleString('en-IN')}</p>
           </div>
         </div>
         {!(ytd.data?.months || []).length && !ytd.isLoading && (
@@ -1419,10 +1303,10 @@ function PayslipsTab() {
         columns={[
           { key: 'month',            label: 'Month' },
           { key: 'year',             label: 'Year'  },
-          { key: 'gross_earnings',   label: 'Gross',      render: r => `₹${Number(r.gross_earnings  ||0).toLocaleString('en-IN')}` },
-          { key: 'total_deductions', label: 'Deductions', render: r => `₹${Number(r.total_deductions||0).toLocaleString('en-IN')}` },
+          { key: 'gross_earnings',   label: 'Gross',      render: r => `â‚¹${Number(r.gross_earnings  ||0).toLocaleString('en-IN')}` },
+          { key: 'total_deductions', label: 'Deductions', render: r => `â‚¹${Number(r.total_deductions||0).toLocaleString('en-IN')}` },
           { key: 'net_pay',          label: 'Net Pay',    render: r => (
-            <span className="font-bold" style={{ color: ACCENT }}>₹{Number(r.net_pay||0).toLocaleString('en-IN')}</span>
+            <span className="font-bold" style={{ color: ACCENT }}>â‚¹{Number(r.net_pay||0).toLocaleString('en-IN')}</span>
           )},
           { key: 'status', label: 'Status', render: r => <StatusBadge value={r.status} /> },
           { key: 'actions', label: 'Payslip', render: r => (
@@ -1442,9 +1326,9 @@ function PayslipsTab() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    DOCUMENTS TAB
-═══════════════════════════════════════════════════════════════ */
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 function DocumentsTab({ policies, userId }) {
   const qc = useQueryClient();
   const [doc, setDoc] = useState({ file: null, doc_type: 'employee_document', doc_name: '' });
@@ -1521,9 +1405,9 @@ function DocumentsTab({ policies, userId }) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    HR REQUESTS TAB
-═══════════════════════════════════════════════════════════════ */
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 function HRRequestsTab({ serviceRequests }) {
   const qc = useQueryClient();
   const [reqForm, setReqForm] = useState({ request_type: 'certificate', priority: 'normal', subject: '', description: '' });
@@ -1585,9 +1469,9 @@ function HRRequestsTab({ serviceRequests }) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    MANAGER DESK TAB
-═══════════════════════════════════════════════════════════════ */
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 function ManagerDeskTab() {
   const qc          = useQueryClient();
   const leaves      = useQuery({ queryKey: ['ess-manager-leaves'],      queryFn: () => essAPI.managerLeaveRequests({ status: 'pending' }).then(unwrap), retry: false });
@@ -1684,9 +1568,9 @@ function ManagerDeskTab() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    TRAINING TAB
-═══════════════════════════════════════════════════════════════ */
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 const TRAINING_CATEGORIES = [
   'Safety & HSE',
   'Technical Skills',
@@ -1762,7 +1646,7 @@ function TrainingTab() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="text-xs font-bold text-amber-800 uppercase tracking-wide">
-                      {r.eval_period} · {r.review_type === 'quarterly' ? 'Quarterly' : 'Monthly'} Review
+                      {r.eval_period} Â· {r.review_type === 'quarterly' ? 'Quarterly' : 'Monthly'} Review
                     </span>
                     {r.overall_rating && (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white border border-amber-200 text-amber-700">
@@ -1790,12 +1674,12 @@ function TrainingTab() {
             <label className={labelCls}>Training / Course Name *</label>
             <input className={inputCls} value={form.training_name}
               onChange={e => set('training_name', e.target.value)}
-              placeholder="e.g. Fire Safety, Crane Operation, First Aid…" />
+              placeholder="e.g. Fire Safety, Crane Operation, First Aidâ€¦" />
           </div>
           <div>
             <label className={labelCls}>Category</label>
             <select className={inputCls} value={form.category} onChange={e => set('category', e.target.value)}>
-              <option value="">Select category…</option>
+              <option value="">Select categoryâ€¦</option>
               {TRAINING_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
@@ -1818,7 +1702,7 @@ function TrainingTab() {
             className="px-6 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50"
             style={{ background: ACCENT }}
           >
-            {submit.isPending ? 'Submitting…' : 'Submit Request'}
+            {submit.isPending ? 'Submittingâ€¦' : 'Submit Request'}
           </button>
         </div>
       </SectionCard>
@@ -1826,7 +1710,7 @@ function TrainingTab() {
       {/* My Training Requests */}
       <SectionCard title="My Training Requests" subtitle="Track the status of your submitted training requests">
         {requests.isLoading ? (
-          <p className="text-sm text-gray-400 py-4 text-center">Loading…</p>
+          <p className="text-sm text-gray-400 py-4 text-center">Loadingâ€¦</p>
         ) : myRequests.length === 0 ? (
           <div className="text-center py-8 text-gray-400">
             <Award size={32} className="mx-auto mb-2 opacity-30" />
@@ -1853,9 +1737,9 @@ function TrainingTab() {
                         <p className="font-medium text-gray-800">{r.training_name}</p>
                         {r.reason && <p className="text-xs text-gray-400 mt-0.5 truncate max-w-[220px]">{r.reason}</p>}
                       </td>
-                      <td className="py-3 px-3 text-gray-600 text-xs">{r.category || '—'}</td>
+                      <td className="py-3 px-3 text-gray-600 text-xs">{r.category || 'â€”'}</td>
                       <td className="py-3 px-3 text-gray-600 text-xs">
-                        {r.preferred_date ? String(r.preferred_date).slice(0, 10) : '—'}
+                        {r.preferred_date ? String(r.preferred_date).slice(0, 10) : 'â€”'}
                       </td>
                       <td className="py-3 px-3">
                         <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${sc.bg} ${sc.text}`}>
@@ -1865,7 +1749,7 @@ function TrainingTab() {
                           <p className="text-[10px] text-red-400 mt-0.5">{r.rejection_reason}</p>
                         )}
                       </td>
-                      <td className="py-3 px-3 text-gray-500 text-xs">{r.actioned_by_name || '—'}</td>
+                      <td className="py-3 px-3 text-gray-500 text-xs">{r.actioned_by_name || 'â€”'}</td>
                     </tr>
                   );
                 })}
@@ -1879,16 +1763,16 @@ function TrainingTab() {
       <SectionCard title="Training Categories Available" subtitle="Types of training programs offered at BCIM">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {[
-            { label: 'Safety & HSE',          icon: '🦺', color: 'bg-red-50 border-red-100 text-red-700'      },
-            { label: 'Technical Skills',       icon: '⚙️', color: 'bg-blue-50 border-blue-100 text-blue-700'   },
-            { label: 'Quality Assurance',      icon: '✅', color: 'bg-green-50 border-green-100 text-green-700'},
-            { label: 'Housekeeping & 5S',      icon: '🧹', color: 'bg-yellow-50 border-yellow-100 text-yellow-700'},
-            { label: 'Soft Skills',            icon: '🤝', color: 'bg-purple-50 border-purple-100 text-purple-700'},
-            { label: 'Induction',              icon: '📋', color: 'bg-indigo-50 border-indigo-100 text-indigo-700'},
-            { label: 'Compliance',             icon: '⚖️', color: 'bg-gray-50 border-gray-200 text-gray-700'   },
-            { label: 'Equipment Operation',    icon: '🏗️', color: 'bg-orange-50 border-orange-100 text-orange-700'},
-            { label: 'First Aid / Emergency',  icon: '🩺', color: 'bg-pink-50 border-pink-100 text-pink-700'   },
-            { label: 'Other',                  icon: '📚', color: 'bg-teal-50 border-teal-100 text-teal-700'   },
+            { label: 'Safety & HSE',          icon: 'ðŸ¦º', color: 'bg-red-50 border-red-100 text-red-700'      },
+            { label: 'Technical Skills',       icon: 'âš™ï¸', color: 'bg-blue-50 border-blue-100 text-blue-700'   },
+            { label: 'Quality Assurance',      icon: 'âœ…', color: 'bg-green-50 border-green-100 text-green-700'},
+            { label: 'Housekeeping & 5S',      icon: 'ðŸ§¹', color: 'bg-yellow-50 border-yellow-100 text-yellow-700'},
+            { label: 'Soft Skills',            icon: 'ðŸ¤', color: 'bg-purple-50 border-purple-100 text-purple-700'},
+            { label: 'Induction',              icon: 'ðŸ“‹', color: 'bg-indigo-50 border-indigo-100 text-indigo-700'},
+            { label: 'Compliance',             icon: 'âš–ï¸', color: 'bg-gray-50 border-gray-200 text-gray-700'   },
+            { label: 'Equipment Operation',    icon: 'ðŸ—ï¸', color: 'bg-orange-50 border-orange-100 text-orange-700'},
+            { label: 'First Aid / Emergency',  icon: 'ðŸ©º', color: 'bg-pink-50 border-pink-100 text-pink-700'   },
+            { label: 'Other',                  icon: 'ðŸ“š', color: 'bg-teal-50 border-teal-100 text-teal-700'   },
           ].map(({ label, icon, color }) => (
             <div key={label} className={`flex flex-col items-center gap-2 p-3 rounded-xl border text-center cursor-pointer ${color}`}
               onClick={() => { set('category', label); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
@@ -1903,12 +1787,12 @@ function TrainingTab() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   ASSETS TAB — company assets allocated to the employee (read-only)
-═══════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   ASSETS TAB â€” company assets allocated to the employee (read-only)
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 const ASSET_ICONS = {
-  laptop: '💻', mobile: '📱', sim_card: '📶', vehicle: '🚗',
-  tools: '🛠️', uniform: '👕', safety_gear: '🦺', access_card: '🪪', other: '📦',
+  laptop: 'ðŸ’»', mobile: 'ðŸ“±', sim_card: 'ðŸ“¶', vehicle: 'ðŸš—',
+  tools: 'ðŸ› ï¸', uniform: 'ðŸ‘•', safety_gear: 'ðŸ¦º', access_card: 'ðŸªª', other: 'ðŸ“¦',
 };
 function AssetsTab() {
   const assets = useQuery({ queryKey: ['ess-my-assets'], queryFn: () => essAPI.myAssets().then(unwrap) });
@@ -1918,7 +1802,7 @@ function AssetsTab() {
     <div className="space-y-5">
       <SectionCard title="My Assets" subtitle="Company equipment currently allocated to you">
         {assets.isLoading ? (
-          <p className="py-6 text-center text-sm text-gray-400">Loading assets…</p>
+          <p className="py-6 text-center text-sm text-gray-400">Loading assetsâ€¦</p>
         ) : !active.length ? (
           <p className="py-8 text-center text-sm text-gray-400">No assets are currently allocated to you.</p>
         ) : (
@@ -1926,7 +1810,7 @@ function AssetsTab() {
             {active.map(a => (
               <div key={a.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
                 <div className="flex items-start justify-between">
-                  <span className="text-2xl">{ASSET_ICONS[a.category] || '📦'}</span>
+                  <span className="text-2xl">{ASSET_ICONS[a.category] || 'ðŸ“¦'}</span>
                   <StatusBadge value={a.status === 'assigned' ? 'approved' : a.status} />
                 </div>
                 <p className="mt-2 text-sm font-bold text-gray-900">{a.asset_name}</p>
@@ -1962,9 +1846,9 @@ function AssetsTab() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   HELPDESK TAB — raise & track own IT tickets
-═══════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   HELPDESK TAB â€” raise & track own IT tickets
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 function HelpdeskTab() {
   const qc = useQueryClient();
   const tickets = useQuery({ queryKey: ['ess-helpdesk'], queryFn: () => essAPI.helpdeskTickets().then(unwrap) });
@@ -2015,7 +1899,7 @@ function HelpdeskTab() {
 
       <SectionCard title="My Tickets">
         {tickets.isLoading ? (
-          <p className="py-6 text-center text-sm text-gray-400">Loading tickets…</p>
+          <p className="py-6 text-center text-sm text-gray-400">Loading ticketsâ€¦</p>
         ) : (
           <Table
             columns={[
@@ -2035,9 +1919,9 @@ function HelpdeskTab() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   TIMESHEET TAB — monthly hours from attendance
-═══════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   TIMESHEET TAB â€” monthly hours from attendance
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 function hoursBetween(inT, outT) {
   if (!inT || !outT) return 0;
   const [ih, im] = String(inT).split(':').map(Number);
@@ -2096,7 +1980,7 @@ function TimesheetTab() {
           </div>
         </div>
         {att.isLoading ? (
-          <p className="py-6 text-center text-sm text-gray-400">Loading timesheet…</p>
+          <p className="py-6 text-center text-sm text-gray-400">Loading timesheetâ€¦</p>
         ) : (
           <Table
             columns={[
@@ -2115,9 +1999,9 @@ function TimesheetTab() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   KNOWLEDGE BASE TAB — published company policies
-═══════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   KNOWLEDGE BASE TAB â€” published company policies
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 function KnowledgeTab() {
   const kb = useQuery({ queryKey: ['ess-knowledge'], queryFn: () => essAPI.knowledge().then(unwrap) });
   const [openId, setOpenId] = useState(null);
@@ -2136,10 +2020,10 @@ function KnowledgeTab() {
     <div className="space-y-5">
       <SectionCard title="Knowledge Base" subtitle="Company policies, guidelines and procedures">
         <div className="relative mb-4 max-w-sm">
-          <input className={inputCls} value={search} onChange={e => setSearch(e.target.value)} placeholder="Search policies…" />
+          <input className={inputCls} value={search} onChange={e => setSearch(e.target.value)} placeholder="Search policiesâ€¦" />
         </div>
         {kb.isLoading ? (
-          <p className="py-6 text-center text-sm text-gray-400">Loading…</p>
+          <p className="py-6 text-center text-sm text-gray-400">Loadingâ€¦</p>
         ) : !filtered.length ? (
           <p className="py-8 text-center text-sm text-gray-400">No published policies available.</p>
         ) : (
@@ -2161,8 +2045,8 @@ function KnowledgeTab() {
                             <div>
                               <p className="text-sm font-semibold text-gray-900">{d.title}</p>
                               <p className="text-xs text-gray-400">
-                                {d.policy_code ? `${d.policy_code} · ` : ''}v{d.version}
-                                {d.effective_date ? ` · ${String(d.effective_date).slice(0,10)}` : ''}
+                                {d.policy_code ? `${d.policy_code} Â· ` : ''}v{d.version}
+                                {d.effective_date ? ` Â· ${String(d.effective_date).slice(0,10)}` : ''}
                               </p>
                             </div>
                           </div>
@@ -2186,9 +2070,9 @@ function KnowledgeTab() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   ENGAGE TAB — social feed (posts + kudos)
-═══════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   ENGAGE TAB â€” social feed (posts + kudos)
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 function timeAgo(ts) {
   if (!ts) return '';
   const diff = Date.now() - new Date(ts).getTime();
@@ -2237,7 +2121,7 @@ function EngageComments({ postId }) {
         ))}
       </div>
       <div className="mt-2 flex items-center gap-2">
-        <input className={inputCls} value={text} placeholder="Write a comment…"
+        <input className={inputCls} value={text} placeholder="Write a commentâ€¦"
           onChange={e => setText(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && text.trim()) add.mutate(); }} />
         <button onClick={() => text.trim() && add.mutate()} disabled={add.isPending}
@@ -2253,7 +2137,7 @@ function EngageCard({ post }) {
   const qc = useQueryClient();
   const [showComments, setShowComments] = useState(false);
   const react = useMutation({
-    mutationFn: () => essAPI.reactEngage(post.id, '❤️'),
+    mutationFn: () => essAPI.reactEngage(post.id, 'â¤ï¸'),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['ess-engage'] }),
   });
   const liked = Boolean(post.my_reaction);
@@ -2266,7 +2150,7 @@ function EngageCard({ post }) {
           <div className="min-w-0 flex-1">
             <p className="text-sm font-bold text-gray-900">{post.author_name}</p>
             <p className="text-xs text-gray-400">
-              {post.group_name ? `${post.group_name} · ` : ''}{timeAgo(post.created_at)}
+              {post.group_name ? `${post.group_name} Â· ` : ''}{timeAgo(post.created_at)}
             </p>
           </div>
           {isKudos && (
@@ -2282,7 +2166,7 @@ function EngageCard({ post }) {
               <span className="font-semibold text-gray-900">{post.author_name}</span> appreciated{' '}
               <span className="font-semibold" style={{ color: ACCENT }}>{post.kudos_to_name}</span>
             </p>
-            {post.body && <p className="mt-2 text-sm italic text-gray-700">“{post.body}”</p>}
+            {post.body && <p className="mt-2 text-sm italic text-gray-700">â€œ{post.body}â€</p>}
           </div>
         ) : (
           <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">{post.body}</p>
@@ -2348,7 +2232,7 @@ function EngageTab({ profile }) {
             <div className="flex-1 space-y-3">
               {mode === 'post' ? (
                 <>
-                  <textarea className={inputCls} rows={3} value={postBody} placeholder="Share something with your team…"
+                  <textarea className={inputCls} rows={3} value={postBody} placeholder="Share something with your teamâ€¦"
                     onChange={e => setPostBody(e.target.value)} />
                   <div className="flex items-center justify-between">
                     <select className={`${inputCls} max-w-[180px]`} value={postGroup} onChange={e => setPostGroup(e.target.value)}>
@@ -2364,8 +2248,8 @@ function EngageTab({ profile }) {
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field title="Appreciate">
                       <select className={inputCls} value={kudosTo} onChange={e => setKudosTo(e.target.value)}>
-                        <option value="">Select a colleague…</option>
-                        {(colleagues.data || []).map(c => <option key={c.id} value={c.id}>{c.name}{c.designation_name ? ` — ${c.designation_name}` : ''}</option>)}
+                        <option value="">Select a colleagueâ€¦</option>
+                        {(colleagues.data || []).map(c => <option key={c.id} value={c.id}>{c.name}{c.designation_name ? ` â€” ${c.designation_name}` : ''}</option>)}
                       </select>
                     </Field>
                     <Field title="Badge">
@@ -2374,7 +2258,7 @@ function EngageTab({ profile }) {
                       </select>
                     </Field>
                   </div>
-                  <textarea className={inputCls} rows={2} value={kudosMsg} placeholder="Add a message (optional)…"
+                  <textarea className={inputCls} rows={2} value={kudosMsg} placeholder="Add a message (optional)â€¦"
                     onChange={e => setKudosMsg(e.target.value)} />
                   <div className="flex justify-end">
                     <GreenBtn disabled={!kudosTo || create.isPending} onClick={() => create.mutate()}>
@@ -2401,7 +2285,7 @@ function EngageTab({ profile }) {
 
       {/* Feed */}
       {feed.isLoading ? (
-        <p className="py-8 text-center text-sm text-gray-400">Loading feed…</p>
+        <p className="py-8 text-center text-sm text-gray-400">Loading feedâ€¦</p>
       ) : !(feed.data || []).length ? (
         <SectionCard><p className="py-8 text-center text-sm text-gray-400">No activity yet. Be the first to post or give kudos!</p></SectionCard>
       ) : (
@@ -2413,9 +2297,9 @@ function EngageTab({ profile }) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    REIMBURSEMENTS TAB
-═══════════════════════════════════════════════════════════════ */
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 function ReimbursementsTab() {
   const qc = useQueryClient();
   const claims = useQuery({ queryKey: ['ess-reimbursements'], queryFn: () => essAPI.reimbursements().then(unwrap) });
@@ -2439,7 +2323,7 @@ function ReimbursementsTab() {
               <option value="general">General</option>
             </select>
           </Field>
-          <Field title="Amount (₹)">
+          <Field title="Amount (â‚¹)">
             <input type="number" className={inputCls} value={form.amount} placeholder="0.00"
               onChange={e => setForm({ ...form, amount: e.target.value })} />
           </Field>
@@ -2461,7 +2345,7 @@ function ReimbursementsTab() {
             { key: 'claim_date',   label: 'Date', render: r => String(r.claim_date||'').slice(0,10) },
             { key: 'expense_type', label: 'Type', render: r => <span className="capitalize">{r.expense_type}</span> },
             { key: 'description',  label: 'Description' },
-            { key: 'amount',       label: 'Amount', render: r => `₹${Number(r.amount||0).toLocaleString('en-IN')}` },
+            { key: 'amount',       label: 'Amount', render: r => `â‚¹${Number(r.amount||0).toLocaleString('en-IN')}` },
             { key: 'status',       label: 'Status', render: r => <StatusBadge value={r.status} /> },
           ]}
           rows={claims.data || []}
@@ -2472,9 +2356,9 @@ function ReimbursementsTab() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    LOANS & ADVANCES TAB
-═══════════════════════════════════════════════════════════════ */
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 function LoansTab() {
   const qc = useQueryClient();
   const loans = useQuery({ queryKey: ['ess-loans'], queryFn: () => essAPI.loans().then(unwrap) });
@@ -2495,7 +2379,7 @@ function LoansTab() {
               <option value="emergency">Emergency Loan</option>
             </select>
           </Field>
-          <Field title="Amount (₹)">
+          <Field title="Amount (â‚¹)">
             <input type="number" className={inputCls} value={form.amount} placeholder="0.00"
               onChange={e => setForm({ ...form, amount: e.target.value })} />
           </Field>
@@ -2516,8 +2400,8 @@ function LoansTab() {
           columns={[
             { key: 'requested_date', label: 'Requested', render: r => String(r.requested_date||'').slice(0,10) },
             { key: 'loan_type',   label: 'Type', render: r => <span className="capitalize">{r.loan_type}</span> },
-            { key: 'amount',      label: 'Amount', render: r => `₹${Number(r.amount||0).toLocaleString('en-IN')}` },
-            { key: 'balance_amount', label: 'Balance', render: r => r.status === 'disbursed' || Number(r.balance_amount) ? `₹${Number(r.balance_amount||0).toLocaleString('en-IN')}` : '-' },
+            { key: 'amount',      label: 'Amount', render: r => `â‚¹${Number(r.amount||0).toLocaleString('en-IN')}` },
+            { key: 'balance_amount', label: 'Balance', render: r => r.status === 'disbursed' || Number(r.balance_amount) ? `â‚¹${Number(r.balance_amount||0).toLocaleString('en-IN')}` : '-' },
             { key: 'status',      label: 'Status', render: r => <StatusBadge value={r.status} /> },
           ]}
           rows={loans.data || []}
@@ -2528,9 +2412,9 @@ function LoansTab() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    COMING SOON PLACEHOLDER
-═══════════════════════════════════════════════════════════════ */
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 function ComingSoon({ label }) {
   return (
     <div className="flex min-h-[60vh] items-center justify-center rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -2545,9 +2429,9 @@ function ComingSoon({ label }) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    ROOT PAGE
-═══════════════════════════════════════════════════════════════ */
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 const FUNCTIONAL_TABS = new Set(['dashboard','engage','profile','attendance','leave','payslips','reimbursement','loans','documents','hr-requests','manager','training','timesheet','assets','helpdesk','knowledge']);
 
 export default function ESSPortalPage() {
@@ -2593,7 +2477,7 @@ export default function ESSPortalPage() {
       <ESSSidebar active={active} setActive={setActive} />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Mobile horizontal tab bar (hidden on desktop — sidebar covers it) */}
+        {/* Mobile horizontal tab bar (hidden on desktop â€” sidebar covers it) */}
         <ESSTabNav active={active} setActive={setActive} />
 
         {/* Page content */}
