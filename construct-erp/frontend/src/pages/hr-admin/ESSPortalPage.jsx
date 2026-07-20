@@ -20,10 +20,10 @@ const MONTH_NAMES = [
   'July','August','September','October','November','December',
 ];
 
-/* â”€â”€â”€ design tokens â€” light HR-SaaS palette (Zoho People / GreytHR style),
+/* â”€â”€â”€ design tokens — light HR-SaaS palette (Zoho People / GreytHR style),
    matching the ESS login page's blue/teal theme instead of the ERP's navy/gold â”€â”€â”€ */
-const ACCENT = '#2F6FED';   // primary accent â€” buttons, links, positive stats, progress bars
-const TEAL   = '#14B8A6';   // secondary accent â€” used sparingly for variety
+const ACCENT = '#2F6FED';   // primary accent — buttons, links, positive stats, progress bars
+const TEAL   = '#14B8A6';   // secondary accent — used sparingly for variety
 const DARK   = '#0F172A';   // dark text/highlight (was solid navy fills)
 const BG     = '#F4F6FB';
 
@@ -144,10 +144,10 @@ function SwipeDir({ direction }) {
   const isOut = String(direction||'').toLowerCase().includes('out') || direction === '1';
   if (isIn)  return <span style={{ display:'inline-block', padding:'1px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#dcfce7', color:'#15803d' }}>IN</span>;
   if (isOut) return <span style={{ display:'inline-block', padding:'1px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#fee2e2', color:'#b91c1c' }}>OUT</span>;
-  return       <span style={{ display:'inline-block', padding:'1px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#f1f5f9', color:'#64748b' }}>â€”</span>;
+  return       <span style={{ display:'inline-block', padding:'1px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#f1f5f9', color:'#64748b' }}>—</span>;
 }
 
-// ESSL stores IST device-local time as if it were UTC â€” read UTC components
+// ESSL stores IST device-local time as if it were UTC — read UTC components
 // to recover the actual punch time the device recorded.
 function esslTime(ts) {
   if (!ts) return null;
@@ -160,7 +160,7 @@ function fmt12(h, m, s = 0) {
   return `${String(h12).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} ${period}`;
 }
 function fmtSwipeTime(ts) {
-  if (!ts) return 'â€”';
+  if (!ts) return '—';
   const t = esslTime(ts);
   return `${t.dateStr} ${fmt12(t.h, t.m)}`;
 }
@@ -169,7 +169,7 @@ function fmtSwipeTime(ts) {
 function groupByDate(swipes) {
   const groups = {};
   for (const s of swipes) {
-    // ESSL stores IST device-local time as if it were UTC â€” read UTC date
+    // ESSL stores IST device-local time as if it were UTC — read UTC date
     // components to recover the actual calendar date the device recorded.
     const dayKey = new Date(s.swipe_time).toISOString().slice(0, 10);
     if (!groups[dayKey]) groups[dayKey] = [];
@@ -233,7 +233,7 @@ function ESSTabNav({ active, setActive }) {
   );
 }
 
-// Desktop vertical sidebar â€” the primary ESS Portal navigation for individual
+// Desktop vertical sidebar — the primary ESS Portal navigation for individual
 // staff logins (Zoho People / GreytHR style left nav instead of a top bar).
 function ESSSidebar({ active, setActive }) {
   return (
@@ -416,21 +416,21 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
     {
       label: 'Leave Balance', bg: '#E3F5F1', fg: '#0D9488', Icon: CalendarOff,
       body: <p style={{ fontSize:24, fontWeight:700, color:'#0F172A', lineHeight:1 }}>{Number(totalBalance).toFixed(1)}</p>,
-      sub: [casualBal>0&&`Casual ${Number(casualBal).toFixed(1)}`, earnedBal>0&&`Earned ${Number(earnedBal).toFixed(1)}`].filter(Boolean).join(' Â· ') || 'days available',
+      sub: [casualBal>0&&`Casual ${Number(casualBal).toFixed(1)}`, earnedBal>0&&`Earned ${Number(earnedBal).toFixed(1)}`].filter(Boolean).join(' · ') || 'days available',
       cta: { label: 'View Leave', onClick: () => setActive('leave') },
     },
     {
       label: 'Latest Payslip', bg: '#FEF3D6', fg: '#B45309', Icon: BadgeIndianRupee,
       body: payroll?.month
-        ? <p style={{ fontSize:20, fontWeight:700, color:'#0F172A', lineHeight:1 }}>â‚¹{Number(payroll.net_pay||0).toLocaleString('en-IN')}</p>
+        ? <p style={{ fontSize:20, fontWeight:700, color:'#0F172A', lineHeight:1 }}>₹{Number(payroll.net_pay||0).toLocaleString('en-IN')}</p>
         : <p style={{ fontSize:12, color:'#94A3B8', marginTop:4 }}>No payslip yet</p>,
-      sub: payroll?.month ? `${MONTH_NAMES[(payroll.month||1)-1]} ${payroll.year} Â· Net pay` : 'Not processed',
+      sub: payroll?.month ? `${MONTH_NAMES[(payroll.month||1)-1]} ${payroll.year} · Net pay` : 'Not processed',
       cta: payroll?.month ? { label: 'View Payslip', onClick: () => payroll.id && navigate(`/hr-admin/payroll/${payroll.id}/payslip`) } : null,
     },
     {
       label: 'My Requests', bg: '#FCE7F3', fg: '#DB2777', Icon: FolderUp,
       body: <p style={{ fontSize:24, fontWeight:700, color:'#0F172A', lineHeight:1 }}>{pendingTotal}</p>,
-      sub: `Leave ${pendingLeave} Â· Reg. ${pendingCorr} pending`,
+      sub: `Leave ${pendingLeave} · Reg. ${pendingCorr} pending`,
       cta: { label: 'View Requests', onClick: () => setActive('hr-requests') },
     },
   ];
@@ -453,10 +453,10 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
             }
             <div>
               <div style={{ fontSize:10.5,color:'#94A3B8',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:2 }}>{greeting}</div>
-              <div style={{ fontSize:20,fontWeight:600,letterSpacing:'-0.02em',color:'#0F172A' }}>{profile?.name?.split(' ')[0]||'Employee'} ðŸ‘‹</div>
+              <div style={{ fontSize:20,fontWeight:600,letterSpacing:'-0.02em',color:'#0F172A' }}>{profile?.name?.split(' ')[0]||'Employee'} </div>
               <div style={{ fontSize:11.5,color:'#94A3B8',marginTop:3,display:'flex',alignItems:'center',gap:5 }}>
                 <div style={{ width:6,height:6,borderRadius:'50%',background:'#10B981',flexShrink:0 }} />
-                {profile?.work_location||'Head Office'} Â· {now.toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short'})}
+                {profile?.work_location||'Head Office'} · {now.toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short'})}
               </div>
             </div>
           </div>
@@ -469,12 +469,12 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
               const boxBg  = code ? `${dotColorMap[code]}18` : isToday ? 'rgba(245,158,11,0.1)' : 'rgba(0,0,0,0.03)';
               const boxBdr = code ? `1px solid ${dotBorderMap[code]}` : isToday ? '1px solid rgba(245,158,11,0.3)' : '1px solid rgba(0,0,0,0.07)';
               const boxClr = code ? dotColorMap[code] : isToday ? '#D97706' : '#CBD5E1';
-              const label  = code==='P'?'âœ“':code==='A'?'âœ—':code==='H'?'H':code==='L'?'L':code==='HD'?'Â½':isToday?'â€”':'';
+              const label  = code==='P'?'✓':code==='A'?'✗':code==='H'?'H':code==='L'?'L':code==='HD'?'½':isToday?'—':'';
               return (
                 <div key={ds} style={{ display:'flex',flexDirection:'column',alignItems:'center',gap:4 }}>
                   <div style={{ fontSize:8.5,color:'#94A3B8',textTransform:'uppercase',letterSpacing:'0.05em' }}>{name}</div>
                   <div style={{ width:34,height:34,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:600,background:boxBg,border:boxBdr,color:boxClr }}>{label}</div>
-                  <div style={{ fontSize:8.5,color:code==='P'?'#10B981':isToday?'#F59E0B':'#CBD5E1' }}>{inTime||(isToday?'Today':isWknd?'Off':'â€”')}</div>
+                  <div style={{ fontSize:8.5,color:code==='P'?'#10B981':isToday?'#F59E0B':'#CBD5E1' }}>{inTime||(isToday?'Today':isWknd?'Off':'—')}</div>
                 </div>
               );
             })}
@@ -482,9 +482,9 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
 
           {/* CTA */}
           <div style={{ display:'flex',flexDirection:'column',alignItems:'flex-end',gap:8,flexShrink:0 }}>
-            {!todayRec?.code && <div style={{ background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',color:'#B45309',fontSize:11,padding:'4px 11px',borderRadius:20 }}>âš  Not marked today</div>}
+            {!todayRec?.code && <div style={{ background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',color:'#B45309',fontSize:11,padding:'4px 11px',borderRadius:20 }}>⚠ Not marked today</div>}
             <button onClick={() => setActive('attendance')} style={{ background:'linear-gradient(135deg,#4F46E5,#06B6D4)',color:'#fff',fontSize:12.5,fontWeight:700,padding:'9px 18px',borderRadius:9,border:'none',cursor:'pointer',boxShadow:'0 4px 14px rgba(79,70,229,.3)',whiteSpace:'nowrap' }}>
-              {todayRec?.code ? `Marked Â· ${todayInTime||todayStatusLabel[todayRec.code]||''} â†—` : 'Mark Attendance â†’'}
+              {todayRec?.code ? `Marked · ${todayInTime||todayStatusLabel[todayRec.code]||''} ↗` : 'Mark Attendance →'}
             </button>
           </div>
         </div>
@@ -518,7 +518,7 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
               </div>
             ))}
           </div>
-          <button onClick={() => setActive('leave')} style={{ fontSize:11.5,fontWeight:600,color:ACCENT,background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:0 }}>View Leave Balance â†’</button>
+          <button onClick={() => setActive('leave')} style={{ fontSize:11.5,fontWeight:600,color:ACCENT,background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:0 }}>View Leave Balance →</button>
         </div>
       </div>
 
@@ -533,7 +533,7 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
               {c.body}
               <div style={{ fontSize:11,color:'#64748B',marginTop:3 }}>{c.label}</div>
               {c.sub && <div style={{ fontSize:10.5,color:'#94A3B8',marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{c.sub}</div>}
-              {c.cta && <button onClick={c.cta.onClick} style={{ fontSize:10.5,fontWeight:600,color:ACCENT,background:'none',border:'none',cursor:'pointer',marginTop:4,padding:0 }}>{c.cta.label} â†’</button>}
+              {c.cta && <button onClick={c.cta.onClick} style={{ fontSize:10.5,fontWeight:600,color:ACCENT,background:'none',border:'none',cursor:'pointer',marginTop:4,padding:0 }}>{c.cta.label} →</button>}
             </div>
           </div>
         ))}
@@ -544,7 +544,7 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
 
         {/* Monthly attendance dot grid */}
         <div style={{ ...GC, padding:'18px 20px' }}>
-          <span style={ST}>{MONTH_NAMES[now.getMonth()]} {now.getFullYear()} â€” Attendance</span>
+          <span style={ST}>{MONTH_NAMES[now.getMonth()]} {now.getFullYear()} — Attendance</span>
           <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,marginBottom:12 }}>
             {[
               { label:'Present', val:attendance.present??0,   color:'#059669' },
@@ -562,7 +562,7 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
             {monthlyDots.map(({ ds,code,isWknd,isToday }) => {
               const bg  = code ? `${dotColorMap[code]}22` : 'rgba(0,0,0,0.04)';
               const bdr = code ? `1px solid ${dotBorderMap[code]}` : '1px solid rgba(0,0,0,0.07)';
-              return <div key={ds} title={`${ds}: ${code||(isWknd?'WO':'â€”')}`} style={{ aspectRatio:'1',borderRadius:4,background:bg,border:bdr,outline:isToday?`2px solid ${ACCENT}`:undefined,outlineOffset:isToday?1:undefined }} />;
+              return <div key={ds} title={`${ds}: ${code||(isWknd?'WO':'—')}`} style={{ aspectRatio:'1',borderRadius:4,background:bg,border:bdr,outline:isToday?`2px solid ${ACCENT}`:undefined,outlineOffset:isToday?1:undefined }} />;
             })}
           </div>
           <div style={{ display:'flex',gap:10,flexWrap:'wrap' }}>
@@ -578,7 +578,7 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
         <div style={{ ...GC, padding:'18px 20px' }}>
           <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12 }}>
             <span style={{ ...ST, marginBottom:0 }}>Recent Leave Requests</span>
-            <button onClick={() => setActive('leave')} style={{ fontSize:10.5,fontWeight:600,color:ACCENT,background:'none',border:'none',cursor:'pointer' }}>View All â†’</button>
+            <button onClick={() => setActive('leave')} style={{ fontSize:10.5,fontWeight:600,color:ACCENT,background:'none',border:'none',cursor:'pointer' }}>View All →</button>
           </div>
           <div style={{ display:'flex',flexDirection:'column',gap:6 }}>
             {(leavesQ.data||[]).slice(0,4).length ? (leavesQ.data||[]).slice(0,4).map((r,i) => (
@@ -588,7 +588,7 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
                 </div>
                 <div style={{ flex:1,minWidth:0 }}>
                   <div style={{ fontSize:12,fontWeight:500,color:'#1E293B',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>{r.leave_type_name||'Leave'}</div>
-                  <div style={{ fontSize:10.5,color:'#94A3B8',marginTop:1 }}>{String(r.from_date||'').slice(0,10)} â†’ {String(r.to_date||'').slice(0,10)}</div>
+                  <div style={{ fontSize:10.5,color:'#94A3B8',marginTop:1 }}>{String(r.from_date||'').slice(0,10)} → {String(r.to_date||'').slice(0,10)}</div>
                 </div>
                 <StatusBadge value={r.status} />
               </div>
@@ -629,12 +629,12 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
             <div style={{ display:'flex',flexDirection:'column',gap:6 }}>
               {!todayRec?.code && (
                 <div style={{ display:'flex',alignItems:'center',gap:9,padding:'9px 12px',borderRadius:10,border:'1px solid rgba(245,158,11,0.2)',background:'rgba(245,158,11,0.05)' }}>
-                  <span>âš ï¸</span>
+                  <span>⚠ï¸</span>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:11.5,fontWeight:500,color:'#1E293B' }}>Mark today's attendance</div>
                     <div style={{ fontSize:10,color:'#94A3B8',marginTop:1 }}>Not yet checked in</div>
                   </div>
-                  <button onClick={() => setActive('attendance')} style={{ fontSize:10.5,fontWeight:600,color:'#D97706',background:'none',border:'none',cursor:'pointer' }}>Mark â†’</button>
+                  <button onClick={() => setActive('attendance')} style={{ fontSize:10.5,fontWeight:600,color:'#D97706',background:'none',border:'none',cursor:'pointer' }}>Mark →</button>
                 </div>
               )}
               {pendingCorr > 0 && (
@@ -644,7 +644,7 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
                     <div style={{ fontSize:11.5,fontWeight:500,color:'#1E293B' }}>{pendingCorr} regularization{pendingCorr>1?'s':''} pending</div>
                     <div style={{ fontSize:10,color:'#94A3B8',marginTop:1 }}>Awaiting approval</div>
                   </div>
-                  <button onClick={() => setActive('attendance')} style={{ fontSize:10.5,fontWeight:600,color:ACCENT,background:'none',border:'none',cursor:'pointer' }}>View â†’</button>
+                  <button onClick={() => setActive('attendance')} style={{ fontSize:10.5,fontWeight:600,color:ACCENT,background:'none',border:'none',cursor:'pointer' }}>View →</button>
                 </div>
               )}
               {pendingLeave > 0 && (
@@ -654,11 +654,11 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
                     <div style={{ fontSize:11.5,fontWeight:500,color:'#1E293B' }}>{pendingLeave} leave request{pendingLeave>1?'s':''} pending</div>
                     <div style={{ fontSize:10,color:'#94A3B8',marginTop:1 }}>Awaiting manager approval</div>
                   </div>
-                  <button onClick={() => setActive('leave')} style={{ fontSize:10.5,fontWeight:600,color:'#7C3AED',background:'none',border:'none',cursor:'pointer' }}>View â†’</button>
+                  <button onClick={() => setActive('leave')} style={{ fontSize:10.5,fontWeight:600,color:'#7C3AED',background:'none',border:'none',cursor:'pointer' }}>View →</button>
                 </div>
               )}
               {todayRec?.code && pendingCorr===0 && pendingLeave===0 && (
-                <div style={{ textAlign:'center',padding:'12px 0',color:'#94A3B8',fontSize:11.5 }}>All clear â€” no pending actions âœ“</div>
+                <div style={{ textAlign:'center',padding:'12px 0',color:'#94A3B8',fontSize:11.5 }}>All clear — no pending actions ✓</div>
               )}
             </div>
           </div>
@@ -788,7 +788,7 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
             <span style={ST}>Month Summary</span>
             <div style={{ display:'flex',gap:6 }}>
               {[
-                { label:'Working',val:attendance.working_days??'â€”',color:'#64748B' },
+                { label:'Working',val:attendance.working_days??'—',color:'#64748B' },
                 { label:'Present', val:attendance.present??0,     color:'#059669' },
                 { label:'Absent',  val:attendance.absent??0,      color:'#DC2626' },
               ].map(({ label,val,color }) => (
@@ -802,6 +802,97 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
         </div>
       </div>
 
+    </div>
+  );
+}
+
+function fileToAvatarDataUri(file, size = 256) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const min = Math.min(img.width, img.height);
+        const sx = (img.width - min) / 2;
+        const sy = (img.height - min) / 2;
+        ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function ProfilePhotoAvatar({ profile, size = 80, editable = false }) {
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const name     = profile?.name || 'Employee';
+  const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  const photo    = profile?.profile_photo_url;
+
+  const refresh = () => qc.invalidateQueries({ queryKey: ['ess-summary'] });
+
+  const onPick = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!/^image\//.test(file.type)) return toast.error('Please choose an image file.');
+    setBusy(true);
+    try {
+      const dataUri = await fileToAvatarDataUri(file);
+      await essAPI.uploadProfilePhoto(dataUri);
+      toast.success('Profile photo updated');
+      refresh();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Could not update photo');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onRemove = async () => {
+    setBusy(true);
+    try {
+      await essAPI.removeProfilePhoto();
+      toast.success('Profile photo removed');
+      refresh();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Could not remove photo');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ position:'relative', flexShrink:0, width:size, height:size }}>
+      {photo ? (
+        <img src={photo} alt={name} style={{ width:size, height:size, borderRadius:'50%', objectFit:'cover', boxShadow:'0 0 0 3px #fff,0 2px 8px rgba(0,0,0,0.18)' }} />
+      ) : (
+        <div style={{ width:size, height:size, borderRadius:'50%', background:`linear-gradient(135deg,${ACCENT},${TEAL})`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:size*0.3, fontWeight:700, color:'#fff', boxShadow:'0 0 0 3px #fff,0 2px 8px rgba(0,0,0,0.18)' }}>
+          {initials}
+        </div>
+      )}
+      {editable && (
+        <>
+          <label style={{ position:'absolute', bottom:-4, right:-4, width:30, height:30, borderRadius:'50%', background:'#fff', border:'2px solid #fff', boxShadow:'0 1px 6px rgba(0,0,0,0.18)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', color:ACCENT }}>
+            {busy
+              ? <span style={{ width:14, height:14, borderRadius:'50%', border:`2px solid #e5e7eb`, borderTopColor:ACCENT, display:'inline-block' }} />
+              : <Camera size={14} />}
+            <input type="file" accept="image/*" style={{ display:'none' }} onChange={onPick} disabled={busy} />
+          </label>
+          {photo && !busy && (
+            <button onClick={onRemove} title="Remove photo" style={{ position:'absolute', top:-4, right:-4, width:22, height:22, borderRadius:'50%', background:'#fff', border:'2px solid #fff', boxShadow:'0 1px 6px rgba(0,0,0,0.18)', display:'flex', alignItems:'center', justifyContent:'center', color:'#EF4444', cursor:'pointer' }}>
+              <Trash2 size={11} />
+            </button>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -845,7 +936,7 @@ function ProfileTab({ profile, balances }) {
               </div>
               <div style={{ paddingBottom:4 }}>
                 <p style={{ fontSize:20, fontWeight:800, color:'#0F172A', margin:0 }}>{name}</p>
-                <p style={{ fontSize:13, color:'#64748B', margin:0 }}>{p.designation_name || cap(p.role) || 'â€”'}</p>
+                <p style={{ fontSize:13, color:'#64748B', margin:0 }}>{p.designation_name || cap(p.role) || '—'}</p>
               </div>
             </div>
             <div style={{ display:'flex', flexWrap:'wrap', gap:8, paddingBottom:4 }}>
@@ -1350,9 +1441,9 @@ function PayslipsTab() {
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
           {[
-            { label:'Gross Earnings',    val:`â‚¹${t.gross.toLocaleString('en-IN')}`,       color:'#1E293B' },
-            { label:'Total Deductions',  val:`â‚¹${t.deductions.toLocaleString('en-IN')}`,  color:'#EF4444' },
-            { label:'Net Paid',          val:`â‚¹${t.net.toLocaleString('en-IN')}`,         color:ACCENT    },
+            { label:'Gross Earnings',    val:`₹${t.gross.toLocaleString('en-IN')}`,       color:'#1E293B' },
+            { label:'Total Deductions',  val:`₹${t.deductions.toLocaleString('en-IN')}`,  color:'#EF4444' },
+            { label:'Net Paid',          val:`₹${t.net.toLocaleString('en-IN')}`,         color:ACCENT    },
           ].map(({ label, val, color }) => (
             <div key={label} style={{ background:'rgba(47,111,237,0.04)', border:'1px solid rgba(47,111,237,0.08)', borderRadius:12, padding:16 }}>
               <p style={{ fontSize:10.5, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8' }}>{label}</p>
@@ -1372,10 +1463,10 @@ function PayslipsTab() {
           columns={[
             { key: 'month',            label: 'Month' },
             { key: 'year',             label: 'Year'  },
-            { key: 'gross_earnings',   label: 'Gross',      render: r => `â‚¹${Number(r.gross_earnings  ||0).toLocaleString('en-IN')}` },
-            { key: 'total_deductions', label: 'Deductions', render: r => `â‚¹${Number(r.total_deductions||0).toLocaleString('en-IN')}` },
+            { key: 'gross_earnings',   label: 'Gross',      render: r => `₹${Number(r.gross_earnings  ||0).toLocaleString('en-IN')}` },
+            { key: 'total_deductions', label: 'Deductions', render: r => `₹${Number(r.total_deductions||0).toLocaleString('en-IN')}` },
             { key: 'net_pay', label: 'Net Pay', render: r => (
-              <span style={{ fontWeight:700, color:ACCENT }}>â‚¹{Number(r.net_pay||0).toLocaleString('en-IN')}</span>
+              <span style={{ fontWeight:700, color:ACCENT }}>₹{Number(r.net_pay||0).toLocaleString('en-IN')}</span>
             )},
             { key: 'status', label: 'Status', render: r => <StatusBadge value={r.status} /> },
             { key: 'actions', label: 'Payslip', render: r => (
@@ -1833,7 +1924,7 @@ function TrainingTab() {
 }
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-   ASSETS TAB â€” company assets allocated to the employee (read-only)
+   ASSETS TAB — company assets allocated to the employee (read-only)
 â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 const ASSET_ICONS = {
   laptop: 'ðŸ’»', mobile: 'ðŸ“±', sim_card: 'ðŸ“¶', vehicle: 'ðŸš—',
@@ -1851,7 +1942,7 @@ function AssetsTab() {
         <span style={STA}>My Assets</span>
         <p style={{ fontSize:11.5, color:'#64748B', marginBottom:16 }}>Company equipment currently allocated to you</p>
         {assets.isLoading ? (
-          <p style={{ padding:'24px 0', textAlign:'center', fontSize:13, color:'#94A3B8' }}>Loading assetsâ€¦</p>
+          <p style={{ padding:'24px 0', textAlign:'center', fontSize:13, color:'#94A3B8' }}>Loading assets…</p>
         ) : !active.length ? (
           <p style={{ padding:'32px 0', textAlign:'center', fontSize:13, color:'#94A3B8' }}>No assets are currently allocated to you.</p>
         ) : (
@@ -1897,7 +1988,7 @@ function AssetsTab() {
 }
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-   HELPDESK TAB â€” raise & track own IT tickets
+   HELPDESK TAB — raise & track own IT tickets
 â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 function HelpdeskTab() {
   const qc = useQueryClient();
@@ -1956,7 +2047,7 @@ function HelpdeskTab() {
       <div style={{ ...GCA, padding:20 }}>
         <span style={STA}>My Tickets</span>
         {tickets.isLoading ? (
-          <p style={{ padding:'24px 0', textAlign:'center', fontSize:13, color:'#94A3B8' }}>Loading ticketsâ€¦</p>
+          <p style={{ padding:'24px 0', textAlign:'center', fontSize:13, color:'#94A3B8' }}>Loading tickets…</p>
         ) : (
           <Table
             columns={[
@@ -1977,7 +2068,7 @@ function HelpdeskTab() {
 }
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-   TIMESHEET TAB â€” monthly hours from attendance
+   TIMESHEET TAB — monthly hours from attendance
 â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 function hoursBetween(inT, outT) {
   if (!inT || !outT) return 0;
@@ -2044,7 +2135,7 @@ function TimesheetTab() {
         </div>
 
         {att.isLoading ? (
-          <p style={{ padding:'24px 0', textAlign:'center', fontSize:13, color:'#94A3B8' }}>Loading timesheetâ€¦</p>
+          <p style={{ padding:'24px 0', textAlign:'center', fontSize:13, color:'#94A3B8' }}>Loading timesheet…</p>
         ) : (
           <Table
             columns={[
@@ -2064,7 +2155,7 @@ function TimesheetTab() {
 }
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-   KNOWLEDGE BASE TAB â€” published company policies
+   KNOWLEDGE BASE TAB — published company policies
 â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 function KnowledgeTab() {
   const kb = useQuery({ queryKey: ['ess-knowledge'], queryFn: () => essAPI.knowledge().then(unwrap) });
@@ -2088,10 +2179,10 @@ function KnowledgeTab() {
         <span style={STA}>Knowledge Base</span>
         <p style={{ fontSize:11.5, color:'#64748B', marginBottom:12 }}>Company policies, guidelines and procedures</p>
         <div style={{ marginBottom:16, maxWidth:320 }}>
-          <input className={inputCls} value={search} onChange={e => setSearch(e.target.value)} placeholder="Search policiesâ€¦" />
+          <input className={inputCls} value={search} onChange={e => setSearch(e.target.value)} placeholder="Search policies…" />
         </div>
         {kb.isLoading ? (
-          <p style={{ padding:'24px 0', textAlign:'center', fontSize:13, color:'#94A3B8' }}>Loadingâ€¦</p>
+          <p style={{ padding:'24px 0', textAlign:'center', fontSize:13, color:'#94A3B8' }}>Loading…</p>
         ) : !filtered.length ? (
           <p style={{ padding:'32px 0', textAlign:'center', fontSize:13, color:'#94A3B8' }}>No published policies available.</p>
         ) : (
@@ -2111,8 +2202,8 @@ function KnowledgeTab() {
                             <div>
                               <p style={{ fontSize:13, fontWeight:600, color:'#1E293B' }}>{d.title}</p>
                               <p style={{ fontSize:11, color:'#94A3B8', marginTop:1 }}>
-                                {d.policy_code ? `${d.policy_code} Â· ` : ''}v{d.version}
-                                {d.effective_date ? ` Â· ${String(d.effective_date).slice(0,10)}` : ''}
+                                {d.policy_code ? `${d.policy_code} · ` : ''}v{d.version}
+                                {d.effective_date ? ` · ${String(d.effective_date).slice(0,10)}` : ''}
                               </p>
                             </div>
                           </div>
@@ -2137,7 +2228,7 @@ function KnowledgeTab() {
 }
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-   ENGAGE TAB â€” social feed (posts + kudos)
+   ENGAGE TAB — social feed (posts + kudos)
 â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 function timeAgo(ts) {
   if (!ts) return '';
@@ -2187,7 +2278,7 @@ function EngageComments({ postId }) {
         ))}
       </div>
       <div className="mt-2 flex items-center gap-2">
-        <input className={inputCls} value={text} placeholder="Write a commentâ€¦"
+        <input className={inputCls} value={text} placeholder="Write a comment…"
           onChange={e => setText(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && text.trim()) add.mutate(); }} />
         <button onClick={() => text.trim() && add.mutate()} disabled={add.isPending}
@@ -2216,7 +2307,7 @@ function EngageCard({ post }) {
           <div className="min-w-0 flex-1">
             <p className="text-sm font-bold text-gray-900">{post.author_name}</p>
             <p className="text-xs text-gray-400">
-              {post.group_name ? `${post.group_name} Â· ` : ''}{timeAgo(post.created_at)}
+              {post.group_name ? `${post.group_name} · ` : ''}{timeAgo(post.created_at)}
             </p>
           </div>
           {isKudos && (
@@ -2232,7 +2323,7 @@ function EngageCard({ post }) {
               <span className="font-semibold text-gray-900">{post.author_name}</span> appreciated{' '}
               <span className="font-semibold" style={{ color: ACCENT }}>{post.kudos_to_name}</span>
             </p>
-            {post.body && <p className="mt-2 text-sm italic text-gray-700">â€œ{post.body}â€</p>}
+            {post.body && <p className="mt-2 text-sm italic text-gray-700">“{post.body}â€</p>}
           </div>
         ) : (
           <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">{post.body}</p>
@@ -2299,7 +2390,7 @@ function EngageTab({ profile }) {
             <div style={{ flex:1, display:'flex', flexDirection:'column', gap:10 }}>
               {mode === 'post' ? (
                 <>
-                  <textarea className={inputCls} rows={3} value={postBody} placeholder="Share something with your teamâ€¦" onChange={e => setPostBody(e.target.value)} />
+                  <textarea className={inputCls} rows={3} value={postBody} placeholder="Share something with your team…" onChange={e => setPostBody(e.target.value)} />
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
                     <select className={inputCls} style={{ maxWidth:180 }} value={postGroup} onChange={e => setPostGroup(e.target.value)}>
                       {POST_GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
@@ -2316,8 +2407,8 @@ function EngageTab({ profile }) {
                     <div>
                       <label style={{ fontSize:10.5, color:'#94A3B8', fontWeight:600, display:'block', marginBottom:4 }}>Appreciate</label>
                       <select className={inputCls} value={kudosTo} onChange={e => setKudosTo(e.target.value)}>
-                        <option value="">Select a colleagueâ€¦</option>
-                        {(colleagues.data || []).map(c => <option key={c.id} value={c.id}>{c.name}{c.designation_name ? ` â€” ${c.designation_name}` : ''}</option>)}
+                        <option value="">Select a colleague…</option>
+                        {(colleagues.data || []).map(c => <option key={c.id} value={c.id}>{c.name}{c.designation_name ? ` — ${c.designation_name}` : ''}</option>)}
                       </select>
                     </div>
                     <div>
@@ -2327,7 +2418,7 @@ function EngageTab({ profile }) {
                       </select>
                     </div>
                   </div>
-                  <textarea className={inputCls} rows={2} value={kudosMsg} placeholder="Add a message (optional)â€¦" onChange={e => setKudosMsg(e.target.value)} />
+                  <textarea className={inputCls} rows={2} value={kudosMsg} placeholder="Add a message (optional)…" onChange={e => setKudosMsg(e.target.value)} />
                   <div style={{ display:'flex', justifyContent:'flex-end' }}>
                     <button disabled={!kudosTo || create.isPending} onClick={() => create.mutate()}
                       style={{ display:'inline-flex', alignItems:'center', gap:6, background:kudosTo?ACCENT:'rgba(0,0,0,0.08)', color:kudosTo?'#fff':'#94A3B8', borderRadius:10, border:'none', padding:'8px 18px', fontWeight:700, fontSize:12.5, cursor:kudosTo?'pointer':'not-allowed' }}>
@@ -2353,7 +2444,7 @@ function EngageTab({ profile }) {
 
       {/* Feed */}
       {feed.isLoading ? (
-        <p style={{ padding:'32px 0', textAlign:'center', fontSize:13, color:'#94A3B8' }}>Loading feedâ€¦</p>
+        <p style={{ padding:'32px 0', textAlign:'center', fontSize:13, color:'#94A3B8' }}>Loading feed…</p>
       ) : !(feed.data || []).length ? (
         <div style={{ ...GCA, padding:32, textAlign:'center' }}>
           <p style={{ fontSize:13, color:'#94A3B8' }}>No activity yet. Be the first to post or give kudos!</p>
@@ -2399,7 +2490,7 @@ function ReimbursementsTab() {
             </select>
           </div>
           <div>
-            <label style={{ fontSize:10.5, color:'#94A3B8', fontWeight:600, display:'block', marginBottom:4 }}>Amount (â‚¹)</label>
+            <label style={{ fontSize:10.5, color:'#94A3B8', fontWeight:600, display:'block', marginBottom:4 }}>Amount (₹)</label>
             <input type="number" className={inputCls} value={form.amount} placeholder="0.00" onChange={e => setForm({ ...form, amount: e.target.value })} />
           </div>
           <div>
@@ -2421,7 +2512,7 @@ function ReimbursementsTab() {
             { key: 'claim_date',   label: 'Date', render: r => String(r.claim_date||'').slice(0,10) },
             { key: 'expense_type', label: 'Type', render: r => <span className="capitalize">{r.expense_type}</span> },
             { key: 'description',  label: 'Description' },
-            { key: 'amount',       label: 'Amount', render: r => `â‚¹${Number(r.amount||0).toLocaleString('en-IN')}` },
+            { key: 'amount',       label: 'Amount', render: r => `₹${Number(r.amount||0).toLocaleString('en-IN')}` },
             { key: 'status',       label: 'Status', render: r => <StatusBadge value={r.status} /> },
           ]}
           rows={claims.data || []}
@@ -2461,7 +2552,7 @@ function LoansTab() {
             </select>
           </div>
           <div>
-            <label style={{ fontSize:10.5, color:'#94A3B8', fontWeight:600, display:'block', marginBottom:4 }}>Amount (â‚¹)</label>
+            <label style={{ fontSize:10.5, color:'#94A3B8', fontWeight:600, display:'block', marginBottom:4 }}>Amount (₹)</label>
             <input type="number" className={inputCls} value={form.amount} placeholder="0.00" onChange={e => setForm({ ...form, amount: e.target.value })} />
           </div>
           <div>
@@ -2482,8 +2573,8 @@ function LoansTab() {
           columns={[
             { key: 'requested_date', label: 'Requested', render: r => String(r.requested_date||'').slice(0,10) },
             { key: 'loan_type',   label: 'Type', render: r => <span className="capitalize">{r.loan_type}</span> },
-            { key: 'amount',      label: 'Amount', render: r => `â‚¹${Number(r.amount||0).toLocaleString('en-IN')}` },
-            { key: 'balance_amount', label: 'Balance', render: r => r.status === 'disbursed' || Number(r.balance_amount) ? `â‚¹${Number(r.balance_amount||0).toLocaleString('en-IN')}` : '-' },
+            { key: 'amount',      label: 'Amount', render: r => `₹${Number(r.amount||0).toLocaleString('en-IN')}` },
+            { key: 'balance_amount', label: 'Balance', render: r => r.status === 'disbursed' || Number(r.balance_amount) ? `₹${Number(r.balance_amount||0).toLocaleString('en-IN')}` : '-' },
             { key: 'status',      label: 'Status', render: r => <StatusBadge value={r.status} /> },
           ]}
           rows={loans.data || []}
@@ -2559,7 +2650,7 @@ export default function ESSPortalPage() {
       <ESSSidebar active={active} setActive={setActive} />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Mobile horizontal tab bar (hidden on desktop â€” sidebar covers it) */}
+        {/* Mobile horizontal tab bar (hidden on desktop — sidebar covers it) */}
         <ESSTabNav active={active} setActive={setActive} />
 
         {/* Page content */}
