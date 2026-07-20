@@ -1866,6 +1866,289 @@ function TrainingTab() {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   ASSETS TAB — company assets allocated to the employee (read-only)
+═══════════════════════════════════════════════════════════════ */
+const ASSET_ICONS = {
+  laptop: '💻', mobile: '📱', sim_card: '📶', vehicle: '🚗',
+  tools: '🛠️', uniform: '👕', safety_gear: '🦺', access_card: '🪪', other: '📦',
+};
+function AssetsTab() {
+  const assets = useQuery({ queryKey: ['ess-my-assets'], queryFn: () => essAPI.myAssets().then(unwrap) });
+  const rows = assets.data || [];
+  const active = rows.filter(r => r.status === 'assigned');
+  return (
+    <div className="space-y-5">
+      <SectionCard title="My Assets" subtitle="Company equipment currently allocated to you">
+        {assets.isLoading ? (
+          <p className="py-6 text-center text-sm text-gray-400">Loading assets…</p>
+        ) : !active.length ? (
+          <p className="py-8 text-center text-sm text-gray-400">No assets are currently allocated to you.</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {active.map(a => (
+              <div key={a.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between">
+                  <span className="text-2xl">{ASSET_ICONS[a.category] || '📦'}</span>
+                  <StatusBadge value={a.status === 'assigned' ? 'approved' : a.status} />
+                </div>
+                <p className="mt-2 text-sm font-bold text-gray-900">{a.asset_name}</p>
+                <p className="text-xs capitalize text-gray-500">{String(a.category || '').replace(/_/g, ' ')}</p>
+                <dl className="mt-3 space-y-1 text-xs text-gray-600">
+                  {a.asset_code     && <div className="flex justify-between"><dt className="text-gray-400">Code</dt><dd className="font-medium text-gray-700">{a.asset_code}</dd></div>}
+                  {a.serial_number  && <div className="flex justify-between"><dt className="text-gray-400">Serial</dt><dd className="font-medium text-gray-700">{a.serial_number}</dd></div>}
+                  {a.assigned_on    && <div className="flex justify-between"><dt className="text-gray-400">Assigned</dt><dd className="font-medium text-gray-700">{String(a.assigned_on).slice(0,10)}</dd></div>}
+                  {a.assigned_by_name && <div className="flex justify-between"><dt className="text-gray-400">By</dt><dd className="font-medium text-gray-700">{a.assigned_by_name}</dd></div>}
+                </dl>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
+
+      {rows.some(r => r.status !== 'assigned') && (
+        <SectionCard title="Returned / Past Assets">
+          <Table
+            columns={[
+              { key: 'asset_name', label: 'Asset' },
+              { key: 'category',   label: 'Category', render: r => <span className="capitalize">{String(r.category||'').replace(/_/g,' ')}</span> },
+              { key: 'serial_number', label: 'Serial' },
+              { key: 'assigned_on', label: 'Assigned', render: r => String(r.assigned_on||'').slice(0,10) },
+              { key: 'returned_on', label: 'Returned', render: r => String(r.returned_on||'').slice(0,10) || '-' },
+              { key: 'status', label: 'Status', render: r => <StatusBadge value={r.status} /> },
+            ]}
+            rows={rows.filter(r => r.status !== 'assigned')}
+          />
+        </SectionCard>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   HELPDESK TAB — raise & track own IT tickets
+═══════════════════════════════════════════════════════════════ */
+function HelpdeskTab() {
+  const qc = useQueryClient();
+  const tickets = useQuery({ queryKey: ['ess-helpdesk'], queryFn: () => essAPI.helpdeskTickets().then(unwrap) });
+  const [form, setForm] = useState({ category: 'hardware', priority: 'medium', subject: '', description: '' });
+  const create = useMutation({
+    mutationFn: () => essAPI.createHelpdeskTicket(form),
+    onSuccess:  () => { toast.success('Ticket raised'); setForm({ category: 'hardware', priority: 'medium', subject: '', description: '' }); qc.invalidateQueries({ queryKey: ['ess-helpdesk'] }); },
+    onError:    (e) => toast.error(e?.response?.data?.error || 'Failed to raise ticket'),
+  });
+  return (
+    <div className="space-y-5">
+      <SectionCard title="Raise a Helpdesk Ticket" subtitle="Report IT / equipment issues to the support team">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field title="Category">
+            <select className={inputCls} value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
+              <option value="hardware">Hardware</option>
+              <option value="software">Software</option>
+              <option value="network">Network / Internet</option>
+              <option value="email">Email / Login</option>
+              <option value="printer">Printer</option>
+              <option value="access">Access Request</option>
+              <option value="other">Other</option>
+            </select>
+          </Field>
+          <Field title="Priority">
+            <select className={inputCls} value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })}>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
+          </Field>
+          <Field title="Subject">
+            <input className={inputCls} value={form.subject} placeholder="Brief summary of the issue"
+              onChange={e => setForm({ ...form, subject: e.target.value })} />
+          </Field>
+          <Field title="Description">
+            <input className={inputCls} value={form.description} placeholder="What went wrong? Any error messages?"
+              onChange={e => setForm({ ...form, description: e.target.value })} />
+          </Field>
+        </div>
+        <div className="mt-4">
+          <GreenBtn disabled={!form.subject || create.isPending} onClick={() => create.mutate()}>
+            <Headphones size={16} /> Raise Ticket
+          </GreenBtn>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="My Tickets">
+        {tickets.isLoading ? (
+          <p className="py-6 text-center text-sm text-gray-400">Loading tickets…</p>
+        ) : (
+          <Table
+            columns={[
+              { key: 'ticket_number', label: 'Ticket #' },
+              { key: 'subject',  label: 'Subject' },
+              { key: 'category', label: 'Category', render: r => <span className="capitalize">{r.category}</span> },
+              { key: 'priority', label: 'Priority', render: r => <span className="capitalize">{r.priority}</span> },
+              { key: 'created_at', label: 'Raised', render: r => String(r.created_at||'').slice(0,10) },
+              { key: 'status', label: 'Status', render: r => <StatusBadge value={r.status} /> },
+            ]}
+            rows={tickets.data || []}
+            empty="You haven't raised any tickets yet"
+          />
+        )}
+      </SectionCard>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TIMESHEET TAB — monthly hours from attendance
+═══════════════════════════════════════════════════════════════ */
+function hoursBetween(inT, outT) {
+  if (!inT || !outT) return 0;
+  const [ih, im] = String(inT).split(':').map(Number);
+  const [oh, om] = String(outT).split(':').map(Number);
+  if ([ih, im, oh, om].some(Number.isNaN)) return 0;
+  let mins = (oh * 60 + om) - (ih * 60 + im);
+  if (mins < 0) mins += 24 * 60; // overnight shift
+  return Math.round((mins / 60) * 100) / 100;
+}
+function TimesheetTab() {
+  const now = new Date();
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year,  setYear]  = useState(now.getFullYear());
+  const att = useQuery({
+    queryKey: ['ess-timesheet', month, year],
+    queryFn:  () => essAPI.attendance({ month, year }).then(unwrap),
+  });
+  const rows = useMemo(() => {
+    return (att.data || [])
+      .map(r => ({ ...r, hours: hoursBetween(r.in_time, r.out_time) }))
+      .sort((a, b) => String(a.attendance_date).localeCompare(String(b.attendance_date)));
+  }, [att.data]);
+  const totalHours   = useMemo(() => Math.round(rows.reduce((s, r) => s + r.hours, 0) * 100) / 100, [rows]);
+  const presentDays  = rows.filter(r => normaliseStatus(r.status) === 'P').length;
+  const shiftMonth = (delta) => {
+    let m = month + delta, y = year;
+    if (m < 1)  { m = 12; y--; }
+    if (m > 12) { m = 1;  y++; }
+    setMonth(m); setYear(y);
+  };
+  return (
+    <div className="space-y-5">
+      <SectionCard
+        title="My Timesheet"
+        subtitle="Daily hours derived from your attendance punches"
+        action={
+          <div className="flex items-center gap-2">
+            <button onClick={() => shiftMonth(-1)} className="rounded-lg border border-gray-200 p-1.5 hover:bg-gray-50"><ChevronLeft size={16} /></button>
+            <span className="min-w-[110px] text-center text-sm font-semibold text-gray-700">{MONTH_NAMES[month-1]} {year}</span>
+            <button onClick={() => shiftMonth(1)} className="rounded-lg border border-gray-200 p-1.5 hover:bg-gray-50"><ChevronRight size={16} /></button>
+          </div>
+        }
+      >
+        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-gray-200 bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Total Hours</p>
+            <p className="mt-1 text-2xl font-extrabold" style={{ color: ACCENT }}>{totalHours}</p>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Present Days</p>
+            <p className="mt-1 text-2xl font-extrabold" style={{ color: TEAL }}>{presentDays}</p>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Avg Hours/Day</p>
+            <p className="mt-1 text-2xl font-extrabold text-gray-800">{presentDays ? Math.round((totalHours / presentDays) * 10) / 10 : 0}</p>
+          </div>
+        </div>
+        {att.isLoading ? (
+          <p className="py-6 text-center text-sm text-gray-400">Loading timesheet…</p>
+        ) : (
+          <Table
+            columns={[
+              { key: 'attendance_date', label: 'Date', render: r => String(r.attendance_date||'').slice(0,10) },
+              { key: 'status', label: 'Status', render: r => <StatusBadge value={r.status} /> },
+              { key: 'in_time',  label: 'In',  render: r => r.in_time  ? String(r.in_time).slice(0,5)  : '-' },
+              { key: 'out_time', label: 'Out', render: r => r.out_time ? String(r.out_time).slice(0,5) : '-' },
+              { key: 'hours', label: 'Hours', render: r => r.hours ? r.hours.toFixed(2) : '-' },
+            ]}
+            rows={rows}
+            empty="No attendance records for this month"
+          />
+        )}
+      </SectionCard>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   KNOWLEDGE BASE TAB — published company policies
+═══════════════════════════════════════════════════════════════ */
+function KnowledgeTab() {
+  const kb = useQuery({ queryKey: ['ess-knowledge'], queryFn: () => essAPI.knowledge().then(unwrap) });
+  const [openId, setOpenId] = useState(null);
+  const [search, setSearch] = useState('');
+  const docs = kb.data || [];
+  const filtered = docs.filter(d => {
+    const q = search.toLowerCase();
+    return !q || d.title.toLowerCase().includes(q) || String(d.category||'').toLowerCase().includes(q);
+  });
+  const grouped = useMemo(() => {
+    const g = {};
+    filtered.forEach(d => { const c = d.category || 'General'; (g[c] = g[c] || []).push(d); });
+    return Object.entries(g).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [filtered]);
+  return (
+    <div className="space-y-5">
+      <SectionCard title="Knowledge Base" subtitle="Company policies, guidelines and procedures">
+        <div className="relative mb-4 max-w-sm">
+          <input className={inputCls} value={search} onChange={e => setSearch(e.target.value)} placeholder="Search policies…" />
+        </div>
+        {kb.isLoading ? (
+          <p className="py-6 text-center text-sm text-gray-400">Loading…</p>
+        ) : !filtered.length ? (
+          <p className="py-8 text-center text-sm text-gray-400">No published policies available.</p>
+        ) : (
+          <div className="space-y-5">
+            {grouped.map(([cat, items]) => (
+              <div key={cat}>
+                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-400">{cat}</p>
+                <div className="space-y-2">
+                  {items.map(d => {
+                    const open = openId === d.id;
+                    return (
+                      <div key={d.id} className="rounded-xl border border-gray-200 bg-white">
+                        <button
+                          onClick={() => setOpenId(open ? null : d.id)}
+                          className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                        >
+                          <div className="flex items-center gap-3">
+                            <BookOpen size={18} style={{ color: ACCENT }} />
+                            <div>
+                              <p className="text-sm font-semibold text-gray-900">{d.title}</p>
+                              <p className="text-xs text-gray-400">
+                                {d.policy_code ? `${d.policy_code} · ` : ''}v{d.version}
+                                {d.effective_date ? ` · ${String(d.effective_date).slice(0,10)}` : ''}
+                              </p>
+                            </div>
+                          </div>
+                          <ChevronRight size={16} className={`text-gray-400 transition-transform ${open ? 'rotate-90' : ''}`} />
+                        </button>
+                        {open && (
+                          <div className="border-t border-gray-100 px-4 py-3 text-sm leading-relaxed text-gray-700 whitespace-pre-wrap">
+                            {d.body}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
    COMING SOON PLACEHOLDER
 ═══════════════════════════════════════════════════════════════ */
 function ComingSoon({ label }) {
@@ -1885,7 +2168,7 @@ function ComingSoon({ label }) {
 /* ═══════════════════════════════════════════════════════════════
    ROOT PAGE
 ═══════════════════════════════════════════════════════════════ */
-const FUNCTIONAL_TABS = new Set(['dashboard','profile','attendance','leave','payslips','documents','hr-requests','manager','training']);
+const FUNCTIONAL_TABS = new Set(['dashboard','profile','attendance','leave','payslips','documents','hr-requests','manager','training','timesheet','assets','helpdesk','knowledge']);
 
 export default function ESSPortalPage() {
   const now     = new Date();
@@ -1953,6 +2236,10 @@ export default function ESSPortalPage() {
           {active === 'hr-requests' && <HRRequestsTab serviceRequests={serviceRequests.data || []} />}
           {active === 'manager'     && <ManagerDeskTab />}
           {active === 'training'    && <TrainingTab />}
+          {active === 'timesheet'   && <TimesheetTab />}
+          {active === 'assets'      && <AssetsTab />}
+          {active === 'helpdesk'    && <HelpdeskTab />}
+          {active === 'knowledge'   && <KnowledgeTab />}
           {!FUNCTIONAL_TABS.has(active) && <ComingSoon label={navLabel} />}
         </div>
       </div>

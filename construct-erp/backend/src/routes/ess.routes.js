@@ -1047,4 +1047,87 @@ router.patch('/onboarding/:id', requireManager, async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════
+//  MY ASSETS — employee's allocated company assets (read-only)
+// ═══════════════════════════════════════════════════════════════
+router.get('/assets', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT a.id, a.asset_name, a.asset_code, a.category, a.serial_number,
+              a.assigned_on, a.return_expected, a.returned_on,
+              a.condition_at_issue, a.status, a.notes,
+              u.name AS assigned_by_name
+         FROM hr_employee_assets a
+         LEFT JOIN users u ON u.id = a.assigned_by
+        WHERE a.company_id = $1 AND a.employee_id = $2
+        ORDER BY (a.status = 'assigned') DESC, a.assigned_on DESC`,
+      [ownCompany(req), ownUser(req)]
+    );
+    res.json({ data: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  HELPDESK — raise & track own IT tickets
+// ═══════════════════════════════════════════════════════════════
+router.get('/helpdesk', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT t.id, t.ticket_number, t.category, t.priority, t.subject, t.description,
+              t.status, t.resolution_notes, t.created_at, t.resolved_at,
+              u.name AS assigned_to_name
+         FROM it_tickets t
+         LEFT JOIN users u ON u.id = t.assigned_to
+        WHERE t.raised_by = $1
+        ORDER BY t.created_at DESC
+        LIMIT 100`,
+      [ownUser(req)]
+    );
+    res.json({ data: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const TICKET_SLA = { critical: { r: 4, x: 8 }, high: { r: 8, x: 24 }, medium: { r: 24, x: 48 }, low: { r: 48, x: 120 } };
+router.post('/helpdesk', async (req, res) => {
+  try {
+    const { category = 'other', priority = 'medium', subject, description } = req.body;
+    if (!subject || !String(subject).trim()) return res.status(400).json({ error: 'Subject is required' });
+    const sla = TICKET_SLA[priority] || TICKET_SLA.medium;
+    const num = `T-${String(Date.now()).slice(-6)}`;
+    const { rows } = await query(
+      `INSERT INTO it_tickets
+         (ticket_number, raised_by, category, priority, subject, description,
+          sla_response_hours, sla_resolve_hours, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'open')
+       RETURNING id, ticket_number, category, priority, subject, description, status, created_at`,
+      [num, ownUser(req), category, priority, subject.trim(), description || null, sla.r, sla.x]
+    );
+    res.status(201).json({ data: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  KNOWLEDGE BASE — published company policy documents (read-only)
+// ═══════════════════════════════════════════════════════════════
+router.get('/knowledge', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT id, policy_code, title, category, version, effective_date, body
+         FROM hr_policy_documents
+        WHERE company_id = $1 AND status = 'published'
+        ORDER BY category, title`,
+      [ownCompany(req)]
+    ).catch(() => ({ rows: [] }));
+    res.json({ data: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -2201,6 +2201,10 @@ export const essAPI = {
   uploadProfilePhoto:   (photo)        => api.post('/ess/profile/photo', { photo }),
   removeProfilePhoto:   ()             => api.delete('/ess/profile/photo'),
   teamToday:            ()             => api.get('/ess/team-today'),
+  myAssets:             ()             => api.get('/ess/assets'),
+  helpdeskTickets:      ()             => api.get('/ess/helpdesk'),
+  createHelpdeskTicket: (data)         => api.post('/ess/helpdesk', data),
+  knowledge:            ()             => api.get('/ess/knowledge'),
 };
 
 export const notificationsAPI = {
