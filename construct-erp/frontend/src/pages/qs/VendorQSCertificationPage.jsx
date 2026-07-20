@@ -750,7 +750,7 @@ export default function VendorQSCertificationPage() {
   };
 
   return (
-    <div className="p-5 min-h-full space-y-4" style={{ background: '#EEF1F6', fontFamily: "'Inter','Segoe UI',system-ui,sans-serif" }}>
+    <div className="p-5 min-h-full space-y-4" style={{ background: '#EEF1F6', fontFamily: "'Geist Variable','Segoe UI',system-ui,sans-serif" }}>
 
       {/* ── Hero band: title + CTA + KPIs ── */}
       <div className="rounded-2xl overflow-hidden shadow-md text-white"

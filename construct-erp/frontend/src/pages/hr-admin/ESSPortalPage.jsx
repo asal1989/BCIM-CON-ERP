@@ -1925,7 +1925,7 @@ export default function ESSPortalPage() {
   const navLabel = TAB_ITEMS.find(i => i.id === active)?.label || active;
 
   return (
-    <div className="flex min-h-screen" style={{ backgroundColor: BG, fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div className="flex min-h-screen" style={{ backgroundColor: BG, fontFamily: "'Geist Variable', system-ui, sans-serif" }}>
       {/* Desktop vertical sidebar */}
       <ESSSidebar active={active} setActive={setActive} />
 

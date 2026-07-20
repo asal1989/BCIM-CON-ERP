@@ -317,7 +317,7 @@ export default function LoginPage() {
         .lp-root {
           min-height: 100vh;
           display: flex;
-          font-family: 'Inter', -apple-system, sans-serif;
+          font-family: 'Geist Variable', -apple-system, sans-serif;
           background: #fff;
         }
 

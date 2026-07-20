@@ -34,7 +34,7 @@ const T = {
   purple: '#7C3AED', purpleSoft: '#F5F3FF',
   text: '#0F172A', textMuted: '#64748B',
 };
-const FONT = { fontFamily: "'Inter', system-ui, -apple-system, sans-serif" };
+const FONT = { fontFamily: "'Geist Variable', system-ui, -apple-system, sans-serif" };
 
 const RA_MONTHS = ['July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March'];
 const RA_MONTHS_SHORT = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];

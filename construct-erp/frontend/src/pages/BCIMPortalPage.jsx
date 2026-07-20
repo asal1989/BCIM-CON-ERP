@@ -277,7 +277,7 @@ export default function BCIMPortalPage() {
     <div style={{
       minHeight: '100vh',
       background: T.bg,
-      fontFamily: "'Inter', -apple-system, sans-serif",
+      fontFamily: "'Geist Variable', -apple-system, sans-serif",
       position: 'relative',
       overflow: 'hidden',
     }}>
