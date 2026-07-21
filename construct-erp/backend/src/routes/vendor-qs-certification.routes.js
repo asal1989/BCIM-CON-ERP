@@ -471,7 +471,7 @@ router.post('/summary-items', async (req, res) => {
     }
 
     const billsRes = await query(`
-      SELECT id, inv_number, sl_number, bill_type, gst_amount, total_amount,
+      SELECT id, inv_number, sl_number, bill_type, gst_amount, total_amount, basic_amount,
              transport_charges, transport_gst_amt, other_charges
       FROM tqs_bills
       WHERE id = ANY($1::uuid[])
@@ -560,6 +560,28 @@ router.post('/summary-items', async (req, res) => {
       });
     });
     const items = Array.from(grouped.values());
+
+    // Bills entered as a lump sum (common for WO bills) never got rows in
+    // tqs_bill_line_items — without a fallback the abstract sheet comes out
+    // completely empty for them even though the bill is otherwise valid.
+    // Synthesize one line item from the bill's own basic_amount so QS can
+    // still certify it.
+    const billIdsWithLineItems = new Set(rows.map(r => r.bill_id));
+    for (const b of billsRes.rows) {
+      if (billIdsWithLineItems.has(b.id)) continue;
+      const basicAmt = n(b.basic_amount) || Math.max(0, n(b.total_amount) - n(b.gst_amount) - n(b.transport_charges) - n(b.other_charges));
+      if (basicAmt <= 0) continue;
+      items.push({
+        bill_id: b.id, bill_ids: [b.id], bill_line_item_id: null, bill_line_item_ids: [],
+        source_inv_number: b.inv_number || b.sl_number,
+        item_ref_id: null, description: 'Bill Amount (no itemized breakup on this invoice)', unit: 'LS',
+        order_qty: 1, order_rate: round2(basicAmt),
+        inv_prev_qty: 0, inv_pres_qty: 1, qs_prev_qty: 0, qs_pres_qty: 1,
+        tax_amount: round2(n(b.gst_amount)),
+        amount: round2(basicAmt),
+        balance_qty: 0, remarks: '',
+      });
+    }
 
     // Append synthetic line items for header-level transport and other charges
     // (these fields live on tqs_bills, not in tqs_bill_line_items)
@@ -1837,6 +1859,84 @@ runSchemaInit('cleanup_orphaned_advance_recovered_2026_07b', async () => {
       console.error('[migration] tqs_advances resync failed for company', company_id, e.message));
     await resyncAdvancesFromBills(company_id).catch(e =>
       console.error('[migration] voucher resync failed for company', company_id, e.message));
+  }
+});
+
+// ── One-time: merge duplicate vendor master records + backfill bill.vendor_id ──
+// Investigation (2026-07-21) found 9 vendor names with two separate vendor
+// master rows (e.g. "SCP Concrete" existed twice) and 341 bills across 50
+// vendors with vendor_id=NULL that only matched a vendor by name — both of
+// which made bills silently invisible in QS Certification's pending-invoices
+// lookup (see the pending-invoices route above, fixed to match by ID OR
+// normalized name). This backfills vendor_id everywhere it's now unambiguous
+// so every other vendor_id-based join/report benefits too, not just that one
+// endpoint.
+runSchemaInit('merge_duplicate_vendors_and_backfill_2026_07', async () => {
+  // keeper (K) = record kept active; loser (L) = merged away and deactivated.
+  // Picked by usage count across all vendor_id-referencing tables.
+  const MERGES = [
+    { name: 'AARGEE STEEL INC / Aargee Steel Inc',            K: '6d663b30-cd72-4184-bc70-40f21c095f3f', L: '8aef35a0-1f51-464a-bb4f-46d849ffacca' },
+    { name: 'Evergreen Engineering / EVERGREEN ENGINEERING',   K: '7454c1b0-202e-48e1-8a89-bd0037f19062', L: 'd2c6af7b-c780-4e33-af43-007d38bcfcb6' },
+    { name: 'Faczo Tech Private Limited (x2)',                 K: 'aeef808f-bf51-43c8-a212-ba43bcc0844a', L: '9bbc234b-f2c6-41e3-83b6-4c803718bdf6' },
+    { name: 'Goodwill Hardware Mart / GOODWILL HARDWARE MART', K: '47ca8cc5-41c9-411d-a599-da975f97e81f', L: 'a713b9fe-b491-4a17-8a9a-d1c2a46da8db' },
+    { name: 'Power Tools & Tackles (x2)',                      K: '7d7133f1-355b-4ea6-8486-3a24a281db80', L: 'ce985fef-ed3d-43c7-888b-f852cb7fe895' },
+    { name: 'SCP Concrete (x2)',                               K: 'd76dd8e1-98f2-4571-9c0b-1b59d9810b67', L: '1ed88959-5419-47ee-8a07-1728241733f0' },
+    { name: 'SM Stone Crusher / SM STONE CRUSHER',             K: '4c392d01-f3a2-4ddb-aae5-69507cfd3cf8', L: '5456ea5a-7a65-47b4-9c95-a7d50f5a3595' },
+    { name: 'Super King Earth Movers (x2)',                    K: '2f295658-52bb-4b50-96e8-92ed3acc3e71', L: '93b06e11-cdcd-4531-94a4-14df0d43d1fd' },
+    { name: 'Trinity press / Trinity Press',                   K: 'fb7aaca7-c0b6-431c-9368-13bf1abc46b2', L: 'd1dadff6-d71e-4ca6-8a54-1b05ab60024f' },
+  ];
+  // Only tables that showed non-zero refs on any loser id during investigation.
+  const MERGE_TABLES = ['ign', 'project_vendors', 'purchase_orders', 'tqs_bills'];
+
+  // Bills whose vendor_name is a genuine typo (not just whitespace/case) with
+  // no vendor-master match at all — confirmed manually against the vendor list.
+  const ORPHAN_LINKS = [
+    { vendor_name: 'Pragati Road Lines',      vendor_id: 'd8f50eb0-009e-4b44-931d-9512095c9d78' },
+    { vendor_name: 'Power Tools and Tackles', vendor_id: '7d7133f1-355b-4ea6-8486-3a24a281db80' },
+    { vendor_name: 'Faczo Tech Pvt  Ltd',     vendor_id: 'aeef808f-bf51-43c8-a212-ba43bcc0844a' },
+    { vendor_name: 'Alufort Enetrprises',     vendor_id: '9b82a9f4-e304-49f5-a7f9-3d286291aadc' },
+  ];
+
+  for (const m of MERGES) {
+    // project_vendors has PK(project_id, vendor_id) — drop loser rows that would
+    // collide with an existing keeper row for the same project first.
+    await query(
+      `DELETE FROM project_vendors WHERE vendor_id = $2
+         AND project_id IN (SELECT project_id FROM project_vendors WHERE vendor_id = $1)`,
+      [m.K, m.L]
+    );
+    for (const t of MERGE_TABLES) {
+      await query(`UPDATE ${t} SET vendor_id = $1 WHERE vendor_id = $2`, [m.K, m.L]);
+    }
+    await query(
+      `UPDATE vendors SET is_active = false,
+              notes = COALESCE(notes,'') || E'\\n[Merged into vendor ${m.K} — duplicate cleanup 2026-07-21]',
+              updated_at = NOW()
+       WHERE id = $1`,
+      [m.L]
+    );
+    console.log(`[migration] merged duplicate vendor "${m.name}" (${m.L} → ${m.K})`);
+  }
+
+  const backfill = await query(`
+    UPDATE tqs_bills b
+    SET vendor_id = v.id, updated_at = NOW()
+    FROM vendors v
+    WHERE b.vendor_id IS NULL
+      AND b.is_deleted = FALSE
+      AND v.company_id = b.company_id
+      AND v.is_active = true
+      AND regexp_replace(LOWER(v.name), '\\s+', '', 'g') = regexp_replace(LOWER(b.vendor_name), '\\s+', '', 'g')
+  `);
+  console.log(`[migration] Backfilled vendor_id on ${backfill.rowCount} bill(s) via normalized name match`);
+
+  for (const o of ORPHAN_LINKS) {
+    const r = await query(
+      `UPDATE tqs_bills SET vendor_id = $1, updated_at = NOW()
+       WHERE vendor_name = $2 AND vendor_id IS NULL AND is_deleted = FALSE`,
+      [o.vendor_id, o.vendor_name]
+    );
+    console.log(`[migration] Linked "${o.vendor_name}" → vendor ${o.vendor_id}: ${r.rowCount} bill(s)`);
   }
 });
 
