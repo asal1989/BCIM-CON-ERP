@@ -331,11 +331,13 @@ export default function PaymentsPage() {
     enabled: showModal && payType === 'advance' && !!form.vendor_id,
     staleTime: 60 * 1000,
   });
-  // Existing approved advance vouchers for this vendor, to pay an installment against
+  // Existing approved advance vouchers for this vendor, to pay an installment against.
+  // Matched by id OR name — vendor_id alone is unreliable across this app's
+  // multiple vendor master tables (see backend route comment).
   const { data: existingAdvances = [] } = useQuery({
-    queryKey: ['advance-existing-lookup', form.vendor_id],
-    queryFn: () => procurementAdvanceAPI.list({ vendor_id: form.vendor_id, approval_status: 'approved' }).then(r => r.data?.data ?? []),
-    enabled: showModal && payType === 'advance' && linkExisting && !!form.vendor_id,
+    queryKey: ['advance-existing-lookup', form.vendor_id, vendorName],
+    queryFn: () => procurementAdvanceAPI.list({ vendor_id: form.vendor_id || undefined, vendor_name: vendorName || undefined, approval_status: 'approved' }).then(r => r.data?.data ?? []),
+    enabled: showModal && payType === 'advance' && linkExisting && !!vendorName,
     staleTime: 30 * 1000,
   });
   const selectedExistingAdv = existingAdvances.find(a => String(a.id) === String(existingAdvId)) || null;

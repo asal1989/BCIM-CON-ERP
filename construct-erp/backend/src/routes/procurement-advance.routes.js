@@ -357,13 +357,24 @@ router.get('/lookup/bills-by-vendor', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const { company_id } = req.user;
-    const { project_id, vendor_id, status, approval_status, search } = req.query;
+    const { project_id, vendor_id, vendor_name, status, approval_status, search } = req.query;
 
     const wheres = [`av.company_id=$1`, `av.is_deleted=FALSE`];
     const params = [company_id];
 
     applyProjectScope(req, wheres, params, 'av', project_id);
-    if (vendor_id) { params.push(vendor_id); wheres.push(`av.vendor_id=$${params.length}`); }
+    // vendor_id alone is unreliable — this codebase has multiple vendor master
+    // tables and the id a picker hands back doesn't always match what a given
+    // voucher was saved with. Match on id OR name so a real vendor's vouchers
+    // don't silently vanish just because of which vendor list they came from.
+    if (vendor_id && vendor_name) {
+      params.push(vendor_id, `%${vendor_name}%`);
+      wheres.push(`(av.vendor_id=$${params.length - 1} OR av.vendor_name ILIKE $${params.length})`);
+    } else if (vendor_id) {
+      params.push(vendor_id); wheres.push(`av.vendor_id=$${params.length}`);
+    } else if (vendor_name) {
+      params.push(`%${vendor_name}%`); wheres.push(`av.vendor_name ILIKE $${params.length}`);
+    }
     if (status && status !== 'all') { params.push(status); wheres.push(`av.status=$${params.length}`); }
     if (approval_status) { params.push(approval_status); wheres.push(`av.approval_status=$${params.length}`); }
     if (search) {
