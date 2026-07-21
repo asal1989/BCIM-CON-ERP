@@ -7,16 +7,18 @@ const cleanBalance = value => {
 };
 
 const billOutstandingSql = (b = 'b', u = 'u') => `
-  GREATEST(
-    COALESCE(NULLIF(${u}.certified_net, 0), ${b}.total_amount, 0)
-      - COALESCE(${u}.paid_amount, 0),
-    COALESCE(${b}.total_amount, 0)
-      - COALESCE(${u}.tds_deduction, 0)
-      - COALESCE(${u}.other_deductions, 0)
-      - COALESCE(${u}.advance_recovered, 0)
-      - COALESCE(${u}.paid_amount, 0),
-    0
-  )
+  CASE
+    WHEN ${u}.certified_net IS NOT NULL
+    THEN GREATEST(${u}.certified_net - COALESCE(${u}.paid_amount, 0), 0)
+    ELSE GREATEST(
+      COALESCE(${b}.total_amount, 0)
+        - COALESCE(${u}.tds_deduction, 0)
+        - COALESCE(${u}.other_deductions, 0)
+        - COALESCE(${u}.advance_recovered, 0)
+        - COALESCE(${u}.paid_amount, 0),
+      0
+    )
+  END
 `;
 
 const billCreditSql = (b = 'b', u = 'u', advanceCreditSql = `COALESCE(${u}.advance_recovered, 0)`) => `
