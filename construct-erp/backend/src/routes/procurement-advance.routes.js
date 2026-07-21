@@ -116,6 +116,8 @@ async function ensureTable() {
   await query(`ALTER TABLE tqs_advance_vouchers ADD COLUMN IF NOT EXISTS md_name TEXT`);
   await query(`ALTER TABLE tqs_advance_vouchers ADD COLUMN IF NOT EXISTS note TEXT`);
   await query(`ALTER TABLE tqs_advance_vouchers ADD COLUMN IF NOT EXISTS terms_conditions TEXT`);
+  await query(`ALTER TABLE tqs_advance_vouchers ADD COLUMN IF NOT EXISTS tds_rate   NUMERIC(5,2)  DEFAULT 0`);
+  await query(`ALTER TABLE tqs_advance_vouchers ADD COLUMN IF NOT EXISTS tds_amount NUMERIC(15,2) DEFAULT 0`);
   // ── Approval workflow: Procurement → Managing Director ──────────────────────
   await query(`ALTER TABLE tqs_advance_vouchers ADD COLUMN IF NOT EXISTS approval_status VARCHAR(24) NOT NULL DEFAULT 'pending'`);
   await query(`ALTER TABLE tqs_advance_vouchers ADD COLUMN IF NOT EXISTS procurement_approved_by UUID`);
@@ -627,8 +629,10 @@ router.patch('/:id/issue', async (req, res) => {
   try {
     const { company_id, id: user_id } = req.user;
     const { id } = req.params;
-    const { paid_amount, pay_date } = req.body;
-    const paidAmt = parseFloat(paid_amount || 0);
+    const { paid_amount, pay_date, tds_amount, tds_rate } = req.body;
+    const paidAmt  = parseFloat(paid_amount  || 0);
+    const tdsAmt   = parseFloat(tds_amount   || 0);
+    const tdsRate  = parseFloat(tds_rate     || 0);
 
     // Disbursement is gated on full approval (Procurement + Managing Director).
     const chk = await query(
@@ -642,10 +646,11 @@ router.patch('/:id/issue', async (req, res) => {
 
     const { rows } = await query(`
       UPDATE tqs_advance_vouchers SET
-        status='issued', paid_amount=$1, pay_date=$2, updated_at=NOW()
-      WHERE id=$3 AND company_id=$4 AND is_deleted=FALSE
+        status='issued', paid_amount=$1, pay_date=$2,
+        tds_amount=$3, tds_rate=$4, updated_at=NOW()
+      WHERE id=$5 AND company_id=$6 AND is_deleted=FALSE
       RETURNING *
-    `, [paidAmt, pay_date || null, id, company_id]);
+    `, [paidAmt, pay_date || null, tdsAmt, tdsRate, id, company_id]);
 
     if (!rows.length) return res.status(404).json({ success: false, message: 'Not found' });
     const voucher = rows[0];

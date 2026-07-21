@@ -78,12 +78,40 @@ function StatCard({ label, value, sub, color, borderColor }) {
 }
 
 // ── Issue Modal ───────────────────────────────────────────────────────────────
-function IssueModal({ voucher, onClose }) {
+// isQS=true  → QS raised the voucher; TDS already deducted by QS; accounts pays
+//              the QS-recommended net amount (current_net_payment_due).
+// isQS=false → Procurement raised the voucher; advance is gross (pre-TDS);
+//              accounts deducts TDS at payment time and pays the net.
+function IssueModal({ voucher, isQS, onClose }) {
   const qc = useQueryClient();
-  const [form, setForm] = useState({ paid_amount: voucher.advance_value || '', pay_date: '' });
+  const advAmt  = parseFloat(voucher.advance_value || 0);
+  const qsNet   = parseFloat(voucher.current_net_payment_due || voucher.advance_value || 0);
+
+  const [form, setForm] = useState(isQS
+    ? { paid_amount: String(qsNet || ''), pay_date: '' }
+    : { tds_rate: '', tds_amount: '', paid_amount: String(advAmt || ''), pay_date: '' }
+  );
+
+  const setTdsRate = (rate) => {
+    const r = parseFloat(rate) || 0;
+    const tdsAmt = (advAmt * r / 100).toFixed(2);
+    setForm(f => ({ ...f, tds_rate: rate, tds_amount: tdsAmt, paid_amount: Math.max(0, advAmt - parseFloat(tdsAmt)).toFixed(2) }));
+  };
+  const setTdsAmt = (amt) => {
+    const a = parseFloat(amt) || 0;
+    setForm(f => ({
+      ...f,
+      tds_amount: amt,
+      tds_rate: advAmt > 0 ? ((a / advAmt) * 100).toFixed(2) : '',
+      paid_amount: Math.max(0, advAmt - a).toFixed(2),
+    }));
+  };
 
   const mutation = useMutation({
-    mutationFn: () => procurementAdvanceAPI.issue(voucher.id, form),
+    mutationFn: () => procurementAdvanceAPI.issue(voucher.id, isQS
+      ? { paid_amount: form.paid_amount, pay_date: form.pay_date }
+      : { paid_amount: form.paid_amount, pay_date: form.pay_date, tds_amount: form.tds_amount, tds_rate: form.tds_rate }
+    ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['procurement-advance', String(voucher.id)] });
       qc.invalidateQueries({ queryKey: ['procurement-advances'] });
@@ -104,26 +132,64 @@ function IssueModal({ voucher, onClose }) {
           </div>
           <button onClick={onClose} className="text-emerald-200 hover:text-white"><X size={18} /></button>
         </div>
+
         <div className="px-6 py-5 space-y-4">
-          <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-100">
-            <p className="text-xs text-emerald-700 font-medium">Sanctioned Advance: <span className="font-medium">₹{inr(voucher.advance_value)}</span></p>
-          </div>
-          <div>
-            <Lbl req>Disbursed Amount (₹)</Lbl>
-            <input type="number" className={F} value={form.paid_amount}
-              onChange={e => setForm(f => ({ ...f, paid_amount: e.target.value }))} />
-          </div>
+          {isQS ? (
+            /* ── QS flow: QS already deducted TDS; pay the QS-recommended net ── */
+            <>
+              <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-100 space-y-1">
+                <p className="text-xs text-emerald-700 font-medium">Advance Sanctioned: <span className="font-semibold">₹{inr(voucher.advance_value)}</span></p>
+                {qsNet !== advAmt && (
+                  <p className="text-xs text-emerald-700">QS Recommended Net: <span className="font-semibold">₹{inr(qsNet)}</span>
+                    <span className="text-[11px] text-emerald-500 ml-1">(TDS &amp; deductions applied by QS)</span>
+                  </p>
+                )}
+              </div>
+              <div>
+                <Lbl req>Net Amount to Pay (₹)</Lbl>
+                <input type="number" className={F} value={form.paid_amount}
+                  onChange={e => setForm(f => ({ ...f, paid_amount: e.target.value }))} />
+                <p className="text-[11px] text-slate-400 mt-1">Pre-filled with QS recommended amount. Edit if needed.</p>
+              </div>
+            </>
+          ) : (
+            /* ── Procurement flow: gross advance; accounts deducts TDS here ── */
+            <>
+              <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">
+                <p className="text-xs text-amber-700 font-medium">Sanctioned Advance (Gross): <span className="font-semibold">₹{inr(voucher.advance_value)}</span></p>
+                <p className="text-[11px] text-amber-500 mt-0.5">Enter TDS below — net payable is auto-calculated.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Lbl>TDS Rate (%)</Lbl>
+                  <input type="number" className={F} value={form.tds_rate} placeholder="e.g. 2"
+                    onChange={e => setTdsRate(e.target.value)} />
+                </div>
+                <div>
+                  <Lbl>TDS Amount (₹)</Lbl>
+                  <input type="number" className={F} value={form.tds_amount} placeholder="auto-calc"
+                    onChange={e => setTdsAmt(e.target.value)} />
+                </div>
+              </div>
+              <div className="flex items-center justify-between bg-slate-50 rounded-lg px-4 py-3 border border-slate-200">
+                <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Net Payable to Vendor</span>
+                <span className="text-base font-bold text-slate-900">₹{inr(form.paid_amount)}</span>
+              </div>
+            </>
+          )}
+
           <div>
             <Lbl req>Payment Date</Lbl>
             <input type="date" className={F} value={form.pay_date}
               onChange={e => setForm(f => ({ ...f, pay_date: e.target.value }))} />
           </div>
         </div>
+
         <div className="flex justify-end gap-3 px-6 py-4 border-t bg-slate-50 rounded-b-2xl">
           <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-medium text-slate-900 border border-slate-200 hover:bg-slate-100">Cancel</button>
           <button onClick={() => mutation.mutate()} disabled={mutation.isPending || !form.pay_date}
             className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 transition-all">
-            <CheckCircle2 size={14} />{mutation.isPending ? 'Saving...' : 'Confirm Issuance'}
+            <CheckCircle2 size={14} />{mutation.isPending ? 'Saving...' : 'Confirm Payment'}
           </button>
         </div>
       </div>
@@ -555,6 +621,7 @@ export default function ProcurementAdvanceVoucherDetailPage() {
             <InfoRow label="Acct. Received"         value={fmt(voucher.accts_received_date)} />
             <InfoRow label="Paid Amount"            value={voucher.paid_amount > 0 ? `₹${inr(voucher.paid_amount)}` : null} />
             <InfoRow label="Pay Date"               value={fmt(voucher.pay_date)} />
+            {voucher.tds_amount > 0 && <InfoRow label="TDS Deducted"  value={`₹${inr(voucher.tds_amount)}${voucher.tds_rate > 0 ? ` (${voucher.tds_rate}%)` : ''}`} />}
           </div>
           {(voucher.remarks || voucher.note) && (
             <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
@@ -624,7 +691,7 @@ export default function ProcurementAdvanceVoucherDetailPage() {
         </div>
       </div>
 
-      {showIssue   && <IssueModal    voucher={voucher} onClose={() => setShowIssue(false)} />}
+      {showIssue   && <IssueModal    voucher={voucher} isQS={location.pathname.startsWith('/qs/')} onClose={() => setShowIssue(false)} />}
       {showRecover && <RecoveryModal voucher={voucher} onClose={() => setShowRecover(false)} />}
     </div>
   );
