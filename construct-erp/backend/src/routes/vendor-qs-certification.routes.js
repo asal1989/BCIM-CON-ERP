@@ -352,8 +352,20 @@ router.get('/pending-invoices', async (req, res) => {
     ];
     let i = 2;
     if (project_id) { where.push(`b.project_id = $${i++}`); params.push(project_id); }
-    if (vendor_id) { where.push(`b.vendor_id = $${i++}`); params.push(vendor_id); }
-    else if (vendor_name) { where.push(`b.vendor_name ILIKE $${i++}`); params.push(vendor_name); }
+    // Many bills are entered with a free-text vendor_name and no vendor_id link,
+    // so match on either — falling back to a whitespace/case-insensitive name
+    // compare handles vendor master entries like "ACE AQUATECH" vs a bill typed
+    // as "Ace Aqua Tech".
+    if (vendor_id && vendor_name) {
+      where.push(`(b.vendor_id = $${i} OR regexp_replace(LOWER(b.vendor_name), '\\s+', '', 'g') = regexp_replace(LOWER($${i + 1}), '\\s+', '', 'g'))`);
+      params.push(vendor_id, vendor_name);
+      i += 2;
+    } else if (vendor_id) {
+      where.push(`b.vendor_id = $${i++}`); params.push(vendor_id);
+    } else if (vendor_name) {
+      where.push(`regexp_replace(LOWER(b.vendor_name), '\\s+', '', 'g') = regexp_replace(LOWER($${i++}), '\\s+', '', 'g')`);
+      params.push(vendor_name);
+    }
     if (order_type) { where.push(`COALESCE(b.bill_type, 'po') = $${i++}`); params.push(order_type); }
     if (order_number) { where.push(`COALESCE(b.wo_number, b.po_number) = $${i++}`); params.push(order_number); }
 
