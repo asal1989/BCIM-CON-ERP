@@ -1696,7 +1696,7 @@ router.delete('/:id', async (req, res) => {
           // Clear certification data AND payment data (handles paid certs too)
           await client.query(`
             UPDATE tqs_bill_updates SET
-              certified_net=0, balance_to_pay=0,
+              certified_net=0,
               qs_certified_date=NULL, qs_received_date=NULL,
               qs_gross=0, qs_tax=NULL, qs_total=NULL,
               ra_sequence=NULL, ra_bill_number=NULL,
