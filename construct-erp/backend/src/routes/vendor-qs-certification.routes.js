@@ -2037,4 +2037,80 @@ runSchemaInit('reset_yelahanka_uncertified_accounts_to_qs_2026_07', async () => 
   console.log(`[migration] Moved ${moved.rowCount} uncertified bill(s) from 'accounts' → 'qs' for Yelahanka`);
 });
 
+// ── One-time: link 205 orphaned SCP Concrete bills to Yelahanka, then apply
+// the same payment-revert + accounts→qs treatment already done above.
+// These bills had project_id=NULL entirely, so they were invisible to every
+// project-scoped fix so far — found only because "All Projects" showed 301
+// active SCP Concrete bills but just 71 tagged to Yelahanka. All 205
+// reference PO POTQS001 (or its amendments -A1/-A3/-A4), which the real
+// purchase_orders record confirms belongs to Residential Apartments -
+// Yelahanka (Retaining Wall & STP) — same vendor, same PO family already
+// linked for the other 71 bills. Verified: none of the 205 have a real
+// qs_certified_date, an active certification link, or a Finance payments
+// row backing their paid_amount — identical bulk-import pattern.
+runSchemaInit('link_orphaned_scp_concrete_bills_to_yelahanka_2026_07', async () => {
+  const YELAHANKA_RW_STP = '593273cf-721f-42f1-9178-53dca3e71caa';
+  const SCP_PO_NUMBERS = ['POTQS001', 'POTQS001-A1', 'POTQS001-A3', 'POTQS001-A4'];
+
+  const linked = await query(`
+    UPDATE tqs_bills b
+    SET project_id = $1, updated_at = NOW()
+    FROM vendors v
+    WHERE b.vendor_id = v.id
+      AND v.name ILIKE '%SCP Concrete%'
+      AND b.project_id IS NULL
+      AND b.is_deleted = FALSE
+      AND b.po_number = ANY($2::text[])
+  `, [YELAHANKA_RW_STP, SCP_PO_NUMBERS]);
+  console.log(`[migration] Linked ${linked.rowCount} orphaned SCP Concrete bill(s) to Yelahanka (Retaining Wall & STP)`);
+
+  const clearedUpdates = await query(`
+    UPDATE tqs_bill_updates u
+    SET paid_amount = 0,
+        balance_to_pay = COALESCE(u.certified_net, 0),
+        payment_status = NULL,
+        payment_date = NULL,
+        payment_mode = NULL,
+        reference_number = NULL,
+        bank_name = NULL,
+        updated_at = NOW()
+    FROM tqs_bills b
+    WHERE b.id = u.bill_id
+      AND b.project_id = $1
+      AND b.is_deleted = FALSE
+      AND COALESCE(u.paid_amount, 0) > 0
+      AND u.qs_certified_date IS NULL
+  `, [YELAHANKA_RW_STP]);
+  console.log(`[migration] Cleared payment fields on ${clearedUpdates.rowCount} tqs_bill_updates row(s) (SCP Concrete linkage)`);
+
+  const revertedBills = await query(`
+    UPDATE tqs_bills b
+    SET workflow_status = 'accounts', updated_at = NOW()
+    FROM tqs_bill_updates u
+    WHERE u.bill_id = b.id
+      AND b.project_id = $1
+      AND b.is_deleted = FALSE
+      AND b.workflow_status = 'paid'
+      AND COALESCE(u.paid_amount, 0) = 0
+  `, [YELAHANKA_RW_STP]);
+  console.log(`[migration] Reverted workflow_status 'paid' → 'accounts' on ${revertedBills.rowCount} bill(s) (SCP Concrete linkage)`);
+
+  const moved2 = await query(`
+    UPDATE tqs_bills b
+    SET workflow_status = 'qs', updated_at = NOW()
+    FROM tqs_bill_updates u
+    WHERE u.bill_id = b.id
+      AND b.project_id = $1
+      AND b.is_deleted = FALSE
+      AND b.workflow_status = 'accounts'
+      AND u.qs_certified_date IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM vendor_qs_certification_bills cb
+        JOIN vendor_qs_certifications vc ON vc.id = cb.certification_id
+        WHERE cb.bill_id = b.id AND vc.status NOT IN ('cancelled', 'rejected')
+      )
+  `, [YELAHANKA_RW_STP]);
+  console.log(`[migration] Moved ${moved2.rowCount} uncertified bill(s) from 'accounts' → 'qs' (SCP Concrete linkage)`);
+});
+
 module.exports = router;
