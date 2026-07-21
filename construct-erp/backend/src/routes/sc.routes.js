@@ -1401,18 +1401,30 @@ router.patch('/bills/:id', authorize(...PLANNER), async (req, res) => {
       return r.rows[0];
     });
 
-    // Sync invoice_number to tqs_bills and its linked QS cert snapshots
+    // Sync editable fields to tqs_bills (and cert snapshot where relevant)
+    await query(`
+      UPDATE tqs_bills
+      SET inv_date = $1
+        ${updated.invoice_number ? ', inv_number = $3' : ''}
+      WHERE sc_bill_id = $2
+    `, updated.invoice_number
+      ? [updated.bill_date, req.params.id, updated.invoice_number]
+      : [updated.bill_date, req.params.id]);
+
     if (updated.invoice_number) {
-      await query(
-        `UPDATE tqs_bills SET inv_number=$1 WHERE sc_bill_id=$2`,
-        [updated.invoice_number, req.params.id]
-      );
       await query(`
         UPDATE vendor_qs_certification_bills cb
-        SET inv_number = $1
+        SET inv_number = $1, inv_date = $2
+        FROM tqs_bills tb
+        WHERE cb.bill_id = tb.id AND tb.sc_bill_id = $3
+      `, [updated.invoice_number, updated.bill_date, req.params.id]);
+    } else {
+      await query(`
+        UPDATE vendor_qs_certification_bills cb
+        SET inv_date = $1
         FROM tqs_bills tb
         WHERE cb.bill_id = tb.id AND tb.sc_bill_id = $2
-      `, [updated.invoice_number, req.params.id]);
+      `, [updated.bill_date, req.params.id]);
     }
 
     res.json({ data: updated });
