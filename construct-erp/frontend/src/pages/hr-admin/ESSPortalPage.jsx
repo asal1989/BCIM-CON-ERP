@@ -404,7 +404,8 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
       const wday = new Date(ds).getDay();
       const isWknd = wday===0||wday===6;
       const isHoliday = holidayDateSet.has(ds);
-      const code = statusMap[ds]?.code || (isHoliday ? 'H' : isWknd ? 'WO' : null);
+      const isPast = ds < todayStr;
+      const code = statusMap[ds]?.code || (isHoliday ? 'H' : isWknd ? 'WO' : isPast ? 'A' : null);
       result.push({ d, ds, code, isWknd, isToday: ds===todayStr });
     }
     return result;
