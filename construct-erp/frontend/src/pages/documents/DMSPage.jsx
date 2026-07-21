@@ -7,7 +7,8 @@ import {
   Eye, Download, Share2, GitBranch, X, Bell, BarChart3, RefreshCw, Filter, Plus,
   Archive, PenTool, History, ScrollText, ChevronRight, ChevronDown, HardDrive,
   Building2, Users2, Briefcase, UserCircle, FileSignature, Activity, Trash2, Link2,
-  Send, UploadCloud, FileSpreadsheet, Tag, Layers,
+  Send, UploadCloud, FileSpreadsheet, Tag, Layers, LayoutGrid, List as ListIcon,
+  Image as ImageIcon, FileArchive, TrendingUp,
 } from 'lucide-react';
 import { dmsAPI, projectAPI } from '../../api/client';
 import api from '../../api/client';
@@ -78,6 +79,69 @@ async function downloadDmsDocument(doc) {
 }
 
 const isWordDoc = (doc) => ['docx','doc'].includes(fileExt(doc?.file_name || doc?.local_url || doc?.file_type || ''));
+
+// ── File-type visual config for grid tiles ──────────────────────────────────
+const FILE_TYPE_CFG = {
+  pdf:  { icon: FileText,      bg: 'bg-red-50',     fg: 'text-red-500',     ring: 'ring-red-100' },
+  doc:  { icon: FileText,      bg: 'bg-blue-50',    fg: 'text-blue-600',    ring: 'ring-blue-100' },
+  docx: { icon: FileText,      bg: 'bg-blue-50',    fg: 'text-blue-600',    ring: 'ring-blue-100' },
+  xls:  { icon: FileSpreadsheet, bg: 'bg-emerald-50', fg: 'text-emerald-600', ring: 'ring-emerald-100' },
+  xlsx: { icon: FileSpreadsheet, bg: 'bg-emerald-50', fg: 'text-emerald-600', ring: 'ring-emerald-100' },
+  png:  { icon: ImageIcon,     bg: 'bg-purple-50',  fg: 'text-purple-500',  ring: 'ring-purple-100' },
+  jpg:  { icon: ImageIcon,     bg: 'bg-purple-50',  fg: 'text-purple-500',  ring: 'ring-purple-100' },
+  jpeg: { icon: ImageIcon,     bg: 'bg-purple-50',  fg: 'text-purple-500',  ring: 'ring-purple-100' },
+  zip:  { icon: FileArchive,   bg: 'bg-amber-50',   fg: 'text-amber-600',   ring: 'ring-amber-100' },
+  dwg:  { icon: Layers,        bg: 'bg-cyan-50',    fg: 'text-cyan-600',    ring: 'ring-cyan-100' },
+  default: { icon: FileText,   bg: 'bg-slate-100',  fg: 'text-slate-500',   ring: 'ring-slate-200' },
+};
+const fileTypeCfg = (name) => FILE_TYPE_CFG[fileExt(name)] || FILE_TYPE_CFG.default;
+
+// ── Animated count-up used in the KPI strip ─────────────────────────────────
+function AnimatedCounter({ value, duration = 700, format }) {
+  const [display, setDisplay] = useState(0);
+  const target = Number(value) || 0;
+  useEffect(() => {
+    let raf; const start = performance.now();
+    const from = 0;
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplay(from + (target - from) * eased);
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
+  const rounded = Math.round(display);
+  return <>{format ? format(rounded) : rounded.toLocaleString('en-IN')}</>;
+}
+
+// ── Premium KPI card with icon, animated value and hover lift ──────────────
+function KpiTile({ icon: Icon, label, value, format, tint, sub, trend }) {
+  return (
+    <div className="group relative bg-white/90 backdrop-blur border border-slate-100 rounded-2xl p-4 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 overflow-hidden">
+      <div className={clsx('absolute -right-4 -top-4 w-20 h-20 rounded-full opacity-[0.07] transition-transform duration-300 group-hover:scale-125', tint.dot)} />
+      <div className="flex items-start justify-between relative">
+        <div className={clsx('w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0', tint.bg)}>
+          <Icon className={clsx('w-4.5 h-4.5', tint.fg)} style={{ width: 18, height: 18 }} />
+        </div>
+        {trend != null && (
+          <span className={clsx('flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full',
+            trend >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600')}>
+            <TrendingUp className="w-2.5 h-2.5" style={{ transform: trend < 0 ? 'rotate(180deg)' : undefined }} />
+            {Math.abs(trend)}%
+          </span>
+        )}
+      </div>
+      <div className="mt-3 text-2xl font-extrabold text-slate-900 tabular-nums leading-none">
+        <AnimatedCounter value={value} format={format} />
+      </div>
+      <div className="text-[11px] font-semibold text-slate-400 mt-1.5 uppercase tracking-wide">{label}</div>
+      {sub && <div className="text-[10px] text-slate-400 mt-0.5">{sub}</div>}
+    </div>
+  );
+}
 
 function DocumentPreview({ doc }) {
   const [blobUrl,     setBlobUrl]     = useState('');
@@ -548,6 +612,47 @@ function DocDetailDrawer({ docId, onClose, onSubmitReview, onAddVersion }) {
   );
 }
 
+// ── Grid-view document tile ──────────────────────────────────────────────
+function DocumentCard({ doc, onOpen, onDownload, onShare, onArchive }) {
+  const cfg = STATUS_CFG[doc.status] || STATUS_CFG.draft;
+  const ft  = fileTypeCfg(doc.file_name);
+  const Icon = ft.icon;
+  const expDays = doc.expiry_date ? dayjs(doc.expiry_date).diff(dayjs(), 'day') : null;
+  return (
+    <div onClick={() => onOpen(doc.id)}
+      className="group relative bg-white border border-slate-100 rounded-2xl p-4 shadow-sm hover:shadow-lg hover:-translate-y-0.5 hover:border-indigo-200 transition-all duration-200 cursor-pointer flex flex-col">
+      <div className="flex items-start justify-between mb-3">
+        <div className={clsx('w-11 h-11 rounded-xl flex items-center justify-center ring-4 flex-shrink-0', ft.bg, ft.ring)}>
+          <Icon className={clsx('w-5 h-5', ft.fg)} />
+        </div>
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+          {(doc.local_url || doc.onedrive_url) && (
+            <button onClick={() => onDownload(doc)} title="Download" className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"><Download className="w-3.5 h-3.5" /></button>
+          )}
+          <button onClick={() => onShare(doc)} title="Share" className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg"><Share2 className="w-3.5 h-3.5" /></button>
+          <button onClick={() => onArchive(doc)} title="Archive" className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Archive className="w-3.5 h-3.5" /></button>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5 mb-1">
+        {doc.doc_number && <span className="font-mono text-[10px] text-indigo-500 truncate">{doc.doc_number}</span>}
+        {doc.is_signed && <FileSignature className="w-3 h-3 text-blue-500 flex-shrink-0" />}
+      </div>
+      <p className="text-sm font-semibold text-slate-800 leading-snug line-clamp-2 mb-1 min-h-[2.5em]">{doc.doc_title || doc.file_name}</p>
+      <p className="text-[11px] text-slate-400 truncate mb-3">{doc.project_name || 'No project'} · Rev {doc.revision || 'A'}</p>
+      <div className="mt-auto flex items-center justify-between">
+        <span className={clsx('text-[10px] px-2 py-0.5 rounded-full border font-semibold', cfg.color)}>{cfg.label}</span>
+        <span className="text-[10px] text-slate-400">{fmtSize(doc.file_size)}</span>
+      </div>
+      {expDays != null && expDays <= 30 && (
+        <div className={clsx('mt-2 text-[10px] font-semibold px-2 py-1 rounded-lg text-center',
+          expDays < 0 ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600')}>
+          {expDays < 0 ? `Expired ${Math.abs(expDays)}d ago` : `Expires in ${expDays}d`}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════════
@@ -565,6 +670,7 @@ export default function DMSPage() {
   const [modal, setModal]     = useState(null);
   const [detailId, setDetailId] = useState(null);
   const [reportTab, setReportTab] = useState('register');
+  const [viewMode, setViewMode] = useState('list'); // 'grid' | 'list'
 
   const { data: projects = [] } = useQuery({ queryKey:['projects'], queryFn: () => projectAPI.list().then(r=>r.data?.data??[]) });
   const { data: folders = [] }  = useQuery({ queryKey:['dms-folders'], queryFn: () => dmsAPI.listFolders().then(r => r.data?.data ?? r.data ?? []).catch(() => []) });
@@ -664,6 +770,10 @@ export default function DMSPage() {
     : cat.kind === 'month' ? monthLabel(cat.value)
     : (folders.find(f => f.id === cat.value)?.folder_name || 'Folder');
   const s = dash?.stats;
+  const todayStr = dayjs().format('YYYY-MM-DD');
+  const monthStr = dayjs().format('YYYY-MM');
+  const todayUploads = useMemo(() => docs.filter(d => d.created_at && dayjs(d.created_at).format('YYYY-MM-DD') === todayStr).length, [docs, todayStr]);
+  const monthUploads = useMemo(() => docs.filter(d => d.created_at && dayjs(d.created_at).format('YYYY-MM') === monthStr).length, [docs, monthStr]);
 
   const renderRow = (d) => {
     const cfg = STATUS_CFG[d.status] || STATUS_CFG.draft;
@@ -704,27 +814,58 @@ export default function DMSPage() {
   };
 
   return (
-    <div className="p-6 md:p-8 max-w-[1400px] mx-auto min-h-screen bg-[#f4f6f9]">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Document Management System</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Repository · Version Control · Approval · Signatures · Audit · Reports</p>
+    <div className="min-h-screen bg-[#f4f6fb]">
+
+      {/* ── PREMIUM HERO ── */}
+      <div className="relative overflow-hidden" style={{ background: 'linear-gradient(145deg,#0A0F1E 0%,#0F172A 20%,#1E1B4B 55%,#4338CA 100%)', padding: '32px 28px 56px' }}>
+        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse 70% 60% at 70% 0%,rgba(99,102,241,.25),transparent),radial-gradient(ellipse 50% 80% at 100% 70%,rgba(139,92,246,.15),transparent)' }} />
+        <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,.055) 1px,transparent 1px)', backgroundSize: '24px 24px' }} />
+        <div className="relative z-10 max-w-[1400px] mx-auto">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center flex-shrink-0">
+                <FolderOpen className="w-7 h-7 text-white" />
+              </div>
+              <div>
+                <div className="text-[10.5px] font-bold text-white/50 uppercase tracking-widest mb-1">BCIM Construction ERP</div>
+                <h1 className="text-2xl font-extrabold text-white tracking-tight">Document Management System</h1>
+                <p className="text-xs text-white/60 mt-0.5">Centralized repository · Version Control · Approvals · Signatures · Audit</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {myApprovals.length > 0 && (
+                <button onClick={() => setTab('approvals')} className="flex items-center gap-2 px-3 py-2 bg-amber-400/15 border border-amber-300/30 rounded-xl text-sm text-amber-200 hover:bg-amber-400/25 transition-colors">
+                  <Bell className="w-4 h-4" /><strong>{myApprovals.length}</strong> pending
+                </button>
+              )}
+              <button onClick={() => setModal('upload')}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white shadow-lg transition-transform hover:-translate-y-0.5"
+                style={{ background: 'linear-gradient(135deg,#7C3AED,#4338CA)', boxShadow: '0 4px 16px rgba(67,56,202,.4)' }}>
+                <Upload className="w-4 h-4" /> Upload Document
+              </button>
+            </div>
+          </div>
+
+          {/* Animated KPI strip */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <KpiTile icon={FileText}      label="Total Documents" value={s?.total || 0}                 tint={{ bg:'bg-indigo-50',  fg:'text-indigo-600',  dot:'bg-indigo-500' }} />
+            <KpiTile icon={CheckCircle2}  label="Approved"        value={s?.approved || 0}               tint={{ bg:'bg-emerald-50', fg:'text-emerald-600', dot:'bg-emerald-500' }} />
+            <KpiTile icon={Clock}         label="Pending Approval" value={myApprovals.length}            tint={{ bg:'bg-amber-50',   fg:'text-amber-600',   dot:'bg-amber-500' }} />
+            <KpiTile icon={HardDrive}     label="Storage Used"    value={s?.total_size_bytes || 0} format={fmtSize} tint={{ bg:'bg-purple-50', fg:'text-purple-600', dot:'bg-purple-500' }} />
+            <KpiTile icon={UploadCloud}   label="Today's Uploads" value={todayUploads}                   tint={{ bg:'bg-cyan-50',    fg:'text-cyan-600',    dot:'bg-cyan-500' }} />
+            <KpiTile icon={BarChart3}     label="This Month"      value={monthUploads}                   tint={{ bg:'bg-rose-50',    fg:'text-rose-600',    dot:'bg-rose-500' }} />
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          {myApprovals.length > 0 && (
-            <button onClick={() => setTab('approvals')} className="flex items-center gap-2 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-700">
-              <Bell className="w-4 h-4" /><strong>{myApprovals.length}</strong> pending
-            </button>
-          )}
-          <button onClick={() => setModal('upload')}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 shadow-sm">
-            <Upload className="w-4 h-4" /> Upload
-          </button>
-        </div>
+
+        <svg className="absolute bottom-0 left-0 right-0 w-full block pointer-events-none" viewBox="0 0 1440 36" preserveAspectRatio="none">
+          <path d="M0,18L60,15C120,12,240,6,360,8C480,10,600,20,720,21C840,23,960,17,1080,13C1200,9,1320,8,1380,8L1440,7V36H0Z" fill="#f4f6fb" />
+        </svg>
       </div>
 
+      <div className="p-6 md:p-8 max-w-[1400px] mx-auto -mt-2 relative z-10">
+
       {/* Tabs */}
-      <div className="flex gap-1 bg-white/70 border p-1 rounded-xl w-fit mb-5 flex-wrap">
+      <div className="flex gap-1 bg-white border border-slate-100 p-1 rounded-2xl w-fit mb-5 flex-wrap shadow-sm">
         {[
           ['repository',`Repository (${docs.length})`],
           ['approvals',`My Approvals (${myApprovals.length})`],
@@ -732,8 +873,9 @@ export default function DMSPage() {
           ['reports','Reports'],
         ].map(([k,l]) => (
           <button key={k} onClick={()=>setTab(k)}
-            className={clsx('px-4 py-1.5 rounded-lg text-sm font-medium transition-colors',
-              tab===k ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900')}>
+            className={clsx('px-4 py-1.5 rounded-xl text-sm font-medium transition-all duration-150',
+              tab===k ? 'text-white shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50')}
+            style={tab===k ? { background: 'linear-gradient(135deg,#4F46E5,#4338CA)' } : undefined}>
             {l}
           </button>
         ))}
@@ -742,21 +884,6 @@ export default function DMSPage() {
       {/* ── DASHBOARD ── */}
       {tab === 'dashboard' && s && (
         <div className="space-y-5">
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            {[
-              {label:'Total Docs', value:s.total, color:'text-indigo-600'},
-              {label:'Approved', value:s.approved, color:'text-emerald-600'},
-              {label:'Under Review', value:s.under_review, color:'text-yellow-600'},
-              {label:'Draft', value:s.draft, color:'text-slate-600'},
-              {label:'Signed', value:s.signed, color:'text-blue-600'},
-              {label:'Expiring 30d', value:s.expiring_soon, color:'text-red-600'},
-            ].map(c=>(
-              <div key={c.label} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-                <div className={`text-2xl font-bold ${c.color}`}>{c.value}</div>
-                <div className="text-xs text-slate-500 mt-0.5">{c.label}</div>
-              </div>
-            ))}
-          </div>
 
           {/* Storage + by-type */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -1003,6 +1130,16 @@ export default function DMSPage() {
                 <option value="project">Group by Project</option>
                 <option value="month">Group by Month</option>
               </select>
+              <div className="flex items-center gap-0.5 bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
+                <button onClick={() => setViewMode('grid')} title="Grid view"
+                  className={clsx('p-1.5 rounded-md transition-colors', viewMode==='grid' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-600')}>
+                  <LayoutGrid className="w-4 h-4" />
+                </button>
+                <button onClick={() => setViewMode('list')} title="List view"
+                  className={clsx('p-1.5 rounded-md transition-colors', viewMode==='list' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-600')}>
+                  <ListIcon className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             {/* Active category chip */}
@@ -1018,7 +1155,34 @@ export default function DMSPage() {
               </div>
             )}
 
-            {isLoading ? <div className="text-center py-12 text-slate-400"><RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />Loading…</div> : (
+            {isLoading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <div key={i} className="bg-white border border-slate-100 rounded-2xl p-4 animate-pulse">
+                    <div className="w-11 h-11 rounded-xl bg-slate-100 mb-3" />
+                    <div className="h-3 bg-slate-100 rounded w-3/4 mb-2" />
+                    <div className="h-3 bg-slate-100 rounded w-1/2 mb-4" />
+                    <div className="h-4 bg-slate-100 rounded-full w-16" />
+                  </div>
+                ))}
+              </div>
+            ) : viewMode === 'grid' ? (
+              visibleDocs.length === 0 ? (
+                <div className="bg-white border border-slate-100 rounded-2xl py-16 text-center">
+                  <FolderOpen className="w-10 h-10 mx-auto mb-3 text-slate-200" />
+                  <p className="text-slate-400 text-sm">No documents found</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                  {visibleDocs.map(d => (
+                    <DocumentCard key={d.id} doc={d} onOpen={setDetailId}
+                      onDownload={downloadDmsDocument}
+                      onShare={(doc) => setModal({ type:'share', doc })}
+                      onArchive={(doc) => { if (window.confirm('Archive?')) archiveMut.mutate(doc.id); }} />
+                  ))}
+                </div>
+              )
+            ) : (
               <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -1081,6 +1245,7 @@ export default function DMSPage() {
         onSubmitReview={(doc)=>setModal({type:'review', doc})}
         onAddVersion={(doc)=>setModal({type:'version', doc})}
       />}
+      </div>
     </div>
   );
 }
