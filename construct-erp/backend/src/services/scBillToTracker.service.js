@@ -49,11 +49,11 @@ async function pushScBillToTracker(billId, actorId) {
     const r = await client.query(`
       INSERT INTO tqs_bills (
         company_id, project_id, sl_number, vendor_name,
-        wo_number, inv_number, inv_date, bill_type, work_desc,
+        wo_number, po_number, inv_number, inv_date, bill_type, work_desc,
         basic_amount, gst_amount, cgst_amt, sgst_amt, igst_amt,
         total_amount, remarks, workflow_status, created_by, sc_bill_id
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,'wo',$8,
+        $1,$2,$3,$4,$5,$5,$6,$7,'wo',$8,
         $9,$10,$11,$12,$13,
         $14,$15,'pending',$16,$17
       ) RETURNING id
@@ -72,6 +72,16 @@ async function pushScBillToTracker(billId, actorId) {
     return r.rows[0].id;
   });
 }
+
+// One-time fix: copy wo_number → po_number for SC bills already in tracker
+runSchemaInit('fix_sc_tracker_po_number_2026_07', async () => {
+  const result = await query(`
+    UPDATE tqs_bills
+    SET po_number = wo_number
+    WHERE sc_bill_id IS NOT NULL AND po_number IS NULL AND wo_number IS NOT NULL
+  `);
+  console.log(`[fix] Set po_number from wo_number for ${result.rowCount} SC tracker rows`);
+});
 
 // One-time backfill: push all existing SC bills not yet in Bill Tracker
 runSchemaInit('backfill_sc_bills_to_tracker_2026_07', async () => {
