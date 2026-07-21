@@ -282,6 +282,8 @@ export default function PaymentsPage() {
   const [payType, setPayType]       = useState('bill');   // 'bill' | 'advance' | 'general'
   const [vendorName, setVendorName] = useState('');       // selected vendor name
   const [selectedPc, setSelectedPc] = useState(null);     // selected PC/bill for payment
+  const [linkExisting, setLinkExisting]   = useState(false); // advance type: pay against an existing tracker voucher
+  const [existingAdvId, setExistingAdvId] = useState('');
   const [form, setForm] = useState({
     project_id: '', payee_name: '', payee_type: 'Contractor',
     description: '', amount: '', tds_rate: 0,
@@ -299,6 +301,7 @@ export default function PaymentsPage() {
 
   const resetModal = () => {
     setPayType('bill'); setVendorName(''); setSelectedPc(null);
+    setLinkExisting(false); setExistingAdvId('');
     setForm(FORM_RESET);
   };
 
@@ -328,6 +331,14 @@ export default function PaymentsPage() {
     enabled: showModal && payType === 'advance' && !!form.vendor_id,
     staleTime: 60 * 1000,
   });
+  // Existing approved advance vouchers for this vendor, to pay an installment against
+  const { data: existingAdvances = [] } = useQuery({
+    queryKey: ['advance-existing-lookup', form.vendor_id],
+    queryFn: () => procurementAdvanceAPI.list({ vendor_id: form.vendor_id, approval_status: 'approved' }).then(r => r.data?.data ?? []),
+    enabled: showModal && payType === 'advance' && linkExisting && !!form.vendor_id,
+    staleTime: 30 * 1000,
+  });
+  const selectedExistingAdv = existingAdvances.find(a => String(a.id) === String(existingAdvId)) || null;
 
   // ── QS Certifications pending payment ──────────────────────────────────────
   const { data: qsCertsRes = [], isFetching: qsCertLoading } = useQuery({
@@ -411,6 +422,20 @@ export default function PaymentsPage() {
     onError: e => toast.error(e?.response?.data?.error || 'Failed to record advance'),
   });
 
+  const payInstallmentMut = useMutation({
+    mutationFn: d => procurementAdvanceAPI.payInstallment(existingAdvId, d),
+    onSuccess: () => {
+      toast.success('Payment recorded against advance voucher');
+      qc.invalidateQueries({ queryKey: ['payments'] });
+      qc.invalidateQueries({ queryKey: ['procurement-advances'] });
+      qc.invalidateQueries({ queryKey: ['advance-existing-lookup'] });
+      qc.invalidateQueries({ queryKey: ['liability-summary'] });
+      setShowModal(false);
+      resetModal();
+    },
+    onError: e => toast.error(e?.response?.data?.message || 'Failed to record payment'),
+  });
+
   const deleteMut = useMutation({
     mutationFn: id => api.delete(`/payments/${id}`),
     onSuccess: () => { toast.success('Deleted'); qc.invalidateQueries({ queryKey: ['payments'] }); },
@@ -462,12 +487,25 @@ export default function PaymentsPage() {
   const tdsSplit    = payBill ? computeTdsSplit(payBill) : null;
   const canSubmitPay = payForm.payment_date && payForm.payment_mode && payForm.payment_ref.trim();
 
-  const canSubmit = (createMut.isPending || advanceMut.isPending) ? false
+  const canSubmit = (createMut.isPending || advanceMut.isPending || payInstallmentMut.isPending) ? false
     : payType === 'bill'    ? (!!selectedPc && !!form.project_id && !!form.amount && !!form.payment_date)
-    : payType === 'advance' ? (!!vendorName  && !!form.project_id && !!form.amount && !!form.payment_date)
+    : payType === 'advance' ? (linkExisting
+                                 ? (!!vendorName && !!existingAdvId && !!form.amount && !!form.payment_date)
+                                 : (!!vendorName && !!form.project_id && !!form.amount && !!form.payment_date))
     :                         (!!form.payee_name && !!form.project_id && !!form.amount && !!form.payment_date);
 
   const handleSubmit = () => {
+    if (payType === 'advance' && linkExisting) {
+      payInstallmentMut.mutate({
+        amount:           parseFloat(form.amount),
+        payment_date:     form.payment_date,
+        payment_mode:     form.payment_mode,
+        reference_number: form.bank_ref || null,
+        bank_name:        null,
+        remarks:          form.description || null,
+      });
+      return;
+    }
     const base = {
       project_id:       form.project_id,
       payment_mode:     form.payment_mode,
@@ -929,8 +967,64 @@ export default function PaymentsPage() {
                 </div>
               )}
 
-              {/* ── Advance Tracker Fields (advance type only) ── */}
+              {/* ── Advance mode toggle: brand-new advance vs an installment against
+                   an already-approved voucher in the Advance Tracker ── */}
               {payType === 'advance' && vendorName && (
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => { setLinkExisting(false); setExistingAdvId(''); }}
+                    className={clsx('flex-1 px-3 py-2 rounded-lg text-xs font-semibold border transition-colors',
+                      !linkExisting ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50')}>
+                    New Advance
+                  </button>
+                  <button type="button" onClick={() => setLinkExisting(true)}
+                    className={clsx('flex-1 px-3 py-2 rounded-lg text-xs font-semibold border transition-colors',
+                      linkExisting ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50')}>
+                    Pay Existing Advance
+                  </button>
+                </div>
+              )}
+
+              {/* ── Pay an installment against an existing Advance Tracker voucher ── */}
+              {payType === 'advance' && vendorName && linkExisting && (
+                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 space-y-3">
+                  <p className="text-[10px] uppercase font-bold text-emerald-700 tracking-wider">Advance Tracker Voucher</p>
+                  <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-400 bg-white"
+                    value={existingAdvId} onChange={e => setExistingAdvId(e.target.value)}>
+                    <option value="">— Select advance voucher —</option>
+                    {existingAdvances.map(a => {
+                      const remaining = Number(a.advance_value || 0) - Number(a.paid_amount || 0);
+                      return (
+                        <option key={a.id} value={a.id}>
+                          {a.sl_number}{a.voucher_number ? ` · ${a.voucher_number}` : ''} — {inr(a.advance_value)} sanctioned, {inr(a.paid_amount || 0)} paid, {inr(remaining)} remaining
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {!existingAdvances.length && (
+                    <p className="text-[11px] text-emerald-700">No approved advance vouchers found for this vendor.</p>
+                  )}
+                  {selectedExistingAdv && (
+                    <div className="grid grid-cols-3 gap-3 pt-1">
+                      <div>
+                        <p className="text-[10px] text-emerald-600 uppercase font-semibold">Sanctioned</p>
+                        <p className="text-sm font-bold text-slate-800">{inr(selectedExistingAdv.advance_value)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-emerald-600 uppercase font-semibold">Paid So Far</p>
+                        <p className="text-sm font-bold text-slate-800">{inr(selectedExistingAdv.paid_amount || 0)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-emerald-600 uppercase font-semibold">Remaining</p>
+                        <p className="text-sm font-bold text-emerald-700">{inr(Number(selectedExistingAdv.advance_value || 0) - Number(selectedExistingAdv.paid_amount || 0))}</p>
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-[10px] text-emerald-600">This payment is logged as a dated installment against the selected voucher — its Paid Amount and payment history update, no new voucher is created.</p>
+                </div>
+              )}
+
+              {/* ── Advance Tracker Fields (advance type only, new advance) ── */}
+              {payType === 'advance' && vendorName && !linkExisting && (
                 <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 space-y-3">
                   <p className="text-[10px] uppercase font-bold text-indigo-600 tracking-wider">Bill Tracker Link</p>
                   <div className="grid grid-cols-2 gap-3">
@@ -1065,7 +1159,9 @@ export default function PaymentsPage() {
                   {createMut.isPending ? 'Saving...' : (
                     <>
                       <ArrowRight className="w-4 h-4" />
-                      {payType === 'bill' ? `Record Payment${selectedPc ? ` — ${inr(form.amount || 0)}` : ''}` : payType === 'advance' ? 'Record Advance' : 'Record Expense'}
+                      {payType === 'bill' ? `Record Payment${selectedPc ? ` — ${inr(form.amount || 0)}` : ''}`
+                        : payType === 'advance' ? (linkExisting ? 'Record Installment Payment' : 'Record Advance')
+                        : 'Record Expense'}
                     </>
                   )}
                 </button>

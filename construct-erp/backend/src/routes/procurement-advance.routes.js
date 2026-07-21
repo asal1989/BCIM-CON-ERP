@@ -144,6 +144,25 @@ async function ensureTable() {
   // mismatched type made every GET /:id 500 on the LEFT JOIN below. Table has
   // never had any rows with bill_id set, so this is a safe no-op-or-fix ALTER.
   await query(`ALTER TABLE tqs_advance_recoveries ALTER COLUMN bill_id TYPE UUID USING bill_id::text::uuid`);
+
+  // Disbursement-side mirror of tqs_advance_recoveries — lets one voucher be
+  // paid out in several dated installments (e.g. Rs.20,000 x 4 instead of one
+  // lump Rs.1,00,000) instead of only ever holding a single paid_amount/pay_date.
+  await query(`
+    CREATE TABLE IF NOT EXISTS tqs_advance_payments (
+      id               SERIAL PRIMARY KEY,
+      advance_id       INTEGER NOT NULL REFERENCES tqs_advance_vouchers(id) ON DELETE CASCADE,
+      amount           NUMERIC(15,2) NOT NULL,
+      payment_date     DATE NOT NULL,
+      payment_mode     TEXT,
+      reference_number TEXT,
+      bank_name        TEXT,
+      remarks          TEXT,
+      finance_payment_id UUID,
+      created_by       UUID,
+      created_at       TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
 }
 
 runSchemaInit('tqs_advance_vouchers', ensureTable);
@@ -338,12 +357,13 @@ router.get('/lookup/bills-by-vendor', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const { company_id } = req.user;
-    const { project_id, status, approval_status, search } = req.query;
+    const { project_id, vendor_id, status, approval_status, search } = req.query;
 
     const wheres = [`av.company_id=$1`, `av.is_deleted=FALSE`];
     const params = [company_id];
 
     applyProjectScope(req, wheres, params, 'av', project_id);
+    if (vendor_id) { params.push(vendor_id); wheres.push(`av.vendor_id=$${params.length}`); }
     if (status && status !== 'all') { params.push(status); wheres.push(`av.status=$${params.length}`); }
     if (approval_status) { params.push(approval_status); wheres.push(`av.approval_status=$${params.length}`); }
     if (search) {
@@ -677,6 +697,115 @@ router.patch('/:id/issue', async (req, res) => {
     }
 
     res.json({ success: true, data: voucher });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ── POST /tqs/advances/:id/pay — record one dated installment payment
+// against an existing (already-approved) voucher. Unlike /issue (the FIRST
+// disbursement) this can be called any number of times — e.g. Rs.20,000 paid
+// on 4 separate dates instead of one lump Rs.1,00,000 — and each call logs
+// its own row in tqs_advance_payments, its own GL entry and its own Payment
+// Register row, so the actual payment history stays auditable.
+router.post('/:id/pay', async (req, res) => {
+  try {
+    const { company_id, id: user_id } = req.user;
+    const { id } = req.params;
+    const { amount, payment_date, payment_mode, reference_number, bank_name, remarks } = req.body;
+    const payAmt = parseFloat(amount || 0);
+    if (!(payAmt > 0)) return res.status(400).json({ success: false, message: 'amount must be > 0' });
+    if (!payment_date) return res.status(400).json({ success: false, message: 'payment_date is required' });
+
+    const { rows: [voucher] } = await query(
+      `SELECT * FROM tqs_advance_vouchers WHERE id=$1 AND company_id=$2 AND is_deleted=FALSE`,
+      [id, company_id]
+    );
+    if (!voucher) return res.status(404).json({ success: false, message: 'Not found' });
+    if (voucher.approval_status !== 'approved') {
+      return res.status(403).json({ success: false, message: 'Advance must be approved by Procurement and the Managing Director before it can be disbursed.' });
+    }
+
+    const result = await withTransaction(async (client) => {
+      const { rows: [pay] } = await client.query(`
+        INSERT INTO tqs_advance_payments
+          (advance_id, amount, payment_date, payment_mode, reference_number, bank_name, remarks, created_by)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *
+      `, [id, payAmt, payment_date, payment_mode || null, reference_number || null, bank_name || null, remarks || null, user_id]);
+
+      // Cumulative paid_amount + latest pay_date; first payment also flips
+      // status out of 'pending'. Later status (issued/partial/recovered)
+      // continues to be governed by syncVoucherStatus against recoveries.
+      await client.query(`
+        UPDATE tqs_advance_vouchers
+        SET paid_amount = paid_amount + $1,
+            pay_date = $2,
+            status = CASE WHEN status = 'pending' THEN 'issued' ELSE status END,
+            updated_at = NOW()
+        WHERE id = $3
+      `, [payAmt, payment_date, id]);
+      await syncVoucherStatus(client, id);
+
+      // Mirror into the Finance Payment Register so it shows up there too.
+      let financePaymentId = null;
+      if (voucher.project_id) {
+        const { rows: [fp] } = await client.query(`
+          INSERT INTO payments
+            (project_id, payment_type, entity_name, amount, tds_deducted, net_amount,
+             payment_date, payment_mode, reference_number, bank_name, cost_head, remarks, created_by, source)
+          VALUES ($1,'vendor',$2,$3,0,$3,$4,$5,$6,$7,$8,$9,$10,'tqs_advance_installment')
+          RETURNING id
+        `, [
+          voucher.project_id, voucher.vendor_name, payAmt, payment_date,
+          payment_mode || 'bank_transfer', reference_number || null, bank_name || null,
+          (voucher.wo_number || voucher.po_number) ? `Advance — ${voucher.wo_number || voucher.po_number}` : 'Advance Payment',
+          remarks || `Installment against advance ${voucher.voucher_number || voucher.sl_number}`,
+          user_id,
+        ]);
+        financePaymentId = fp.id;
+        await client.query(`UPDATE tqs_advance_payments SET finance_payment_id=$1 WHERE id=$2`, [financePaymentId, pay.id]);
+      }
+
+      // Each installment gets its own GL entry (own reference) — never
+      // overwrites a prior one, since this is new money going out each time,
+      // not a correction of an existing figure (see /paid-amount for that).
+      const ref = `${voucher.voucher_number || voucher.sl_number}/PAY${pay.id}`;
+      await postAutoJournal(client, {
+        companyId: company_id,
+        userId: user_id,
+        entryDate: payment_date,
+        projectId: voucher.project_id || null,
+        reference: ref,
+        narration: `Advance paid (installment) — ${voucher.vendor_name || ''} (${voucher.voucher_number || voucher.sl_number})`,
+        source: 'auto_tqs_advance',
+        lines: [
+          { code: '1150', debit: payAmt, description: `Advance to ${voucher.vendor_name || 'vendor'} — ${voucher.voucher_number || voucher.sl_number}` },
+          { code: '1010', credit: payAmt, description: `Advance paid — ${voucher.voucher_number || voucher.sl_number}` },
+        ],
+      });
+
+      return pay;
+    });
+
+    const { rows: [updated] } = await query(`SELECT * FROM tqs_advance_vouchers WHERE id=$1`, [id]);
+    res.json({ success: true, data: { payment: result, voucher: updated } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ── GET /tqs/advances/:id/payments — installment payment history ─────────────
+router.get('/:id/payments', async (req, res) => {
+  try {
+    const { company_id } = req.user;
+    const { id } = req.params;
+    const chk = await query(`SELECT id FROM tqs_advance_vouchers WHERE id=$1 AND company_id=$2`, [id, company_id]);
+    if (!chk.rows.length) return res.status(404).json({ success: false, message: 'Not found' });
+    const { rows } = await query(
+      `SELECT * FROM tqs_advance_payments WHERE advance_id=$1 ORDER BY payment_date ASC, created_at ASC`,
+      [id]
+    );
+    res.json({ success: true, data: rows });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
