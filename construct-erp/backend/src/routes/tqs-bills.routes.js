@@ -1630,9 +1630,10 @@ router.get('/advances/pending', async (req, res) => {
       conditions.push(`a.vendor_name ILIKE $${i++}`);
       params.push(`%${vendor_name}%`);
     }
-    // Exact WO/PO match only — no NULL fallback when a specific number is requested
-    if (wo_number) { conditions.push(`a.wo_number = $${i++}`); params.push(wo_number); }
-    if (po_number) { conditions.push(`a.po_number = $${i++}`); params.push(po_number); }
+    // Match exact WO/PO, and also include advances with no order link (unattributed).
+    // Exclude advances tied to a DIFFERENT order (e.g. null-po but has a wo, when searching by po).
+    if (wo_number) { conditions.push(`(a.wo_number = $${i++} OR (a.wo_number IS NULL AND a.po_number IS NULL))`); params.push(wo_number); }
+    if (po_number) { conditions.push(`(a.po_number = $${i++} OR (a.po_number IS NULL AND a.wo_number IS NULL))`); params.push(po_number); }
 
     const r1 = await query(`
       SELECT
@@ -1669,8 +1670,8 @@ router.get('/advances/pending', async (req, res) => {
       vConditions.push(`av.vendor_name ILIKE $${vi++}`);
       vParams.push(`%${vendor_name}%`);
     }
-    if (wo_number) { vConditions.push(`av.wo_number = $${vi++}`); vParams.push(wo_number); }
-    if (po_number) { vConditions.push(`av.po_number = $${vi++}`); vParams.push(po_number); }
+    if (wo_number) { vConditions.push(`(av.wo_number = $${vi++} OR (av.wo_number IS NULL AND av.po_number IS NULL))`); vParams.push(wo_number); }
+    if (po_number) { vConditions.push(`(av.po_number = $${vi++} OR (av.po_number IS NULL AND av.wo_number IS NULL))`); vParams.push(po_number); }
 
     const r2 = await query(`
       SELECT
