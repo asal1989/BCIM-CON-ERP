@@ -16,13 +16,16 @@ const fmt  = v => `₹${Number(v||0).toLocaleString('en-IN',{maximumFractionDigi
 const fmt2 = v => `₹${Number(v||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 
 const STATUS_META = {
-  submitted:    { bg:'bg-blue-100',    text:'text-blue-700',    label:'Pending',      dot:'bg-blue-500' },
-  under_review: { bg:'bg-amber-100',   text:'text-amber-700',   label:'Waiting for Approval', dot:'bg-amber-500' },
+  submitted:    { bg:'bg-blue-100',    text:'text-blue-700',    label:'Waiting for QS Manager Approval', dot:'bg-blue-500' },
+  under_review: { bg:'bg-amber-100',   text:'text-amber-700',   label:'Waiting for MD Approval', dot:'bg-amber-500' },
   queried:      { bg:'bg-orange-100',  text:'text-orange-700',  label:'Queried',      dot:'bg-orange-500' },
   approved:     { bg:'bg-emerald-100', text:'text-emerald-700', label:'Approved',     dot:'bg-emerald-500' },
   rejected:     { bg:'bg-red-100',     text:'text-red-700',     label:'Rejected',     dot:'bg-red-500' },
   paid:         { bg:'bg-teal-100',    text:'text-teal-700',    label:'Paid',         dot:'bg-teal-500' },
 };
+
+const STAGE_LABEL = { qs_engineer: 'QS Manager', managing_director: 'MD' };
+const stageLabel = (s) => STAGE_LABEL[s] || (s || '').replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
 
 // ─── Bill Review Modal ────────────────────────────────────────────────────────
 function BillReviewModal({ billId, stages, onClose }) {
@@ -128,7 +131,7 @@ function BillReviewModal({ billId, stages, onClose }) {
                     : mode === 'query' ? 'bg-orange-100 text-orange-700'
                     : 'bg-red-100 text-red-700'
                 )}>
-                  {mode === 'approve' ? `Confirm Approval${stageIdx < stages.length - 1 ? ` → next stage: ${(stages[stageIdx+1]||'').replace(/_/g,' ')}` : ' (Final — bill will be marked Approved)'}`
+                  {mode === 'approve' ? `Confirm Approval${stageIdx < stages.length - 1 ? ` → next stage: ${stageLabel(stages[stageIdx+1])}` : ' (Final — bill will be marked Approved)'}`
                     : mode === 'query' ? 'Send Query to Bill Raiser'
                     : 'Confirm Rejection'}
                 </div>
@@ -241,8 +244,8 @@ function BillApprovalCard({ bill, stages, onReview }) {
                 <span className={clsx('w-1.5 h-1.5 rounded-full', meta.dot)}/>
                 {meta.label}
               </span>
-              <span className="text-xs text-slate-400 capitalize">
-                Stage: {(bill.current_stage||'').replace(/_/g,' ')}
+              <span className="text-xs text-slate-400">
+                Stage: {stageLabel(bill.current_stage)}
               </span>
               <span className="text-xs text-slate-400">
                 {dayjs(bill.bill_date).format('DD MMM YYYY')}
@@ -268,7 +271,7 @@ function BillApprovalCard({ bill, stages, onReview }) {
                     : i === stageIdx ? 'bg-purple-100 text-purple-700'
                     : 'bg-slate-100 text-slate-400'
                 )}>
-                  {s.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase())}
+                  {stageLabel(s)}
                 </div>
                 {i < stages.length - 1 && (
                   <ChevronRight className={clsx('w-3 h-3 flex-shrink-0',
@@ -356,7 +359,7 @@ function BillApprovalCard({ bill, stages, onReview }) {
               {mode === 'approve' && (
                 <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-700">
                   {stageIdx < stages.length - 1
-                    ? `Will advance to next stage: ${(stages[stageIdx+1]||'').replace(/_/g,' ')}`
+                    ? `Will advance to next stage: ${stageLabel(stages[stageIdx+1])}`
                     : '⭐ This is the final approval — bill will be marked Approved and an IPC will be generated.'}
                 </div>
               )}
@@ -424,8 +427,8 @@ function BillApprovalCard({ bill, stages, onReview }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const STATUS_FILTERS = [
-  ['submitted',    'Pending'],
-  ['under_review', 'Waiting for Approval'],
+  ['submitted',    'QS Manager Approval'],
+  ['under_review', 'MD Approval'],
   ['queried',      'Queried'],
   ['approved',     'Approved'],
   ['rejected',     'Rejected'],
