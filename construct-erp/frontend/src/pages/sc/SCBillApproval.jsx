@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { scAPI, projectAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
@@ -16,7 +17,7 @@ const fmt2 = v => `₹${Number(v||0).toLocaleString('en-IN',{minimumFractionDigi
 
 const STATUS_META = {
   submitted:    { bg:'bg-blue-100',    text:'text-blue-700',    label:'Pending',      dot:'bg-blue-500' },
-  under_review: { bg:'bg-amber-100',   text:'text-amber-700',   label:'Under Review', dot:'bg-amber-500' },
+  under_review: { bg:'bg-amber-100',   text:'text-amber-700',   label:'Waiting for Approval', dot:'bg-amber-500' },
   queried:      { bg:'bg-orange-100',  text:'text-orange-700',  label:'Queried',      dot:'bg-orange-500' },
   approved:     { bg:'bg-emerald-100', text:'text-emerald-700', label:'Approved',     dot:'bg-emerald-500' },
   rejected:     { bg:'bg-red-100',     text:'text-red-700',     label:'Rejected',     dot:'bg-red-500' },
@@ -424,7 +425,7 @@ function BillApprovalCard({ bill, stages, onReview }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const STATUS_FILTERS = [
   ['submitted',    'Pending'],
-  ['under_review', 'Under Review'],
+  ['under_review', 'Waiting for Approval'],
   ['queried',      'Queried'],
   ['approved',     'Approved'],
   ['rejected',     'Rejected'],
@@ -432,11 +433,24 @@ const STATUS_FILTERS = [
 ];
 
 export default function SCBillApproval() {
+  const location = useLocation();
   const { selectedProjectId } = useAuthStore();
   const [projectFilter, setProject]   = useState(selectedProjectId || '');
   useEffect(() => { setProject(selectedProjectId || ''); }, [selectedProjectId]);
   const [statusFilter,  setStatus]    = useState('submitted');
   const [reviewBillId,  setReviewId]  = useState(null);
+
+  // Deep link from the "My Approvals" feed (e.g. MD's "Review & Authorise"
+  // button) passes { viewId } via navigate state — without this, landing here
+  // just shows the default "Pending" tab, which is empty for any bill that's
+  // already past the first stage, making it look like the button did nothing.
+  useEffect(() => {
+    if (location.state?.viewId) {
+      setReviewId(location.state.viewId);
+      setStatus('');
+      setProject('');
+    }
+  }, [location.state]);
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -449,7 +463,7 @@ export default function SCBillApproval() {
     queryFn:  () => scAPI.getSettings().then(r => r.data?.data),
     staleTime: 5 * 60 * 1000,
   });
-  const stages = settings?.approval_stages || ['qs_engineer','project_head','managing_director'];
+  const stages = settings?.approval_stages || ['qs_engineer','managing_director'];
 
   const { data: bills = [], isLoading, refetch } = useQuery({
     queryKey: ['sc-bills-approval', projectFilter, statusFilter],

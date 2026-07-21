@@ -68,7 +68,30 @@ const BillInfoTable = ({ data }) => {
 
 // ─── Abstract Table ───────────────────────────────────────────────────────────
 const AbstractTable = ({ data }) => {
-  const items   = data.items || [];
+  // GET /sc/bills/:id returns raw sc_bill_items columns (wo_qty, prev_qty,
+  // curr_qty, balance_qty, rate, amount) plus a freshly-computed
+  // cum_prev_qty — none of which match the wo_amount/prev_amount/current_qty/
+  // curr_amount/cum_qty/cum_amount names this table was written against, so
+  // every derived column silently rendered as 0. Normalise here instead of
+  // changing the API shape (other consumers rely on the raw columns).
+  const items = (data.items || []).map(it => {
+    const woQty   = n(it.wo_qty);
+    const rate    = n(it.rate);
+    const prevQty = n(it.cum_prev_qty ?? it.prev_qty);
+    const currQty = n(it.curr_qty);
+    const cumQty  = prevQty + currQty;
+    return {
+      ...it,
+      wo_amount:          woQty * rate,
+      prev_certified_qty: prevQty,
+      prev_amount:        prevQty * rate,
+      current_qty:        currQty,
+      curr_amount:        n(it.amount) || currQty * rate,
+      cum_qty:            cumQty,
+      cum_amount:         cumQty * rate,
+      balance_amount:     n(it.balance_qty) * rate,
+    };
+  });
   const gstRate = n(data.gst_rate || 18);
   const isIgst  = data.is_igst;
   const halfGst = gstRate / 2;
@@ -113,11 +136,11 @@ const AbstractTable = ({ data }) => {
 
   return (
     <div style={{ marginBottom: 8 }}>
-      <table style={{ fontSize: 8.5 }}>
+      <table style={{ fontSize: 8.5, tableLayout: 'fixed' }}>
         <thead>
           <tr>
             <th rowSpan={2} style={{ ...thBase, width: 28 }}>Sr.</th>
-            <th rowSpan={2} style={{ ...thBase, textAlign: 'left', minWidth: 160 }}>Description of Work</th>
+            <th rowSpan={2} style={{ ...thBase, textAlign: 'left', width: 160 }}>Description of Work</th>
             <th rowSpan={2} style={{ ...thBase, width: 34 }}>Unit</th>
             <th colSpan={3} style={thGreen}>As per Work Order</th>
             <th colSpan={2} style={thAmber}>Previous Certified</th>
@@ -144,7 +167,7 @@ const AbstractTable = ({ data }) => {
             <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#f8fafc' }}>
               <td style={{ textAlign: 'center', color: '#64748b' }}>{it.sr_no || i + 1}</td>
               <td style={{ textAlign: 'left' }}>
-                <div style={{ fontWeight: 600, color: '#1e293b', lineHeight: 1.3 }}>{it.description}</div>
+                <div style={{ fontWeight: 600, color: '#1e293b', lineHeight: 1.3, whiteSpace: 'normal', wordBreak: 'break-word' }}>{it.description}</div>
                 {it.item_code && <div style={{ fontSize: 7, color: '#94a3b8', fontFamily: 'monospace' }}>{it.item_code}</div>}
               </td>
               <td style={{ textAlign: 'center', color: '#475569', fontSize: 8 }}>{it.unit || '—'}</td>

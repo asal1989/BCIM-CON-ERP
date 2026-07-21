@@ -35,7 +35,7 @@ export default function SCSettings() {
   const [activeTab, setTab] = useState('general');
   const [form, setForm] = useState({
     default_gst_pct:18, default_tds_pct:2, default_retention_pct:5,
-    approval_stages:['qs_engineer','project_head','managing_director'],
+    approval_stages:['qs_engineer','managing_director'],
     wo_prefix:'WO', bill_prefix:'BILL',
     require_wo_approval:true, block_overbilling:true,
     // ESSL
