@@ -722,8 +722,10 @@ export default function VendorQSCertificationPage() {
 
   const handleDelete = (e, cert) => {
     e.stopPropagation();
-    if (cert.status === 'paid') { toast.error('Cannot delete a paid certification.'); return; }
-    if (!window.confirm(`Delete certification ${cert.cert_number}?\n\nThis cannot be undone.`)) return;
+    const msg = cert.status === 'paid'
+      ? `Delete PAID certification ${cert.cert_number}?\n\nThis will reverse the payment and reset all linked bills back to QS stage. This cannot be undone.`
+      : `Delete certification ${cert.cert_number}?\n\nThis cannot be undone.`;
+    if (!window.confirm(msg)) return;
     deleteMut.mutate(cert.id);
   };
 
@@ -946,9 +948,9 @@ export default function VendorQSCertificationPage() {
                   )}
                   <button
                     onClick={e => handleDelete(e, c)}
-                    disabled={deleteMut.isPending || c.status === 'paid'}
+                    disabled={deleteMut.isPending}
                     className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-40 transition-colors"
-                    title={c.status === 'paid' ? 'Paid certifications cannot be deleted' : 'Delete certification'}
+                    title="Delete certification"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

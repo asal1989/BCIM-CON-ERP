@@ -1668,9 +1668,6 @@ router.delete('/:id', async (req, res) => {
     );
     if (!rows.length) return res.status(404).json({ error: 'Certification not found' });
     const cert = rows[0];
-    if (cert.status === 'paid') {
-      return res.status(400).json({ error: 'Cannot delete a paid certification. Cancel it first.' });
-    }
 
     await withTransaction(async (client) => {
       // Capture linked bill IDs before cascade removes them
@@ -1686,7 +1683,7 @@ router.delete('/:id', async (req, res) => {
       );
 
       // For each bill, check if another active cert still covers it.
-      // If not, clear all certification data and send it back to QS.
+      // If not, clear ALL certification AND payment data and send the bill back to QS.
       for (const { bill_id } of linkedBills.rows) {
         const remaining = await client.query(
           `SELECT 1 FROM vendor_qs_certification_bills cb
@@ -1696,6 +1693,7 @@ router.delete('/:id', async (req, res) => {
           [bill_id]
         );
         if (remaining.rows.length === 0) {
+          // Clear certification data AND payment data (handles paid certs too)
           await client.query(`
             UPDATE tqs_bill_updates SET
               certified_net=0, balance_to_pay=0,
@@ -1705,13 +1703,18 @@ router.delete('/:id', async (req, res) => {
               advance_recovered=0, tds_deduction=0, retention_money=0,
               other_deductions=0, total_deductions=0,
               pc_number=NULL, pc_generated_at=NULL,
-              handed_over_accounts_date=NULL, updated_at=NOW()
+              handed_over_accounts_date=NULL,
+              paid_amount=0, balance_to_pay=0,
+              payment_status=NULL, payment_date=NULL,
+              payment_mode=NULL, reference_number=NULL, bank_name=NULL,
+              updated_at=NOW()
             WHERE bill_id=$1
           `, [bill_id]);
 
+          // Reset bill status — allow reversal even from 'paid'
           await client.query(`
             UPDATE tqs_bills SET workflow_status='qs', updated_at=NOW()
-            WHERE id=$1 AND workflow_status NOT IN ('paid')
+            WHERE id=$1
           `, [bill_id]);
         }
       }
