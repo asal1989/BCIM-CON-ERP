@@ -16,7 +16,7 @@ const fmt2 = v => `₹${Number(v||0).toLocaleString('en-IN',{minimumFractionDigi
 
 const STATUS_META = {
   submitted:    { bg:'bg-blue-100',    text:'text-blue-700',    label:'Pending',      dot:'bg-blue-500' },
-  under_review: { bg:'bg-amber-100',   text:'text-amber-700',   label:'Under Review', dot:'bg-amber-500' },
+  under_review: { bg:'bg-amber-100',   text:'text-amber-700',   label:'Waiting for Approval', dot:'bg-amber-500' },
   queried:      { bg:'bg-orange-100',  text:'text-orange-700',  label:'Queried',      dot:'bg-orange-500' },
   approved:     { bg:'bg-emerald-100', text:'text-emerald-700', label:'Approved',     dot:'bg-emerald-500' },
   rejected:     { bg:'bg-red-100',     text:'text-red-700',     label:'Rejected',     dot:'bg-red-500' },
@@ -424,7 +424,7 @@ function BillApprovalCard({ bill, stages, onReview }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const STATUS_FILTERS = [
   ['submitted',    'Pending'],
-  ['under_review', 'Under Review'],
+  ['under_review', 'Waiting for Approval'],
   ['queried',      'Queried'],
   ['approved',     'Approved'],
   ['rejected',     'Rejected'],
