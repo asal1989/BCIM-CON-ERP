@@ -1818,7 +1818,7 @@ router.get('/settings', async (req, res) => {
     const r = await query(`SELECT * FROM sc_settings WHERE company_id=$1`, [CID(req)]);
     if (!r.rows.length) {
       // Return defaults if not configured
-      return res.json({ data: { default_gst_pct:18, default_tds_pct:2, default_retention_pct:5, approval_stages:['qs_engineer','project_head','managing_director'], wo_prefix:'WO', bill_prefix:'BILL', require_wo_approval:true, block_overbilling:true } });
+      return res.json({ data: { default_gst_pct:18, default_tds_pct:2, default_retention_pct:5, approval_stages:['qs_engineer','managing_director'], wo_prefix:'WO', bill_prefix:'BILL', require_wo_approval:true, block_overbilling:true } });
     }
     res.json({ data: r.rows[0] });
   } catch(e){ res.status(500).json({ error: e.message }); }
@@ -1841,7 +1841,7 @@ router.post('/settings', authorize(...ADMIN), async (req, res) => {
       RETURNING *`,
       [CID(req),
        f.default_gst_pct||18, f.default_tds_pct||2, f.default_retention_pct||5,
-       JSON.stringify(f.approval_stages||['qs_engineer','project_head','managing_director']),
+       JSON.stringify(f.approval_stages||['qs_engineer','managing_director']),
        f.wo_prefix||'WO', f.bill_prefix||'BILL',
        f.require_wo_approval!==false, f.block_overbilling!==false,
        f.essl_host||null, f.essl_port||3306, f.essl_database||'att2000',
@@ -1876,7 +1876,7 @@ async function nextIPCNumber(client, cid, projId) {
 // Helper to load approval stages from settings (with fallback)
 async function getApprovalStages(cid) {
   const r = await query(`SELECT approval_stages FROM sc_settings WHERE company_id=$1`, [cid]);
-  return r.rows[0]?.approval_stages || ['qs_engineer','project_head','managing_director'];
+  return r.rows[0]?.approval_stages || ['qs_engineer','managing_director'];
 }
 
 router.get('/mb', async (req, res) => {

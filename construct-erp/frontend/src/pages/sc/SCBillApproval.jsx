@@ -449,7 +449,7 @@ export default function SCBillApproval() {
     queryFn:  () => scAPI.getSettings().then(r => r.data?.data),
     staleTime: 5 * 60 * 1000,
   });
-  const stages = settings?.approval_stages || ['qs_engineer','project_head','managing_director'];
+  const stages = settings?.approval_stages || ['qs_engineer','managing_director'];
 
   const { data: bills = [], isLoading, refetch } = useQuery({
     queryKey: ['sc-bills-approval', projectFilter, statusFilter],
