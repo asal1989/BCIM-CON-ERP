@@ -7,7 +7,7 @@ import {
   ArrowRight, ChevronDown, Building2, Receipt, Wallet,
   IndianRupee, FileSignature, RefreshCw,
 } from 'lucide-react';
-import api, { projectAPI, raBillAPI, tqsBillsAPI, vendorAPI, tqsVendorsAPI, vendorQSCertificationAPI } from '../../api/client';
+import api, { projectAPI, raBillAPI, tqsBillsAPI, vendorAPI, tqsVendorsAPI, vendorQSCertificationAPI, procurementAdvanceAPI } from '../../api/client';
 import dayjs from 'dayjs';
 import { clsx } from 'clsx';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
@@ -313,6 +313,20 @@ export default function PaymentsPage() {
     queryFn: () => tqsBillsAPI.pcPending({}).then(r => r.data?.data ?? []),
     staleTime: 5 * 60 * 1000,
     enabled: showModal && payType === 'bill',
+  });
+
+  // WO / PO options for the selected vendor — advance payments only
+  const { data: advWOs = [] } = useQuery({
+    queryKey: ['advance-wo-lookup', form.vendor_id, form.project_id],
+    queryFn: () => procurementAdvanceAPI.lookupWOs({ project_id: form.project_id || undefined, vendor_id: form.vendor_id || undefined }).then(r => r.data?.data ?? []),
+    enabled: showModal && payType === 'advance' && !!form.vendor_id,
+    staleTime: 60 * 1000,
+  });
+  const { data: advPOs = [] } = useQuery({
+    queryKey: ['advance-po-lookup', form.vendor_id, form.project_id],
+    queryFn: () => procurementAdvanceAPI.lookupPOs({ project_id: form.project_id || undefined, vendor_id: form.vendor_id || undefined }).then(r => r.data?.data ?? []),
+    enabled: showModal && payType === 'advance' && !!form.vendor_id,
+    staleTime: 60 * 1000,
   });
 
   // ── QS Certifications pending payment ──────────────────────────────────────
@@ -921,8 +935,28 @@ export default function PaymentsPage() {
                   <p className="text-[10px] uppercase font-bold text-indigo-600 tracking-wider">Bill Tracker Link</p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">WO / PO Reference</label>
-                      <input className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-400 bg-white" placeholder="e.g. WO/2026/001" value={form.wo_number} onChange={e => setForm(f => ({ ...f, wo_number: e.target.value }))} />
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Work Order</label>
+                      <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-400 bg-white"
+                        value={form.wo_number}
+                        onChange={e => {
+                          const wo = advWOs.find(w => w.wo_number === e.target.value);
+                          setForm(f => ({ ...f, wo_number: e.target.value, po_number: e.target.value ? '' : f.po_number, order_value: wo ? (wo.total_with_tax ?? wo.total_value ?? '') : f.order_value }));
+                        }}>
+                        <option value="">— Select work order (optional) —</option>
+                        {advWOs.map(w => <option key={w.id} value={w.wo_number}>{w.wo_number}{w.subject ? ` · ${w.subject}` : ''}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Purchase Order</label>
+                      <select className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-400 bg-white"
+                        value={form.po_number}
+                        onChange={e => {
+                          const po = advPOs.find(p => p.po_number === e.target.value);
+                          setForm(f => ({ ...f, po_number: e.target.value, wo_number: e.target.value ? '' : f.wo_number, order_value: po ? (po.total_with_tax ?? po.total_value ?? '') : f.order_value }));
+                        }}>
+                        <option value="">— Select purchase order (optional) —</option>
+                        {advPOs.map(p => <option key={p.id} value={p.po_number}>{p.po_number}</option>)}
+                      </select>
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-slate-700 mb-1">Voucher Number</label>
