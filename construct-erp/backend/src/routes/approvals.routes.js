@@ -501,6 +501,20 @@ router.post('/action', async (req, res) => {
     switch (entity_type) {
 
       case 'sc_bill': {
+        // Same stage-ownership rule as sc.routes.js /bills/:id/approve|reject —
+        // this generic action endpoint used to skip it entirely, letting any
+        // role in the feed act on a bill regardless of whose stage it's at.
+        {
+          const billRow = await query(`SELECT current_stage FROM sc_bills WHERE id=$1 AND company_id=$2`, [entity_id, CID(req)]);
+          if (!billRow.rows.length) return res.status(404).json({ error: 'Bill not found' });
+          const actorRole = String(req.user.role || '').toLowerCase();
+          if (!['super_admin', 'admin'].includes(actorRole)) {
+            const scope = scBillScopeForRole(actorRole);
+            if (!scope.stageNames.includes(billRow.rows[0].current_stage)) {
+              return res.status(403).json({ error: `This bill is awaiting the ${(billRow.rows[0].current_stage||'').replace(/_/g,' ')} approver — you cannot act on it at this stage.` });
+            }
+          }
+        }
         if (action === 'approve') {
           const bill = await query(`SELECT * FROM sc_bills WHERE id=$1 AND company_id=$2`, [entity_id, CID(req)]);
           if (!bill.rows.length) return res.status(404).json({ error: 'Bill not found' });
@@ -508,7 +522,7 @@ router.post('/action', async (req, res) => {
           const stage = b.current_stage;
           // Fetch dynamic approval stages from settings (same source as sc.routes.js)
           const settingsRes = await query(`SELECT approval_stages FROM sc_settings WHERE company_id=$1`, [CID(req)]);
-          const stages = settingsRes.rows[0]?.approval_stages || ['qs_engineer','project_head','managing_director'];
+          const stages = settingsRes.rows[0]?.approval_stages || ['qs_engineer','managing_director'];
           const idx      = stages.indexOf(stage);
           const isFinal  = idx < 0 || idx === stages.length - 1;
           const nextStage = !isFinal ? stages[idx + 1] : stage;

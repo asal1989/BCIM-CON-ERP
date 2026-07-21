@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { scAPI, projectAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
@@ -432,11 +433,24 @@ const STATUS_FILTERS = [
 ];
 
 export default function SCBillApproval() {
+  const location = useLocation();
   const { selectedProjectId } = useAuthStore();
   const [projectFilter, setProject]   = useState(selectedProjectId || '');
   useEffect(() => { setProject(selectedProjectId || ''); }, [selectedProjectId]);
   const [statusFilter,  setStatus]    = useState('submitted');
   const [reviewBillId,  setReviewId]  = useState(null);
+
+  // Deep link from the "My Approvals" feed (e.g. MD's "Review & Authorise"
+  // button) passes { viewId } via navigate state — without this, landing here
+  // just shows the default "Pending" tab, which is empty for any bill that's
+  // already past the first stage, making it look like the button did nothing.
+  useEffect(() => {
+    if (location.state?.viewId) {
+      setReviewId(location.state.viewId);
+      setStatus('');
+      setProject('');
+    }
+  }, [location.state]);
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
