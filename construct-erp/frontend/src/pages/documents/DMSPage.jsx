@@ -8,13 +8,8 @@ import {
   Archive, PenTool, History, ScrollText, ChevronRight, ChevronDown, HardDrive,
   Building2, Users2, Briefcase, UserCircle, FileSignature, Activity, Trash2, Link2,
   Send, UploadCloud, FileSpreadsheet, Tag, Layers, LayoutGrid, List as ListIcon,
-  Image as ImageIcon, FileArchive, TrendingUp, MoreVertical, ChevronLeft,
-  MoreHorizontal, Home,
+  Image as ImageIcon, FileArchive, TrendingUp,
 } from 'lucide-react';
-import {
-  PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip as RTooltip, ResponsiveContainer, Legend,
-} from 'recharts';
 import { dmsAPI, projectAPI } from '../../api/client';
 import api from '../../api/client';
 import toast from 'react-hot-toast';
@@ -658,365 +653,6 @@ function DocumentCard({ doc, onOpen, onDownload, onShare, onArchive }) {
   );
 }
 
-// ── Friendly "kind" label shown under the document name (mirrors mockup's
-// "Drawing" / "Excel Sheet" / "CAD Drawing" subtitles) ─────────────────────
-function fileKindLabel(doc) {
-  const ext = fileExt(doc?.file_name || '');
-  if (['xls', 'xlsx', 'xlsm'].includes(ext)) return 'Excel Sheet';
-  if (['doc', 'docx'].includes(ext)) return 'Word Document';
-  if (ext === 'dwg' || ext === 'dxf') return 'CAD Drawing';
-  if (ext === 'pdf' && doc?.doc_type === 'drawing') return 'Drawing';
-  if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext)) return 'Image';
-  if (['zip', 'rar', '7z'].includes(ext)) return 'Archive';
-  return titleCase(doc?.doc_type || 'general');
-}
-
-const STATUS_DOT = {
-  approved: '#10B981', under_review: '#F59E0B', draft: '#94A3B8',
-  rejected: '#EF4444', archived: '#64748B',
-};
-
-// ── Breadcrumb trail reflecting the active folder/category selection ───────
-function DMSBreadcrumb({ cat, catLabel, onHome }) {
-  return (
-    <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-3 flex-wrap">
-      <button onClick={onHome} className="flex items-center gap-1 hover:text-indigo-600 transition-colors font-medium">
-        <Home className="w-3.5 h-3.5" /> Documents
-      </button>
-      {cat.kind !== 'all' && (<>
-        <ChevronRight className="w-3.5 h-3.5 text-slate-300" />
-        <span className="text-slate-800 font-semibold">{catLabel}</span>
-      </>)}
-    </div>
-  );
-}
-
-// ── Per-row kebab actions menu ──────────────────────────────────────────────
-function RowActionsMenu({ doc, onDownload, onShare, onVersion, onArchive }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
-  return (
-    <div className="relative inline-block" ref={ref} onClick={e => e.stopPropagation()}>
-      <button onClick={() => setOpen(o => !o)} className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
-        <MoreVertical className="w-4 h-4" />
-      </button>
-      {open && (
-        <div className="absolute right-0 top-8 z-20 w-44 bg-white border border-slate-200 rounded-xl shadow-lg py-1">
-          {(doc.local_url || doc.onedrive_url) && (
-            <button onClick={() => { onDownload(doc); setOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50">
-              <Download className="w-3.5 h-3.5" /> Download
-            </button>
-          )}
-          <button onClick={() => { onVersion(doc); setOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50">
-            <GitBranch className="w-3.5 h-3.5" /> Add Revision
-          </button>
-          <button onClick={() => { onShare(doc); setOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50">
-            <Share2 className="w-3.5 h-3.5" /> Share
-          </button>
-          <div className="my-1 border-t border-slate-100" />
-          <button onClick={() => { onArchive(doc); setOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50">
-            <Archive className="w-3.5 h-3.5" /> Archive
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Simple client-side pager ────────────────────────────────────────────────
-function Pager({ page, setPage, total, pageSize }) {
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  if (totalPages <= 1) return null;
-  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const to = Math.min(total, page * pageSize);
-  const nums = [];
-  const windowSize = 3;
-  let start = Math.max(1, page - 1), end = Math.min(totalPages, start + windowSize - 1);
-  start = Math.max(1, Math.min(start, end - windowSize + 1));
-  for (let i = start; i <= end; i++) nums.push(i);
-  return (
-    <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-white">
-      <span className="text-xs text-slate-400">Showing {from} to {to} of {total} entries</span>
-      <div className="flex items-center gap-1">
-        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-          className="p-1.5 rounded-lg border border-slate-200 text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed">
-          <ChevronLeft className="w-3.5 h-3.5" />
-        </button>
-        {start > 1 && <span className="px-1 text-slate-300 text-xs">…</span>}
-        {nums.map(n => (
-          <button key={n} onClick={() => setPage(n)}
-            className={clsx('w-7 h-7 rounded-lg text-xs font-medium transition-colors',
-              n === page ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100')}>
-            {n}
-          </button>
-        ))}
-        {end < totalPages && <span className="px-1 text-slate-300 text-xs">…</span>}
-        <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-          className="p-1.5 rounded-lg border border-slate-200 text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed">
-          <ChevronRight className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── Document Status Overview — donut chart ──────────────────────────────────
-function StatusDonutCard({ byStatus }) {
-  const data = (byStatus || [])
-    .filter(s => s.status && Number(s.c) > 0)
-    .map(s => ({ name: (STATUS_CFG[s.status] || { label: titleCase(s.status) }).label, value: Number(s.c), key: s.status }));
-  const total = data.reduce((s, d) => s + d.value, 0);
-  return (
-    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-      <h3 className="text-sm font-semibold text-slate-800 mb-4">Document Status Overview</h3>
-      {data.length === 0 ? (
-        <div className="h-[180px] flex items-center justify-center text-xs text-slate-400">No data yet</div>
-      ) : (
-        <div className="flex items-center gap-5">
-          <ResponsiveContainer width="55%" height={170}>
-            <PieChart>
-              <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={48} outerRadius={72} paddingAngle={2} strokeWidth={2} stroke="#fff">
-                {data.map((d, i) => <Cell key={i} fill={STATUS_DOT[d.key] || '#94A3B8'} />)}
-              </Pie>
-              <RTooltip contentStyle={{ border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 12 }} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="flex flex-col gap-2.5 flex-1 min-w-0">
-            {data.map(d => (
-              <div key={d.key} className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: STATUS_DOT[d.key] || '#94A3B8' }} />
-                <span className="text-xs text-slate-600 truncate">{d.name}</span>
-                <span className="text-xs font-bold text-slate-800 ml-auto flex-shrink-0">{d.value}</span>
-                <span className="text-[10px] text-slate-400 w-9 text-right flex-shrink-0">{total ? Math.round((d.value / total) * 100) : 0}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Document Trend — uploads vs approvals over the current month ───────────
-function TrendCard({ docs }) {
-  const series = useMemo(() => {
-    const startOfMonth = dayjs().startOf('month');
-    const daysSoFar = dayjs().diff(startOfMonth, 'day') + 1;
-    const buckets = Array.from({ length: daysSoFar }, (_, i) => {
-      const d = startOfMonth.add(i, 'day');
-      return { date: d.format('D MMM'), key: d.format('YYYY-MM-DD'), uploaded: 0, approved: 0 };
-    });
-    const byKey = Object.fromEntries(buckets.map(b => [b.key, b]));
-    docs.forEach(d => {
-      const uk = d.created_at ? dayjs(d.created_at).format('YYYY-MM-DD') : null;
-      if (uk && byKey[uk]) byKey[uk].uploaded += 1;
-      if (d.status === 'approved' && d.approved_at) {
-        const ak = dayjs(d.approved_at).format('YYYY-MM-DD');
-        if (byKey[ak]) byKey[ak].approved += 1;
-      }
-    });
-    // Thin out to at most ~10 labelled points for readability
-    const step = Math.max(1, Math.ceil(buckets.length / 10));
-    return buckets.filter((_, i) => i % step === 0 || i === buckets.length - 1);
-  }, [docs]);
-
-  return (
-    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-      <h3 className="text-sm font-semibold text-slate-800 mb-4">Document Trend (This Month)</h3>
-      <ResponsiveContainer width="100%" height={190}>
-        <LineChart data={series} margin={{ top: 4, right: 8, left: -22, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-          <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-          <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-          <RTooltip contentStyle={{ border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 12 }} />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
-          <Line type="monotone" dataKey="uploaded" name="Uploaded" stroke="#4F46E5" strokeWidth={2} dot={{ r: 2 }} />
-          <Line type="monotone" dataKey="approved" name="Approved" stroke="#10B981" strokeWidth={2} dot={{ r: 2 }} />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-// ── Recent Activities feed ──────────────────────────────────────────────────
-const ACTIVITY_ICON = { upload: UploadCloud, approve: CheckCircle2, reject: X, download: Download, share: Share2, view: Eye, delete: Archive, edit: FileText };
-function RecentActivitiesCard({ items }) {
-  return (
-    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-      <h3 className="text-sm font-semibold text-slate-800 mb-4">Recent Activities</h3>
-      {(!items || items.length === 0) ? (
-        <div className="h-[190px] flex items-center justify-center text-xs text-slate-400">No recent activity</div>
-      ) : (
-        <div className="space-y-3 max-h-[190px] overflow-y-auto pr-1">
-          {items.slice(0, 8).map((a, i) => {
-            const Icon = ACTIVITY_ICON[a.action] || Activity;
-            return (
-              <div key={i} className="flex items-start gap-2.5">
-                <div className={clsx('w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5',
-                  a.action === 'approve' ? 'bg-emerald-50 text-emerald-600' :
-                  a.action === 'upload' ? 'bg-blue-50 text-blue-600' :
-                  a.action === 'reject' ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-500')}>
-                  <Icon className="w-3 h-3" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs text-slate-700 leading-snug">
-                    <span className="font-semibold">{a.user_name || 'Someone'}</span>{' '}
-                    {a.action === 'upload' ? 'uploaded' : a.action === 'approve' ? 'approved' : a.action === 'reject' ? 'rejected' : a.action === 'download' ? 'downloaded' : a.action === 'share' ? 'shared' : a.action}{' '}
-                    <span className="font-medium">{a.doc_title || a.doc_number}</span>
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">{dayjs(a.created_at).format('DD MMM YYYY, hh:mm A')}</p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Persistent right-side Document Details panel ────────────────────────────
-function DocDetailsPanel({ docId, onClose, onExpand, onDownload, onShare, onOpenModal }) {
-  const { data: doc, isLoading } = useQuery({
-    queryKey: ['dms-doc', docId],
-    queryFn: () => dmsAPI.get(docId).then(r => r.data?.data ?? r.data ?? []).catch(() => []),
-    enabled: !!docId,
-  });
-
-  if (!docId) {
-    return (
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 flex flex-col items-center justify-center text-center h-full min-h-[420px]">
-        <FileText className="w-9 h-9 text-slate-200 mb-3" />
-        <p className="text-sm font-medium text-slate-500">Document Details</p>
-        <p className="text-xs text-slate-400 mt-1">Select a document to preview its details here.</p>
-      </div>
-    );
-  }
-  if (isLoading || !doc) {
-    return <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 flex items-center justify-center h-full min-h-[420px] text-slate-300"><RefreshCw className="w-5 h-5 animate-spin" /></div>;
-  }
-
-  const ft = fileTypeCfg(doc.file_name);
-  const FIcon = ft.icon;
-  const cfg = STATUS_CFG[doc.status] || STATUS_CFG.draft;
-  const rows = [
-    ['Discipline', doc.discipline || '—'],
-    ['Type', titleCase(doc.doc_type)],
-    ['Version', doc.revision || 'A'],
-    ['Status', <span key="s" className={`text-[11px] px-2 py-0.5 rounded-full border font-medium ${cfg.color}`}>{cfg.label}</span>],
-    ['Size', fmtSize(doc.file_size)],
-    ['Uploaded By', doc.uploaded_by_name || '—'],
-    ['Uploaded On', doc.created_at ? dayjs(doc.created_at).format('DD MMM YYYY, hh:mm A') : '—'],
-    ['Description', doc.description || '—'],
-  ];
-
-  return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col h-full">
-      <div className="flex items-center justify-between p-4 border-b border-slate-100">
-        <h3 className="text-sm font-semibold text-slate-800">Document Details</h3>
-        <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg"><X className="w-4 h-4" /></button>
-      </div>
-      <div className="p-4 overflow-y-auto flex-1">
-        <div className="flex items-start gap-3 mb-4">
-          <div className={clsx('w-10 h-10 rounded-lg flex items-center justify-center ring-4 flex-shrink-0', ft.bg, ft.ring)}>
-            <FIcon className={clsx('w-5 h-5', ft.fg)} />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-800 leading-snug break-words">{doc.doc_title || doc.file_name}</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">{fileKindLabel(doc)}</p>
-          </div>
-        </div>
-
-        <div className="space-y-2.5 mb-4">
-          {rows.map(([l, v]) => (
-            <div key={l} className="flex items-start justify-between gap-3 text-xs">
-              <span className="text-slate-400 flex-shrink-0">{l}</span>
-              <span className="text-slate-700 text-right break-words">{v}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="mb-4">
-          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">Preview</p>
-          {['pdf'].includes(fileExt(doc.file_name)) || ['png','jpg','jpeg','webp','gif'].includes(fileExt(doc.file_name)) ? (
-            <div onClick={onExpand} className="border border-slate-200 rounded-lg bg-slate-50 h-32 flex items-center justify-center cursor-pointer hover:border-indigo-300 transition-colors">
-              <Eye className="w-5 h-5 text-slate-300" />
-              <span className="text-[11px] text-slate-400 ml-2">Click to preview</span>
-            </div>
-          ) : (
-            <div className="border border-slate-200 rounded-lg bg-slate-50 h-24 flex flex-col items-center justify-center gap-1">
-              <FIcon className={clsx('w-6 h-6', ft.fg)} />
-              <span className="text-[10px] text-slate-400">No inline preview</span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex gap-2 mb-5">
-          {(doc.local_url || doc.onedrive_url) && (
-            <button onClick={() => onDownload(doc)} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700">
-              <Download className="w-3.5 h-3.5" /> Download
-            </button>
-          )}
-          <button onClick={onExpand} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border border-slate-200 text-slate-600 text-xs font-medium rounded-lg hover:bg-slate-50">
-            <Eye className="w-3.5 h-3.5" /> View
-          </button>
-          <button onClick={onExpand} title="More" className="px-3 py-2 border border-slate-200 text-slate-500 rounded-lg hover:bg-slate-50">
-            <MoreHorizontal className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        <div className="pt-4 border-t border-slate-100">
-          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">Quick Actions</p>
-          <div className="space-y-0.5">
-            {[
-              { label: 'Upload Document', icon: UploadCloud, onClick: () => onOpenModal('upload') },
-              { label: 'Create New Folder', icon: Folder, onClick: () => onOpenModal('folder') },
-              { label: 'Share This Document', icon: Share2, onClick: () => onShare(doc) },
-              { label: 'View Full Workflow', icon: GitBranch, onClick: onExpand },
-            ].map(qa => (
-              <button key={qa.label} onClick={qa.onClick}
-                className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-xs text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-colors group">
-                <qa.icon className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-500" />
-                <span className="flex-1 text-left">{qa.label}</span>
-                <ChevronRight className="w-3 h-3 text-slate-300" />
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Storage Usage widget (radial progress) — sits at the base of the folder
-// browser rail, mirroring the mockup's persistent left-nav storage gauge ────
-function StorageUsageWidget({ usedBytes, capBytes = 200 * 1024 * 1024 * 1024 }) {
-  const pct = capBytes ? Math.min(100, Math.round((usedBytes / capBytes) * 100)) : 0;
-  const r = 34, c = 2 * Math.PI * r;
-  return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 mt-3">
-      <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-3">Storage Usage</p>
-      <div className="flex flex-col items-center">
-        <svg width="88" height="88" viewBox="0 0 88 88" className="-rotate-90">
-          <circle cx="44" cy="44" r={r} fill="none" stroke="#f1f5f9" strokeWidth="8" />
-          <circle cx="44" cy="44" r={r} fill="none" stroke="#F59E0B" strokeWidth="8" strokeLinecap="round"
-            strokeDasharray={c} strokeDashoffset={c - (pct / 100) * c} />
-        </svg>
-        <div className="-mt-14 mb-8 text-center">
-          <div className="text-base font-bold text-slate-800">{pct}%</div>
-          <div className="text-[9px] text-slate-400">Used</div>
-        </div>
-        <div className="text-[11px] text-slate-500 text-center">{fmtSize(usedBytes)} / {fmtSize(capBytes)}</div>
-      </div>
-    </div>
-  );
-}
-
 // ════════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════════
@@ -1033,11 +669,8 @@ export default function DMSPage() {
   const [collapsedGroups, setCollapsedGroups] = useState({});
   const [modal, setModal]     = useState(null);
   const [detailId, setDetailId] = useState(null);
-  const [expandedId, setExpandedId] = useState(null); // full multi-tab drawer
   const [reportTab, setReportTab] = useState('register');
   const [viewMode, setViewMode] = useState('list'); // 'grid' | 'list'
-  const [page, setPage]       = useState(1);
-  const PAGE_SIZE = 10;
 
   const { data: projects = [] } = useQuery({ queryKey:['projects'], queryFn: () => projectAPI.list().then(r=>r.data?.data??[]) });
   const { data: folders = [] }  = useQuery({ queryKey:['dms-folders'], queryFn: () => dmsAPI.listFolders().then(r => r.data?.data ?? r.data ?? []).catch(() => []) });
@@ -1105,10 +738,6 @@ export default function DMSPage() {
     return docs;
   }, [docs, cat]);
 
-  // Reset to page 1 whenever the visible set changes shape (filter/category change)
-  useEffect(() => { setPage(1); }, [cat, typeFilter, statusFilter, projectFilter, search]);
-  const pagedDocs = useMemo(() => visibleDocs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [visibleDocs, page]);
-
   // ── Row grouping inside the table ──────────────────────────────────────────
   const groupKeyOf = (d) => {
     if (groupBy === 'vendor')  return vendorOf(d) || 'Unspecified vendor';
@@ -1148,88 +777,92 @@ export default function DMSPage() {
 
   const renderRow = (d) => {
     const cfg = STATUS_CFG[d.status] || STATUS_CFG.draft;
-    const ft = fileTypeCfg(d.file_name);
-    const FIcon = ft.icon;
-    const active = detailId === d.id;
+    const expDays = d.expiry_date ? dayjs(d.expiry_date).diff(dayjs(), 'day') : null;
     return (
-      <tr key={d.id} onClick={() => setDetailId(d.id)}
-        className={clsx('border-b last:border-0 group cursor-pointer transition-colors', active ? 'bg-indigo-50/60' : 'hover:bg-slate-50')}>
-        <td className="py-2.5 px-3">
-          <div className="flex items-center gap-2.5">
-            <div className={clsx('w-8 h-8 rounded-lg flex items-center justify-center ring-4 flex-shrink-0', ft.bg, ft.ring)}>
-              <FIcon className={clsx('w-4 h-4', ft.fg)} />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-semibold text-slate-800 max-w-[200px] truncate">{d.doc_title || d.file_name}</span>
-                {d.is_signed && <FileSignature className="w-3 h-3 text-blue-500 flex-shrink-0" />}
-              </div>
-              <div className="text-[10px] text-slate-400 truncate">{fileKindLabel(d)}</div>
-            </div>
+      <tr key={d.id} className="border-b last:border-0 hover:bg-slate-50 group cursor-pointer" onClick={()=>setDetailId(d.id)}>
+        <td className="py-2 px-3 font-mono text-xs text-indigo-600">{d.doc_number || '—'}</td>
+        <td className="py-2 px-3">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-medium text-slate-800 max-w-[180px] truncate">{d.doc_title || d.file_name}</span>
+            {d.is_signed && <FileSignature className="w-3 h-3 text-blue-500 flex-shrink-0" />}
+            {d.version_count > 0 && <span className="text-[9px] bg-slate-100 text-slate-500 px-1 rounded">v{d.revision_no+1||d.version_count}</span>}
           </div>
+          <div className="text-[10px] text-slate-400 truncate">{d.file_name}</div>
         </td>
-        <td className="py-2.5 px-3 text-xs text-slate-600">{titleCase(d.doc_type)}</td>
-        <td className="py-2.5 px-3 text-xs text-slate-500">{d.discipline || '—'}</td>
-        <td className="py-2.5 px-3 text-xs font-mono text-slate-500">{d.revision || 'A'}</td>
-        <td className="py-2.5 px-3"><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${cfg.color}`}>{cfg.label}</span></td>
-        <td className="py-2.5 px-3 text-xs text-slate-500">{fmtSize(d.file_size)}</td>
-        <td className="py-2.5 px-3 text-xs text-slate-600">{d.uploaded_by_name || '—'}</td>
-        <td className="py-2.5 px-3 text-xs text-slate-500 whitespace-nowrap">{d.created_at ? dayjs(d.created_at).format('DD MMM YYYY') : '—'}</td>
-        <td className="py-2.5 px-3">
-          <RowActionsMenu doc={d} onDownload={downloadDmsDocument}
-            onShare={(doc) => setModal({ type: 'share', doc })}
-            onVersion={(doc) => setModal({ type: 'version', doc })}
-            onArchive={(doc) => { if (window.confirm('Archive?')) archiveMut.mutate(doc.id); }} />
+        <td className="py-2 px-3 text-xs capitalize">{titleCase(d.doc_type)}</td>
+        <td className="py-2 px-3 text-xs text-slate-500 max-w-[120px] truncate">{d.project_name || '—'}</td>
+        <td className="py-2 px-3 text-xs font-mono">{d.revision || 'A'}</td>
+        <td className="py-2 px-3 text-xs">{fmtSize(d.file_size)}</td>
+        <td className="py-2 px-3 text-xs">
+          {d.expiry_date ? <span className={clsx('font-medium', expDays<0?'text-red-600':expDays<=30?'text-orange-500':'text-slate-500')}>{d.expiry_date}</span> : '—'}
+        </td>
+        <td className="py-2 px-3"><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${cfg.color}`}>{cfg.label}</span></td>
+        <td className="py-2 px-3" onClick={e=>e.stopPropagation()}>
+          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {(d.local_url || d.onedrive_url) && (
+              <button type="button" onClick={()=>downloadDmsDocument(d)}
+                className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Download"><Download className="w-3.5 h-3.5" /></button>
+            )}
+            <button onClick={()=>setModal({type:'review', doc:d})} className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded" title="Submit for Review"><Send className="w-3.5 h-3.5" /></button>
+            <button onClick={()=>setModal({type:'version', doc:d})} className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded" title="Add Revision"><GitBranch className="w-3.5 h-3.5" /></button>
+            <button onClick={()=>setModal({type:'share', doc:d})} className="p-1 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded" title="Share"><Share2 className="w-3.5 h-3.5" /></button>
+            <button onClick={()=>{ if(window.confirm('Archive?')) archiveMut.mutate(d.id); }} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded" title="Archive"><Archive className="w-3.5 h-3.5" /></button>
+          </div>
         </td>
       </tr>
     );
   };
 
-  const drawingsCount    = useMemo(() => docs.filter(d => d.doc_type === 'drawing').length, [docs]);
-  const rfisCount        = useMemo(() => docs.filter(d => d.doc_type === 'rfi').length, [docs]);
-  const submittalsCount  = useMemo(() => docs.filter(d => d.doc_type === 'correspondence').length, [docs]);
-
   return (
     <div className="min-h-screen bg-[#f4f6fb]">
 
-      {/* ── HEADER ── */}
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-[1400px] mx-auto px-6 md:px-8 py-5">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
-            <div>
-              <h1 className="text-xl font-bold text-slate-900">Document Management System</h1>
-              <p className="text-xs text-slate-400 mt-0.5">Centralized repository for all project documents</p>
+      {/* ── PREMIUM HERO ── */}
+      <div className="relative overflow-hidden" style={{ background: 'linear-gradient(145deg,#0A0F1E 0%,#0F172A 20%,#1E1B4B 55%,#4338CA 100%)', padding: '32px 28px 56px' }}>
+        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse 70% 60% at 70% 0%,rgba(99,102,241,.25),transparent),radial-gradient(ellipse 50% 80% at 100% 70%,rgba(139,92,246,.15),transparent)' }} />
+        <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,.055) 1px,transparent 1px)', backgroundSize: '24px 24px' }} />
+        <div className="relative z-10 max-w-[1400px] mx-auto">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center flex-shrink-0">
+                <FolderOpen className="w-7 h-7 text-white" />
+              </div>
+              <div>
+                <div className="text-[10.5px] font-bold text-white/50 uppercase tracking-widest mb-1">BCIM Construction ERP</div>
+                <h1 className="text-2xl font-extrabold text-white tracking-tight">Document Management System</h1>
+                <p className="text-xs text-white/60 mt-0.5">Centralized repository · Version Control · Approvals · Signatures · Audit</p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               {myApprovals.length > 0 && (
-                <button onClick={() => setTab('approvals')} className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700 hover:bg-amber-100 transition-colors">
+                <button onClick={() => setTab('approvals')} className="flex items-center gap-2 px-3 py-2 bg-amber-400/15 border border-amber-300/30 rounded-xl text-sm text-amber-200 hover:bg-amber-400/25 transition-colors">
                   <Bell className="w-4 h-4" /><strong>{myApprovals.length}</strong> pending
                 </button>
               )}
-              <button onClick={() => setModal('folder')}
-                className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-sm font-semibold text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors">
-                <Folder className="w-4 h-4" /> New Folder
-              </button>
               <button onClick={() => setModal('upload')}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-colors">
-                <Upload className="w-4 h-4" /> Upload
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white shadow-lg transition-transform hover:-translate-y-0.5"
+                style={{ background: 'linear-gradient(135deg,#7C3AED,#4338CA)', boxShadow: '0 4px 16px rgba(67,56,202,.4)' }}>
+                <Upload className="w-4 h-4" /> Upload Document
               </button>
             </div>
           </div>
 
-          {/* KPI row */}
+          {/* Animated KPI strip */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <KpiTile icon={FileText}     label="Total Documents" value={s?.total || 0}    sub={`+${todayUploads} today`}   tint={{ bg:'bg-blue-50',    fg:'text-blue-600',    dot:'bg-blue-500' }} />
-            <KpiTile icon={Folder}       label="Folders"         value={folders.length}    sub="across all projects"        tint={{ bg:'bg-emerald-50', fg:'text-emerald-600', dot:'bg-emerald-500' }} />
-            <KpiTile icon={Layers}       label="Drawings"        value={drawingsCount}     sub="drawing type documents"     tint={{ bg:'bg-purple-50',  fg:'text-purple-600',  dot:'bg-purple-500' }} />
-            <KpiTile icon={FileSpreadsheet} label="RFIs"         value={rfisCount}         sub="requests for information"   tint={{ bg:'bg-orange-50',  fg:'text-orange-600',  dot:'bg-orange-500' }} />
-            <KpiTile icon={ScrollText}   label="Submittals"      value={submittalsCount}   sub="correspondence & submittals" tint={{ bg:'bg-cyan-50',   fg:'text-cyan-600',    dot:'bg-cyan-500' }} />
-            <KpiTile icon={CheckCircle2} label="Approved"        value={s?.approved || 0}  sub={`${s?.total ? Math.round(((s?.approved||0)/s.total)*100) : 0}% of total`} tint={{ bg:'bg-green-50', fg:'text-green-600', dot:'bg-green-500' }} />
+            <KpiTile icon={FileText}      label="Total Documents" value={s?.total || 0}                 tint={{ bg:'bg-indigo-50',  fg:'text-indigo-600',  dot:'bg-indigo-500' }} />
+            <KpiTile icon={CheckCircle2}  label="Approved"        value={s?.approved || 0}               tint={{ bg:'bg-emerald-50', fg:'text-emerald-600', dot:'bg-emerald-500' }} />
+            <KpiTile icon={Clock}         label="Pending Approval" value={myApprovals.length}            tint={{ bg:'bg-amber-50',   fg:'text-amber-600',   dot:'bg-amber-500' }} />
+            <KpiTile icon={HardDrive}     label="Storage Used"    value={s?.total_size_bytes || 0} format={fmtSize} tint={{ bg:'bg-purple-50', fg:'text-purple-600', dot:'bg-purple-500' }} />
+            <KpiTile icon={UploadCloud}   label="Today's Uploads" value={todayUploads}                   tint={{ bg:'bg-cyan-50',    fg:'text-cyan-600',    dot:'bg-cyan-500' }} />
+            <KpiTile icon={BarChart3}     label="This Month"      value={monthUploads}                   tint={{ bg:'bg-rose-50',    fg:'text-rose-600',    dot:'bg-rose-500' }} />
           </div>
         </div>
+
+        <svg className="absolute bottom-0 left-0 right-0 w-full block pointer-events-none" viewBox="0 0 1440 36" preserveAspectRatio="none">
+          <path d="M0,18L60,15C120,12,240,6,360,8C480,10,600,20,720,21C840,23,960,17,1080,13C1200,9,1320,8,1380,8L1440,7V36H0Z" fill="#f4f6fb" />
+        </svg>
       </div>
 
-      <div className="p-6 md:p-8 max-w-[1400px] mx-auto">
+      <div className="p-6 md:p-8 max-w-[1400px] mx-auto -mt-2 relative z-10">
 
       {/* Tabs */}
       <div className="flex gap-1 bg-white border border-slate-100 p-1 rounded-2xl w-fit mb-5 flex-wrap shadow-sm">
@@ -1287,7 +920,7 @@ export default function DMSPage() {
               {(dash.expiring_docs||[]).length === 0 ? <p className="text-xs text-slate-400 py-4 text-center">None expiring</p> : (
                 <div className="space-y-1.5">
                   {dash.expiring_docs.map(d=>(
-                    <div key={d.id} onClick={()=>setExpandedId(d.id)} className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg text-xs cursor-pointer">
+                    <div key={d.id} onClick={()=>setDetailId(d.id)} className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg text-xs cursor-pointer">
                       <span className="truncate">{d.doc_number} · {d.doc_title}</span>
                       <span className={clsx('font-bold flex-shrink-0', d.days_until<=0?'text-red-600':'text-orange-600')}>
                         {d.days_until<=0?`${Math.abs(d.days_until)}d ago`:`${d.days_until}d`}
@@ -1326,7 +959,7 @@ export default function DMSPage() {
           ) : myApprovals.map(ap => (
             <div key={ap.id} className="bg-white border rounded-xl p-4 shadow-sm">
               <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 cursor-pointer" onClick={()=>setExpandedId(ap.document_id)}>
+                <div className="flex-1 cursor-pointer" onClick={()=>setDetailId(ap.document_id)}>
                   <div className="flex items-center gap-2 mb-1">
                     <FileText className="w-4 h-4 text-indigo-500" />
                     <span className="font-mono text-xs text-indigo-600">{ap.doc_number}</span>
@@ -1468,158 +1101,129 @@ export default function DMSPage() {
                 </div>
               </div>
             </div>
-            <StorageUsageWidget usedBytes={s?.total_size_bytes || 0} />
           </div>
 
           {/* Main */}
-          <div className="flex-1 min-w-0 space-y-5">
-            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-              <div className="p-4 border-b border-slate-100">
-                <div className="flex items-center justify-between mb-3">
-                  <DMSBreadcrumb cat={cat} catLabel={catLabel} onHome={() => setCat({ kind: 'all' })} />
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => setModal('folder')}
-                      className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50">
-                      <Folder className="w-3.5 h-3.5" /> New Folder
-                    </button>
-                    <button onClick={() => setModal('upload')}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700">
-                      <Upload className="w-3.5 h-3.5" /> Upload
-                    </button>
-                  </div>
-                </div>
-                {/* Filters */}
-                <div className="flex flex-col sm:flex-row gap-2.5">
-                  <select value={typeFilter} onChange={e=>setType(e.target.value)} className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs">
-                    <option value="">All Types</option>{DOC_TYPES.map(t=><option key={t} value={t}>{titleCase(t)}</option>)}
-                  </select>
-                  <select value={statusFilter} onChange={e=>setStatus(e.target.value)} className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs">
-                    <option value="">All Status</option>{Object.entries(STATUS_CFG).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
-                  </select>
-                  <select value={projectFilter} onChange={e=>setProjFilter(e.target.value)} className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs">
-                    <option value="">All Projects</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                  <select value={groupBy} onChange={e=>{ setGroupBy(e.target.value); setCollapsedGroups({}); }}
-                    title="Group rows" className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs">
-                    <option value="none">No grouping</option>
-                    <option value="vendor">Group by Vendor</option>
-                    <option value="type">Group by Type</option>
-                    <option value="project">Group by Project</option>
-                    <option value="month">Group by Month</option>
-                  </select>
-                  <div className="relative flex-1 min-w-[160px]">
-                    <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
-                    <input value={search} onChange={e=>setSearch(e.target.value)}
-                      className="pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-xs w-full"
-                      placeholder="Search in folder…" />
-                  </div>
-                  <div className="flex items-center gap-0.5 bg-white border border-slate-200 rounded-lg p-1">
-                    <button onClick={() => setViewMode('grid')} title="Grid view"
-                      className={clsx('p-1.5 rounded-md transition-colors', viewMode==='grid' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-600')}>
-                      <LayoutGrid className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => setViewMode('list')} title="List view"
-                      className={clsx('p-1.5 rounded-md transition-colors', viewMode==='list' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-600')}>
-                      <ListIcon className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-                {cat.kind !== 'all' && (
-                  <p className="text-[11px] text-slate-400 mt-2">Invoices already linked to another certification are hidden. Showing <strong className="text-slate-600">{visibleDocs.length}</strong> document(s).</p>
-                )}
+          <div className="flex-1 min-w-0">
+            {/* Filters */}
+            <div className="flex flex-col sm:flex-row gap-3 mb-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                <input value={search} onChange={e=>setSearch(e.target.value)}
+                  className="pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm w-full shadow-sm"
+                  placeholder="Search title, number, filename, content…" />
               </div>
+              <select value={projectFilter} onChange={e=>setProjFilter(e.target.value)} className="bg-white border rounded-lg px-3 py-2 text-sm shadow-sm">
+                <option value="">All Projects</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <select value={typeFilter} onChange={e=>setType(e.target.value)} className="bg-white border rounded-lg px-3 py-2 text-sm shadow-sm">
+                <option value="">All Types</option>{DOC_TYPES.map(t=><option key={t} value={t}>{titleCase(t)}</option>)}
+              </select>
+              <select value={statusFilter} onChange={e=>setStatus(e.target.value)} className="bg-white border rounded-lg px-3 py-2 text-sm shadow-sm">
+                <option value="">All Status</option>{Object.entries(STATUS_CFG).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+              </select>
+              <select value={groupBy} onChange={e=>{ setGroupBy(e.target.value); setCollapsedGroups({}); }}
+                title="Group rows" className="bg-white border rounded-lg px-3 py-2 text-sm shadow-sm">
+                <option value="none">No grouping</option>
+                <option value="vendor">Group by Vendor</option>
+                <option value="type">Group by Type</option>
+                <option value="project">Group by Project</option>
+                <option value="month">Group by Month</option>
+              </select>
+              <div className="flex items-center gap-0.5 bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
+                <button onClick={() => setViewMode('grid')} title="Grid view"
+                  className={clsx('p-1.5 rounded-md transition-colors', viewMode==='grid' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-600')}>
+                  <LayoutGrid className="w-4 h-4" />
+                </button>
+                <button onClick={() => setViewMode('list')} title="List view"
+                  className={clsx('p-1.5 rounded-md transition-colors', viewMode==='list' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-600')}>
+                  <ListIcon className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
 
-              {isLoading ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 p-5">
-                  {Array.from({ length: 8 }).map((_, i) => (
-                    <div key={i} className="bg-slate-50 border border-slate-100 rounded-2xl p-4 animate-pulse">
-                      <div className="w-11 h-11 rounded-xl bg-slate-100 mb-3" />
-                      <div className="h-3 bg-slate-100 rounded w-3/4 mb-2" />
-                      <div className="h-3 bg-slate-100 rounded w-1/2 mb-4" />
-                      <div className="h-4 bg-slate-100 rounded-full w-16" />
-                    </div>
+            {/* Active category chip */}
+            {cat.kind !== 'all' && (
+              <div className="flex items-center gap-2 mb-3 text-xs">
+                <span className="text-slate-400">Showing:</span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full font-medium">
+                  {cat.kind === 'type' ? <Layers className="w-3 h-3" /> : cat.kind === 'vendor' ? <Tag className="w-3 h-3" /> : cat.kind === 'project' ? <Building2 className="w-3 h-3" /> : cat.kind === 'month' ? <Clock className="w-3 h-3" /> : <Folder className="w-3 h-3" />}
+                  {catLabel}
+                  <span className="text-indigo-400">· {visibleDocs.length}</span>
+                  <button onClick={()=>setCat({ kind:'all' })} className="hover:text-indigo-900"><X className="w-3 h-3" /></button>
+                </span>
+              </div>
+            )}
+
+            {isLoading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <div key={i} className="bg-white border border-slate-100 rounded-2xl p-4 animate-pulse">
+                    <div className="w-11 h-11 rounded-xl bg-slate-100 mb-3" />
+                    <div className="h-3 bg-slate-100 rounded w-3/4 mb-2" />
+                    <div className="h-3 bg-slate-100 rounded w-1/2 mb-4" />
+                    <div className="h-4 bg-slate-100 rounded-full w-16" />
+                  </div>
+                ))}
+              </div>
+            ) : viewMode === 'grid' ? (
+              visibleDocs.length === 0 ? (
+                <div className="bg-white border border-slate-100 rounded-2xl py-16 text-center">
+                  <FolderOpen className="w-10 h-10 mx-auto mb-3 text-slate-200" />
+                  <p className="text-slate-400 text-sm">No documents found</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                  {visibleDocs.map(d => (
+                    <DocumentCard key={d.id} doc={d} onOpen={setDetailId}
+                      onDownload={downloadDmsDocument}
+                      onShare={(doc) => setModal({ type:'share', doc })}
+                      onArchive={(doc) => { if (window.confirm('Archive?')) archiveMut.mutate(doc.id); }} />
                   ))}
                 </div>
-              ) : viewMode === 'grid' ? (
-                visibleDocs.length === 0 ? (
-                  <div className="py-16 text-center">
-                    <FolderOpen className="w-10 h-10 mx-auto mb-3 text-slate-200" />
-                    <p className="text-slate-400 text-sm">No documents found</p>
-                  </div>
-                ) : (<>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 p-5">
-                    {pagedDocs.map(d => (
-                      <DocumentCard key={d.id} doc={d} onOpen={setDetailId}
-                        onDownload={downloadDmsDocument}
-                        onShare={(doc) => setModal({ type:'share', doc })}
-                        onArchive={(doc) => { if (window.confirm('Archive?')) archiveMut.mutate(doc.id); }} />
-                    ))}
-                  </div>
-                  <Pager page={page} setPage={setPage} total={visibleDocs.length} pageSize={PAGE_SIZE} />
-                </>)
-              ) : (
-                <>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-50 border-b border-slate-100">
-                        <tr>{['Name','Type','Discipline','Version','Status','Size','Modified By','Modified On','Actions'].map(h=>(
-                          <th key={h} className="text-left py-3 px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
-                        ))}</tr>
-                      </thead>
-                      <tbody>
-                        {groupBy === 'none'
-                          ? pagedDocs.map(renderRow)
-                          : groupedDocs.map(g => {
-                              const collapsed = collapsedGroups[g.key];
-                              const GIcon = groupBy==='vendor' ? Tag : groupBy==='type' ? Layers : groupBy==='project' ? Building2 : Clock;
-                              return (
-                                <React.Fragment key={g.key}>
-                                  <tr className="bg-slate-100/70 border-b cursor-pointer hover:bg-slate-100"
-                                    onClick={()=>setCollapsedGroups(c=>({ ...c, [g.key]: !c[g.key] }))}>
-                                    <td colSpan={9} className="py-2 px-3">
-                                      <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-                                        {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                                        <GIcon className="w-3.5 h-3.5 text-slate-400" />
-                                        <span>{g.label}</span>
-                                        <span className="text-slate-400 font-normal">· {g.rows.length} doc{g.rows.length!==1?'s':''}</span>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                  {!collapsed && g.rows.map(renderRow)}
-                                </React.Fragment>
-                              );
-                            })}
-                        {visibleDocs.length === 0 && (
-                          <tr><td colSpan={9} className="text-center py-10 text-slate-400">
-                            <FolderOpen className="w-8 h-8 mx-auto mb-2 opacity-30" />No documents found
-                          </td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                  {groupBy === 'none' && <Pager page={page} setPage={setPage} total={visibleDocs.length} pageSize={PAGE_SIZE} />}
-                </>
-              )}
-            </div>
-
-            {/* Analytics row */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-              <StatusDonutCard byStatus={dash?.by_status} />
-              <TrendCard docs={docs} />
-              <RecentActivitiesCard items={dash?.recent_activity} />
-            </div>
-          </div>
-
-          {/* Document Details side panel */}
-          <div className="w-full xl:w-80 flex-shrink-0 xl:sticky xl:top-6 xl:self-start">
-            <DocDetailsPanel
-              docId={detailId}
-              onClose={() => setDetailId(null)}
-              onExpand={() => setExpandedId(detailId)}
-              onDownload={downloadDmsDocument}
-              onShare={(doc) => setModal({ type:'share', doc })}
-              onOpenModal={setModal}
-            />
+              )
+            ) : (
+              <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 border-b">
+                      <tr>{['Doc#','Title','Type','Project','Rev','Size','Expiry','Status','Actions'].map(h=>(
+                        <th key={h} className="text-left py-3 px-3 text-xs font-medium text-slate-500 whitespace-nowrap">{h}</th>
+                      ))}</tr>
+                    </thead>
+                    <tbody>
+                      {groupBy === 'none'
+                        ? visibleDocs.map(renderRow)
+                        : groupedDocs.map(g => {
+                            const collapsed = collapsedGroups[g.key];
+                            const GIcon = groupBy==='vendor' ? Tag : groupBy==='type' ? Layers : groupBy==='project' ? Building2 : Clock;
+                            return (
+                              <React.Fragment key={g.key}>
+                                <tr className="bg-slate-100/70 border-b cursor-pointer hover:bg-slate-100"
+                                  onClick={()=>setCollapsedGroups(c=>({ ...c, [g.key]: !c[g.key] }))}>
+                                  <td colSpan={9} className="py-2 px-3">
+                                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                                      {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                      <GIcon className="w-3.5 h-3.5 text-slate-400" />
+                                      <span>{g.label}</span>
+                                      <span className="text-slate-400 font-normal">· {g.rows.length} doc{g.rows.length!==1?'s':''}</span>
+                                    </div>
+                                  </td>
+                                </tr>
+                                {!collapsed && g.rows.map(renderRow)}
+                              </React.Fragment>
+                            );
+                          })}
+                      {visibleDocs.length === 0 && (
+                        <tr><td colSpan={9} className="text-center py-10 text-slate-400">
+                          <FolderOpen className="w-8 h-8 mx-auto mb-2 opacity-30" />No documents found
+                        </td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1635,9 +1239,9 @@ export default function DMSPage() {
       {modal?.type === 'share' && <ShareModal doc={modal.doc} onClose={()=>setModal(null)} />}
       {modal?.type === 'review' && <SubmitReviewModal doc={modal.doc} onClose={()=>setModal(null)} />}
       {modal?.type === 'version' && <RevisionModal doc={modal.doc} onClose={()=>setModal(null)} />}
-      {expandedId && <DocDetailDrawer
-        docId={expandedId}
-        onClose={()=>setExpandedId(null)}
+      {detailId && <DocDetailDrawer
+        docId={detailId}
+        onClose={()=>setDetailId(null)}
         onSubmitReview={(doc)=>setModal({type:'review', doc})}
         onAddVersion={(doc)=>setModal({type:'version', doc})}
       />}
