@@ -35,8 +35,8 @@ async function pushScBillToTracker(billId, actorId) {
   const bill = r0.rows[0];
   const { wo_number: woNumber, sc_name: scName } = bill;
 
-  const basicAmount = parseFloat(bill.gross_amount || 0) - parseFloat(bill.gst_amount || 0);
-  const totalAmount = parseFloat(bill.gross_amount || 0);
+  const basicAmount = parseFloat(bill.gross_amount || 0);
+  const totalAmount = basicAmount + parseFloat(bill.gst_amount || 0);
 
   return withTransaction(async (client) => {
     const slNumber = await nextSlNumber('wo', bill.company_id);
@@ -98,6 +98,29 @@ async function copyScItemsToLineItems(client, scBillId, tqsBillId, bill) {
     `, [tqsBillId, it.description, it.unit, it.curr_qty, it.rate, basic, gstPct, gstAmt, basic + gstAmt, it.sequence_no]);
   }
 }
+
+// One-time fix: correct basic_amount and total_amount for SC bills already in tracker
+runSchemaInit('fix_sc_tracker_amounts_2026_07', async () => {
+  const result = await query(`
+    UPDATE tqs_bills tb
+    SET basic_amount = sb.gross_amount,
+        total_amount = sb.gross_amount + COALESCE(sb.gst_amount, 0)
+    FROM sc_bills sb
+    WHERE tb.sc_bill_id = sb.id
+  `);
+  // Also fix balance_to_pay in tqs_bill_updates
+  await query(`
+    UPDATE tqs_bill_updates u
+    SET balance_to_pay = sb.gross_amount + COALESCE(sb.gst_amount, 0)
+    FROM tqs_bills tb
+    JOIN sc_bills sb ON sb.id = tb.sc_bill_id
+    WHERE u.bill_id = tb.id
+      AND tb.sc_bill_id IS NOT NULL
+      AND (u.certified_net IS NULL OR u.certified_net = 0)
+      AND (u.paid_amount IS NULL OR u.paid_amount = 0)
+  `);
+  console.log(`[fix] Corrected amounts for ${result.rowCount} SC tracker rows`);
+});
 
 // One-time fix: copy wo_number → po_number for SC bills already in tracker
 runSchemaInit('fix_sc_tracker_po_number_2026_07', async () => {
