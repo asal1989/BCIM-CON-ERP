@@ -285,6 +285,57 @@ const QUOTES = [
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+/* Shared premium tab shell — dark gradient hero + KPI strip, matching the
+   Dashboard/Attendance/Profile pattern, reused by every other tab below
+   instead of re-implementing the same ~150 lines of hero markup per tab. */
+function TabShell({ bg, gradient, mesh, label, title, subtitle, icon: Icon, stats, actions, children }) {
+  return (
+    <div style={{ display:'flex', flexDirection:'column', background:bg, minHeight:'100%' }}>
+      {/* HERO BANNER */}
+      <div style={{ background:gradient, position:'relative', overflow:'hidden', padding:'28px 28px 52px' }}>
+        <div style={{ position:'absolute',inset:0,pointerEvents:'none',background:mesh }} />
+        <div style={{ position:'absolute',inset:0,pointerEvents:'none',backgroundImage:'radial-gradient(rgba(255,255,255,.055) 1px,transparent 1px)',backgroundSize:'24px 24px' }} />
+        <div style={{ position:'relative',zIndex:1,display:'flex',alignItems:'center',gap:20,flexWrap:'wrap' }}>
+          {Icon && (
+            <div style={{ width:64,height:64,borderRadius:16,background:'rgba(255,255,255,.12)',border:'1px solid rgba(255,255,255,.2)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+              <Icon size={28} style={{ color:'#fff' }} />
+            </div>
+          )}
+          <div style={{ flex:1,minWidth:200 }}>
+            <div style={{ fontSize:10.5,fontWeight:700,color:'rgba(255,255,255,.55)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:6 }}>{label}</div>
+            <div style={{ fontSize:26,fontWeight:800,color:'#fff',letterSpacing:'-.03em',lineHeight:1.1,marginBottom:8 }}>{title}</div>
+            {subtitle && <div style={{ fontSize:12.5,color:'rgba(255,255,255,.6)' }}>{subtitle}</div>}
+          </div>
+          {actions && <div style={{ display:'flex',alignItems:'center',gap:8,flexShrink:0 }}>{actions}</div>}
+        </div>
+        <svg style={{ position:'absolute',bottom:0,left:0,right:0,width:'100%',display:'block',pointerEvents:'none' }} viewBox="0 0 1440 36" preserveAspectRatio="none">
+          <path d="M0,18L60,15C120,12,240,6,360,8C480,10,600,20,720,21C840,23,960,17,1080,13C1200,9,1320,8,1380,8L1440,7V36H0Z" fill={bg}/>
+        </svg>
+      </div>
+
+      {/* KPI STRIP */}
+      {stats && stats.length > 0 && (
+        <div style={{ padding:'0 24px', marginTop:'-2px', position:'relative', zIndex:10 }}>
+          <div style={{ display:'grid', gridTemplateColumns:`repeat(${stats.length},1fr)`, background:'#fff', borderRadius:16, border:'1px solid rgba(0,0,0,.06)', boxShadow:'0 4px 16px rgba(0,0,0,.07),0 2px 6px rgba(0,0,0,.04)', overflow:'hidden' }}>
+            {stats.map((s, i) => (
+              <div key={s.label} style={{ padding:'14px 16px', borderRight:i<stats.length-1?'1px solid rgba(0,0,0,.06)':undefined }}>
+                <div style={{ fontSize:10.5,fontWeight:700,color:'#94A3B8',textTransform:'uppercase',letterSpacing:'.07em',marginBottom:5 }}>{s.label}</div>
+                <div style={{ fontSize:20,fontWeight:800,color:s.color||'#0F172A',letterSpacing:'-.02em',fontVariantNumeric:'tabular-nums',lineHeight:1 }}>{s.value}</div>
+                {s.sub && <div style={{ fontSize:11,color:'#64748B',marginTop:3 }}>{s.sub}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* BODY */}
+      <div style={{ padding:'20px 24px 28px', display:'flex', flexDirection:'column', gap:16 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function DashboardTab({ summary, balances, serviceRequests, notifications, profile, setActive }) {
   const navigate   = useNavigate();
   const attendance = summary?.attendance || {};
@@ -1773,8 +1824,28 @@ function LeaveTab({ leaveTypes }) {
   });
   const cancelLeave = useMutation({ mutationFn: essAPI.cancelLeaveRequest, onSuccess: refresh, onError: (e) => toast.error(e?.response?.data?.error || 'Failed to cancel leave') });
 
+  const leaveReqs   = requests.data || [];
+  const pendingCnt  = leaveReqs.filter(r => r.status === 'pending').length;
+  const approvedCnt = leaveReqs.filter(r => r.status === 'approved').length;
+  const totalAvail  = (balances.data || []).reduce((s, b) => s + Number(b.closing_balance ?? 0), 0);
+  const totalTaken  = (balances.data || []).reduce((s, b) => s + Number(b.taken ?? 0), 0);
+
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+    <TabShell
+      bg="#FFFBEB"
+      gradient="linear-gradient(145deg,#78350F 0%,#92400E 25%,#B45309 60%,#D97706 100%)"
+      mesh="radial-gradient(ellipse 70% 60% at 70% 0%,rgba(245,158,11,.25),transparent),radial-gradient(ellipse 50% 80% at 100% 70%,rgba(251,191,36,.15),transparent)"
+      icon={CalendarOff}
+      label="Leave Management"
+      title="My Leave"
+      subtitle={`${totalAvail.toFixed(1)} days available · ${totalTaken} taken this cycle`}
+      stats={[
+        { label: 'Available', value: totalAvail.toFixed(1), color: '#D97706' },
+        { label: 'Taken', value: totalTaken, color: '#0F172A' },
+        { label: 'Pending', value: pendingCnt, color: pendingCnt > 0 ? '#DC2626' : '#059669' },
+        { label: 'Approved', value: approvedCnt, color: '#059669' },
+      ]}
+    >
       {/* Balance chips */}
       <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
         {(balances.data || []).map((b) => {
@@ -1846,7 +1917,7 @@ function LeaveTab({ leaveTypes }) {
           rows={requests.data || []}
         />
       </div>
-    </div>
+    </TabShell>
   );
 }
 
@@ -1862,8 +1933,23 @@ function PayslipsTab() {
   const payslips = useQuery({ queryKey: ['ess-payslips'], queryFn: () => essAPI.payslips().then(unwrap) });
   const ytd = useQuery({ queryKey: ['ess-ytd', ytdYear], queryFn: () => essAPI.payrollYtd({ year: ytdYear }).then(r => r.data.data) });
   const t = ytd.data?.totals || { gross: 0, deductions: 0, net: 0 };
+  const latest = (payslips.data || [])[0];
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+    <TabShell
+      bg="#F5F3FF"
+      gradient="linear-gradient(145deg,#2E1065 0%,#4C1D95 25%,#6D28D9 60%,#7C3AED 100%)"
+      mesh="radial-gradient(ellipse 70% 60% at 70% 0%,rgba(124,58,237,.25),transparent),radial-gradient(ellipse 50% 80% at 100% 70%,rgba(167,139,250,.15),transparent)"
+      icon={BadgeIndianRupee}
+      label="Payroll"
+      title="My Payslips"
+      subtitle={`Year-to-date net pay ₹${t.net.toLocaleString('en-IN')}`}
+      stats={[
+        { label: 'YTD Gross', value: `₹${t.gross.toLocaleString('en-IN')}`, color: '#0F172A' },
+        { label: 'YTD Deductions', value: `₹${t.deductions.toLocaleString('en-IN')}`, color: '#DC2626' },
+        { label: 'YTD Net', value: `₹${t.net.toLocaleString('en-IN')}`, color: '#7C3AED' },
+        { label: 'Latest Payslip', value: latest ? `${latest.month}/${latest.year}` : '--', color: '#0F172A' },
+      ]}
+    >
       <div style={{ ...GCA, padding:20 }}>
         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:16 }}>
           <div>
@@ -1914,7 +2000,7 @@ function PayslipsTab() {
           rows={payslips.data || []}
         />
       </div>
-    </div>
+    </TabShell>
   );
 }
 
@@ -1937,9 +2023,24 @@ function DocumentsTab({ policies, userId }) {
     onSuccess:  () => { toast.success('Policy acknowledged'); qc.invalidateQueries({ queryKey: ['ess-policy-acks'] }); },
   });
   const acked = new Set((acks.data || []).map(a => a.policy_id));
+  const pendingAcks = policies.filter(p => !acked.has(p.id)).length;
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+    <TabShell
+      bg="#F0F9FF"
+      gradient="linear-gradient(145deg,#082F49 0%,#0C4A6E 25%,#0369A1 60%,#0EA5E9 100%)"
+      mesh="radial-gradient(ellipse 70% 60% at 70% 0%,rgba(14,165,233,.25),transparent),radial-gradient(ellipse 50% 80% at 100% 70%,rgba(56,189,248,.15),transparent)"
+      icon={FileText}
+      label="Documents & Policies"
+      title="My Documents"
+      subtitle="Uploaded documents and company policy acknowledgements"
+      stats={[
+        { label: 'My Documents', value: (documents.data || []).length, color: '#0F172A' },
+        { label: 'Policies', value: policies.length, color: '#0F172A' },
+        { label: 'Acknowledged', value: acked.size, color: '#059669' },
+        { label: 'Pending Ack.', value: pendingAcks, color: pendingAcks > 0 ? '#DC2626' : '#059669' },
+      ]}
+    >
       <div style={{ ...GCA, padding:20 }}>
         <span style={STA}>Upload Document</span>
         <p style={{ fontSize:11.5, color:'#64748B', marginBottom:12 }}>Upload profile and HR documents</p>
@@ -1999,7 +2100,7 @@ function DocumentsTab({ policies, userId }) {
           rows={policies}
         />
       </div>
-    </div>
+    </TabShell>
   );
 }
 
@@ -2015,8 +2116,23 @@ function HRRequestsTab({ serviceRequests }) {
     mutationFn: () => hrAdvancedAPI.createServiceRequest(reqForm),
     onSuccess:  () => { toast.success('HR request created'); setReqForm({ request_type: 'certificate', priority: 'normal', subject: '', description: '' }); qc.invalidateQueries({ queryKey: ['ess-hr-requests'] }); },
   });
+  const pendingReq = serviceRequests.filter(r => r.status === 'pending' || r.status === 'open').length;
+  const closedReq  = serviceRequests.filter(r => r.status === 'closed' || r.status === 'resolved').length;
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+    <TabShell
+      bg="#FFF1F2"
+      gradient="linear-gradient(145deg,#4C0519 0%,#881337 25%,#BE123C 60%,#E11D48 100%)"
+      mesh="radial-gradient(ellipse 70% 60% at 70% 0%,rgba(225,29,72,.25),transparent),radial-gradient(ellipse 50% 80% at 100% 70%,rgba(251,113,133,.15),transparent)"
+      icon={FolderUp}
+      label="Support"
+      title="My HR Requests"
+      subtitle="Certificates, payroll queries, corrections and general support"
+      stats={[
+        { label: 'Total Requests', value: serviceRequests.length, color: '#0F172A' },
+        { label: 'Pending', value: pendingReq, color: pendingReq > 0 ? '#DC2626' : '#059669' },
+        { label: 'Closed', value: closedReq, color: '#059669' },
+      ]}
+    >
       <div style={{ ...GCA, padding:20 }}>
         <span style={STA}>Raise HR Request</span>
         <p style={{ fontSize:11.5, color:'#64748B', marginBottom:12 }}>Certificates, payroll queries, corrections, document support</p>
@@ -2070,7 +2186,7 @@ function HRRequestsTab({ serviceRequests }) {
           rows={serviceRequests}
         />
       </div>
-    </div>
+    </TabShell>
   );
 }
 
@@ -2099,12 +2215,24 @@ function ManagerDeskTab() {
     closeReject();
   };
 
+  const pendingLeaveCnt = (leaves.data || []).length;
+  const pendingCorrCnt  = (corrections.data || []).length;
+
   if (leaves.error?.response?.status === 403 && corrections.error?.response?.status === 403) {
     return (
-      <div style={{ ...GCA, padding:20 }}>
-        <span style={STA}>Manager Desk</span>
-        <p style={{ fontSize:13, color:'#64748B' }}>No manager approvals are available for this login.</p>
-      </div>
+      <TabShell
+        bg="#ECFEFF"
+        gradient="linear-gradient(145deg,#083344 0%,#164E63 25%,#0E7490 60%,#06B6D4 100%)"
+        mesh="radial-gradient(ellipse 70% 60% at 70% 0%,rgba(6,182,212,.25),transparent),radial-gradient(ellipse 50% 80% at 100% 70%,rgba(103,232,249,.15),transparent)"
+        icon={CheckCircle2}
+        label="Manager Desk"
+        title="Team Approvals"
+      >
+        <div style={{ ...GCA, padding:20 }}>
+          <span style={STA}>Manager Desk</span>
+          <p style={{ fontSize:13, color:'#64748B' }}>No manager approvals are available for this login.</p>
+        </div>
+      </TabShell>
     );
   }
 
@@ -2116,7 +2244,19 @@ function ManagerDeskTab() {
   );
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+    <TabShell
+      bg="#ECFEFF"
+      gradient="linear-gradient(145deg,#083344 0%,#164E63 25%,#0E7490 60%,#06B6D4 100%)"
+      mesh="radial-gradient(ellipse 70% 60% at 70% 0%,rgba(6,182,212,.25),transparent),radial-gradient(ellipse 50% 80% at 100% 70%,rgba(103,232,249,.15),transparent)"
+      icon={CheckCircle2}
+      label="Manager Desk"
+      title="Team Approvals"
+      subtitle="Pending leave requests and attendance corrections from your team"
+      stats={[
+        { label: 'Pending Leave', value: pendingLeaveCnt, color: pendingLeaveCnt > 0 ? '#DC2626' : '#059669' },
+        { label: 'Pending Corrections', value: pendingCorrCnt, color: pendingCorrCnt > 0 ? '#DC2626' : '#059669' },
+      ]}
+    >
       {rejectModal.open && (
         <div style={{ position:'fixed', inset:0, zIndex:50, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,0.4)' }} onClick={closeReject}>
           <div style={{ ...GCA, padding:24, width:'100%', maxWidth:360, margin:'0 16px' }} onClick={e => e.stopPropagation()}>
@@ -2165,7 +2305,7 @@ function ManagerDeskTab() {
           rows={corrections.data || []}
         />
       </div>
-    </div>
+    </TabShell>
   );
 }
 
@@ -2211,19 +2351,25 @@ function TrainingTab() {
 
   const reqs = requirements.data || [];
   const myRequests = requests.data || [];
+  const completedCnt = myRequests.filter(r => r.status === 'completed').length;
+  const pendingCnt   = myRequests.filter(r => r.status === 'pending').length;
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:16, maxWidth:900, margin:'0 auto' }}>
-
-      {/* Header */}
-      <div style={{ borderRadius:16, padding:24, color:'#fff', background:`linear-gradient(135deg, ${DARK}, #1e5a8a)` }}>
-        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:4 }}>
-          <Award size={20} style={{ opacity:0.85 }} />
-          <h2 style={{ fontSize:18, fontWeight:800, margin:0 }}>Training & Development</h2>
-        </div>
-        <p style={{ fontSize:13, color:'rgba(255,255,255,0.6)', margin:0 }}>View your training requirements and request new training programs</p>
-      </div>
-
+    <TabShell
+      bg="#FEFCE8"
+      gradient="linear-gradient(145deg,#422006 0%,#713F12 25%,#A16207 60%,#EAB308 100%)"
+      mesh="radial-gradient(ellipse 70% 60% at 70% 0%,rgba(234,179,8,.25),transparent),radial-gradient(ellipse 50% 80% at 100% 70%,rgba(253,224,71,.15),transparent)"
+      icon={Award}
+      label="Growth"
+      title="Training & Development"
+      subtitle="View your training requirements and request new training programs"
+      stats={[
+        { label: 'Requirements', value: reqs.length, color: '#0F172A' },
+        { label: 'My Requests', value: myRequests.length, color: '#0F172A' },
+        { label: 'Pending', value: pendingCnt, color: pendingCnt > 0 ? '#DC2626' : '#059669' },
+        { label: 'Completed', value: completedCnt, color: '#059669' },
+      ]}
+    >
       {/* Requirements from perf review */}
       {reqs.length > 0 && (
         <div style={{ ...GCA, padding:20 }}>
@@ -2354,7 +2500,7 @@ function TrainingTab() {
           ))}
         </div>
       </div>
-    </div>
+    </TabShell>
   );
 }
 
@@ -2371,8 +2517,21 @@ function AssetsTab() {
   const active = rows.filter(r => r.status === 'assigned');
   const GCA = { background:'rgba(255,255,255,0.88)', border:'1px solid rgba(255,255,255,0.95)', borderRadius:16, boxShadow:'0 2px 16px rgba(0,0,0,.055),0 1px 3px rgba(0,0,0,.04)' };
   const STA = { fontSize:10.5, color:'#94A3B8', textTransform:'uppercase', letterSpacing:'0.1em', fontWeight:600, marginBottom:8, display:'block' };
+  const returnedCnt = rows.filter(r => r.status !== 'assigned').length;
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+    <TabShell
+      bg="#FAFAF9"
+      gradient="linear-gradient(145deg,#0C0A09 0%,#1C1917 25%,#292524 60%,#57534E 100%)"
+      mesh="radial-gradient(ellipse 70% 60% at 70% 0%,rgba(120,113,108,.25),transparent),radial-gradient(ellipse 50% 80% at 100% 70%,rgba(168,162,158,.15),transparent)"
+      icon={Monitor}
+      label="Company Equipment"
+      title="My Assets"
+      subtitle="Company equipment currently allocated to you"
+      stats={[
+        { label: 'Active Assets', value: active.length, color: '#0F172A' },
+        { label: 'Returned / Past', value: returnedCnt, color: '#64748B' },
+      ]}
+    >
       <div style={{ ...GCA, padding:20 }}>
         <span style={STA}>My Assets</span>
         <p style={{ fontSize:11.5, color:'#64748B', marginBottom:16 }}>Company equipment currently allocated to you</p>
@@ -2418,7 +2577,7 @@ function AssetsTab() {
           />
         </div>
       )}
-    </div>
+    </TabShell>
   );
 }
 
@@ -2436,8 +2595,24 @@ function HelpdeskTab() {
     onSuccess:  () => { toast.success('Ticket raised'); setForm({ category: 'hardware', priority: 'medium', subject: '', description: '' }); qc.invalidateQueries({ queryKey: ['ess-helpdesk'] }); },
     onError:    (e) => toast.error(e?.response?.data?.error || 'Failed to raise ticket'),
   });
+  const ticketRows = tickets.data || [];
+  const openCnt   = ticketRows.filter(t => !['closed','resolved'].includes(t.status)).length;
+  const closedCnt = ticketRows.filter(t => ['closed','resolved'].includes(t.status)).length;
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+    <TabShell
+      bg="#FFF7ED"
+      gradient="linear-gradient(145deg,#431407 0%,#7C2D12 25%,#C2410C 60%,#EA580C 100%)"
+      mesh="radial-gradient(ellipse 70% 60% at 70% 0%,rgba(234,88,12,.25),transparent),radial-gradient(ellipse 50% 80% at 100% 70%,rgba(251,146,60,.15),transparent)"
+      icon={Headphones}
+      label="IT Support"
+      title="Helpdesk"
+      subtitle="Report IT / equipment issues to the support team"
+      stats={[
+        { label: 'Total Tickets', value: ticketRows.length, color: '#0F172A' },
+        { label: 'Open', value: openCnt, color: openCnt > 0 ? '#DC2626' : '#059669' },
+        { label: 'Closed', value: closedCnt, color: '#059669' },
+      ]}
+    >
       <div style={{ ...GCA, padding:20 }}>
         <span style={STA}>Raise a Helpdesk Ticket</span>
         <p style={{ fontSize:11.5, color:'#64748B', marginBottom:12 }}>Report IT / equipment issues to the support team</p>
@@ -2498,7 +2673,7 @@ function HelpdeskTab() {
           />
         )}
       </div>
-    </div>
+    </TabShell>
   );
 }
 
@@ -2537,38 +2712,38 @@ function TimesheetTab() {
     if (m > 12) { m = 1;  y++; }
     setMonth(m); setYear(y);
   };
+  const avgHours = presentDays ? Math.round((totalHours/presentDays)*10)/10 : 0;
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+    <TabShell
+      bg="#F7FEE7"
+      gradient="linear-gradient(145deg,#1A2E05 0%,#365314 25%,#4D7C0F 60%,#65A30D 100%)"
+      mesh="radial-gradient(ellipse 70% 60% at 70% 0%,rgba(101,163,13,.25),transparent),radial-gradient(ellipse 50% 80% at 100% 70%,rgba(163,230,53,.15),transparent)"
+      icon={Clock}
+      label="Timesheet"
+      title={`${MONTH_NAMES[month-1]} ${year}`}
+      subtitle="Daily hours derived from your attendance punches"
+      stats={[
+        { label: 'Total Hours', value: totalHours, color: '#4D7C0F' },
+        { label: 'Present Days', value: presentDays, color: '#0F172A' },
+        { label: 'Avg Hours/Day', value: avgHours, color: '#0F172A' },
+      ]}
+      actions={
+        <>
+          <button onClick={() => shiftMonth(-1)} style={{ width:32,height:32,borderRadius:9,background:'rgba(255,255,255,.15)',border:'1px solid rgba(255,255,255,.25)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff' }}>
+            <ChevronLeft size={15}/>
+          </button>
+          <button onClick={() => { setMonth(now.getMonth()+1); setYear(now.getFullYear()); }}
+            style={{ fontSize:12,fontWeight:700,color:'rgba(255,255,255,.8)',background:'rgba(255,255,255,.12)',border:'1px solid rgba(255,255,255,.2)',borderRadius:9,padding:'5px 14px',cursor:'pointer' }}>
+            Today
+          </button>
+          <button onClick={() => shiftMonth(1)} style={{ width:32,height:32,borderRadius:9,background:'rgba(255,255,255,.15)',border:'1px solid rgba(255,255,255,.25)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff' }}>
+            <ChevronRight size={15}/>
+          </button>
+        </>
+      }
+    >
       <div style={{ ...GCA, padding:20 }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
-          <div>
-            <span style={STA}>My Timesheet</span>
-            <p style={{ fontSize:11.5, color:'#64748B' }}>Daily hours derived from your attendance punches</p>
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <button onClick={() => shiftMonth(-1)} style={{ background:'rgba(0,0,0,0.04)', border:'1px solid rgba(0,0,0,0.07)', borderRadius:8, padding:'5px 8px', cursor:'pointer', display:'flex', alignItems:'center' }}>
-              <ChevronLeft size={15} color="#64748B" />
-            </button>
-            <span style={{ minWidth:120, textAlign:'center', fontSize:13, fontWeight:700, color:'#1E293B' }}>{MONTH_NAMES[month-1]} {year}</span>
-            <button onClick={() => shiftMonth(1)} style={{ background:'rgba(0,0,0,0.04)', border:'1px solid rgba(0,0,0,0.07)', borderRadius:8, padding:'5px 8px', cursor:'pointer', display:'flex', alignItems:'center' }}>
-              <ChevronRight size={15} color="#64748B" />
-            </button>
-          </div>
-        </div>
-
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, marginBottom:16 }}>
-          {[
-            { label:'Total Hours',   val:totalHours,  color:ACCENT },
-            { label:'Present Days',  val:presentDays, color:TEAL },
-            { label:'Avg Hours/Day', val:presentDays ? Math.round((totalHours/presentDays)*10)/10 : 0, color:'#1E293B' },
-          ].map(({ label, val, color }) => (
-            <div key={label} style={{ background:'rgba(47,111,237,0.04)', border:'1px solid rgba(47,111,237,0.08)', borderRadius:12, padding:16 }}>
-              <p style={{ fontSize:10.5, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.08em', color:'#94A3B8' }}>{label}</p>
-              <p style={{ marginTop:4, fontSize:24, fontWeight:800, color, lineHeight:1, fontVariantNumeric:'tabular-nums' }}>{val}</p>
-            </div>
-          ))}
-        </div>
-
+        <span style={STA}>My Timesheet</span>
         {att.isLoading ? (
           <p style={{ padding:'24px 0', textAlign:'center', fontSize:13, color:'#94A3B8' }}>Loading timesheet…</p>
         ) : (
@@ -2585,7 +2760,7 @@ function TimesheetTab() {
           />
         )}
       </div>
-    </div>
+    </TabShell>
   );
 }
 
@@ -2608,8 +2783,21 @@ function KnowledgeTab() {
     filtered.forEach(d => { const c = d.category || 'General'; (g[c] = g[c] || []).push(d); });
     return Object.entries(g).sort((a, b) => a[0].localeCompare(b[0]));
   }, [filtered]);
+  const kbRows = kb.data || [];
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+    <TabShell
+      bg="#EEF2FF"
+      gradient="linear-gradient(145deg,#1E1B4B 0%,#312E81 25%,#4338CA 60%,#6366F1 100%)"
+      mesh="radial-gradient(ellipse 70% 60% at 70% 0%,rgba(99,102,241,.25),transparent),radial-gradient(ellipse 50% 80% at 100% 70%,rgba(129,140,248,.15),transparent)"
+      icon={BookOpen}
+      label="Reference"
+      title="Knowledge Base"
+      subtitle="Company policies, guidelines and procedures"
+      stats={[
+        { label: 'Published Policies', value: kbRows.length, color: '#0F172A' },
+        { label: 'Categories', value: grouped.length, color: '#0F172A' },
+      ]}
+    >
       <div style={{ ...GCA, padding:20 }}>
         <span style={STA}>Knowledge Base</span>
         <p style={{ fontSize:11.5, color:'#64748B', marginBottom:12 }}>Company policies, guidelines and procedures</p>
@@ -2658,7 +2846,7 @@ function KnowledgeTab() {
           </div>
         )}
       </div>
-    </div>
+    </TabShell>
   );
 }
 
@@ -3108,8 +3296,24 @@ function ReimbursementsTab() {
     onSuccess:  () => { toast.success('Claim submitted'); setForm({ expense_type: 'travel', amount: '', description: '' }); qc.invalidateQueries({ queryKey: ['ess-reimbursements'] }); },
     onError:    (e) => toast.error(e?.response?.data?.error || 'Failed'),
   });
+  const claimRows = claims.data || [];
+  const pendingAmt = claimRows.filter(c => c.status === 'pending').reduce((s,c) => s + Number(c.amount||0), 0);
+  const paidAmt    = claimRows.filter(c => c.status === 'paid' || c.status === 'approved').reduce((s,c) => s + Number(c.amount||0), 0);
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+    <TabShell
+      bg="#FDF4FF"
+      gradient="linear-gradient(145deg,#4A044E 0%,#701A75 25%,#A21CAF 60%,#C026D4 100%)"
+      mesh="radial-gradient(ellipse 70% 60% at 70% 0%,rgba(192,38,211,.25),transparent),radial-gradient(ellipse 50% 80% at 100% 70%,rgba(232,121,249,.15),transparent)"
+      icon={Receipt}
+      label="Expenses"
+      title="Reimbursements"
+      subtitle="Travel, food, supplies and other work expenses"
+      stats={[
+        { label: 'Total Claims', value: claimRows.length, color: '#0F172A' },
+        { label: 'Pending Amount', value: `₹${pendingAmt.toLocaleString('en-IN')}`, color: pendingAmt > 0 ? '#DC2626' : '#059669' },
+        { label: 'Paid / Approved', value: `₹${paidAmt.toLocaleString('en-IN')}`, color: '#059669' },
+      ]}
+    >
       <div style={{ ...GCA, padding:20 }}>
         <span style={STA}>Submit a Reimbursement Claim</span>
         <p style={{ fontSize:11.5, color:'#64748B', marginBottom:12 }}>Travel, food, supplies and other work expenses</p>
@@ -3155,7 +3359,7 @@ function ReimbursementsTab() {
           empty="No reimbursement claims yet"
         />
       </div>
-    </div>
+    </TabShell>
   );
 }
 
@@ -3173,8 +3377,24 @@ function LoansTab() {
     onSuccess:  () => { toast.success('Request submitted'); setForm({ loan_type: 'advance', amount: '', reason: '' }); qc.invalidateQueries({ queryKey: ['ess-loans'] }); },
     onError:    (e) => toast.error(e?.response?.data?.error || 'Failed'),
   });
+  const loanRows = loans.data || [];
+  const outstanding = loanRows.reduce((s,l) => s + Number(l.balance_amount||0), 0);
+  const activeCnt = loanRows.filter(l => l.status === 'disbursed').length;
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+    <TabShell
+      bg="#F0FDFA"
+      gradient="linear-gradient(145deg,#042F2E 0%,#134E4A 25%,#0F766E 60%,#14B8A6 100%)"
+      mesh="radial-gradient(ellipse 70% 60% at 70% 0%,rgba(20,184,166,.25),transparent),radial-gradient(ellipse 50% 80% at 100% 70%,rgba(94,234,212,.15),transparent)"
+      icon={Wallet}
+      label="Finance"
+      title="Loans & Advances"
+      subtitle="Salary advances and staff loans (subject to HR approval)"
+      stats={[
+        { label: 'Total Requests', value: loanRows.length, color: '#0F172A' },
+        { label: 'Active', value: activeCnt, color: '#0F172A' },
+        { label: 'Outstanding Balance', value: `₹${outstanding.toLocaleString('en-IN')}`, color: outstanding > 0 ? '#DC2626' : '#059669' },
+      ]}
+    >
       <div style={{ ...GCA, padding:20 }}>
         <span style={STA}>Request a Loan / Advance</span>
         <p style={{ fontSize:11.5, color:'#64748B', marginBottom:12 }}>Salary advances and staff loans (subject to HR approval)</p>
@@ -3217,7 +3437,7 @@ function LoansTab() {
           empty="No loan or advance requests yet"
         />
       </div>
-    </div>
+    </TabShell>
   );
 }
 
