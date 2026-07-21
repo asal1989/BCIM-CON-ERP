@@ -1292,6 +1292,13 @@ router.post('/bills', authorize(...PLANNER), async (req, res) => {
       return r.rows[0];
     });
 
+    // Push to Bill Tracker immediately on creation so QS can certify it
+    try {
+      await pushScBillToTracker(billResult.id, req.user.id);
+    } catch (trackerErr) {
+      console.error('Bill Tracker auto-add failed:', trackerErr.message);
+    }
+
     res.status(201).json({ data: billResult });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });

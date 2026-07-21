@@ -40,7 +40,7 @@ async function pushScBillToTracker(billId, actorId) {
 
   return withTransaction(async (client) => {
     const slNumber = await nextSlNumber('wo', bill.company_id);
-    const remarks = `Auto-added from Sub Con Bill ${bill.bill_number} on MD approval. `
+    const remarks = `Auto-added from Sub Con Bill ${bill.bill_number}. `
       + `Net payable ₹${parseFloat(bill.net_payable || 0).toLocaleString('en-IN')} `
       + `(TDS ₹${parseFloat(bill.tds_amount || 0).toLocaleString('en-IN')}, `
       + `Retention ₹${parseFloat(bill.retention_amount || 0).toLocaleString('en-IN')}). `
@@ -55,7 +55,7 @@ async function pushScBillToTracker(billId, actorId) {
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,'wo',$8,
         $9,$10,$11,$12,$13,
-        $14,$15,'stores',$16,$17
+        $14,$15,'pending',$16,$17
       ) RETURNING id
     `, [
       bill.company_id, bill.project_id, slNumber, scName,
