@@ -251,6 +251,7 @@ const AuditLogPage        = lazy(() => import('./pages/admin/AuditLogPage'));
 const MailCenterPage      = lazy(() => import('./pages/admin/MailCenterPage'));
 const RolePermissionsPage = lazy(() => import('./pages/admin/RolePermissionsPage'));
 const ApiKeysPage         = lazy(() => import('./pages/admin/ApiKeysPage'));
+const DatabaseBackupPage  = lazy(() => import('./pages/admin/DatabaseBackupPage'));
 const MRSVerificationPage = lazy(() => import('./pages/stores/MRSVerificationPage'));
 const POVerificationPage = lazy(() => import('./pages/procurement/POVerificationPage'));
 const MINVerificationPage = lazy(() => import('./pages/stores/MINVerificationPage'));
@@ -1111,6 +1112,7 @@ export default function App() {
                 <Route path="mail-center" element={<RequireModule module="Administration"><MailCenterPage /></RequireModule>} />
                 <Route path="role-permissions" element={<RequireModule module="Administration"><RolePermissionsPage /></RequireModule>} />
                 <Route path="api-keys" element={<RequireModule module="Administration"><ApiKeysPage /></RequireModule>} />
+                <Route path="db-backup" element={<RequireModule module="Administration"><DatabaseBackupPage /></RequireModule>} />
                 <Route path="automation-ideas" element={<RequireModule module="Automation Ideas"><AutomationIdeasPage /></RequireModule>} />
                 <Route path="approval-engine" element={<RequireModule module="Approval Engine"><ApprovalEnginePage /></RequireModule>} />
 

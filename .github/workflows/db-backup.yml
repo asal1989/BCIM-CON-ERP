@@ -1,22 +1,30 @@
 name: Database backup
 
-# Railway's free/current plan has no built-in Postgres backups, so this
-# workflow dumps the database and uploads it to the same SharePoint site the
-# app already uses for document storage (via Microsoft Graph API, app-only
-# auth — same credentials as ONEDRIVE_* in the backend). Runs independently
-# of Railway, so it works even if the app itself is down.
+# Dumps Railway PostgreSQL to:
+#   1. SharePoint (ConstructERP/DB-Backups/) via Microsoft Graph API
+#   2. This repo's backups/ folder (committed directly, pruned at 30 days)
 #
-# Manual trigger only (no cron): the dump contains full employee PII and
-# salary data, so a human runs this deliberately from the Actions tab rather
-# than it firing unattended every night.
+# Triggers:
+#   - Daily at 1:00 AM UTC (auto backup)
+#   - Manual via workflow_dispatch from GitHub Actions tab or via the ERP frontend
 
 on:
+  schedule:
+    - cron: '0 1 * * *'
   workflow_dispatch: {}
+
+permissions:
+  contents: write
 
 jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
       - name: Install postgresql-client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
@@ -27,6 +35,39 @@ jobs:
           STAMP=$(date -u +%Y-%m-%d_%H%M)
           pg_dump "$DATABASE_URL" -Fc -f "backup_${STAMP}.dump"
           echo "STAMP=${STAMP}" >> "$GITHUB_ENV"
+          DUMP_SIZE=$(du -sh "backup_${STAMP}.dump" | cut -f1)
+          echo "Dump size: ${DUMP_SIZE}"
+          echo "DUMP_SIZE=${DUMP_SIZE}" >> "$GITHUB_ENV"
+
+      - name: Commit backup to repository
+        run: |
+          mkdir -p backups
+          cp "backup_${STAMP}.dump" "backups/backup_${STAMP}.dump"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "backups/backup_${STAMP}.dump"
+          git commit -m "chore(backup): automated DB backup ${STAMP} (${DUMP_SIZE})"
+          git push
+
+      - name: Prune backups older than 30 days from repository
+        run: |
+          CUTOFF=$(date -u -d '30 days ago' +%Y-%m-%d)
+          cd backups
+          for FILE in backup_*.dump; do
+            [ -f "$FILE" ] || continue
+            FILE_DATE=$(echo "$FILE" | grep -oP '\d{4}-\d{2}-\d{2}' | head -1 || true)
+            if [ -n "$FILE_DATE" ] && [[ "$FILE_DATE" < "$CUTOFF" ]]; then
+              echo "Pruning old backup: $FILE"
+              git rm "$FILE"
+            fi
+          done
+          cd ..
+          if git diff --cached --quiet; then
+            echo "No old backups to prune"
+          else
+            git commit -m "chore(backup): prune backups older than 30 days"
+            git push
+          fi
 
       - name: Get Graph API access token
         env:
@@ -58,12 +99,12 @@ jobs:
             --data-binary @"${FILE}" -o response.json
           cat response.json
           if jq -e '.id' response.json > /dev/null; then
-            echo "Backup uploaded: ${FILE}"
+            echo "Backup uploaded to SharePoint: ${FILE}"
           else
-            echo "Upload failed"; exit 1
+            echo "SharePoint upload failed"; exit 1
           fi
 
-      - name: Prune backups older than 30 days
+      - name: Prune SharePoint backups older than 30 days
         env:
           SITE_ID: ${{ secrets.SHAREPOINT_SITE_ID }}
         run: |
@@ -75,7 +116,7 @@ jobs:
               ITEM_ID=$(echo "$item" | jq -r '.id')
               FILE_DATE=$(echo "$NAME" | grep -oP '(?<=backup_)\d{4}-\d{2}-\d{2}' || true)
               if [ -n "$FILE_DATE" ] && [[ "$FILE_DATE" < "$CUTOFF" ]]; then
-                echo "Deleting old backup: $NAME"
+                echo "Deleting old SharePoint backup: $NAME"
                 curl -s -X DELETE \
                   "https://graph.microsoft.com/v1.0/sites/${SITE_ID}/drive/items/${ITEM_ID}" \
                   -H "Authorization: Bearer ${TOKEN}"

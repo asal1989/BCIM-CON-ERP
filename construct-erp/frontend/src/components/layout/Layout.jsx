@@ -16,7 +16,7 @@ import {
   Landmark, FileSignature, CircleSlash, ShieldCheck, Clock3, Lightbulb,
   Gavel, Target, Send, Coins, Replace, Link2, Wrench, Layers, MapPin, TrendingDown, FolderOpen, Calculator, UserRound,
   Cog, Fuel, Gauge, BarChart2, History, GitBranch, MinusCircle, FolderKanban, Sparkles, MessageSquare, Mail,
-  RefreshCw, Shuffle, Globe
+  RefreshCw, Shuffle, Globe, Database
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import CommandPalette from './CommandPalette';
@@ -385,6 +385,7 @@ const navGroups = [
     { to: '/mail-center', icon: Mail, label: 'Mail Center' },
     { to: '/role-permissions', icon: ShieldCheck, label: 'Roles & Module Access' },
     { to: '/api-keys',         icon: Key,         label: 'API Keys' },
+    { to: '/db-backup',        icon: Database,    label: 'DB Backup' },
   ]},
   { label: 'Automation Ideas', items: [
     { to: '/automation-ideas', icon: Lightbulb, label: 'Ideas Dashboard' },
