@@ -2008,4 +2008,33 @@ runSchemaInit('revert_yelahanka_bill_payments_2026_07', async () => {
   console.log(`[migration] Reverted workflow_status 'paid' → 'accounts' on ${revertedBills.rowCount} bill(s) for Yelahanka`);
 });
 
+// ── One-time: move Residential Apartments - Yelahanka bills stuck at
+// 'accounts' back to 'qs' — none of them were ever actually QS-certified
+// (qs_certified_date NULL, no active certification link on any of them),
+// same bulk-import pattern as the payment data reverted above. Sends them
+// back to QS so they go through real certification instead of skipping it.
+runSchemaInit('reset_yelahanka_uncertified_accounts_to_qs_2026_07', async () => {
+  const YELAHANKA_PROJECTS = [
+    'a30adb9c-3511-4149-9017-bdc6150133c0',
+    '593273cf-721f-42f1-9178-53dca3e71caa',
+  ];
+
+  const moved = await query(`
+    UPDATE tqs_bills b
+    SET workflow_status = 'qs', updated_at = NOW()
+    FROM tqs_bill_updates u
+    WHERE u.bill_id = b.id
+      AND b.project_id = ANY($1::uuid[])
+      AND b.is_deleted = FALSE
+      AND b.workflow_status = 'accounts'
+      AND u.qs_certified_date IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM vendor_qs_certification_bills cb
+        JOIN vendor_qs_certifications vc ON vc.id = cb.certification_id
+        WHERE cb.bill_id = b.id AND vc.status NOT IN ('cancelled', 'rejected')
+      )
+  `, [YELAHANKA_PROJECTS]);
+  console.log(`[migration] Moved ${moved.rowCount} uncertified bill(s) from 'accounts' → 'qs' for Yelahanka`);
+});
+
 module.exports = router;
