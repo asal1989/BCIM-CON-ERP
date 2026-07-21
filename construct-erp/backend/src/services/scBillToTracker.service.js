@@ -64,13 +64,39 @@ async function pushScBillToTracker(billId, actorId) {
       totalAmount, remarks, actorId, bill.id,
     ]);
 
+    const tqsBillId = r.rows[0].id;
+
     await client.query(
       `INSERT INTO tqs_bill_updates (bill_id, balance_to_pay) VALUES ($1, $2)`,
-      [r.rows[0].id, totalAmount]
+      [tqsBillId, totalAmount]
     );
 
-    return r.rows[0].id;
+    // Copy sc_bill_items → tqs_bill_line_items so QS cert summary sheet populates
+    await copyScItemsToLineItems(client, billId, tqsBillId, bill);
+
+    return tqsBillId;
   });
+}
+
+async function copyScItemsToLineItems(client, scBillId, tqsBillId, bill) {
+  const items = await client.query(`
+    SELECT description, unit, curr_qty, rate, COALESCE(amount, curr_qty * rate) AS basic_amount, sequence_no
+    FROM sc_bill_items
+    WHERE bill_id = $1 AND curr_qty > 0
+    ORDER BY sequence_no
+  `, [scBillId]);
+  if (!items.rows.length) return;
+
+  const gstPct = parseFloat(bill.gst_pct || 0);
+  for (const it of items.rows) {
+    const basic = parseFloat(it.basic_amount || 0);
+    const gstAmt = Math.round(basic * gstPct) / 100;
+    await client.query(`
+      INSERT INTO tqs_bill_line_items
+        (bill_id, item_name, unit, quantity, rate, basic_amount, gst_pct, gst_amount, total_amount, sort_order)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+    `, [tqsBillId, it.description, it.unit, it.curr_qty, it.rate, basic, gstPct, gstAmt, basic + gstAmt, it.sequence_no]);
+  }
 }
 
 // One-time fix: copy wo_number → po_number for SC bills already in tracker
@@ -81,6 +107,29 @@ runSchemaInit('fix_sc_tracker_po_number_2026_07', async () => {
     WHERE sc_bill_id IS NOT NULL AND po_number IS NULL AND wo_number IS NOT NULL
   `);
   console.log(`[fix] Set po_number from wo_number for ${result.rowCount} SC tracker rows`);
+});
+
+// One-time backfill: copy sc_bill_items into tqs_bill_line_items for SC bills already in tracker
+runSchemaInit('backfill_sc_bill_line_items_2026_07', async () => {
+  const res = await query(`
+    SELECT tb.id AS tqs_bill_id, tb.sc_bill_id, sb.gst_pct
+    FROM tqs_bills tb
+    JOIN sc_bills sb ON sb.id = tb.sc_bill_id
+    WHERE tb.sc_bill_id IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM tqs_bill_line_items WHERE bill_id = tb.id)
+  `);
+  console.log(`[backfill] Found ${res.rows.length} SC tracker bills missing line items`);
+  for (const row of res.rows) {
+    try {
+      await withTransaction(async (client) => {
+        const billMock = { gst_pct: row.gst_pct };
+        await copyScItemsToLineItems(client, row.sc_bill_id, row.tqs_bill_id, billMock);
+      });
+    } catch (e) {
+      console.error(`[backfill] Line items failed for tqs_bill ${row.tqs_bill_id}:`, e.message);
+    }
+  }
+  console.log('[backfill] SC bill line items backfill complete');
 });
 
 // One-time backfill: push all existing SC bills not yet in Bill Tracker
