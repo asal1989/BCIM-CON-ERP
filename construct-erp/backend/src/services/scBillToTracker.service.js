@@ -73,4 +73,22 @@ async function pushScBillToTracker(billId, actorId) {
   });
 }
 
+// One-time backfill: push all existing SC bills not yet in Bill Tracker
+runSchemaInit('backfill_sc_bills_to_tracker_2026_07', async () => {
+  const res = await query(`
+    SELECT id, created_by FROM sc_bills
+    WHERE id NOT IN (SELECT sc_bill_id FROM tqs_bills WHERE sc_bill_id IS NOT NULL)
+    ORDER BY created_at ASC
+  `);
+  console.log(`[backfill] Found ${res.rows.length} SC bills to push to Bill Tracker`);
+  for (const row of res.rows) {
+    try {
+      await pushScBillToTracker(row.id, row.created_by);
+    } catch (e) {
+      console.error(`[backfill] Failed to push sc_bill ${row.id}:`, e.message);
+    }
+  }
+  console.log('[backfill] SC bills backfill complete');
+});
+
 module.exports = { pushScBillToTracker };
