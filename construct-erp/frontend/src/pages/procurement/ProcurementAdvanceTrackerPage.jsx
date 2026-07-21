@@ -868,11 +868,17 @@ export default function ProcurementAdvanceTrackerPage() {
 
         {/* ── KPI Cards (3D tilt) ── */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <KpiCard label="Total Vouchers"      value={summary.total_vouchers || '0'}             sub="advance vouchers"     icon={FileText}    themeIdx={0} />
-          <KpiCard label="Total Order Value"   value={`₹${inr(summary.total_order_value)}`}      sub="across all PO / WO"   icon={IndianRupee} themeIdx={1} />
-          <KpiCard label="Total Advance Value" value={`₹${inr(summary.total_advance_value)}`}    sub="sanctioned advances"  icon={Wallet}      themeIdx={2} />
-          <KpiCard label="Disbursed"           value={`₹${inr(summary.disbursed)}`}              sub="paid · status Issued" icon={CheckCircle2} themeIdx={3} />
-          <KpiCard label="Pending Disbursal"   value={`₹${inr(summary.pending_disbursement)}`}   sub="yet to be disbursed"  icon={Clock}       themeIdx={4} />
+          <KpiCard label="Total Vouchers"      value={summary.total_vouchers || '0'}
+            sub="advance vouchers"              icon={FileText}     themeIdx={0} />
+          <KpiCard label="Total Advance Value" value={`₹${inr(summary.total_advance_value)}`}
+            sub="sanctioned advances"           icon={Wallet}       themeIdx={1} />
+          <KpiCard label="Total Paid"          value={`₹${inr(summary.disbursed)}`}
+            sub="total disbursed"               icon={IndianRupee}  themeIdx={2} />
+          <KpiCard label="Total Recovered"     value={`₹${inr(summary.total_recovered)}`}
+            sub="recovered so far"              icon={CheckCircle2} themeIdx={3} />
+          <KpiCard label="Balance to Recover"
+            value={`₹${inr(Math.max(0, (parseFloat(summary.disbursed || 0) - parseFloat(summary.total_recovered || 0))))}`}
+            sub="paid but not yet recovered"    icon={TrendingDown} themeIdx={4} />
         </div>
 
         {/* ── Status Tabs + Search ── */}

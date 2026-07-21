@@ -135,7 +135,7 @@ function IssueModal({ voucher, onClose }) {
 function RecoveryModal({ voucher, onClose }) {
   const qc = useQueryClient();
   const [form, setForm] = useState({ amount: '', recovery_date: '', bill_id: '', notes: '' });
-  const outstanding = parseFloat(voucher.advance_value || 0) - parseFloat(voucher.recovered_amount || 0);
+  const outstanding = parseFloat(voucher.paid_amount || voucher.advance_value || 0) - parseFloat(voucher.recovered_amount || 0);
 
   const { data: bills = [] } = useQuery({
     queryKey: ['advance-bills-lookup', voucher.vendor_id, voucher.vendor_name],
@@ -424,9 +424,10 @@ export default function ProcurementAdvanceVoucherDetailPage() {
     </div>
   );
 
-  const outstanding  = parseFloat(voucher.advance_value || 0) - parseFloat(voucher.recovered_amount || 0);
-  const recoveryPct  = voucher.advance_value > 0
-    ? Math.min(Math.round((parseFloat(voucher.recovered_amount || 0) / parseFloat(voucher.advance_value)) * 100), 100)
+  const paidBase     = parseFloat(voucher.paid_amount || voucher.advance_value || 0);
+  const outstanding  = paidBase - parseFloat(voucher.recovered_amount || 0);
+  const recoveryPct  = paidBase > 0
+    ? Math.min(Math.round((parseFloat(voucher.recovered_amount || 0) / paidBase) * 100), 100)
     : 0;
   const statusCfg    = STATUS_CFG[voucher.status] || STATUS_CFG.pending;
 
@@ -514,13 +515,14 @@ export default function ProcurementAdvanceVoucherDetailPage() {
 
         {/* ── KPI Stats ── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Order Value"        value={`₹${inr(voucher.order_value)}`}     borderColor="#0891B2" color="#0F172A" />
           <StatCard label="Advance Sanctioned" value={`₹${inr(voucher.advance_value)}`}
             sub={voucher.advance_pct > 0 ? `${voucher.advance_pct}% of order` : undefined}
-            borderColor="#D97706" color="#D97706" />
+            borderColor="#0891B2" color="#D97706" />
+          <StatCard label="Paid Amount"        value={`₹${inr(voucher.paid_amount)}`}
+            sub="actually disbursed"            borderColor="#D97706" color="#0F172A" />
           <StatCard label="Recovered"          value={`₹${inr(voucher.recovered_amount)}`}
-            sub={`${recoveryPct}% recovered`}    borderColor="#059669" color="#059669" />
-          <StatCard label="Outstanding Balance" value={`₹${inr(outstanding)}`}
+            sub={`${recoveryPct}% of paid`}     borderColor="#059669" color="#059669" />
+          <StatCard label="Outstanding Balance" value={`₹${inr(Math.max(0, outstanding))}`}
             borderColor={outstanding > 0 ? '#DC2626' : '#059669'} color={outstanding > 0 ? '#DC2626' : '#059669'} />
         </div>
 
@@ -528,7 +530,7 @@ export default function ProcurementAdvanceVoucherDetailPage() {
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-4">
           <div className="flex items-center justify-between text-xs text-slate-900 font-medium mb-2">
             <span className="font-semibold">Recovery Progress</span>
-            <span>{recoveryPct}% of ₹{inr(voucher.advance_value)} recovered</span>
+            <span>{recoveryPct}% of ₹{inr(paidBase)} paid recovered</span>
           </div>
           <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
             <div style={{ width: `${recoveryPct}%`, transition: 'width 0.6s ease' }}

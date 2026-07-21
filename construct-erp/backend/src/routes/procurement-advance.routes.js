@@ -160,17 +160,19 @@ async function nextSlNumber() {
 // ── Helper: recalculate and update voucher status after recovery ──────────────
 async function syncVoucherStatus(client, advanceId) {
   const { rows } = await client.query(
-    `SELECT advance_value, recovered_amount FROM tqs_advance_vouchers WHERE id = $1`,
+    `SELECT paid_amount, advance_value, recovered_amount FROM tqs_advance_vouchers WHERE id = $1`,
     [advanceId]
   );
   if (!rows.length) return;
-  const { advance_value, recovered_amount } = rows[0];
-  const adv = parseFloat(advance_value || 0);
-  const rec = parseFloat(recovered_amount || 0);
+  const { paid_amount, advance_value, recovered_amount } = rows[0];
+  // Compare against what was actually paid (disbursed), not the sanctioned amount.
+  // If paid_amount not set yet, fall back to advance_value.
+  const base = parseFloat(paid_amount || advance_value || 0);
+  const rec  = parseFloat(recovered_amount || 0);
   let status = 'issued';
-  if (rec <= 0)        status = 'issued';
-  else if (rec >= adv) status = 'recovered';
-  else                 status = 'partial';
+  if (rec <= 0)                  status = 'issued';
+  else if (base > 0 && rec >= base) status = 'recovered';
+  else                           status = 'partial';
   await client.query(
     `UPDATE tqs_advance_vouchers SET status=$1, updated_at=NOW() WHERE id=$2`,
     [status, advanceId]
@@ -919,11 +921,11 @@ async function resyncAdvancesFromBills(company_id) {
         : [company_id, `%${bill.vendor_name}%`];
 
       const openVouchers = await query(
-        `SELECT id, advance_value, recovered_amount,
-                advance_value - recovered_amount AS remaining
+        `SELECT id, advance_value, paid_amount, recovered_amount,
+                COALESCE(paid_amount, advance_value) - recovered_amount AS remaining
          FROM tqs_advance_vouchers
          WHERE company_id = $1 AND ${vWhere}
-           AND advance_value > recovered_amount AND is_deleted = FALSE
+           AND COALESCE(paid_amount, advance_value) > recovered_amount AND is_deleted = FALSE
          ORDER BY COALESCE(pay_date, created_at) ASC`,
         vParams
       );
@@ -935,7 +937,8 @@ async function resyncAdvancesFromBills(company_id) {
         if (remaining <= 0) break;
         const apply = Math.min(remaining, parseFloat(v.remaining));
         const newRecovered = parseFloat(v.recovered_amount) + apply;
-        const newStatus = newRecovered >= parseFloat(v.advance_value) ? 'recovered'
+        const base = parseFloat(v.paid_amount || v.advance_value || 0);
+        const newStatus = base > 0 && newRecovered >= base ? 'recovered'
                         : newRecovered > 0 ? 'partial'
                         : 'issued';
         await query(
