@@ -68,7 +68,30 @@ const BillInfoTable = ({ data }) => {
 
 // ─── Abstract Table ───────────────────────────────────────────────────────────
 const AbstractTable = ({ data }) => {
-  const items   = data.items || [];
+  // GET /sc/bills/:id returns raw sc_bill_items columns (wo_qty, prev_qty,
+  // curr_qty, balance_qty, rate, amount) plus a freshly-computed
+  // cum_prev_qty — none of which match the wo_amount/prev_amount/current_qty/
+  // curr_amount/cum_qty/cum_amount names this table was written against, so
+  // every derived column silently rendered as 0. Normalise here instead of
+  // changing the API shape (other consumers rely on the raw columns).
+  const items = (data.items || []).map(it => {
+    const woQty   = n(it.wo_qty);
+    const rate    = n(it.rate);
+    const prevQty = n(it.cum_prev_qty ?? it.prev_qty);
+    const currQty = n(it.curr_qty);
+    const cumQty  = prevQty + currQty;
+    return {
+      ...it,
+      wo_amount:          woQty * rate,
+      prev_certified_qty: prevQty,
+      prev_amount:        prevQty * rate,
+      current_qty:        currQty,
+      curr_amount:        n(it.amount) || currQty * rate,
+      cum_qty:            cumQty,
+      cum_amount:         cumQty * rate,
+      balance_amount:     n(it.balance_qty) * rate,
+    };
+  });
   const gstRate = n(data.gst_rate || 18);
   const isIgst  = data.is_igst;
   const halfGst = gstRate / 2;
