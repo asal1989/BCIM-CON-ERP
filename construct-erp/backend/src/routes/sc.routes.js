@@ -13,6 +13,7 @@ const { runSchemaInit } = require('../utils/schemaInit');
 const { BOQ_COST_HEADS } = require('../constants/boqCostHeads');
 const { uploadToOneDrive, isConfigured } = require('../services/onedrive.service');
 const { scBillScopeForRole } = require('../constants/scBillApprovalStages');
+const { pushScBillToTracker } = require('../services/scBillToTracker.service');
 
 // Does this user's role own the bill's current approval stage? admin/super_admin
 // always may act; everyone else must actually be the assigned stage owner —
@@ -1528,6 +1529,13 @@ router.patch('/bills/:id/approve', authorize('super_admin','admin','project_mana
       } catch(ipcErr) {
         // IPC failure is non-fatal — log but don't block the approval response
         console.error('IPC generation failed:', ipcErr.message);
+      }
+
+      // ── Auto-add to Bill Tracker on MD (final) approval ────────────────────
+      try {
+        await pushScBillToTracker(b.id, req.user.id);
+      } catch(trackerErr) {
+        console.error('Bill Tracker auto-add failed:', trackerErr.message);
       }
     }
 

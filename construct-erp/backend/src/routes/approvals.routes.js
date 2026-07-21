@@ -12,6 +12,7 @@ const {
   notifyRetentionApproved, notifyRetentionRejected,
 } = require('../services/notif.helper');
 const { scBillScopeForRole } = require('../constants/scBillApprovalStages');
+const { pushScBillToTracker } = require('../services/scBillToTracker.service');
 
 // GL mapping for stores petty cash auto-JV (mirrors stores-petty-cash.routes.js)
 const SPC_CATEGORY_GL = {
@@ -536,6 +537,11 @@ router.post('/action', async (req, res) => {
             [entity_id, stage, uid, uname, comments||'Approved']);
           if (newStatus === 'approved') {
             notifyScBillFullyApproved(CID(req), b, uname);
+            try {
+              await pushScBillToTracker(b.id, uid);
+            } catch (trackerErr) {
+              console.error('Bill Tracker auto-add failed:', trackerErr.message);
+            }
           } else {
             notifyScBillApproved(CID(req), b, uname);
           }

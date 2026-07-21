@@ -4627,4 +4627,8 @@ router.post('/backfill-jv', async (req, res) => {
 });
 
 module.exports = router;
+// Exposed so other modules (e.g. sc.routes.js auto-pushing an MD-approved SC
+// bill into Bill Tracker) can generate a matching sl_number the same way
+// this route's own bill-creation flow does.
+module.exports.nextSlNumber = nextSlNumber;
 
