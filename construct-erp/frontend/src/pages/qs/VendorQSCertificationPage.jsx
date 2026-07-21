@@ -383,18 +383,18 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
               <input type="number" className={fieldCls} value={form.advance_recovered} onChange={e => set('advance_recovered', e.target.value)} />
               <div className="mt-1 min-h-[18px] text-[11px]">
                 {loadingAdvance ? (
-                  <span className="text-slate-400">Checking DQS advance...</span>
+                  <span className="text-slate-400">Checking advance...</span>
                 ) : pendingAdvanceBalance > 0 ? (
                   <button
                     type="button"
                     onClick={() => set('advance_recovered', pendingAdvanceBalance.toFixed(2))}
                     className="font-medium text-orange-700 hover:underline"
-                    title="Click to fill pending DQS advance balance"
+                    title="Click to fill pending advance balance"
                   >
-                    Pending DQS advance Rs {inr(pendingAdvanceBalance)}
+                    Pending advance Rs {inr(pendingAdvanceBalance)}
                   </button>
                 ) : (
-                  <span className="text-slate-400">No pending DQS advance</span>
+                  <span className="text-slate-400">No pending advance</span>
                 )}
               </div>
             </div>
