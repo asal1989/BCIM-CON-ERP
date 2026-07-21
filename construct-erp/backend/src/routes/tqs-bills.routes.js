@@ -1674,15 +1674,15 @@ router.get('/advances/pending', async (req, res) => {
 
     const r2 = await query(`
       SELECT
-        SUM(av.advance_value)                      AS total_advanced,
-        SUM(av.recovered_amount)                    AS total_recovered,
-        SUM(av.advance_value - av.recovered_amount) AS pending_balance,
+        SUM(COALESCE(av.paid_amount, av.advance_value))                      AS total_advanced,
+        SUM(av.recovered_amount)                                              AS total_recovered,
+        SUM(COALESCE(av.paid_amount, av.advance_value) - av.recovered_amount) AS pending_balance,
         json_agg(json_build_object(
           'id',               av.id,
           'source',           'voucher',
-          'amount',           av.advance_value,
+          'amount',           COALESCE(av.paid_amount, av.advance_value),
           'recovered_amount', av.recovered_amount,
-          'balance',          av.advance_value - av.recovered_amount,
+          'balance',          COALESCE(av.paid_amount, av.advance_value) - av.recovered_amount,
           'payment_date',     av.pay_date,
           'wo_number',        av.wo_number,
           'reference_number', av.voucher_number
