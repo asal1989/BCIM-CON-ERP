@@ -1714,4 +1714,43 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// ── One-time cleanup: clear stale cert data from bills whose certification ──
+// was deleted/cancelled before the fix (2026-07). Finds any bill that has
+// certified_net > 0 or qs_certified_date set in tqs_bill_updates but is NOT
+// linked to any active (non-cancelled, non-rejected) certification.
+runSchemaInit('cleanup_orphaned_cert_data_2026_07', async () => {
+  // 1. Clear stale tqs_bill_updates rows
+  await query(`
+    UPDATE tqs_bill_updates u
+    SET certified_net=0, balance_to_pay=0,
+        qs_certified_date=NULL, qs_received_date=NULL,
+        qs_gross=0, qs_tax=NULL, qs_total=NULL,
+        ra_sequence=NULL, ra_bill_number=NULL,
+        advance_recovered=0, tds_deduction=0, retention_money=0,
+        other_deductions=0, total_deductions=0,
+        pc_number=NULL, pc_generated_at=NULL,
+        handed_over_accounts_date=NULL, updated_at=NOW()
+    WHERE (COALESCE(u.certified_net, 0) > 0 OR u.qs_certified_date IS NOT NULL)
+      AND NOT EXISTS (
+        SELECT 1 FROM vendor_qs_certification_bills cb
+        JOIN vendor_qs_certifications c ON c.id = cb.certification_id
+        WHERE cb.bill_id = u.bill_id
+          AND c.status NOT IN ('cancelled', 'rejected')
+      )
+  `);
+
+  // 2. Reset workflow_status back to 'qs' for those now-orphaned bills
+  await query(`
+    UPDATE tqs_bills b
+    SET workflow_status='qs', updated_at=NOW()
+    WHERE b.workflow_status = 'procurement'
+      AND NOT EXISTS (
+        SELECT 1 FROM vendor_qs_certification_bills cb
+        JOIN vendor_qs_certifications c ON c.id = cb.certification_id
+        WHERE cb.bill_id = b.id
+          AND c.status NOT IN ('cancelled', 'rejected')
+      )
+  `);
+});
+
 module.exports = router;
