@@ -2587,6 +2587,7 @@ router.post('/pc-payment', authenticate, async (req, res) => {
       if (!userCanAccessProject(req, bill.project_id)) {
         return res.status(403).json({ error: 'Access denied for this project.' });
       }
+      await requireMdSignature(bill.id);
     }
 
     const totalCertified = bills.reduce((s, b) => s + billPayableCap(b), 0);
@@ -3949,10 +3950,25 @@ router.patch('/:id/qs-sign', requireTqsStageAccess('qs_sign'), async (req, res) 
   }
 });
 
+// Reusable guard — throws if MD signature not yet collected for a bill
+async function requireMdSignature(billId) {
+  const r = await query(
+    `SELECT u.qs_sign_date FROM tqs_bill_updates u WHERE u.bill_id = $1`,
+    [billId]
+  );
+  if (!r.rows.length || !r.rows[0].qs_sign_date) {
+    throw Object.assign(
+      new Error('MD signature not collected. Complete "QS — MD Signature Collection" before recording payment.'),
+      { statusCode: 400 }
+    );
+  }
+}
+
 // ── PATCH /tqs/bills/:id/mark-paid — force-mark a bill as fully paid ─────────
 router.patch('/:id/mark-paid', requireTqsStageAccess('payment'), async (req, res) => {
   try {
     await getAccessibleBill(req, req.params.id);
+    await requireMdSignature(req.params.id);
     await query(`
       UPDATE tqs_bill_updates SET payment_status='paid', balance_to_pay=0, updated_at=NOW()
       WHERE bill_id=$1
@@ -3987,6 +4003,7 @@ router.patch('/:id/mark-paid', requireTqsStageAccess('payment'), async (req, res
 router.patch('/:id/payment', requireTqsStageAccess('payment'), async (req, res) => {
   try {
     await getAccessibleBill(req, req.params.id);
+    await requireMdSignature(req.params.id);
     const { paid_amount, payment_date, payment_mode, reference_number, bank_name } = req.body;
     requireDateFields(req.body, [
       { key: 'payment_date', label: 'Payment Date' },
