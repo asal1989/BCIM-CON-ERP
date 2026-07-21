@@ -1348,7 +1348,8 @@ const ALL_COLUMNS = [
   { key: 'total_amount',    label: 'Total',        align: 'right', w: 'w-[150px]', default: true  },
   { key: 'basic_amount',    label: 'Basic (excl. GST)', align: 'right', w: 'w-[150px]', default: false },
   { key: 'pc_number',       label: 'PC #',         align: 'left',  w: 'w-[150px]', default: false },
-  { key: 'certified_net',   label: 'Cert',         align: 'right', w: 'w-[130px]', default: false },
+  { key: 'certified_net',   label: 'Cert',         align: 'right',  w: 'w-[130px]', default: false },
+  { key: 'cert_status',    label: 'Cert Status',  align: 'center', w: 'w-[120px]', default: true  },
   { key: 'tds_deduction',   label: 'TDS',          align: 'right', w: 'w-[130px]', default: true  },
   { key: 'balance_to_pay',  label: 'Balance',      align: 'right', w: 'w-[150px]', default: true  },
   { key: 'paid_amount',     label: 'Paid',         align: 'right', w: 'w-[150px]', default: true  },
@@ -1357,6 +1358,7 @@ const ALL_COLUMNS = [
 ];
 
 const trailingNum = (s) => { const m = String(s || '').match(/(\d+)$/); return m ? parseInt(m[1], 10) : 0; };
+const isCertified = (b) => parseFloat(b.certified_net) > 0 || !!b.qs_certified_date;
 
 function sortRows(rows, col, dir) {
   if (!col) return rows;
@@ -2662,6 +2664,7 @@ export default function TQSBillsPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [vendorFilter, setVendorFilter] = useState('');
+  const [certFilter, setCertFilter] = useState(false);
   const [sortCol, setSortCol] = useState('sl_number');
   const [sortDir, setSortDir] = useState('desc');
   const [visibleCols, setVisibleCols] = useState(() => loadVisibleCols());
@@ -2791,7 +2794,11 @@ export default function TQSBillsPage() {
   );
 
   const sorted = sortRows(
-    vendorFilter ? bills.filter(b => b.vendor_name === vendorFilter) : bills,
+    bills.filter(b => {
+      if (vendorFilter && b.vendor_name !== vendorFilter) return false;
+      if (certFilter && isCertified(b)) return false;
+      return true;
+    }),
     sortCol, sortDir
   );
 
@@ -2995,23 +3002,40 @@ export default function TQSBillsPage() {
       <div className="bg-white" style={{ borderBottom: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div className="flex items-center overflow-x-auto scrollbar-none px-4">
           {STATUS_TABS.map(tab => (
-            <button key={tab.key} onClick={() => setStatusFilter(tab.key)}
+            <button key={tab.key} onClick={() => { setStatusFilter(tab.key); setCertFilter(false); }}
               className="flex items-center gap-1.5 px-4 py-3 text-sm whitespace-nowrap flex-shrink-0 transition-all"
               style={{
-                color: statusFilter === tab.key ? ACCENT : '#64748b',
-                borderBottom: statusFilter === tab.key ? `2px solid ${ACCENT}` : '2px solid transparent',
-                fontWeight: statusFilter === tab.key ? 700 : 500,
+                color: !certFilter && statusFilter === tab.key ? ACCENT : '#64748b',
+                borderBottom: !certFilter && statusFilter === tab.key ? `2px solid ${ACCENT}` : '2px solid transparent',
+                fontWeight: !certFilter && statusFilter === tab.key ? 700 : 500,
               }}>
               {tab.label}
               <span className="text-[11px] px-1.5 py-0.5 rounded font-bold"
                 style={{
-                  background: statusFilter === tab.key ? ACCENT : '#f1f5f9',
-                  color: statusFilter === tab.key ? 'white' : '#64748b',
+                  background: !certFilter && statusFilter === tab.key ? ACCENT : '#f1f5f9',
+                  color: !certFilter && statusFilter === tab.key ? 'white' : '#64748b',
                 }}>
                 {tab.count}
               </span>
             </button>
           ))}
+          <div className="w-px h-5 bg-slate-200 mx-1 flex-shrink-0" />
+          <button onClick={() => { setCertFilter(f => !f); setStatusFilter(''); }}
+            className="flex items-center gap-1.5 px-4 py-3 text-sm whitespace-nowrap flex-shrink-0 transition-all"
+            style={{
+              color: certFilter ? '#EF4444' : '#64748b',
+              borderBottom: certFilter ? '2px solid #EF4444' : '2px solid transparent',
+              fontWeight: certFilter ? 700 : 500,
+            }}>
+            Not Certified
+            <span className="text-[11px] px-1.5 py-0.5 rounded font-bold"
+              style={{
+                background: certFilter ? '#EF4444' : '#f1f5f9',
+                color: certFilter ? 'white' : '#64748b',
+              }}>
+              {bills.filter(b => !isCertified(b)).length}
+            </span>
+          </button>
         </div>
       </div>
 
@@ -3333,6 +3357,18 @@ export default function TQSBillsPage() {
                           {b.payment_date ? dayjs(b.payment_date).format('DD-MM-YYYY') : <span className="text-slate-400">—</span>}
                         </span>
                       </td>;
+                    case 'cert_status': {
+                      const certified = isCertified(b);
+                      return (
+                        <td key={col.key} className={cls}>
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded text-[11px] font-medium ${
+                            certified ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'
+                          }`}>
+                            {certified ? '✓ Certified' : 'Pending Cert'}
+                          </span>
+                        </td>
+                      );
+                    }
                     case 'workflow_status': {
                       const WF_CFG = {
                         pending:             { badge: 'bg-amber-100 text-amber-800',   label: 'Pending' },
