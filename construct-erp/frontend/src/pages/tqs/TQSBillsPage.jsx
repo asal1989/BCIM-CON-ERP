@@ -40,10 +40,21 @@ const billBalanceDue = (bill = {}) => {
   const deductions = num(bill.tds_deduction) + num(bill.other_deductions) + num(bill.advance_recovered);
   const invoiceTotal = num(bill.total_amount);
   const certifiedNet = num(bill.certified_net);
+
+  // When a bill has been QS certified, balance_to_pay in tqs_bill_updates is
+  // authoritative (kept up-to-date by both certification and payment flows).
+  // Do NOT let invoice arithmetic override it — certified_net=0 with full
+  // advance recovery is a valid ₹0 balance, but invoiceTotal - deductions
+  // would show the GST residual as a phantom balance.
+  const hasCertification = bill.qs_certified_date != null || bill.certified_net != null;
+  if (hasCertification) {
+    return Math.max(apiBalance, 0);
+  }
+
   const certifiedBalance = certifiedNet > 0 && (!invoiceTotal || certifiedNet <= invoiceTotal + 1)
     ? certifiedNet - paid
     : 0;
-  const invoiceBalance = num(bill.total_amount) - deductions - paid;
+  const invoiceBalance = invoiceTotal - deductions - paid;
   const calculatedBalance = Math.max(certifiedBalance, invoiceBalance, 0);
 
   if (bill.workflow_status === 'paid' || bill.payment_status === 'paid') {
