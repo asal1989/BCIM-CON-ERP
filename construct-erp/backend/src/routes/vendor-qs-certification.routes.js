@@ -1940,4 +1940,27 @@ runSchemaInit('merge_duplicate_vendors_and_backfill_2026_07', async () => {
   }
 });
 
+// ── One-time: fix two WO-reference typos found during the WO-bill audit ──
+// These bills carry a wo_number that matches no real work_orders row, so they
+// were unpickable from the QS cert PO/WO dropdown (which only lists real WOs)
+// no matter which WO the certifier selected. Both are unambiguous — vendor
+// matches exactly one WO whose number differs by a single-character typo.
+// Two other similarly-broken bills (WO-415, WO-427) were left untouched
+// because the vendor has multiple WOs and it isn't clear which one they
+// belong to — needs a human decision, not a guess.
+runSchemaInit('fix_wo_reference_typos_2026_07', async () => {
+  const FIXES = [
+    { sl_number: 'WO-408', from: 'WOTQS10-a1', to: 'WOTQS010-A1' },
+    { sl_number: 'WO-413', from: 'WOTQS035',   to: 'WODQS035' },
+  ];
+  for (const f of FIXES) {
+    const r = await query(
+      `UPDATE tqs_bills SET wo_number = $1, updated_at = NOW()
+       WHERE sl_number = $2 AND wo_number = $3`,
+      [f.to, f.sl_number, f.from]
+    );
+    console.log(`[migration] ${f.sl_number}: wo_number "${f.from}" → "${f.to}" (${r.rowCount} row updated)`);
+  }
+});
+
 module.exports = router;
