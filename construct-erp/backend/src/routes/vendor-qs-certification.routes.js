@@ -1963,4 +1963,49 @@ runSchemaInit('fix_wo_reference_typos_2026_07', async () => {
   }
 });
 
+// ── One-time: revert bulk-imported payment data on Residential Apartments -
+// Yelahanka bills so accounts can re-record the correct amount/date and
+// reconcile against QS records. Verified before running: none of these 111
+// bills' paid_amount is backed by a real `payments` (Finance) row or journal
+// entry — it was set directly on tqs_bill_updates, most likely during the
+// original Excel import — so this is a clean revert with no ledger/cash-flow
+// side effects to unwind. QS certification data (certified amount, RA
+// number, dates) is untouched; only payment fields are cleared.
+runSchemaInit('revert_yelahanka_bill_payments_2026_07', async () => {
+  const YELAHANKA_PROJECTS = [
+    'a30adb9c-3511-4149-9017-bdc6150133c0',
+    '593273cf-721f-42f1-9178-53dca3e71caa',
+  ];
+
+  const clearedUpdates = await query(`
+    UPDATE tqs_bill_updates u
+    SET paid_amount = 0,
+        balance_to_pay = COALESCE(u.certified_net, 0),
+        payment_status = NULL,
+        payment_date = NULL,
+        payment_mode = NULL,
+        reference_number = NULL,
+        bank_name = NULL,
+        updated_at = NOW()
+    FROM tqs_bills b
+    WHERE b.id = u.bill_id
+      AND b.project_id = ANY($1::uuid[])
+      AND b.is_deleted = FALSE
+      AND COALESCE(u.paid_amount, 0) > 0
+  `, [YELAHANKA_PROJECTS]);
+  console.log(`[migration] Cleared payment fields on ${clearedUpdates.rowCount} tqs_bill_updates row(s) for Yelahanka`);
+
+  const revertedBills = await query(`
+    UPDATE tqs_bills b
+    SET workflow_status = 'accounts', updated_at = NOW()
+    FROM tqs_bill_updates u
+    WHERE u.bill_id = b.id
+      AND b.project_id = ANY($1::uuid[])
+      AND b.is_deleted = FALSE
+      AND b.workflow_status = 'paid'
+      AND COALESCE(u.paid_amount, 0) = 0
+  `, [YELAHANKA_PROJECTS]);
+  console.log(`[migration] Reverted workflow_status 'paid' → 'accounts' on ${revertedBills.rowCount} bill(s) for Yelahanka`);
+});
+
 module.exports = router;
