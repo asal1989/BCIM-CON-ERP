@@ -136,11 +136,11 @@ const AbstractTable = ({ data }) => {
 
   return (
     <div style={{ marginBottom: 8 }}>
-      <table style={{ fontSize: 8.5 }}>
+      <table style={{ fontSize: 8.5, tableLayout: 'fixed' }}>
         <thead>
           <tr>
             <th rowSpan={2} style={{ ...thBase, width: 28 }}>Sr.</th>
-            <th rowSpan={2} style={{ ...thBase, textAlign: 'left', minWidth: 160 }}>Description of Work</th>
+            <th rowSpan={2} style={{ ...thBase, textAlign: 'left', width: 160 }}>Description of Work</th>
             <th rowSpan={2} style={{ ...thBase, width: 34 }}>Unit</th>
             <th colSpan={3} style={thGreen}>As per Work Order</th>
             <th colSpan={2} style={thAmber}>Previous Certified</th>
@@ -167,7 +167,7 @@ const AbstractTable = ({ data }) => {
             <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#f8fafc' }}>
               <td style={{ textAlign: 'center', color: '#64748b' }}>{it.sr_no || i + 1}</td>
               <td style={{ textAlign: 'left' }}>
-                <div style={{ fontWeight: 600, color: '#1e293b', lineHeight: 1.3 }}>{it.description}</div>
+                <div style={{ fontWeight: 600, color: '#1e293b', lineHeight: 1.3, whiteSpace: 'normal', wordBreak: 'break-word' }}>{it.description}</div>
                 {it.item_code && <div style={{ fontSize: 7, color: '#94a3b8', fontFamily: 'monospace' }}>{it.item_code}</div>}
               </td>
               <td style={{ textAlign: 'center', color: '#475569', fontSize: 8 }}>{it.unit || '—'}</td>
