@@ -1790,4 +1790,42 @@ runSchemaInit('cleanup_orphaned_cert_advance_resync_2026_07', async () => {
   }
 });
 
+// ── One-time: clear orphaned advance_recovered on bills with no active cert ──
+// The 2026-07 orphan cleanup only matched bills with certified_net > 0 or
+// qs_certified_date set — bills carrying ONLY advance_recovered slipped through
+// (e.g. Residential Apartments - Yelahanka). Their deleted certifications left
+// advance_recovered > 0 behind, so every resync kept rebuilding voucher
+// recoveries from them. Clear it, then rebuild both advance tables.
+runSchemaInit('cleanup_orphaned_advance_recovered_2026_07b', async () => {
+  const result = await query(`
+    UPDATE tqs_bill_updates u
+    SET advance_recovered=0, updated_at=NOW()
+    FROM tqs_bills b
+    WHERE b.id = u.bill_id
+      AND b.is_deleted = FALSE
+      AND COALESCE(u.advance_recovered, 0) > 0
+      AND b.project_id IN (
+        'a30adb9c-3511-4149-9017-bdc6150133c0',
+        '593273cf-721f-42f1-9178-53dca3e71caa'
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM vendor_qs_certification_bills cb
+        JOIN vendor_qs_certifications c ON c.id = cb.certification_id
+        WHERE cb.bill_id = u.bill_id
+          AND c.status NOT IN ('cancelled', 'rejected')
+      )
+  `);
+  console.log(`[migration] Cleared orphaned advance_recovered on ${result.rowCount} bill(s)`);
+
+  const { rows: companies } = await query(
+    `SELECT DISTINCT company_id FROM tqs_bills WHERE is_deleted = FALSE`
+  );
+  for (const { company_id } of companies) {
+    await resyncTqsAdvancesForCompany(company_id).catch(e =>
+      console.error('[migration] tqs_advances resync failed for company', company_id, e.message));
+    await resyncAdvancesFromBills(company_id).catch(e =>
+      console.error('[migration] voucher resync failed for company', company_id, e.message));
+  }
+});
+
 module.exports = router;
