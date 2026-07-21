@@ -313,6 +313,7 @@ function RaiseBillModal({ wos, onClose, initialWoId }) {
   const [form, setForm] = useState({
     bill_date: dayjs().format('YYYY-MM-DD'),
     bill_type: 'ra',
+    invoice_number: '',
     period_from: '', period_to: '',
     description: '',
     gst_pct: 18, tds_pct: 2, retention_pct: 5,
@@ -561,9 +562,14 @@ function RaiseBillModal({ wos, onClose, initialWoId }) {
                         <option value="extra_item">Extra Item Bill</option>
                       </select>
                     </Field>
+                    <Field label="Invoice No. (Vendor's)">
+                      <input type="text" value={form.invoice_number} onChange={e => set('invoice_number', e.target.value)} placeholder="e.g. INV-2025-001" className={inp} />
+                    </Field>
                     <Field label="Bill Date">
                       <input type="date" value={form.bill_date} onChange={e => set('bill_date', e.target.value)} className={inp} />
                     </Field>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <Field label="Period From">
                       <input type="date" value={form.period_from} onChange={e => set('period_from', e.target.value)} className={inp} />
                     </Field>
@@ -1107,6 +1113,7 @@ function EditBillModal({ bill, onClose }) {
   const canEditQty = ['super_admin', 'qs_engineer'].includes(user?.role);
 
   const [f, setF] = useState({
+    invoice_number: bill.invoice_number || '',
     gst_pct: bill.gst_pct, tds_pct: bill.tds_pct, retention_pct: bill.retention_pct,
     is_igst: !!bill.is_igst, labour_cess_pct: bill.gross_amount > 0 ? +(100 * bill.labour_cess_amount / bill.gross_amount).toFixed(2) : 0,
     advance_recovery: bill.advance_recovery, material_recovery: bill.material_recovery,
@@ -1201,6 +1208,11 @@ function EditBillModal({ bill, onClose }) {
               </div>
             </div>
           )}
+          <div className="grid grid-cols-1 gap-3">
+            <Field label="Invoice No. (Vendor's)">
+              <input type="text" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none" value={f.invoice_number} onChange={e => set('invoice_number', e.target.value)} placeholder="e.g. INV-2025-001" />
+            </Field>
+          </div>
           <div className="grid grid-cols-3 gap-3">
             <Field label="GST %"><input type="number" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none" value={f.gst_pct} onChange={e => set('gst_pct', e.target.value)} /></Field>
             <Field label="TDS %"><input type="number" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none" value={f.tds_pct} onChange={e => set('tds_pct', e.target.value)} /></Field>

@@ -59,7 +59,7 @@ async function pushScBillToTracker(billId, actorId) {
       ) RETURNING id
     `, [
       bill.company_id, bill.project_id, slNumber, scName,
-      woNumber, bill.bill_number, bill.bill_date, bill.description || `Subcontractor RA Bill — ${woNumber}`,
+      woNumber, bill.invoice_number || bill.bill_number, bill.bill_date, bill.description || `Subcontractor RA Bill — ${woNumber}`,
       basicAmount, bill.gst_amount || 0, bill.cgst_amount || 0, bill.sgst_amount || 0, bill.igst_amount || 0,
       totalAmount, remarks, actorId, bill.id,
     ]);

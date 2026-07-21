@@ -281,6 +281,10 @@ runSchemaInit('wotqs015_items_fix_v1', async () => {
   console.log('[fix] WOTQS015 items corrected — 62 line items inserted (Annexure-1)');
 });
 
+runSchemaInit('sc_bills_invoice_number_col', async () => {
+  await query(`ALTER TABLE sc_bills ADD COLUMN IF NOT EXISTS invoice_number TEXT`);
+});
+
 router.use(authenticate);
 const CID  = req => req.user.company_id;
 const ADMIN = ['super_admin','admin'];
@@ -1139,7 +1143,7 @@ router.post('/bills', authorize(...PLANNER), async (req, res) => {
             penalty_amount, other_deductions,
             is_igst, labour_cess_pct,
             retention_release_amount, credit_note_amount,
-            items, attachments } = req.body;
+            items, attachments, invoice_number } = req.body;
     if (!wo_id || !gross_amount) return res.status(400).json({ error: 'wo_id and gross_amount required' });
 
     // ── Load WO ──────────────────────────────────────────────────────────────
@@ -1228,13 +1232,13 @@ router.post('/bills', authorize(...PLANNER), async (req, res) => {
             tds_pct,tds_amount,retention_pct,retention_amount,
             advance_recovery,material_recovery,penalty_amount,other_deductions,
             labour_cess_amount,retention_release_amount,credit_note_amount,
-            net_payable,attachments,created_by)
+            net_payable,attachments,created_by,invoice_number)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
                  $11,$12,$13,$14,$15,$16,$17,
                  $18,$19,$20,$21,
                  $22,$23,$24,$25,
                  $26,$27,$28,
-                 $29,$30,$31)
+                 $29,$30,$31,$32)
          RETURNING *`,
         [CID(req), woRow.project_id, wo_id, woRow.sc_id, bill_number,
          bill_date || new Date().toISOString().slice(0,10), bill_type || 'ra',
@@ -1245,7 +1249,7 @@ router.post('/bills', authorize(...PLANNER), async (req, res) => {
          retention_pct||woRow.retention_pct||5, ret,
          adv, mat, pen, oth,
          labourCess, retRelease, creditNote,
-         net, JSON.stringify(attachments||[]), req.user.id]);
+         net, JSON.stringify(attachments||[]), req.user.id, invoice_number||null]);
 
       const billId = r.rows[0].id;
 
@@ -1317,7 +1321,7 @@ router.patch('/bills/:id', authorize(...PLANNER), async (req, res) => {
     }
 
     const {
-      bill_date, period_from, period_to, description,
+      bill_date, period_from, period_to, description, invoice_number,
       gst_pct, tds_pct, retention_pct, is_igst, labour_cess_pct,
       advance_recovery, material_recovery, penalty_amount, other_deductions,
       retention_release_amount, credit_note_amount,
@@ -1382,19 +1386,26 @@ router.patch('/bills/:id', authorize(...PLANNER), async (req, res) => {
            tds_pct=$12, tds_amount=$13, retention_pct=$14, retention_amount=$15,
            advance_recovery=$16, material_recovery=$17, penalty_amount=$18, other_deductions=$19,
            labour_cess_amount=$20, retention_release_amount=$21, credit_note_amount=$22,
-           net_payable=$23, updated_at=NOW()
-         WHERE id=$24 RETURNING *`,
+           invoice_number=$23, net_payable=$24, updated_at=NOW()
+         WHERE id=$25 RETURNING *`,
         [bill_date || bill.bill_date, period_from ?? bill.period_from, period_to ?? bill.period_to, description ?? bill.description,
          grossAmt,
          effectiveGstPct, gst2, isIgst, cgst2, sgst2, igst2,
          effectiveTdsPct, tds2, effectiveRetPct, ret2,
          adv, mat, pen, oth,
          labourCess2, retRelease, creditNote,
+         invoice_number !== undefined ? (invoice_number || null) : bill.invoice_number,
          net2, req.params.id]
       );
       await recalculateWOConsumption(bill.wo_id, client);
       return r.rows[0];
     });
+
+    // Sync invoice_number change to Bill Tracker if this SC bill has a tqs_bills row
+    await query(
+      `UPDATE tqs_bills SET inv_number=COALESCE($1, inv_number) WHERE sc_bill_id=$2`,
+      [updated.invoice_number, req.params.id]
+    );
 
     res.json({ data: updated });
   } catch (e) { res.status(500).json({ error: e.message }); }
