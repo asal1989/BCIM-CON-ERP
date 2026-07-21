@@ -5,7 +5,7 @@ const { authenticate } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
 const { sendMail } = require('../services/mail.service');
-const { resyncAdvancesFromBills } = require('./procurement-advance.routes');
+const { resyncAdvancesFromBills, resyncTqsAdvancesForCompany } = require('./procurement-advance.routes');
 
 router.use(authenticate);
 
@@ -1433,6 +1433,15 @@ router.patch('/:id/status', async (req, res) => {
     if (!result) return res.status(404).json({ error: 'Certification not found' });
     res.json({ data: result });
 
+    // On cancel/reject: tqs_bill_updates.advance_recovered was cleared inside the
+    // transaction — resync both advance tables so recoveries reflect remaining bills.
+    if (status === 'cancelled' || status === 'rejected') {
+      resyncTqsAdvancesForCompany(req.user.company_id).catch(e =>
+        console.error('[cert cancel/reject] tqs_advances resync failed:', e.message));
+      resyncAdvancesFromBills(req.user.company_id).catch(e =>
+        console.error('[cert cancel/reject] voucher resync failed:', e.message));
+    }
+
     if (status === 'accounts') {
       // Best-effort: let the approver + Derek know the Payment Certificate is
       // ready — never blocks/fails the request if mail isn't configured.
@@ -1709,6 +1718,13 @@ router.delete('/:id', async (req, res) => {
     });
 
     res.json({ message: `Certification ${cert.cert_number} deleted successfully` });
+
+    // Resync advance recoveries — tqs_bill_updates.advance_recovered was cleared
+    // inside the transaction, so both tables now rebuild correctly from remaining bills.
+    resyncTqsAdvancesForCompany(req.user.company_id).catch(e =>
+      console.error('[cert delete] tqs_advances resync failed:', e.message));
+    resyncAdvancesFromBills(req.user.company_id).catch(e =>
+      console.error('[cert delete] voucher resync failed:', e.message));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1719,7 +1735,7 @@ router.delete('/:id', async (req, res) => {
 // certified_net > 0 or qs_certified_date set in tqs_bill_updates but is NOT
 // linked to any active (non-cancelled, non-rejected) certification.
 runSchemaInit('cleanup_orphaned_cert_data_2026_07', async () => {
-  // 1. Clear stale tqs_bill_updates rows
+  // 1. Clear stale tqs_bill_updates rows (advance_recovered included)
   await query(`
     UPDATE tqs_bill_updates u
     SET certified_net=0, balance_to_pay=0,
@@ -1751,6 +1767,24 @@ runSchemaInit('cleanup_orphaned_cert_data_2026_07', async () => {
           AND c.status NOT IN ('cancelled', 'rejected')
       )
   `);
+});
+
+// ── One-time: resync advance recovered amounts after orphaned-cert cleanup ──
+// The previous migration cleared advance_recovered on orphaned bills.
+// This rebuilds both tqs_advances and tqs_advance_vouchers from remaining bills.
+// ── One-time: resync advance recovered amounts after orphaned-cert cleanup ──
+// The previous migration cleared advance_recovered on orphaned bills.
+// This rebuilds both tqs_advances and tqs_advance_vouchers from remaining bills.
+runSchemaInit('cleanup_orphaned_cert_advance_resync_2026_07', async () => {
+  const { rows: companies } = await query(
+    `SELECT DISTINCT company_id FROM tqs_bills WHERE is_deleted = FALSE`
+  );
+  for (const { company_id } of companies) {
+    await resyncTqsAdvancesForCompany(company_id).catch(e =>
+      console.error('[migration] tqs_advances resync failed for company', company_id, e.message));
+    await resyncAdvancesFromBills(company_id).catch(e =>
+      console.error('[migration] voucher resync failed for company', company_id, e.message));
+  }
 });
 
 module.exports = router;

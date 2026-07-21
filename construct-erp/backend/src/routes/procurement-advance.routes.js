@@ -968,5 +968,46 @@ router.post('/resync-from-bills', async (req, res) => {
   }
 });
 
+// Resets tqs_advances.recovered_amount to 0 for the company, then re-applies
+// from all active bills' advance_recovered amounts — mirrors resyncAdvancesFromBills
+// but for the older tqs_advances table (direct-increment path used by QS cert).
+async function resyncTqsAdvancesForCompany(company_id) {
+  await query(
+    `UPDATE tqs_advances SET recovered_amount = 0, updated_at = NOW() WHERE company_id = $1`,
+    [company_id]
+  );
+
+  const billsRes = await query(
+    `SELECT b.vendor_id, b.vendor_name, u.advance_recovered
+     FROM tqs_bills b
+     JOIN tqs_bill_updates u ON u.bill_id = b.id
+     WHERE b.company_id = $1 AND b.is_deleted = FALSE AND u.advance_recovered > 0
+     ORDER BY b.created_at ASC`,
+    [company_id]
+  );
+
+  for (const bill of billsRes.rows) {
+    let remaining = parseFloat(bill.advance_recovered || 0);
+    if (remaining <= 0) continue;
+    const advances = await query(
+      `SELECT id, amount, recovered_amount
+       FROM tqs_advances
+       WHERE company_id = $1
+         AND (vendor_id = $2 OR vendor_name ILIKE $3)
+         AND amount > recovered_amount
+       ORDER BY payment_date NULLS LAST, created_at`,
+      [company_id, bill.vendor_id, `%${bill.vendor_name}%`]
+    );
+    for (const adv of advances.rows) {
+      if (remaining <= 0) break;
+      const open = Math.max(0, parseFloat(adv.amount) - parseFloat(adv.recovered_amount));
+      const apply = Math.min(open, remaining);
+      await query(`UPDATE tqs_advances SET recovered_amount = recovered_amount + $1 WHERE id = $2`, [apply, adv.id]);
+      remaining -= apply;
+    }
+  }
+}
+
 module.exports = router;
 module.exports.resyncAdvancesFromBills = resyncAdvancesFromBills;
+module.exports.resyncTqsAdvancesForCompany = resyncTqsAdvancesForCompany;
