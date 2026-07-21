@@ -146,6 +146,22 @@ async function ensureTable() {
 
 runSchemaInit('tqs_advance_vouchers', ensureTable);
 
+// One-time fix: recalculate status for vouchers where recovered >= paid_amount
+// but are still incorrectly set to 'partial' (old logic compared against advance_value).
+runSchemaInit('fix_advance_status_vs_paid_2026_07', async () => {
+  const result = await query(`
+    UPDATE tqs_advance_vouchers
+    SET status     = 'recovered',
+        updated_at = NOW()
+    WHERE is_deleted = FALSE
+      AND status = 'partial'
+      AND paid_amount > 0
+      AND recovered_amount >= paid_amount
+  `);
+  if (result.rowCount > 0)
+    console.log(`[fix] Corrected ${result.rowCount} advance voucher(s) from partial → recovered`);
+});
+
 // ── Auto-number ───────────────────────────────────────────────────────────────
 async function nextSlNumber() {
   const yr = new Date().getFullYear();
