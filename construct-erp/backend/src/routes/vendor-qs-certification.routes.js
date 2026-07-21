@@ -1401,16 +1401,31 @@ router.patch('/:id/status', async (req, res) => {
       );
       if (!rows.length) return null;
 
-      // Rejecting frees up the linked bills — send them back to the QS stage
-      // (they were moved to 'procurement' at certification time) so QS can
-      // fix and re-certify. The "not already certified" checks elsewhere
-      // already exclude 'rejected' certs, so re-certifying just works.
-      if (status === 'rejected') {
-        await client.query(`
-          UPDATE tqs_bills SET workflow_status='qs', updated_at=NOW()
-          WHERE id IN (SELECT bill_id FROM vendor_qs_certification_bills WHERE certification_id=$1)
-            AND workflow_status NOT IN ('paid')
-        `, [req.params.id]);
+      // Rejecting or cancelling frees up the linked bills — send them back to
+      // the QS stage and clear their certification data in tqs_bill_updates.
+      if (status === 'rejected' || status === 'cancelled') {
+        const linkedBills = await client.query(
+          `SELECT bill_id FROM vendor_qs_certification_bills WHERE certification_id=$1`,
+          [req.params.id]
+        );
+        for (const { bill_id } of linkedBills.rows) {
+          await client.query(`
+            UPDATE tqs_bills SET workflow_status='qs', updated_at=NOW()
+            WHERE id=$1 AND workflow_status NOT IN ('paid')
+          `, [bill_id]);
+          await client.query(`
+            UPDATE tqs_bill_updates SET
+              certified_net=0, balance_to_pay=0,
+              qs_certified_date=NULL, qs_received_date=NULL,
+              qs_gross=0, qs_tax=NULL, qs_total=NULL,
+              ra_sequence=NULL, ra_bill_number=NULL,
+              advance_recovered=0, tds_deduction=0, retention_money=0,
+              other_deductions=0, total_deductions=0,
+              pc_number=NULL, pc_generated_at=NULL,
+              handed_over_accounts_date=NULL, updated_at=NOW()
+            WHERE bill_id=$1
+          `, [bill_id]);
+        }
       }
       return rows[0];
     });
@@ -1647,11 +1662,52 @@ router.delete('/:id', async (req, res) => {
     if (cert.status === 'paid') {
       return res.status(400).json({ error: 'Cannot delete a paid certification. Cancel it first.' });
     }
-    // Delete — child tables (items, bills) are ON DELETE CASCADE
-    await query(
-      `DELETE FROM vendor_qs_certifications WHERE id=$1 AND company_id=$2`,
-      [req.params.id, req.user.company_id]
-    );
+
+    await withTransaction(async (client) => {
+      // Capture linked bill IDs before cascade removes them
+      const linkedBills = await client.query(
+        `SELECT bill_id FROM vendor_qs_certification_bills WHERE certification_id=$1`,
+        [req.params.id]
+      );
+
+      // Delete cert — ON DELETE CASCADE removes certification_bills and certification_items
+      await client.query(
+        `DELETE FROM vendor_qs_certifications WHERE id=$1 AND company_id=$2`,
+        [req.params.id, req.user.company_id]
+      );
+
+      // For each bill, check if another active cert still covers it.
+      // If not, clear all certification data and send it back to QS.
+      for (const { bill_id } of linkedBills.rows) {
+        const remaining = await client.query(
+          `SELECT 1 FROM vendor_qs_certification_bills cb
+           JOIN vendor_qs_certifications c ON c.id = cb.certification_id
+           WHERE cb.bill_id=$1 AND c.status NOT IN ('cancelled','rejected')
+           LIMIT 1`,
+          [bill_id]
+        );
+        if (remaining.rows.length === 0) {
+          await client.query(`
+            UPDATE tqs_bill_updates SET
+              certified_net=0, balance_to_pay=0,
+              qs_certified_date=NULL, qs_received_date=NULL,
+              qs_gross=0, qs_tax=NULL, qs_total=NULL,
+              ra_sequence=NULL, ra_bill_number=NULL,
+              advance_recovered=0, tds_deduction=0, retention_money=0,
+              other_deductions=0, total_deductions=0,
+              pc_number=NULL, pc_generated_at=NULL,
+              handed_over_accounts_date=NULL, updated_at=NOW()
+            WHERE bill_id=$1
+          `, [bill_id]);
+
+          await client.query(`
+            UPDATE tqs_bills SET workflow_status='qs', updated_at=NOW()
+            WHERE id=$1 AND workflow_status NOT IN ('paid')
+          `, [bill_id]);
+        }
+      }
+    });
+
     res.json({ message: `Certification ${cert.cert_number} deleted successfully` });
   } catch (err) {
     res.status(500).json({ error: err.message });
