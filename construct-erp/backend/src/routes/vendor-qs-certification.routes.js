@@ -471,7 +471,7 @@ router.post('/summary-items', async (req, res) => {
     }
 
     const billsRes = await query(`
-      SELECT id, inv_number, sl_number, bill_type, gst_amount, total_amount,
+      SELECT id, inv_number, sl_number, bill_type, gst_amount, total_amount, basic_amount,
              transport_charges, transport_gst_amt, other_charges
       FROM tqs_bills
       WHERE id = ANY($1::uuid[])
@@ -560,6 +560,28 @@ router.post('/summary-items', async (req, res) => {
       });
     });
     const items = Array.from(grouped.values());
+
+    // Bills entered as a lump sum (common for WO bills) never got rows in
+    // tqs_bill_line_items — without a fallback the abstract sheet comes out
+    // completely empty for them even though the bill is otherwise valid.
+    // Synthesize one line item from the bill's own basic_amount so QS can
+    // still certify it.
+    const billIdsWithLineItems = new Set(rows.map(r => r.bill_id));
+    for (const b of billsRes.rows) {
+      if (billIdsWithLineItems.has(b.id)) continue;
+      const basicAmt = n(b.basic_amount) || Math.max(0, n(b.total_amount) - n(b.gst_amount) - n(b.transport_charges) - n(b.other_charges));
+      if (basicAmt <= 0) continue;
+      items.push({
+        bill_id: b.id, bill_ids: [b.id], bill_line_item_id: null, bill_line_item_ids: [],
+        source_inv_number: b.inv_number || b.sl_number,
+        item_ref_id: null, description: 'Bill Amount (no itemized breakup on this invoice)', unit: 'LS',
+        order_qty: 1, order_rate: round2(basicAmt),
+        inv_prev_qty: 0, inv_pres_qty: 1, qs_prev_qty: 0, qs_pres_qty: 1,
+        tax_amount: round2(n(b.gst_amount)),
+        amount: round2(basicAmt),
+        balance_qty: 0, remarks: '',
+      });
+    }
 
     // Append synthetic line items for header-level transport and other charges
     // (these fields live on tqs_bills, not in tqs_bill_line_items)
