@@ -1401,11 +1401,19 @@ router.patch('/bills/:id', authorize(...PLANNER), async (req, res) => {
       return r.rows[0];
     });
 
-    // Sync invoice_number change to Bill Tracker if this SC bill has a tqs_bills row
-    await query(
-      `UPDATE tqs_bills SET inv_number=COALESCE($1, inv_number) WHERE sc_bill_id=$2`,
-      [updated.invoice_number, req.params.id]
-    );
+    // Sync invoice_number to tqs_bills and its linked QS cert snapshots
+    if (updated.invoice_number) {
+      await query(
+        `UPDATE tqs_bills SET inv_number=$1 WHERE sc_bill_id=$2`,
+        [updated.invoice_number, req.params.id]
+      );
+      await query(`
+        UPDATE vendor_qs_certification_bills cb
+        SET inv_number = $1
+        FROM tqs_bills tb
+        WHERE cb.bill_id = tb.id AND tb.sc_bill_id = $2
+      `, [updated.invoice_number, req.params.id]);
+    }
 
     res.json({ data: updated });
   } catch (e) { res.status(500).json({ error: e.message }); }
