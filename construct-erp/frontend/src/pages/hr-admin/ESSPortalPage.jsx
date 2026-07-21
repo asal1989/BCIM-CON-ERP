@@ -1373,7 +1373,7 @@ function AttendanceTab({ leaveTypes }) {
 
   const STATUS_STYLE = {
     P:  { bg:'rgba(16,185,129,.12)',  fg:'#059669', bdr:'rgba(16,185,129,.3)',   label:'Present'  },
-    PL: { bg:'rgba(245,158,11,.13)',  fg:'#B45309', bdr:'rgba(245,158,11,.35)',  label:'Late'     },
+    PL: { bg:'rgba(59,130,246,.13)',   fg:'#2563EB', bdr:'rgba(59,130,246,.32)',  label:'Late'     },
     A:  { bg:'rgba(239,68,68,.13)',   fg:'#DC2626', bdr:'rgba(239,68,68,.3)',    label:'Absent'   },
     HD: { bg:'rgba(251,146,60,.13)',  fg:'#C2410C', bdr:'rgba(251,146,60,.3)',   label:'Half Day' },
     L:  { bg:'rgba(139,92,246,.1)',   fg:'#7C3AED', bdr:'rgba(139,92,246,.25)', label:'Leave'    },
@@ -1474,7 +1474,7 @@ function AttendanceTab({ leaveTypes }) {
           <div style={{ padding:'16px 18px', borderBottom:`1px solid ${T.bdr}`, display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:10 }}>
             <div style={{ fontSize:14,fontWeight:700,color:T.t1 }}>{MONTH_NAMES[calMonth]} {calYear} — Attendance</div>
             <div style={{ display:'flex',gap:'6px 12px',flexWrap:'wrap' }}>
-              {[['P','Present','#059669'],['PL','Late','#B45309'],['A','Absent','#DC2626'],['HD','Half Day','#C2410C'],['L','Leave','#7C3AED'],['H','Holiday','#4338CA'],['WO','Week Off','#94A3B8']].map(([code,name,color])=>(
+              {[['P','Present','#059669'],['PL','Late','#2563EB'],['A','Absent','#DC2626'],['HD','Half Day','#C2410C'],['L','Leave','#7C3AED'],['H','Holiday','#4338CA'],['WO','Week Off','#94A3B8']].map(([code,name,color])=>(
                 <span key={code} style={{ display:'flex',alignItems:'center',gap:4,fontSize:10.5,color:'#64748B' }}>
                   <span style={{ width:8,height:8,borderRadius:2,background:color,display:'inline-block',flexShrink:0 }}/>{name}
                 </span>
@@ -1519,7 +1519,7 @@ function AttendanceTab({ leaveTypes }) {
                     <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between' }}>
                       <span style={{ fontSize:11.5,fontWeight:700,color:ss.fg,lineHeight:1 }}>{day}</span>
                       {isToday && <span style={{ fontSize:6.5,fontWeight:800,background:'rgba(255,255,255,.25)',color:'#fff',padding:'1px 4px',borderRadius:3,letterSpacing:'.04em' }}>NOW</span>}
-                      {isLate && !isToday && <span style={{ fontSize:6,fontWeight:800,background:'rgba(180,83,9,.15)',color:'#B45309',padding:'1px 4px',borderRadius:3,letterSpacing:'.03em' }}>LATE</span>}
+                      {isLate && !isToday && <span style={{ fontSize:6,fontWeight:800,background:'rgba(37,99,235,.12)',color:'#2563EB',padding:'1px 4px',borderRadius:3,letterSpacing:'.03em' }}>LATE</span>}
                     </div>
                     {code && <span style={{ fontSize:8.5,fontWeight:700,color:isToday?'rgba(255,255,255,.9)':ss.fg }}>{isLate?'P':code}</span>}
                     {rec?.inTime && (
@@ -1528,7 +1528,7 @@ function AttendanceTab({ leaveTypes }) {
                       </span>
                     )}
                     {isLate && !isToday && (
-                      <span style={{ fontSize:7,color:'#B45309',fontWeight:700 }}>+{rec.lateMin}m</span>
+                      <span style={{ fontSize:7,color:'#2563EB',fontWeight:700 }}>+{rec.lateMin}m</span>
                     )}
                     {isNoPunch && (
                       <span style={{ fontSize:7,color:'#DC2626',fontWeight:600,marginTop:'auto',opacity:.75 }}>No punch</span>
