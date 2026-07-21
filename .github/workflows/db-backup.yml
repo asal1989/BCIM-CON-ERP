@@ -38,6 +38,9 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update
           sudo apt-get install -y postgresql-client-18
+          # ubuntu-latest already has a v16 pg_dump earlier on PATH — point PATH
+          # at the versioned v18 bin dir first so plain `pg_dump` resolves to it.
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
 
       - name: Dump database
         env:
