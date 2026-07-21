@@ -682,6 +682,71 @@ router.patch('/:id/issue', async (req, res) => {
   }
 });
 
+// ── PATCH /tqs/advances/:id/paid-amount — correct the disbursed amount on an
+// already-issued advance (e.g. fixing a data-entry mistake), without going
+// through the approval gate again. Keeps status and the GL entry in sync.
+router.patch('/:id/paid-amount', async (req, res) => {
+  try {
+    const { company_id, id: user_id } = req.user;
+    const { id } = req.params;
+    const paidAmt = parseFloat(req.body.paid_amount);
+    const { pay_date } = req.body;
+    if (!(paidAmt >= 0)) {
+      return res.status(400).json({ success: false, message: 'paid_amount must be a non-negative number' });
+    }
+
+    const cur = await query(
+      `SELECT voucher_number, sl_number, vendor_name, project_id, recovered_amount, status
+       FROM tqs_advance_vouchers WHERE id=$1 AND company_id=$2 AND is_deleted=FALSE`,
+      [id, company_id]
+    );
+    if (!cur.rows.length) return res.status(404).json({ success: false, message: 'Not found' });
+    const v = cur.rows[0];
+    if (!['issued', 'partial', 'recovered'].includes(v.status)) {
+      return res.status(400).json({ success: false, message: 'This advance has not been issued yet — use Issue Payment first.' });
+    }
+    const recovered = parseFloat(v.recovered_amount || 0);
+    if (paidAmt < recovered) {
+      return res.status(400).json({ success: false, message: `Paid amount cannot be less than the ₹${recovered.toLocaleString('en-IN')} already recovered against it.` });
+    }
+
+    await withTransaction(async (client) => {
+      await client.query(
+        `UPDATE tqs_advance_vouchers SET paid_amount=$1, pay_date=COALESCE($2, pay_date), updated_at=NOW() WHERE id=$3`,
+        [paidAmt, pay_date || null, id]
+      );
+      await syncVoucherStatus(client, id);
+
+      // Re-post the GL entry so the books reflect the corrected amount.
+      const ref = v.voucher_number || v.sl_number;
+      await client.query(
+        `DELETE FROM journal_entries WHERE company_id=$1 AND source='auto_tqs_advance' AND reference=$2`,
+        [company_id, ref]
+      );
+      if (paidAmt > 0) {
+        await postAutoJournal(client, {
+          companyId: company_id,
+          userId: user_id,
+          entryDate: pay_date || new Date().toISOString().slice(0, 10),
+          projectId: v.project_id || null,
+          reference: ref,
+          narration: `Advance paid — ${v.vendor_name || ''} (${ref}) [corrected]`,
+          source: 'auto_tqs_advance',
+          lines: [
+            { code: '1150', debit: paidAmt, description: `Advance to ${v.vendor_name || 'vendor'} — ${ref}` },
+            { code: '1010', credit: paidAmt, description: `Advance paid — ${ref}` },
+          ],
+        });
+      }
+    });
+
+    const updated = await query(`SELECT * FROM tqs_advance_vouchers WHERE id=$1`, [id]);
+    res.json({ success: true, data: updated.rows[0] });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // ── POST /tqs/advances/:id/recover — record a recovery ───────────────────────
 router.post('/:id/recover', async (req, res) => {
   try {

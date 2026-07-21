@@ -10,7 +10,7 @@ import toast from 'react-hot-toast';
 import {
   IndianRupee, Plus, Search, FileText, CheckCircle2, Clock,
   Wallet, X, ChevronRight, Trash2, Upload, AlertTriangle,
-  TrendingDown, RotateCcw, Filter, RefreshCw, Download,
+  TrendingDown, RotateCcw, Filter, RefreshCw, Download, Pencil,
 } from 'lucide-react';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -654,6 +654,60 @@ function ImportExcelModal({ onClose, projects, defaultProjectId }) {
   );
 }
 
+// ── Edit Paid Amount Modal — correct a mistaken disbursed amount on an
+// already-issued advance, without re-running the approval/issue flow. ───────
+function EditPaidAmountModal({ voucher, onClose }) {
+  const qc = useQueryClient();
+  const [paidAmount, setPaidAmount] = useState(String(voucher.paid_amount ?? ''));
+  const [payDate, setPayDate] = useState(voucher.pay_date ? voucher.pay_date.slice(0, 10) : '');
+
+  const mutation = useMutation({
+    mutationFn: () => procurementAdvanceAPI.editPaidAmount(voucher.id, {
+      paid_amount: paidAmount, pay_date: payDate || undefined,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['procurement-advances'] });
+      qc.invalidateQueries({ queryKey: ['procurement-advances-summary'] });
+      toast.success('Paid amount updated');
+      onClose();
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Failed to update'),
+  });
+
+  const recovered = Number(voucher.recovered_amount || 0);
+
+  return (
+    <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-bold text-gray-900">Edit Paid Amount</h3>
+          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X size={16} /></button>
+        </div>
+        <p className="text-xs text-gray-500 mb-3">{voucher.voucher_number || voucher.sl_number} · {voucher.vendor_name}</p>
+        <Lbl req>Paid Amount (₹)</Lbl>
+        <input type="number" autoFocus className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-1 outline-none focus:ring-2 focus:ring-indigo-300"
+          value={paidAmount} onChange={e => setPaidAmount(e.target.value)} min="0" step="0.01" />
+        {recovered > 0 && (
+          <p className="text-[11px] text-amber-600 mb-3">₹{inr(recovered)} already recovered — cannot set below this.</p>
+        )}
+        <Lbl>Pay Date</Lbl>
+        <input type="date" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-4 outline-none focus:ring-2 focus:ring-indigo-300"
+          value={payDate} onChange={e => setPayDate(e.target.value)} />
+        <div className="flex gap-2 justify-end">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100">Cancel</button>
+          <button
+            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending || paidAmount === '' || Number(paidAmount) < 0}
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {mutation.isPending ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function ProcurementAdvanceTrackerPage() {
   const navigate = useNavigate();
@@ -672,6 +726,7 @@ export default function ProcurementAdvanceTrackerPage() {
   const [searchInput, setSearchInput] = useState(search);
   const [showModal,   setShowModal]   = useState(false);
   const [showImport,  setShowImport]  = useState(false);
+  const [editingPaid, setEditingPaid] = useState(null);
 
   // Debounce: update URL param (and trigger query) 350ms after user stops typing.
   useEffect(() => {
@@ -997,7 +1052,15 @@ export default function ProcurementAdvanceTrackerPage() {
                       </td>
                       <td className="px-3 py-2.5"><StatusBadge status={v.status} /></td>
                       <td className="px-3 py-2.5 font-medium text-emerald-700">
-                        {v.paid_amount > 0 ? `₹${inr(v.paid_amount)}` : '—'}
+                        <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                          <span>{v.paid_amount > 0 ? `₹${inr(v.paid_amount)}` : '—'}</span>
+                          {['issued', 'partial', 'recovered'].includes(v.status) && (
+                            <button onClick={() => setEditingPaid(v)} title="Edit paid amount"
+                              className="p-0.5 rounded text-gray-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
+                              <Pencil size={12} />
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2.5 text-gray-500">{fmt(v.pay_date)}</td>
                       <td className="px-3 py-2.5">
@@ -1029,6 +1092,7 @@ export default function ProcurementAdvanceTrackerPage() {
 
       {showModal  && <NewAdvanceModal  onClose={() => setShowModal(false)}  projects={projects} defaultProjectId={projectId} />}
       {showImport && <ImportExcelModal onClose={() => setShowImport(false)} projects={projects} defaultProjectId={projectId} />}
+      {editingPaid && <EditPaidAmountModal voucher={editingPaid} onClose={() => setEditingPaid(null)} />}
     </div>
   );
 }

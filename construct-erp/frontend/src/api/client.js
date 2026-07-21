@@ -1828,6 +1828,7 @@ export const procurementAdvanceAPI = {
   update:        (id, data) => api.put(`/procurement/advances/${id}`, data),
   delete:        (id)       => api.delete(`/procurement/advances/${id}`),
   issue:         (id, data) => api.patch(`/procurement/advances/${id}/issue`, data),
+  editPaidAmount: (id, data) => api.patch(`/procurement/advances/${id}/paid-amount`, data),
   recover:       (id, data) => api.post(`/procurement/advances/${id}/recover`, data),
   approveProcurement: (id)       => api.patch(`/procurement/advances/${id}/approve-procurement`),
   approveMD:          (id)       => api.patch(`/procurement/advances/${id}/approve-md`),
