@@ -11,6 +11,7 @@ const {
   notifyScNmrApproved,
   notifyRetentionApproved, notifyRetentionRejected,
 } = require('../services/notif.helper');
+const { scBillScopeForRole } = require('../constants/scBillApprovalStages');
 
 // GL mapping for stores petty cash auto-JV (mirrors stores-petty-cash.routes.js)
 const SPC_CATEGORY_GL = {
@@ -111,26 +112,8 @@ const MRS_STAGE_MAP = {
 // Which SC bill stages can this role act on, AND which current_stage values belong to them?
 // stageNames: the sc_bills.current_stage label(s) this role owns.
 // Empty stageNames = admin/super_admin: see all stages, no current_stage filter.
-function scBillScopeForRole(role) {
-  const map = {
-    site_engineer:       { statuses: ['submitted'],                stageNames: ['qs_engineer','site_engineer'] },
-    qs_engineer:         { statuses: ['submitted','under_review'], stageNames: ['qs_engineer'] },
-    project_manager:     { statuses: ['under_review'],            stageNames: ['project_head','project_manager'] },
-    project_head:        { statuses: ['under_review'],            stageNames: ['project_head','project_manager'] },
-    accounts:            { statuses: ['under_review'],            stageNames: ['accounts'] },
-    management:          { statuses: ['under_review'],            stageNames: ['project_head','management'] },
-    management_director: { statuses: ['under_review'],            stageNames: ['project_head','management','management_director'] },
-    director:            { statuses: ['under_review'],            stageNames: ['project_head','management','director'] },
-    project_director:    { statuses: ['under_review'],            stageNames: ['project_head','management','project_director'] },
-    managing_director:   { statuses: ['under_review'],            stageNames: ['managing_director','md'] },
-    md:                  { statuses: ['under_review'],            stageNames: ['managing_director','md'] },
-    ceo:                 { statuses: ['under_review'],            stageNames: ['managing_director','md','ceo'] },
-    cfo:                 { statuses: ['under_review'],            stageNames: ['managing_director','cfo'] },
-    admin:               { statuses: ['submitted','under_review'], stageNames: [] },
-    super_admin:         { statuses: ['submitted','under_review'], stageNames: [] },
-  };
-  return map[role] || { statuses: [], stageNames: [] };
-}
+// (imported from ../constants/scBillApprovalStages — shared with sc.routes.js so the
+// "who can see it" and "who can act on it" rules can never drift apart)
 
 // ════════════════════════════════════════════════════════════════════════════
 // GET /api/v1/approvals/pending

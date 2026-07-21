@@ -12,6 +12,19 @@ const { notifyScBillSubmitted, notifyScWoSubmitted } = require('../services/noti
 const { runSchemaInit } = require('../utils/schemaInit');
 const { BOQ_COST_HEADS } = require('../constants/boqCostHeads');
 const { uploadToOneDrive, isConfigured } = require('../services/onedrive.service');
+const { scBillScopeForRole } = require('../constants/scBillApprovalStages');
+
+// Does this user's role own the bill's current approval stage? admin/super_admin
+// always may act; everyone else must actually be the assigned stage owner —
+// without this, any role in the approve/query/reject authorize() list (e.g. the
+// MD) could act on a bill still sitting at an earlier stage (e.g. QS), silently
+// skipping the intended reviewer.
+function userOwnsBillStage(req, bill) {
+  const role = String(req.user.role || '').toLowerCase();
+  if (['super_admin', 'admin'].includes(role)) return true;
+  const scope = scBillScopeForRole(role);
+  return scope.stageNames.includes(bill.current_stage);
+}
 
 // ── Multer storage for SC bill file attachments ────────────────────────────
 const scBillStorage = multer.diskStorage({
@@ -1468,6 +1481,8 @@ router.patch('/bills/:id/approve', authorize('super_admin','admin','project_mana
     const b = bill.rows[0];
     if (!['submitted','under_review'].includes(b.status))
       return res.status(400).json({ error: 'Bill is not in an approvable state' });
+    if (!userOwnsBillStage(req, b))
+      return res.status(403).json({ error: `This bill is awaiting the ${(b.current_stage||'').replace(/_/g,' ')} approver — you cannot act on it at this stage.` });
 
     // Compute next stage from settings (server-authoritative — never trust client)
     const stages   = await getApprovalStages(CID(req));
@@ -1525,6 +1540,10 @@ router.patch('/bills/:id/query', authorize('super_admin','admin','project_manage
   try {
     const { comments } = req.body;
     if (!comments?.trim()) return res.status(400).json({ error: 'Query remarks are required' });
+    const existing = await query(`SELECT * FROM sc_bills WHERE id=$1 AND company_id=$2`, [req.params.id, CID(req)]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'Bill not found' });
+    if (!userOwnsBillStage(req, existing.rows[0]))
+      return res.status(403).json({ error: `This bill is awaiting the ${(existing.rows[0].current_stage||'').replace(/_/g,' ')} approver — you cannot act on it at this stage.` });
     const r = await query(
       `UPDATE sc_bills
           SET status='queried', query_remarks=$1, updated_at=NOW()
@@ -1544,6 +1563,10 @@ router.patch('/bills/:id/query', authorize('super_admin','admin','project_manage
 router.patch('/bills/:id/reject', authorize('super_admin','admin','project_manager','qs_engineer','accounts','project_head','managing_director'), async (req, res) => {
   try {
     const { comments } = req.body;
+    const existing = await query(`SELECT * FROM sc_bills WHERE id=$1 AND company_id=$2`, [req.params.id, CID(req)]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'Bill not found' });
+    if (!userOwnsBillStage(req, existing.rows[0]))
+      return res.status(403).json({ error: `This bill is awaiting the ${(existing.rows[0].current_stage||'').replace(/_/g,' ')} approver — you cannot act on it at this stage.` });
     const result = await withTransaction(async (client) => {
       const r = await client.query(
         `UPDATE sc_bills
