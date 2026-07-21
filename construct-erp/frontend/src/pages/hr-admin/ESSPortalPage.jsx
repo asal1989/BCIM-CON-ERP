@@ -2633,18 +2633,22 @@ function EngageCard({ post }) {
 
 function EngageTab({ profile }) {
   const qc = useQueryClient();
-  const [filter, setFilter] = useState('');
-  const [mode, setMode]     = useState('post');
-  const [postBody, setPostBody]   = useState('');
+  const [filter,    setFilter]    = useState('');
+  const [mode,      setMode]      = useState('post');
+  const [sideNav,   setSideNav]   = useState('feed');
+  const [postBody,  setPostBody]  = useState('');
   const [postGroup, setPostGroup] = useState('General');
-  const [kudosTo, setKudosTo]     = useState('');
-  const [kudosBadge, setKudosBadge] = useState('Great Work');
-  const [kudosMsg, setKudosMsg]   = useState('');
-  const GCA = { background:'rgba(255,255,255,0.88)', border:'1px solid rgba(255,255,255,0.95)', borderRadius:16, boxShadow:'0 2px 16px rgba(0,0,0,.055),0 1px 3px rgba(0,0,0,.04)' };
-  const STA = { fontSize:10.5, color:'#94A3B8', textTransform:'uppercase', letterSpacing:'0.1em', fontWeight:600, marginBottom:8, display:'block' };
+  const [kudosTo,   setKudosTo]   = useState('');
+  const [kudosBadge,setKudosBadge]= useState('Great Work');
+  const [kudosMsg,  setKudosMsg]  = useState('');
 
+  /* ── queries ── */
   const feed       = useQuery({ queryKey: ['ess-engage', filter], queryFn: () => essAPI.engageFeed(filter ? { type: filter } : {}).then(unwrap) });
   const colleagues = useQuery({ queryKey: ['ess-colleagues'], queryFn: () => essAPI.colleagues().then(unwrap), enabled: mode === 'kudos' });
+  const teamQ      = useQuery({ queryKey: ['ess-team-today'],  queryFn: () => essAPI.teamToday().then(r => r.data.data) });
+
+  const birthdaysToday = teamQ.data?.birthdays_today || [];
+  const nextHoliday    = teamQ.data?.next_holiday    || null;
 
   const create = useMutation({
     mutationFn: () => mode === 'kudos'
@@ -2658,91 +2662,288 @@ function EngageTab({ profile }) {
     onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
   });
 
+  /* ── derived ── */
+  const initials  = (profile?.name || 'E').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  const hour      = new Date().getHours();
+  const greeting  = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const feedArr   = feed.data || [];
+  const pinnedArr = feedArr.filter(p => p.is_pinned);
+  const kudosCnt  = feedArr.filter(p => p.type === 'kudos').length;
+
+  /* ── design tokens ── */
+  const T = {
+    bg:'#EEF2FF', card:'#FFFFFF', bdr:'#E0E7FF',
+    t1:'#1E1B4B', t2:'#3730A3', t3:'#6366F1', t4:'#A5B4FC',
+    pri:'#2563EB', purp:'#7C3AED',
+    sh:'0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04)',
+    shm:'0 4px 16px rgba(0,0,0,.07),0 2px 6px rgba(0,0,0,.04)',
+  };
+  const Card = (ex={}) => ({ background:T.card, borderRadius:18, border:`1px solid ${T.bdr}`, boxShadow:T.sh, ...ex });
+
+  const AVATAR_COLS = ['#6366F1','#8B5CF6','#EC4899','#F59E0B','#10B981','#2563EB','#EF4444','#06B6D4'];
+
+  /* ── left sidebar nav items ── */
+  const NAV = [
+    { id:'feed',        label:'My Feed',      count:0         },
+    { id:'announce',    label:'Announcements',count:feedArr.filter(p=>p.group_name==='Company News').length||0 },
+    { id:'recognition', label:'Recognition',  count:kudosCnt  },
+    { id:'events',      label:'Events',       count:0         },
+    { id:'polls',       label:'Polls',        count:feedArr.filter(p=>p.type==='poll').length||0 },
+  ];
+
+  const filterForNav = { feed:'', announce:'post', recognition:'kudos', events:'post', polls:'post' };
+
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-      {/* Composer */}
-      <div style={{ ...GCA, overflow:'hidden' }}>
-        <div style={{ display:'flex', gap:4, borderBottom:'1px solid rgba(0,0,0,0.06)', padding:8 }}>
-          {[['post', 'Write Post', Radio], ['kudos', 'Give Kudos', Award]].map(([m, label, Icon]) => (
-            <button key={m} onClick={() => setMode(m)}
-              style={{ display:'flex', alignItems:'center', gap:8, borderRadius:8, padding:'6px 16px', fontSize:13, fontWeight:600, border:'none', cursor:'pointer', background:mode===m?ACCENT:'transparent', color:mode===m?'#fff':'#64748B', transition:'all 0.15s' }}>
-              <Icon size={15} /> {label}
-            </button>
-          ))}
+    <div style={{ display:'flex', background:T.bg, minHeight:'100%', gap:0, position:'relative' }}>
+
+      {/* LEFT SIDEBAR */}
+      <div style={{ width:220, flexShrink:0, padding:'16px 0 16px 16px', display:'flex', flexDirection:'column', gap:12 }}>
+
+        {/* Brand */}
+        <div style={{ ...Card(), padding:'14px 16px', display:'flex', alignItems:'center', gap:10 }}>
+          <div style={{ width:36, height:36, borderRadius:10, background:'linear-gradient(135deg,#4F46E5,#7C3AED)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            <Users size={17} style={{ color:'#fff' }} />
+          </div>
+          <div>
+            <div style={{ fontSize:13, fontWeight:800, color:T.t1, letterSpacing:'-.02em' }}>BCIM Connect</div>
+            <div style={{ fontSize:10, color:T.t4, fontWeight:500 }}>Employee Hub</div>
+          </div>
         </div>
-        <div style={{ padding:16 }}>
-          <div style={{ display:'flex', gap:12 }}>
-            <Avatar name={profile?.name} photo={profile?.profile_photo_url} />
-            <div style={{ flex:1, display:'flex', flexDirection:'column', gap:10 }}>
-              {mode === 'post' ? (
-                <>
-                  <textarea className={inputCls} rows={3} value={postBody} placeholder="Share something with your team…" onChange={e => setPostBody(e.target.value)} />
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
-                    <select className={inputCls} style={{ maxWidth:180 }} value={postGroup} onChange={e => setPostGroup(e.target.value)}>
-                      {POST_GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
-                    </select>
-                    <button disabled={!postBody.trim() || create.isPending} onClick={() => create.mutate()}
-                      style={{ display:'inline-flex', alignItems:'center', gap:6, background:postBody.trim()?ACCENT:'rgba(0,0,0,0.08)', color:postBody.trim()?'#fff':'#94A3B8', borderRadius:10, border:'none', padding:'8px 18px', fontWeight:700, fontSize:12.5, cursor:postBody.trim()?'pointer':'not-allowed' }}>
-                      <Send size={14} /> Post
-                    </button>
+
+        {/* Nav links */}
+        <div style={{ ...Card(), padding:'8px 6px', display:'flex', flexDirection:'column', gap:1 }}>
+          {NAV.map(n => {
+            const active = sideNav === n.id;
+            return (
+              <button key={n.id} onClick={() => { setSideNav(n.id); setFilter(filterForNav[n.id]||''); }}
+                style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:12, border:'none', cursor:'pointer', textAlign:'left', width:'100%', transition:'.15s',
+                  background: active ? 'linear-gradient(135deg,rgba(79,70,229,.12),rgba(124,58,237,.08))' : 'transparent',
+                  color: active ? T.t2 : '#64748B' }}
+                onMouseEnter={e=>{if(!active){e.currentTarget.style.background='rgba(99,102,241,.06)';e.currentTarget.style.color=T.t2;}}}
+                onMouseLeave={e=>{if(!active){e.currentTarget.style.background='transparent';e.currentTarget.style.color='#64748B';}}}
+              >
+                <span style={{ fontSize:13, fontWeight: active?700:500, flex:1 }}>{n.label}</span>
+                {n.count>0 && <span style={{ fontSize:10, fontWeight:700, background:active?T.t2:'#E0E7FF', color:active?'#fff':T.t3, borderRadius:10, padding:'1px 7px', minWidth:18, textAlign:'center' }}>{n.count}</span>}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Pinned */}
+        {pinnedArr.length > 0 && (
+          <div style={{ ...Card(), padding:'12px 14px' }}>
+            <div style={{ fontSize:9.5, fontWeight:800, color:T.t4, textTransform:'uppercase', letterSpacing:'.1em', marginBottom:8 }}>Pinned</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
+              {pinnedArr.slice(0, 3).map(p => (
+                <div key={p.id} style={{ display:'flex', alignItems:'flex-start', gap:8 }}>
+                  <div style={{ width:6, height:6, borderRadius:'50%', background:T.t3, flexShrink:0, marginTop:5 }} />
+                  <div>
+                    <div style={{ fontSize:12, fontWeight:600, color:T.t1, lineHeight:1.3 }}>{(p.body||'').slice(0,40)}{(p.body||'').length>40?'…':''}</div>
                   </div>
-                </>
-              ) : (
-                <>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-                    <div>
-                      <label style={{ fontSize:10.5, color:'#94A3B8', fontWeight:600, display:'block', marginBottom:4 }}>Appreciate</label>
-                      <select className={inputCls} value={kudosTo} onChange={e => setKudosTo(e.target.value)}>
-                        <option value="">Select a colleague…</option>
-                        {(colleagues.data || []).map(c => <option key={c.id} value={c.id}>{c.name}{c.designation_name ? ` — ${c.designation_name}` : ''}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ fontSize:10.5, color:'#94A3B8', fontWeight:600, display:'block', marginBottom:4 }}>Badge</label>
-                      <select className={inputCls} value={kudosBadge} onChange={e => setKudosBadge(e.target.value)}>
-                        {KUDOS_BADGES.map(b => <option key={b} value={b}>{b}</option>)}
-                      </select>
-                    </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Birthdays */}
+        {birthdaysToday.length > 0 && (
+          <div style={{ ...Card(), padding:'12px 14px' }}>
+            <div style={{ fontSize:9.5, fontWeight:800, color:T.t4, textTransform:'uppercase', letterSpacing:'.1em', marginBottom:8 }}>Birthdays Today</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              {birthdaysToday.slice(0, 3).map((b, i) => (
+                <div key={i} style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <div style={{ width:30, height:30, borderRadius:'50%', background:AVATAR_COLS[i%AVATAR_COLS.length], display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:'#fff', flexShrink:0 }}>
+                    {(b.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}
                   </div>
-                  <textarea className={inputCls} rows={2} value={kudosMsg} placeholder="Add a message (optional)…" onChange={e => setKudosMsg(e.target.value)} />
-                  <div style={{ display:'flex', justifyContent:'flex-end' }}>
-                    <button disabled={!kudosTo || create.isPending} onClick={() => create.mutate()}
-                      style={{ display:'inline-flex', alignItems:'center', gap:6, background:kudosTo?ACCENT:'rgba(0,0,0,0.08)', color:kudosTo?'#fff':'#94A3B8', borderRadius:10, border:'none', padding:'8px 18px', fontWeight:700, fontSize:12.5, cursor:kudosTo?'pointer':'not-allowed' }}>
-                      <Award size={14} /> Give Kudos
-                    </button>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12, fontWeight:600, color:T.t1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{b.name}</div>
                   </div>
-                </>
-              )}
+                  <button onClick={() => { setMode('kudos'); setKudosTo(b.id||''); setKudosBadge('Great Work'); setKudosMsg(`Happy Birthday, ${(b.name||'').split(' ')[0]}! 🎂`); }}
+                    style={{ fontSize:10.5, fontWeight:700, color:T.purp, background:'rgba(124,58,237,.08)', border:'1px solid rgba(124,58,237,.18)', borderRadius:8, padding:'3px 8px', cursor:'pointer', flexShrink:0, whiteSpace:'nowrap' }}>
+                    Wish
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Upcoming holiday */}
+        {nextHoliday && (
+          <div style={{ background:'linear-gradient(135deg,#FEF3C7,#FDE68A)', borderRadius:14, border:'1px solid #FCD34D', padding:'12px 14px', boxShadow:T.sh }}>
+            <div style={{ fontSize:9.5, fontWeight:800, color:'#92400E', textTransform:'uppercase', letterSpacing:'.08em', marginBottom:4 }}>Next Holiday</div>
+            <div style={{ fontSize:12.5, fontWeight:700, color:'#78350F' }}>{nextHoliday.name}</div>
+            <div style={{ fontSize:10.5, color:'#B45309', marginTop:2 }}>{new Date(nextHoliday.holiday_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div>
+          </div>
+        )}
+      </div>
+
+      {/* CENTER */}
+      <div style={{ flex:1, minWidth:0, padding:'16px 16px 32px', display:'flex', flexDirection:'column', gap:14 }}>
+
+        {/* Hero banner */}
+        <div style={{ background:'linear-gradient(135deg,#1E1B4B 0%,#4C1D95 30%,#2563EB 70%,#06B6D4 100%)', borderRadius:20, padding:'20px 24px', position:'relative', overflow:'hidden', boxShadow:'0 8px 24px rgba(79,70,229,.3)' }}>
+          <div style={{ position:'absolute',inset:0,backgroundImage:'radial-gradient(rgba(255,255,255,.04) 1px,transparent 1px)',backgroundSize:'20px 20px',pointerEvents:'none' }} />
+          <div style={{ position:'absolute',top:-60,right:-40,width:200,height:200,borderRadius:'50%',background:'rgba(124,58,237,.25)',filter:'blur(60px)',pointerEvents:'none' }} />
+          <div style={{ position:'relative',zIndex:1,display:'flex',alignItems:'center',justifyContent:'space-between',gap:16,flexWrap:'wrap' }}>
+            <div>
+              <div style={{ fontSize:11,fontWeight:700,color:'rgba(255,255,255,.6)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4 }}>{`${greeting} 👋`}</div>
+              <div style={{ fontSize:22,fontWeight:800,color:'#fff',letterSpacing:'-.02em',lineHeight:1.2 }}>Hello, {(profile?.name||'Employee').split(' ')[0]}!</div>
+              <div style={{ fontSize:12.5,color:'rgba(255,255,255,.6)',marginTop:6 }}>
+                {kudosCnt > 0 ? `You have ${kudosCnt} kudos in your feed.` : 'Welcome to the employee hub.'}
+              </div>
+            </div>
+            <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+              {[
+                { icon:'👥', label:'Online now',  val:teamQ.data?.active_count||'--' },
+                { icon:'🎂', label:'Birthdays',   val:birthdaysToday.length           },
+                { icon:'⭐', label:'Kudos',       val:kudosCnt                        },
+              ].map(({ icon,label,val })=>(
+                <div key={label} style={{ background:'rgba(255,255,255,.12)', border:'1px solid rgba(255,255,255,.2)', borderRadius:14, padding:'10px 16px', textAlign:'center', backdropFilter:'blur(8px)' }}>
+                  <div style={{ fontSize:15,fontWeight:800,color:'#fff',lineHeight:1 }}>{icon} {val}</div>
+                  <div style={{ fontSize:10.5,color:'rgba(255,255,255,.6)',marginTop:3 }}>{label}</div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Filter pills */}
-      <div style={{ display:'flex', gap:8 }}>
-        {[['', 'All Activities'], ['post', 'Posts'], ['kudos', 'Kudos']].map(([v, label]) => (
-          <button key={v} onClick={() => setFilter(v)}
-            style={{ borderRadius:99, padding:'5px 16px', fontSize:13, fontWeight:600, border:'1px solid', cursor:'pointer', transition:'all 0.15s', background:filter===v?ACCENT:'rgba(255,255,255,0.88)', color:filter===v?'#fff':'#64748B', borderColor:filter===v?ACCENT:'rgba(0,0,0,0.1)' }}>
-            {label}
-          </button>
-        ))}
-      </div>
+        {/* Stories strip (colleagues) */}
+        {(colleagues.data||[]).length > 0 && (
+          <div style={{ ...Card(), padding:'14px 16px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:12, overflowX:'auto', paddingBottom:2 }}>
+              {/* Add story = self */}
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:5, flexShrink:0 }}>
+                <div style={{ width:48,height:48,borderRadius:'50%',background:'linear-gradient(135deg,#EEF2FF,#E0E7FF)',border:'2px dashed #A5B4FC',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer' }}>
+                  <span style={{ fontSize:20, color:T.t3 }}>+</span>
+                </div>
+                <span style={{ fontSize:10,color:T.t4,fontWeight:600 }}>You</span>
+              </div>
+              {(colleagues.data||[]).slice(0,8).map((c,i)=>(
+                <div key={c.id} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:5, flexShrink:0 }}>
+                  <div style={{ padding:2,borderRadius:'50%',background:`linear-gradient(135deg,${AVATAR_COLS[i%AVATAR_COLS.length]},${AVATAR_COLS[(i+2)%AVATAR_COLS.length]})` }}>
+                    {c.profile_photo_url
+                      ? <img src={c.profile_photo_url} alt="" style={{ width:44,height:44,borderRadius:'50%',objectFit:'cover',border:'2px solid #fff',display:'block' }} />
+                      : <div style={{ width:44,height:44,borderRadius:'50%',background:AVATAR_COLS[i%AVATAR_COLS.length],border:'2px solid #fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:'#fff' }}>
+                          {(c.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}
+                        </div>
+                    }
+                  </div>
+                  <span style={{ fontSize:10,color:T.t3,fontWeight:500,maxWidth:52,textAlign:'center',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{(c.name||'').split(' ')[0]}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
-      {/* Feed */}
-      {feed.isLoading ? (
-        <p style={{ padding:'32px 0', textAlign:'center', fontSize:13, color:'#94A3B8' }}>Loading feed…</p>
-      ) : !(feed.data || []).length ? (
-        <div style={{ ...GCA, padding:32, textAlign:'center' }}>
-          <p style={{ fontSize:13, color:'#94A3B8' }}>No activity yet. Be the first to post or give kudos!</p>
+        {/* Create post card */}
+        <div style={{ ...Card(), overflow:'hidden' }}>
+          {/* Mode tabs */}
+          <div style={{ display:'flex', gap:2, borderBottom:`1px solid ${T.bdr}`, padding:'10px 12px 0', background:'rgba(238,242,255,.4)' }}>
+            {[['post','Post',Send],['kudos','Recognition',Award]].map(([m,label,Icon])=>(
+              <button key={m} onClick={()=>setMode(m)}
+                style={{ display:'flex',alignItems:'center',gap:7,padding:'8px 16px',borderRadius:'10px 10px 0 0',border:'none',cursor:'pointer',fontSize:12.5,fontWeight:600,transition:'.15s',
+                  background:mode===m?T.card:'transparent',
+                  color:mode===m?T.pri:'#64748B',
+                  boxShadow:mode===m?`0 -2px 0 ${T.pri} inset`:undefined,
+                }}>
+                <Icon size={14}/>{label}
+              </button>
+            ))}
+          </div>
+          <div style={{ padding:'14px 16px' }}>
+            <div style={{ display:'flex', gap:10 }}>
+              {/* Self avatar */}
+              {profile?.profile_photo_url
+                ? <img src={profile.profile_photo_url} alt="" style={{ width:38,height:38,borderRadius:'50%',objectFit:'cover',flexShrink:0 }} />
+                : <div style={{ width:38,height:38,borderRadius:'50%',background:'linear-gradient(135deg,#4F46E5,#7C3AED)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:'#fff',flexShrink:0 }}>{initials}</div>
+              }
+              <div style={{ flex:1, display:'flex', flexDirection:'column', gap:10 }}>
+                {mode === 'post' ? (
+                  <>
+                    <textarea rows={3} value={postBody} placeholder={`What's on your mind, ${(profile?.name||'').split(' ')[0]||'you'}? 💬`}
+                      onChange={e=>setPostBody(e.target.value)}
+                      style={{ width:'100%',borderRadius:12,border:`1px solid ${T.bdr}`,background:'#F8FAFF',padding:'10px 14px',fontSize:13,color:'#1E293B',resize:'none',outline:'none',fontFamily:'inherit',boxSizing:'border-box',transition:'.15s' }}
+                      onFocus={e=>{e.target.style.borderColor=T.pri;e.target.style.boxShadow=`0 0 0 3px rgba(37,99,235,.08)`;}}
+                      onBlur={e=>{e.target.style.borderColor=T.bdr;e.target.style.boxShadow='';}}
+                    />
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, flexWrap:'wrap' }}>
+                      <select value={postGroup} onChange={e=>setPostGroup(e.target.value)}
+                        style={{ fontSize:12,fontWeight:600,color:'#64748B',background:'#F1F5F9',border:`1px solid ${T.bdr}`,borderRadius:10,padding:'6px 12px',cursor:'pointer',outline:'none' }}>
+                        {POST_GROUPS.map(g=><option key={g} value={g}>{g}</option>)}
+                      </select>
+                      <button disabled={!postBody.trim()||create.isPending} onClick={()=>create.mutate()}
+                        style={{ display:'inline-flex',alignItems:'center',gap:7,background:postBody.trim()?`linear-gradient(135deg,${T.pri},${T.purp})`:'#E2E8F0',color:postBody.trim()?'#fff':'#94A3B8',border:'none',borderRadius:10,padding:'8px 20px',fontWeight:700,fontSize:13,cursor:postBody.trim()?'pointer':'not-allowed',boxShadow:postBody.trim()?'0 4px 14px rgba(37,99,235,.35)':undefined,transition:'.15s' }}>
+                        <Send size={14}/> Post
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                      <div>
+                        <label style={{ fontSize:10.5,fontWeight:700,color:'#64748B',display:'block',marginBottom:4 }}>Appreciate</label>
+                        <select value={kudosTo} onChange={e=>setKudosTo(e.target.value)}
+                          style={{ width:'100%',fontSize:12,background:'#F8FAFF',border:`1px solid ${T.bdr}`,borderRadius:10,padding:'8px 12px',cursor:'pointer',outline:'none',color:'#1E293B' }}>
+                          <option value="">Select a colleague…</option>
+                          {(colleagues.data||[]).map(c=><option key={c.id} value={c.id}>{c.name}{c.designation_name?` — ${c.designation_name}`:''}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize:10.5,fontWeight:700,color:'#64748B',display:'block',marginBottom:4 }}>Badge</label>
+                        <select value={kudosBadge} onChange={e=>setKudosBadge(e.target.value)}
+                          style={{ width:'100%',fontSize:12,background:'#F8FAFF',border:`1px solid ${T.bdr}`,borderRadius:10,padding:'8px 12px',cursor:'pointer',outline:'none',color:'#1E293B' }}>
+                          {KUDOS_BADGES.map(b=><option key={b} value={b}>{b}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <textarea rows={2} value={kudosMsg} placeholder="Add a personal message (optional)…"
+                      onChange={e=>setKudosMsg(e.target.value)}
+                      style={{ width:'100%',borderRadius:12,border:`1px solid ${T.bdr}`,background:'#F8FAFF',padding:'10px 14px',fontSize:13,color:'#1E293B',resize:'none',outline:'none',fontFamily:'inherit',boxSizing:'border-box' }}
+                    />
+                    <div style={{ display:'flex', justifyContent:'flex-end' }}>
+                      <button disabled={!kudosTo||create.isPending} onClick={()=>create.mutate()}
+                        style={{ display:'inline-flex',alignItems:'center',gap:7,background:kudosTo?'linear-gradient(135deg,#7C3AED,#EC4899)':'#E2E8F0',color:kudosTo?'#fff':'#94A3B8',border:'none',borderRadius:10,padding:'8px 20px',fontWeight:700,fontSize:13,cursor:kudosTo?'pointer':'not-allowed',boxShadow:kudosTo?'0 4px 14px rgba(124,58,237,.35)':undefined,transition:'.15s' }}>
+                        <Award size={14}/> Give Kudos
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-      ) : (
-        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-          {(feed.data || []).map(p => <EngageCard key={p.id} post={p} />)}
+
+        {/* Filter pills */}
+        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          {[['','All Activities'],['post','Posts'],['kudos','Kudos']].map(([v,label])=>(
+            <button key={v} onClick={()=>setFilter(v)}
+              style={{ padding:'6px 16px',borderRadius:20,fontSize:12.5,fontWeight:600,border:`1px solid ${filter===v?T.pri:T.bdr}`,cursor:'pointer',transition:'.15s',
+                background:filter===v?T.pri:T.card,color:filter===v?'#fff':'#64748B' }}>
+              {label}
+            </button>
+          ))}
         </div>
-      )}
+
+        {/* Feed */}
+        {feed.isLoading ? (
+          <div style={{ textAlign:'center',padding:'32px 0',color:'#94A3B8',fontSize:13 }}>Loading feed…</div>
+        ) : !feedArr.length ? (
+          <div style={{ ...Card(), padding:'32px',textAlign:'center' }}>
+            <Users size={28} style={{ color:T.t4,display:'block',margin:'0 auto 8px' }} />
+            <div style={{ fontSize:13,color:'#94A3B8' }}>No activity yet. Be the first to post or give kudos!</div>
+          </div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {feedArr.map(p => <EngageCard key={p.id} post={p} />)}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
+
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    REIMBURSEMENTS TAB
