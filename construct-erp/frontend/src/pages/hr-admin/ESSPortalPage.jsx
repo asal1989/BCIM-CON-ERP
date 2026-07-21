@@ -343,11 +343,11 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
   const totalBalance = (balances || []).reduce((s, b) => s + Number(b.closing_balance ?? 0), 0);
   const casualBal    = (balances || []).find(b => /casual/i.test(b.leave_type_name))?.closing_balance ?? 0;
   const earnedBal    = (balances || []).find(b => /earned|privilege/i.test(b.leave_type_name))?.closing_balance ?? 0;
-  const pendingLeave = leave.pending ?? 0;
-  const pendingCorr  = attendance.pending_corrections ?? 0;
+  const pendingLeave = Number(leave.pending) || 0;
+  const pendingCorr  = Number(attendance.pending_corrections) || 0;
   const pendingTotal = pendingLeave + pendingCorr;
-  const workDays     = (attendance.present||0) + (attendance.absent||0) + (attendance.half_day||0) + (attendance.on_leave||0);
-  const presentDays  = attendance.present || 0;
+  const workDays     = (Number(attendance.present)||0) + (Number(attendance.absent)||0) + (Number(attendance.half_day)||0) + (Number(attendance.on_leave)||0);
+  const presentDays  = Number(attendance.present) || 0;
   const attPct       = workDays > 0 ? Math.round((presentDays / workDays) * 100) : 0;
   const announcements = (notifications || []).slice(0, 6);
 
