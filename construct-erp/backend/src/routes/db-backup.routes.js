@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { authenticateToken } = require('../middleware/auth.middleware');
+const { authenticate: authenticateToken } = require('../middleware/auth');
 
 const GITHUB_PAT   = process.env.GITHUB_PAT;
 const GITHUB_OWNER = process.env.GITHUB_OWNER || 'asal1989';
