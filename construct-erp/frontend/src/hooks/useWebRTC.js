@@ -48,10 +48,16 @@ export function useWebRTC({ socketRef, connected, currentUser }) {
   const isCallerRef       = useRef(false); // true when we initiated the call
 
   useEffect(() => {
+    // Skip entirely when there's no logged-in user — this hook mounts globally
+    // via ChatProvider on every route including public pages (login, register,
+    // reset-password, verification links). A 401 here isn't on the auth-endpoint
+    // exclusion list, so it used to trigger a global forceLogin() redirect that
+    // yanked unauthenticated visitors to /login mid-flow.
+    if (!currentUser?.id) return;
     api.get('/chat/turn-credentials').then(r => {
       if (r.data?.iceServers?.length) iceServersRef.current = r.data.iceServers;
     }).catch(() => {});
-  }, []);
+  }, [currentUser?.id]);
 
   useEffect(() => { localStreamRef.current = localStream;  }, [localStream]);
   useEffect(() => { callStateRef.current   = callState;    }, [callState]);

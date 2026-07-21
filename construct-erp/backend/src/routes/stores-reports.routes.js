@@ -1126,6 +1126,104 @@ router.get('/:type', async (req, res) => {
       rows = (await query(sql, allParams)).rows;
     }
 
+    // ── Inventory Register (period-based with vendor details) ────────────────
+    else if (type === 'inventory-register') {
+      const base = [cid, fd, td + ' 23:59:59'];
+      const { scopeClause, allParams } = buildScope(req, base, 'i');
+
+      const sql = `
+        SELECT
+          p.name                                    AS project_name,
+          i.id,
+          i.material_name,
+          i.category,
+          i.major_head,
+          i.dc_idc,
+          i.unit,
+          COALESCE(i.unit_rate, 0)                  AS unit_rate,
+
+          -- Opening stock at start of period
+          GREATEST(0,
+            i.opening_stock
+            + COALESCE(pre_rx.qty, 0)
+            - COALESCE(pre_ix.qty, 0)
+          )                                         AS opening_qty,
+
+          -- Received IN period
+          COALESCE(rx.qty, 0)                       AS received_qty,
+          COALESCE(rx.vendors, '')                  AS vendor_names,
+
+          -- Issued IN period
+          COALESCE(ix.qty, 0)                       AS issued_qty,
+          COALESCE(ix.issued_to, '')                AS issued_to,
+
+          -- Closing = opening + received - issued (live)
+          i.closing_stock                           AS closing_qty
+
+        FROM inventory i
+        JOIN projects p ON p.id = i.project_id
+
+        -- Receipts BEFORE period (to compute period opening)
+        LEFT JOIN (
+          SELECT inventory_id, SUM(quantity) AS qty
+          FROM stock_transactions
+          WHERE transaction_type IN ('grn','bill_receipt','transfer_in','ign')
+            AND transacted_at < $2
+          GROUP BY inventory_id
+        ) pre_rx ON pre_rx.inventory_id = i.id
+
+        -- Issues BEFORE period (to compute period opening)
+        LEFT JOIN (
+          SELECT inventory_id, SUM(quantity) AS qty
+          FROM stock_transactions
+          WHERE transaction_type IN ('issue','transfer_out')
+            AND transacted_at < $2
+          GROUP BY inventory_id
+        ) pre_ix ON pre_ix.inventory_id = i.id
+
+        -- Receipts IN period with vendor aggregation
+        LEFT JOIN (
+          SELECT
+            st.inventory_id,
+            SUM(st.quantity) AS qty,
+            STRING_AGG(DISTINCT COALESCE(v.name, ''), ', ')
+              FILTER (WHERE v.name IS NOT NULL AND v.name <> '') AS vendors
+          FROM stock_transactions st
+          LEFT JOIN grn g ON g.grn_number = st.reference_number
+          LEFT JOIN vendors v ON v.id = g.vendor_id
+          WHERE st.transaction_type IN ('grn','bill_receipt','transfer_in','ign')
+            AND st.transacted_at BETWEEN $2 AND $3
+          GROUP BY st.inventory_id
+        ) rx ON rx.inventory_id = i.id
+
+        -- Issues IN period with issued_to aggregation
+        LEFT JOIN (
+          SELECT
+            st.inventory_id,
+            SUM(st.quantity) AS qty,
+            STRING_AGG(DISTINCT COALESCE(st.issued_to, ''), ', ')
+              FILTER (WHERE st.issued_to IS NOT NULL AND st.issued_to <> '') AS issued_to
+          FROM stock_transactions st
+          WHERE st.transaction_type IN ('issue','transfer_out')
+            AND st.transacted_at BETWEEN $2 AND $3
+          GROUP BY st.inventory_id
+        ) ix ON ix.inventory_id = i.id
+
+        WHERE p.company_id = $1
+          ${project_id ? ` AND i.project_id = '${project_id.replace(/'/g,"''")}' ` : ''}
+          ${category   ? ` AND LOWER(i.category) = LOWER('${category.replace(/'/g,"''")}')` : ''}
+          ${scopeClause}
+          AND (
+            COALESCE(rx.qty, 0) > 0
+            OR COALESCE(ix.qty, 0) > 0
+            OR i.closing_stock > 0
+            OR i.opening_stock > 0
+          )
+        ORDER BY p.name, COALESCE(i.category, ''), i.material_name`;
+
+      rows = (await query(sql, allParams)).rows;
+    }
+
     else {
       return res.status(400).json({ error: `Unknown report type: ${type}` });
     }

@@ -73,7 +73,7 @@ export function PageHeader({ title, subtitle, breadcrumbs = [], onBack, pills = 
     >
       {/* Breadcrumb strip */}
       {breadcrumbs.length > 0 && (
-        <div className="px-6 py-2 flex items-center gap-2 text-[11px]"
+        <div className="px-6 py-2 flex items-center gap-2 text-[13px]"
           style={{ background: 'rgba(0,0,0,0.18)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           {breadcrumbs.map((bc, i) => {
             const isLast = i === breadcrumbs.length - 1;
@@ -109,7 +109,7 @@ export function PageHeader({ title, subtitle, breadcrumbs = [], onBack, pills = 
         )}
 
         <div className="flex-1 min-w-0">
-          <h1 className="text-lg font-medium tracking-tight text-white truncate">{title}</h1>
+          <h1 className="text-xl font-medium tracking-tight text-white truncate">{title}</h1>
           {subtitle && (
             <p className="text-xs mt-1 truncate" style={{ color: 'rgba(255,255,255,0.65)' }}>
               {subtitle}

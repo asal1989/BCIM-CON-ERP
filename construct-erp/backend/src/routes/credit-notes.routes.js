@@ -65,6 +65,9 @@ const router = express.Router();
   await safe(`CREATE INDEX IF NOT EXISTS idx_cn_project ON credit_notes(project_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_cn_status  ON credit_notes(status)`);
   await safe(`ALTER TABLE credit_notes ADD COLUMN IF NOT EXISTS bill_id UUID`);
+  await safe(`ALTER TABLE credit_notes ADD COLUMN IF NOT EXISTS tds_pct    NUMERIC(5,2)  DEFAULT 0`);
+  await safe(`ALTER TABLE credit_notes ADD COLUMN IF NOT EXISTS tds_amount NUMERIC(14,2) DEFAULT 0`);
+  await safe(`ALTER TABLE credit_notes ADD COLUMN IF NOT EXISTS net_amount NUMERIC(14,2) DEFAULT 0`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_cni_cn     ON credit_note_items(cn_id)`);
 
   console.log('[CreditNotes] Schema OK');
@@ -168,6 +171,7 @@ router.post('/', authenticate, async (req, res) => {
       cgst_pct = 0, cgst_amt = 0,
       sgst_pct = 0, sgst_amt = 0,
       igst_pct = 0, igst_amt = 0,
+      tds_pct = 0,
       remarks,
       items = [],
     } = req.body;
@@ -175,8 +179,10 @@ router.post('/', authenticate, async (req, res) => {
     if (!cn_date)     return res.status(400).json({ error: 'cn_date is required' });
     if (!vendor_name) return res.status(400).json({ error: 'vendor_name is required' });
 
-    const gst_amount  = n(cgst_amt) + n(sgst_amt) + n(igst_amt);
+    const gst_amount   = n(cgst_amt) + n(sgst_amt) + n(igst_amt);
     const total_amount = n(basic_amount) + gst_amount;
+    const tds_amount   = parseFloat(((n(basic_amount) * n(tds_pct)) / 100).toFixed(2));
+    const net_amount   = parseFloat((total_amount - tds_amount).toFixed(2));
 
     const result = await withTransaction(async (client) => {
       const cn_number = await nextCNNumber(client, req.user.company_id);
@@ -189,11 +195,13 @@ router.post('/', authenticate, async (req, res) => {
           cn_type, reason, tax_mode,
           basic_amount, cgst_pct, cgst_amt, sgst_pct, sgst_amt,
           igst_pct, igst_amt, gst_amount, total_amount,
+          tds_pct, tds_amount, net_amount,
           status, remarks, created_by, company_id
         ) VALUES (
           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
           $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,
-          'pending',$25,$26,$27
+          $25,$26,$27,
+          'pending',$28,$29,$30
         ) RETURNING *`,
         [
           cn_number, cn_date, vendor_id || null, vendor_name,
@@ -203,6 +211,7 @@ router.post('/', authenticate, async (req, res) => {
           cn_type, reason || null, tax_mode,
           n(basic_amount), n(cgst_pct), n(cgst_amt), n(sgst_pct), n(sgst_amt),
           n(igst_pct), n(igst_amt), gst_amount, total_amount,
+          n(tds_pct), tds_amount, net_amount,
           remarks || null, req.user.id, req.user.company_id,
         ]
       );
@@ -265,12 +274,15 @@ router.put('/:id', authenticate, async (req, res) => {
       cgst_pct = 0, cgst_amt = 0,
       sgst_pct = 0, sgst_amt = 0,
       igst_pct = 0, igst_amt = 0,
+      tds_pct = 0,
       remarks,
       items = [],
     } = req.body;
 
     const gst_amount   = n(cgst_amt) + n(sgst_amt) + n(igst_amt);
     const total_amount = n(basic_amount) + gst_amount;
+    const tds_amount   = parseFloat(((n(basic_amount) * n(tds_pct)) / 100).toFixed(2));
+    const net_amount   = parseFloat((total_amount - tds_amount).toFixed(2));
 
     await withTransaction(async (client) => {
       await client.query(
@@ -283,8 +295,9 @@ router.put('/:id', authenticate, async (req, res) => {
           basic_amount=$15, cgst_pct=$16, cgst_amt=$17,
           sgst_pct=$18, sgst_amt=$19, igst_pct=$20, igst_amt=$21,
           gst_amount=$22, total_amount=$23,
-          remarks=$24, updated_at=NOW()
-         WHERE id=$25`,
+          tds_pct=$24, tds_amount=$25, net_amount=$26,
+          remarks=$27, updated_at=NOW()
+         WHERE id=$28`,
         [
           cn_date, vendor_id || null, vendor_name,
           project_id || null, po_id || null, po_number || null,
@@ -294,6 +307,7 @@ router.put('/:id', authenticate, async (req, res) => {
           n(basic_amount), n(cgst_pct), n(cgst_amt),
           n(sgst_pct), n(sgst_amt), n(igst_pct), n(igst_amt),
           gst_amount, total_amount,
+          n(tds_pct), tds_amount, net_amount,
           remarks || null, req.params.id,
         ]
       );
@@ -332,6 +346,55 @@ router.patch('/:id/status', authenticate, async (req, res) => {
       `UPDATE credit_notes SET status = $1, updated_at = NOW() WHERE id = $2`,
       [status, req.params.id]
     );
+
+    // Sync credit note value to tqs_bills when applied; clear when cancelled/refunded
+    const billId       = existing.bill_id;
+    const invoiceNum   = existing.invoice_number;
+    const companyId    = req.user.company_id;
+
+    if (status === 'applied') {
+      // Find the linked tqs_bill — prefer bill_id, fall back to invoice_number match
+      let billRow = null;
+      if (billId) {
+        const r = await query(`SELECT id FROM tqs_bills WHERE id = $1 AND company_id = $2`, [billId, companyId]);
+        billRow = r.rows[0] || null;
+      }
+      if (!billRow && invoiceNum) {
+        const r = await query(
+          `SELECT id FROM tqs_bills WHERE company_id = $1 AND inv_number ILIKE $2 AND is_deleted = FALSE LIMIT 1`,
+          [companyId, `%${invoiceNum.trim()}%`]
+        );
+        billRow = r.rows[0] || null;
+      }
+      if (billRow) {
+        const creditValue = parseFloat(existing.net_amount || existing.total_amount) || 0;
+        await query(
+          `UPDATE tqs_bills SET credit_note_num = $1, credit_note_val = $2, updated_at = NOW() WHERE id = $3`,
+          [existing.cn_number, creditValue, billRow.id]
+        );
+      }
+    } else if (['cancelled', 'refunded'].includes(status) && existing.status === 'applied') {
+      // Clear from the linked bill when un-applying
+      let billRow = null;
+      if (billId) {
+        const r = await query(`SELECT id FROM tqs_bills WHERE id = $1 AND company_id = $2`, [billId, companyId]);
+        billRow = r.rows[0] || null;
+      }
+      if (!billRow && invoiceNum) {
+        const r = await query(
+          `SELECT id FROM tqs_bills WHERE company_id = $1 AND credit_note_num = $2 AND is_deleted = FALSE LIMIT 1`,
+          [companyId, existing.cn_number]
+        );
+        billRow = r.rows[0] || null;
+      }
+      if (billRow) {
+        await query(
+          `UPDATE tqs_bills SET credit_note_num = NULL, credit_note_val = 0, updated_at = NOW() WHERE id = $1`,
+          [billRow.id]
+        );
+      }
+    }
+
     const full = await getCN(req.params.id, req.user.company_id);
     res.json({ data: full });
   } catch (err) {

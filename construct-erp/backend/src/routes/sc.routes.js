@@ -174,6 +174,112 @@ runSchemaInit('wotqs006_items_fix_v1', async () => {
   console.log('[fix] WOTQS006 items corrected — 6 line items inserted');
 });
 
+// WOTQS015 — Bureau Veritas India Pvt Ltd (Annexure-1 line items per WO dated 29.12.2025)
+runSchemaInit('wotqs015_items_fix_v1', async () => {
+  const wo = await query(`SELECT id FROM sc_work_orders WHERE wo_number=$1 LIMIT 1`, ['WOTQS015']);
+  if (!wo.rowCount) { console.log('[fix] WOTQS015 not found, skipping'); return; }
+  const woId = wo.rows[0].id;
+
+  await query(`DELETE FROM sc_wo_items WHERE wo_id=$1`, [woId]);
+
+  const items = [
+    // 1. AAC BLOCKS
+    { seq: 1,  desc: 'AAC Blocks - Compressive Strength',                                          unit: 'Nos', qty: 10,   rate: 455   },
+    { seq: 2,  desc: 'AAC Blocks - Block Density',                                                 unit: 'Nos', qty: 10,   rate: 350   },
+    { seq: 3,  desc: 'AAC Blocks - Dimension',                                                     unit: 'Nos', qty: 10,   rate: 210   },
+    { seq: 4,  desc: 'AAC Blocks - Drying Shrinkage',                                              unit: 'Nos', qty: 10,   rate: 1750  },
+    // 2. ADMIXTURE
+    { seq: 5,  desc: 'Admixture - Chemical',                                                       unit: 'Nos', qty: 10,   rate: 2450  },
+    // 3. AGGREGATE - COARSE
+    { seq: 6,  desc: 'Aggregate (Coarse) - Sieve Analysis',                                        unit: 'Nos', qty: 10,   rate: 420   },
+    { seq: 7,  desc: 'Aggregate (Coarse) - Specific Gravity',                                      unit: 'Nos', qty: 10,   rate: 420   },
+    { seq: 8,  desc: 'Aggregate (Coarse) - Bulk Density',                                          unit: 'Nos', qty: 10,   rate: 245   },
+    { seq: 9,  desc: 'Aggregate (Coarse) - Flakiness and Elongation Index',                        unit: 'Nos', qty: 10,   rate: 490   },
+    { seq: 10, desc: 'Aggregate (Coarse) - Crushing Value',                                        unit: 'Nos', qty: 10,   rate: 420   },
+    { seq: 11, desc: 'Aggregate (Coarse) - Water Absorption',                                      unit: 'Nos', qty: 10,   rate: 385   },
+    { seq: 12, desc: 'Aggregate (Coarse) - Impact Value',                                          unit: 'Nos', qty: 10,   rate: 420   },
+    { seq: 13, desc: 'Aggregate (Coarse) - Alkali Aggregate Reactivity',                           unit: 'Nos', qty: 10,   rate: 1155  },
+    { seq: 14, desc: 'Aggregate (Coarse) - Moisture Content',                                      unit: 'Nos', qty: 0,    rate: 245   }, // R/o
+    // 4. AGGREGATE - FINE
+    { seq: 15, desc: 'Aggregate (Fine) - Sieve Analysis',                                          unit: 'Nos', qty: 10,   rate: 420   },
+    { seq: 16, desc: 'Aggregate (Fine) - Specific Gravity',                                        unit: 'Nos', qty: 10,   rate: 420   },
+    { seq: 17, desc: 'Aggregate (Fine) - Bulk Density',                                            unit: 'Nos', qty: 10,   rate: 245   },
+    { seq: 18, desc: 'Aggregate (Fine) - Water Absorption',                                        unit: 'Nos', qty: 10,   rate: 385   },
+    { seq: 19, desc: 'Aggregate (Fine) - Alkali Aggregate Reactivity',                             unit: 'Nos', qty: 10,   rate: 1155  },
+    { seq: 20, desc: 'Aggregate (Fine) - Moisture Content',                                        unit: 'Nos', qty: 10,   rate: 0     }, // rate blank in WO
+    // 5. ULTRAFINE GROUND GRANULATED
+    { seq: 21, desc: 'Ultrafine Ground Granulated - Physical Test',                                unit: 'Nos', qty: 10,   rate: 2450  },
+    { seq: 22, desc: 'Ultrafine Ground Granulated - Chemical Test',                                unit: 'Nos', qty: 10,   rate: 3150  },
+    // 6. CEMENT
+    { seq: 23, desc: 'Cement - Physical',                                                          unit: 'Nos', qty: 100,  rate: 2380  },
+    { seq: 24, desc: 'Cement - Chemical',                                                          unit: 'Nos', qty: 100,  rate: 2800  },
+    // 7. CONCRETE BLOCKS
+    { seq: 25, desc: 'Concrete Blocks - Compressive Strength',                                     unit: 'Nos', qty: 100,  rate: 280   },
+    { seq: 26, desc: 'Concrete Blocks - Water Absorption',                                         unit: 'Nos', qty: 100,  rate: 385   },
+    { seq: 27, desc: 'Concrete Blocks - Block Density',                                            unit: 'Nos', qty: 100,  rate: 210   },
+    // 8. CONCRETE CUBES
+    { seq: 28, desc: 'Concrete Cubes - Compressive Strength',                                      unit: 'Nos', qty: 1000, rate: 280   },
+    // 9. CONCRETE DESIGN MIX
+    { seq: 29, desc: 'Concrete Design Mix - Grade of Concrete upto M45',                           unit: 'Nos', qty: 100,  rate: 5250  },
+    { seq: 30, desc: 'Concrete Design Mix - Grade of Concrete M50 & Above',                        unit: 'Nos', qty: 100,  rate: 7000  },
+    // 10. FLYASH
+    { seq: 31, desc: 'Flyash - Physical',                                                          unit: 'Nos', qty: 10,   rate: 2100  },
+    { seq: 32, desc: 'Flyash - Chemical',                                                          unit: 'Nos', qty: 10,   rate: 2100  },
+    // 11. GGBS
+    { seq: 33, desc: 'GGBS - Physical Properties',                                                 unit: 'Nos', qty: 10,   rate: 2100  },
+    { seq: 34, desc: 'GGBS - Chemical Properties',                                                 unit: 'Nos', qty: 10,   rate: 2450  },
+    // 12. GRANULAR SUBBASE (GSB) — R/o only, no quantity
+    { seq: 35, desc: 'Granular Subbase (GSB) - Water Absorption',                                  unit: 'Nos', qty: 0,    rate: 420   },
+    { seq: 36, desc: 'Granular Subbase (GSB) - Soaked CBR',                                        unit: 'Nos', qty: 0,    rate: 2450  },
+    { seq: 37, desc: 'Granular Subbase (GSB) - Impact Value',                                      unit: 'Nos', qty: 0,    rate: 385   },
+    { seq: 38, desc: 'Granular Subbase (GSB) - Abrasion Value',                                    unit: 'Nos', qty: 0,    rate: 595   },
+    // 13. PLYWOOD
+    { seq: 39, desc: 'Plywood - Moisture Content',                                                 unit: 'Nos', qty: 100,  rate: 385   },
+    { seq: 40, desc: 'Plywood - Density',                                                          unit: 'Nos', qty: 100,  rate: 420   },
+    { seq: 41, desc: 'Plywood - Water Resistance',                                                 unit: 'Nos', qty: 100,  rate: 1050  },
+    { seq: 42, desc: 'Plywood - Glue Shear Strength',                                              unit: 'Nos', qty: 100,  rate: 1050  },
+    { seq: 43, desc: 'Plywood - Glue Adhesion',                                                    unit: 'Nos', qty: 100,  rate: 700   },
+    { seq: 44, desc: 'Plywood - Tensile Strength',                                                 unit: 'Nos', qty: 100,  rate: 1225  },
+    // 14. REINFORCING STEEL
+    { seq: 45, desc: 'Reinforcing Steel - Thickness',                                              unit: 'Nos', qty: 100,  rate: 420   },
+    { seq: 46, desc: 'Reinforcing Steel - Physical Properties',                                    unit: 'Nos', qty: 500,  rate: 595   },
+    { seq: 47, desc: 'Reinforcing Steel - Chemical Composition (with 8 Elements)',                  unit: 'Nos', qty: 500,  rate: 420   },
+    // 15. SOIL TESTING
+    { seq: 48, desc: 'Soil Testing - Soaked CBR',                                                  unit: 'Nos', qty: 10,   rate: 2100  },
+    // 16. STRUCTURAL STEEL
+    { seq: 49, desc: 'Structural Steel - Chemical Properties',                                     unit: 'Nos', qty: 0,    rate: 420   }, // R/o (amount blank in WO)
+    { seq: 50, desc: 'Structural Steel - Chemical Properties (Prestressing Steel)',                 unit: 'Nos', qty: 10,   rate: 840   },
+    // 17. WET MIX MACADAM (WMM-Mix)
+    { seq: 51, desc: 'Wet Mix Macadam (WMM) - Sieve Analysis',                                     unit: 'Nos', qty: 10,   rate: 420   },
+    { seq: 52, desc: 'Wet Mix Macadam (WMM) - Design Mix',                                         unit: 'Nos', qty: 10,   rate: 5600  },
+    { seq: 53, desc: 'Wet Mix Macadam (WMM) - Compaction',                                         unit: 'Nos', qty: 10,   rate: 2100  },
+    { seq: 54, desc: 'Wet Mix Macadam (WMM) - Moisture Content',                                   unit: 'Nos', qty: 10,   rate: 420   },
+    { seq: 55, desc: 'Wet Mix Macadam (WMM) - Water Absorption',                                   unit: 'Nos', qty: 10,   rate: 420   },
+    { seq: 56, desc: 'Wet Mix Macadam (WMM) - Flakiness and Elongation',                           unit: 'Nos', qty: 10,   rate: 490   },
+    { seq: 57, desc: 'Wet Mix Macadam (WMM) - Impact Value',                                       unit: 'Nos', qty: 10,   rate: 420   },
+    { seq: 58, desc: 'Wet Mix Macadam (WMM) - Liquid and Plastic Limit',                           unit: 'Nos', qty: 10,   rate: 490   },
+    { seq: 59, desc: 'Wet Mix Macadam (WMM) - Abrasion Value',                                     unit: 'Nos', qty: 10,   rate: 595   },
+    { seq: 60, desc: 'Wet Mix Macadam (WMM) - Field Density by Sand Replacement Method (per pit)', unit: 'Nos', qty: 10,   rate: 840   },
+    // 18. WATER — Suitability to Concrete
+    { seq: 61, desc: 'Water - Suitability to Concrete',                                            unit: 'Nos', qty: 100,  rate: 1050  },
+    // 19. WATER — Water for Drinking
+    { seq: 62, desc: 'Water - Water for Drinking',                                                 unit: 'Nos', qty: 100,  rate: 3850  },
+  ];
+
+  for (const it of items) {
+    await query(
+      `INSERT INTO sc_wo_items (wo_id, item_code, description, unit, qty, rate, sequence_no)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [woId, `WOTQS015-${it.seq}`, it.desc, it.unit, it.qty, it.rate, it.seq]
+    );
+  }
+  await query(
+    `UPDATE sc_work_orders SET contract_amount=4041800, subject='Technical Testing & Analysis Services of All Construction Material - TQS, Yelahanka' WHERE id=$1`,
+    [woId]
+  );
+  console.log('[fix] WOTQS015 items corrected — 62 line items inserted (Annexure-1)');
+});
+
 router.use(authenticate);
 const CID  = req => req.user.company_id;
 const ADMIN = ['super_admin','admin'];

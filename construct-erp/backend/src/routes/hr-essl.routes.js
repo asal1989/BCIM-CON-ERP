@@ -201,9 +201,12 @@ function buildMssqlConfig(cfg) {
 }
 
 // ─── Status resolver ──────────────────────────────────────────────────────────
+// Single punch (in only OR out only) = present.
+// SP is flagged in the frontend by checking present + null out_time.
+// No punches at all = absent.
 function resolveStatus(hasIn, hasOut) {
   if (hasIn && hasOut) return 'present';
-  if (hasIn || hasOut) return 'half_day';
+  if (hasIn || hasOut) return 'present'; // single punch — missed out-punch, still worked
   return 'absent';
 }
 

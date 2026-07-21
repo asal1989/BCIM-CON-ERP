@@ -379,28 +379,61 @@ router.get('/', async (req, res) => {
     applyProjectScope(req, conditions, params, 'po', project_id);
     let sql = `
       WITH recv AS (
-        SELECT gi.po_item_id, SUM(gi.quantity_received) AS qty
-        FROM grn_items gi
-        JOIN grn g ON g.id = gi.grn_id
-        WHERE g.quality_status NOT IN ('rejected')
-        GROUP BY gi.po_item_id
+        SELECT po_item_id, SUM(qty) AS qty FROM (
+          -- Material Inspection is an optional step after IGN — most goods
+          -- receipts never get a separate qty_inspected value, so relying on
+          -- it alone made every un-inspected (but genuinely received) IGN
+          -- count as 0 received. Falls back to qty_as_per_dc (the delivery
+          -- challan quantity logged at receipt) when inspection was skipped.
+          SELECT ii.po_item_id, SUM(COALESCE(ii.qty_inspected, ii.qty_as_per_dc, 0) - COALESCE(ii.qty_rejected, 0)) AS qty
+          FROM ign_items ii
+          JOIN ign i ON i.id = ii.ign_id
+          WHERE i.status != 'cancelled' AND ii.po_item_id IS NOT NULL
+          GROUP BY ii.po_item_id
+          UNION ALL
+          SELECT gi.po_item_id, SUM(gi.quantity_received) AS qty
+          FROM grn_items gi
+          JOIN grn g ON g.id = gi.grn_id
+          WHERE g.quality_status NOT IN ('rejected')
+          GROUP BY gi.po_item_id
+        ) combined
+        GROUP BY po_item_id
       ),
       po_rcv AS (
         SELECT
           poi.po_id,
           COUNT(*) AS items_total,
-          COUNT(*) FILTER (WHERE COALESCE(r.qty, 0) >= poi.quantity) AS items_received
+          COUNT(*) FILTER (WHERE COALESCE(r.qty, 0) >= poi.quantity) AS items_received,
+          SUM(LEAST(COALESCE(r.qty, 0), poi.quantity) * COALESCE(poi.rate, 0)) AS received_value
         FROM po_items poi
         LEFT JOIN recv r ON r.po_item_id = poi.id
         GROUP BY poi.po_id
+      ),
+      po_bills AS (
+        -- Paid = actual cash disbursed (tqs_bill_updates.paid_amount), not
+        -- "total_amount only if workflow_status='paid'" — a bill sitting at
+        -- an earlier stage (e.g. 'accounts') can already have most or all of
+        -- its value paid out as a partial payment, and that money would
+        -- otherwise show as ₹0 Paid until the bill's status formally flips.
+        SELECT tb.po_id,
+               SUM(tb.total_amount) AS billed_amount,
+               SUM(COALESCE(u.paid_amount, 0)) AS paid_amount
+        FROM tqs_bills tb
+        LEFT JOIN tqs_bill_updates u ON u.bill_id = tb.id
+        WHERE tb.is_deleted = false AND tb.po_id IS NOT NULL
+        GROUP BY tb.po_id
       )
       SELECT po.*, v.name AS vendor_name, p.name AS project_name,
-             COALESCE(rc.items_total, 0)    AS items_total,
-             COALESCE(rc.items_received, 0) AS items_received
+             COALESCE(rc.items_total, 0)     AS items_total,
+             COALESCE(rc.items_received, 0)  AS items_received,
+             COALESCE(rc.received_value, 0)  AS received_value,
+             COALESCE(pb.billed_amount, 0)   AS billed_amount,
+             COALESCE(pb.paid_amount, 0)     AS paid_amount
       FROM purchase_orders po
       JOIN vendors v ON po.vendor_id = v.id
       JOIN projects p ON po.project_id = p.id
       LEFT JOIN po_rcv rc ON rc.po_id = po.id
+      LEFT JOIN po_bills pb ON pb.po_id = po.id
       WHERE ${conditions.join(' AND ')}`;
     let i = params.length + 1;
     if (status)     { sql += ` AND po.status = $${i++}`;     params.push(status); }

@@ -858,14 +858,13 @@ router.post('/import', multerMem.single('file'), async (req, res) => {
   }
 });
 
-// ── POST /tqs/advances/resync-from-bills ─────────────────────────────────────
 // Recalculates recovered_amount on all advance vouchers from scratch using
 // actual advance_recovered values stored in tqs_bill_updates (non-deleted bills).
 // Safe to run multiple times — resets all vouchers then re-applies FIFO.
-router.post('/resync-from-bills', async (req, res) => {
-  try {
-    const { company_id } = req.user;
-
+// Extracted so it can be called automatically whenever a QS certification's
+// advance_recovered changes (see vendor-qs-certification.routes.js), not just
+// from the manual "Resync" button below.
+async function resyncAdvancesFromBills(company_id) {
     // 1a. Backfill paid_amount for vouchers that were previously marked issued/partial/recovered
     //     but never had paid_amount captured (common when imported from Excel).
     //     If a voucher had any recovery against it, the advance must have been paid.
@@ -950,6 +949,13 @@ router.post('/resync-from-bills', async (req, res) => {
       applied++;
     }
 
+    return { applied, skipped };
+}
+
+// ── POST /tqs/advances/resync-from-bills ─────────────────────────────────────
+router.post('/resync-from-bills', async (req, res) => {
+  try {
+    const { applied, skipped } = await resyncAdvancesFromBills(req.user.company_id);
     res.json({
       success: true,
       message: `Resync complete. ${applied} bill recoveries applied, ${skipped} skipped (no matching voucher).`,
@@ -963,3 +969,4 @@ router.post('/resync-from-bills', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.resyncAdvancesFromBills = resyncAdvancesFromBills;

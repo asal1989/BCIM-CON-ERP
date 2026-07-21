@@ -117,7 +117,13 @@ api.interceptors.response.use(
 
       const refreshToken = localStorage.getItem('refreshToken') || sessionStorage.getItem('refreshToken');
       if (!refreshToken) {
-        forceLogin('session_expired');
+        // Only force a redirect if this visitor actually had a session to begin
+        // with. Without this check, any stray authenticated-looking call made
+        // from a public page (login, register, reset-password, verification
+        // links) by a never-logged-in visitor would 401 and hard-redirect them
+        // to /login?reason=session_expired — a confusing false alarm.
+        const hadAccessToken = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+        if (hadAccessToken) forceLogin('session_expired');
         return Promise.reject(error);
       }
 
@@ -253,6 +259,9 @@ export const boqBudgetAPI = {
   costheadMonthly:     (projectId)            => api.get(`/boq-budget/${projectId}/costhead-monthly`),
   sendBudgetAlert:     (projectId)            => api.post(`/boq-budget/${projectId}/send-budget-alert`),
   unlinkedLines:       (projectId, costHead)  => api.get(`/boq-budget/${projectId}/unlinked-lines`, { params: { cost_head: costHead || undefined } }),
+  raPlan:              (projectId)            => api.get(`/boq-budget/${projectId}/ra-plan`),
+  setRaPlanCell:       (projectId, payload)    => api.put(`/boq-budget/${projectId}/ra-plan`, payload),
+  raActuals:           (projectId)             => api.get(`/boq-budget/${projectId}/ra-actuals`),
 };
 
 export const boqMappingAPI = {
@@ -296,6 +305,16 @@ export const raBillAPI = {
   getPrevStats:  (params) => api.get('/ra-bills/previous-stats', { params }),
   boqItemBilled:  (projectId) => api.get('/ra-bills/boq-item-billed',  { params: { project_id: projectId } }),
   boqBillsDetail: (projectId) => api.get('/ra-bills/boq-bills-detail', { params: { project_id: projectId } }),
+};
+
+export const clientWOAPI = {
+  list:           (params) => api.get('/client-work-orders', { params }),
+  get:            (id)     => api.get(`/client-work-orders/${id}`),
+  create:         (data)   => api.post('/client-work-orders', data),
+  update:         (id, d)  => api.put(`/client-work-orders/${id}`, d),
+  remove:         (id)     => api.delete(`/client-work-orders/${id}`),
+  addAmendment:   (id, d)  => api.post(`/client-work-orders/${id}/amendments`, d),
+  delAmendment:   (id, aid) => api.delete(`/client-work-orders/${id}/amendments/${aid}`),
 };
 
 export const clientAdvanceAPI = {
@@ -1068,6 +1087,14 @@ export const plantAPI = {
   listCostAllocation:(p)     => api.get('/plant/cost-allocation', { params: p }),
   createCostAllocation:(d)   => api.post('/plant/cost-allocation', d),
   deleteCostAllocation:(id)  => api.delete(`/plant/cost-allocation/${id}`),
+  // Tower Crane Register
+  listTowerCranes:       (p)     => api.get('/plant/tower-cranes', { params: p }),
+  createTowerCrane:      (d)     => api.post('/plant/tower-cranes', d),
+  updateTowerCrane:      (id, d) => api.put(`/plant/tower-cranes/${id}`, d),
+  deleteTowerCrane:      (id)    => api.delete(`/plant/tower-cranes/${id}`),
+  listTowerCraneDocs:    (id)    => api.get(`/plant/tower-cranes/${id}/documents`),
+  addTowerCraneDoc:      (id, d) => api.post(`/plant/tower-cranes/${id}/documents`, d),
+  deleteTowerCraneDoc:   (id)    => api.delete(`/plant/tower-crane-documents/${id}`),
   // Dashboard / Reports / Compliance
   dashboard:         ()      => api.get('/plant/dashboard'),
   expiryAlerts:      ()      => api.get('/plant/expiry-alerts'),
@@ -1734,8 +1761,10 @@ export const tqsBillsAPI = {
   updateQSSign: (id, d)    => api.patch(`/tqs/bills/${id}/qs-sign`, d),
   updatePayment:(id, d)    => api.patch(`/tqs/bills/${id}/payment`, d),
   markPaid:    (id)        => api.patch(`/tqs/bills/${id}/mark-paid`),
-  tagLineChapter: (billId, lineId, boqChapter) => api.patch(`/tqs/bills/${billId}/line-items/${lineId}/chapter`, { boq_chapter: boqChapter }),
-  updateLineItem: (billId, lineId, data) => api.patch(`/tqs/bills/${billId}/line-items/${lineId}`, data),
+  tagLineChapter:  (billId, lineId, boqChapter) => api.patch(`/tqs/bills/${billId}/line-items/${lineId}/chapter`, { boq_chapter: boqChapter }),
+  updateLineItem:  (billId, lineId, data) => api.patch(`/tqs/bills/${billId}/line-items/${lineId}`, data),
+  createLineItem:  (billId, data)         => api.post(`/tqs/bills/${billId}/line-items`, data),
+  deleteLineItem:  (billId, lineId)       => api.delete(`/tqs/bills/${billId}/line-items/${lineId}`),
   uploadFile:   (id, fd)   => api.post(`/tqs/bills/${id}/files`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
   linkOneDrive: (id, data) => api.post(`/tqs/bills/${id}/files/link`, data),
   syncFileToOneDrive: (id, fid) => api.post(`/tqs/bills/${id}/files/${fid}/sync-onedrive`),
@@ -1846,9 +1875,11 @@ export const vendorQSCertificationAPI = {
   accountsPending: (params) => api.get('/vendor-qs-certifications/accounts-pending', { params }),
   pendingInvoices:   (params) => api.get('/vendor-qs-certifications/pending-invoices', { params }),
   pendingScAdvances: (params) => api.get('/vendor-qs-certifications/pending-sc-advances', { params }),
+  pendingAdvanceVouchers: (params) => api.get('/vendor-qs-certifications/pending-advance-vouchers', { params }),
   summaryItems:    (data)   => api.post('/vendor-qs-certifications/summary-items', data),
   create:          (data)   => api.post('/vendor-qs-certifications', data),
   refreshFromBills:(id)     => api.post(`/vendor-qs-certifications/${id}/refresh-from-bills`),
+  updateMeta:      (id, d)  => api.patch(`/vendor-qs-certifications/${id}/meta`, d),
   updateAmounts:   (id, d)  => api.patch(`/vendor-qs-certifications/${id}/amounts`, d),
   updateStatus:    (id, d)  => api.patch(`/vendor-qs-certifications/${id}/status`, d),
   updateItems:     (id, d)  => api.patch(`/vendor-qs-certifications/${id}/items`, d),
@@ -2167,6 +2198,30 @@ export const essAPI = {
   uploadDocument:       (file, data = {}) => { const fd = new FormData(); fd.append('file', file); Object.entries(data).forEach(([k, v]) => fd.append(k, v ?? '')); return api.post('/ess/documents', fd, multipart); },
   onboarding:           ()             => api.get('/ess/onboarding'),
   updateOnboarding:     (id, data)     => api.patch(`/ess/onboarding/${id}`, data),
+  uploadProfilePhoto:   (photo)        => api.post('/ess/profile/photo', { photo }),
+  removeProfilePhoto:   ()             => api.delete('/ess/profile/photo'),
+  teamToday:            ()             => api.get('/ess/team-today'),
+  myAssets:             ()             => api.get('/ess/assets'),
+  helpdeskTickets:      ()             => api.get('/ess/helpdesk'),
+  createHelpdeskTicket: (data)         => api.post('/ess/helpdesk', data),
+  knowledge:            ()             => api.get('/ess/knowledge'),
+  // Engage
+  colleagues:           ()             => api.get('/ess/colleagues'),
+  engageFeed:           (params)       => api.get('/ess/engage', { params }),
+  createEngagePost:     (data)         => api.post('/ess/engage', data),
+  reactEngage:          (id, emoji)    => api.post(`/ess/engage/${id}/react`, { emoji }),
+  engageComments:       (id)           => api.get(`/ess/engage/${id}/comments`),
+  addEngageComment:     (id, body)     => api.post(`/ess/engage/${id}/comments`, { body }),
+  // Training
+  trainingRequirements: ()             => api.get('/ess/training/requirements'),
+  trainingRequests:     ()             => api.get('/ess/training/requests'),
+  createTrainingRequest:(data)         => api.post('/ess/training/requests', data),
+  // Salary
+  payrollYtd:           (params)       => api.get('/ess/payroll/ytd', { params }),
+  loans:                ()             => api.get('/ess/loans'),
+  requestLoan:          (data)         => api.post('/ess/loans', data),
+  reimbursements:       ()             => api.get('/ess/reimbursements'),
+  createReimbursement:  (data)         => api.post('/ess/reimbursements', data),
 };
 
 export const notificationsAPI = {

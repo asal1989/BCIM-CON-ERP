@@ -12,7 +12,7 @@ import { clsx } from 'clsx';
 import dayjs from 'dayjs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { inventoryAPI, projectAPI } from '../../api/client';
+import { inventoryAPI, projectAPI, storesReportAPI } from '../../api/client';
 import { PageHeader, Theme } from '../../theme';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
@@ -489,6 +489,10 @@ export default function StoreLedgerPage() {
   // Monthly Movement tab state
   const [month, setMonth]                 = useState(dayjs().format('YYYY-MM'));
   const [movTab, setMovTab]               = useState('register'); // register | valuation | slow
+  // Inventory Register date range (for PDF/print report)
+  const fyStart = dayjs().month() >= 3 ? dayjs().year() : dayjs().year() - 1;
+  const [invRegFrom, setInvRegFrom] = useState(`${fyStart}-04-01`);
+  const [invRegTo,   setInvRegTo]   = useState(dayjs().format('YYYY-MM-DD'));
 
   const { data: projectsData = [] } = useQuery({
     queryKey: ['projects'],
@@ -577,13 +581,18 @@ export default function StoreLedgerPage() {
 
   // Summary totals for footer
   const totalOpeningValue  = filteredSummary.reduce((sum, s) => sum + (rq3(s.opening_stock) * parseFloat(s.unit_rate || 0)), 0);
+  const totalIssuedQty     = filteredSummary.reduce((sum, s) => sum + parseFloat(s.total_issued || 0), 0);
   const totalIssuedValue   = filteredSummary.reduce((sum, s) => {
-    const issued = Math.max(0, rq3(s.opening_stock) - rq3(s.closing_stock));
+    const issued = parseFloat(s.total_issued || 0);
     return sum + issued * parseFloat(s.unit_rate || 0);
   }, 0);
   const totalClosingValue  = filteredSummary.reduce((sum, s) => sum + (rq3(s.closing_stock) * parseFloat(s.unit_rate || 0)), 0);
   const totalGST           = totalClosingValue * GST_RATE;
   const totalGrandTotal    = totalClosingValue + totalGST;
+  // Rows with at least some activity (received, issued, or in stock) — used in PDF/CSV exports
+  const activeForReport    = filteredSummary.filter(s =>
+    rq3(s.closing_stock) > 0 || parseFloat(s.total_issued || 0) > 0 || parseFloat(s.total_received || 0) > 0
+  );
 
   // Pagination for the Stock Report table
   const totalPages   = Math.max(1, Math.ceil(sortedSummary.length / PAGE_SIZE));
@@ -627,18 +636,20 @@ export default function StoreLedgerPage() {
   };
 
   const exportLedgerCSV = () => {
-    const headers = ['SL NO','Major Head','Category','Material Description','Unit','DC/IDC','Opening Stock','Closing Stock','Rate (₹)','Total Issued Stock Value','Opening Stock Value','Closing Stock Value','GST @18%','Grand Total'];
-    const rows = filteredSummary.map((s, idx) => {
-      const rate       = parseFloat(s.unit_rate  || 0);
-      const opening    = rq3(s.opening_stock);
-      const closing    = rq3(s.closing_stock);
-      const issued     = Math.max(0, opening - closing);
-      const issuedVal  = (issued   * rate).toFixed(2);
-      const openingVal = (opening  * rate).toFixed(2);
-      const closingVal = (closing  * rate).toFixed(2);
-      const gst        = (closing  * rate * GST_RATE).toFixed(2);
-      const grand      = (closing  * rate * (1 + GST_RATE)).toFixed(2);
-      return [idx + 1, s.major_head || '', s.category || '', s.material_name, s.unit, s.dc_idc || '', opening, closing, rate, issuedVal, openingVal, closingVal, gst, grand];
+    const headers = ['SL NO','Major Head','Category','Material Description','Unit','DC/IDC','Opening Qty','Received Qty','Issued Qty','Closing Qty','Rate (₹)','Opening Value (₹)','Received Value (₹)','Issued Value (₹)','Closing Value (₹)','GST @18% (₹)','Grand Total (₹)'];
+    const rows = activeForReport.map((s, idx) => {
+      const rate        = parseFloat(s.unit_rate || 0);
+      const opening     = rq3(s.opening_stock);
+      const received    = parseFloat(s.total_received || 0);
+      const issued      = parseFloat(s.total_issued || 0);
+      const closing     = rq3(s.closing_stock);
+      const openingVal  = (opening  * rate).toFixed(2);
+      const receivedVal = (received * rate).toFixed(2);
+      const issuedVal   = (issued   * rate).toFixed(2);
+      const closingVal  = (closing  * rate).toFixed(2);
+      const gst         = (closing  * rate * GST_RATE).toFixed(2);
+      const grand       = (closing  * rate * (1 + GST_RATE)).toFixed(2);
+      return [idx + 1, s.major_head || '', s.category || '', s.material_name, s.unit, s.dc_idc || '', opening, received, issued, closing, rate, openingVal, receivedVal, issuedVal, closingVal, gst, grand];
     });
     const csv = [headers, ...rows].map(row => row.map(c => `"${c}"`).join(',')).join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
@@ -718,18 +729,30 @@ export default function StoreLedgerPage() {
       };
     }
 
+    const totOpQty = activeForReport.reduce((s, r) => s + rq3(r.opening_stock), 0);
+    const totRxQty = activeForReport.reduce((s, r) => s + parseFloat(r.total_received || 0), 0);
+    const totIxQty = activeForReport.reduce((s, r) => s + parseFloat(r.total_issued || 0), 0);
+    const totClQty = activeForReport.reduce((s, r) => s + rq3(r.closing_stock), 0);
+    const totOpVal = activeForReport.reduce((s, r) => s + rq3(r.opening_stock) * parseFloat(r.unit_rate || 0), 0);
+    const totRxVal = activeForReport.reduce((s, r) => s + parseFloat(r.total_received || 0) * parseFloat(r.unit_rate || 0), 0);
+    const totIxVal = activeForReport.reduce((s, r) => s + parseFloat(r.total_issued || 0) * parseFloat(r.unit_rate || 0), 0);
+    const totClVal = activeForReport.reduce((s, r) => s + rq3(r.closing_stock) * parseFloat(r.unit_rate || 0), 0);
+    const totGst   = totClVal * GST_RATE;
+    const totGrand = totClVal + totGst;
     return {
       title: 'Store Ledger - Inventory Register',
-      columns: ['SL No', 'Major Head', 'Category', 'Material Description', 'Unit', 'DC/IDC', 'Opening Stock', 'Closing Stock', 'Rate', 'Issued Value', 'Opening Value', 'Closing Value', 'GST 18%', 'Grand Total'],
-      rows: filteredSummary.map((s, idx) => {
-        const rate = parseFloat(s.unit_rate || 0);
-        const opening = rq3(s.opening_stock);
-        const closing = rq3(s.closing_stock);
-        const issued = Math.max(0, opening - closing);
-        const issuedVal = issued * rate;
-        const openingVal = opening * rate;
-        const closingVal = closing * rate;
-        const gst = closingVal * GST_RATE;
+      columns: ['SL No', 'Major Head', 'Category', 'Material Description', 'Unit', 'DC/IDC', 'Opening Qty', 'Received Qty', 'Issued Qty', 'Closing Qty', 'Rate (₹)', 'Opening Value (₹)', 'Received Value (₹)', 'Issued Value (₹)', 'Closing Value (₹)', 'GST 18% (₹)', 'Grand Total (₹)'],
+      rows: activeForReport.map((s, idx) => {
+        const rate        = parseFloat(s.unit_rate || 0);
+        const opening     = rq3(s.opening_stock);
+        const received    = parseFloat(s.total_received || 0);
+        const issued      = parseFloat(s.total_issued || 0);
+        const closing     = rq3(s.closing_stock);
+        const openingVal  = opening  * rate;
+        const receivedVal = received * rate;
+        const issuedVal   = issued   * rate;
+        const closingVal  = closing  * rate;
+        const gst   = closingVal * GST_RATE;
         const grand = closingVal + gst;
         return [
           idx + 1,
@@ -739,138 +762,269 @@ export default function StoreLedgerPage() {
           s.unit || '',
           s.dc_idc || '',
           qty(opening),
+          qty(received),
+          qty(issued),
           qty(closing),
           inr(rate),
-          inr(issuedVal),
           inr(openingVal),
+          inr(receivedVal),
+          inr(issuedVal),
           inr(closingVal),
           inr(gst),
           inr(grand),
         ];
       }),
-      totals: ['Totals', '', '', '', '', '', '', '', '', inr(totalIssuedValue), inr(totalOpeningValue), inr(totalClosingValue), inr(totalGST), inr(totalGrandTotal)],
+      totals: ['Totals', '', '', '', '', '', qty(totOpQty), qty(totRxQty), qty(totIxQty), qty(totClQty), '', inr(totOpVal), inr(totRxVal), inr(totIxVal), inr(totClVal), inr(totGst), inr(totGrand)],
     };
   };
 
+  const buildPrintWindow = async (reportHtml, title) => {
+    const win = window.open('', '_blank', 'width=1400,height=900');
+    if (!win) { window.print(); return; }
+    win.document.write(reportHtml);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 400);
+  };
+
+  const getLogoBase64 = async () => {
+    try {
+      const res = await fetch(`${window.location.origin}/bcim-logo.png`);
+      const blob = await res.blob();
+      return await new Promise(resolve => { const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(blob); });
+    } catch (_) { return ''; }
+  };
+
+  const printInventoryRegister = async () => {
+    const toastId = toast.loading('Generating store ledger…');
+    try {
+      const params = { from_date: invRegFrom, to_date: invRegTo };
+      if (projectFilter) params.project_id = projectFilter;
+      if (categoryFilter) params.category = categoryFilter;
+      const resp = await storesReportAPI.get('inventory-register', params);
+      const data = resp.data?.data || [];
+      if (!data.length) { toast.dismiss(toastId); toast.error('No data for selected period'); return; }
+
+      const projectName = projectFilter
+        ? (projectsData.find(p => String(p.id) === String(projectFilter))?.name || projectFilter)
+        : 'All Projects';
+      const storesPersonName = user?.name || '—';
+      const periodLabel = `${dayjs(invRegFrom).format('DD-MM-YYYY')} to ${dayjs(invRegTo).format('DD-MM-YYYY')}`;
+      const logoSrc = await getLogoBase64();
+
+      // Compute totals
+      let totOpQty=0, totOpVal=0, totRxQty=0, totRxVal=0, totIxQty=0, totIxVal=0, totClQty=0, totClVal=0;
+      data.forEach(r => {
+        const rt = parseFloat(r.unit_rate||0);
+        totOpQty += parseFloat(r.opening_qty||0);
+        totOpVal += parseFloat(r.opening_qty||0)*rt;
+        totRxQty += parseFloat(r.received_qty||0);
+        totRxVal += parseFloat(r.received_qty||0)*rt;
+        totIxQty += parseFloat(r.issued_qty||0);
+        totIxVal += parseFloat(r.issued_qty||0)*rt;
+        totClQty += parseFloat(r.closing_qty||0);
+        totClVal += parseFloat(r.closing_qty||0)*rt;
+      });
+      const gstVal = totClVal * GST_RATE;
+
+      let sl = 0;
+      const bodyRows = data.map(r => {
+        sl++;
+        const rt = parseFloat(r.unit_rate||0);
+        const opQ = parseFloat(r.opening_qty||0), opV = opQ*rt;
+        const rxQ = parseFloat(r.received_qty||0), rxV = rxQ*rt;
+        const ixQ = parseFloat(r.issued_qty||0),   ixV = ixQ*rt;
+        const clQ = parseFloat(r.closing_qty||0),  clV = clQ*rt;
+        const gst = clV * GST_RATE;
+        return `<tr>
+          <td class="c">${sl}</td>
+          <td>${escapeHtml(r.major_head||'')}</td>
+          <td>${escapeHtml(r.category||'')}</td>
+          <td class="mat">${escapeHtml(r.material_name||'')}<br/><span class="proj">${escapeHtml(r.project_name||'')}</span></td>
+          <td class="c">${escapeHtml(r.unit||'')}</td>
+          <td class="n">${qty(opQ)}</td>
+          <td class="n">${inr(opV)}</td>
+          <td class="n rx">${rxQ > 0 ? qty(rxQ) : '—'}</td>
+          <td class="n rx">${rxV > 0 ? inr(rxV) : '—'}</td>
+          <td class="vend">${escapeHtml(r.vendor_names||'—')}</td>
+          <td class="n ix">${ixQ > 0 ? qty(ixQ) : '—'}</td>
+          <td class="n ix">${ixV > 0 ? inr(ixV) : '—'}</td>
+          <td class="vend ix">${escapeHtml(r.issued_to||'—')}</td>
+          <td class="n">${inr(rt)}</td>
+          <td class="n cl">${qty(clQ)}</td>
+          <td class="n cl">${inr(clV)}</td>
+          <td class="n">${inr(gst)}</td>
+        </tr>`;
+      }).join('');
+
+      const html = `<!doctype html><html><head><title>Store Ledger - Inventory Register</title>
+      <style>
+        *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+        body{margin:0;font-family:Arial,sans-serif;font-size:8px;color:#0f172a}
+        .hdr{display:table;width:100%;border-collapse:collapse;border:2px solid #0f2d6b;margin-bottom:0}
+        .hdr td{border:1px solid #0f2d6b;padding:5px 8px;vertical-align:middle}
+        .logo img{height:44px;width:auto}
+        .ttl{text-align:center}
+        .ttl h1{margin:0;font-size:12px;font-weight:900;color:#0f2d6b;text-decoration:underline;text-transform:uppercase;letter-spacing:.08em}
+        .ttl p{margin:2px 0 0;font-size:8px;color:#475569}
+        .meta{width:28%;font-size:8px}
+        .meta-row{display:flex;gap:4px;margin-bottom:2px}
+        .meta-lbl{font-weight:700;color:#64748b;width:80px;flex-shrink:0}
+        .meta-val{font-weight:600}
+        .period-bar{display:table;width:100%;border-collapse:collapse;border:2px solid #0f2d6b;border-top:none;margin-bottom:10px;background:#f0f4ff}
+        .period-bar td{border:1px solid #0f2d6b;padding:3px 8px;font-size:8px}
+        .period-bar .lbl{font-weight:700;color:#334155}
+        .period-bar .val{font-weight:600;color:#0f2d6b}
+        table.d{width:100%;border-collapse:collapse;font-size:7.5px}
+        table.d th{padding:5px 4px;border:1px solid #94a3b8;font-size:7px;text-transform:uppercase;letter-spacing:.04em;vertical-align:bottom;text-align:center}
+        th.op{background:#1e3a5f;color:#fff}
+        th.rx{background:#166534;color:#fff}
+        th.ix{background:#7c2d12;color:#fff}
+        th.cl{background:#1e3a5f;color:#fff}
+        th.misc{background:#374151;color:#fff}
+        table.d td{padding:4px;border:1px solid #e2e8f0;vertical-align:top}
+        table.d tr:nth-child(even) td{background:#f8fafc}
+        td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+        td.c{text-align:center}
+        td.mat{font-weight:600;min-width:120px}
+        .proj{font-weight:400;color:#64748b;font-size:6.5px}
+        td.rx{color:#166534}
+        td.ix{color:#7c2d12}
+        td.cl{font-weight:700}
+        td.vend{font-size:7px;color:#475569;max-width:90px}
+        .tot td{background:#dbeafe !important;font-weight:800;color:#1e3a5f;border-top:2px solid #1e3a5f}
+        .group-hdr td{background:#1e3a5f;color:#fff;font-weight:700;padding:3px 4px;font-size:7.5px}
+        .foot{margin-top:8px;display:flex;justify-content:space-between;font-size:7px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:4px}
+        @page{size:A3 landscape;margin:8mm}
+      </style></head><body>
+      <table class="hdr"><tr>
+        <td class="logo">${logoSrc?`<img src="${logoSrc}" alt="BCIM"/>`:'<b style="color:#0f2d6b;font-size:10px">BCIM</b>'}</td>
+        <td class="ttl"><h1>Store Ledger &mdash; Inventory Register</h1><p>BCIM Engineering Private Limited &mdash; Stores &amp; Inventory Control</p></td>
+        <td class="meta">
+          <div class="meta-row"><span class="meta-lbl">Project :</span><span class="meta-val">${escapeHtml(projectName)}</span></div>
+          <div class="meta-row"><span class="meta-lbl">Period :</span><span class="meta-val">${escapeHtml(periodLabel)}</span></div>
+          <div class="meta-row"><span class="meta-lbl">Prepared by :</span><span class="meta-val">${escapeHtml(storesPersonName)}</span></div>
+          <div class="meta-row"><span class="meta-lbl">Print Date :</span><span class="meta-val">${dayjs().format('DD-MM-YYYY hh:mm A')}</span></div>
+        </td>
+      </tr></table>
+      <table class="period-bar"><tr>
+        <td><span class="lbl">From :</span> <span class="val">${dayjs(invRegFrom).format('DD-MM-YYYY')}</span></td>
+        <td><span class="lbl">To :</span> <span class="val">${dayjs(invRegTo).format('DD-MM-YYYY')}</span></td>
+        <td><span class="lbl">Total Items :</span> <span class="val">${data.length}</span></td>
+        <td><span class="lbl">Total Received Value :</span> <span class="val">₹${inr(totRxVal)}</span></td>
+        <td><span class="lbl">Total Issued Value :</span> <span class="val">₹${inr(totIxVal)}</span></td>
+        <td><span class="lbl">Closing Stock Value :</span> <span class="val">₹${inr(totClVal)}</span></td>
+        <td><span class="lbl">Grand Total (incl. GST) :</span> <span class="val">₹${inr(totClVal+gstVal)}</span></td>
+      </tr></table>
+      <table class="d">
+        <thead>
+          <tr>
+            <th class="misc" rowspan="2">#</th>
+            <th class="misc" rowspan="2">Major Head</th>
+            <th class="misc" rowspan="2">Category</th>
+            <th class="misc" rowspan="2">Material Description</th>
+            <th class="misc" rowspan="2">Unit</th>
+            <th class="op" colspan="2">Opening Balance</th>
+            <th class="rx" colspan="3">Receipts (IN)</th>
+            <th class="ix" colspan="3">Issues (OUT)</th>
+            <th class="misc" rowspan="2">Rate (₹)</th>
+            <th class="cl" colspan="2">Closing Balance</th>
+            <th class="misc" rowspan="2">GST 18%</th>
+          </tr>
+          <tr>
+            <th class="op">Qty</th><th class="op">Value (₹)</th>
+            <th class="rx">Qty</th><th class="rx">Value (₹)</th><th class="rx">Vendor</th>
+            <th class="ix">Qty</th><th class="ix">Value (₹)</th><th class="ix">Issued To</th>
+            <th class="cl">Qty</th><th class="cl">Value (₹)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${bodyRows}
+          <tr class="tot">
+            <td colspan="5" style="text-align:right;font-size:8px">TOTALS</td>
+            <td class="n">${qty(totOpQty)}</td><td class="n">₹${inr(totOpVal)}</td>
+            <td class="n">${qty(totRxQty)}</td><td class="n">₹${inr(totRxVal)}</td><td></td>
+            <td class="n">${qty(totIxQty)}</td><td class="n">₹${inr(totIxVal)}</td><td></td>
+            <td></td>
+            <td class="n">${qty(totClQty)}</td><td class="n">₹${inr(totClVal)}</td>
+            <td class="n">₹${inr(gstVal)}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="foot">
+        <span>BCIM Construct-ERP &bull; Store Ledger &bull; ${escapeHtml(storesPersonName)}</span>
+        <span>Confidential — For internal use only &bull; Printed: ${dayjs().format('DD-MM-YYYY HH:mm')}</span>
+      </div>
+      </body></html>`;
+
+      toast.dismiss(toastId);
+      await buildPrintWindow(html, 'Store Ledger - Inventory Register');
+    } catch (err) {
+      toast.dismiss(toastId);
+      toast.error('Failed to generate report: ' + (err?.response?.data?.error || err.message));
+    }
+  };
+
   const printActiveReport = async () => {
+    if (tab === 'summary') { await printInventoryRegister(); return; }
     const report = getReportDefinition();
     if (!report.rows.length) {
       toast.error('No data available to print');
       return;
     }
     const win = window.open('', '_blank', 'width=1200,height=800');
-    if (!win) {
-      window.print();
-      return;
-    }
+    if (!win) { window.print(); return; }
 
-    // Resolve project name — prefer projectsData, fall back to inventory rows
     const projectName = projectFilter
       ? (projectsData.find(p => String(p.id) === String(projectFilter))?.name
           || inventoryData.find(r => r.project_id === projectFilter)?.project_name
           || projectFilter)
       : 'All Projects';
     const storesPersonName = user?.name || '—';
-
-    // Pre-fetch logo as base64 so the blank window can render it without timing issues
-    let logoSrc = '';
-    try {
-      const res = await fetch(`${window.location.origin}/bcim-logo.png`);
-      const blob = await res.blob();
-      logoSrc = await new Promise(resolve => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.readAsDataURL(blob);
-      });
-    } catch (_) { /* logo just won't render */ }
+    const logoSrc = await getLogoBase64();
 
     const headerCells = report.columns.map(h => `<th>${escapeHtml(h)}</th>`).join('');
     const bodyRows = report.rows.map(row => `<tr>${row.map(c => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('');
     const totalRow = report.totals ? `<tr class="total-row">${report.totals.map(c => `<td>${escapeHtml(c)}</td>`).join('')}</tr>` : '';
 
     win.document.write(`
-      <!doctype html>
-      <html>
-      <head>
-        <title>${escapeHtml(report.title)}</title>
-        <style>
-          * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          body { margin: 0; font-family: Arial, sans-serif; color: #0f172a; }
-
-          /* ── Document header ── */
-          .doc-header {
-            display: table; width: 100%; border-collapse: collapse;
-            border: 2px solid #0f2d6b; margin-bottom: 0;
-          }
-          .doc-header td { border: 1px solid #0f2d6b; padding: 6px 10px; vertical-align: middle; }
-          .logo-cell { width: 90px; text-align: center; }
-          .logo-cell img { height: 48px; width: auto; object-fit: contain; }
-          .title-cell { text-align: center; }
-          .doc-title { font-size: 14px; font-weight: 900; color: #0f2d6b; letter-spacing: .06em; text-transform: uppercase; text-decoration: underline; }
-          .doc-sub { font-size: 9px; color: #475569; margin-top: 3px; }
-          .meta-cell { width: 30%; font-size: 9px; }
-          .meta-row { display: flex; gap: 4px; margin-bottom: 3px; }
-          .meta-label { font-weight: 700; color: #475569; width: 90px; flex-shrink: 0; }
-          .meta-value { font-weight: 600; color: #0f172a; }
-
-          /* ── Info strip ── */
-          .info-strip {
-            display: table; width: 100%; border-collapse: collapse;
-            border: 2px solid #0f2d6b; border-top: none; margin-bottom: 12px;
-          }
-          .info-strip td { border: 1px solid #0f2d6b; padding: 4px 8px; font-size: 9px; }
-          .info-lbl { font-weight: 700; color: #475569; }
-          .info-val { font-weight: 600; }
-
-          /* ── Data table ── */
-          table.data { width: 100%; border-collapse: collapse; font-size: 9px; }
-          table.data th { background: #0f2d6b; color: #fff; text-align: left; padding: 6px; border: 1px solid #94a3b8; font-size: 8.5px; text-transform: uppercase; letter-spacing: .04em; }
-          table.data td { padding: 5px 6px; border: 1px solid #cbd5e1; vertical-align: top; }
-          table.data td:nth-child(n+5), table.data th:nth-child(n+5) { text-align: right; }
-          table.data tr:nth-child(even) td { background: #f8fafc; }
-          .total-row td { background: #eaf1ff !important; font-weight: 800; color: #0f2d6b; border-top: 2px solid #0f2d6b; }
-
-          /* ── Footer ── */
-          .doc-footer { margin-top: 10px; display: flex; justify-content: space-between; font-size: 8px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 6px; }
-
-          @page { size: A4 landscape; margin: 10mm; }
-        </style>
-      </head>
-      <body>
-
-        <!-- Header table -->
-        <table class="doc-header">
-          <tr>
-            <td class="logo-cell" rowspan="1">
-              ${logoSrc ? `<img src="${logoSrc}" alt="BCIM" style="height:48px;width:auto;object-fit:contain;" />` : '<span style="font-size:9px;font-weight:900;color:#0f2d6b;">BCIM</span>'}
-            </td>
-            <td class="title-cell">
-              <div class="doc-title">${escapeHtml(report.title)}</div>
-              <div class="doc-sub">BCIM Engineering Private Limited &mdash; Stores &amp; Inventory Control</div>
-            </td>
-            <td class="meta-cell">
-              <div class="meta-row"><span class="meta-label">Project :</span><span class="meta-value">${escapeHtml(projectName)}</span></div>
-              <div class="meta-row"><span class="meta-label">Prepared by :</span><span class="meta-value">${escapeHtml(storesPersonName)}</span></div>
-              <div class="meta-row"><span class="meta-label">Print Date :</span><span class="meta-value">${dayjs().format('DD-MM-YYYY hh:mm A')}</span></div>
-            </td>
-          </tr>
-        </table>
-
-        <!-- Data table -->
-        <table class="data">
-          <thead><tr>${headerCells}</tr></thead>
-          <tbody>${bodyRows}${totalRow}</tbody>
-        </table>
-
-        <!-- Footer -->
-        <div class="doc-footer">
-          <span>BCIM Construct-ERP v3.0 &bull; Store Ledger &bull; ${escapeHtml(storesPersonName)}</span>
-          <span>Confidential &mdash; For internal use only &bull; Printed: ${dayjs().format('DD-MM-YYYY HH:mm')}</span>
-        </div>
-
-      </body>
-      </html>
-    `);
+      <!doctype html><html><head><title>${escapeHtml(report.title)}</title>
+      <style>
+        *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+        body{margin:0;font-family:Arial,sans-serif;color:#0f172a}
+        .doc-header{display:table;width:100%;border-collapse:collapse;border:2px solid #0f2d6b;margin-bottom:0}
+        .doc-header td{border:1px solid #0f2d6b;padding:6px 10px;vertical-align:middle}
+        .logo-cell{width:90px;text-align:center}.logo-cell img{height:48px;width:auto;object-fit:contain}
+        .title-cell{text-align:center}
+        .doc-title{font-size:14px;font-weight:900;color:#0f2d6b;letter-spacing:.06em;text-transform:uppercase;text-decoration:underline}
+        .doc-sub{font-size:9px;color:#475569;margin-top:3px}
+        .meta-cell{width:30%;font-size:9px}
+        .meta-row{display:flex;gap:4px;margin-bottom:3px}
+        .meta-label{font-weight:700;color:#475569;width:90px;flex-shrink:0}
+        .meta-value{font-weight:600;color:#0f172a}
+        table.data{width:100%;border-collapse:collapse;font-size:9px}
+        table.data th{background:#0f2d6b;color:#fff;text-align:left;padding:6px;border:1px solid #94a3b8;font-size:8.5px;text-transform:uppercase;letter-spacing:.04em}
+        table.data td{padding:5px 6px;border:1px solid #cbd5e1;vertical-align:top}
+        table.data td:nth-child(n+5),table.data th:nth-child(n+5){text-align:right}
+        table.data tr:nth-child(even) td{background:#f8fafc}
+        .total-row td{background:#eaf1ff !important;font-weight:800;color:#0f2d6b;border-top:2px solid #0f2d6b}
+        .doc-footer{margin-top:10px;display:flex;justify-content:space-between;font-size:8px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:6px}
+        @page{size:A4 landscape;margin:10mm}
+      </style></head><body>
+      <table class="doc-header"><tr>
+        <td class="logo-cell">${logoSrc?`<img src="${logoSrc}" alt="BCIM" style="height:48px;width:auto;object-fit:contain;"/>`:'<span style="font-size:9px;font-weight:900;color:#0f2d6b;">BCIM</span>'}</td>
+        <td class="title-cell"><div class="doc-title">${escapeHtml(report.title)}</div><div class="doc-sub">BCIM Engineering Private Limited &mdash; Stores &amp; Inventory Control</div></td>
+        <td class="meta-cell">
+          <div class="meta-row"><span class="meta-label">Project :</span><span class="meta-value">${escapeHtml(projectName)}</span></div>
+          <div class="meta-row"><span class="meta-label">Prepared by :</span><span class="meta-value">${escapeHtml(storesPersonName)}</span></div>
+          <div class="meta-row"><span class="meta-label">Print Date :</span><span class="meta-value">${dayjs().format('DD-MM-YYYY hh:mm A')}</span></div>
+        </td>
+      </tr></table>
+      <table class="data"><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}${totalRow}</tbody></table>
+      <div class="doc-footer">
+        <span>BCIM Construct-ERP v3.0 &bull; Store Ledger &bull; ${escapeHtml(storesPersonName)}</span>
+        <span>Confidential &mdash; For internal use only &bull; Printed: ${dayjs().format('DD-MM-YYYY HH:mm')}</span>
+      </div></body></html>`);
     win.document.close();
     win.focus();
     setTimeout(() => win.print(), 300);
@@ -1148,6 +1302,16 @@ export default function StoreLedgerPage() {
                 <option value="out_of_stock">Out of Stock</option>
               </select>
             </div>
+            {/* Date range for Inventory Register PDF */}
+            <div className="flex items-center gap-1.5 h-10 border border-indigo-200 bg-indigo-50 rounded-xl px-3 shrink-0">
+              <Calendar size={13} className="text-indigo-600 shrink-0" />
+              <span className="text-xs font-bold text-indigo-700 whitespace-nowrap">Period:</span>
+              <input type="date" value={invRegFrom} onChange={e => setInvRegFrom(e.target.value)}
+                className="h-7 text-xs font-semibold text-slate-800 bg-transparent border-none outline-none" />
+              <span className="text-xs text-indigo-400">–</span>
+              <input type="date" value={invRegTo} max={dayjs().format('YYYY-MM-DD')} onChange={e => setInvRegTo(e.target.value)}
+                className="h-7 text-xs font-semibold text-slate-800 bg-transparent border-none outline-none" />
+            </div>
             <button
               onClick={exportLedgerCSV}
               className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-slate-900 bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-slate-700"
@@ -1276,7 +1440,7 @@ export default function StoreLedgerPage() {
                     const rate       = parseFloat(s.unit_rate || 0);
                     const opening    = rq3(s.opening_stock);
                     const closing    = rq3(s.closing_stock);
-                    const issued     = Math.max(0, opening - closing);
+                    const issued     = parseFloat(s.total_issued || 0);
                     const closingVal = closing * rate;
                     const grandTotal = closingVal * (1 + GST_RATE);
                     const badge      = stockStatus(closing, s.min_stock, s.reorder_level);

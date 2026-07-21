@@ -16,7 +16,7 @@ import {
   Landmark, FileSignature, CircleSlash, ShieldCheck, Clock3, Lightbulb,
   Gavel, Target, Send, Coins, Replace, Link2, Wrench, Layers, MapPin, TrendingDown, FolderOpen, Calculator, UserRound,
   Cog, Fuel, Gauge, BarChart2, History, GitBranch, MinusCircle, FolderKanban, Sparkles, MessageSquare, Mail,
-  RefreshCw, Shuffle
+  RefreshCw, Shuffle, Globe
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import CommandPalette from './CommandPalette';
@@ -37,6 +37,7 @@ const navGroups = [
     { to: '/approvals', icon: BadgeCheck,      label: 'My Approvals' },
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/projects',  icon: Building2,       label: 'Projects' },
+    { to: '/apps',      icon: Globe,           label: 'BCIM Apps' },
     { to: '/chat',      icon: MessageSquare,   label: 'Team Chat' },
   ]},
   { label: 'Planning', items: [
@@ -108,6 +109,7 @@ const navGroups = [
     { to: '/qs/boq-mapping',          icon: Layers,          label: 'BOQ SC Mapping' },
     { to: '/qs/boq-dashboard',        icon: BarChart3,       label: 'BOQ Margin Dashboard' },
     { to: '/qs/measurements',         icon: Ruler,           label: 'Measurement Book' },
+    { to: '/qs/client-work-orders',   icon: FileSignature,   label: 'Client Work Orders' },
     { to: '/qs/ra-bills',             icon: Receipt,         label: 'RA Bills' },
     { to: '/qs/po',                   icon: ShoppingCart,    label: 'Purchase Orders' },
     { to: '/qs/po-register',          icon: ClipboardList,   label: 'PO Register' },
@@ -382,6 +384,7 @@ const navGroups = [
     { to: '/audit-log', icon: History, label: 'Audit Log' },
     { to: '/mail-center', icon: Mail, label: 'Mail Center' },
     { to: '/role-permissions', icon: ShieldCheck, label: 'Roles & Module Access' },
+    { to: '/api-keys',         icon: Key,         label: 'API Keys' },
   ]},
   { label: 'Automation Ideas', items: [
     { to: '/automation-ideas', icon: Lightbulb, label: 'Ideas Dashboard' },
@@ -612,7 +615,7 @@ function GroupDropdown({ group, onClose, pos, onKeepOpen, onStartClose }) {
     );
   };
 
-  const vw = window.innerWidth;
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
 
   // ── Accordion mode: group headers expand to their own sub-menus ──
   if (hasSubMenus) {
@@ -2011,6 +2014,12 @@ export default function Layout() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
+  // ESS custom domain: strip the full ERP nav chrome for regular employees —
+  // they should only ever see the ESS Portal, not the module sidebar. HR/admin
+  // staff are exempt since they still need full ERP access on this domain.
+  const ESS_FULL_ACCESS_ROLES = ['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager'];
+  const isEssDomainHost = typeof window !== 'undefined' && window.location.hostname === 'bcimhr.bcim.in';
+  const essOnly = isEssDomainHost && !ESS_FULL_ACCESS_ROLES.includes(String(user?.role || '').toLowerCase());
   const { language, setLanguage, t } = useLanguage();
   const isProcurementPage = location.pathname.startsWith('/procurement');
   const isChatPage = location.pathname === '/chat' || location.pathname.startsWith('/chat/');
@@ -2233,20 +2242,6 @@ export default function Layout() {
         {/* Right actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 6px', flexShrink: 0, borderLeft: '1px solid rgba(255,255,255,0.1)' }}>
 
-          {/* Search */}
-          <button
-            onClick={() => setPaletteOpen(true)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 7,
-              padding: '5px 10px', borderRadius: 8,
-              background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)',
-              color: 'rgba(255,255,255,0.90)', cursor: 'pointer', fontSize: 12,
-            }}
-          >
-            <Search size={13} />
-            <span className="sm-show" style={{ fontSize: 12, display: 'none' }}>Search</span>
-            <kbd className="sm-show" style={{ display: 'none', fontSize: 9, background: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.85)', padding: '1px 5px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.15)' }}>⌘K</kbd>
-          </button>
 
           {/* Language — hidden on mobile */}
           <div style={{ position: 'relative' }} className="lg-show">
@@ -2278,8 +2273,6 @@ export default function Layout() {
             )}
           </div>
 
-          {/* Current Project chip — switches project for the session */}
-          <ProjectChip />
 
           {/* My ESS Portal — hidden on mobile (available via bottom nav) */}
           <NavLink
@@ -2301,23 +2294,6 @@ export default function Layout() {
             <span className="sm-show" style={{ display: 'none' }}>My ESS</span>
           </NavLink>
 
-          {/* Notifications */}
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setNotifOpen(o => !o)}
-              style={{ position: 'relative', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.90)', cursor: 'pointer' }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-              onMouseLeave={e => { if (!notifOpen) e.currentTarget.style.background = 'transparent'; }}
-            >
-              <Bell size={16} />
-              {notifCount > 0 && (
-                <span style={{ position: 'absolute', top: 5, right: 5, minWidth: 14, height: 14, borderRadius: '50%', background: '#EF4444', border: '1.5px solid #1E3A8A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, color: '#fff' }}>
-                  {notifCount > 99 ? '99+' : notifCount}
-                </span>
-              )}
-            </button>
-            {notifOpen && <NotificationPanel onClose={() => setNotifOpen(false)} />}
-          </div>
 
           {/* AI Copilot (Bill Tracker pilot) */}
           {isCopilotUser && (
@@ -2420,24 +2396,26 @@ export default function Layout() {
       )}
 
       {/* ── HR secondary nav ── */}
-      {pageGroup === 'HR & Admin' && <HREmployeeNav />}
+      {!essOnly && pageGroup === 'HR & Admin' && <HREmployeeNav />}
 
       {/* ── MD Quick-Access Bar ── */}
-      {isMDNavUser && <MDQuickAccessBar />}
+      {!essOnly && isMDNavUser && <MDQuickAccessBar />}
       {/* ── Procurement Quick-Access Bar ── */}
-      {isProcurementUser && <ProcurementQuickAccessBar />}
+      {!essOnly && isProcurementUser && <ProcurementQuickAccessBar />}
 
       {/* ── Page content: sidebar + main ── */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
-        {/* Desktop sidebar — hidden on mobile via CSS */}
-        <DesktopSidebar
-          navGroups={orderedGroups}
-          matchesPath={matchesPath}
-          collapsed={sidebarCollapsed}
-          onToggle={() => setSidebarCollapsed(c => !c)}
-          topOffset={(pageGroup ? 80 : 52) + (isMDNavUser || isProcurementUser ? 36 : 0)}
-          recentPages={recentPages}
-        />
+        {/* Desktop sidebar — hidden on mobile via CSS, and entirely on the ESS domain */}
+        {!essOnly && (
+          <DesktopSidebar
+            navGroups={orderedGroups}
+            matchesPath={matchesPath}
+            collapsed={sidebarCollapsed}
+            onToggle={() => setSidebarCollapsed(c => !c)}
+            topOffset={(pageGroup ? 80 : 52) + (isMDNavUser || isProcurementUser ? 36 : 0)}
+            recentPages={recentPages}
+          />
+        )}
         <main style={{ flex: 1, minWidth: 0, position: 'relative', overflow: isChatPage ? 'hidden' : 'auto', ...(isChatPage ? { display: 'flex', flexDirection: 'column' } : {}) }} className="print:overflow-visible print:h-auto">
           <Suspense fallback={<LoadingScreen />}>
             <div key={location.key} className={clsx('page-enter', isProcurementPage && 'procurement-strong-text')} style={isChatPage ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } : {}}>
@@ -2447,18 +2425,20 @@ export default function Layout() {
         </main>
       </div>
 
-      {/* Mobile sidebar */}
-      <MobileSidebar
-        open={mobileOpen}
-        onClose={() => setMobileOpen(false)}
-        navGroups={orderedGroups}
-        user={user}
-        matchesPath={matchesPath}
-        recentPages={recentPages}
-      />
+      {/* Mobile sidebar — not needed on the ESS domain (no other modules to browse) */}
+      {!essOnly && (
+        <MobileSidebar
+          open={mobileOpen}
+          onClose={() => setMobileOpen(false)}
+          navGroups={orderedGroups}
+          user={user}
+          matchesPath={matchesPath}
+          recentPages={recentPages}
+        />
+      )}
 
-      {/* Mobile bottom navigation bar */}
-      <MobileBottomNav onMenuOpen={() => setMobileOpen(true)} />
+      {/* Mobile bottom navigation bar — hidden on the ESS domain */}
+      {!essOnly && <MobileBottomNav onMenuOpen={() => setMobileOpen(true)} />}
 
       {/* ── Floating Team Chat launcher — visible from anywhere except the chat
           page itself. Hidden on mobile widths where MobileBottomNav already

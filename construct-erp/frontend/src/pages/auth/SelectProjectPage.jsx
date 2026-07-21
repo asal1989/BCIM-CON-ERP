@@ -184,7 +184,7 @@ const styles = {
   root: {
     minHeight: '100vh',
     background: 'linear-gradient(180deg, #f5f8fd 0%, #eef3fb 100%)',
-    fontFamily: "'Inter', -apple-system, sans-serif",
+    fontFamily: "'Geist Variable', -apple-system, sans-serif",
     color: '#0f172a',
     display: 'flex', flexDirection: 'column',
   },

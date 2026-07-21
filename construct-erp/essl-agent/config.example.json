@@ -16,17 +16,22 @@
     "company_id": 1
   },
 
-  "loop_interval_minutes": 5,
+  "loop_interval_minutes": 0.5,
   "window_minutes": 10,
   "sync_days": 1,
 
   "_notes": [
-    "loop_interval_minutes: how often to sync in --loop mode (default 5).",
-    "window_minutes: how far back each loop tick pulls swipes (default 10, overlaps to avoid gaps).",
+    "loop_interval_minutes: how often to sync in --loop mode.",
+    "  0.5 = 30 seconds (near-real-time — recommended).",
+    "  1   = 1 minute, 5 = 5 minutes (legacy).",
+    "  After the first tick the agent tracks exact last-sync time and only",
+    "  queries ESSL for NEW swipes, so a short interval costs almost nothing.",
+    "",
+    "window_minutes: only used on the FIRST tick to seed the initial lookback.",
     "sync_days: used in one-shot --days mode only.",
     "",
     "RECOMMENDED: Run continuously with:  node sync.js --loop",
-    "  This syncs every 5 minutes automatically — no Task Scheduler needed.",
+    "  Syncs every 30 seconds automatically — punch appears in ERP within ~30s.",
     "",
     "One-shot modes:",
     "  node sync.js --minutes 30     pull last 30 minutes",

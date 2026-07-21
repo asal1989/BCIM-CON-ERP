@@ -10,9 +10,10 @@ import {
   Package, Building2, Calendar, BadgeCheck, FileText,
   CheckCircle2, UserCheck, Landmark, XCircle, Upload,
   Receipt, TrendingUp, IndianRupee, FileSpreadsheet,
-  Mail, Send, Edit2, ChevronsUpDown, ChevronUp, ChevronDown, Lock,
+  Mail, Send, Edit2, ChevronsUpDown, ChevronUp, ChevronDown, Lock, AlertTriangle,
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { motion } from 'framer-motion';
 import dayjs from 'dayjs';
 import { poAPI, vendorAPI, projectAPI, mrsAPI, inventoryAPI, companySettingsAPI, boqAPI } from '../../api/client';
 import MaterialCombobox from '../../components/shared/MaterialCombobox';
@@ -66,7 +67,68 @@ const STAGE_ACTIONS = [
 ];
 
 const inr  = v => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const inrCompact = v => {
+  const n = Number(v) || 0;
+  const abs = Math.abs(n);
+  if (abs >= 1e7) return `₹${(n / 1e7).toFixed(2)} Cr`;
+  if (abs >= 1e5) return `₹${(n / 1e5).toFixed(2)} L`;
+  return `₹${Math.round(n).toLocaleString('en-IN')}`;
+};
 const fmt  = d => d ? dayjs(d).format('DD-MM-YYYY') : '—';
+
+/* ─── Kpi3DCard — tilt-on-hover 3D stat tile ─── */
+function Kpi3DCard({ icon: Icon, value, label, sub, iconBg, iconText, active, onClick, index = 0, title }) {
+  const ref = useRef(null);
+  const [tilt, setTilt] = useState({ rx: 0, ry: 0, gx: 50, gy: 50 });
+
+  const handleMove = (e) => {
+    const r = ref.current.getBoundingClientRect();
+    const px = (e.clientX - r.left) / r.width;
+    const py = (e.clientY - r.top) / r.height;
+    setTilt({ rx: (0.5 - py) * 12, ry: (px - 0.5) * 12, gx: px * 100, gy: py * 100 });
+  };
+  const handleLeave = () => setTilt({ rx: 0, ry: 0, gx: 50, gy: 50 });
+
+  const Tag = onClick ? motion.button : motion.div;
+  return (
+    <Tag
+      ref={ref}
+      type={onClick ? 'button' : undefined}
+      onClick={onClick}
+      onMouseMove={handleMove}
+      onMouseLeave={handleLeave}
+      title={title}
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: index * 0.035, ease: 'easeOut' }}
+      style={{ perspective: 700 }}
+      className="relative text-left"
+    >
+      <motion.div
+        animate={{ rotateX: tilt.rx, rotateY: tilt.ry, scale: tilt.rx || tilt.ry ? 1.03 : 1 }}
+        transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+        style={{ transformStyle: 'preserve-3d' }}
+        className={clsx(
+          'relative bg-white border rounded-2xl p-4 overflow-hidden',
+          active ? 'border-indigo-400 ring-2 ring-indigo-100 shadow-lg' : 'border-slate-200 shadow-sm hover:shadow-xl'
+        )}
+      >
+        <div className="pointer-events-none absolute inset-0 rounded-2xl transition-opacity duration-200"
+          style={{
+            opacity: tilt.rx || tilt.ry ? 1 : 0,
+            background: `radial-gradient(circle at ${tilt.gx}% ${tilt.gy}%, rgba(99,102,241,0.14), transparent 62%)`,
+          }} />
+        <div className={clsx('w-9 h-9 rounded-xl flex items-center justify-center mb-3 shadow-sm', iconBg)}
+          style={{ transform: 'translateZ(24px)' }}>
+          <Icon className={clsx('w-4.5 h-4.5', iconText)} style={{ transform: 'translateZ(4px)' }} />
+        </div>
+        <div className="text-2xl font-bold text-slate-800 leading-tight" style={{ transform: 'translateZ(18px)' }}>{value}</div>
+        <div className="text-xs text-slate-400 mt-0.5" style={{ transform: 'translateZ(10px)' }}>{label}</div>
+        {sub && <div className="text-[11px] text-slate-400 mt-1 truncate" style={{ transform: 'translateZ(10px)' }}>{sub}</div>}
+      </motion.div>
+    </Tag>
+  );
+}
 
 /* ─── Signature Pad Modal ─── */
 function SignaturePadModal({ signerName, signerRole, onSave, onClose }) {
@@ -2205,13 +2267,20 @@ export default function POPage() {
     onError: e => toast.error(e?.response?.data?.error || 'Failed to update PO'),
   });
 
+  const isRecvUnbilled = p => {
+    const recv = parseFloat(p.received_value) || 0;
+    const billed = parseFloat(p.billed_amount) || 0;
+    return recv > 0 && recv > billed + 100;
+  };
+
   const filtered = poData.filter(p => {
     if (filterSeries) {
       const ref = (p.po_ref_no || p.serial_no_formatted || p.po_number || '').toUpperCase();
       if (!ref.startsWith(filterSeries.toUpperCase())) return false;
     }
     if (projectFilter !== 'all' && String(p.project_id) !== String(projectFilter)) return false;
-    if (statusFilter !== 'all' && p.status !== statusFilter) return false;
+    if (statusFilter === 'recv_unbilled') { if (!isRecvUnbilled(p)) return false; }
+    else if (statusFilter !== 'all' && p.status !== statusFilter) return false;
     if (search) {
       const q = search.toLowerCase();
       const match =
@@ -2234,6 +2303,8 @@ export default function POPage() {
     po_date:      p => (p.po_date ? new Date(p.po_date).getTime() : 0),
     delivery:    p => (p.delivery_date ? new Date(p.delivery_date).getTime() : 0),
     grand_total: p => (parseFloat(p.grand_total) || 0),
+    billed_amount: p => (parseFloat(p.billed_amount) || 0),
+    paid_amount:   p => (parseFloat(p.paid_amount) || 0),
     status:      p => (p.status || '').toLowerCase(),
   };
   const sorted = [...filtered].sort((a, b) => {
@@ -2249,10 +2320,10 @@ export default function POPage() {
       : { key, dir: 'asc' });
 
   const exportCSV = () => {
-    const headers = ['PO Number', 'Vendor', 'Project', 'PO Date', 'Grand Total', 'Status'];
+    const headers = ['PO Number', 'Vendor', 'Project', 'PO Date', 'Grand Total', 'Billed', 'Paid', 'Status'];
     const rows = filtered.map(p => [
       p.po_ref_no || p.po_number || p.serial_no_formatted, p.vendor_name, p.project_name,
-      fmt(p.po_date), p.grand_total, p.status,
+      fmt(p.po_date), p.grand_total, p.billed_amount || 0, p.paid_amount || 0, p.status,
     ]);
     const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
@@ -2271,6 +2342,27 @@ export default function POPage() {
     { key: 'approved',       label: 'Authorized',     icon: CheckCircle2, iconBg: 'bg-emerald-50', iconText: 'text-emerald-600' },
     { key: 'part_received',  label: 'Receiving',      icon: Package,      iconBg: 'bg-cyan-50',    iconText: 'text-cyan-600'    },
     { key: 'fully_received', label: 'Received',       icon: Check,        iconBg: 'bg-green-50',   iconText: 'text-green-600'   },
+  ];
+
+  const totalPOValue    = poData.reduce((s, p) => s + (parseFloat(p.grand_total) || 0), 0);
+  const totalBilled     = poData.reduce((s, p) => s + (parseFloat(p.billed_amount) || 0), 0);
+  const totalPaid       = poData.reduce((s, p) => s + (parseFloat(p.paid_amount) || 0), 0);
+  const billedPct       = totalPOValue > 0 ? (totalBilled / totalPOValue) * 100 : 0;
+
+  const recvUnbilledList = poData.filter(isRecvUnbilled);
+  const recvUnbilledGap  = recvUnbilledList.reduce((s, p) =>
+    s + Math.max((parseFloat(p.received_value) || 0) - (parseFloat(p.billed_amount) || 0), 0), 0);
+
+  const financeCards = [
+    { label: 'Total POs',        value: poData.length,              sub: projectFilter === 'all' ? 'All projects' : 'This project', icon: ShoppingCart,    iconBg: 'bg-slate-100',  iconText: 'text-slate-600' },
+    { label: 'Total PO Value',   value: inrCompact(totalPOValue),   sub: inr(totalPOValue),  icon: IndianRupee,     iconBg: 'bg-indigo-50',  iconText: 'text-indigo-600', full: inr(totalPOValue) },
+    { label: 'Total Billed',     value: inrCompact(totalBilled),    sub: `${billedPct.toFixed(1)}% of PO value`, icon: Receipt,         iconBg: 'bg-blue-50',    iconText: 'text-blue-600',   full: inr(totalBilled) },
+    { label: 'Total Paid',       value: inrCompact(totalPaid),      sub: totalBilled > 0 ? `${((totalPaid / totalBilled) * 100).toFixed(1)}% of billed` : '—', icon: CheckCircle2, iconBg: 'bg-green-50',   iconText: 'text-green-600',  full: inr(totalPaid) },
+    { label: 'Recv\'d Unbilled', value: recvUnbilledList.length > 0 ? `${recvUnbilledList.length} PO${recvUnbilledList.length > 1 ? 's' : ''}` : '—',
+      sub: recvUnbilledList.length > 0 ? `${inrCompact(recvUnbilledGap)} gap` : 'All receipts invoiced',
+      icon: AlertTriangle,       iconBg: recvUnbilledList.length > 0 ? 'bg-amber-50' : 'bg-slate-50',
+      iconText: recvUnbilledList.length > 0 ? 'text-amber-600' : 'text-slate-400',
+      filterKey: 'recv_unbilled', full: recvUnbilledList.length > 0 ? `${recvUnbilledList.length} POs with ${inr(recvUnbilledGap)} received but not yet invoiced` : 'No unbilled receipts' },
   ];
 
   return (
@@ -2312,23 +2404,24 @@ export default function POPage() {
         </div>
       )}
 
-      {/* KPI cards */}
+      {/* Financial summary cards */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">
+        {financeCards.map(({ label, value, sub, icon, iconBg, iconText, full, filterKey }, i) => (
+          <Kpi3DCard key={label} index={i} icon={icon} value={value} label={label} sub={sub}
+            iconBg={iconBg} iconText={iconText} title={full}
+            active={filterKey && statusFilter === filterKey}
+            onClick={filterKey ? () => setStatusFilter(statusFilter === filterKey ? 'all' : filterKey) : undefined} />
+        ))}
+      </div>
+
+      {/* Workflow stage KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-        {stats.map(({ key, label, icon: Icon, iconBg, iconText }) => {
+        {stats.map(({ key, label, icon, iconBg, iconText }, i) => {
           const count = poData.filter(p => p.status === key).length;
           return (
-            <button key={key}
-              onClick={() => setStatusFilter(statusFilter === key ? 'all' : key)}
-              className={clsx(
-                'bg-white border rounded-md p-4 text-left transition-colors',
-                statusFilter === key ? 'border-blue-400 ring-1 ring-blue-100' : 'border-slate-200 hover:border-slate-300'
-              )}>
-              <div className={clsx('w-8 h-8 rounded-md flex items-center justify-center mb-3', iconBg)}>
-                <Icon className={clsx('w-4 h-4', iconText)} />
-              </div>
-              <div className="text-2xl font-semibold text-slate-800">{count}</div>
-              <div className="text-xs text-slate-400 mt-0.5">{label}</div>
-            </button>
+            <Kpi3DCard key={key} index={i + financeCards.length} icon={icon} value={count} label={label}
+              iconBg={iconBg} iconText={iconText} active={statusFilter === key}
+              onClick={() => setStatusFilter(statusFilter === key ? 'all' : key)} />
           );
         })}
       </div>
@@ -2407,6 +2500,8 @@ export default function POPage() {
                   { label: 'Delivery',       key: 'delivery' },
                   { label: 'Receipt',        key: null },
                   { label: 'Total with GST', key: 'grand_total' },
+                  { label: 'Billed',         key: 'billed_amount' },
+                  { label: 'Paid',           key: 'paid_amount' },
                   { label: 'Status',         key: 'status' },
                   { label: '',               key: null },
                 ].map(h => (
@@ -2459,6 +2554,26 @@ export default function POPage() {
                   <td className="px-5 py-3.5 whitespace-nowrap">
                     <div className="text-sm font-medium text-slate-800">{inr(po.grand_total)}</div>
                     <div className="text-xs text-slate-400">{po.gst_inclusive ? 'Tax inclusive' : 'Basic + GST'}</div>
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap">
+                    <div className="text-sm font-medium text-blue-700">{inrCompact(po.billed_amount)}</div>
+                    {parseFloat(po.grand_total) > 0 && (
+                      <div className="text-xs text-slate-400">{((parseFloat(po.billed_amount || 0) / parseFloat(po.grand_total)) * 100).toFixed(0)}% of PO</div>
+                    )}
+                    {isRecvUnbilled(po) && (
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <AlertTriangle className="w-3 h-3 text-amber-500 flex-shrink-0" />
+                        <span className="text-[10px] font-medium text-amber-600">
+                          {inrCompact((parseFloat(po.received_value) || 0) - (parseFloat(po.billed_amount) || 0))} recv'd unbilled
+                        </span>
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap">
+                    <div className="text-sm font-medium text-green-700">{inrCompact(po.paid_amount)}</div>
+                    {parseFloat(po.billed_amount) > 0 && (
+                      <div className="text-xs text-slate-400">{((parseFloat(po.paid_amount || 0) / parseFloat(po.billed_amount)) * 100).toFixed(0)}% of billed</div>
+                    )}
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap">
                     <StatusBadge status={po.status} />

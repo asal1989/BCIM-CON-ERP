@@ -511,7 +511,7 @@ export default function TQSReportsPage() {
       }
     `}</style>
 
-    <div className="flex h-screen bg-[#EEF1F6] overflow-hidden" style={{ fontFamily: "'Inter','Segoe UI',system-ui,sans-serif" }}>
+    <div className="flex h-screen bg-[#EEF1F6] overflow-hidden" style={{ fontFamily: "'Geist Variable','Segoe UI',system-ui,sans-serif" }}>
 
       {/* ══ LEFT SIDEBAR ══════════════════════════════════════════════════════ */}
       <aside className={clsx(

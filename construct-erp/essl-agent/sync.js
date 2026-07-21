@@ -30,8 +30,12 @@ if (!fs.existsSync(CFG_PATH)) {
 }
 const cfg = JSON.parse(fs.readFileSync(CFG_PATH, 'utf8'));
 
-const LOOP_INTERVAL_MS   = (cfg.loop_interval_minutes || 1) * 60 * 1000;
+const LOOP_INTERVAL_MS   = (cfg.loop_interval_minutes || 0.5) * 60 * 1000; // default 30 seconds
 const DEFAULT_WINDOW_MIN = cfg.window_minutes || 10;
+const OVERLAP_SECONDS    = 30; // re-query last 30s of previous window to catch late-arriving rows
+
+// Track exact timestamp of last successful sync so we only pull NEW swipes
+let lastSyncAt = null;
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 function toDateStr(d)    { return d.toISOString().split('T')[0]; }
@@ -231,6 +235,7 @@ async function runSync({ fromDT, toDT, label }) {
     // Force pool reconnect on next tick
     if (pool) { try { await pool.close(); } catch (_) {} pool = null; }
     if (!loopMode) process.exit(1);
+    return false; // signal caller not to advance lastSyncAt
   }
 }
 
@@ -249,12 +254,17 @@ async function main() {
     // Use sequential setTimeout instead of setInterval to prevent overlapping ticks
     const tick = async () => {
       const now  = new Date();
-      const from = addMinutes(now, -windowMin);
-      await runSync({
+      // On first tick use configured window; after that query only since last sync
+      // (with a small overlap to catch rows that arrive slightly late)
+      const from = lastSyncAt
+        ? new Date(lastSyncAt.getTime() - OVERLAP_SECONDS * 1000)
+        : addMinutes(now, -windowMin);
+      const syncResult = await runSync({
         fromDT: toDateTimeStr(from),
         toDT:   toDateTimeStr(now),
-        label:  `last ${windowMin} min`,
+        label:  lastSyncAt ? `since ${toDateTimeStr(from)}` : `last ${windowMin} min`,
       });
+      if (syncResult !== false) lastSyncAt = now; // update only on success
       // Schedule next tick AFTER this one finishes
       setTimeout(tick, LOOP_INTERVAL_MS);
     };

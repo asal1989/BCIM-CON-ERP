@@ -91,6 +91,57 @@ CREATE TABLE IF NOT EXISTS pm_operators (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS pm_tower_cranes (
+  id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  company_id            UUID NOT NULL,
+  equipment_id          UUID REFERENCES pm_equipment(id) ON DELETE SET NULL,
+  project_id            UUID REFERENCES projects(id),
+  crane_tag             VARCHAR(30),
+  make                  VARCHAR(120),
+  model                 VARCHAR(120),
+  serial_number         VARCHAR(80),
+  max_capacity_t        NUMERIC(8,2),
+  jib_length_m          NUMERIC(8,2),
+  counter_jib_length_m  NUMERIC(8,2),
+  max_height_m          NUMERIC(8,2),
+  free_standing_height_m NUMERIC(8,2),
+  foundation_type       VARCHAR(60),
+  mast_section          VARCHAR(80),
+  number_of_sections    INT,
+  electrical_supply     VARCHAR(80),
+  hoist_motor_kw        NUMERIC(6,2),
+  slewing_motor_kw      NUMERIC(6,2),
+  trolley_motor_kw      NUMERIC(6,2),
+  erection_agency       VARCHAR(200),
+  erection_supervisor   VARCHAR(150),
+  installation_date     DATE,
+  commissioning_date    DATE,
+  last_load_test_date   DATE,
+  next_load_test_date   DATE,
+  last_inspection_date  DATE,
+  next_inspection_date  DATE,
+  status                VARCHAR(30) DEFAULT 'operational',
+  remarks               TEXT,
+  is_deleted            BOOLEAN DEFAULT false,
+  created_at            TIMESTAMPTZ DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS pm_tower_crane_documents (
+  id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  company_id     UUID NOT NULL,
+  crane_id       UUID NOT NULL REFERENCES pm_tower_cranes(id) ON DELETE CASCADE,
+  doc_type       VARCHAR(120) NOT NULL,
+  doc_number     VARCHAR(120),
+  issued_by      VARCHAR(150),
+  issue_date     DATE,
+  expiry_date    DATE,
+  file_url       TEXT,
+  remarks        TEXT,
+  is_deleted     BOOLEAN DEFAULT false,
+  created_at     TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS pm_equipment (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   company_id UUID NOT NULL,
@@ -1447,6 +1498,111 @@ router.get('/maintenance-due', async (req, res) => {
         AND s.due_date IS NOT NULL AND s.due_date <= CURRENT_DATE + 30
       ORDER BY s.due_date ASC`, [CID(req)]);
     res.json({ data: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Tower Crane Register ──────────────────────────────────────────────────────
+router.get('/tower-cranes', async (req, res) => {
+  try {
+    const { rows } = await query(`
+      SELECT tc.*, e.code AS equipment_code, e.name AS equipment_name,
+             p.name AS project_name
+      FROM pm_tower_cranes tc
+      LEFT JOIN pm_equipment e ON e.id = tc.equipment_id
+      LEFT JOIN projects p ON p.id = tc.project_id
+      WHERE tc.company_id=$1 AND tc.is_deleted=false
+      ORDER BY tc.created_at DESC`, [CID(req)]);
+    res.json({ data: rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/tower-cranes', async (req, res) => {
+  try {
+    const c = CID(req);
+    const f = req.body;
+    const { rows } = await query(`
+      INSERT INTO pm_tower_cranes
+        (company_id, equipment_id, project_id, crane_tag, make, model, serial_number,
+         max_capacity_t, jib_length_m, counter_jib_length_m, max_height_m,
+         free_standing_height_m, foundation_type, mast_section, number_of_sections,
+         electrical_supply, hoist_motor_kw, slewing_motor_kw, trolley_motor_kw,
+         erection_agency, erection_supervisor, installation_date, commissioning_date,
+         last_load_test_date, next_load_test_date, last_inspection_date, next_inspection_date,
+         status, remarks)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
+      RETURNING *`,
+      [c, f.equipment_id||null, f.project_id||null, f.crane_tag||null,
+       f.make||null, f.model||null, f.serial_number||null,
+       f.max_capacity_t||null, f.jib_length_m||null, f.counter_jib_length_m||null, f.max_height_m||null,
+       f.free_standing_height_m||null, f.foundation_type||null, f.mast_section||null, f.number_of_sections||null,
+       f.electrical_supply||null, f.hoist_motor_kw||null, f.slewing_motor_kw||null, f.trolley_motor_kw||null,
+       f.erection_agency||null, f.erection_supervisor||null, f.installation_date||null, f.commissioning_date||null,
+       f.last_load_test_date||null, f.next_load_test_date||null, f.last_inspection_date||null, f.next_inspection_date||null,
+       f.status||'operational', f.remarks||null]);
+    res.json({ data: rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/tower-cranes/:id', async (req, res) => {
+  try {
+    const f = req.body;
+    const { rows } = await query(`
+      UPDATE pm_tower_cranes SET
+        equipment_id=$2, project_id=$3, crane_tag=$4, make=$5, model=$6, serial_number=$7,
+        max_capacity_t=$8, jib_length_m=$9, counter_jib_length_m=$10, max_height_m=$11,
+        free_standing_height_m=$12, foundation_type=$13, mast_section=$14, number_of_sections=$15,
+        electrical_supply=$16, hoist_motor_kw=$17, slewing_motor_kw=$18, trolley_motor_kw=$19,
+        erection_agency=$20, erection_supervisor=$21, installation_date=$22, commissioning_date=$23,
+        last_load_test_date=$24, next_load_test_date=$25, last_inspection_date=$26, next_inspection_date=$27,
+        status=$28, remarks=$29, updated_at=NOW()
+      WHERE id=$1 AND company_id=$30
+      RETURNING *`,
+      [req.params.id, f.equipment_id||null, f.project_id||null, f.crane_tag||null,
+       f.make||null, f.model||null, f.serial_number||null,
+       f.max_capacity_t||null, f.jib_length_m||null, f.counter_jib_length_m||null, f.max_height_m||null,
+       f.free_standing_height_m||null, f.foundation_type||null, f.mast_section||null, f.number_of_sections||null,
+       f.electrical_supply||null, f.hoist_motor_kw||null, f.slewing_motor_kw||null, f.trolley_motor_kw||null,
+       f.erection_agency||null, f.erection_supervisor||null, f.installation_date||null, f.commissioning_date||null,
+       f.last_load_test_date||null, f.next_load_test_date||null, f.last_inspection_date||null, f.next_inspection_date||null,
+       f.status||'operational', f.remarks||null, CID(req)]);
+    res.json({ data: rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/tower-cranes/:id', async (req, res) => {
+  try {
+    await query(`UPDATE pm_tower_cranes SET is_deleted=true WHERE id=$1 AND company_id=$2`, [req.params.id, CID(req)]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Tower Crane Documents
+router.get('/tower-cranes/:id/documents', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT * FROM pm_tower_crane_documents WHERE crane_id=$1 AND company_id=$2 AND is_deleted=false ORDER BY created_at DESC`,
+      [req.params.id, CID(req)]);
+    res.json({ data: rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/tower-cranes/:id/documents', async (req, res) => {
+  try {
+    const f = req.body;
+    const { rows } = await query(`
+      INSERT INTO pm_tower_crane_documents
+        (company_id, crane_id, doc_type, doc_number, issued_by, issue_date, expiry_date, file_url, remarks)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [CID(req), req.params.id, f.doc_type, f.doc_number||null, f.issued_by||null,
+       f.issue_date||null, f.expiry_date||null, f.file_url||null, f.remarks||null]);
+    res.json({ data: rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/tower-crane-documents/:id', async (req, res) => {
+  try {
+    await query(`UPDATE pm_tower_crane_documents SET is_deleted=true WHERE id=$1 AND company_id=$2`, [req.params.id, CID(req)]);
+    res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

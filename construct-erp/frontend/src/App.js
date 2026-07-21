@@ -1,6 +1,6 @@
 // src/App.js
 import React, { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, QueryCache } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
@@ -43,6 +43,7 @@ const queryClient = new QueryClient({
 
 // Only login is truly critical — everything else lazy-loads
 import LoginPage    from './pages/auth/LoginPage';
+const ESSLoginPage = lazy(() => import('./pages/auth/ESSLoginPage'));
 import RegisterPage from './pages/auth/RegisterPage';
 import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 import SelectProjectPage from './pages/auth/SelectProjectPage';
@@ -68,6 +69,7 @@ const MeasurementBookPage = lazy(() =>
 const RABillPage           = lazy(() => import('./pages/qs/RABillPage'));
 const RABillNewPage        = lazy(() => import('./pages/qs/RABillNewPage'));
 const RABillDetail         = lazy(() => import('./pages/qs/RABillDetail'));
+const ClientWOPage         = lazy(() => import('./pages/qs/ClientWOPage'));
 const PriceEscalationPage  = lazy(() => import('./pages/qs/PriceEscalationPage'));
 const VendorQSCertificationPage = lazy(() => import('./pages/qs/VendorQSCertificationPage'));
 const VendorQSCertificationDetailPage = lazy(() => import('./pages/qs/VendorQSCertificationDetailPage'));
@@ -221,6 +223,7 @@ const PlantCompliance     = lazy(() => import('./pages/plant/PlantCompliance'));
 const PlantCost           = lazy(() => import('./pages/plant/PlantCost'));
 const PlantReports        = lazy(() => import('./pages/plant/PlantReports'));
 const HireRentalPage      = lazy(() => import('./pages/plant/HireRentalPage'));
+const TowerCranePage      = lazy(() => import('./pages/plant/TowerCranePage'));
 const ITAssetPage         = lazy(() => import('./pages/it/ITAssetPage'));
 const ITTicketPage        = lazy(() => import('./pages/it/ITTicketPage'));
 const LicensePage         = lazy(() => import('./pages/it/LicensePage'));
@@ -247,6 +250,7 @@ const UsersPage           = lazy(() => import('./pages/users/UsersPage'));
 const AuditLogPage        = lazy(() => import('./pages/admin/AuditLogPage'));
 const MailCenterPage      = lazy(() => import('./pages/admin/MailCenterPage'));
 const RolePermissionsPage = lazy(() => import('./pages/admin/RolePermissionsPage'));
+const ApiKeysPage         = lazy(() => import('./pages/admin/ApiKeysPage'));
 const MRSVerificationPage = lazy(() => import('./pages/stores/MRSVerificationPage'));
 const POVerificationPage = lazy(() => import('./pages/procurement/POVerificationPage'));
 const MINVerificationPage = lazy(() => import('./pages/stores/MINVerificationPage'));
@@ -366,6 +370,7 @@ const HRReportsShiftSchedulePage  = lazy(() => import('./pages/hr-admin/reports/
 const HRDepartmentSummaryPage     = lazy(() => import('./pages/hr-admin/reports/DepartmentSummaryPage'));
 const HRLogRecordsPage            = lazy(() => import('./pages/hr-admin/reports/LogRecordsPage'));
 const HRRandomCheckReportPage     = lazy(() => import('./pages/hr-admin/reports/RandomCheckReportPage'));
+const BCIMPortalPage               = lazy(() => import('./pages/BCIMPortalPage'));
 
 // ── Home route resolver — sends each user to their first accessible page ──────
 const MODULE_HOME = {
@@ -418,8 +423,18 @@ function isMDDashboardUser(user) {
   return !!user.can_access_executive_dashboard;
 }
 
+// Custom-domain ESS Portal: visitors on this hostname land on /ess and see
+// only the ESS Portal — except HR/admin staff, who still need full ERP
+// access (managing the very HR data ESS reads) so they get the normal
+// role-based routing and menus even on this domain.
+const ESS_DOMAIN = 'bcimhr.bcim.in';
+const isEssDomain = () => typeof window !== 'undefined' && window.location.hostname === ESS_DOMAIN;
+const ESS_FULL_ACCESS_ROLES = ['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager'];
+const isEssFullAccessRole = (user) => ESS_FULL_ACCESS_ROLES.includes(String(user?.role || '').toLowerCase());
+
 function getHomeRoute(user) {
   if (!user) return '/login';
+  if (isEssDomain() && !isEssFullAccessRole(user)) return '/ess';
   const role = String(user.role || '').toLowerCase();
   // Stores-specific roles → direct to their section
   if (role === 'security_guard') return '/stores/ign';
@@ -449,10 +464,23 @@ const GLOBAL_ROLES = ['super_admin', 'admin', 'managing_director', 'director', '
 // Also enforces a project selection for scoped users (anyone not in GLOBAL_ROLES).
 const ProtectedRoute = ({ children, allowWithoutProject = false }) => {
   const { user, isInitialized, selectedProjectId } = useAuthStore();
+  const location = useLocation();
   if (!isInitialized) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" replace />;
-  if (!allowWithoutProject && !GLOBAL_ROLES.includes(user.role) && !isMDDashboardUser(user) && !selectedProjectId) {
+  // ESS domain regular employees have no project scoping — exempt them from
+  // the project-selection gate. Without this, hitting /ess (which has no
+  // allowWithoutProject) redirected them to /select-project, which in turn
+  // redirected back to /ess (via the ESS-only check below), dead-ending in a
+  // redirect loop on a blank page.
+  const essExempt = isEssDomain() && !isEssFullAccessRole(user);
+  if (!allowWithoutProject && !essExempt && !GLOBAL_ROLES.includes(user.role) && !isMDDashboardUser(user) && !selectedProjectId) {
     return <Navigate to="/select-project" replace />;
+  }
+  // ESS custom domain: only the ESS Portal itself is reachable for regular
+  // employees — every other ERP route bounces back. HR/admin staff are
+  // exempt since they still need full ERP access on this domain.
+  if (essExempt && location.pathname !== '/' && !location.pathname.startsWith('/ess')) {
+    return <Navigate to="/ess" replace />;
   }
   return children;
 };
@@ -461,8 +489,11 @@ const PublicRoute = ({ children }) => {
   const { user, isInitialized, selectedProjectId } = useAuthStore();
   if (!isInitialized) return <LoadingScreen />;
   if (user) {
+    // ESS domain: regular employees have no project scoping — skip the
+    // project-selection gate entirely (only HR/admin roles need it here).
+    const essExempt = isEssDomain() && !isEssFullAccessRole(user);
     // Non-global users must pick a project before entering the app
-    if (!GLOBAL_ROLES.includes(user.role) && !isMDDashboardUser(user) && !selectedProjectId) {
+    if (!essExempt && !GLOBAL_ROLES.includes(user.role) && !isMDDashboardUser(user) && !selectedProjectId) {
       return <Navigate to="/select-project" replace />;
     }
     return <Navigate to={getHomeRoute(user)} replace />;
@@ -473,7 +504,8 @@ const PublicRoute = ({ children }) => {
 // Smart home redirect for the index route (already authenticated)
 function HomeRedirect() {
   const { user, selectedProjectId } = useAuthStore();
-  if (user && !GLOBAL_ROLES.includes(user.role) && !selectedProjectId) {
+  const essExempt = isEssDomain() && !isEssFullAccessRole(user);
+  if (user && !essExempt && !GLOBAL_ROLES.includes(user.role) && !selectedProjectId) {
     return <Navigate to="/select-project" replace />;
   }
   return <Navigate to={getHomeRoute(user)} replace />;
@@ -545,7 +577,13 @@ function AuthInitializer({ children }) {
   const { user, initialize, logout } = useAuthStore();
   const navigate = useNavigate();
   const IDLE_TIMEOUT = 4 * 60 * 60 * 1000; // 4 hours idle timeout
-  const SESSION_MAX_MS = 8 * 60 * 60 * 1000; // 8 hours absolute
+  // No client-side absolute session cutoff — a session now lasts as long as
+  // the refresh token is valid (JWT_REFRESH_EXPIRES_IN, currently 7 days),
+  // with the access token silently renewed in the background by the axios
+  // interceptor. Previously a hard 8-hour wall-clock check here force-logged
+  // users out independent of token validity, which also proved fragile
+  // around app updates (a reload racing an in-progress login could read
+  // stale loginAt data and misfire this check).
 
   useEffect(() => {
     const isPublicVendorPortal = window.location.pathname.startsWith('/vendor-rfq/');
@@ -558,14 +596,6 @@ function AuthInitializer({ children }) {
       }
     };
     window.addEventListener('auth:logout', handleAuthLogout);
-
-    // Check absolute session age before anything else
-    const { loginAt } = useAuthStore.getState();
-    if (!isPublicVendorPortal && loginAt && Date.now() - loginAt > SESSION_MAX_MS) {
-      logout();
-      navigate('/login?reason=session_expired', { replace: true });
-      return;
-    }
 
     initialize();
 
@@ -606,7 +636,7 @@ export default function App() {
           <Suspense fallback={<LoadingScreen />}>
             <Routes>
               {/* Public */}
-              <Route path="/login" element={<LoginPage />} />
+              <Route path="/login" element={isEssDomain() ? <ESSLoginPage /> : <LoginPage />} />
               <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
               <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
               <Route path="/select-project" element={
@@ -638,6 +668,8 @@ export default function App() {
               <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                 <Route index element={<HomeRedirect />} />
                 <Route path="approvals" element={<ProtectedRoute allowWithoutProject><ApprovalsPage /></ProtectedRoute>} />
+                {/* intentionally unrestricted — harmless launcher for all authenticated users */}
+                <Route path="apps" element={<BCIMPortalPage />} />
                 <Route path="dashboard" element={<RequireModule module="Overview"><Dashboard /></RequireModule>} />
 
                 {/* Projects */}
@@ -654,6 +686,7 @@ export default function App() {
                 <Route path="qs/boq-budget-breakdown" element={<RequireBudgetAccess><BOQBudgetBreakdownPage /></RequireBudgetAccess>} />
                 <Route path="qs/measurements" element={<RequireModule module="QS & Billing"><MeasurementPage /></RequireModule>} />
                 <Route path="qs/measurements/book" element={<RequireModule module="QS & Billing"><MeasurementBookPage /></RequireModule>} />
+                <Route path="qs/client-work-orders" element={<RequireModule module="QS & Billing"><ClientWOPage /></RequireModule>} />
                 <Route path="qs/ra-bills" element={<RequireModule module="QS & Billing"><RABillPage /></RequireModule>} />
                 <Route path="qs/ra-bills/new" element={<RequireModule module="QS & Billing"><RABillNewPage /></RequireModule>} />
                 <Route path="qs/ra-bills/:id" element={<RequireModule module="QS & Billing"><RABillDetail /></RequireModule>} />
@@ -981,6 +1014,7 @@ export default function App() {
                 <Route path="plant/compliance"   element={<RequireModule module="Plant & Machinery"><PlantCompliance /></RequireModule>} />
                 <Route path="plant/cost"         element={<RequireModule module="Plant & Machinery"><PlantCost /></RequireModule>} />
                 <Route path="plant/reports"      element={<RequireModule module="Plant & Machinery"><PlantReports /></RequireModule>} />
+                <Route path="plant/tower-cranes" element={<RequireModule module="Plant & Machinery"><TowerCranePage /></RequireModule>} />
                 <Route path="hire-rental"           element={<RequireModule module="Hire & Rental"><HireRentalPage defaultTab="dashboard" /></RequireModule>} />
                 <Route path="hire-rental/invoices"  element={<RequireModule module="Hire & Rental"><HireRentalPage defaultTab="invoices" /></RequireModule>} />
                 <Route path="hire-rental/certify"   element={<RequireModule module="Hire & Rental"><HireRentalPage defaultTab="certify" /></RequireModule>} />
@@ -1076,6 +1110,7 @@ export default function App() {
                 <Route path="audit-log" element={<RequireModule module="Administration"><AuditLogPage /></RequireModule>} />
                 <Route path="mail-center" element={<RequireModule module="Administration"><MailCenterPage /></RequireModule>} />
                 <Route path="role-permissions" element={<RequireModule module="Administration"><RolePermissionsPage /></RequireModule>} />
+                <Route path="api-keys" element={<RequireModule module="Administration"><ApiKeysPage /></RequireModule>} />
                 <Route path="automation-ideas" element={<RequireModule module="Automation Ideas"><AutomationIdeasPage /></RequireModule>} />
                 <Route path="approval-engine" element={<RequireModule module="Approval Engine"><ApprovalEnginePage /></RequireModule>} />
 

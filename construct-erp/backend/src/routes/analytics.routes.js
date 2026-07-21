@@ -435,29 +435,19 @@ router.get('/executive', async (req, res) => {
              WHERE pp.company_id = $1
            ), 0) AS total_budget,
 
-           -- Total spent: line-item totals matching budget control page "bills received"
+           -- Total spent: TQS vendor/contractor bills + SC subcontractor bills (header totals)
            COALESCE((
-             SELECT SUM(li.basic_amount + COALESCE(li.cgst_amt,0) + COALESCE(li.sgst_amt,0) + COALESCE(li.igst_amt,0))
-             FROM tqs_bill_line_items li
-             JOIN tqs_bills tb ON tb.id = li.bill_id
-             JOIN projects pp ON pp.id = tb.project_id
-             WHERE pp.company_id = $1 AND tb.is_deleted = FALSE
+             SELECT SUM(tb.total_amount)
+             FROM tqs_bills tb
+             WHERE tb.company_id = $1 AND tb.is_deleted = FALSE
            ), 0)
            +
            COALESCE((
-             SELECT SUM(bi.curr_qty * bi.rate * (1 + COALESCE(sb.gst_pct, 18) / 100.0))
-             FROM sc_bill_items bi
-             JOIN sc_bills sb ON sb.id = bi.bill_id
+             SELECT SUM(sb.gross_amount)
+             FROM sc_bills sb
              JOIN projects pp ON pp.id = sb.project_id
-             WHERE pp.company_id = $1 AND sb.status IN ('submitted','approved','paid')
-           ), 0)
-           +
-           COALESCE((
-             SELECT SUM(rbi.current_qty * rbi.rate * (1 + COALESCE(rb.gst_rate, 18) / 100.0))
-             FROM ra_bill_items rbi
-             JOIN ra_bills rb ON rb.id = rbi.ra_bill_id
-             JOIN projects pp ON pp.id = rb.project_id
-             WHERE pp.company_id = $1 AND rb.status IN ('certified','paid')
+             WHERE pp.company_id = $1
+               AND sb.status IN ('submitted','under_review','approved','paid')
            ), 0)
            AS total_spent`,
         [scope.params[0]]

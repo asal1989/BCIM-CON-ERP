@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
+import { RefreshCw, CheckCircle2, AlertCircle, Zap } from 'lucide-react';
 import api from '../../../api/client';
 import toast from 'react-hot-toast';
 
@@ -10,21 +10,33 @@ export default function RecalculateAttendancePage() {
   const [from, setFrom] = useState(firstOfMonth());
   const [to,   setTo]   = useState(today());
   const [running, setRunning] = useState(false);
+  const [syncAndRun, setSyncAndRun] = useState(false);
   const [result,  setResult]  = useState(null);
 
-  const run = async () => {
+  const run = async (withSync = false) => {
     if (!from || !to) { toast.error('Select date range'); return; }
     if (from > to)    { toast.error('From must be before To'); return; }
-    setRunning(true); setResult(null);
+    setRunning(true); setSyncAndRun(withSync); setResult(null);
     try {
+      let syncInfo = null;
+      if (withSync) {
+        toast.loading('Pulling from ESSL device…', { id: 'essl-sync' });
+        try {
+          const syncRes = await api.post('/hr-admin/essl/trigger-sync', { from, to });
+          syncInfo = syncRes.data;
+          toast.success(`ESSL sync done — ${syncInfo?.synced ?? 0} records pulled`, { id: 'essl-sync' });
+        } catch (syncErr) {
+          toast.error(`ESSL sync failed: ${syncErr.response?.data?.error || syncErr.message}`, { id: 'essl-sync' });
+        }
+      }
       const res = await api.post('/hr-admin/attendance/recalculate', { from, to });
-      setResult({ ok: true, ...res.data });
+      setResult({ ok: true, ...res.data, syncInfo });
       toast.success('Recalculation complete');
     } catch (e) {
       setResult({ ok: false, message: e.response?.data?.error || e.message });
       toast.error('Recalculation failed');
     } finally {
-      setRunning(false);
+      setRunning(false); setSyncAndRun(false);
     }
   };
 
@@ -53,11 +65,19 @@ export default function RecalculateAttendancePage() {
               style={{ border:'1px solid #CBD5E1', borderRadius:6, padding:'7px 10px', fontSize:13, width:'100%' }} />
           </div>
 
-          <button onClick={run} disabled={running}
-            style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, background: running?'#A78BFA':'#7C3AED', color:'#fff', border:'none', borderRadius:7, padding:'10px 20px', cursor: running?'not-allowed':'pointer', fontSize:14, fontWeight:700, marginTop:6 }}>
-            <RefreshCw size={15} style={{ animation: running?'spin 1s linear infinite':undefined }} />
-            {running ? 'Recalculating...' : 'Run Recalculation'}
-          </button>
+          <div style={{ display:'flex', gap:10, marginTop:6 }}>
+            <button onClick={() => run(false)} disabled={running}
+              style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8, background: running?'#A78BFA':'#7C3AED', color:'#fff', border:'none', borderRadius:7, padding:'10px 20px', cursor: running?'not-allowed':'pointer', fontSize:14, fontWeight:700 }}>
+              <RefreshCw size={15} style={{ animation: running&&!syncAndRun?'spin 1s linear infinite':undefined }} />
+              {running && !syncAndRun ? 'Recalculating...' : 'Recalculate Only'}
+            </button>
+            <button onClick={() => run(true)} disabled={running}
+              title="First pulls fresh punches from ESSL device, then recalculates"
+              style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8, background: running?'#059669':'#10B981', color:'#fff', border:'none', borderRadius:7, padding:'10px 20px', cursor: running?'not-allowed':'pointer', fontSize:14, fontWeight:700 }}>
+              <Zap size={15} style={{ animation: running&&syncAndRun?'spin 1s linear infinite':undefined }} />
+              {running && syncAndRun ? 'Syncing & Recalculating...' : 'Sync ESSL + Recalculate'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -71,6 +91,11 @@ export default function RecalculateAttendancePage() {
           </div>
           {result.ok && result.updated !== undefined && (
             <div style={{ fontSize:13, color:'#166534', display:'flex', flexDirection:'column', gap:4 }}>
+              {result.syncInfo && (
+                <p style={{ margin:0, color:'#065F46', fontWeight:600 }}>
+                  ESSL: {result.syncInfo.synced ?? 0} punches pulled from device
+                </p>
+              )}
               <p style={{ margin:0, fontWeight:700 }}>{result.updated} total records updated ({from} → {to})</p>
               <p style={{ margin:0 }}>• Staff: {result.staff_updated} records</p>
               <p style={{ margin:0 }}>• SC Workers: {result.sc_updated} records</p>

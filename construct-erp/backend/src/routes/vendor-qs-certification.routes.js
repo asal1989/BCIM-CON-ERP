@@ -5,6 +5,7 @@ const { authenticate } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
 const { sendMail } = require('../services/mail.service');
+const { resyncAdvancesFromBills } = require('./procurement-advance.routes');
 
 router.use(authenticate);
 
@@ -414,6 +415,42 @@ router.get('/pending-sc-advances', async (req, res) => {
   }
 });
 
+// GET /pending-advance-vouchers — outstanding Procurement Advance Tracker
+// balance for this vendor, so the QS certifier can pull it straight into the
+// Advance Recovery field instead of having to look it up separately.
+router.get('/pending-advance-vouchers', async (req, res) => {
+  try {
+    const { vendor_name, project_id } = req.query;
+    if (!vendor_name?.trim()) return res.json({ data: [], total: 0 });
+
+    const params = [req.user.company_id, `%${vendor_name.trim()}%`];
+    const where = [
+      `av.company_id = $1`,
+      `av.vendor_name ILIKE $2`,
+      `av.is_deleted = FALSE`,
+      `av.advance_value > av.recovered_amount`,
+    ];
+    if (project_id) {
+      where.push(`(av.project_id = $${params.length + 1} OR av.project_id IS NULL)`);
+      params.push(project_id);
+    }
+
+    const { rows } = await query(`
+      SELECT av.id, av.sl_number, av.voucher_number, av.wo_number, av.po_number,
+             av.advance_value::text, av.recovered_amount::text,
+             (av.advance_value - av.recovered_amount) AS outstanding
+      FROM tqs_advance_vouchers av
+      WHERE ${where.join(' AND ')}
+      ORDER BY av.created_at ASC
+    `, params);
+
+    const total = rows.reduce((sum, r) => sum + parseFloat(r.outstanding || 0), 0);
+    res.json({ data: rows, total });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/summary-items', async (req, res) => {
   try {
     const { bill_ids = [] } = req.body;
@@ -422,7 +459,8 @@ router.post('/summary-items', async (req, res) => {
     }
 
     const billsRes = await query(`
-      SELECT id, inv_number, sl_number, bill_type, gst_amount, total_amount
+      SELECT id, inv_number, sl_number, bill_type, gst_amount, total_amount,
+             transport_charges, transport_gst_amt, other_charges
       FROM tqs_bills
       WHERE id = ANY($1::uuid[])
         AND company_id = $2
@@ -510,6 +548,35 @@ router.post('/summary-items', async (req, res) => {
       });
     });
     const items = Array.from(grouped.values());
+
+    // Append synthetic line items for header-level transport and other charges
+    // (these fields live on tqs_bills, not in tqs_bill_line_items)
+    for (const b of billsRes.rows) {
+      if (n(b.transport_charges) > 0) {
+        items.push({
+          bill_id: b.id, bill_ids: [b.id], bill_line_item_id: null, bill_line_item_ids: [],
+          source_inv_number: b.inv_number || b.sl_number,
+          item_ref_id: null, description: 'Transport Charges', unit: 'LS',
+          order_qty: 1, order_rate: n(b.transport_charges),
+          inv_prev_qty: 0, inv_pres_qty: 1, qs_prev_qty: 0, qs_pres_qty: 1,
+          tax_amount: round2(n(b.transport_gst_amt)),
+          amount: round2(n(b.transport_charges)),
+          balance_qty: 0, remarks: '',
+        });
+      }
+      if (n(b.other_charges) > 0) {
+        items.push({
+          bill_id: b.id, bill_ids: [b.id], bill_line_item_id: null, bill_line_item_ids: [],
+          source_inv_number: b.inv_number || b.sl_number,
+          item_ref_id: null, description: 'Other Charges', unit: 'LS',
+          order_qty: 1, order_rate: n(b.other_charges),
+          inv_prev_qty: 0, inv_pres_qty: 1, qs_prev_qty: 0, qs_pres_qty: 1,
+          tax_amount: 0,
+          amount: round2(n(b.other_charges)),
+          balance_qty: 0, remarks: '',
+        });
+      }
+    }
 
     res.json({ data: { bills: billsRes.rows, items } });
   } catch (err) {
@@ -651,8 +718,16 @@ router.post('/', async (req, res) => {
             };
           })
         : systemItems;
-      const gross = mappedItems.reduce((s, it) => s + it.amount, 0);
-      const itemTax = mappedItems.reduce((s, it) => s + n(it.tax_amount), 0);
+      // When using systemItems (no summary_items from frontend), header-level transport/other
+      // charges are not in line items and must be added separately.
+      // When summary_items ARE provided they already include synthetic transport items.
+      const headerExtras = summary_items.length === 0
+        ? billsRes.rows.reduce((s, b) => s + n(b.transport_charges) + n(b.other_charges), 0)
+        : 0;
+      const headerExtraGst = summary_items.length === 0
+        ? billsRes.rows.reduce((s, b) => s + n(b.transport_gst_amt), 0)
+        : 0;
+      const itemTax = mappedItems.reduce((s, it) => s + n(it.tax_amount), 0) + headerExtraGst;
       // Use gst_tax override if explicitly provided (even 0 = vendor has no GST)
       const billTax = (gst_tax !== undefined && gst_tax !== '' && gst_tax !== null)
         ? n(gst_tax)
@@ -661,6 +736,17 @@ router.post('/', async (req, res) => {
       // Invoice total = sum of selected bills' total_amount (basic + GST, exactly what vendor billed).
       // This is the correct base for net_payable and TDS — it matches the frontend display.
       const invoiceBillTotal = billsRes.rows.reduce((s, b) => s + n(b.total_amount), 0);
+      // gross_amount (the certification's "before tax" summary figure, shown in the
+      // printed Abstract as part of "Total Gross Certified" = gross + tax) is derived
+      // from the real invoice total minus tax, NOT summed independently from
+      // qty × PO-rate. Some POs quote a GST-INCLUSIVE rate (po_items.rate already
+      // includes tax) — for those, qty × rate IS the full inclusive amount, so
+      // summing it as "gross" and then adding tax_amount on top double-counted
+      // the tax in this one summary figure (net_payable itself was never affected,
+      // since it already derives from invoiceBillTotal below). Deriving gross this
+      // way keeps gross + tax == invoiceBillTotal always, regardless of whether any
+      // given PO's rate happens to be tax-inclusive or -exclusive.
+      const gross = invoiceBillTotal - billTax;
 
       // ── TDS auto-calculation ────────────────────────────────────────────
       // TDS base = invoice total (what vendor billed incl. GST), matching frontend useEffect.
@@ -851,6 +937,13 @@ router.post('/', async (req, res) => {
     });
     res.status(201).json({ data: result });
 
+    // Advance Recovery was set at creation — resync the Procurement Advance
+    // Tracker so the vendor's voucher(s) reflect it immediately.
+    if (n(advance_recovered) > 0) {
+      resyncAdvancesFromBills(req.user.company_id).catch(e =>
+        console.error('[qs-cert create] advance resync failed:', e.message));
+    }
+
     // Best-effort: notify the approver a new certification is awaiting their
     // sign-off — never blocks/fails the request if mail isn't configured.
     try {
@@ -905,13 +998,16 @@ router.post('/:id/refresh-from-bills', async (req, res) => {
       if (!billIds.length) throw new Error('No linked vendor bills found to refresh');
 
       const { items } = await buildSummaryFromBills(client, billIds, req.user.company_id, req.params.id);
-      const gross = round2(items.reduce((s, it) => s + n(it.amount), 0));
       const itemTax = round2(items.reduce((s, it) => s + n(it.tax_amount), 0));
       const billTax = itemTax || round2(linkedBills.rows.reduce((s, b) => s + n(b.gst_amount), 0));
       const totalDed = n(cert.tds_amount) + n(cert.advance_recovered) + n(cert.retention_amount) + n(cert.other_deductions);
       // Net = invoice total (what vendor billed incl. GST) minus deductions
-      const invoiceBillTotal = round2(linkedBills.rows.reduce((s, b) => s + n(b.total_amount), 0)) || gross;
+      const invoiceBillTotal = round2(linkedBills.rows.reduce((s, b) => s + n(b.total_amount), 0));
       const netPayable = round2(invoiceBillTotal - totalDed);
+      // gross_amount is derived from the real invoice total minus tax (see the
+      // same fix + comment in POST / above) — NOT summed independently from
+      // qty × PO-rate, which double-counts tax on POs whose rate is GST-inclusive.
+      const gross = round2(invoiceBillTotal - billTax) || round2(items.reduce((s, it) => s + n(it.amount), 0));
 
       // weighment_qty/msb_ref/ign_ref/grs_ref are typed in manually by the QS
       // certifier and aren't derivable from bill data — preserve them across
@@ -1026,6 +1122,48 @@ router.post('/:id/refresh-from-bills', async (req, res) => {
       return { ...updated.rows[0], refreshed_items: items.length };
     });
     res.json({ data: result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /:id/meta — correct the RA Bill No. on an existing certification
+// (e.g. renumbering RA-1 -> RA-19). Same sensitivity gate as cert_number/GST
+// since the RA number is an official reference printed on the Abstract of
+// Measurement and Payment Certificate.
+router.patch('/:id/meta', async (req, res) => {
+  try {
+    const { ra_bill_number, ra_sequence } = req.body;
+    if (ra_bill_number === undefined && ra_sequence === undefined) {
+      return res.status(400).json({ error: 'ra_bill_number or ra_sequence required' });
+    }
+    const email = (req.user.email || '').toLowerCase();
+    const role  = (req.user.role || '').toLowerCase();
+    const canEditSensitive = email === CERT_APPROVER_EMAIL || role === 'super_admin' || role === 'admin';
+    if (!canEditSensitive) {
+      return res.status(403).json({ error: `Only ${CERT_APPROVER_EMAIL} can edit the RA Bill No.` });
+    }
+
+    const certRes = await query(
+      `SELECT id, status FROM vendor_qs_certifications WHERE id=$1 AND company_id=$2`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!certRes.rows.length) return res.status(404).json({ error: 'Certification not found' });
+    if (certRes.rows[0].status === 'paid') return res.status(400).json({ error: 'Paid certification cannot be edited' });
+
+    const sets = [];
+    const params = [];
+    let i = 1;
+    if (ra_bill_number !== undefined) { sets.push(`ra_bill_number=$${i++}`); params.push(ra_bill_number || null); }
+    if (ra_sequence !== undefined)    { sets.push(`ra_sequence=$${i++}`);    params.push(parseInt(ra_sequence, 10) || 1); }
+    params.push(req.params.id, req.user.company_id);
+
+    const result = await query(
+      `UPDATE vendor_qs_certifications SET ${sets.join(', ')}, updated_at=NOW()
+       WHERE id=$${i++} AND company_id=$${i++} RETURNING *`,
+      params
+    );
+    res.json({ data: result.rows[0] });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1158,6 +1296,12 @@ router.patch('/:id/amounts', async (req, res) => {
       return updated.rows[0];
     });
     res.json({ data: result });
+
+    // Advance Recovery on this cert just changed — resync the Procurement
+    // Advance Tracker so the linked vendor's voucher(s) reflect it (FIFO
+    // across their open vouchers). Best-effort: never fails the request.
+    resyncAdvancesFromBills(req.user.company_id).catch(e =>
+      console.error('[qs-cert /amounts] advance resync failed:', e.message));
   } catch (err) {
     if (err.code === '23505' && /cert_number/.test(err.constraint || '')) {
       return res.status(409).json({ error: `Certificate number "${String(req.body.cert_number).trim()}" is already in use. Enter a different number.` });
@@ -1423,6 +1567,15 @@ router.post('/:id/payment', async (req, res) => {
       const totalTds = billsRes.rows.reduce((s, b) => s + n(b.tds_deduction), 0);
       const netPaid  = Math.max(0, totalPaid - totalTds);
 
+      // Link tqs_bill_id when the cert covers exactly one bill (single FK, can't
+      // represent a multi-bill cert), and always link certification_id so a
+      // multi-bill cert can still be excluded once all its bills are fully paid
+      // — see the vendor_qs_certification_bills join in boq-budget.routes.js's
+      // finPayActuals query. Without one of these, the Budget Control "Bills
+      // Paid" figure double-counts: once via each bill's own workflow_status=
+      // 'paid', and again via this Finance payment record.
+      const singleBillId = billsRes.rows.length === 1 ? billsRes.rows[0].bill_id : null;
+
       let finance_payment_id = null;
       if (firstBill.project_id) {
         const fp = await client.query(`
@@ -1430,8 +1583,8 @@ router.post('/:id/payment', async (req, res) => {
             (project_id, payment_type, entity_name,
              amount, tds_deducted, net_amount,
              payment_date, payment_mode, reference_number, bank_name,
-             cost_head, remarks, created_by, source)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+             cost_head, remarks, created_by, source, tqs_bill_id, certification_id)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
           RETURNING id
         `, [
           firstBill.project_id, payType, cert.vendor_name,
@@ -1439,7 +1592,7 @@ router.post('/:id/payment', async (req, res) => {
           payment_date, payment_mode, reference_number || null, bank_name || null,
           costHead,
           `QS Cert ${cert.cert_number} (${cert.ra_bill_number || ''}) — ${billsRes.rows.length} bill(s)${remarks ? ': ' + remarks : ''}`,
-          req.user.id, 'tqs_cert',
+          req.user.id, 'tqs_cert', singleBillId, cert.id,
         ]);
         finance_payment_id = fp.rows[0].id;
       }

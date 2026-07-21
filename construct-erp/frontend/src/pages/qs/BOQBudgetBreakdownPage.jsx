@@ -1,5 +1,5 @@
 // src/pages/qs/BOQBudgetBreakdownPage.jsx — Master-detail BOQ budget allocation
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useReactToPrint } from 'react-to-print';
 import { clsx } from 'clsx';
@@ -16,6 +16,7 @@ import {
 } from 'recharts';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import { boqBudgetAPI, projectAPI, raBillAPI, tqsBillsAPI, clientAdvanceAPI } from '../../api/client';
+import useAuthStore from '../../store/authStore';
 import BOQSummaryPrintTemplate from './BOQSummaryPrintTemplate';
 import bcimLogo from '../../assets/bcim-logo.png';
 
@@ -26,7 +27,7 @@ const inr2 = (v) => `₹${(parseFloat(v) || 0).toLocaleString('en-IN', { minimum
 const num  = (v) => parseFloat(v) || 0;
 
 // ─── Shared professional print letterhead ─────────────────────────────────────
-function BOQPrintHeader({ title, subtitle, projectName, projectAddress, clientName, meta = [] }) {
+export function BOQPrintHeader({ title, subtitle, projectName, projectAddress, clientName, meta = [] }) {
   const now = new Date().toLocaleString('en-IN', {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
@@ -239,6 +240,157 @@ function ChapterBudgetCell({ value, onSave, saving }) {
         className="shrink-0 px-2 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-600 text-[10px] font-bold rounded hover:bg-indigo-100 disabled:opacity-50">
         {saving ? '…' : 'Edit'}
       </button>
+    </div>
+  );
+}
+
+// ─── Editable plan cell (RA Bills Comparison — Plan RA bills grid) ───────────
+function RaPlanCell({ value, onSave, saving }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState('');
+
+  const open = () => { setVal(value > 0 ? String(Math.round(value)) : ''); setEditing(true); };
+  const commit = () => {
+    const n = parseFloat(val);
+    setEditing(false);
+    onSave(isNaN(n) || n < 0 ? 0 : n);
+  };
+
+  if (editing) return (
+    <input
+      autoFocus
+      type="number"
+      value={val}
+      onChange={e => setVal(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
+      className="w-full h-8 border border-indigo-400 rounded px-1.5 text-right text-xs focus:outline-none focus:ring-2 focus:ring-indigo-200"
+    />
+  );
+
+  return (
+    <button onClick={open} disabled={saving}
+      className="w-full h-8 text-right text-xs px-1.5 rounded hover:bg-amber-100 transition-colors disabled:opacity-50">
+      {value > 0 ? Math.round(value).toLocaleString('en-IN') : <span className="text-slate-300 italic">—</span>}
+    </button>
+  );
+}
+
+// ─── RA Bills Comparison tab — Plan RA bills grid + live Actual Value grid ───
+// Rows = BOQ chapters (same rows/BOQ Value as the BOQ Summary tab). Columns are
+// fixed: RA1-RA9 mapped to July-March. Plan values are hand-entered per cell;
+// Actual values are computed server-side from real RA bills, assigned to
+// RA1..RA9 by chronological submission order (1st bill ever raised = RA1).
+function RaBillsComparisonTab({ chapterRows, months, planMap, actualMap, bills, onSaveCell, saving }) {
+  const inr0 = (v) => Math.round(v || 0).toLocaleString('en-IN');
+
+  const planColTotals = months.map((_, i) =>
+    chapterRows.reduce((s, c) => s + (planMap[`${c.key}::${i + 1}`] || 0), 0)
+  );
+  const planBoqTotal = chapterRows.reduce((s, c) => s + c.bill, 0);
+  const planGrandTotal = planColTotals.reduce((s, v) => s + v, 0);
+
+  const actualColTotals = months.map((_, i) =>
+    chapterRows.reduce((s, c) => s + (actualMap[`${c.key}::${i + 1}`] || 0), 0)
+  );
+  const actualGrandTotal = actualColTotals.reduce((s, v) => s + v, 0);
+
+  const billByIndex = {};
+  bills.forEach(b => { billByIndex[b.ra_index] = b; });
+
+  const renderTable = ({ title, subtitle, cellClass, headClass, isActual }) => (
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+      <div className={clsx('px-5 py-3 border-b border-slate-200', headClass)}>
+        <h3 className="text-sm font-bold text-slate-700">{title}</h3>
+        <p className="text-[11px] text-slate-500 mt-0.5">{subtitle}</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className={clsx(isActual ? 'bg-emerald-100' : 'bg-amber-100')}>
+              <th className="px-3 py-2 text-left font-bold border border-slate-200 min-w-[180px]" rowSpan={2}>
+                {isActual ? 'Actual Value' : 'Plan RA bills'}
+              </th>
+              <th className="px-3 py-2 text-right font-bold border border-slate-200 w-32" rowSpan={2}>BOQ Value</th>
+              {months.map(m => (
+                <th key={m} className="px-2 py-1 text-center font-bold border border-slate-200 w-24">{m}</th>
+              ))}
+            </tr>
+            <tr className={clsx(isActual ? 'bg-emerald-50' : 'bg-amber-50')}>
+              {months.map((_, i) => (
+                <th key={i} className="px-2 py-1 text-center font-semibold border border-slate-200 text-[10px]">
+                  RA{i + 1}
+                  {isActual && billByIndex[i + 1] && (
+                    <div className="font-normal text-slate-400 truncate" title={billByIndex[i + 1].bill_number}>
+                      {billByIndex[i + 1].bill_number}
+                    </div>
+                  )}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {chapterRows.map((c, i) => (
+              <tr key={c.key || i} className="border-b border-slate-100 hover:bg-slate-50">
+                <td className="px-3 py-1.5 font-semibold text-slate-700 border border-slate-200">{i + 1}. {c.name}</td>
+                <td className="px-3 py-1.5 text-right border border-slate-200">{inr0(c.bill)}</td>
+                {months.map((_, mi) => {
+                  const raIdx = mi + 1;
+                  if (isActual) {
+                    const v = actualMap[`${c.key}::${raIdx}`] || 0;
+                    return (
+                      <td key={mi} className="px-2 py-1.5 text-right border border-slate-200 text-slate-600">
+                        {v > 0 ? inr0(v) : <span className="text-slate-300">—</span>}
+                      </td>
+                    );
+                  }
+                  const v = planMap[`${c.key}::${raIdx}`] || 0;
+                  return (
+                    <td key={mi} className="p-0 border border-slate-200">
+                      <RaPlanCell value={v} saving={saving} onSave={(n) => onSaveCell(c.key, raIdx, n)} />
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+            <tr className={clsx('font-bold', isActual ? 'bg-emerald-50' : 'bg-amber-50')}>
+              <td className="px-3 py-1.5 border border-slate-200">Total</td>
+              <td className="px-3 py-1.5 text-right border border-slate-200">{inr0(planBoqTotal)}</td>
+              {(isActual ? actualColTotals : planColTotals).map((v, i) => (
+                <td key={i} className="px-2 py-1.5 text-right border border-slate-200">{inr0(v)}</td>
+              ))}
+            </tr>
+            <tr className={clsx('text-slate-500', isActual ? 'bg-emerald-50/60' : 'bg-amber-50/60')}>
+              <td className="px-3 py-1 border border-slate-200" />
+              <td className="px-3 py-1 text-right border border-slate-200">
+                {planBoqTotal > 0 ? `${Math.round((isActual ? actualGrandTotal : planGrandTotal) / planBoqTotal * 100)}%` : '—'}
+              </td>
+              {(isActual ? actualColTotals : planColTotals).map((v, i) => (
+                <td key={i} className="px-2 py-1 text-right border border-slate-200">
+                  {planBoqTotal > 0 ? `${Math.round(v / planBoqTotal * 100)}%` : '—'}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-5">
+      {renderTable({
+        title: 'RA Bills Comparison (Planned vs Actual)',
+        subtitle: 'Click any month cell to enter the planned billing amount for that chapter — saved per project',
+        headClass: 'bg-amber-50',
+        isActual: false,
+      })}
+      {renderTable({
+        title: 'Actual Value',
+        subtitle: 'Auto-computed from real RA bills, assigned to RA1-RA9 in the order they were submitted',
+        headClass: 'bg-emerald-50',
+        isActual: true,
+      })}
     </div>
   );
 }
@@ -1407,16 +1559,26 @@ function ClientBillingSummary({ projectId, contractValue }) {
   );
 }
 
+const inrCompact = (v) => {
+  const n = parseFloat(v) || 0;
+  const abs = Math.abs(n);
+  if (abs >= 1e7) return `₹${(n / 1e7).toFixed(2)} Cr`;
+  if (abs >= 1e5) return `₹${(n / 1e5).toFixed(2)} L`;
+  return `₹${Math.round(n).toLocaleString('en-IN')}`;
+};
+
 function ClientKPI({ label, value, sub, icon: Icon, color }) {
   const n = parseFloat(value);
   return (
-    <div className="bg-white rounded-xl border border-slate-200 px-3.5 py-2.5 shadow-sm flex items-start gap-2.5">
-      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${color}1A` }}>
-        <Icon className="w-4 h-4" style={{ color }} />
+    <div className="bg-white rounded-lg border border-slate-200 px-2.5 py-2 shadow-sm flex items-start gap-2 min-w-0">
+      <div className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: `${color}1A` }}>
+        <Icon className="w-3.5 h-3.5" style={{ color }} />
       </div>
-      <div className="min-w-0">
-        <div className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wide leading-tight">{label}</div>
-        <div className="text-[13px] font-bold text-slate-800 mt-0.5 truncate">{n > 0 ? `₹${Math.round(n).toLocaleString('en-IN')}` : '—'}</div>
+      <div className="min-w-0 flex-1">
+        <div className="text-[10px] font-medium text-slate-500 leading-tight">{label}</div>
+        <div className="text-[15px] font-bold text-slate-800 mt-0.5 leading-tight" title={n > 0 ? `₹${Math.round(n).toLocaleString('en-IN')}` : ''}>
+          {n > 0 ? inrCompact(n) : '—'}
+        </div>
         {sub ? <div className="text-[9.5px] text-slate-400 mt-0.5 truncate">{sub}</div> : null}
       </div>
     </div>
@@ -1503,7 +1665,7 @@ function SortableTh({ label, sortKey, chSort, onSort, className }) {
   );
 }
 
-function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName, contractValue }) {
+function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName, contractValue, highlightCostHead = null, initialChFilter = null }) {
   const qc = useQueryClient();
   const [editingHead, setEditingHead] = useState(null);
   const [editVal, setEditVal] = useState('');
@@ -1516,6 +1678,14 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
   const [chSearch, setChSearch] = useState('');
   const [chFilter, setChFilter] = useState('all'); // all | over | near | nobudget
   const [chSort, setChSort] = useState({ key: null, dir: 'asc' });
+
+  // Jump-in from the Overview tab: focus a specific cost head or a filter (over/near/nobudget)
+  useEffect(() => {
+    if (highlightCostHead) { setChSearch(highlightCostHead); setCostheadView('summary'); }
+  }, [highlightCostHead]);
+  useEffect(() => {
+    if (initialChFilter) { setChFilter(initialChFilter); setCostheadView('summary'); }
+  }, [initialChFilter]);
   const printBudgetRef = useRef();
   const handlePrintBudget = useReactToPrint({
     contentRef: printBudgetRef,
@@ -1828,8 +1998,8 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
                     : isContingency && contAbsorbed > 0 ? 'border-l-blue-300 bg-blue-50/20'
                     : 'border-l-transparent',
                   isExpanded && 'bg-indigo-50/40')}>
-                  <td className="px-2 py-2 text-center text-slate-500 font-bold">{i + 1}</td>
-                  <td className="px-4 py-2 font-medium text-slate-700">
+                  <td className="px-2 py-3.5 text-center text-slate-500 font-medium">{i + 1}</td>
+                  <td className="px-4 py-3.5 font-medium text-slate-700">
                     <div className="flex items-center gap-1.5">
                       {hasActual && (
                         <button onClick={() => toggleExpand(r.cost_head, hasActual)}
@@ -1842,10 +2012,10 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
                       <span>{r.cost_head}</span>
                     </div>
                   </td>
-                  <td className="px-2 py-1">
+                  <td className="px-2 py-3.5">
                     {r.derived ? (
                       <div className="flex items-center justify-end gap-2 px-2">
-                        <span className="text-sm font-semibold text-slate-800">
+                        <span className="text-sm font-medium text-slate-800">
                           {r.budget !== 0 ? `₹${Math.round(r.budget).toLocaleString('en-IN')}` : '—'}
                         </span>
                         {r.cost_head === 'Profit' ? (
@@ -1868,7 +2038,7 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
                       </div>
                     ) : (
                       <div className="flex items-center justify-end gap-2 px-2">
-                        <span className={clsx('text-sm font-semibold', r.budget > 0 ? 'text-slate-800' : 'text-slate-300 italic text-xs')}>
+                        <span className={clsx('text-sm font-medium', r.budget > 0 ? 'text-slate-800' : 'text-slate-300 italic text-xs')}>
                           {r.budget > 0 ? `₹${Math.round(r.budget).toLocaleString('en-IN')}` : 'Not set'}
                         </span>
                         <button onClick={() => { setEditVal(r.budget ? Math.round(r.budget).toString() : ''); setEditingHead(r.cost_head); }}
@@ -1879,7 +2049,7 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-right font-semibold">
+                  <td className="px-4 py-3.5 text-right font-medium">
                     {isContingency ? (
                       <div className="text-right">
                         {contAbsorbed > 0 ? (
@@ -1908,7 +2078,7 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
                       <span className="text-slate-300">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-right font-semibold">
+                  <td className="px-4 py-3.5 text-right font-medium">
                     {isContingency ? (
                       <div className="text-right">
                         {contAbsorbed > 0 ? (
@@ -1922,39 +2092,49 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
                         {r.paid > 0 ? `₹${Math.round(r.paid).toLocaleString('en-IN')}` : '—'}
                       </span>
                     ) : r.paid > 0 ? (
-                      <button onClick={() => toggleExpand(r.cost_head, hasActual)}
-                        title="Cash actually disbursed — click to see the transactions counted under Bills Received"
-                        className={clsx('font-semibold hover:underline underline-offset-2 transition-colors',
-                          isExpanded ? 'text-indigo-600' : 'text-indigo-700 hover:text-indigo-500')}>
-                        ₹{Math.round(r.paid).toLocaleString('en-IN')}
-                      </button>
+                      <div className="text-right">
+                        <button onClick={() => toggleExpand(r.cost_head, hasActual)}
+                          title="Cash actually disbursed — click to see the transactions counted under Bills Received"
+                          className={clsx('font-semibold hover:underline underline-offset-2 transition-colors',
+                            isExpanded ? 'text-indigo-600' : 'text-indigo-700 hover:text-indigo-500')}>
+                          ₹{Math.round(r.paid).toLocaleString('en-IN')}
+                        </button>
+                        {(r.paid_advance > 0 && r.paid_invoice > 0) && (
+                          <div className="text-[9px] text-slate-400 mt-0.5">
+                            Adv ₹{Math.round(r.paid_advance).toLocaleString('en-IN')} · Inv ₹{Math.round(r.paid_invoice).toLocaleString('en-IN')}
+                          </div>
+                        )}
+                        {(r.paid_advance > 0 && r.paid_invoice === 0) && (
+                          <div className="text-[9px] text-amber-500 mt-0.5">Advance only — no bill yet</div>
+                        )}
+                      </div>
                     ) : (
                       <span className="text-slate-300">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-right font-semibold">
+                  <td className="px-4 py-3.5 text-right font-medium">
                     {isContingency || r.derived ? (
                       <span className="text-slate-300">—</span>
                     ) : (() => {
                       const outstanding = (r.received || 0) - (r.paid || 0);
                       return outstanding > 0.5 ? (
-                        <span className="font-semibold text-amber-600" title="Bills received but not yet paid">
+                        <span className="font-medium text-amber-600" title="Bills received but not yet paid">
                           ₹{Math.round(outstanding).toLocaleString('en-IN')}
                         </span>
                       ) : <span className="text-slate-300">—</span>;
                     })()}
                   </td>
-                  <td className="px-4 py-2 text-right text-xs font-bold tabular-nums">
+                  <td className="px-4 py-3.5 text-right text-xs font-medium tabular-nums">
                     {r.budget > 0 && !isContingency ? (
                       <UsageBar pct={pctUsed} status={barStatus} />
                     ) : isContingency && contBudget > 0 ? (
                       <UsageBar pct={(contAbsorbed / contBudget) * 100} status="slate" />
                     ) : <span className="text-slate-300">—</span>}
                   </td>
-                  <td className="px-3 py-2 text-right text-xs tabular-nums">
+                  <td className="px-3 py-3.5 text-right text-xs tabular-nums">
                     {!isContingency && r.monthly_avg > 0 ? (
                       <div>
-                        <div className={clsx('font-bold',
+                        <div className={clsx('font-medium',
                           r.budget > 0 && r.monthly_avg * 12 > r.budget ? 'text-rose-600' : 'text-indigo-600')}>
                           {inr(r.monthly_avg * 12)}
                         </div>
@@ -1962,7 +2142,7 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
                       </div>
                     ) : <span className="text-slate-300">—</span>}
                   </td>
-                  <td className={clsx('px-4 py-2 text-right font-bold',
+                  <td className={clsx('px-4 py-3.5 text-right font-medium',
                     r.budget === 0 && !isContingency ? 'text-slate-300'
                     : overCritical ? 'text-rose-600'
                     : overCovered ? 'text-amber-600'
@@ -2025,8 +2205,9 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
   );
 }
 
-export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = null, pageTitle = null, pageSubtitle = null }) {
-  const [projectId, setProjectId] = useState('');
+export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = null, pageTitle = null, pageSubtitle = null, highlightCostHead = null, initialChFilter = null }) {
+  const { selectedProjectId } = useAuthStore();
+  const projectId = selectedProjectId || '';
   const [mode, setMode] = useState('amount'); // 'amount' | 'pct'
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState({});
@@ -2186,7 +2367,7 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
       const key = chapterKey(it);
       let budget = 0;
       for (const h of costHeads) budget += num(it.breakdown?.[h]?.amount);
-      if (!map[key]) map[key] = { chapter_no: it.chapter_no, name: chapterLabel(it), bill: 0, budget: 0, sort: Infinity };
+      if (!map[key]) map[key] = { key, chapter_no: it.chapter_no, name: chapterLabel(it), bill: 0, budget: 0, sort: Infinity };
       map[key].bill   += num(it.amount);
       map[key].budget += budget;
       const sk = toNum(it.chapter_no) || toNum(it.item_no);
@@ -2253,7 +2434,41 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
       @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
     `,
   });
-  const [view, setView] = useState(lockedView || 'breakdown'); // 'breakdown' | 'summary' | 'costhead'
+  const [view, setView] = useState(lockedView || 'breakdown'); // 'breakdown' | 'summary' | 'costhead' | 'ra_comparison'
+
+  // ── RA Bills Comparison — Plan vs Actual, fixed 9 columns (RA1-RA9 / Jul-Mar) ──
+  const RA_MONTHS = ['July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March'];
+
+  const { data: raPlanRows = [] } = useQuery({
+    queryKey: ['ra-plan', projectId],
+    queryFn: () => boqBudgetAPI.raPlan(projectId).then(r => r.data?.data ?? []).catch(() => []),
+    enabled: !!projectId && view === 'ra_comparison',
+  });
+
+  const { data: raActualsData } = useQuery({
+    queryKey: ['ra-actuals', projectId],
+    queryFn: () => boqBudgetAPI.raActuals(projectId).then(r => r.data?.data ?? { bills: [], actuals: [] }).catch(() => ({ bills: [], actuals: [] })),
+    enabled: !!projectId && view === 'ra_comparison',
+  });
+
+  const raPlanCellMutation = useMutation({
+    mutationFn: ({ chapter_key, ra_index, planned_amount }) =>
+      boqBudgetAPI.setRaPlanCell(projectId, { chapter_key, ra_index, planned_amount }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ra-plan', projectId] }),
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to save plan value'),
+  });
+
+  const raPlanMap = useMemo(() => {
+    const m = {};
+    raPlanRows.forEach(r => { m[`${r.chapter_key}::${r.ra_index}`] = parseFloat(r.planned_amount) || 0; });
+    return m;
+  }, [raPlanRows]);
+
+  const raActualMap = useMemo(() => {
+    const m = {};
+    (raActualsData?.actuals || []).forEach(r => { m[`${r.chapter_key}::${r.ra_index}`] = parseFloat(r.amount) || 0; });
+    return m;
+  }, [raActualsData]);
 
   const chapterBudgetMutation = useMutation({
     mutationFn: ({ chapterName, chapterNo, totalBudget }) =>
@@ -2271,7 +2486,7 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
   });
 
   return (
-    <div style={embedded ? { fontFamily: "'Times New Roman', Times, serif" } : { background: Theme.pageBg, minHeight: '100vh', fontFamily: "'Times New Roman', Times, serif" }}>
+    <div style={embedded ? { fontFamily: "'Geist Variable', system-ui, sans-serif" } : { background: Theme.pageBg, minHeight: '100vh', fontFamily: "'Geist Variable', system-ui, sans-serif" }}>
       {!embedded && (
         <PageHeader
           title={pageTitle || 'BOQ Budget Breakdown'}
@@ -2303,28 +2518,23 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
         />
       )}
 
-      <div className="p-5 md:p-6 max-w-[1700px] mx-auto space-y-5">
+      <div className="p-5 md:p-6 max-w-[1700px] mx-auto space-y-6">
 
-        {/* Project selector + search */}
-        <div className="flex flex-wrap gap-3">
-          <select value={projectId} onChange={e => setProjectId(e.target.value)}
-            className="border border-slate-200 bg-white rounded-xl px-3 py-2 text-sm shadow-sm focus:outline-none min-w-64">
-            <option value="">— Select Project —</option>
-            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          {projectId && (
+        {/* Search — project comes from the top bar's project selector */}
+        {projectId && (
+          <div className="flex flex-wrap gap-3">
             <div className="relative flex-1 min-w-52">
               <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search BOQ items…"
                 className="pl-9 pr-3 py-2 border border-slate-200 bg-white rounded-xl text-sm w-full focus:outline-none shadow-sm" />
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {!projectId && (
           <div className="bg-white rounded-2xl border border-slate-200 py-20 text-center shadow-sm">
             <Layers className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-            <p className="text-slate-500 font-semibold">Select a project to view its budget breakdown</p>
+            <p className="text-slate-500 font-semibold">Select a project from the top bar to view its budget breakdown</p>
             <p className="text-xs text-slate-400 mt-1">Allocate each BOQ item's budget across cost heads</p>
           </div>
         )}
@@ -2338,8 +2548,9 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
             {/* View tabs — hidden when a specific view is locked (e.g. Budget Control page) */}
             {!lockedView && <div className="flex gap-2">
               {[
-                { id: 'breakdown', label: 'Budget Breakdown', icon: LayoutList },
-                { id: 'summary',   label: 'BOQ Summary',      icon: FileText },
+                { id: 'breakdown',     label: 'Budget Breakdown',    icon: LayoutList },
+                { id: 'summary',       label: 'BOQ Summary',         icon: FileText },
+                { id: 'ra_comparison', label: 'RA Bills Comparison (Planned vs Actual)', icon: TrendingUp },
               ].map(t => (
                 <button key={t.id} onClick={() => setView(t.id)}
                   className={clsx('flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg border transition',
@@ -2410,9 +2621,22 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
               </div>
             )}
 
+            {/* ── RA BILLS COMPARISON VIEW (Plan vs Actual, RA1-RA9 / Jul-Mar) ── */}
+            {view === 'ra_comparison' && (
+              <RaBillsComparisonTab
+                chapterRows={chapterRows}
+                months={RA_MONTHS}
+                planMap={raPlanMap}
+                actualMap={raActualMap}
+                bills={raActualsData?.bills || []}
+                onSaveCell={(chapter_key, ra_index, planned_amount) => raPlanCellMutation.mutate({ chapter_key, ra_index, planned_amount })}
+                saving={raPlanCellMutation.isPending}
+              />
+            )}
+
             {/* ── COST HEAD BUDGET VIEW ── */}
             {view === 'costhead' && (
-              <CostHeadBudgetTab projectId={projectId} projectName={selectedProject?.name || ''} projectAddress={projectAddress} clientName={clientName} contractValue={selectedProject?.contract_value} />
+              <CostHeadBudgetTab projectId={projectId} projectName={selectedProject?.name || ''} projectAddress={projectAddress} clientName={clientName} contractValue={selectedProject?.contract_value} highlightCostHead={highlightCostHead} initialChFilter={initialChFilter} />
             )}
 
             {/* ── BUDGET BREAKDOWN VIEW (existing) ── */}

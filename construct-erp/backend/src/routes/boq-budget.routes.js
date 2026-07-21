@@ -27,6 +27,22 @@ runSchemaInit('boq_item_budget_breakdown', async () => {
   `);
 });
 
+runSchemaInit('ra_bill_chapter_plans', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS ra_bill_chapter_plans (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      chapter_key TEXT NOT NULL,
+      ra_index SMALLINT NOT NULL CHECK (ra_index BETWEEN 1 AND 9),
+      planned_amount NUMERIC(16,2) DEFAULT 0,
+      created_by UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (project_id, chapter_key, ra_index)
+    )
+  `);
+});
+
 runSchemaInit('project_costhead_budgets', async () => {
   await query(`
     CREATE TABLE IF NOT EXISTS project_costhead_budgets (
@@ -726,10 +742,16 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
 
     // Received: SC bills — same statuses and cost-head attribution as the BOQ
     // item view (untagged lines default to "Sub Con") so both screens agree.
+    // 'under_review' is included alongside 'submitted' — a bill only reaches
+    // under_review AFTER being submitted, while it's mid-way through a
+    // multi-stage approval chain (see sc.routes.js /bills/:id/approve: a
+    // non-final-stage approval sets status='under_review', not before
+    // submission). Excluding it here was an oversight — it's already been
+    // submitted and represents real money billed against you.
     const scActuals = await query(`
       SELECT COALESCE(bi.cost_head, 'Sub Con') AS cost_head, SUM(bi.curr_qty * bi.rate * (1 + COALESCE(sb.gst_pct, 18) / 100.0)) AS actual
       FROM sc_bill_items bi JOIN sc_bills sb ON sb.id = bi.bill_id
-      WHERE sb.project_id=$1 AND sb.status IN ('submitted','approved','paid')
+      WHERE sb.project_id=$1 AND sb.status IN ('submitted','under_review','approved','paid')
       GROUP BY COALESCE(bi.cost_head, 'Sub Con')`, [project_id]);
     // Paid: actual cash paid against SC bills (mapped to "Sub Con" — SC bill
     // items are essentially all Sub Con, and paid_amount isn't split by head).
@@ -856,32 +878,71 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
     // Finance module payments (Vendor Payments page) — Bills Paid.
     // Uses payments.cost_head when set; otherwise falls back to the linked
     // invoice's PO item cost_head; finally defaults to 'Material'.
-    // Excludes payments already counted via tqsPaid (tqs_bill_id IS NOT NULL
-    // means the payment was synced back to a TQS bill, so it's already in the
-    // tqsPaid/tqsActuals bucket via workflow_status='paid' on tqs_bills).
+    // Excludes payments already counted via tqsPaid:
+    //   - tqs_bill_id IS NOT NULL: single-bill QS-cert payment, synced back to
+    //     that one TQS bill (already in tqsPaid via workflow_status='paid').
+    //   - certification_id set AND every bill the certification covers is
+    //     already workflow_status='paid': a multi-bill QS-cert payment can't
+    //     use tqs_bill_id (one FK, many bills), so it's excluded via the
+    //     vendor_qs_certification_bills junction instead — once every covered
+    //     bill is fully paid, tqsPaid already captures that money in full and
+    //     this Finance payment would otherwise double it.
+    //   - advance_voucher_id IS NOT NULL: this payment's advance was later
+    //     migrated into the Advance Tracker (tqs_advance_vouchers) as its own
+    //     voucher with paid_amount set, which advTrackerActuals already sums —
+    //     without this exclusion the same advance counts twice, once here and
+    //     once via the voucher.
+    // is_advance is exposed alongside cost_head so the caller can route this
+    // row's money into either the "paid against invoice" or "paid as advance"
+    // bucket — same underlying money, just split for the Bills Paid breakdown.
     const finPayActuals = await query(`
       SELECT
-        COALESCE(
-          pay.cost_head,
-          (SELECT pi.cost_head
-           FROM invoices inv
-           JOIN po_items pi ON pi.po_id = inv.po_id
-           WHERE inv.id = pay.invoice_id AND pi.cost_head IS NOT NULL
-           ORDER BY pi.sort_order LIMIT 1),
-          'Material'
-        ) AS cost_head,
-        SUM(pay.net_amount) AS actual
-      FROM payments pay
-      WHERE pay.project_id = $1
-        AND pay.tqs_bill_id IS NULL
-        AND COALESCE(pay.pc_number, '') = ''
-        AND pay.status = 'paid'
-      GROUP BY 1
+        CASE
+          WHEN resolved ILIKE 'Advance%' THEN 'Sub Con'
+          WHEN resolved = 'Material'     THEN 'Materials / Consumables'
+          ELSE resolved
+        END AS cost_head,
+        (resolved ILIKE 'Advance%') AS is_advance,
+        SUM(actual) AS actual
+      FROM (
+        SELECT
+          COALESCE(
+            pay.cost_head,
+            (SELECT pi.cost_head
+             FROM invoices inv
+             JOIN po_items pi ON pi.po_id = inv.po_id
+             WHERE inv.id = pay.invoice_id AND pi.cost_head IS NOT NULL
+             ORDER BY pi.sort_order LIMIT 1),
+            'Materials / Consumables'
+          ) AS resolved,
+          pay.net_amount AS actual
+        FROM payments pay
+        WHERE pay.project_id = $1
+          AND pay.tqs_bill_id IS NULL
+          AND pay.advance_voucher_id IS NULL
+          AND COALESCE(pay.pc_number, '') = ''
+          AND pay.status = 'paid'
+          AND NOT (
+            pay.certification_id IS NOT NULL
+            AND EXISTS (SELECT 1 FROM vendor_qs_certification_bills cb WHERE cb.certification_id = pay.certification_id)
+            AND NOT EXISTS (
+              SELECT 1 FROM vendor_qs_certification_bills cb
+              JOIN tqs_bills tb ON tb.id = cb.bill_id
+              WHERE cb.certification_id = pay.certification_id AND tb.workflow_status <> 'paid'
+            )
+          )
+      ) sub
+      GROUP BY 1, 2
     `, [project_id]);
 
     // "Received" = value of bills logged (RA/SC/TQS/PO/Finance invoices).
+    // Petty Cash is included here too — unlike a PO/WO bill, the petty-cash
+    // receipt/bill is only collected AFTER the cash is paid out, so payment
+    // itself is the record; Received and Paid should read the same for this
+    // head instead of Received showing "—" until a bill that never arrives
+    // separately gets logged.
     const receivedMap = {};
-    for (const rows of [raActuals.rows, scActuals.rows, tqsActuals.rows, poFallbackActuals.rows, finInvActuals.rows]) {
+    for (const rows of [raActuals.rows, scActuals.rows, tqsActuals.rows, poFallbackActuals.rows, finInvActuals.rows, spcActuals.rows, spcRemainder.rows]) {
       for (const r of rows) {
         if (!r.cost_head) continue;
         receivedMap[r.cost_head] = (receivedMap[r.cost_head] || 0) + parseFloat(r.actual || 0);
@@ -890,19 +951,43 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
     // "Paid" = cash actually disbursed: the paid portion of those same bills,
     // plus advances/petty cash (cash out with no corresponding bill received),
     // plus Finance module payments (Vendor Payments page).
-    const paidMap = {};
-    for (const rows of [raPaid.rows, scPaid.rows, tqsPaid.rows, poFallbackPaid.rows, advActuals.rows, advTrackerActuals.rows, btAdvActuals.rows, spcActuals.rows, spcRemainder.rows, storePCAdvActuals.rows, finPayActuals.rows]) {
+    // Split into paidInvoiceMap (paid against a real bill/invoice) and
+    // paidAdvanceMap (advances/petty cash paid with no bill of their own) so
+    // Budget Control can show the breakdown, not just the combined total.
+    const paidInvoiceMap = {};
+    for (const rows of [raPaid.rows, scPaid.rows, tqsPaid.rows, poFallbackPaid.rows]) {
       for (const r of rows) {
         if (!r.cost_head) continue;
-        paidMap[r.cost_head] = (paidMap[r.cost_head] || 0) + parseFloat(r.actual || 0);
+        paidInvoiceMap[r.cost_head] = (paidInvoiceMap[r.cost_head] || 0) + parseFloat(r.actual || 0);
       }
     }
-    // actualMap = total cost incurred (received bills + advances/petty cash that
-    // have no bill of their own) — drives Profit/Contingency derivation below.
-    // Finance invoices are already in receivedMap; finPayActuals excluded here
-    // since they're the paid subset of those invoices (same as raPaid/scPaid).
-    const actualMap = { ...receivedMap };
+    const paidAdvanceMap = {};
     for (const rows of [advActuals.rows, advTrackerActuals.rows, btAdvActuals.rows, spcActuals.rows, spcRemainder.rows, storePCAdvActuals.rows]) {
+      for (const r of rows) {
+        if (!r.cost_head) continue;
+        paidAdvanceMap[r.cost_head] = (paidAdvanceMap[r.cost_head] || 0) + parseFloat(r.actual || 0);
+      }
+    }
+    // finPayActuals rows carry their own is_advance flag, decided per row —
+    // route each into the matching bucket instead of guessing at the cost-head
+    // level (a cost head can have both kinds of Finance payment).
+    for (const r of finPayActuals.rows) {
+      if (!r.cost_head) continue;
+      const bucket = r.is_advance ? paidAdvanceMap : paidInvoiceMap;
+      bucket[r.cost_head] = (bucket[r.cost_head] || 0) + parseFloat(r.actual || 0);
+    }
+    const paidMap = {};
+    for (const h of new Set([...Object.keys(paidInvoiceMap), ...Object.keys(paidAdvanceMap)])) {
+      paidMap[h] = (paidInvoiceMap[h] || 0) + (paidAdvanceMap[h] || 0);
+    }
+    // actualMap = total cost incurred (received bills + advances that have no
+    // bill of their own) — drives Profit/Contingency derivation below. Finance
+    // invoices and Petty Cash are already in receivedMap (see above); Petty
+    // Cash is deliberately NOT re-added here, or it would double-count now that
+    // it's part of receivedMap. finPayActuals excluded here since it's the
+    // paid subset of those invoices (same as raPaid/scPaid).
+    const actualMap = { ...receivedMap };
+    for (const rows of [advActuals.rows, advTrackerActuals.rows, btAdvActuals.rows, storePCAdvActuals.rows]) {
       for (const r of rows) {
         if (!r.cost_head) continue;
         actualMap[r.cost_head] = (actualMap[r.cost_head] || 0) + parseFloat(r.actual || 0);
@@ -943,6 +1028,10 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
     receivedMap['Profit'] = baseReceived * PROFIT_PCT;
     const basePaid = PROFIT_BASE_HEADS.reduce((s, h) => s + (paidMap[h] || 0), 0);
     paidMap['Profit'] = basePaid * PROFIT_PCT;
+    const basePaidInvoice = PROFIT_BASE_HEADS.reduce((s, h) => s + (paidInvoiceMap[h] || 0), 0);
+    paidInvoiceMap['Profit'] = basePaidInvoice * PROFIT_PCT;
+    const basePaidAdvance = PROFIT_BASE_HEADS.reduce((s, h) => s + (paidAdvanceMap[h] || 0), 0);
+    paidAdvanceMap['Profit'] = basePaidAdvance * PROFIT_PCT;
 
     // Contingency (head 20) budget = Total BOQ Value − sum(heads 1-18) − Profit.
     // This is a planning allocation only — "whatever's left of the contract
@@ -988,6 +1077,8 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
       actual: actualMap[head] || 0,
       received: receivedMap[head] || 0,
       paid: paidMap[head] || 0,
+      paid_invoice: paidInvoiceMap[head] || 0,
+      paid_advance: paidAdvanceMap[head] || 0,
       balance: (budgetMap[head] || 0) - (actualMap[head] || 0),
       derived: DERIVED_HEADS.has(head),
       monthly_avg: parseFloat(((actualMap[head] || 0) / monthsElapsed).toFixed(2)),
@@ -1924,6 +2015,106 @@ router.post('/:project_id/send-budget-alert', async (req, res) => {
     console.error('[send-budget-alert]', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── RA Bills Comparison — Plan vs Actual, chapter × RA1-RA9 (fixed Jul-Mar) ──
+// Chapter grouping mirrors the frontend's BOQ Summary logic exactly (group by
+// normalized chapter_name when a project has multiple distinct names, else by
+// chapter_no) so chapter_key values line up between the Plan grid the user
+// edits and the Actual figures computed here from real RA bills.
+const normChapterName = (s) => (s || '').trim().replace(/\s+/g, ' ').toLowerCase();
+function buildChapterKeyer(allBoqItems) {
+  const names = new Set(allBoqItems.map(i => normChapterName(i.chapter_name)).filter(Boolean));
+  const useNameGrouping = names.size > 1;
+  return (it) => {
+    if (useNameGrouping) {
+      const name = normChapterName(it.chapter_name);
+      return name || `__no:${it.chapter_no || 'ZZZ'}`;
+    }
+    return it.chapter_no || '0';
+  };
+}
+
+// GET /:project_id/ra-plan — saved planned amounts, chapter_key × ra_index (1-9)
+router.get('/:project_id/ra-plan', async (req, res) => {
+  try {
+    const { project_id } = req.params;
+    const r = await query(
+      `SELECT chapter_key, ra_index, planned_amount::text FROM ra_bill_chapter_plans WHERE project_id = $1`,
+      [project_id]
+    );
+    res.json({ data: r.rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /:project_id/ra-plan — upsert a single cell { chapter_key, ra_index, planned_amount }
+router.put('/:project_id/ra-plan', authorize(...BUDGET_WRITERS), async (req, res) => {
+  try {
+    const { project_id } = req.params;
+    const { chapter_key, ra_index, planned_amount } = req.body;
+    if (!chapter_key || !(ra_index >= 1 && ra_index <= 9)) {
+      return res.status(400).json({ error: 'chapter_key and ra_index (1-9) are required' });
+    }
+    await query(
+      `INSERT INTO ra_bill_chapter_plans (project_id, chapter_key, ra_index, planned_amount, created_by)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (project_id, chapter_key, ra_index)
+       DO UPDATE SET planned_amount = EXCLUDED.planned_amount, updated_at = NOW()`,
+      [project_id, chapter_key, ra_index, parseFloat(planned_amount) || 0, req.user.id]
+    );
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /:project_id/ra-actuals — real RA bill amounts assigned to RA1-RA9 by
+// chronological submission order (1st bill ever created = RA1, etc.), summed
+// per chapter to match the Plan grid's row keys.
+router.get('/:project_id/ra-actuals', async (req, res) => {
+  try {
+    const { project_id } = req.params;
+
+    const boqItemsRes = await query(
+      `SELECT id, chapter_no, chapter_name FROM boq_items WHERE project_id = $1`,
+      [project_id]
+    );
+    const chapterKeyOf = buildChapterKeyer(boqItemsRes.rows);
+    const boqItemChapter = {};
+    boqItemsRes.rows.forEach(bi => { boqItemChapter[bi.id] = chapterKeyOf(bi); });
+
+    const billsRes = await query(
+      `SELECT id, bill_number, bill_date, created_at
+       FROM ra_bills
+       WHERE project_id = $1
+       ORDER BY COALESCE(bill_date, created_at::date) ASC, created_at ASC
+       LIMIT 9`,
+      [project_id]
+    );
+    const bills = billsRes.rows.map((b, i) => ({ ...b, ra_index: i + 1 }));
+
+    const actualsMap = {}; // `${chapter_key}::${ra_index}` -> amount
+    if (bills.length) {
+      const itemsRes = await query(
+        `SELECT ra_bill_id, boq_item_id, amount::text FROM ra_bill_items WHERE ra_bill_id = ANY($1)`,
+        [bills.map(b => b.id)]
+      );
+      const raIndexByBillId = {};
+      bills.forEach(b => { raIndexByBillId[b.id] = b.ra_index; });
+      itemsRes.rows.forEach(it => {
+        const raIdx = raIndexByBillId[it.ra_bill_id];
+        const chKey = boqItemChapter[it.boq_item_id];
+        if (!raIdx || !chKey) return;
+        const mapKey = `${chKey}::${raIdx}`;
+        actualsMap[mapKey] = (actualsMap[mapKey] || 0) + (parseFloat(it.amount) || 0);
+      });
+    }
+
+    const actuals = Object.entries(actualsMap).map(([k, amount]) => {
+      const [chapter_key, ra_index] = k.split('::');
+      return { chapter_key, ra_index: parseInt(ra_index, 10), amount };
+    });
+
+    res.json({ data: { bills, actuals } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 module.exports = router;

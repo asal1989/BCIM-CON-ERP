@@ -55,6 +55,8 @@ const router = express.Router();
   `);
 
   await safe(`ALTER TABLE debit_notes ADD COLUMN IF NOT EXISTS bill_id UUID`);
+  await safe(`ALTER TABLE tqs_bills   ADD COLUMN IF NOT EXISTS debit_note_num TEXT`);
+  await safe(`ALTER TABLE tqs_bills   ADD COLUMN IF NOT EXISTS debit_note_val NUMERIC(14,2) DEFAULT 0`);
 
   await safe(`CREATE INDEX IF NOT EXISTS idx_dn_vendor  ON debit_notes(vendor_id)`);
   await safe(`CREATE INDEX IF NOT EXISTS idx_dn_project ON debit_notes(project_id)`);
@@ -224,6 +226,45 @@ router.patch('/:id/status', authenticate, async (req, res) => {
     if (!existing) return res.status(404).json({ error: 'Debit note not found' });
 
     await query(`UPDATE debit_notes SET status = $1, updated_at = NOW() WHERE id = $2`, [status, req.params.id]);
+
+    // Sync debit note value to tqs_bills when applied; clear when cancelled
+    const billId     = existing.bill_id;
+    const invoiceNum = existing.invoice_number;
+    const companyId  = req.user.company_id;
+
+    const findBill = async () => {
+      if (billId) {
+        const r = await query(`SELECT id FROM tqs_bills WHERE id = $1 AND company_id = $2`, [billId, companyId]);
+        if (r.rows[0]) return r.rows[0];
+      }
+      if (invoiceNum) {
+        const r = await query(
+          `SELECT id FROM tqs_bills WHERE company_id = $1 AND inv_number ILIKE $2 AND is_deleted = FALSE LIMIT 1`,
+          [companyId, `%${invoiceNum.trim()}%`]
+        );
+        if (r.rows[0]) return r.rows[0];
+      }
+      return null;
+    };
+
+    if (status === 'applied') {
+      const billRow = await findBill();
+      if (billRow) {
+        await query(
+          `UPDATE tqs_bills SET debit_note_num = $1, debit_note_val = $2, updated_at = NOW() WHERE id = $3`,
+          [existing.dn_number, parseFloat(existing.total_amount) || 0, billRow.id]
+        );
+      }
+    } else if (status === 'cancelled' && existing.status === 'applied') {
+      const billRow = await findBill();
+      if (billRow) {
+        await query(
+          `UPDATE tqs_bills SET debit_note_num = NULL, debit_note_val = 0, updated_at = NOW() WHERE id = $1`,
+          [billRow.id]
+        );
+      }
+    }
+
     const full = await getDN(req.params.id, req.user.company_id);
     res.json({ data: full });
   } catch (err) {

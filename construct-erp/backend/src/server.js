@@ -31,6 +31,7 @@ const boqRoutes = require('./routes/boq.routes');
 const boqBudgetRoutes = require('./routes/boq-budget.routes');
 const measurementRoutes = require('./routes/measurement.routes');
 const raBillRoutes = require('./routes/raBill.routes');
+const clientWorkOrderRoutes = require('./routes/client-work-orders.routes');
 const clientAdvanceRoutes = require('./routes/client-advance.routes');
 const priceEscalationRoutes = require('./routes/price-escalation.routes');
 const vendorQsCertificationRoutes = require('./routes/vendor-qs-certification.routes');
@@ -131,6 +132,8 @@ const hrTrainingRoutes    = require('./routes/hr-training.routes');
 const hrEmpAssetsRoutes   = require('./routes/hr-employee-assets.routes');
 const hrTravelRoutes      = require('./routes/hr-travel.routes');
 const hrRecruitmentRoutes = require('./routes/hr-recruitment.routes');
+const apiKeysRoutes       = require('./routes/api-keys.routes');
+const publicCareersRoutes = require('./routes/public-careers.routes');
 const essRoutes           = require('./routes/ess.routes');
 const snagRoutes          = require('./routes/snag.routes');
 const { tenderRouter, bidRouter } = require('./routes/tender.routes');
@@ -268,6 +271,7 @@ const extraAllowedOrigins = [
   'http://bcim.ddns.net:3000',
   'https://bcim.ddns.net:3000',
   'https://erp.bcim.in',
+  'https://bcimhr.bcim.in',
 ];
 
 const isAllowedOrigin = (origin) => {
@@ -397,6 +401,7 @@ app.use(`${API}/boq`, boqRoutes);
 app.use(`${API}/boq-budget`, boqBudgetRoutes);
 app.use(`${API}/measurements`, measurementRoutes);
 app.use(`${API}/ra-bills`, raBillRoutes);
+app.use(`${API}/client-work-orders`, clientWorkOrderRoutes);
 app.use(`${API}/client-advances`, clientAdvanceRoutes);
 app.use(`${API}/price-escalations`, priceEscalationRoutes);
 app.use(`${API}/vendor-qs-certifications`, vendorQsCertificationRoutes);
@@ -562,6 +567,8 @@ app.use(`${API}/hr-admin/training`,    hrTrainingRoutes);
 app.use(`${API}/hr-admin/emp-assets`,  hrEmpAssetsRoutes);
 app.use(`${API}/hr-admin/travel`,      hrTravelRoutes);
 app.use(`${API}/hr-admin/recruitment`, hrRecruitmentRoutes);
+app.use(`${API}/settings/api-keys`,   apiKeysRoutes);
+app.use('/api/public/careers',        publicCareersRoutes);
 // Shifts router defines its paths as /shifts, /employee-shifts, /overtime,
 // /comp-off — mounting it at /hr-admin/shifts produced /hr-admin/shifts/shifts
 // etc., so every frontend call (which uses /hr-admin/shifts, /hr-admin/overtime,
@@ -873,6 +880,21 @@ app.use((req, res) => {
 
 // Global error handler
 app.use((err, req, res, next) => {
+  // Multer errors (file too large, wrong field, too many files, etc.) happen in
+  // upload middleware BEFORE the route handler's own try/catch runs, so they
+  // always fell through to here — where production mode hid them behind a bare
+  // "Internal server error", giving no hint that the file itself was the problem
+  // (e.g. a >10MB scan on Employee Documents). Multer sets err.name itself, so
+  // this needs no extra dependency to detect.
+  if (err.name === 'MulterError') {
+    const messages = {
+      LIMIT_FILE_SIZE: 'File is too large. Please upload a file under 10MB.',
+      LIMIT_FILE_COUNT: 'Too many files — please upload fewer at a time.',
+      LIMIT_UNEXPECTED_FILE: 'Unexpected file field — please check what you\'re uploading.',
+    };
+    logger.error(`${err.status || 400} — Multer:${err.code} — ${req.originalUrl}`);
+    return res.status(400).json({ error: messages[err.code] || `Upload failed: ${err.message}` });
+  }
   logger.error(`${err.status || 500} — ${err.message} — ${req.originalUrl}`);
   res.status(err.status || 500).json({
     error: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
@@ -1203,6 +1225,9 @@ if (require.main === module) {
 
     const { initLateSummary } = require('./utils/hr-late-summary.service');
     initLateSummary();
+
+    const { initAbsentSummary } = require('./utils/hr-absent-summary.service');
+    initAbsentSummary();
   });
   }); // end .finally()
 }

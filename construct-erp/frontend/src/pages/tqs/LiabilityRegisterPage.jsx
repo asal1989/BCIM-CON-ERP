@@ -480,7 +480,7 @@ export default function LiabilityRegisterPage() {
     root: {
       height: '100%', display: 'flex', flexDirection: 'column',
       overflow: 'hidden', background: C.canvas, minHeight: 0,
-      fontFamily: "'Inter','Segoe UI',system-ui,sans-serif",
+      fontFamily: "'Geist Variable','Segoe UI',system-ui,sans-serif",
     },
     // ── Top bar ──
     topBar: {

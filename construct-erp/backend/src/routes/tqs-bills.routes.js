@@ -1609,8 +1609,10 @@ router.get('/advances', async (req, res) => {
 router.get('/advances/pending', async (req, res) => {
   try {
     const { vendor_id, vendor_name, wo_number, po_number, project_id } = req.query;
-    // Use ONLY tqs_advances (synced by certification recovery logic) to avoid double-counting
-    // with tqs_advance_vouchers which tracks the same advances in a separate system.
+    // Combines both advance sources — an advance now lives in EITHER
+    // tqs_advances OR tqs_advance_vouchers (the Procurement Advance Tracker),
+    // never both: any advance migrated to the Tracker is removed from
+    // tqs_advances at migration time, so summing both here can't double-count.
     // When a specific WO/PO is provided, match EXACTLY — do NOT include NULL-wo advances
     // (that caused all-vendor advances to be bundled into a single WO's pending total).
     let conditions = [`a.company_id = $1`, `a.amount > a.recovered_amount`];
@@ -1651,10 +1653,48 @@ router.get('/advances/pending', async (req, res) => {
       WHERE ${conditions.join(' AND ')}
     `, params);
 
-    const totalAdvanced  = parseFloat(r1.rows[0]?.total_advanced)  || 0;
-    const totalRecovered = parseFloat(r1.rows[0]?.total_recovered) || 0;
-    const pendingBalance = parseFloat(r1.rows[0]?.pending_balance) || 0;
-    const advances = (r1.rows[0]?.advances || []).filter(Boolean);
+    // Same filters, against the Procurement Advance Tracker table.
+    let vConditions = [`av.company_id = $1`, `av.is_deleted = FALSE`, `av.advance_value > av.recovered_amount`];
+    const vParams   = [req.user.company_id];
+    let vi = 2;
+    applyProjectScope(req, vConditions, vParams, 'av', project_id);
+    vi = vParams.length + 1;
+    if (vendor_id && vendor_id.trim() && vendor_name) {
+      vConditions.push(`(av.vendor_id = $${vi++} OR av.vendor_name ILIKE $${vi++})`);
+      vParams.push(vendor_id, `%${vendor_name}%`);
+    } else if (vendor_id && vendor_id.trim()) {
+      vConditions.push(`(av.vendor_id = $${vi++} OR av.vendor_id IS NULL)`);
+      vParams.push(vendor_id);
+    } else if (vendor_name) {
+      vConditions.push(`av.vendor_name ILIKE $${vi++}`);
+      vParams.push(`%${vendor_name}%`);
+    }
+    if (wo_number) { vConditions.push(`av.wo_number = $${vi++}`); vParams.push(wo_number); }
+    if (po_number) { vConditions.push(`av.po_number = $${vi++}`); vParams.push(po_number); }
+
+    const r2 = await query(`
+      SELECT
+        SUM(av.advance_value)                      AS total_advanced,
+        SUM(av.recovered_amount)                    AS total_recovered,
+        SUM(av.advance_value - av.recovered_amount) AS pending_balance,
+        json_agg(json_build_object(
+          'id',               av.id,
+          'source',           'voucher',
+          'amount',           av.advance_value,
+          'recovered_amount', av.recovered_amount,
+          'balance',          av.advance_value - av.recovered_amount,
+          'payment_date',     av.pay_date,
+          'wo_number',        av.wo_number,
+          'reference_number', av.voucher_number
+        ) ORDER BY av.pay_date) AS advances
+      FROM tqs_advance_vouchers av
+      WHERE ${vConditions.join(' AND ')}
+    `, vParams);
+
+    const totalAdvanced  = (parseFloat(r1.rows[0]?.total_advanced)  || 0) + (parseFloat(r2.rows[0]?.total_advanced)  || 0);
+    const totalRecovered = (parseFloat(r1.rows[0]?.total_recovered) || 0) + (parseFloat(r2.rows[0]?.total_recovered) || 0);
+    const pendingBalance = (parseFloat(r1.rows[0]?.pending_balance) || 0) + (parseFloat(r2.rows[0]?.pending_balance) || 0);
+    const advances = [...(r1.rows[0]?.advances || []), ...(r2.rows[0]?.advances || [])].filter(Boolean);
 
     res.json({ data: { total_advanced: totalAdvanced, total_recovered: totalRecovered, pending_balance: pendingBalance, advances } });
   } catch (err) {
@@ -2421,20 +2461,29 @@ router.post('/', async (req, res) => {
   }
 });
 
-// ── PATCH /tqs/bills/:id/meta — update project, package description & (admin) workflow_status
+// ── PATCH /tqs/bills/:id/meta — update project, package description & (admin) workflow_status / inv_number
 router.patch('/:id/meta', async (req, res) => {
   try {
-    const { project_id, work_desc, workflow_status } = req.body;
+    const { project_id, work_desc, workflow_status, inv_number, vendor_name, po_number, po_id } = req.body;
     await getAccessibleBill(req, req.params.id);
     if (project_id && !userCanAccessProject(req, project_id)) {
       return res.status(403).json({ error: 'Access denied for this project.' });
     }
 
-    // Allow admins/management to manually override workflow_status (e.g. to unstick a pending WO bill)
     const VALID_STATUSES = ['pending','stores','document_controller','qs','accounts','procurement','qs_sign','paid'];
     const canOverrideStatus = req.user && DQS_FULL_ACCESS_ROLES.includes(req.user.role);
 
-    if (workflow_status && canOverrideStatus && VALID_STATUSES.includes(workflow_status)) {
+    if ((inv_number || vendor_name || po_number || po_id !== undefined) && canOverrideStatus) {
+      const sets = [];
+      const vals = [];
+      if (inv_number)          { sets.push(`inv_number=$${sets.length+1}`);  vals.push(inv_number.trim()); }
+      if (vendor_name)         { sets.push(`vendor_name=$${sets.length+1}`); vals.push(vendor_name.trim()); }
+      if (po_number)           { sets.push(`po_number=$${sets.length+1}`);   vals.push(po_number.trim()); }
+      if (po_id !== undefined) { sets.push(`po_id=$${sets.length+1}`);       vals.push(po_id || null); }
+      sets.push(`updated_at=NOW()`);
+      vals.push(req.params.id);
+      await query(`UPDATE tqs_bills SET ${sets.join(', ')} WHERE id=$${vals.length}`, vals);
+    } else if (workflow_status && canOverrideStatus && VALID_STATUSES.includes(workflow_status)) {
       await query(
         `UPDATE tqs_bills SET project_id=$1, work_desc=$2, workflow_status=$3, updated_at=NOW() WHERE id=$4`,
         [project_id || null, work_desc || null, workflow_status, req.params.id]
@@ -3097,6 +3146,65 @@ router.patch('/:id/line-items/:lineId', async (req, res) => {
     ]);
     await logHistory(req.params.id, 'system', `Line item "${r.rows[0].item_name}" updated`, req.user.id);
     res.json({ data: r.rows[0] });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// ── POST /tqs/bills/:id/line-items — add a new line to an existing bill ────
+router.post('/:id/line-items', async (req, res) => {
+  try {
+    await getAccessibleBill(req, req.params.id);
+    const {
+      item_name = '', category, unit = '', quantity = 0, rate = 0,
+      gst_pct = 0, gst_mode = 'intrastate', cost_head, boq_item_id, boq_chapter,
+    } = req.body;
+
+    const qty   = parseFloat(quantity) || 0;
+    const rt    = parseFloat(rate)     || 0;
+    const gstP  = parseFloat(gst_pct)  || 0;
+    const basic = qty * rt;
+    const mode  = gst_mode === 'interstate' ? 'interstate' : 'intrastate';
+    let cgP = 0, sgP = 0, igP = 0, cgA = 0, sgA = 0, igA = 0;
+    if (mode === 'interstate') { igP = gstP; igA = basic * igP / 100; }
+    else { cgP = gstP / 2; sgP = gstP / 2; cgA = basic * cgP / 100; sgA = basic * sgP / 100; }
+    const gstAmt   = cgA + sgA + igA;
+    const totalAmt = basic + gstAmt;
+
+    const r = await query(`
+      INSERT INTO tqs_bill_line_items (
+        bill_id, item_name, category, unit, quantity, rate, basic_amount,
+        gst_pct, gst_mode, cgst_pct, cgst_amt, sgst_pct, sgst_amt,
+        igst_pct, igst_amt, gst_amount, total_amount,
+        cost_head, boq_item_id, boq_chapter
+      ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20
+      ) RETURNING *
+    `, [
+      req.params.id, item_name || 'New Item', category || null, unit, qty, rt, basic.toFixed(2),
+      gstP, mode, cgP, cgA.toFixed(2), sgP, sgA.toFixed(2), igP, igA.toFixed(2),
+      gstAmt.toFixed(2), totalAmt.toFixed(2),
+      BOQ_COST_HEADS.includes(cost_head) ? cost_head : null,
+      boq_item_id || null, boq_chapter || null,
+    ]);
+    await logHistory(req.params.id, 'system', `Line item "${r.rows[0].item_name}" added`, req.user.id);
+    res.status(201).json({ data: r.rows[0] });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// ── DELETE /tqs/bills/:id/line-items/:lineId ───────────────────────────────
+router.delete('/:id/line-items/:lineId', async (req, res) => {
+  try {
+    await getAccessibleBill(req, req.params.id);
+    const r = await query(
+      `DELETE FROM tqs_bill_line_items WHERE id=$1 AND bill_id=$2 RETURNING id, item_name`,
+      [req.params.lineId, req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Line item not found on this bill' });
+    await logHistory(req.params.id, 'system', `Line item "${r.rows[0].item_name}" deleted`, req.user.id);
+    res.json({ data: { deleted: true } });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
   }

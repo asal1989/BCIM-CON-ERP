@@ -236,15 +236,13 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
     setSummaryRows([]);
   };
 
-  // Auto-calculate tds_amount on invoice total whenever rate or selection changes.
-  // Always use the INVOICE total_amount (what the user sees in the list),
-  // NOT summaryRows (WO item rates differ from invoice amounts).
+  // TDS is deducted on basic amount only (excl. GST) per CBDT Circular 23/2017.
   useEffect(() => {
     const rate = Number(form.tds_rate || 0);
     if (!rate) { set('tds_amount', ''); return; }
     const tdsBase = invoices
       .filter(b => selectedBillIds.includes(b.id))
-      .reduce((s, b) => s + Number(b.total_amount || 0), 0);
+      .reduce((s, b) => s + Number(b.basic_amount || 0), 0);
     if (!tdsBase) return;
     set('tds_amount', String(Math.round(tdsBase * rate / 100)));
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -752,7 +750,7 @@ export default function VendorQSCertificationPage() {
   };
 
   return (
-    <div className="p-5 min-h-full space-y-4" style={{ background: '#EEF1F6', fontFamily: "'Inter','Segoe UI',system-ui,sans-serif" }}>
+    <div className="p-5 min-h-full space-y-4" style={{ background: '#EEF1F6', fontFamily: "'Geist Variable','Segoe UI',system-ui,sans-serif" }}>
 
       {/* ── Hero band: title + CTA + KPIs ── */}
       <div className="rounded-2xl overflow-hidden shadow-md text-white"
@@ -930,8 +928,8 @@ export default function VendorQSCertificationPage() {
                   </Link>
                   <button
                     onClick={() => statusMut.mutate({ id: c.id, status: 'accounts' })}
-                    disabled={c.status === 'accounts' || c.status === 'paid' || !canApprove}
-                    title={canApprove ? 'Approve and send to Accounts' : `Only ${CERT_APPROVER_EMAIL} can approve and send this to Accounts`}
+                    disabled={c.status !== 'certified' || !canApprove}
+                    title={!canApprove ? `Only ${CERT_APPROVER_EMAIL} can approve` : c.status !== 'certified' ? `Cannot approve: status is ${c.status}` : 'Approve and send to Accounts'}
                     className="px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-[11px] font-semibold disabled:opacity-40 inline-flex items-center gap-1 transition-colors"
                   >
                     <Send className="w-3 h-3" /> {canApprove ? 'Approve' : 'Accounts'}

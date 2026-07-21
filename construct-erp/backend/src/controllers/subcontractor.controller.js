@@ -627,7 +627,7 @@ const updateWorkOrder = async (req, res) => {
       start_date, end_date, total_value, contract_value,
       cost_head, work_category, tower_block, vendor_id,
       gst_pct, tds_pct, retention_pct, advance_recovery_pct,
-      wo_number, items, mrs_id, mrs_ids,
+      wo_number, items, mrs_id, mrs_ids, rejection_reason,
     } = req.body;
 
     if (status && !VALID_WO_STATUSES.includes(status))
@@ -663,6 +663,7 @@ const updateWorkOrder = async (req, res) => {
 
     if (wo_number         !== undefined) { sets.push(`wo_number = $${i++}`);                           params.push(String(wo_number).trim().toUpperCase()); }
     if (status            !== undefined) { sets.push(`status = $${i++}`);                              params.push(status); }
+    if (rejection_reason  !== undefined) { sets.push(`rejection_reason = $${i++}`);                   params.push(rejection_reason || null); }
     if (subject           !== undefined) { sets.push(`subject = $${i}, work_description = $${i++}`);  params.push(subject); }
     if (scope_of_work     !== undefined) { sets.push(`scope_of_work = $${i++}`);                      params.push(scope_of_work); }
     if (terms_conditions  !== undefined) { sets.push(`terms_conditions = $${i++}`);                   params.push(terms_conditions); }

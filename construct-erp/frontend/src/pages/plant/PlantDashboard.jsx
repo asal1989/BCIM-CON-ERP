@@ -7,7 +7,7 @@ import {
   Truck, CheckCircle, Clock, Wrench, FileWarning, Briefcase,
   Layers, ArrowLeftRight, Gauge, Fuel, UserCheck, ShieldCheck,
   Calculator, FileBarChart, ChevronRight, BarChart3, PieChart as PieChartIcon,
-  RefreshCw,
+  RefreshCw, Construction,
 } from 'lucide-react';
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip,
@@ -46,8 +46,9 @@ const QUICK_LINKS = [
   { to: '/plant/maintenance', icon: Wrench,        label: 'Maintenance & Repairs',   desc: 'Schedules & work orders' },
   { to: '/plant/operators',   icon: UserCheck,     label: 'Operator Management',     desc: 'Operator assignments' },
   { to: '/plant/compliance',  icon: ShieldCheck,   label: 'Document Compliance',     desc: 'Permits, insurance, fitness' },
-  { to: '/plant/cost',        icon: Calculator,    label: 'Cost Allocation',         desc: 'Equipment cost to projects' },
-  { to: '/plant/reports',     icon: FileBarChart,  label: 'Reports & Analytics',     desc: 'Utilisation & cost reports' },
+  { to: '/plant/cost',         icon: Calculator,    label: 'Cost Allocation',         desc: 'Equipment cost to projects' },
+  { to: '/plant/reports',      icon: FileBarChart,  label: 'Reports & Analytics',     desc: 'Utilisation & cost reports' },
+  { to: '/plant/tower-cranes', icon: Construction,  label: 'Tower Crane Register',    desc: 'Installation docs & inspections' },
 ];
 
 function dueTone(daysLeft) {

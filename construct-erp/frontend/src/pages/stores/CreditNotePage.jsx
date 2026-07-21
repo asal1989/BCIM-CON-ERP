@@ -45,6 +45,7 @@ const EMPTY_FORM = {
   cgst_pct: '', cgst_amt: '',
   sgst_pct: '', sgst_amt: '',
   igst_pct: '', igst_amt: '',
+  tds_pct: '',
   remarks: '',
 };
 
@@ -97,6 +98,7 @@ function CNForm({ initial, onClose, onSaved }) {
           sgst_amt:       initial.sgst_amt || '',
           igst_pct:       initial.igst_pct || '',
           igst_amt:       initial.igst_amt || '',
+          tds_pct:        initial.tds_pct || '',
           remarks:        initial.remarks || '',
         }
       : { ...EMPTY_FORM }
@@ -249,8 +251,10 @@ function CNForm({ initial, onClose, onSaved }) {
     }
   };
 
-  const totalGST = (parseFloat(form.cgst_amt) || 0) + (parseFloat(form.sgst_amt) || 0) + (parseFloat(form.igst_amt) || 0);
+  const totalGST  = (parseFloat(form.cgst_amt) || 0) + (parseFloat(form.sgst_amt) || 0) + (parseFloat(form.igst_amt) || 0);
   const grandTotal = basicAmt + totalGST;
+  const tdsAmt    = parseFloat(((basicAmt * (parseFloat(form.tds_pct) || 0)) / 100).toFixed(2));
+  const netTotal  = parseFloat((grandTotal - tdsAmt).toFixed(2));
 
   // ── Submit ─────────────────────────────────────────────────────────────────
   const saveMut = useMutation({
@@ -279,6 +283,7 @@ function CNForm({ initial, onClose, onSaved }) {
       sgst_amt: parseFloat(form.sgst_amt) || 0,
       igst_pct: parseFloat(form.igst_pct) || 0,
       igst_amt: parseFloat(form.igst_amt) || 0,
+      tds_pct:  parseFloat(form.tds_pct)  || 0,
       items: items.filter(it => it.material_name?.trim()),
     });
   };
@@ -599,6 +604,21 @@ function CNForm({ initial, onClose, onSaved }) {
               )}
             </div>
 
+            {/* TDS field */}
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+              <div>
+                <Lbl>TDS % (on basic amount)</Lbl>
+                <input type="number" step="0.01" min="0" max="100" className={F}
+                  placeholder="e.g. 2"
+                  value={form.tds_pct}
+                  onChange={e => set('tds_pct', e.target.value)} />
+              </div>
+              <div>
+                <Lbl>TDS Amount (₹)</Lbl>
+                <input type="number" className={clsx(F, 'bg-slate-50')} readOnly value={tdsAmt > 0 ? tdsAmt.toFixed(2) : ''} />
+              </div>
+            </div>
+
             {/* Grand Total pill */}
             <div className="flex items-center justify-end gap-4 pt-2 border-t border-slate-200">
               {totalGST > 0 && (
@@ -607,9 +627,15 @@ function CNForm({ initial, onClose, onSaved }) {
                   <p className="text-sm font-semibold text-slate-700">₹ {inr(totalGST)}</p>
                 </div>
               )}
+              {tdsAmt > 0 && (
+                <div className="text-right">
+                  <p className="text-[10px] text-slate-400 uppercase">TDS Deduction</p>
+                  <p className="text-sm font-semibold text-red-600">− ₹ {inr(tdsAmt)}</p>
+                </div>
+              )}
               <div className="bg-indigo-600 text-white rounded-xl px-5 py-2.5 text-right">
-                <p className="text-[10px] uppercase tracking-wider text-indigo-200">Total Credit Value</p>
-                <p className="text-lg font-bold">₹ {inr(grandTotal)}</p>
+                <p className="text-[10px] uppercase tracking-wider text-indigo-200">Net Credit Value</p>
+                <p className="text-lg font-bold">₹ {inr(netTotal)}</p>
               </div>
             </div>
           </div>
@@ -752,7 +778,7 @@ function CNDetail({ cn, onClose, onEdit }) {
           )}
 
           {/* Financial summary */}
-          <div className="bg-white border border-slate-200 rounded-xl p-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white border border-slate-200 rounded-xl p-4 grid grid-cols-2 md:grid-cols-5 gap-4">
             {[
               { label: 'Basic Amount',  value: inr(cn.basic_amount), color: 'text-slate-800' },
               { label: cn.tax_mode === 'intrastate' ? 'CGST + SGST' : 'IGST',
@@ -761,7 +787,8 @@ function CNDetail({ cn, onClose, onEdit }) {
                   : inr(cn.igst_amt),
                 color: 'text-slate-600' },
               { label: 'Total GST',     value: inr(cn.gst_amount),   color: 'text-slate-600' },
-              { label: 'Total Credit',  value: `₹ ${inr(cn.total_amount)}`, color: 'text-indigo-700 text-base font-bold' },
+              ...(cn.tds_pct > 0 ? [{ label: `TDS @ ${cn.tds_pct}%`, value: `− ₹ ${inr(cn.tds_amount)}`, color: 'text-red-600' }] : []),
+              { label: 'Net Credit',    value: `₹ ${inr(cn.net_amount || cn.total_amount)}`, color: 'text-indigo-700 text-base font-bold' },
             ].map((k, i) => (
               <div key={i} className="text-center">
                 <p className="text-[10px] text-slate-400 mb-0.5">{k.label}</p>

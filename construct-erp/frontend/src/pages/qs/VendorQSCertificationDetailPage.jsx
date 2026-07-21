@@ -295,6 +295,16 @@ function AbstractSheet({ cert }) {
             );
           })}
 
+          {/* Basic Amount (before tax) */}
+          <tr style={{ background: '#FAFAFA' }}>
+            <td style={T.tdC}>—</td>
+            <td style={T.tdC}>—</td>
+            <td style={{...T.td, fontStyle:'italic', color:'#111', fontWeight:'600'}}>Basic Amount</td>
+            <td style={T.tdC}>—</td>
+            <td colSpan={14} style={{...T.tdC, color:'#444', fontSize:'10px', fontWeight:'500'}}>Certified quantity × rate, before tax</td>
+            <td style={{...T.tdR, fontWeight:'bold'}}>{raw(gross)}</td>
+          </tr>
+
           {/* GST / Tax */}
           {tax > 0 && (
             <tr style={{ background: '#FAFAFA' }}>
@@ -396,15 +406,17 @@ function PaymentCertificate({ cert }) {
     { no:  2, label: 'Net Change by Variation Orders',            value: null,                isDed: false },
     { no:  3, label: 'Final Contract Value to Date',              value: finalContract,       isDed: false },
     { no:  4, label: 'Advance Certified',                         value: advance || null,     isDed: false },
-    { no:  5, label: 'Gross Certified Till Date',                 value: grossTillDate,       isDed: false },
-    { no:  6, label: 'Deduction of Mobilisation Advance',        value: advance,             isDed: true  },
-    { no:  7, label: 'Deduction of Retention Amount',            value: retention,           isDed: true  },
-    { no:  8, label: payTdsLabel,                                 value: tds,                 isDed: true  },
-    { no:  9, label: 'Any Other Deductions',                     value: other,               isDed: true  },
-    { no: 10, label: 'Total Net Certified Till Date',            value: totalNetTillDate,    bold: true   },
-    { no: 11, label: 'Less Previous Certificates for Payments',  value: prev,                isDed: false },
-    { no: 12, label: 'Balance to Finish',                        value: balanceToFinish,     isDed: false },
-    { no: 13, label: 'Current Net Payment Due',                  value: currentDue,          highlight: true },
+    { no:  5, label: 'Basic Amount Certified (Current RA)',      value: n(cert.gross_amount), isDed: false },
+    { no:  6, label: 'GST / Tax Certified (Current RA)',         value: n(cert.tax_amount),   isDed: false },
+    { no:  7, label: 'Gross Certified Till Date',                 value: grossTillDate,       isDed: false },
+    { no:  8, label: 'Deduction of Mobilisation Advance',        value: advance,             isDed: true  },
+    { no:  9, label: 'Deduction of Retention Amount',            value: retention,           isDed: true  },
+    { no: 10, label: payTdsLabel,                                 value: tds,                 isDed: true  },
+    { no: 11, label: 'Any Other Deductions',                     value: other,               isDed: true  },
+    { no: 12, label: 'Total Net Certified Till Date',            value: totalNetTillDate,    bold: true   },
+    { no: 13, label: 'Less Previous Certificates for Payments',  value: prev,                isDed: false },
+    { no: 14, label: 'Balance to Finish',                        value: balanceToFinish,     isDed: false },
+    { no: 15, label: 'Current Net Payment Due',                  value: currentDue,          highlight: true },
   ];
 
   // Package description: use cert remarks as the work package label (same as AbstractSheet)
@@ -559,11 +571,19 @@ function AmountCorrectionModal({ cert, onClose }) {
     remarks:           cert.remarks           || '',
     cert_number:       cert.cert_number       || '',
     gst_tax:           cert.tax_amount        || 0,
+    ra_bill_number:    cert.ra_bill_number    || `RA-${cert.ra_sequence || 1}`,
   });
   // Fetch pending subcon advances from Stores matching this vendor
   const { data: scAdv } = useQuery({
     queryKey: ['pending-sc-advances', cert.vendor_name, cert.project_id],
     queryFn:  () => vendorQSCertificationAPI.pendingScAdvances({ vendor_name: cert.vendor_name, project_id: cert.project_id }).then(r => r.data),
+    enabled:  !!cert.vendor_name,
+    staleTime: 30000,
+  });
+  // Fetch outstanding Procurement Advance Tracker balance for this vendor
+  const { data: pcAdv } = useQuery({
+    queryKey: ['pending-advance-vouchers', cert.vendor_name, cert.project_id],
+    queryFn:  () => vendorQSCertificationAPI.pendingAdvanceVouchers({ vendor_name: cert.vendor_name, project_id: cert.project_id }).then(r => r.data),
     enabled:  !!cert.vendor_name,
     staleTime: 30000,
   });
@@ -577,6 +597,7 @@ function AmountCorrectionModal({ cert, onClose }) {
       remarks:           cert.remarks           || '',
       cert_number:       cert.cert_number       || '',
       gst_tax:           cert.tax_amount        || 0,
+      ra_bill_number:    cert.ra_bill_number    || `RA-${cert.ra_sequence || 1}`,
     });
   }, [cert]);
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
@@ -591,9 +612,14 @@ function AmountCorrectionModal({ cert, onClose }) {
   const effectiveTax = canEditSensitive ? n(form.gst_tax) : n(cert.tax_amount);
   const revisedNet = n(cert.gross_amount) + effectiveTax - totalDed;
   const mut = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const payload = { ...form };
+      delete payload.ra_bill_number;
       if (!canEditSensitive) { delete payload.cert_number; delete payload.gst_tax; }
+      const original = cert.ra_bill_number || `RA-${cert.ra_sequence || 1}`;
+      if (canEditSensitive && form.ra_bill_number !== original) {
+        await vendorQSCertificationAPI.updateMeta(cert.id, { ra_bill_number: form.ra_bill_number });
+      }
       return vendorQSCertificationAPI.updateAmounts(cert.id, payload);
     },
     onSuccess: () => {
@@ -634,6 +660,11 @@ function AmountCorrectionModal({ cert, onClose }) {
                 <input type="number" className="w-full border border-indigo-200 rounded-lg px-3 py-2 text-sm"
                   value={form.gst_tax} onChange={e => set('gst_tax', e.target.value)} />
               </div>
+              <div>
+                <label className="text-[11px] font-medium text-slate-900 uppercase">RA Bill No.</label>
+                <input type="text" className="w-full border border-indigo-200 rounded-lg px-3 py-2 text-sm"
+                  placeholder="RA-19" value={form.ra_bill_number} onChange={e => set('ra_bill_number', e.target.value)} />
+              </div>
               <div className="col-span-2 border-b border-dashed border-slate-200 -mt-1 mb-1" />
             </>
           )}
@@ -659,8 +690,21 @@ function AmountCorrectionModal({ cert, onClose }) {
             <input type="number" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
               value={form.tds_amount} onChange={e => set('tds_amount', e.target.value)} />
           </div>
-          {/* Advance Recovery — with pending subcon advance hint from Stores */}
+          {/* Advance Recovery — with pending advance hints from Stores + the Procurement Advance Tracker */}
           <div className="col-span-2">
+            {pcAdv?.total > 0 && (
+              <div className="mb-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 flex items-center justify-between">
+                <span className="text-[11px] text-blue-800">
+                  Outstanding advance in Advance Tracker ({pcAdv.data?.length} voucher{pcAdv.data?.length === 1 ? '' : 's'}):
+                  {' '}<strong>₹{inr(pcAdv.total)}</strong>
+                  {pcAdv.data?.[0] && <span className="text-blue-600 ml-1">— {pcAdv.data[0].sl_number}{pcAdv.data[0].wo_number ? ` / ${pcAdv.data[0].wo_number}` : pcAdv.data[0].po_number ? ` / ${pcAdv.data[0].po_number}` : ''}</span>}
+                </span>
+                <button type="button" onClick={() => set('advance_recovered', pcAdv.total)}
+                  className="ml-3 text-[11px] font-semibold text-blue-700 border border-blue-300 rounded px-2 py-0.5 hover:bg-blue-100 whitespace-nowrap">
+                  Apply ₹{inr(pcAdv.total)}
+                </button>
+              </div>
+            )}
             {scAdv?.total > 0 && (
               <div className="mb-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center justify-between">
                 <span className="text-[11px] text-amber-800">
