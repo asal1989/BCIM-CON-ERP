@@ -46,7 +46,12 @@ const billBalanceDue = (bill = {}) => {
   // Do NOT let invoice arithmetic override it — certified_net=0 with full
   // advance recovery is a valid ₹0 balance, but invoiceTotal - deductions
   // would show the GST residual as a phantom balance.
-  const hasCertification = bill.qs_certified_date != null || bill.certified_net != null;
+  // Use qs_certified_date (not certified_net) as the certification signal —
+  // certified_net defaults to 0 in the schema, so bulk-imported bills that
+  // were never actually QS-certified still have certified_net=0 (not null),
+  // which made this branch wrongly treat balance_to_pay=0 as a real "Nil"
+  // instead of falling through to the invoice-based calculation below.
+  const hasCertification = bill.qs_certified_date != null;
   if (hasCertification) {
     return Math.max(apiBalance, 0);
   }
