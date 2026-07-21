@@ -1113,6 +1113,7 @@ function EditBillModal({ bill, onClose }) {
   const canEditQty = ['super_admin', 'qs_engineer'].includes(user?.role);
 
   const [f, setF] = useState({
+    bill_date: bill.bill_date ? bill.bill_date.slice(0, 10) : '',
     invoice_number: bill.invoice_number || '',
     gst_pct: bill.gst_pct, tds_pct: bill.tds_pct, retention_pct: bill.retention_pct,
     is_igst: !!bill.is_igst, labour_cess_pct: bill.gross_amount > 0 ? +(100 * bill.labour_cess_amount / bill.gross_amount).toFixed(2) : 0,
@@ -1208,7 +1209,10 @@ function EditBillModal({ bill, onClose }) {
               </div>
             </div>
           )}
-          <div className="grid grid-cols-1 gap-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Bill Date">
+              <input type="date" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none" value={f.bill_date} onChange={e => set('bill_date', e.target.value)} />
+            </Field>
             <Field label="Invoice No. (Vendor's)">
               <input type="text" className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none" value={f.invoice_number} onChange={e => set('invoice_number', e.target.value)} placeholder="e.g. INV-2025-001" />
             </Field>
