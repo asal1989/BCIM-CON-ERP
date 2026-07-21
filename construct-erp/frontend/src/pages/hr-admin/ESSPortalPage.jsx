@@ -483,11 +483,11 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
             <div style={{ display:'flex',alignItems:'center',gap:7,marginBottom:6,flexWrap:'wrap' }}>
               <span style={{ fontSize:10.5,fontWeight:700,color:'rgba(255,255,255,.5)',textTransform:'uppercase',letterSpacing:'.08em' }}>{greeting}</span>
               <span style={{ background:'rgba(34,197,94,.18)',color:'#4ADE80',border:'1px solid rgba(34,197,94,.3)',fontSize:10.5,fontWeight:700,padding:'2px 9px',borderRadius:20 }}>Active</span>
-              {profile?.employee_id && <span style={{ background:'rgba(255,255,255,.1)',color:'rgba(255,255,255,.7)',border:'1px solid rgba(255,255,255,.15)',fontSize:10.5,fontWeight:700,padding:'2px 9px',borderRadius:20,fontFamily:'ui-monospace,monospace' }}>{profile.employee_id}</span>}
+              {profile?.employee_code && <span style={{ background:'rgba(255,255,255,.1)',color:'rgba(255,255,255,.7)',border:'1px solid rgba(255,255,255,.15)',fontSize:10.5,fontWeight:700,padding:'2px 9px',borderRadius:20,fontFamily:'ui-monospace,monospace' }}>{profile.employee_code}</span>}
             </div>
             <div style={{ fontSize:26,fontWeight:800,color:'#fff',letterSpacing:'-.03em',lineHeight:1.1,marginBottom:6 }}>{profile?.name||'Employee'}</div>
             <div style={{ display:'flex',flexWrap:'wrap',gap:'3px 14px',fontSize:12,color:'rgba(255,255,255,.55)' }}>
-              {profile?.designation && <span>Role: {profile.designation}</span>}
+              {profile?.designation_name && <span>Role: {profile.designation_name}</span>}
               {profile?.department_name && <span>Dept: {profile.department_name}</span>}
               {profile?.work_location && <span>Location: {profile.work_location}</span>}
               <span>{now.toLocaleDateString('en-IN',{weekday:'long',day:'2-digit',month:'long',year:'numeric'})}</span>
@@ -542,12 +542,12 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
       <div style={{ padding:'0 24px', position:'relative', zIndex:10, marginTop:'-2px' }}>
         <div style={{ display:'grid',gridTemplateColumns:'repeat(6,1fr)',background:T.card,borderRadius:16,border:`1px solid ${T.bdr}`,boxShadow:'0 4px 20px rgba(0,0,0,.07),0 2px 6px rgba(0,0,0,.04)',overflow:'hidden' }}>
           {[
-            { icon:'ID', label:'Employee ID',   val:profile?.employee_id||'--',  sub:'',                                                  mono:true,  clr:T.t1 },
+            { icon:'ID', label:'Employee ID',   val:profile?.employee_code||'--',  sub:'',                                                mono:true,  clr:T.t1 },
             { icon:'%',  label:'Attendance',    val:`${attPct}%`,                 sub:`${presentDays}/${workDays} days`,                    mono:false, clr:'#059669' },
             { icon:'L',  label:'Leave Balance', val:`${Number(totalBalance).toFixed(1)}d`, sub:'Casual + Earned',                          mono:false, clr:'#7C3AED' },
             { icon:'Rs', label:'Net Pay',       val:payroll?.net_pay?`Rs.${Number(payroll.net_pay).toLocaleString('en-IN')}`:'--',          sub:payroll?.month?`${MONTH_NAMES[(payroll.month||1)-1]} ${payroll.year}`:'Not processed', mono:false, clr:'#D97706' },
             { icon:'!',  label:'Pending',       val:pendingTotal,                 sub:`${pendingLeave} leave · ${pendingCorr} reg.`,         mono:false, clr:pendingTotal>0?'#EF4444':'#059669' },
-            { icon:'D',  label:'Work Days',     val:attendance.working_days??'--', sub:`${presentDays} present`,                            mono:false, clr:'#2563EB' },
+            { icon:'D',  label:'Work Days',     val:workDays||'--',                sub:`${presentDays} present`,                            mono:false, clr:'#2563EB' },
           ].map(({ icon,label,val,sub,mono,clr },i) => (
             <div key={label} style={{ padding:'14px 16px',borderRight:i<5?`1px solid ${T.bdr}`:undefined,transition:'.15s',cursor:'default' }}
               onMouseEnter={e=>{e.currentTarget.style.background='rgba(37,99,235,.03)';}}
@@ -588,9 +588,11 @@ function DashboardTab({ summary, balances, serviceRequests, notifications, profi
                 {cells.map((day,idx) => {
                   if (!day) return <div key={`e-${idx}`} />;
                   const ds = fmtCell(day);
-                  const code = statusMap[ds]?.code;
+                  const isPast = ds < todayStr;
                   const isToday = ds === todayStr;
                   const isWknd = new Date(ds).getDay()===0||new Date(ds).getDay()===6;
+                  const rawCode = statusMap[ds]?.code;
+                  const code = rawCode || (!isWknd && isPast ? 'A' : null);
                   const dotCal = { P:'#2563EB',A:'#EF4444',HD:'#F59E0B',L:'#8B5CF6',H:'#22C55E' };
                   return (
                     <div key={day} style={{ display:'flex',flexDirection:'column',alignItems:'center',padding:'2px 0' }}>
