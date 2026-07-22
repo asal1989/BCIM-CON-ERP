@@ -10,6 +10,7 @@ import {
   Send, UploadCloud, FileSpreadsheet, Tag, Layers, LayoutGrid, List as ListIcon,
   Image as ImageIcon, FileArchive, TrendingUp,
 } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { dmsAPI, projectAPI } from '../../api/client';
 import api from '../../api/client';
 import toast from 'react-hot-toast';
@@ -653,6 +654,84 @@ function DocumentCard({ doc, onOpen, onDownload, onShare, onArchive }) {
   );
 }
 
+// ── Persistent right-side "Document Details" panel ─────────────────────────
+function DocumentDetailsPanel({ doc, onClose, onOpenFull, onDownload, onShare, onSubmitReview, onAddVersion }) {
+  if (!doc) {
+    return (
+      <div className="w-72 flex-shrink-0 hidden xl:block">
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-8 text-center sticky top-4">
+          <FileText className="w-9 h-9 mx-auto mb-3 text-slate-200" />
+          <p className="text-xs text-slate-400">Select a document to view its details</p>
+        </div>
+      </div>
+    );
+  }
+  const cfg = STATUS_CFG[doc.status] || STATUS_CFG.draft;
+  const ft = fileTypeCfg(doc.file_name);
+  const Icon = ft.icon;
+  return (
+    <div className="w-72 flex-shrink-0 hidden xl:block">
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm sticky top-4 overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Document Details</span>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
+        </div>
+        <div className="p-4 space-y-4">
+          {/* Preview thumbnail */}
+          <div className={clsx('rounded-xl flex flex-col items-center justify-center py-6 ring-4', ft.bg, ft.ring)}>
+            <Icon className={clsx('w-9 h-9 mb-2', ft.fg)} />
+            <p className="text-xs font-semibold text-slate-700 text-center px-3 line-clamp-2">{doc.doc_title || doc.file_name}</p>
+          </div>
+
+          <div>
+            <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${cfg.color}`}>{cfg.label}</span>
+          </div>
+
+          {/* Details list */}
+          <div className="space-y-1.5">
+            {[
+              ['Discipline', doc.discipline || '—'],
+              ['Type', titleCase(doc.doc_type)],
+              ['Version', doc.revision || 'A'],
+              ['Size', fmtSize(doc.file_size)],
+              ['Uploaded By', doc.uploaded_by_name || '—'],
+              ['Uploaded On', doc.created_at ? dayjs(doc.created_at).format('DD MMM YYYY') : '—'],
+              ['Description', doc.description || '—'],
+            ].map(([l, v]) => (
+              <div key={l} className="flex justify-between gap-2 text-xs py-1 border-b border-slate-50">
+                <span className="text-slate-400 flex-shrink-0">{l}</span>
+                <span className="text-slate-700 text-right truncate">{v}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex gap-2">
+            {(doc.local_url || doc.onedrive_url) && (
+              <button onClick={()=>onDownload(doc)} className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700">
+                <Download className="w-3.5 h-3.5" /> Download
+              </button>
+            )}
+            <button onClick={()=>onOpenFull(doc.id)} className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 hover:bg-slate-100">
+              <Eye className="w-3.5 h-3.5" /> View
+            </button>
+          </div>
+
+          {/* Quick actions */}
+          <div className="pt-2 border-t">
+            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Quick Actions</div>
+            <div className="space-y-0.5">
+              <button onClick={()=>onSubmitReview(doc)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-slate-600 hover:bg-slate-50"><Send className="w-3.5 h-3.5 text-amber-500" /> Submit for Review</button>
+              <button onClick={()=>onAddVersion(doc)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-slate-600 hover:bg-slate-50"><GitBranch className="w-3.5 h-3.5 text-indigo-500" /> Add Revision</button>
+              <button onClick={()=>onShare(doc)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-slate-600 hover:bg-slate-50"><Share2 className="w-3.5 h-3.5 text-emerald-500" /> Share</button>
+              <button onClick={()=>onOpenFull(doc.id)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-slate-600 hover:bg-slate-50"><History className="w-3.5 h-3.5 text-slate-500" /> Versions / Approvals / Audit</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ════════════════════════════════════════════════════════════════════
@@ -663,6 +742,12 @@ export default function DMSPage() {
   const [typeFilter, setType] = useState('');
   const [statusFilter, setStatus] = useState('');
   const [projectFilter, setProjFilter] = useState('');
+  const [disciplineFilter, setDisciplineFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo]   = useState('');
+  const [page, setPage]       = useState(1);
+  const PAGE_SIZE = 10;
+  const [selectedDoc, setSelectedDoc] = useState(null); // row shown in the persistent right panel
   const [cat, setCat]         = useState({ kind: 'all' });   // {kind:'all'|'type'|'vendor'|'project'|'month'|'folder', value}
   const [openSec, setOpenSec] = useState({ type: true, vendor: true, project: true, month: false, folder: true });
   const [groupBy, setGroupBy] = useState('none');            // none|vendor|type|project|month
@@ -729,7 +814,7 @@ export default function DMSPage() {
   }, [docs]);
   const monthLabel = k => (k === 'unknown' ? 'Unknown date' : dayjs(`${k}-01`).format('MMM YYYY'));
 
-  const visibleDocs = useMemo(() => {
+  const catFilteredDocs = useMemo(() => {
     if (cat.kind === 'type')    return docs.filter(d => (d.doc_type || 'general') === cat.value);
     if (cat.kind === 'vendor')  return docs.filter(d => vendorOf(d) === cat.value);
     if (cat.kind === 'project') return docs.filter(d => (d.project_name || 'No project') === cat.value);
@@ -737,6 +822,29 @@ export default function DMSPage() {
     if (cat.kind === 'folder')  return docs.filter(d => d.folder_id === cat.value);
     return docs;
   }, [docs, cat]);
+
+  const disciplineGroups = useMemo(() => {
+    const m = {};
+    docs.forEach(d => { if (d.discipline) m[d.discipline] = (m[d.discipline] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }, [docs]);
+
+  const visibleDocs = useMemo(() => {
+    return catFilteredDocs.filter(d => {
+      if (disciplineFilter && d.discipline !== disciplineFilter) return false;
+      if (dateFrom && (!d.created_at || dayjs(d.created_at).isBefore(dayjs(dateFrom), 'day'))) return false;
+      if (dateTo && (!d.created_at || dayjs(d.created_at).isAfter(dayjs(dateTo), 'day'))) return false;
+      return true;
+    });
+  }, [catFilteredDocs, disciplineFilter, dateFrom, dateTo]);
+
+  useEffect(() => { setPage(1); }, [cat, disciplineFilter, dateFrom, dateTo, typeFilter, statusFilter, search, projectFilter, groupBy]);
+
+  const pageCount = Math.max(1, Math.ceil(visibleDocs.length / PAGE_SIZE));
+  const pagedDocs = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return visibleDocs.slice(start, start + PAGE_SIZE);
+  }, [visibleDocs, page]);
 
   // ── Row grouping inside the table ──────────────────────────────────────────
   const groupKeyOf = (d) => {
@@ -775,39 +883,77 @@ export default function DMSPage() {
   const todayUploads = useMemo(() => docs.filter(d => d.created_at && dayjs(d.created_at).format('YYYY-MM-DD') === todayStr).length, [docs, todayStr]);
   const monthUploads = useMemo(() => docs.filter(d => d.created_at && dayjs(d.created_at).format('YYYY-MM') === monthStr).length, [docs, monthStr]);
 
+  const STATUS_COLORS = { draft:'#94a3b8', under_review:'#f59e0b', approved:'#10b981', rejected:'#ef4444', archived:'#64748b' };
+  const statusChartData = useMemo(() => {
+    if (!s) return [];
+    return Object.entries(STATUS_CFG)
+      .map(([k, cfg]) => ({ name: cfg.label, value: s[k] || 0, color: STATUS_COLORS[k] }))
+      .filter(d => d.value > 0);
+  }, [s]);
+
+  const trendChartData = useMemo(() => {
+    const days = Array.from({ length: 14 }).map((_, i) => dayjs().subtract(13 - i, 'day'));
+    return days.map(d => {
+      const key = d.format('YYYY-MM-DD');
+      return { date: d.format('DD MMM'), count: docs.filter(x => x.created_at && dayjs(x.created_at).format('YYYY-MM-DD') === key).length };
+    });
+  }, [docs]);
+
+  const [kebabRow, setKebabRow] = useState(null);
+  useEffect(() => {
+    if (!kebabRow) return;
+    const close = () => setKebabRow(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [kebabRow]);
+
   const renderRow = (d) => {
     const cfg = STATUS_CFG[d.status] || STATUS_CFG.draft;
-    const expDays = d.expiry_date ? dayjs(d.expiry_date).diff(dayjs(), 'day') : null;
+    const ft = fileTypeCfg(d.file_name);
+    const FIcon = ft.icon;
     return (
-      <tr key={d.id} className="border-b last:border-0 hover:bg-slate-50 group cursor-pointer" onClick={()=>setDetailId(d.id)}>
-        <td className="py-2 px-3 font-mono text-xs text-indigo-600">{d.doc_number || '—'}</td>
-        <td className="py-2 px-3">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-medium text-slate-800 max-w-[180px] truncate">{d.doc_title || d.file_name}</span>
-            {d.is_signed && <FileSignature className="w-3 h-3 text-blue-500 flex-shrink-0" />}
-            {d.version_count > 0 && <span className="text-[9px] bg-slate-100 text-slate-500 px-1 rounded">v{d.revision_no+1||d.version_count}</span>}
+      <tr key={d.id}
+        className={clsx('border-b last:border-0 hover:bg-slate-50 cursor-pointer', selectedDoc?.id===d.id && 'bg-indigo-50/60')}
+        onClick={()=>setSelectedDoc(d)}>
+        <td className="py-2.5 px-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className={clsx('w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0', ft.bg)}>
+              <FIcon className={clsx('w-3.5 h-3.5', ft.fg)} />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-medium text-slate-800 max-w-[200px] truncate">{d.doc_title || d.file_name}</span>
+                {d.is_signed && <FileSignature className="w-3 h-3 text-blue-500 flex-shrink-0" />}
+              </div>
+              <div className="text-[10px] text-slate-400 truncate">{d.doc_number || d.file_name}</div>
+            </div>
           </div>
-          <div className="text-[10px] text-slate-400 truncate">{d.file_name}</div>
         </td>
-        <td className="py-2 px-3 text-xs capitalize">{titleCase(d.doc_type)}</td>
-        <td className="py-2 px-3 text-xs text-slate-500 max-w-[120px] truncate">{d.project_name || '—'}</td>
-        <td className="py-2 px-3 text-xs font-mono">{d.revision || 'A'}</td>
-        <td className="py-2 px-3 text-xs">{fmtSize(d.file_size)}</td>
-        <td className="py-2 px-3 text-xs">
-          {d.expiry_date ? <span className={clsx('font-medium', expDays<0?'text-red-600':expDays<=30?'text-orange-500':'text-slate-500')}>{d.expiry_date}</span> : '—'}
-        </td>
-        <td className="py-2 px-3"><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${cfg.color}`}>{cfg.label}</span></td>
-        <td className="py-2 px-3" onClick={e=>e.stopPropagation()}>
-          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            {(d.local_url || d.onedrive_url) && (
-              <button type="button" onClick={()=>downloadDmsDocument(d)}
-                className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Download"><Download className="w-3.5 h-3.5" /></button>
-            )}
-            <button onClick={()=>setModal({type:'review', doc:d})} className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded" title="Submit for Review"><Send className="w-3.5 h-3.5" /></button>
-            <button onClick={()=>setModal({type:'version', doc:d})} className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded" title="Add Revision"><GitBranch className="w-3.5 h-3.5" /></button>
-            <button onClick={()=>setModal({type:'share', doc:d})} className="p-1 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded" title="Share"><Share2 className="w-3.5 h-3.5" /></button>
-            <button onClick={()=>{ if(window.confirm('Archive?')) archiveMut.mutate(d.id); }} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded" title="Archive"><Archive className="w-3.5 h-3.5" /></button>
-          </div>
+        <td className="py-2.5 px-3 text-xs capitalize whitespace-nowrap">{titleCase(d.doc_type)}</td>
+        <td className="py-2.5 px-3 text-xs text-slate-500 max-w-[100px] truncate">{d.discipline || '—'}</td>
+        <td className="py-2.5 px-3 text-xs font-mono">{d.revision || 'A'}</td>
+        <td className="py-2.5 px-3"><span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${cfg.color}`}>{cfg.label}</span></td>
+        <td className="py-2.5 px-3 text-xs whitespace-nowrap">{fmtSize(d.file_size)}</td>
+        <td className="py-2.5 px-3 text-xs text-slate-500 max-w-[120px] truncate">{d.uploaded_by_name || '—'}</td>
+        <td className="py-2.5 px-3 text-xs text-slate-500 whitespace-nowrap">{d.created_at ? dayjs(d.created_at).format('DD MMM YYYY') : '—'}</td>
+        <td className="py-2.5 px-3 relative" onClick={e=>e.stopPropagation()}>
+          <button onClick={()=>setKebabRow(kebabRow===d.id?null:d.id)}
+            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="3" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="8" cy="13" r="1.4"/></svg>
+          </button>
+          {kebabRow === d.id && (
+            <div className="absolute right-2 top-9 z-20 w-44 bg-white border border-slate-200 rounded-xl shadow-lg py-1.5 text-xs">
+              <button onClick={()=>{ setDetailId(d.id); setKebabRow(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 text-slate-700"><Eye className="w-3.5 h-3.5" /> Open Details</button>
+              {(d.local_url || d.onedrive_url) && (
+                <button onClick={()=>{ downloadDmsDocument(d); setKebabRow(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 text-slate-700"><Download className="w-3.5 h-3.5" /> Download</button>
+              )}
+              <button onClick={()=>{ setModal({type:'review', doc:d}); setKebabRow(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 text-slate-700"><Send className="w-3.5 h-3.5" /> Submit for Review</button>
+              <button onClick={()=>{ setModal({type:'version', doc:d}); setKebabRow(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 text-slate-700"><GitBranch className="w-3.5 h-3.5" /> Add Revision</button>
+              <button onClick={()=>{ setModal({type:'share', doc:d}); setKebabRow(null); }} className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 text-slate-700"><Share2 className="w-3.5 h-3.5" /> Share</button>
+              <div className="border-t my-1" />
+              <button onClick={()=>{ setKebabRow(null); if(window.confirm('Archive?')) archiveMut.mutate(d.id); }} className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-red-50 text-red-600"><Archive className="w-3.5 h-3.5" /> Archive</button>
+            </div>
+          )}
         </td>
       </tr>
     );
@@ -816,53 +962,50 @@ export default function DMSPage() {
   return (
     <div className="min-h-screen bg-[#f4f6fb]">
 
-      {/* ── PREMIUM HERO ── */}
-      <div className="relative overflow-hidden" style={{ background: 'linear-gradient(145deg,#0A0F1E 0%,#0F172A 20%,#1E1B4B 55%,#4338CA 100%)', padding: '32px 28px 56px' }}>
-        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse 70% 60% at 70% 0%,rgba(99,102,241,.25),transparent),radial-gradient(ellipse 50% 80% at 100% 70%,rgba(139,92,246,.15),transparent)' }} />
-        <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,.055) 1px,transparent 1px)', backgroundSize: '24px 24px' }} />
-        <div className="relative z-10 max-w-[1400px] mx-auto">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center flex-shrink-0">
-                <FolderOpen className="w-7 h-7 text-white" />
+      {/* ── LIGHT PAGE HEADER ── */}
+      <div className="bg-white border-b border-slate-200">
+        <div className="max-w-[1400px] mx-auto px-6 md:px-8 py-5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                <FolderOpen className="w-5.5 h-5.5 text-indigo-600" style={{ width: 22, height: 22 }} />
               </div>
               <div>
-                <div className="text-[10.5px] font-bold text-white/50 uppercase tracking-widest mb-1">BCIM Construction ERP</div>
-                <h1 className="text-2xl font-extrabold text-white tracking-tight">Document Management System</h1>
-                <p className="text-xs text-white/60 mt-0.5">Centralized repository · Version Control · Approvals · Signatures · Audit</p>
+                <h1 className="text-xl font-bold text-slate-900 tracking-tight">Document Management System</h1>
+                <p className="text-xs text-slate-400 mt-0.5">Centralized repository · Version Control · Approvals · Signatures · Audit</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               {myApprovals.length > 0 && (
-                <button onClick={() => setTab('approvals')} className="flex items-center gap-2 px-3 py-2 bg-amber-400/15 border border-amber-300/30 rounded-xl text-sm text-amber-200 hover:bg-amber-400/25 transition-colors">
+                <button onClick={() => setTab('approvals')} className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700 hover:bg-amber-100 transition-colors">
                   <Bell className="w-4 h-4" /><strong>{myApprovals.length}</strong> pending
                 </button>
               )}
+              <button onClick={() => setModal('folder')}
+                className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-sm font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors">
+                <Plus className="w-4 h-4" /> New Folder
+              </button>
               <button onClick={() => setModal('upload')}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white shadow-lg transition-transform hover:-translate-y-0.5"
-                style={{ background: 'linear-gradient(135deg,#7C3AED,#4338CA)', boxShadow: '0 4px 16px rgba(67,56,202,.4)' }}>
-                <Upload className="w-4 h-4" /> Upload Document
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white shadow-sm hover:-translate-y-0.5 transition-transform"
+                style={{ background: 'linear-gradient(135deg,#4F46E5,#4338CA)' }}>
+                <Upload className="w-4 h-4" /> Upload
               </button>
             </div>
           </div>
 
-          {/* Animated KPI strip */}
+          {/* KPI strip */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <KpiTile icon={FileText}      label="Total Documents" value={s?.total || 0}                 tint={{ bg:'bg-indigo-50',  fg:'text-indigo-600',  dot:'bg-indigo-500' }} />
-            <KpiTile icon={CheckCircle2}  label="Approved"        value={s?.approved || 0}               tint={{ bg:'bg-emerald-50', fg:'text-emerald-600', dot:'bg-emerald-500' }} />
+            <KpiTile icon={FileText}      label="Total Documents" value={s?.total || 0}                 sub={`+${monthUploads} this month`} tint={{ bg:'bg-indigo-50',  fg:'text-indigo-600',  dot:'bg-indigo-500' }} />
+            <KpiTile icon={Folder}        label="Folders"         value={folders.length}                tint={{ bg:'bg-cyan-50',    fg:'text-cyan-600',    dot:'bg-cyan-500' }} />
+            <KpiTile icon={Layers}        label="Drawings"        value={(typeGroups.find(([t])=>t==='drawing')||[0,0])[1]} tint={{ bg:'bg-purple-50', fg:'text-purple-600', dot:'bg-purple-500' }} />
+            <KpiTile icon={ScrollText}    label="RFIs"            value={(typeGroups.find(([t])=>t==='rfi')||[0,0])[1]}     tint={{ bg:'bg-rose-50',    fg:'text-rose-600',    dot:'bg-rose-500' }} />
+            <KpiTile icon={CheckCircle2}  label="Approved"        value={s?.approved || 0}               sub="documents" tint={{ bg:'bg-emerald-50', fg:'text-emerald-600', dot:'bg-emerald-500' }} />
             <KpiTile icon={Clock}         label="Pending Approval" value={myApprovals.length}            tint={{ bg:'bg-amber-50',   fg:'text-amber-600',   dot:'bg-amber-500' }} />
-            <KpiTile icon={HardDrive}     label="Storage Used"    value={s?.total_size_bytes || 0} format={fmtSize} tint={{ bg:'bg-purple-50', fg:'text-purple-600', dot:'bg-purple-500' }} />
-            <KpiTile icon={UploadCloud}   label="Today's Uploads" value={todayUploads}                   tint={{ bg:'bg-cyan-50',    fg:'text-cyan-600',    dot:'bg-cyan-500' }} />
-            <KpiTile icon={BarChart3}     label="This Month"      value={monthUploads}                   tint={{ bg:'bg-rose-50',    fg:'text-rose-600',    dot:'bg-rose-500' }} />
           </div>
         </div>
-
-        <svg className="absolute bottom-0 left-0 right-0 w-full block pointer-events-none" viewBox="0 0 1440 36" preserveAspectRatio="none">
-          <path d="M0,18L60,15C120,12,240,6,360,8C480,10,600,20,720,21C840,23,960,17,1080,13C1200,9,1320,8,1380,8L1440,7V36H0Z" fill="#f4f6fb" />
-        </svg>
       </div>
 
-      <div className="p-6 md:p-8 max-w-[1400px] mx-auto -mt-2 relative z-10">
+      <div className="p-6 md:p-8 max-w-[1400px] mx-auto relative z-10">
 
       {/* Tabs */}
       <div className="flex gap-1 bg-white border border-slate-100 p-1 rounded-2xl w-fit mb-5 flex-wrap shadow-sm">
@@ -1105,23 +1248,40 @@ export default function DMSPage() {
 
           {/* Main */}
           <div className="flex-1 min-w-0">
+            {/* Breadcrumb */}
+            <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-3">
+              <span className="hover:text-indigo-600 cursor-pointer" onClick={()=>setCat({kind:'all'})}>Document Repository</span>
+              {cat.kind !== 'all' && <>
+                <ChevronRight className="w-3 h-3" />
+                <span className="text-slate-600 font-medium">{catLabel}</span>
+              </>}
+            </div>
+
             {/* Filters */}
-            <div className="flex flex-col sm:flex-row gap-3 mb-4">
-              <div className="relative flex-1">
+            <div className="flex flex-col sm:flex-row flex-wrap gap-3 mb-4">
+              <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
                 <input value={search} onChange={e=>setSearch(e.target.value)}
                   className="pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm w-full shadow-sm"
-                  placeholder="Search title, number, filename, content…" />
+                  placeholder="Search in folder…" />
               </div>
-              <select value={projectFilter} onChange={e=>setProjFilter(e.target.value)} className="bg-white border rounded-lg px-3 py-2 text-sm shadow-sm">
-                <option value="">All Projects</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
               <select value={typeFilter} onChange={e=>setType(e.target.value)} className="bg-white border rounded-lg px-3 py-2 text-sm shadow-sm">
                 <option value="">All Types</option>{DOC_TYPES.map(t=><option key={t} value={t}>{titleCase(t)}</option>)}
               </select>
               <select value={statusFilter} onChange={e=>setStatus(e.target.value)} className="bg-white border rounded-lg px-3 py-2 text-sm shadow-sm">
                 <option value="">All Status</option>{Object.entries(STATUS_CFG).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
               </select>
+              <select value={disciplineFilter} onChange={e=>setDisciplineFilter(e.target.value)} className="bg-white border rounded-lg px-3 py-2 text-sm shadow-sm">
+                <option value="">All Disciplines</option>{disciplineGroups.map(([d])=><option key={d} value={d}>{d}</option>)}
+              </select>
+              <select value={projectFilter} onChange={e=>setProjFilter(e.target.value)} className="bg-white border rounded-lg px-3 py-2 text-sm shadow-sm">
+                <option value="">All Projects</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-1 shadow-sm">
+                <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} className="text-xs outline-none w-[110px]" />
+                <span className="text-slate-300">–</span>
+                <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} className="text-xs outline-none w-[110px]" />
+              </div>
               <select value={groupBy} onChange={e=>{ setGroupBy(e.target.value); setCollapsedGroups({}); }}
                 title="Group rows" className="bg-white border rounded-lg px-3 py-2 text-sm shadow-sm">
                 <option value="none">No grouping</option>
@@ -1155,75 +1315,164 @@ export default function DMSPage() {
               </div>
             )}
 
-            {isLoading ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-                {Array.from({ length: 10 }).map((_, i) => (
-                  <div key={i} className="bg-white border border-slate-100 rounded-2xl p-4 animate-pulse">
-                    <div className="w-11 h-11 rounded-xl bg-slate-100 mb-3" />
-                    <div className="h-3 bg-slate-100 rounded w-3/4 mb-2" />
-                    <div className="h-3 bg-slate-100 rounded w-1/2 mb-4" />
-                    <div className="h-4 bg-slate-100 rounded-full w-16" />
+            <div className="flex gap-5 items-start">
+              <div className="flex-1 min-w-0">
+                {isLoading ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                    {Array.from({ length: 10 }).map((_, i) => (
+                      <div key={i} className="bg-white border border-slate-100 rounded-2xl p-4 animate-pulse">
+                        <div className="w-11 h-11 rounded-xl bg-slate-100 mb-3" />
+                        <div className="h-3 bg-slate-100 rounded w-3/4 mb-2" />
+                        <div className="h-3 bg-slate-100 rounded w-1/2 mb-4" />
+                        <div className="h-4 bg-slate-100 rounded-full w-16" />
+                      </div>
+                    ))}
                   </div>
-                ))}
+                ) : viewMode === 'grid' ? (
+                  visibleDocs.length === 0 ? (
+                    <div className="bg-white border border-slate-100 rounded-2xl py-16 text-center">
+                      <FolderOpen className="w-10 h-10 mx-auto mb-3 text-slate-200" />
+                      <p className="text-slate-400 text-sm">No documents found</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {pagedDocs.map(d => (
+                        <DocumentCard key={d.id} doc={d} onOpen={setDetailId}
+                          onDownload={downloadDmsDocument}
+                          onShare={(doc) => setModal({ type:'share', doc })}
+                          onArchive={(doc) => { if (window.confirm('Archive?')) archiveMut.mutate(doc.id); }} />
+                      ))}
+                    </div>
+                  )
+                ) : (
+                  <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50 border-b">
+                          <tr>{['Name','Type','Discipline','Version','Status','Size','Modified By','Modified On','Actions'].map(h=>(
+                            <th key={h} className="text-left py-3 px-3 text-xs font-medium text-slate-500 whitespace-nowrap">{h}</th>
+                          ))}</tr>
+                        </thead>
+                        <tbody>
+                          {groupBy === 'none'
+                            ? pagedDocs.map(renderRow)
+                            : groupedDocs.map(g => {
+                                const collapsed = collapsedGroups[g.key];
+                                const GIcon = groupBy==='vendor' ? Tag : groupBy==='type' ? Layers : groupBy==='project' ? Building2 : Clock;
+                                return (
+                                  <React.Fragment key={g.key}>
+                                    <tr className="bg-slate-100/70 border-b cursor-pointer hover:bg-slate-100"
+                                      onClick={()=>setCollapsedGroups(c=>({ ...c, [g.key]: !c[g.key] }))}>
+                                      <td colSpan={9} className="py-2 px-3">
+                                        <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                                          {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                          <GIcon className="w-3.5 h-3.5 text-slate-400" />
+                                          <span>{g.label}</span>
+                                          <span className="text-slate-400 font-normal">· {g.rows.length} doc{g.rows.length!==1?'s':''}</span>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                    {!collapsed && g.rows.map(renderRow)}
+                                  </React.Fragment>
+                                );
+                              })}
+                          {visibleDocs.length === 0 && (
+                            <tr><td colSpan={9} className="text-center py-10 text-slate-400">
+                              <FolderOpen className="w-8 h-8 mx-auto mb-2 opacity-30" />No documents found
+                            </td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                    {groupBy === 'none' && visibleDocs.length > 0 && (
+                      <div className="flex items-center justify-between px-4 py-3 border-t bg-slate-50 text-xs text-slate-500">
+                        <span>Showing {(page-1)*PAGE_SIZE+1} to {Math.min(page*PAGE_SIZE, visibleDocs.length)} of {visibleDocs.length} entries</span>
+                        <div className="flex items-center gap-1">
+                          <button disabled={page<=1} onClick={()=>setPage(p=>Math.max(1,p-1))}
+                            className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white disabled:opacity-40 hover:bg-slate-100">Prev</button>
+                          {Array.from({ length: pageCount }).slice(0, 7).map((_, i) => (
+                            <button key={i} onClick={()=>setPage(i+1)}
+                              className={clsx('px-2.5 py-1 rounded-lg border', page===i+1 ? 'bg-indigo-600 text-white border-indigo-600' : 'border-slate-200 bg-white hover:bg-slate-100')}>
+                              {i+1}
+                            </button>
+                          ))}
+                          <button disabled={page>=pageCount} onClick={()=>setPage(p=>Math.min(pageCount,p+1))}
+                            className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white disabled:opacity-40 hover:bg-slate-100">Next</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            ) : viewMode === 'grid' ? (
-              visibleDocs.length === 0 ? (
-                <div className="bg-white border border-slate-100 rounded-2xl py-16 text-center">
-                  <FolderOpen className="w-10 h-10 mx-auto mb-3 text-slate-200" />
-                  <p className="text-slate-400 text-sm">No documents found</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-                  {visibleDocs.map(d => (
-                    <DocumentCard key={d.id} doc={d} onOpen={setDetailId}
-                      onDownload={downloadDmsDocument}
-                      onShare={(doc) => setModal({ type:'share', doc })}
-                      onArchive={(doc) => { if (window.confirm('Archive?')) archiveMut.mutate(doc.id); }} />
+
+              {/* Persistent right-side Document Details panel */}
+              {viewMode === 'list' && (
+                <DocumentDetailsPanel doc={selectedDoc} onClose={()=>setSelectedDoc(null)}
+                  onOpenFull={(id)=>setDetailId(id)}
+                  onDownload={downloadDmsDocument}
+                  onShare={(doc)=>setModal({ type:'share', doc })}
+                  onSubmitReview={(doc)=>setModal({ type:'review', doc })}
+                  onAddVersion={(doc)=>setModal({ type:'version', doc })} />
+              )}
+            </div>
+
+            {/* Bottom widgets: status overview, upload trend, recent activities */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-6">
+              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-800 mb-3">Document Status Overview</h3>
+                {statusChartData.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-10">No data yet</p>
+                ) : (
+                  <div className="h-[200px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={statusChartData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={70} paddingAngle={2}>
+                          {statusChartData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 justify-center">
+                  {statusChartData.map(d => (
+                    <div key={d.name} className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                      <span className="w-2 h-2 rounded-full" style={{ background: d.color }} /> {d.name} ({d.value})
+                    </div>
                   ))}
                 </div>
-              )
-            ) : (
-              <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-slate-50 border-b">
-                      <tr>{['Doc#','Title','Type','Project','Rev','Size','Expiry','Status','Actions'].map(h=>(
-                        <th key={h} className="text-left py-3 px-3 text-xs font-medium text-slate-500 whitespace-nowrap">{h}</th>
-                      ))}</tr>
-                    </thead>
-                    <tbody>
-                      {groupBy === 'none'
-                        ? visibleDocs.map(renderRow)
-                        : groupedDocs.map(g => {
-                            const collapsed = collapsedGroups[g.key];
-                            const GIcon = groupBy==='vendor' ? Tag : groupBy==='type' ? Layers : groupBy==='project' ? Building2 : Clock;
-                            return (
-                              <React.Fragment key={g.key}>
-                                <tr className="bg-slate-100/70 border-b cursor-pointer hover:bg-slate-100"
-                                  onClick={()=>setCollapsedGroups(c=>({ ...c, [g.key]: !c[g.key] }))}>
-                                  <td colSpan={9} className="py-2 px-3">
-                                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-                                      {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                                      <GIcon className="w-3.5 h-3.5 text-slate-400" />
-                                      <span>{g.label}</span>
-                                      <span className="text-slate-400 font-normal">· {g.rows.length} doc{g.rows.length!==1?'s':''}</span>
-                                    </div>
-                                  </td>
-                                </tr>
-                                {!collapsed && g.rows.map(renderRow)}
-                              </React.Fragment>
-                            );
-                          })}
-                      {visibleDocs.length === 0 && (
-                        <tr><td colSpan={9} className="text-center py-10 text-slate-400">
-                          <FolderOpen className="w-8 h-8 mx-auto mb-2 opacity-30" />No documents found
-                        </td></tr>
-                      )}
-                    </tbody>
-                  </table>
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-800 mb-3">Document Trend (Uploads, last 14 days)</h3>
+                <div className="h-[200px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={trendChartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#94a3b8' }} width={24} />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="count" stroke="#4F46E5" strokeWidth={2} dot={{ r: 2 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
-            )}
+
+              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2"><Activity className="w-4 h-4 text-blue-500" /> Recent Activities</h3>
+                <div className="space-y-1.5 max-h-[220px] overflow-y-auto">
+                  {(dash?.recent_activity||[]).length === 0 ? <p className="text-xs text-slate-400 text-center py-10">No activity yet</p> :
+                    dash.recent_activity.map((a,i)=>(
+                    <div key={i} className="flex items-center gap-2 text-xs py-1">
+                      <span className={clsx('px-1.5 py-0.5 rounded text-[10px] capitalize',
+                        a.action==='approve'?'bg-emerald-100 text-emerald-700':a.action==='upload'?'bg-blue-100 text-blue-700':'bg-slate-100 text-slate-600')}>{a.action}</span>
+                      <span className="text-slate-600 flex-1 truncate">{a.user_name} · {a.doc_title || a.doc_number}</span>
+                      <span className="text-slate-400">{dayjs(a.created_at).format('DD/MM')}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
