@@ -857,13 +857,33 @@ router.post('/', async (req, res) => {
       // Using invoiceBillTotal instead of gross+billTax so GST embedded in total_amount is included.
       const netPayable = invoiceBillTotal - totalDed;
 
+      // "Previously certified" must span the whole PO amendment family
+      // (POTQS001, -A1, -A3, -A4…), not just an exact order_number string
+      // match — a PO amendment renames the order to a new "-A<n>" suffix, so
+      // an earlier cert filed against "POTQS001" would otherwise be invisible
+      // to a later cert filed against "POTQS001-A4", understating "Less:
+      // Previous Certificates for Payments" on the Payment Certificate.
+      // Work Orders don't get renamed on amendment (same wo_number always,
+      // amendments just revise the value in place), so exact match is
+      // already correct there.
+      const orderBase = order_type === 'wo'
+        ? (order_number || '')
+        : String(order_number || '').replace(/-A\d+$/i, '');
       const prev = await client.query(`
         SELECT COALESCE(SUM(net_payable), 0) AS total
         FROM vendor_qs_certifications
         WHERE company_id=$1 AND project_id=$2 AND LOWER(TRIM(vendor_name))=LOWER(TRIM($3))
-          AND COALESCE(order_number,'') = COALESCE($4,'')
           AND status NOT IN ('cancelled', 'rejected')
-      `, [req.user.company_id, project_id, vendor_name, order_number || '']);
+          AND (
+            order_type = $5
+            AND (
+              CASE WHEN $5 = 'wo'
+                THEN COALESCE(order_number,'') = $4
+                ELSE regexp_replace(COALESCE(order_number,''), '-A[0-9]+$', '', 'i') = $4
+              END
+            )
+          )
+      `, [req.user.company_id, project_id, vendor_name, orderBase, order_type]);
       const prevTotal = n(prev.rows[0]?.total);
 
       const cert = await client.query(`
