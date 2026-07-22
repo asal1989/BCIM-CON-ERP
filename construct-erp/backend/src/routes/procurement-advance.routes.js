@@ -167,6 +167,30 @@ async function ensureTable() {
 
 runSchemaInit('tqs_advance_vouchers', ensureTable);
 
+// tqs_advance_payments was added to ensureTable() after 'tqs_advance_vouchers'
+// had already run on this DB — runSchemaInit only ever runs a given name once,
+// so the CREATE TABLE inside ensureTable() never actually executed here and
+// every multi-installment payment insert/select against it 500'd with
+// "relation tqs_advance_payments does not exist". New name forces it to run.
+runSchemaInit('create_tqs_advance_payments_2026_07', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS tqs_advance_payments (
+      id               SERIAL PRIMARY KEY,
+      advance_id       INTEGER NOT NULL REFERENCES tqs_advance_vouchers(id) ON DELETE CASCADE,
+      amount           NUMERIC(15,2) NOT NULL,
+      payment_date     DATE NOT NULL,
+      payment_mode     TEXT,
+      reference_number TEXT,
+      bank_name        TEXT,
+      remarks          TEXT,
+      finance_payment_id UUID,
+      created_by       UUID,
+      created_at       TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  console.log('[migration] Created tqs_advance_payments table');
+});
+
 // One-time fix: recalculate status for vouchers where recovered >= paid_amount
 // but are still incorrectly set to 'partial' (old logic compared against advance_value).
 runSchemaInit('fix_advance_status_vs_paid_2026_07', async () => {
