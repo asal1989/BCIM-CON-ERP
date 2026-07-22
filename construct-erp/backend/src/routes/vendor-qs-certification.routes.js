@@ -2148,4 +2148,31 @@ runSchemaInit('link_dqs_towers_scp_concrete_to_po_2026_07', async () => {
   console.log(`[migration] Moved ${moved.rowCount} DQS Towers SCP Concrete bill(s) from 'accounts' → 'qs'`);
 });
 
+// ── One-time: merge duplicate vendor "Maharani Constrcutions" (typo) into
+// "Maharani Constructions" (correct spelling). Missed by the earlier
+// duplicate-vendor cleanup because the two names differ by more than
+// whitespace/case, so normalized-name matching didn't flag them as the same
+// vendor. The typo'd record has zero real POs/WOs of its own; 4 tqs_bills
+// rows were linked to it even though their own WO references (WOTQS032,
+// WOTQS019) belong to the correctly-spelled vendor.
+runSchemaInit('merge_maharani_constrcutions_typo_2026_07', async () => {
+  const KEEPER = '291370c3-fa9f-4173-b3f7-159a0ea2c7eb'; // Maharani Constructions (correct)
+  const LOSER  = 'dde599db-d2f7-47bc-be40-fb4506aff93c';  // Maharani Constrcutions (typo)
+
+  const relinked = await query(
+    `UPDATE tqs_bills SET vendor_id = $1, vendor_name = 'Maharani Constructions', updated_at = NOW() WHERE vendor_id = $2`,
+    [KEEPER, LOSER]
+  );
+  console.log(`[migration] Relinked ${relinked.rowCount} bill(s) from typo'd "Maharani Constrcutions" to "Maharani Constructions"`);
+
+  await query(
+    `UPDATE vendors SET is_active = false,
+            notes = COALESCE(notes,'') || E'\\n[Merged into vendor ${KEEPER} — typo duplicate cleanup 2026-07-22]',
+            updated_at = NOW()
+     WHERE id = $1`,
+    [LOSER]
+  );
+  console.log(`[migration] Deactivated duplicate vendor ${LOSER} (Maharani Constrcutions)`);
+});
+
 module.exports = router;
