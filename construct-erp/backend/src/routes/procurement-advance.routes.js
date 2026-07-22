@@ -1237,6 +1237,45 @@ async function resyncTqsAdvancesForCompany(company_id) {
   }
 }
 
+// ── One-time: fix advance voucher vendor_name/vendor_id mismatches ──────────
+// 8 vouchers had a vendor_name that didn't match the vendor actually on their
+// referenced PO/WO (e.g. "Amaze Portable Cabins" vs the PO's "Amaze Portable
+// Cabin"), so vendor_id was never linkable — corrected here to the PO/WO's
+// real vendor name and ID. Another 16 vouchers already had the correct name
+// but were simply never linked (vendor_id NULL) — backfilled by exact
+// normalized-name match against active (non-duplicate) vendor records.
+runSchemaInit('fix_advance_voucher_vendor_names_2026_07', async () => {
+  const RENAMES = [
+    { sl_number: 'AV-2026-0020', name: 'Amaze Portable Cabin' },
+    { sl_number: 'AV-2026-0026', name: 'Amaze Portable Cabin' },
+    { sl_number: 'AV-2026-0006', name: 'Electro Optics Private Limited' },
+    { sl_number: 'AV-2026-0010', name: 'Electro Optics Private Limited' },
+    { sl_number: 'AV-2026-0027', name: 'Lucky Interior' },
+    { sl_number: 'AV-2026-0003', name: 'M/s. Sree Krishna Associates' },
+    { sl_number: 'AV-2026-0028', name: 'M/s. Sree Krishna Associates' },
+    { sl_number: 'AV-2026-0009', name: 'Vishwakarma wood & Interior works' },
+  ];
+  for (const r of RENAMES) {
+    const res = await query(
+      `UPDATE tqs_advance_vouchers SET vendor_name = $1, updated_at = NOW() WHERE sl_number = $2`,
+      [r.name, r.sl_number]
+    );
+    console.log(`[migration] ${r.sl_number}: vendor_name → "${r.name}" (${res.rowCount} row updated)`);
+  }
+
+  const backfill = await query(`
+    UPDATE tqs_advance_vouchers av
+    SET vendor_id = v.id, updated_at = NOW()
+    FROM vendors v
+    WHERE av.vendor_id IS NULL
+      AND av.is_deleted = FALSE
+      AND v.company_id = av.company_id
+      AND v.is_active = true
+      AND regexp_replace(LOWER(v.name), '\\s+', '', 'g') = regexp_replace(LOWER(av.vendor_name), '\\s+', '', 'g')
+  `);
+  console.log(`[migration] Backfilled vendor_id on ${backfill.rowCount} advance voucher(s)`);
+});
+
 module.exports = router;
 module.exports.resyncAdvancesFromBills = resyncAdvancesFromBills;
 module.exports.resyncTqsAdvancesForCompany = resyncTqsAdvancesForCompany;
