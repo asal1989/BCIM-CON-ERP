@@ -107,7 +107,7 @@ router.delete('/work-orders/:id', authorize(...PROCUREMENT_ROLES), (req, res) =>
 });
 
 // ── WO Amendments — add a dated amendment/variation entry against a WO ─────
-router.post('/work-orders/:id/amendments', authorize(...PROCUREMENT_ROLES), async (req, res) => {
+router.post('/work-orders/:id/amendments', authorize(...PROCUREMENT_ROLES, 'admin', 'project_manager'), async (req, res) => {
   try {
     const company_id = req.user.company_id;
     const { description, amount_change, amendment_date } = req.body;
@@ -143,7 +143,7 @@ router.post('/work-orders/:id/amendments', authorize(...PROCUREMENT_ROLES), asyn
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.delete('/work-orders/:id/amendments/:aid', authorize(...PROCUREMENT_ROLES), async (req, res) => {
+router.delete('/work-orders/:id/amendments/:aid', authorize(...PROCUREMENT_ROLES, 'admin', 'project_manager'), async (req, res) => {
   try {
     await query(
       `DELETE FROM wo_amendments WHERE id=$1 AND wo_id=$2 AND company_id=$3`,

@@ -75,6 +75,13 @@ function canManageProcurement(user) {
   return role === 'super_admin' || role === 'managing_director' || role.includes('procurement');
 }
 
+// Recording amendments is a broader action — also open to admins & PMs, matching WO create/approve rights
+function canAmendWO(user) {
+  if (!user) return false;
+  const role = (user.role || '').toLowerCase();
+  return canManageProcurement(user) || role === 'admin' || role === 'project_manager';
+}
+
 function StatusBadge({ status }) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
   return (
@@ -1452,7 +1459,7 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
               <GitBranch className="w-3.5 h-3.5 text-slate-400" />
               <span className="text-xs font-medium text-slate-900 uppercase tracking-wider">Amendments / Variations</span>
               <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100">{amendments.length}</span>
-              {canManageProcurement(user) && (
+              {canAmendWO(user) && (
                 <button onClick={() => setAmendModal(true)}
                   className="ml-auto flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200 transition-colors">
                   <Plus size={12} /> Add
@@ -1477,7 +1484,7 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
                           <span className="text-gray-400">→ Revised: ₹{inr(a.revised_order_value)}</span>
                         </div>
                       </div>
-                      {canManageProcurement(user) && (
+                      {canAmendWO(user) && (
                         <button onClick={() => delAmendMut.mutate(a.id)} disabled={delAmendMut.isPending}
                           className="p-1 text-gray-300 hover:text-red-500 transition-colors shrink-0">
                           <Trash2 size={13} />
