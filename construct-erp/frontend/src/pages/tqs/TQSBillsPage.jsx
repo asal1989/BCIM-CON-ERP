@@ -714,16 +714,16 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
         </button>
       </div>
 
-      {/* ── Sidebar + Main body ── */}
+      {/* ── Split body: form (left) + live document preview (right) ── */}
       <div className="flex-1 flex overflow-hidden" style={{ background: '#f1f5f9' }}>
 
-        {/* ══ SIDEBAR — vendor, PO/WO, invoice details, live totals ══ */}
-        <div className="w-[320px] flex-shrink-0 bg-white border-r border-slate-200 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* ══ LEFT — single scrollable form column ══ */}
+        <div className="w-[54%] flex-shrink-0 bg-white border-r border-slate-200 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
 
-            <div>
-              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Project &amp; type</div>
-              <div className="space-y-3">
+            {/* ── SECTION 1: Project, Vendor & PO/WO ── */}
+            <SectionCard icon={Building2} title="Project, Vendor & Linkage" subtitle="Who this bill is from and which order it's against">
+              <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
                   <Lbl req>Project</Lbl>
                   <SearchableSelect
@@ -743,12 +743,9 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                   </select>
                 </div>
               </div>
-            </div>
 
-            <div className="border-t border-slate-100 pt-4">
-              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Vendor &amp; PO / WO</div>
               {/* Vendor combobox */}
-              <div className="relative">
+              <div className="relative mb-3">
                 <Lbl req>Vendor / Supplier</Lbl>
                 <input
                   ref={vendorInputRef}
@@ -814,12 +811,11 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                   </div>,
                   document.body
                 )}
-
               </div>
 
               {/* Vendor outstanding summary card */}
               {vendorOutstanding && vendorOutstanding.bill_count > 0 && vendorOutstanding.total_outstanding > 0 && (
-                <div className="mt-3 flex items-center gap-2 px-2.5 py-2 bg-amber-50 border border-amber-200 rounded-lg text-[11px]">
+                <div className="mb-3 flex items-center gap-2 px-2.5 py-2 bg-amber-50 border border-amber-200 rounded-lg text-[11px]">
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                   <span className="text-amber-800">
                     <strong>{vendorOutstanding.bill_count}</strong> unpaid bill{vendorOutstanding.bill_count > 1 ? 's' : ''}, ₹{Number(vendorOutstanding.total_outstanding || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })} outstanding
@@ -827,7 +823,7 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                 </div>
               )}
 
-              <div className="space-y-3 mt-3">
+              <div className="space-y-3">
                 {/* Work Description - only for WO */}
                 {form.bill_type === 'wo' && (
                   <div>
@@ -949,10 +945,10 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                   </div>
                 )}
               </div>
-            </div>
+            </SectionCard>
 
-            <div className="border-t border-slate-100 pt-4">
-              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-2">Invoice details</div>
+            {/* ── SECTION 2: Invoice Details ── */}
+            <SectionCard icon={Receipt} title="Invoice Details">
               <div className="space-y-3">
                 {/* Invoice Number */}
                 <div>
@@ -1000,351 +996,446 @@ export function NewBillModal({ onClose, projects, defaultProjectId }) {
                   <input type="date" className={F} value={form.received_date} onChange={e => set('received_date', e.target.value)} />
                 </div>
               </div>
-            </div>
+            </SectionCard>
+
+            {/* ── SECTION 3: Invoice Materials (Line Items) ── */}
+            <SectionCard
+              icon={Package}
+              title="Invoice Materials"
+              subtitle={`${items.filter(it => it.item_name?.trim()).length} line item${items.filter(it => it.item_name?.trim()).length === 1 ? '' : 's'}`}
+              right={
+                <div className="flex items-center gap-2">
+                  <select
+                    className={`text-xs h-9 rounded-md px-2 text-slate-900 outline-none transition-colors border ${FIELD_HL}`}
+                    value={form.tax_mode} onChange={e => set('tax_mode', e.target.value)}
+                  >
+                    <option value="intrastate">Intrastate (CGST + SGST)</option>
+                    <option value="interstate">Interstate (IGST)</option>
+                  </select>
+                  <button type="button" onClick={addItem}
+                    className="flex items-center gap-1.5 h-9 px-3 rounded-md bg-blue-50 hover:bg-blue-100 text-xs text-blue-700 font-semibold transition-colors">
+                    <Plus className="w-3.5 h-3.5" /> Add Item
+                  </button>
+                </div>
+              }
+            >
+              {/* GST quick-select */}
+              {(() => {
+                const isIGST = form.tax_mode === 'interstate';
+                const activePct = items.length > 0 && items.every(it => it.gst_pct === items[0].gst_pct)
+                  ? items[0].gst_pct : null;
+                return (
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    <span className="text-xs text-slate-500 self-center">Quick GST:</span>
+                    {[0, 5, 12, 18, 28].map(pct => {
+                      const active = !isIGST && activePct === String(pct);
+                      return (
+                        <button key={pct} type="button" onClick={() => applyGST(pct)}
+                          className={`px-2.5 py-1 text-xs rounded-full border font-medium transition-colors ${
+                            active
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'border-slate-200 hover:bg-blue-50 hover:border-blue-300 text-slate-600'
+                          }`}>
+                          {pct}%
+                        </button>
+                      );
+                    })}
+                    <button type="button" onClick={() => applyGST(18, true)}
+                      className={`px-2.5 py-1 text-xs rounded-full border font-medium transition-colors ${
+                        isIGST
+                          ? 'bg-amber-500 text-white border-amber-500'
+                          : 'border-amber-200 hover:bg-amber-50 text-amber-700'
+                      }`}>
+                      IGST 18%
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {/* Items — one clearly-labeled card per line item (no cramped horizontal-scroll table) */}
+              <div className="space-y-3">
+                {items.map((it, i) => {
+                  const { basic, discount, gst, total } = calcItemRow(it, form.tax_mode);
+                  const rem = it.remaining_qty;
+                  const entered = parseFloat(it.quantity || 0);
+                  const exceeded = rem !== null && rem !== undefined && entered > rem + 0.0001;
+                  return (
+                    <div key={i} className="border border-slate-100 rounded-2xl bg-white p-4 space-y-3 shadow-sm">
+                      {/* Row 1 — item search + category badge + remove */}
+                      <div className="flex items-start gap-2.5">
+                        <span className="shrink-0 mt-[26px] w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-400">{i + 1}</span>
+                        <div className="flex-1 min-w-0">
+                          <Lbl>Item / Material</Lbl>
+                          <MaterialCombobox
+                            value={it.item_name}
+                            inventoryItems={inventoryItems}
+                            placeholder="Search or type item / material name"
+                            onChange={(materialName) => handleItemName(i, materialName)}
+                          />
+                        </div>
+                        <div className="shrink-0 pt-[22px]">
+                          <div className={`px-2.5 h-10 flex items-center text-xs rounded-lg border font-medium whitespace-nowrap ${it.category ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-slate-50 border-slate-200 text-slate-400 italic'}`}>
+                            {it.category || 'Auto'}
+                          </div>
+                        </div>
+                        <button type="button" onClick={() => removeItem(i)}
+                          className="shrink-0 mt-[22px] w-10 h-10 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Row 2 — BOQ link + cost head */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                        <div>
+                          <Lbl>BOQ Item</Lbl>
+                          <select
+                            className={`w-full h-10 rounded-lg px-2.5 text-xs bg-white outline-none transition-all border ${FIELD_HL}`}
+                            value={it.boq_item_id || ''}
+                            onChange={e => updateItem(i, 'boq_item_id', e.target.value)}
+                          >
+                            <option value="">No BOQ item</option>
+                            {boqItems.map(b => (
+                              <option key={b.id} value={b.id}>{b.item_no ? `${b.item_no} — ` : ''}{b.description}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <Lbl>Cost Sub-heading</Lbl>
+                          <select
+                            className={`w-full h-10 rounded-lg px-2.5 text-xs bg-white outline-none transition-all border ${FIELD_HL}`}
+                            value={it.cost_head || ''}
+                            onChange={e => updateItem(i, 'cost_head', e.target.value)}
+                          >
+                            <option value="">Unallocated</option>
+                            {BOQ_COST_HEADS.map(h => <option key={h} value={h}>{h}</option>)}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Row 3 — qty/rate/gst inputs */}
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 pt-2 border-t border-slate-100">
+                        <div>
+                          <Lbl>Unit</Lbl>
+                          <input className={`w-full h-10 rounded-lg px-2.5 text-xs outline-none transition-all border ${FIELD_HL}`}
+                            placeholder="Nos"
+                            value={it.unit} onChange={e => updateItem(i, 'unit', e.target.value)} />
+                        </div>
+                        <div>
+                          <Lbl>Qty</Lbl>
+                          <input
+                            type="number" step="0.001"
+                            max={rem !== null && rem !== undefined ? rem : undefined}
+                            className={clsx('w-full h-10 rounded-lg px-2.5 text-xs text-right outline-none transition-all border',
+                              exceeded
+                                ? 'border-red-400 bg-red-50 text-red-700 shadow-[0_0_0_3px_rgba(248,113,113,0.15)] focus:border-red-500'
+                                : FIELD_HL
+                            )}
+                            placeholder="0"
+                            value={it.quantity}
+                            onChange={e => updateItem(i, 'quantity', e.target.value)}
+                          />
+                          {rem !== null && rem !== undefined && (
+                            <span className={`block text-[10px] mt-0.5 leading-tight ${exceeded ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>
+                              {exceeded ? `Warning max ${rem}` : `Avail: ${rem}`}
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <Lbl>Rate (Rs )</Lbl>
+                          <input type="number" step="0.01" className={`w-full h-10 rounded-lg px-2.5 text-xs text-right outline-none transition-all border ${FIELD_HL}`}
+                            placeholder="0.00"
+                            value={it.rate} onChange={e => updateItem(i, 'rate', e.target.value)} />
+                        </div>
+                        <div>
+                          <Lbl>Discount (Rs )</Lbl>
+                          <input type="number" step="0.01" className={`w-full h-10 rounded-lg px-2.5 text-xs text-right outline-none transition-all border ${FIELD_HL}`}
+                            placeholder="0.00"
+                            value={discount > 0 && !it.discount_amount ? discount.toFixed(2) : it.discount_amount}
+                            onChange={e => updateItem(i, 'discount_amount', e.target.value)} />
+                        </div>
+                        <div>
+                          <Lbl>GST %</Lbl>
+                          <input type="number" step="0.5" className={`w-full h-10 rounded-lg px-2.5 text-xs text-center outline-none transition-all border ${FIELD_HL}`}
+                            placeholder="18"
+                            value={it.gst_pct} onChange={e => updateItem(i, 'gst_pct', e.target.value)} />
+                        </div>
+                      </div>
+
+                      {/* Row 4 — computed totals for this line */}
+                      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pt-2 border-t border-slate-100 text-xs">
+                        <span className="text-slate-500">Basic: <b className="text-slate-700">{basic !== 0 ? `Rs ${inr(basic)}` : '—'}</b></span>
+                        <span className="text-slate-500">GST: <b className="text-slate-700">{gst !== 0 ? `Rs ${inr(gst)}` : '—'}</b></span>
+                        <span className="ml-auto text-slate-500">Line Total: <b className="text-sm text-slate-800">{total !== 0 ? `Rs ${inr(total)}` : '—'}</b></span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {itemsBasic > 0 && (
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-3 px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl text-xs">
+                  <span className="font-semibold text-slate-600">Items Total:</span>
+                  {itemsDiscount > 0 && <span className="text-rose-500">Discount: <b>Rs {inr(itemsDiscount)}</b></span>}
+                  <span className="text-slate-600">Basic: <b>Rs {inr(itemsBasic)}</b></span>
+                  <span className="text-slate-400">GST: Rs {inr(itemsGST)}</span>
+                  <span className="ml-auto font-semibold text-slate-700">Grand Total: Rs {inr(itemsBasic + itemsGST)}</span>
+                </div>
+              )}
+
+              {/* Manual basic amount - only when no items */}
+              {itemsBasic === 0 && (
+                <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <p className="text-xs text-slate-500 mb-2">No line items - enter invoice amount manually:</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <Lbl req>Basic Amount (Rs )</Lbl>
+                      <input type="number" step="0.01" className={F} placeholder="0.00"
+                        value={form.basic_amount} onChange={e => set('basic_amount', e.target.value)} />
+                    </div>
+                    {taxMode === 'intrastate' ? (<>
+                      <div>
+                        <Lbl>CGST %</Lbl>
+                        <input type="number" step="0.5" className={F} placeholder="9"
+                          value={form.cgst_pct} onChange={e => set('cgst_pct', e.target.value)} />
+                      </div>
+                      <div>
+                        <Lbl>SGST %</Lbl>
+                        <input type="number" step="0.5" className={F} placeholder="9"
+                          value={form.sgst_pct} onChange={e => set('sgst_pct', e.target.value)} />
+                      </div>
+                    </>) : (
+                      <div>
+                        <Lbl>IGST %</Lbl>
+                        <input type="number" step="0.5" className={F} placeholder="18"
+                          value={form.igst_pct} onChange={e => set('igst_pct', e.target.value)} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </SectionCard>
+
+            {/* ── SECTION 4: Additional Charges ── */}
+            <SectionCard icon={Truck} title="Additional Charges" subtitle="Transport, packing/insurance and TCS">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                  <Lbl>Transport Description</Lbl>
+                  <input className={F} placeholder="e.g. Freight, Delivery..."
+                    value={form.transport_desc} onChange={e => set('transport_desc', e.target.value)} />
+                </div>
+                <div>
+                  <Lbl>Transport Amount (Rs )</Lbl>
+                  <input type="number" step="0.01" className={F} placeholder="0.00"
+                    value={form.transport_charges} onChange={e => set('transport_charges', e.target.value)} />
+                </div>
+                <div>
+                  <Lbl>Transport GST %</Lbl>
+                  <input type="number" step="0.5" className={F} placeholder="18"
+                    value={form.transport_gst_pct} onChange={e => set('transport_gst_pct', e.target.value)} />
+                </div>
+                <div>
+                  <Lbl>Transport GST Amt</Lbl>
+                  <input type="number" className={F + ' bg-slate-100 text-slate-500'} readOnly
+                    value={transportGST > 0 ? transportGST.toFixed(2) : ''} placeholder="Auto" />
+                </div>
+                <div>
+                  <Lbl>Other Charges Description</Lbl>
+                  <input className={F} placeholder="e.g. Packing, Insurance..."
+                    value={form.other_charges_desc} onChange={e => set('other_charges_desc', e.target.value)} />
+                </div>
+                <div>
+                  <Lbl>Other Charges (Rs )</Lbl>
+                  <input type="number" step="0.01" className={F} placeholder="0.00"
+                    value={form.other_charges} onChange={e => set('other_charges', e.target.value)} />
+                </div>
+                <div>
+                  <Lbl>TCS %</Lbl>
+                  <input type="number" step="0.01" className={F} placeholder="0.1"
+                    value={form.tcs_pct} onChange={e => set('tcs_pct', e.target.value)} />
+                </div>
+                <div>
+                  <Lbl>TCS Amount</Lbl>
+                  <input type="number" className={F + ' bg-slate-100 text-slate-500'} readOnly
+                    value={tcsAmt > 0 ? tcsAmt.toFixed(2) : ''} placeholder="Auto" />
+                </div>
+              </div>
+              {transportAmt > 0 && (
+                <div className="mt-3 flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>Transport charges sit outside the line items — they'll be certified as a separate "Transport Charges" row on the QS abstract sheet. Watch the live preview total on the right.</span>
+                </div>
+              )}
+            </SectionCard>
+
+            {/* ── SECTION 5: Credit Note ── */}
+            <SectionCard icon={Receipt} title="Credit Note" badge={<span className="text-[10px] font-medium text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">Optional</span>}>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Lbl>Credit Note Number</Lbl>
+                  <input className={F} placeholder="CN-001"
+                    value={form.credit_note_num} onChange={e => set('credit_note_num', e.target.value)} />
+                </div>
+                <div>
+                  <Lbl>Credit Note Value (Rs )</Lbl>
+                  <input type="number" step="0.01" className={F} placeholder="0.00"
+                    value={form.credit_note_val} onChange={e => set('credit_note_val', e.target.value)} />
+                </div>
+              </div>
+            </SectionCard>
+
+            {/* ── SECTION 6: Remarks ── */}
+            <SectionCard icon={StickyNote} title="Remarks">
+              <Lbl>Remarks / Notes</Lbl>
+              <textarea rows={2} className={F + ' resize-none'}
+                placeholder="Any initial remarks..."
+                value={form.remarks} onChange={e => set('remarks', e.target.value)} />
+            </SectionCard>
 
           </div>
 
-          {/* Sidebar bottom — live totals + actions (dark) */}
-          <div className="flex-shrink-0 px-4 py-4" style={{ background: '#0f172a' }}>
-            <div className="text-[9px] text-slate-500 uppercase tracking-widest mb-1">Total invoice</div>
-            <div className="text-2xl font-bold text-white tracking-tight mb-3">₹{inr(grandTotal)}</div>
-            <div className="space-y-1 mb-3">
-              <div className="flex justify-between text-[11px]">
-                <span className="text-slate-500">Basic</span>
-                <span className="text-slate-300 font-medium">₹{inr(effectBasic)}</span>
-              </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-slate-500">GST</span>
-                <span className="text-slate-300 font-medium">₹{inr(totalGST)}</span>
-              </div>
-              {(transportAmt > 0 || otherAmt > 0) && (
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-slate-500">Extra charges</span>
-                  <span className="text-slate-300 font-medium">₹{inr(transportAmt + transportGST + otherAmt)}</span>
-                </div>
-              )}
-              {tcsAmt > 0 && (
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-slate-500">TCS ({form.tcs_pct}%)</span>
-                  <span className="text-slate-300 font-medium">₹{inr(tcsAmt)}</span>
-                </div>
-              )}
-              {creditVal > 0 && (
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-slate-500">Credit note</span>
-                  <span className="text-rose-400 font-medium">− ₹{inr(creditVal)}</span>
-                </div>
-              )}
-            </div>
+          {/* Left-pane footer — actions */}
+          <div className="flex-shrink-0 flex items-center gap-3 px-6 py-3.5 border-t border-slate-200 bg-white">
+            <button type="button" onClick={onClose}
+              className="h-10 px-5 rounded-lg border border-slate-200 text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors">
+              Cancel
+            </button>
             <button type="button" onClick={handleSubmit}
               disabled={mutation.isPending || poWarning?.type === 'closed'}
               title={poWarning?.type === 'closed' ? `PO ${poWarning.po_number} is fully billed — cannot create bill` : undefined}
-              className={clsx('w-full inline-flex items-center justify-center gap-2 h-10 rounded-lg text-white text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg mb-2',
-                poWarning?.type === 'closed' ? 'bg-slate-600' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/40')}>
+              className={clsx('flex-1 inline-flex items-center justify-center gap-2 h-10 rounded-lg text-white text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg',
+                poWarning?.type === 'closed' ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/20')}>
               {mutation.isPending
                 ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Saving…</>
                 : poWarning?.type === 'closed'
                   ? <><span>🔒</span> PO Closed — Cannot Bill</>
-                  : <><FileText className="w-4 h-4" /> Create Bill</>}
-            </button>
-            <button type="button" onClick={onClose}
-              className="w-full h-9 rounded-lg border border-slate-700 text-sm font-medium text-slate-400 hover:bg-white/5 hover:text-slate-200 transition-colors">
-              Cancel
+                  : <><FileText className="w-4 h-4" /> Create Bill — ₹{inr(grandTotal)}</>}
             </button>
           </div>
         </div>
 
-        {/* ══ MAIN — line items, charges, credit note, remarks ══ */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="max-w-[980px] mx-auto px-6 py-6 space-y-4">
-
-          {/* ── SECTION 2: Invoice Materials (Line Items) ── */}
-          <SectionCard
-            icon={Package}
-            title="Invoice Materials"
-            subtitle={`${items.filter(it => it.item_name?.trim()).length} line item${items.filter(it => it.item_name?.trim()).length === 1 ? '' : 's'}`}
-            right={
-              <div className="flex items-center gap-2">
-                <select
-                  className={`text-xs h-9 rounded-md px-2 text-slate-900 outline-none transition-colors border ${FIELD_HL}`}
-                  value={form.tax_mode} onChange={e => set('tax_mode', e.target.value)}
-                >
-                  <option value="intrastate">Intrastate (CGST + SGST)</option>
-                  <option value="interstate">Interstate (IGST)</option>
-                </select>
-                <button type="button" onClick={addItem}
-                  className="flex items-center gap-1.5 h-9 px-3 rounded-md bg-blue-50 hover:bg-blue-100 text-xs text-blue-700 font-semibold transition-colors">
-                  <Plus className="w-3.5 h-3.5" /> Add Item
-                </button>
+        {/* ══ RIGHT — live document preview ══ */}
+        <div className="flex-1 flex flex-col overflow-hidden" style={{ background: '#eef1f5' }}>
+          <div className="flex-shrink-0 flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-white">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Live Preview
+            </span>
+            <span className="text-[10px] text-slate-400">Updates as you type — not the final print layout</span>
+          </div>
+          <div className="flex-1 overflow-y-auto px-6 py-6 flex justify-center">
+            <div className="w-full max-w-[560px] bg-white border border-slate-200 rounded-sm shadow-xl px-8 py-7 relative" style={{ fontFamily: 'Georgia, "Times New Roman", serif', height: 'fit-content' }}>
+              <div className="absolute top-3.5 -right-7 rotate-[35deg] bg-amber-500 text-amber-950 text-[9px] font-bold uppercase tracking-widest px-9 py-1 shadow" style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
+                Preview
               </div>
-            }
-          >
-            {/* GST quick-select */}
-            {(() => {
-              const isIGST = form.tax_mode === 'interstate';
-              const activePct = items.length > 0 && items.every(it => it.gst_pct === items[0].gst_pct)
-                ? items[0].gst_pct : null;
-              return (
-                <div className="flex flex-wrap gap-1.5 mb-3">
-                  <span className="text-xs text-slate-500 self-center">Quick GST:</span>
-                  {[0, 5, 12, 18, 28].map(pct => {
-                    const active = !isIGST && activePct === String(pct);
+
+              <div className="flex items-start justify-between border-b-2 border-slate-900 pb-3 mb-4">
+                <div>
+                  <div className="text-lg font-bold text-slate-900">BCIM Constructions</div>
+                  <div className="text-[10.5px] text-slate-500 mt-1 leading-relaxed" style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
+                    Bill Tracker · Internal Record<br />
+                    {projects.find(p => p.id === form.project_id)?.name || <span className="italic">Select a project…</span>}
+                  </div>
+                </div>
+                <div className="text-right" style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Bill Record</div>
+                  <span className={clsx('inline-block mt-1.5 text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border',
+                    form.bill_type === 'wo' ? 'bg-orange-50 text-orange-700 border-orange-200'
+                      : form.bill_type === 'hire' ? 'bg-purple-50 text-purple-700 border-purple-200'
+                      : 'bg-blue-50 text-blue-700 border-blue-200')}>
+                    {form.bill_type === 'wo' ? 'Work Order' : form.bill_type === 'hire' ? 'Hire / Rental' : 'Purchase Order'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-x-5 gap-y-2.5 mb-5" style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
+                <div>
+                  <div className="text-[9.5px] font-bold uppercase tracking-wide text-slate-400">Vendor</div>
+                  <div className={clsx('text-[13px] font-semibold mt-0.5', form.vendor_name ? 'text-slate-800' : 'text-slate-400 italic font-normal')}>
+                    {form.vendor_name || 'Not selected'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[9.5px] font-bold uppercase tracking-wide text-slate-400">PO / WO Reference</div>
+                  <div className={clsx('text-[13px] font-semibold mt-0.5', form.po_number ? 'text-slate-800' : 'text-slate-400 italic font-normal')}>
+                    {form.po_number || '—'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[9.5px] font-bold uppercase tracking-wide text-slate-400">Invoice Number</div>
+                  <div className={clsx('text-[13px] font-semibold mt-0.5', form.inv_number ? 'text-slate-800' : 'text-slate-400 italic font-normal')}>
+                    {form.inv_number || 'Not entered'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[9.5px] font-bold uppercase tracking-wide text-slate-400">Invoice Date</div>
+                  <div className={clsx('text-[13px] font-semibold mt-0.5', form.inv_date ? 'text-slate-800' : 'text-slate-400 italic font-normal')}>
+                    {form.inv_date ? dayjs(form.inv_date).format('DD MMM YYYY') : '—'}
+                  </div>
+                </div>
+              </div>
+
+              <table className="w-full text-[11.5px] mb-1" style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
+                <thead>
+                  <tr className="border-b-[1.5px] border-slate-900">
+                    <th className="text-left font-bold uppercase text-[9.5px] tracking-wide text-slate-400 py-1.5">Description</th>
+                    <th className="text-right font-bold uppercase text-[9.5px] tracking-wide text-slate-400 py-1.5">Qty</th>
+                    <th className="text-right font-bold uppercase text-[9.5px] tracking-wide text-slate-400 py-1.5">Rate</th>
+                    <th className="text-right font-bold uppercase text-[9.5px] tracking-wide text-slate-400 py-1.5">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.filter(it => it.item_name?.trim()).length > 0 ? items.filter(it => it.item_name?.trim()).map((it, i) => {
+                    const { total } = calcItemRow(it, form.tax_mode);
                     return (
-                      <button key={pct} type="button" onClick={() => applyGST(pct)}
-                        className={`px-2.5 py-1 text-xs rounded-full border font-medium transition-colors ${
-                          active
-                            ? 'bg-blue-600 text-white border-blue-600'
-                            : 'border-slate-200 hover:bg-blue-50 hover:border-blue-300 text-slate-600'
-                        }`}>
-                        {pct}%
-                      </button>
+                      <tr key={i} className="border-b border-slate-100">
+                        <td className="py-1.5 text-slate-800">
+                          {it.item_name}
+                          {it.unit && <div className="text-[10px] text-slate-400">{it.unit}</div>}
+                        </td>
+                        <td className="py-1.5 text-right text-slate-600">{it.quantity || 0}</td>
+                        <td className="py-1.5 text-right text-slate-600">₹{inr(it.rate || 0)}</td>
+                        <td className="py-1.5 text-right font-semibold text-slate-800">₹{inr(total)}</td>
+                      </tr>
                     );
-                  })}
-                  <button type="button" onClick={() => applyGST(18, true)}
-                    className={`px-2.5 py-1 text-xs rounded-full border font-medium transition-colors ${
-                      isIGST
-                        ? 'bg-amber-500 text-white border-amber-500'
-                        : 'border-amber-200 hover:bg-amber-50 text-amber-700'
-                    }`}>
-                    IGST 18%
-                  </button>
-                </div>
-              );
-            })()}
-
-            {/* Items — one clearly-labeled card per line item (no cramped horizontal-scroll table) */}
-            <div className="space-y-3">
-              {items.map((it, i) => {
-                const { basic, discount, gst, total } = calcItemRow(it, form.tax_mode);
-                const rem = it.remaining_qty;
-                const entered = parseFloat(it.quantity || 0);
-                const exceeded = rem !== null && rem !== undefined && entered > rem + 0.0001;
-                return (
-                  <div key={i} className="border border-slate-100 rounded-2xl bg-white p-4 space-y-3 shadow-sm">
-                    {/* Row 1 — item search + category badge + remove */}
-                    <div className="flex items-start gap-2.5">
-                      <span className="shrink-0 mt-[26px] w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-400">{i + 1}</span>
-                      <div className="flex-1 min-w-0">
-                        <Lbl>Item / Material</Lbl>
-                        <MaterialCombobox
-                          value={it.item_name}
-                          inventoryItems={inventoryItems}
-                          placeholder="Search or type item / material name"
-                          onChange={(materialName) => handleItemName(i, materialName)}
-                        />
-                      </div>
-                      <div className="shrink-0 pt-[22px]">
-                        <div className={`px-2.5 h-10 flex items-center text-xs rounded-lg border font-medium whitespace-nowrap ${it.category ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-slate-50 border-slate-200 text-slate-400 italic'}`}>
-                          {it.category || 'Auto'}
-                        </div>
-                      </div>
-                      <button type="button" onClick={() => removeItem(i)}
-                        className="shrink-0 mt-[22px] w-10 h-10 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors">
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    {/* Row 2 — BOQ link + cost head */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                      <div>
-                        <Lbl>BOQ Item</Lbl>
-                        <select
-                          className={`w-full h-10 rounded-lg px-2.5 text-xs bg-white outline-none transition-all border ${FIELD_HL}`}
-                          value={it.boq_item_id || ''}
-                          onChange={e => updateItem(i, 'boq_item_id', e.target.value)}
-                        >
-                          <option value="">No BOQ item</option>
-                          {boqItems.map(b => (
-                            <option key={b.id} value={b.id}>{b.item_no ? `${b.item_no} — ` : ''}{b.description}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <Lbl>Cost Sub-heading</Lbl>
-                        <select
-                          className={`w-full h-10 rounded-lg px-2.5 text-xs bg-white outline-none transition-all border ${FIELD_HL}`}
-                          value={it.cost_head || ''}
-                          onChange={e => updateItem(i, 'cost_head', e.target.value)}
-                        >
-                          <option value="">Unallocated</option>
-                          {BOQ_COST_HEADS.map(h => <option key={h} value={h}>{h}</option>)}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Row 3 — qty/rate/gst inputs */}
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 pt-2 border-t border-slate-100">
-                      <div>
-                        <Lbl>Unit</Lbl>
-                        <input className={`w-full h-10 rounded-lg px-2.5 text-xs outline-none transition-all border ${FIELD_HL}`}
-                          placeholder="Nos"
-                          value={it.unit} onChange={e => updateItem(i, 'unit', e.target.value)} />
-                      </div>
-                      <div>
-                        <Lbl>Qty</Lbl>
-                        <input
-                          type="number" step="0.001"
-                          max={rem !== null && rem !== undefined ? rem : undefined}
-                          className={clsx('w-full h-10 rounded-lg px-2.5 text-xs text-right outline-none transition-all border',
-                            exceeded
-                              ? 'border-red-400 bg-red-50 text-red-700 shadow-[0_0_0_3px_rgba(248,113,113,0.15)] focus:border-red-500'
-                              : FIELD_HL
-                          )}
-                          placeholder="0"
-                          value={it.quantity}
-                          onChange={e => updateItem(i, 'quantity', e.target.value)}
-                        />
-                        {rem !== null && rem !== undefined && (
-                          <span className={`block text-[10px] mt-0.5 leading-tight ${exceeded ? 'text-red-500 font-semibold' : 'text-slate-400'}`}>
-                            {exceeded ? `Warning max ${rem}` : `Avail: ${rem}`}
-                          </span>
-                        )}
-                      </div>
-                      <div>
-                        <Lbl>Rate (Rs )</Lbl>
-                        <input type="number" step="0.01" className={`w-full h-10 rounded-lg px-2.5 text-xs text-right outline-none transition-all border ${FIELD_HL}`}
-                          placeholder="0.00"
-                          value={it.rate} onChange={e => updateItem(i, 'rate', e.target.value)} />
-                      </div>
-                      <div>
-                        <Lbl>Discount (Rs )</Lbl>
-                        <input type="number" step="0.01" className={`w-full h-10 rounded-lg px-2.5 text-xs text-right outline-none transition-all border ${FIELD_HL}`}
-                          placeholder="0.00"
-                          value={discount > 0 && !it.discount_amount ? discount.toFixed(2) : it.discount_amount}
-                          onChange={e => updateItem(i, 'discount_amount', e.target.value)} />
-                      </div>
-                      <div>
-                        <Lbl>GST %</Lbl>
-                        <input type="number" step="0.5" className={`w-full h-10 rounded-lg px-2.5 text-xs text-center outline-none transition-all border ${FIELD_HL}`}
-                          placeholder="18"
-                          value={it.gst_pct} onChange={e => updateItem(i, 'gst_pct', e.target.value)} />
-                      </div>
-                    </div>
-
-                    {/* Row 4 — computed totals for this line */}
-                    <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pt-2 border-t border-slate-100 text-xs">
-                      <span className="text-slate-500">Basic: <b className="text-slate-700">{basic !== 0 ? `Rs ${inr(basic)}` : '—'}</b></span>
-                      <span className="text-slate-500">GST: <b className="text-slate-700">{gst !== 0 ? `Rs ${inr(gst)}` : '—'}</b></span>
-                      <span className="ml-auto text-slate-500">Line Total: <b className="text-sm text-slate-800">{total !== 0 ? `Rs ${inr(total)}` : '—'}</b></span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {itemsBasic > 0 && (
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-3 px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl text-xs">
-                <span className="font-semibold text-slate-600">Items Total:</span>
-                {itemsDiscount > 0 && <span className="text-rose-500">Discount: <b>Rs {inr(itemsDiscount)}</b></span>}
-                <span className="text-slate-600">Basic: <b>Rs {inr(itemsBasic)}</b></span>
-                <span className="text-slate-400">GST: Rs {inr(itemsGST)}</span>
-                <span className="ml-auto font-semibold text-slate-700">Grand Total: Rs {inr(itemsBasic + itemsGST)}</span>
-              </div>
-            )}
-
-            {/* Manual basic amount - only when no items */}
-            {itemsBasic === 0 && (
-              <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <p className="text-xs text-slate-500 mb-2">No line items - enter invoice amount manually:</p>
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <Lbl req>Basic Amount (Rs )</Lbl>
-                    <input type="number" step="0.01" className={F} placeholder="0.00"
-                      value={form.basic_amount} onChange={e => set('basic_amount', e.target.value)} />
-                  </div>
-                  {taxMode === 'intrastate' ? (<>
-                    <div>
-                      <Lbl>CGST %</Lbl>
-                      <input type="number" step="0.5" className={F} placeholder="9"
-                        value={form.cgst_pct} onChange={e => set('cgst_pct', e.target.value)} />
-                    </div>
-                    <div>
-                      <Lbl>SGST %</Lbl>
-                      <input type="number" step="0.5" className={F} placeholder="9"
-                        value={form.sgst_pct} onChange={e => set('sgst_pct', e.target.value)} />
-                    </div>
-                  </>) : (
-                    <div>
-                      <Lbl>IGST %</Lbl>
-                      <input type="number" step="0.5" className={F} placeholder="18"
-                        value={form.igst_pct} onChange={e => set('igst_pct', e.target.value)} />
-                    </div>
+                  }) : (
+                    <tr><td colSpan={4} className="text-center text-slate-400 text-[11px] py-4 italic">No items added yet</td></tr>
                   )}
+                </tbody>
+              </table>
+
+              <div className="ml-auto w-[230px] mt-2.5" style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
+                <div className="flex justify-between text-[11.5px] text-slate-500 py-0.5">
+                  <span>Basic Amount</span><span className="font-semibold text-slate-800">₹{inr(effectBasic)}</span>
+                </div>
+                <div className="flex justify-between text-[11.5px] text-slate-500 py-0.5">
+                  <span>GST</span><span className="font-semibold text-slate-800">₹{inr(totalGST)}</span>
+                </div>
+                {(transportAmt > 0 || otherAmt > 0) && (
+                  <div className="flex justify-between text-[11.5px] text-slate-500 py-0.5">
+                    <span>Extra Charges</span><span className="font-semibold text-slate-800">₹{inr(transportAmt + transportGST + otherAmt)}</span>
+                  </div>
+                )}
+                {tcsAmt > 0 && (
+                  <div className="flex justify-between text-[11.5px] text-slate-500 py-0.5">
+                    <span>TCS ({form.tcs_pct}%)</span><span className="font-semibold text-slate-800">₹{inr(tcsAmt)}</span>
+                  </div>
+                )}
+                {creditVal > 0 && (
+                  <div className="flex justify-between text-[11.5px] text-slate-500 py-0.5">
+                    <span>Credit Note</span><span className="font-semibold text-rose-600">− ₹{inr(creditVal)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-[15px] font-bold text-slate-900 border-t-2 border-slate-900 mt-1.5 pt-2">
+                  <span>Grand Total</span><span>₹{inr(grandTotal)}</span>
                 </div>
               </div>
-            )}
-          </SectionCard>
 
-          {/* ── SECTION 3: Additional Charges ── */}
-          <SectionCard icon={Truck} title="Additional Charges" subtitle="Transport, packing/insurance and TCS">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div>
-                <Lbl>Transport Description</Lbl>
-                <input className={F} placeholder="e.g. Freight, Delivery..."
-                  value={form.transport_desc} onChange={e => set('transport_desc', e.target.value)} />
-              </div>
-              <div>
-                <Lbl>Transport Amount (Rs )</Lbl>
-                <input type="number" step="0.01" className={F} placeholder="0.00"
-                  value={form.transport_charges} onChange={e => set('transport_charges', e.target.value)} />
-              </div>
-              <div>
-                <Lbl>Transport GST %</Lbl>
-                <input type="number" step="0.5" className={F} placeholder="18"
-                  value={form.transport_gst_pct} onChange={e => set('transport_gst_pct', e.target.value)} />
-              </div>
-              <div>
-                <Lbl>Transport GST Amt</Lbl>
-                <input type="number" className={F + ' bg-slate-100 text-slate-500'} readOnly
-                  value={transportGST > 0 ? transportGST.toFixed(2) : ''} placeholder="Auto" />
-              </div>
-              <div>
-                <Lbl>Other Charges Description</Lbl>
-                <input className={F} placeholder="e.g. Packing, Insurance..."
-                  value={form.other_charges_desc} onChange={e => set('other_charges_desc', e.target.value)} />
-              </div>
-              <div>
-                <Lbl>Other Charges (Rs )</Lbl>
-                <input type="number" step="0.01" className={F} placeholder="0.00"
-                  value={form.other_charges} onChange={e => set('other_charges', e.target.value)} />
-              </div>
-              <div>
-                <Lbl>TCS %</Lbl>
-                <input type="number" step="0.01" className={F} placeholder="0.1"
-                  value={form.tcs_pct} onChange={e => set('tcs_pct', e.target.value)} />
-              </div>
-              <div>
-                <Lbl>TCS Amount</Lbl>
-                <input type="number" className={F + ' bg-slate-100 text-slate-500'} readOnly
-                  value={tcsAmt > 0 ? tcsAmt.toFixed(2) : ''} placeholder="Auto" />
-              </div>
+              {form.remarks?.trim() && (
+                <div className="mt-4 pt-3 border-t border-dashed border-slate-200 text-[11px] text-slate-500 italic" style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}>
+                  Remarks: {form.remarks}
+                </div>
+              )}
             </div>
-          </SectionCard>
-
-          {/* ── SECTION 4: Credit Note ── */}
-          <SectionCard icon={Receipt} title="Credit Note" badge={<span className="text-[10px] font-medium text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">Optional</span>}>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Lbl>Credit Note Number</Lbl>
-                <input className={F} placeholder="CN-001"
-                  value={form.credit_note_num} onChange={e => set('credit_note_num', e.target.value)} />
-              </div>
-              <div>
-                <Lbl>Credit Note Value (Rs )</Lbl>
-                <input type="number" step="0.01" className={F} placeholder="0.00"
-                  value={form.credit_note_val} onChange={e => set('credit_note_val', e.target.value)} />
-              </div>
-            </div>
-          </SectionCard>
-
-          {/* ── SECTION 6: Remarks ── */}
-          <SectionCard icon={StickyNote} title="Remarks">
-            <Lbl>Remarks / Notes</Lbl>
-            <textarea rows={2} className={F + ' resize-none'}
-              placeholder="Any initial remarks..."
-              value={form.remarks} onChange={e => set('remarks', e.target.value)} />
-          </SectionCard>
-
           </div>
         </div>
       </div>
