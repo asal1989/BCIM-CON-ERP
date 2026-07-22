@@ -3972,11 +3972,26 @@ router.patch('/:id/mark-paid', requireTqsStageAccess('payment'), async (req, res
   try {
     await getAccessibleBill(req, req.params.id);
     await requireMdSignature(req.params.id);
-    await query(`
-      UPDATE tqs_bill_updates SET payment_status='paid', balance_to_pay=0, updated_at=NOW()
-      WHERE bill_id=$1
-    `, [req.params.id]);
-    await query(`UPDATE tqs_bills SET workflow_status='paid', updated_at=NOW() WHERE id=$1`, [req.params.id]);
+    await withTransaction(async (client) => {
+      await client.query(`
+        UPDATE tqs_bill_updates SET payment_status='paid', balance_to_pay=0, updated_at=NOW()
+        WHERE bill_id=$1
+      `, [req.params.id]);
+      await client.query(`UPDATE tqs_bills SET workflow_status='paid', updated_at=NOW() WHERE id=$1`, [req.params.id]);
+
+      // Reverse-sync linked certification, mirroring PATCH /:id/payment
+      await client.query(`
+        UPDATE vendor_qs_certifications c
+        SET status='paid', paid_amount=COALESCE(c.net_payable, c.paid_amount), paid_at=NOW(), updated_at=NOW()
+        FROM vendor_qs_certification_bills cb
+        WHERE cb.certification_id=c.id AND cb.bill_id=$1 AND c.status<>'paid'
+          AND NOT EXISTS (
+            SELECT 1 FROM vendor_qs_certification_bills cb2
+            JOIN tqs_bills b2 ON b2.id=cb2.bill_id
+            WHERE cb2.certification_id=c.id AND b2.id<>$1 AND b2.workflow_status<>'paid'
+          )
+      `, [req.params.id]);
+    });
     await logHistory(req.params.id, 'accounts', 'Manually marked as Fully Paid', req.user.id);
 
     // Send payment notification email
