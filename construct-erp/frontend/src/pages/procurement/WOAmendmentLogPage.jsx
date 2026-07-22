@@ -4,9 +4,10 @@
 // (WorkOrderPage.jsx) — this page is the cross-WO browse/search view,
 // mirroring the "PO Amendments" register.
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
-import { Search, FileText, Calendar, Building2 } from 'lucide-react';
+import { Search, FileText, Calendar, Building2, ExternalLink } from 'lucide-react';
 import { clsx } from 'clsx';
 import { subcontractorAPI, projectAPI } from '../../api/client';
 import { PageHeader } from '../../theme';
@@ -14,6 +15,7 @@ import { PageHeader } from '../../theme';
 const inr = v => Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
 
 export default function WOAmendmentLogPage() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
 
@@ -87,8 +89,11 @@ export default function WOAmendmentLogPage() {
                     <FileText className="w-8 h-8 mx-auto mb-2 opacity-30" />No amendments logged yet
                   </td></tr>
                 ) : amendments.map(a => (
-                  <tr key={a.id} className="border-b last:border-0 hover:bg-slate-50">
-                    <td className="py-2.5 px-3 font-mono text-xs text-indigo-600 whitespace-nowrap">{a.wo_number || '—'}</td>
+                  <tr key={a.id} className="border-b last:border-0 hover:bg-slate-50 cursor-pointer"
+                    onClick={() => navigate('/procurement/work-orders', { state: { viewId: a.wo_id } })}>
+                    <td className="py-2.5 px-3 font-mono text-xs text-indigo-600 whitespace-nowrap hover:underline">
+                      <span className="inline-flex items-center gap-1">{a.wo_number || '—'} <ExternalLink className="w-3 h-3 opacity-50" /></span>
+                    </td>
                     <td className="py-2.5 px-3 text-xs text-slate-600 max-w-[160px] truncate"><Building2 className="w-3 h-3 inline mr-1 text-slate-300" />{a.project_name}</td>
                     <td className="py-2.5 px-3 text-xs text-slate-600 max-w-[140px] truncate">{a.vendor_name || '—'}</td>
                     <td className="py-2.5 px-3 text-xs font-bold text-indigo-600">#{a.amendment_number}</td>
