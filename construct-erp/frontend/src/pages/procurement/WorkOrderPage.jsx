@@ -75,11 +75,15 @@ function canManageProcurement(user) {
   return role === 'super_admin' || role === 'managing_director' || role.includes('procurement');
 }
 
-// Recording amendments is a broader action — also open to admins & PMs, matching WO create/approve rights
+// Recording amendments is a broader action — open to every role that can already
+// create/manage work orders. role.includes('procurement') above misses
+// 'purchase_executive' (a real, distinct role — see users.routes.js VALID ROLES),
+// so this list is spelled out explicitly rather than relying on a substring match.
+const WO_AMEND_ROLES = ['admin', 'management', 'project_manager', 'purchase_executive', 'contracts_manager'];
 function canAmendWO(user) {
   if (!user) return false;
   const role = (user.role || '').toLowerCase();
-  return canManageProcurement(user) || role === 'admin' || role === 'project_manager';
+  return canManageProcurement(user) || WO_AMEND_ROLES.includes(role);
 }
 
 function StatusBadge({ status }) {
