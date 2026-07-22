@@ -848,7 +848,7 @@ export default function PaymentsPage() {
       ══════════════════════════════════════════════════════════════════════ */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl flex flex-col">
+          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[94vh] overflow-y-auto shadow-2xl flex flex-col">
 
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 flex-shrink-0">
@@ -1006,19 +1006,49 @@ export default function PaymentsPage() {
                     <p className="text-[11px] text-emerald-700">No approved advance vouchers found for this vendor.</p>
                   )}
                   {selectedExistingAdv && (
-                    <div className="grid grid-cols-3 gap-3 pt-1">
-                      <div>
-                        <p className="text-[10px] text-emerald-600 uppercase font-semibold">Sanctioned</p>
-                        <p className="text-sm font-bold text-slate-800">{inr(selectedExistingAdv.advance_value)}</p>
+                    <div className="space-y-3 pt-1">
+                      <div className="grid grid-cols-4 gap-3">
+                        <div>
+                          <p className="text-[10px] text-emerald-600 uppercase font-semibold">Sanctioned</p>
+                          <p className="text-sm font-bold text-slate-800">{inr(selectedExistingAdv.advance_value)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-emerald-600 uppercase font-semibold">Paid So Far</p>
+                          <p className="text-sm font-bold text-slate-800">{inr(selectedExistingAdv.paid_amount || 0)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-emerald-600 uppercase font-semibold">Remaining</p>
+                          <p className="text-sm font-bold text-emerald-700">{inr(Number(selectedExistingAdv.advance_value || 0) - Number(selectedExistingAdv.paid_amount || 0))}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-emerald-600 uppercase font-semibold">Order Value</p>
+                          <p className="text-sm font-bold text-slate-800">{selectedExistingAdv.order_value ? inr(selectedExistingAdv.order_value) : '—'}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-[10px] text-emerald-600 uppercase font-semibold">Paid So Far</p>
-                        <p className="text-sm font-bold text-slate-800">{inr(selectedExistingAdv.paid_amount || 0)}</p>
+                      <div className="grid grid-cols-4 gap-3 pt-3 border-t border-emerald-100">
+                        <div>
+                          <p className="text-[10px] text-emerald-600 uppercase font-semibold">Project</p>
+                          <p className="text-xs font-medium text-slate-700 truncate" title={selectedExistingAdv.project_name}>{selectedExistingAdv.project_name || '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-emerald-600 uppercase font-semibold">WO / PO Ref</p>
+                          <p className="text-xs font-medium text-slate-700 font-mono">{selectedExistingAdv.wo_number || selectedExistingAdv.po_number || '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-emerald-600 uppercase font-semibold">Voucher Date</p>
+                          <p className="text-xs font-medium text-slate-700">{selectedExistingAdv.voucher_date ? String(selectedExistingAdv.voucher_date).slice(0, 10) : '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-emerald-600 uppercase font-semibold">TDS Rate</p>
+                          <p className="text-xs font-medium text-slate-700">{selectedExistingAdv.tds_rate ? `${selectedExistingAdv.tds_rate}%` : '—'}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-[10px] text-emerald-600 uppercase font-semibold">Remaining</p>
-                        <p className="text-sm font-bold text-emerald-700">{inr(Number(selectedExistingAdv.advance_value || 0) - Number(selectedExistingAdv.paid_amount || 0))}</p>
-                      </div>
+                      {selectedExistingAdv.work_desc && (
+                        <div className="pt-3 border-t border-emerald-100">
+                          <p className="text-[10px] text-emerald-600 uppercase font-semibold mb-0.5">Work Description</p>
+                          <p className="text-xs text-slate-600">{selectedExistingAdv.work_desc}</p>
+                        </div>
+                      )}
                     </div>
                   )}
                   <p className="text-[10px] text-emerald-600">This payment is logged as a dated installment against the selected voucher — its Paid Amount and payment history update, no new voucher is created.</p>
