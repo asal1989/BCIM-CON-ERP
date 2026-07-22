@@ -17,8 +17,14 @@ if (isCloudUrl) {
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false },
     max: 10,
-    idleTimeoutMillis: 30000,
+    min: 2,                          // keep a couple of connections warm — avoids
+                                      // paying a fresh TCP+TLS handshake to the DB
+                                      // host on every request after an idle gap
+    idleTimeoutMillis: 600000,       // 10 min — was 30s, which tore the pool down
+                                      // between the app's routine ~60s polling gaps
     connectionTimeoutMillis: 5000,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
     // Kill runaway queries after 30 seconds
     options: '-c statement_timeout=30000',
   };

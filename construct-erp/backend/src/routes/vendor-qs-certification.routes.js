@@ -2113,4 +2113,39 @@ runSchemaInit('link_orphaned_scp_concrete_bills_to_yelahanka_2026_07', async () 
   console.log(`[migration] Moved ${moved2.rowCount} uncertified bill(s) from 'accounts' → 'qs' (SCP Concrete linkage)`);
 });
 
+// ── One-time: DQS Towers — link all 28 SCP Concrete bills to PO PODQSMB007
+// and move the 6 'accounts'-stage bills back to 'qs'. PODQSMB007 confirmed
+// as a real purchase_orders row for DQS Towers / SCP Concrete (grand_total
+// ₹17,58,933.75), well above the ₹7,44,362 these 28 bills total, so there's
+// headroom for the full set under one PO. Unlike the Yelahanka bulk-import
+// bills, these were never marked 'paid' — still pending/accounts, no
+// reversal needed, just linking + workflow correction.
+runSchemaInit('link_dqs_towers_scp_concrete_to_po_2026_07', async () => {
+  const DQS_TOWERS = '8bf8a91c-f64c-478a-b6f2-39ed621d9436';
+
+  const linked = await query(`
+    UPDATE tqs_bills b
+    SET po_number = 'PODQSMB007', updated_at = NOW()
+    FROM vendors v
+    WHERE b.vendor_id = v.id
+      AND v.name ILIKE '%SCP Concrete%'
+      AND b.project_id = $1
+      AND b.is_deleted = FALSE
+      AND COALESCE(b.po_number, '') <> 'PODQSMB007'
+  `, [DQS_TOWERS]);
+  console.log(`[migration] Linked ${linked.rowCount} DQS Towers SCP Concrete bill(s) to PO PODQSMB007`);
+
+  const moved = await query(`
+    UPDATE tqs_bills b
+    SET workflow_status = 'qs', updated_at = NOW()
+    FROM vendors v
+    WHERE b.vendor_id = v.id
+      AND v.name ILIKE '%SCP Concrete%'
+      AND b.project_id = $1
+      AND b.is_deleted = FALSE
+      AND b.workflow_status = 'accounts'
+  `, [DQS_TOWERS]);
+  console.log(`[migration] Moved ${moved.rowCount} DQS Towers SCP Concrete bill(s) from 'accounts' → 'qs'`);
+});
+
 module.exports = router;
