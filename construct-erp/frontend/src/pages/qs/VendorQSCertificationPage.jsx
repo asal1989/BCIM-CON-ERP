@@ -267,13 +267,29 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
     setSummaryRows(prev => prev.map((row, i) => {
       if (i !== idx) return row;
       const next = { ...row, [key]: value };
-      if (['qs_pres_qty', 'qs_prev_qty', 'order_rate', 'inv_pres_qty'].includes(key)) {
+      if (['qs_pres_qty', 'qs_prev_qty', 'order_rate', 'inv_pres_qty', 'order_qty'].includes(key)) {
         next.amount = Number(next.qs_pres_qty || 0) * Number(next.order_rate || 0);
         next.balance_qty = Math.max(0, Number(next.order_qty || 0) - Number(next.qs_prev_qty || 0) - Number(next.qs_pres_qty || 0));
       }
       return next;
     }));
   };
+
+  // Manual row insert — needed for bills with no stored line items (bulk-
+  // imported bills that only ever had a total), where the auto-loaded sheet
+  // comes back as a single lump-sum row. Lets QS split that into the real
+  // per-item quantities/rates from the source invoice.
+  const addSummaryRow = () => {
+    const anchor = summaryRows[0];
+    setSummaryRows(prev => [...prev, {
+      bill_id: anchor?.bill_id, bill_ids: anchor?.bill_ids || [], bill_line_item_id: null, bill_line_item_ids: [],
+      source_inv_number: anchor?.source_inv_number || '', item_ref_id: null,
+      description: '', unit: '', order_qty: 0, order_rate: 0,
+      inv_prev_qty: 0, inv_pres_qty: 0, qs_prev_qty: 0, qs_pres_qty: 0,
+      tax_amount: 0, amount: 0, balance_qty: 0, remarks: '',
+    }]);
+  };
+  const removeSummaryRow = (idx) => setSummaryRows(prev => prev.filter((_, i) => i !== idx));
 
   return (
     <div className="fixed inset-0 z-50 bg-white flex items-center justify-center">
@@ -461,14 +477,24 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
                 <p className="text-xs font-medium text-emerald-900 uppercase tracking-wide">RA Abstract Summary Sheet</p>
                 <p className="text-[11px] text-emerald-700">This is the editable Excel-style certification page. Type QS present quantity, rate, tax, and remarks here.</p>
               </div>
-              <button
-                onClick={() => loadSummaryMut.mutate()}
-                disabled={selectedBillIds.length === 0 || loadSummaryMut.isPending}
-                className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-medium disabled:opacity-50 flex items-center gap-2"
-              >
-                {loadSummaryMut.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-                Load / Refresh Summary
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => loadSummaryMut.mutate()}
+                  disabled={selectedBillIds.length === 0 || loadSummaryMut.isPending}
+                  className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-medium disabled:opacity-50 flex items-center gap-2"
+                >
+                  {loadSummaryMut.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                  Load / Refresh Summary
+                </button>
+                <button
+                  onClick={addSummaryRow}
+                  disabled={!summaryRows.length}
+                  title={!summaryRows.length ? 'Load the summary first' : 'Add a manual line item — useful when the bill has no itemized breakdown'}
+                  className="px-3 py-2 bg-white border border-emerald-300 text-emerald-700 rounded-lg text-xs font-medium disabled:opacity-50 flex items-center gap-2 hover:bg-emerald-50"
+                >
+                  <Plus className="w-4 h-4" /> Add Row
+                </button>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-[11px] min-w-[1450px]">
@@ -487,6 +513,7 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
                     <th colSpan={3} className="px-2 py-2 border border-slate-700">As per QS Certified</th>
                     <th colSpan={2} className="px-2 py-2 border border-slate-700">Balance</th>
                     <th rowSpan={2} className="px-2 py-2 border border-slate-700">Remarks</th>
+                    <th rowSpan={2} className="px-2 py-2 border border-slate-700"></th>
                   </tr>
                   <tr className="bg-slate-800 text-white">
                     {['Qty','Rate','Amount','Prev Qty','Present Qty','Amount','Prev Qty','Present Qty','Amount','Qty','Amount'].map(h => (
@@ -516,7 +543,9 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
                         <td className="px-2 py-1 border border-slate-200">
                           <input className="w-16 bg-transparent outline-none text-center" value={row.unit || ''} onChange={e => updateSummaryRow(idx, 'unit', e.target.value)} />
                         </td>
-                        <td className="px-2 py-1 border border-slate-200 text-right">{Number(row.order_qty || 0)}</td>
+                        <td className="px-2 py-1 border border-slate-200">
+                          <input type="number" className="w-20 text-right bg-white border border-slate-200 rounded px-1 py-1" value={row.order_qty || 0} onChange={e => updateSummaryRow(idx, 'order_qty', e.target.value)} />
+                        </td>
                         <td className="px-2 py-1 border border-slate-200">
                           <input type="number" className="w-24 text-right bg-white border border-slate-200 rounded px-1 py-1" value={row.order_rate || 0} onChange={e => updateSummaryRow(idx, 'order_rate', e.target.value)} />
                         </td>
@@ -552,11 +581,17 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
                         <td className="px-2 py-1 border border-slate-200">
                           <input className="w-40 bg-transparent outline-none" value={row.remarks || ''} onChange={e => updateSummaryRow(idx, 'remarks', e.target.value)} />
                         </td>
+                        <td className="px-2 py-1 border border-slate-200 text-center">
+                          <button type="button" onClick={() => removeSummaryRow(idx)} title="Remove row"
+                            className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
                   {!summaryRows.length && (
-                    <tr><td colSpan={20} className="py-10 text-center text-slate-400">Select invoices and click Load / Refresh Summary to type the certification sheet.</td></tr>
+                    <tr><td colSpan={21} className="py-10 text-center text-slate-400">Select invoices and click Load / Refresh Summary to type the certification sheet.</td></tr>
                   )}
                 </tbody>
               </table>
