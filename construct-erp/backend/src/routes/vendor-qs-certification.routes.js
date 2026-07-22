@@ -2246,4 +2246,53 @@ runSchemaInit('merge_maharani_constrcutions_typo_2026_07', async () => {
   console.log(`[migration] Deactivated duplicate vendor ${LOSER} (Maharani Constrcutions)`);
 });
 
+// ── One-time: LANCO Hills (LH-10) — reconcile 6 bills whose Bill Tracker
+// stage disagreed with their QS certification status. Investigated
+// individually (see conversation): 4 bills already show a real payment
+// (date/amount/mode) on tqs_bill_updates but their certification record
+// never advanced to 'paid'; P0-395's net_payable=0 is correct (fully
+// recovered against a prior advance, not a bug) so both cert and bill
+// move straight to paid/settled; WO-480 is genuinely still unpaid, so only
+// its bill stage catches up to the certification's 'accounts' stage.
+runSchemaInit('lanco_lh10_bill_cert_stage_reconcile_2026_07', async () => {
+  // 1) Certs with a real recorded payment that never flipped to 'paid'.
+  const PAID_CERTS = [
+    { cert_number: 'P25/PO04/5676/SVBI',  paid_amount: 135582,   payment_date: '2026-07-06', payment_mode: null },
+    { cert_number: 'P25/PO03/5675/SVR',   paid_amount: 115581,   payment_date: '2026-07-06', payment_mode: null },
+    { cert_number: 'P26/PO05/5686/SBBMS', paid_amount: 62885.56, payment_date: '2026-07-14', payment_mode: 'RTGS' },
+    { cert_number: 'P25/WO08/5718/KSU',   paid_amount: 167300,   payment_date: '2026-07-19', payment_mode: null },
+  ];
+  for (const p of PAID_CERTS) {
+    const r = await query(
+      `UPDATE vendor_qs_certifications
+       SET status='paid', paid_amount=$1, payment_date=$2, payment_mode=COALESCE($3, payment_mode), paid_at=NOW(), updated_at=NOW()
+       WHERE cert_number=$4 AND status<>'paid'`,
+      [p.paid_amount, p.payment_date, p.payment_mode, p.cert_number]
+    );
+    console.log(`[migration] ${p.cert_number}: cert status → paid (${r.rowCount} row updated)`);
+  }
+
+  // 2) P0-395 (P25/PO07/5717/KCPL) — net_payable=0, fully settled via advance
+  // recovery. Mark both the cert and the bill as fully paid/settled.
+  const kcpl = await query(
+    `UPDATE vendor_qs_certifications SET status='paid', paid_amount=0, paid_at=NOW(), updated_at=NOW()
+     WHERE cert_number='P25/PO07/5717/KCPL' AND status<>'paid'`
+  );
+  const kcplBill = await query(
+    `UPDATE tqs_bills SET workflow_status='paid', updated_at=NOW() WHERE sl_number='P0-395'`
+  );
+  await query(
+    `UPDATE tqs_bill_updates SET payment_status='paid', updated_at=NOW()
+     WHERE bill_id = (SELECT id FROM tqs_bills WHERE sl_number='P0-395')`
+  );
+  console.log(`[migration] P25/PO07/5717/KCPL (P0-395): cert → paid (${kcpl.rowCount}), bill → paid (${kcplBill.rowCount}), settled via advance recovery`);
+
+  // 3) WO-480 (P25/WO09/5722/SUR) — genuinely still unpaid; only the bill's
+  // stage needs to catch up to its certification's 'accounts' stage.
+  const wo480 = await query(
+    `UPDATE tqs_bills SET workflow_status='accounts', updated_at=NOW() WHERE sl_number='WO-480' AND workflow_status<>'accounts'`
+  );
+  console.log(`[migration] WO-480: bill stage 'procurement' → 'accounts' (${wo480.rowCount} row updated)`);
+});
+
 module.exports = router;
