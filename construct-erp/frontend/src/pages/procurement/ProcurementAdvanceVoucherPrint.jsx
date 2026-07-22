@@ -115,6 +115,18 @@ export default function ProcurementAdvanceVoucherPrint() {
   const poWoDate = voucher.po_date;
   const certNo   = voucher.voucher_number || voucher.sl_number;
 
+  // ── Company header — LANCO Hills (LH-10) bills from BCIM's Hyderabad/
+  // Telangana GST registration instead of the default Bangalore office,
+  // mirroring POPrintTemplate.jsx / WOPrintTemplate.jsx exactly so all three
+  // documents for the same project show a consistent letterhead.
+  const projStr = String(voucher.project_name || '').toLowerCase().replace(/[\s-]/g, '');
+  const isLanco = projStr.includes('lanco') || projStr.includes('lancho') || projStr.includes('lh10');
+  const coAddr  = isLanco ? 'TOWER VIEW APARTMENT, NO 403, 4th FLOOR,\nPLOT NO 26 & 27, SRI LAKSHMI NAGAR COLONY' : "#11, B Wing, Divyasree Chambers, O'Shaughnessy Road";
+  const coCity  = isLanco ? 'Hyderabad' : 'Bangalore';
+  const coState = isLanco ? 'Telangana, Rangareddy Dist' : 'Karnataka';
+  const coPin   = isLanco ? '500089' : '560025';
+  const coGstin = isLanco ? '36AAHCB6485A1ZQ' : '29AAHCB6485A1ZL';
+
   const claimRows = [
     ['1',  'Original Contract Value (with Tax)',          orderValue],
     ['2',  'Net Change by Variation Orders',               variationValue],
@@ -188,10 +200,10 @@ export default function ProcurementAdvanceVoucherPrint() {
             <tr>
               <td style={{ width: '58%', verticalAlign: 'top', padding: 0 }}>
                 <div style={{ fontWeight: 700 }}>BCIM ENGINEERING PRIVATE LIMITED</div>
-                <div style={{ lineHeight: 1.4 }}>#11, B Wing, Divyasree Chambers, O'Shaughnessy Road</div>
-                <div>Bangalore</div>
-                <div>Karnataka – 560025</div>
-                <div style={{ fontWeight: 700, marginTop: '2px' }}>GSTIN : 29AAHCB6485A1ZL</div>
+                <div style={{ lineHeight: 1.4, whiteSpace: 'pre-line' }}>{coAddr}</div>
+                <div>{coCity}</div>
+                <div>{coState} – {coPin}</div>
+                <div style={{ fontWeight: 700, marginTop: '2px' }}>GSTIN : {coGstin}</div>
               </td>
               <td style={{ verticalAlign: 'top', padding: 0 }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
