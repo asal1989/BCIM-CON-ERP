@@ -72,9 +72,11 @@ const T = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const INR   = (v) => v == null ? '—' : '₹ ' + Math.abs(Number(v)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const raw   = (v) => v == null ? '—' : Math.abs(Number(v)).toLocaleString('en-IN', { minimumFractionDigits: 2 });
-const inr   = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Abstract sheet / Payment Certificate amounts are shown rounded to the
+// nearest whole rupee, not in paise.
+const INR   = (v) => v == null ? '—' : '₹ ' + Math.round(Math.abs(Number(v))).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const raw   = (v) => v == null ? '—' : Math.round(Math.abs(Number(v))).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const inr   = (v) => Math.round(Number(v || 0)).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const n     = (v) => Number(v || 0);
 const fq    = (v) => { const x = parseFloat(n(v).toFixed(3)); return x || '—'; }; // qty: 3dp, no trailing-zero noise
 const fmt   = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
@@ -1312,7 +1314,7 @@ function QuantityEditModal({ cert, onClose, onSaved }) {
                       />
                     </td>
                     <td className="border border-slate-200 px-2 py-1 text-right font-medium text-slate-800">
-                      ₹{qsAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      ₹{Math.round(qsAmt).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                     </td>
                   </tr>
                 );
@@ -1322,8 +1324,8 @@ function QuantityEditModal({ cert, onClose, onSaved }) {
               <tr className="bg-emerald-50 font-semibold">
                 <td colSpan={5} className="border border-slate-200 px-2 py-2 text-right text-slate-700">New Gross Total</td>
                 <td colSpan={2} className="border border-slate-200 px-2 py-2 text-right text-emerald-700">
-                  ₹{rows.reduce((s, r) => s + (parseFloat(r.qs_pres_qty) || 0) * n(r.order_rate), 0)
-                    .toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  ₹{Math.round(rows.reduce((s, r) => s + (parseFloat(r.qs_pres_qty) || 0) * n(r.order_rate), 0))
+                    .toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                 </td>
               </tr>
             </tfoot>

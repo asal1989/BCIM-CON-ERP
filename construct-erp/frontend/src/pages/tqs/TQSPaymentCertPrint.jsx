@@ -16,7 +16,8 @@ const getPublicAppOrigin = () => {
 };
 
 const nv   = (v) => parseFloat(v || 0);
-const inr  = (v) => nv(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Payment Certificate amounts are shown rounded to the nearest whole rupee.
+const inr  = (v) => Math.round(nv(v)).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const fmtD = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—';
 
 const ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];

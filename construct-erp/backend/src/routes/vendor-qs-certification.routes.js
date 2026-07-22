@@ -155,6 +155,10 @@ runSchemaInit('vendor_qs_certifications', ensureTables);
 
 const n = (v) => parseFloat(v || 0) || 0;
 const round2 = (v) => Math.round(n(v) * 100) / 100;
+// Whole-rupee rounding for QS certification abstract/payment certificate
+// amounts (line items, gross, tax, deductions, net payable) — standard
+// rounding, not ceiling.
+const round0 = (v) => Math.round(n(v));
 const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 // Only this user may approve a certification and move it to the Accounts stage.
 const CERT_APPROVER_EMAIL = 'prithivi@bcim.in';
@@ -340,8 +344,8 @@ async function buildSummaryFromBills(executor, billIds, companyId, excludeCertif
       existing.source_inv_number = [...new Set([...String(existing.source_inv_number || '').split(', ').filter(Boolean), row.inv_number || row.sl_number].filter(Boolean))].join(', ');
       existing.inv_pres_qty = round2(n(existing.inv_pres_qty) + invQty);
       existing.qs_pres_qty = round2(n(existing.qs_pres_qty) + qsPresQty);
-      existing.tax_amount = round2(n(existing.tax_amount) + taxAmount);
-      existing.amount = round2(n(existing.qs_pres_qty) * rate);
+      existing.tax_amount = round0(n(existing.tax_amount) + taxAmount);
+      existing.amount = round0(n(existing.qs_pres_qty) * rate);
       existing.balance_qty = Math.max(0, orderQty - qsPrevQty - n(existing.qs_pres_qty));
       return;
     }
@@ -360,8 +364,8 @@ async function buildSummaryFromBills(executor, billIds, companyId, excludeCertif
       inv_pres_qty: invQty,
       qs_prev_qty: qsPrevQty,
       qs_pres_qty: qsPresQty,
-      tax_amount: taxAmount,
-      amount: round2(qsPresQty * rate),
+      tax_amount: round0(taxAmount),
+      amount: round0(qsPresQty * rate),
       balance_qty: Math.max(0, orderQty - qsPrevQty - qsPresQty),
       remarks: '',
     });
@@ -786,9 +790,9 @@ router.post('/', async (req, res) => {
               inv_pres_qty: n(row.inv_pres_qty),
               qs_prev_qty: n(row.qs_prev_qty),
               qs_pres_qty: qsQty,
-              amount: round2(row.amount || (qsQty * rate)),
+              amount: round0(row.amount || (qsQty * rate)),
               remarks: row.remarks || null,
-              tax_amount: n(row.tax_amount),
+              tax_amount: round0(row.tax_amount),
               weighment_qty: n(row.weighment_qty),
               msb_ref: row.msb_ref || null,
               ign_ref: row.ign_ref || null,
@@ -807,9 +811,9 @@ router.post('/', async (req, res) => {
         : 0;
       const itemTax = mappedItems.reduce((s, it) => s + n(it.tax_amount), 0) + headerExtraGst;
       // Use gst_tax override if explicitly provided (even 0 = vendor has no GST)
-      const billTax = (gst_tax !== undefined && gst_tax !== '' && gst_tax !== null)
+      const billTax = round0((gst_tax !== undefined && gst_tax !== '' && gst_tax !== null)
         ? n(gst_tax)
-        : (itemTax || billsRes.rows.reduce((s, b) => s + n(b.gst_amount), 0));
+        : (itemTax || billsRes.rows.reduce((s, b) => s + n(b.gst_amount), 0)));
 
       // Invoice total = sum of selected bills' total_amount (basic + GST, exactly what vendor billed).
       // This is the correct base for net_payable and TDS — it matches the frontend display.
@@ -824,7 +828,7 @@ router.post('/', async (req, res) => {
       // since it already derives from invoiceBillTotal below). Deriving gross this
       // way keeps gross + tax == invoiceBillTotal always, regardless of whether any
       // given PO's rate happens to be tax-inclusive or -exclusive.
-      const gross = invoiceBillTotal - billTax;
+      const gross = round0(invoiceBillTotal - billTax);
 
       // ── TDS auto-calculation ────────────────────────────────────────────
       // TDS base = invoice total (what vendor billed incl. GST), matching frontend useEffect.
@@ -833,7 +837,7 @@ router.post('/', async (req, res) => {
       let tds_amount = 0;
       if (tds_amount_input !== undefined && tds_amount_input !== '' && tds_amount_input !== null) {
         // Frontend explicitly provided amount — use as-is
-        tds_amount = n(tds_amount_input);
+        tds_amount = round0(tds_amount_input);
         // back-calculate rate for storage
         appliedTdsRate = invoiceBillTotal > 0 ? round2((tds_amount / invoiceBillTotal) * 100) : 0;
       } else {
@@ -848,14 +852,17 @@ router.post('/', async (req, res) => {
               return 0;
             })();
         appliedTdsRate = rateToUse;
-        tds_amount = round2(invoiceBillTotal * appliedTdsRate / 100);
+        tds_amount = round0(invoiceBillTotal * appliedTdsRate / 100);
       }
       // ───────────────────────────────────────────────────────────────────
 
-      const totalDed = tds_amount + n(advance_recovered) + n(retention_amount) + n(other_deductions);
+      const advanceRecovered = round0(advance_recovered);
+      const retentionAmount  = round0(retention_amount);
+      const otherDeductions  = round0(other_deductions);
+      const totalDed = tds_amount + advanceRecovered + retentionAmount + otherDeductions;
       // Net = invoice total (vendor's billed amount) minus all deductions.
       // Using invoiceBillTotal instead of gross+billTax so GST embedded in total_amount is included.
-      const netPayable = invoiceBillTotal - totalDed;
+      const netPayable = round0(invoiceBillTotal - totalDed);
 
       // "Previously certified" must span the whole PO amendment family
       // (POTQS001, -A1, -A3, -A4…), not just an exact order_number string
@@ -899,7 +906,7 @@ router.post('/', async (req, res) => {
       `, [
         req.user.company_id, project_id, vendor_id || null, vendor_name, order_type, order_number || null,
         certNumber, ra_sequence, ra_bill_number || `RA-${ra_sequence}`, billsRes.rows.length,
-        gross, billTax, tds_amount, n(advance_recovered), n(retention_amount), n(other_deductions),
+        gross, billTax, tds_amount, advanceRecovered, retentionAmount, otherDeductions,
         netPayable, prevTotal, prevTotal + netPayable, is_final_bill, remarks || null, req.user.id,
         appliedTdsRate,  // $23
         qs_received_date || null,  // $24
@@ -1096,16 +1103,16 @@ router.post('/:id/refresh-from-bills', async (req, res) => {
       if (!billIds.length) throw new Error('No linked vendor bills found to refresh');
 
       const { items } = await buildSummaryFromBills(client, billIds, req.user.company_id, req.params.id);
-      const itemTax = round2(items.reduce((s, it) => s + n(it.tax_amount), 0));
-      const billTax = itemTax || round2(linkedBills.rows.reduce((s, b) => s + n(b.gst_amount), 0));
+      const itemTax = round0(items.reduce((s, it) => s + n(it.tax_amount), 0));
+      const billTax = itemTax || round0(linkedBills.rows.reduce((s, b) => s + n(b.gst_amount), 0));
       const totalDed = n(cert.tds_amount) + n(cert.advance_recovered) + n(cert.retention_amount) + n(cert.other_deductions);
       // Net = invoice total (what vendor billed incl. GST) minus deductions
       const invoiceBillTotal = round2(linkedBills.rows.reduce((s, b) => s + n(b.total_amount), 0));
-      const netPayable = round2(invoiceBillTotal - totalDed);
+      const netPayable = round0(invoiceBillTotal - totalDed);
       // gross_amount is derived from the real invoice total minus tax (see the
       // same fix + comment in POST / above) — NOT summed independently from
       // qty × PO-rate, which double-counts tax on POs whose rate is GST-inclusive.
-      const gross = round2(invoiceBillTotal - billTax) || round2(items.reduce((s, it) => s + n(it.amount), 0));
+      const gross = round0(invoiceBillTotal - billTax) || round0(items.reduce((s, it) => s + n(it.amount), 0));
 
       // weighment_qty/msb_ref/ign_ref/grs_ref are typed in manually by the QS
       // certifier and aren't derivable from bill data — preserve them across
@@ -1438,7 +1445,7 @@ router.patch('/:id/items', async (req, res) => {
           `UPDATE vendor_qs_certification_items
            SET qs_pres_qty = $1,
                inv_pres_qty = COALESCE($2, inv_pres_qty),
-               amount = $1 * order_rate,
+               amount = ROUND($1 * order_rate),
                updated_at = NOW()
            WHERE id = $3 AND certification_id = $4`,
           [qsQty, it.inv_pres_qty != null ? parseFloat(it.inv_pres_qty) : null, it.id, req.params.id]
@@ -1450,10 +1457,10 @@ router.patch('/:id/items', async (req, res) => {
         `SELECT COALESCE(SUM(amount),0) AS gross FROM vendor_qs_certification_items WHERE certification_id=$1`,
         [req.params.id]
       );
-      const newGross = parseFloat(totals.rows[0].gross) || 0;
-      const newNet   = newGross + n(cert.tax_amount)
+      const newGross = round0(totals.rows[0].gross);
+      const newNet   = round0(newGross + n(cert.tax_amount)
                        - n(cert.tds_amount) - n(cert.advance_recovered)
-                       - n(cert.retention_amount) - n(cert.other_deductions);
+                       - n(cert.retention_amount) - n(cert.other_deductions));
       await client.query(
         `UPDATE vendor_qs_certifications SET gross_amount=$1, net_payable=$2, updated_at=NOW() WHERE id=$3`,
         [newGross, newNet, req.params.id]

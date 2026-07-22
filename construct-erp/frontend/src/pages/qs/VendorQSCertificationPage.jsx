@@ -29,7 +29,9 @@ import {
   Trash2,
 } from 'lucide-react';
 
-const inr = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Whole-rupee display — QS certification abstract sheet and payment
+// certificate amounts are rounded to the nearest rupee, not shown in paise.
+const inr = (v) => Math.round(Number(v || 0)).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN') : '-';
 const fieldCls = 'w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400 bg-white';
 
@@ -178,10 +180,10 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
 
   const totals = useMemo(() => {
     const selected = invoices.filter(b => selectedBillIds.includes(b.id));
-    const gross = summaryRows.reduce((s, r) => s + Number(r.amount || 0), 0);
-    const autoTax = summaryRows.reduce((s, r) => s + Number(r.tax_amount || 0), 0);
-    const tax = form.gst_tax !== '' ? Number(form.gst_tax || 0) : autoTax;
-    const deductions = Number(form.tds_amount || 0) + Number(form.advance_recovered || 0) + Number(form.retention_amount || 0) + Number(form.other_deductions || 0);
+    const gross = Math.round(summaryRows.reduce((s, r) => s + Number(r.amount || 0), 0));
+    const autoTax = Math.round(summaryRows.reduce((s, r) => s + Number(r.tax_amount || 0), 0));
+    const tax = Math.round(form.gst_tax !== '' ? Number(form.gst_tax || 0) : autoTax);
+    const deductions = Math.round(Number(form.tds_amount || 0) + Number(form.advance_recovered || 0) + Number(form.retention_amount || 0) + Number(form.other_deductions || 0));
     const invoiceTotal = selected.reduce((s, b) => s + Number(b.total_amount || 0), 0);
     return {
       invoiceTotal,
@@ -190,10 +192,11 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
       autoTax,
       tax,
       deductions,
-      // Net = invoice total (what vendor billed, incl. GST) minus deductions.
+      // Net = invoice total (what vendor billed, incl. GST) minus deductions,
+      // rounded to the nearest rupee for the abstract sheet / payment certificate.
       // Do NOT use summaryRows gross here — it is the QS-certified work value
       // (excl. GST), which causes net < invoice when GST is embedded in total_amount.
-      net: invoiceTotal - deductions,
+      net: Math.round(invoiceTotal - deductions),
     };
   }, [invoices, selectedBillIds, summaryRows, form.gst_tax, form.tds_amount, form.advance_recovered, form.retention_amount, form.other_deductions]);
 
@@ -268,7 +271,7 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
       if (i !== idx) return row;
       const next = { ...row, [key]: value };
       if (['qs_pres_qty', 'qs_prev_qty', 'order_rate', 'inv_pres_qty', 'order_qty'].includes(key)) {
-        next.amount = Number(next.qs_pres_qty || 0) * Number(next.order_rate || 0);
+        next.amount = Math.round(Number(next.qs_pres_qty || 0) * Number(next.order_rate || 0));
         next.balance_qty = Math.max(0, Number(next.order_qty || 0) - Number(next.qs_prev_qty || 0) - Number(next.qs_pres_qty || 0));
       }
       return next;
