@@ -32,6 +32,26 @@ runSchemaInit('sc_attendance_unique_worker_date', async () => {
   `);
 });
 
+// Work Order amendments — a manual, dated log of scope/value changes against
+// an existing WO (extension of time, price variation, scope change), mirroring
+// the client_wo_amendments pattern used for client-side work orders.
+runSchemaInit('wo_amendments', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS wo_amendments (
+      id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      wo_id               UUID NOT NULL REFERENCES work_orders(id) ON DELETE CASCADE,
+      company_id          UUID NOT NULL,
+      amendment_number    INTEGER,
+      amendment_date      DATE,
+      description         TEXT NOT NULL,
+      amount_change       NUMERIC(15,2) DEFAULT 0,
+      revised_order_value NUMERIC(15,2),
+      created_by          UUID REFERENCES users(id),
+      created_at          TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+});
+
 // Public verification endpoint (no auth — QR scan)
 router.get('/public/verify/:id', async (req, res) => {
   try {
@@ -84,6 +104,82 @@ router.get('/work-orders/:id', ctrl.getWorkOrder);
 router.patch('/work-orders/:id', authorize(...PROCUREMENT_ROLES), ctrl.updateWorkOrder);
 router.delete('/work-orders/:id', authorize(...PROCUREMENT_ROLES), (req, res) => {
   res.status(403).json({ error: 'Deletion of Work Orders is not permitted. Work Orders are permanent financial records.' });
+});
+
+// ── WO Amendments — add a dated amendment/variation entry against a WO ─────
+router.post('/work-orders/:id/amendments', authorize(...PROCUREMENT_ROLES), async (req, res) => {
+  try {
+    const company_id = req.user.company_id;
+    const { description, amount_change, amendment_date } = req.body;
+    if (!description?.trim()) return res.status(400).json({ error: 'Description required' });
+
+    const { rows: wo } = await query(
+      `SELECT wo.*, wo.total_value AS contract_value
+       FROM work_orders wo
+       JOIN projects p ON p.id = wo.project_id
+       WHERE wo.id=$1 AND p.company_id=$2`,
+      [req.params.id, company_id]
+    );
+    if (!wo.length) return res.status(404).json({ error: 'Work order not found' });
+
+    const { rows: last } = await query(
+      `SELECT MAX(amendment_number) AS mx FROM wo_amendments WHERE wo_id=$1`, [req.params.id]);
+    const amendNum = (last[0].mx || 0) + 1;
+
+    const { rows: prev } = await query(
+      `SELECT revised_order_value FROM wo_amendments WHERE wo_id=$1 ORDER BY created_at DESC LIMIT 1`,
+      [req.params.id]);
+    const baseValue = prev.length ? Number(prev[0].revised_order_value) : Number(wo[0].contract_value);
+    const revised = baseValue + Number(amount_change || 0);
+
+    const { rows } = await query(`
+      INSERT INTO wo_amendments
+        (wo_id, company_id, amendment_number, amendment_date, description, amount_change, revised_order_value, created_by)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [req.params.id, company_id, amendNum, amendment_date || null, description.trim(),
+       Number(amount_change || 0), revised, req.user.id]
+    );
+    res.status(201).json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/work-orders/:id/amendments/:aid', authorize(...PROCUREMENT_ROLES), async (req, res) => {
+  try {
+    await query(
+      `DELETE FROM wo_amendments WHERE id=$1 AND wo_id=$2 AND company_id=$3`,
+      [req.params.aid, req.params.id, req.user.company_id]);
+    res.json({ message: 'Deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── WO Amendments Register — every amendment across all work orders ────────
+router.get('/wo-amendments', async (req, res) => {
+  try {
+    const { project_id, vendor_id, search } = req.query;
+    const params = [req.user.company_id];
+    let i = 2;
+    let sql = `
+      SELECT a.*, wo.wo_number, wo.total_value AS wo_order_value,
+             p.name AS project_name, p.id AS project_id,
+             v.name AS vendor_name, v.id AS vendor_id,
+             cu.name AS created_by_name
+      FROM wo_amendments a
+      JOIN work_orders wo ON wo.id = a.wo_id
+      JOIN projects p ON p.id = wo.project_id
+      LEFT JOIN vendors v ON v.id = wo.vendor_id
+      LEFT JOIN users cu ON cu.id = a.created_by
+      WHERE a.company_id = $1
+    `;
+    if (project_id) { sql += ` AND wo.project_id = $${i++}`; params.push(project_id); }
+    if (vendor_id)  { sql += ` AND wo.vendor_id = $${i++}`;  params.push(vendor_id); }
+    if (search) {
+      sql += ` AND (wo.wo_number ILIKE $${i} OR COALESCE(v.name,'') ILIKE $${i} OR a.description ILIKE $${i})`;
+      params.push(`%${search}%`); i++;
+    }
+    sql += ' ORDER BY a.amendment_date DESC NULLS LAST, a.created_at DESC';
+    const result = await query(sql, params);
+    res.json({ data: result.rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // PATCH /work-orders/:id/approve — Stage 1 (Procurement): draft/pending → submitted

@@ -192,6 +192,9 @@ export const subcontractorAPI = {
   mdApproveWorkOrder:(id)     => api.patch(`/subcontractors/work-orders/${id}/md-approve`),
   rejectWorkOrder:   (id, d)  => api.patch(`/subcontractors/work-orders/${id}/reject`, d),
   terminateWorkOrder:(id, d)  => api.patch(`/subcontractors/work-orders/${id}/terminate`, d),
+  addWOAmendment:    (id, d)  => api.post(`/subcontractors/work-orders/${id}/amendments`, d),
+  delWOAmendment:    (id, aid)=> api.delete(`/subcontractors/work-orders/${id}/amendments/${aid}`),
+  listWOAmendments:  (params) => api.get('/subcontractors/wo-amendments', { params }),
   downloadWOTemplate:()       => api.get('/subcontractors/work-orders/import/template', { responseType: 'blob' }),
   excelImportPreview:(file)   => { const fd = new FormData(); fd.append('file', file); return api.post('/subcontractors/work-orders/import/excel', fd, { headers: { 'Content-Type': undefined } }); },
   // Measurements

@@ -118,7 +118,8 @@ const getWorkOrders = async (req, res) => {
              u.name AS manager_name,
              mr.mrs_number,
              COALESCE(SUM(b.bill_amount), 0) + COALESCE(tqs_billed.total_billed, 0) AS total_billed,
-             COALESCE(tqs_billed.total_paid, 0) AS total_paid
+             COALESCE(tqs_billed.total_paid, 0) AS total_paid,
+             COALESCE(amend.amendment_count, 0) AS amendment_count
       FROM work_orders wo
       LEFT JOIN projects p ON wo.project_id = p.id
       LEFT JOIN vendors v ON wo.vendor_id = v.id
@@ -136,6 +137,9 @@ const getWorkOrders = async (req, res) => {
         GROUP BY COALESCE(tb.wo_number, tb.po_number)
       ) tqs_billed
         ON tqs_billed.wo_number = wo.wo_number
+      LEFT JOIN (
+        SELECT wo_id, COUNT(*) AS amendment_count FROM wo_amendments GROUP BY wo_id
+      ) amend ON amend.wo_id = wo.id
       WHERE p.company_id = $1
     `;
     // NOTE: previously this list was hard-filtered to subcontractor/labour/
@@ -149,7 +153,7 @@ const getWorkOrders = async (req, res) => {
     if (vendor_id)  { sql += ` AND wo.vendor_id = $${i++}`;  params.push(vendor_id); }
     if (status)     { sql += ` AND wo.status = $${i++}`;     params.push(status); }
 
-    sql += ' GROUP BY wo.id, p.id, p.name, v.name, v.vendor_type, v.gst_number, v.pan_number, u.name, mr.mrs_number, tqs_billed.total_billed, tqs_billed.total_paid ORDER BY COALESCE(wo.start_date, wo.created_at) DESC NULLS LAST';
+    sql += ' GROUP BY wo.id, p.id, p.name, v.name, v.vendor_type, v.gst_number, v.pan_number, u.name, mr.mrs_number, tqs_billed.total_billed, tqs_billed.total_paid, amend.amendment_count ORDER BY COALESCE(wo.start_date, wo.created_at) DESC NULLS LAST';
     const result = await query(sql, params);
     res.json({ data: result.rows, count: result.rowCount });
   } catch (err) {
@@ -242,7 +246,15 @@ const getWorkOrder = async (req, res) => {
       [req.params.id]
     );
 
-    res.json({ ...woResult.rows[0], items: itemsResult.rows });
+    const amendResult = await query(
+      `SELECT a.*, u.name AS created_by_name
+       FROM wo_amendments a
+       LEFT JOIN users u ON u.id = a.created_by
+       WHERE a.wo_id = $1 ORDER BY a.amendment_number`,
+      [req.params.id]
+    );
+
+    res.json({ ...woResult.rows[0], items: itemsResult.rows, amendments: amendResult.rows });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

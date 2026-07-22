@@ -10,7 +10,7 @@ import {
   ChevronRight, ChevronUp, ChevronDown, ChevronsUpDown, Upload, IndianRupee,
   AlertCircle, RefreshCw, FileSpreadsheet,
   MapPin, User, Package, Phone, Mail, Hash,
-  Activity, Check, UserCheck, Edit2, XCircle, Lock,
+  Activity, Check, UserCheck, Edit2, XCircle, Lock, Trash2, GitBranch,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
@@ -1092,14 +1092,101 @@ function WORejectModal({ wo, onClose, onConfirm, isPending }) {
   );
 }
 
+/* ── WO Amendment Modal — record a dated variation/scope change ─────────── */
+const EMPTY_WO_AMEND = { description: '', amount_change: '', amendment_date: '' };
+function WOAmendModal({ open, onClose, woId, currentValue, onSaved }) {
+  const [form, setForm] = useState(EMPTY_WO_AMEND);
+  const [saving, setSaving] = useState(false);
+  const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+  const newTotal = Number(currentValue || 0) + Number(form.amount_change || 0);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!form.description.trim()) return toast.error('Description required');
+    setSaving(true);
+    try {
+      await subcontractorAPI.addWOAmendment(woId, {
+        description: form.description,
+        amount_change: Number(form.amount_change) || 0,
+        amendment_date: form.amendment_date || null,
+      });
+      toast.success('Amendment added');
+      setForm(EMPTY_WO_AMEND);
+      onSaved();
+      onClose();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Failed');
+    } finally { setSaving(false); }
+  }
+
+  if (!open) return null;
+  const inp = 'w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 bg-white';
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-5 py-4 border-b">
+          <h3 className="font-bold text-gray-900">Add Amendment / Variation</h3>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg"><X size={16} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Description *</label>
+            <textarea required rows={3} className={inp + ' resize-none'} placeholder="Describe the variation, scope change, or extension…" value={form.description} onChange={set('description')} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Amount Change (₹)</label>
+              <input type="number" step="0.01" className={inp} placeholder="+/- amount" value={form.amount_change} onChange={set('amount_change')} />
+              <p className="text-xs text-gray-400 mt-1">Use negative for deductions</p>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Amendment Date</label>
+              <input type="date" className={inp} value={form.amendment_date} onChange={set('amendment_date')} />
+            </div>
+          </div>
+          <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-100 text-sm">
+            <div className="flex justify-between text-gray-600 mb-1">
+              <span>Current Order Value</span><span className="font-semibold">₹{inr(currentValue)}</span>
+            </div>
+            <div className="flex justify-between text-gray-600 mb-2">
+              <span>Change Amount</span>
+              <span className={clsx('font-semibold', Number(form.amount_change) < 0 ? 'text-red-600' : 'text-emerald-600')}>
+                {Number(form.amount_change) >= 0 ? '+' : ''}₹{inr(form.amount_change || 0)}
+              </span>
+            </div>
+            <div className="flex justify-between text-gray-900 font-bold border-t border-indigo-200 pt-2">
+              <span>Revised Value</span><span>₹{inr(newTotal)}</span>
+            </div>
+          </div>
+        </form>
+        <div className="px-5 py-4 border-t flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
+          <button onClick={handleSubmit} disabled={saving}
+            className="px-5 py-2 text-sm font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60">
+            {saving ? 'Saving…' : 'Add Amendment'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── WO Detail Panel — Full-Screen Modal ────────────────────────────────── */
 function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, onTerminate, isApproving, isMDApproving, isRejecting, isTerminating, user, company }) {
+  const qc = useQueryClient();
   const [rejectModal, setRejectModal]       = useState(false);
   const [terminateModal, setTerminateModal] = useState(false);
+  const [amendModal, setAmendModal]         = useState(false);
   const { data: detail, isLoading: detailLoading } = useQuery({
     queryKey: ['work-order-detail', wo?.id],
     queryFn: () => subcontractorAPI.getWorkOrder(wo.id).then(r => r.data),
     enabled: !!wo?.id,
+  });
+
+  const delAmendMut = useMutation({
+    mutationFn: (aid) => subcontractorAPI.delWOAmendment(wo.id, aid),
+    onSuccess: () => { toast.success('Amendment removed'); qc.invalidateQueries({ queryKey: ['work-order-detail', wo.id] }); qc.invalidateQueries({ queryKey: ['work-orders'] }); },
+    onError: e => toast.error(e?.response?.data?.error || 'Failed'),
   });
 
   const printZoneRef = React.useRef(null);
@@ -1111,6 +1198,8 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
   const balance = Math.max(val - billed, 0);
   const liveStatus  = displayWO.status;
   const currentAction = WO_STAGE_ACTIONS.find(a => a.reqStatuses.includes(liveStatus));
+  const amendments = displayWO.amendments || [];
+  const amendedValue = amendments.length ? Number(amendments[amendments.length - 1].revised_order_value) : val;
 
   // ── Print in a new isolated window — same approach as Purchase Orders ─────
   const handlePrint = () => {
@@ -1357,6 +1446,52 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
             )}
           </div>
 
+          {/* Amendments / Variations */}
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
+              <GitBranch className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-xs font-medium text-slate-900 uppercase tracking-wider">Amendments / Variations</span>
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100">{amendments.length}</span>
+              {canManageProcurement(user) && (
+                <button onClick={() => setAmendModal(true)}
+                  className="ml-auto flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200 transition-colors">
+                  <Plus size={12} /> Add
+                </button>
+              )}
+            </div>
+            <div className="p-3">
+              {amendments.length ? (
+                <div className="space-y-2">
+                  {amendments.map(a => (
+                    <div key={a.id} className="p-3 rounded-xl border border-gray-100 bg-gray-50 flex items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-bold text-indigo-600">Amdt #{a.amendment_number}</span>
+                          {a.amendment_date && <span className="text-xs text-gray-400">{dayjs(a.amendment_date).format('DD MMM YYYY')}</span>}
+                        </div>
+                        <p className="text-sm text-gray-700">{a.description}</p>
+                        <div className="flex gap-3 mt-1.5 text-xs">
+                          <span className={clsx('font-semibold', Number(a.amount_change) < 0 ? 'text-red-600' : 'text-emerald-600')}>
+                            {Number(a.amount_change) >= 0 ? '+' : ''}₹{inr(a.amount_change)}
+                          </span>
+                          <span className="text-gray-400">→ Revised: ₹{inr(a.revised_order_value)}</span>
+                        </div>
+                      </div>
+                      {canManageProcurement(user) && (
+                        <button onClick={() => delAmendMut.mutate(a.id)} disabled={delAmendMut.isPending}
+                          className="p-1 text-gray-300 hover:text-red-500 transition-colors shrink-0">
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400 text-center py-4">No amendments yet</p>
+              )}
+            </div>
+          </div>
+
           {/* Approval pipeline */}
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
             <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
@@ -1509,6 +1644,13 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
         onConfirm={(reason) => { onTerminate(wo.id, reason); setTerminateModal(false); }}
       />
     )}
+    <WOAmendModal
+      open={amendModal}
+      woId={wo.id}
+      currentValue={amendedValue}
+      onClose={() => setAmendModal(false)}
+      onSaved={() => { qc.invalidateQueries({ queryKey: ['work-order-detail', wo.id] }); qc.invalidateQueries({ queryKey: ['work-orders'] }); }}
+    />
     </>
   );
 }

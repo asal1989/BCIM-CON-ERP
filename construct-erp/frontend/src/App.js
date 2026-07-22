@@ -122,6 +122,7 @@ const VendorList                = lazy(() => import('./pages/procurement/VendorL
 const VendorProjectMappingPage  = lazy(() => import('./pages/procurement/VendorProjectMappingPage'));
 const LiveRateCheckerPage = lazy(() => import('./pages/procurement/LiveRateCheckerPage'));
 const POAmendmentLogPage  = lazy(() => import('./pages/procurement/POAmendmentLogPage'));
+const WOAmendmentLogPage  = lazy(() => import('./pages/procurement/WOAmendmentLogPage'));
 const VendorPerformancePage = lazy(() => import('./pages/procurement/VendorPerformancePage'));
 const RateContractPage    = lazy(() => import('./pages/procurement/RateContractPage'));
 const VendorPaymentsPage  = lazy(() => import('./pages/procurement/VendorPaymentsPage'));
@@ -814,6 +815,7 @@ export default function App() {
                 <Route path="procurement/vendor-mapping" element={<VendorProjectMappingPage />} />
                 <Route path="procurement/live-rate-checker" element={<RequireModule module="Procurement"><LiveRateCheckerPage /></RequireModule>} />
                 <Route path="procurement/po-amendments" element={<RequireModule module="Procurement"><POAmendmentLogPage /></RequireModule>} />
+                <Route path="procurement/wo-amendments" element={<RequireModule module="Procurement"><WOAmendmentLogPage /></RequireModule>} />
                 <Route path="procurement/vendor-performance" element={<RequireModule module="Procurement"><VendorPerformancePage /></RequireModule>} />
                 <Route path="procurement/rate-contracts" element={<RequireModule module="Procurement"><RateContractPage /></RequireModule>} />
                 <Route path="procurement/vendor-payments" element={<RequireModule module="Procurement"><VendorPaymentsPage /></RequireModule>} />
