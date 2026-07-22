@@ -4055,6 +4055,27 @@ router.patch('/:id/payment', requireTqsStageAccess('payment'), async (req, res) 
       await client.query(`UPDATE tqs_bills SET workflow_status=$1, updated_at=NOW() WHERE id=$2`,
         [newWorkflow, req.params.id]);
 
+      // 2b. Reverse-sync: when a bill paid directly here is linked to a QS
+      // certification, and every bill on that certification is now paid,
+      // advance the certification's own status/payment fields to match —
+      // mirrors the cert→bill sync in vendor-qs-certification.routes.js.
+      if (status === 'paid') {
+        await client.query(`
+          UPDATE vendor_qs_certifications c
+          SET status='paid',
+              paid_amount=COALESCE(c.net_payable, $1),
+              payment_date=$2, payment_mode=COALESCE($3, c.payment_mode),
+              paid_at=NOW(), updated_at=NOW()
+          FROM vendor_qs_certification_bills cb
+          WHERE cb.certification_id=c.id AND cb.bill_id=$4 AND c.status<>'paid'
+            AND NOT EXISTS (
+              SELECT 1 FROM vendor_qs_certification_bills cb2
+              JOIN tqs_bills b2 ON b2.id=cb2.bill_id
+              WHERE cb2.certification_id=c.id AND b2.id<>$4 AND b2.workflow_status<>'paid'
+            )
+        `, [new_paid, payment_date || null, payment_mode || null, req.params.id]);
+      }
+
       // 3. Auto-create Finance payment record when amount > 0 and project exists
       let finance_payment_id = null;
       if (new_paid > 0 && payment_date && bill.project_id) {

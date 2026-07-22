@@ -2311,4 +2311,19 @@ runSchemaInit('lanco_lh10_bill_cert_stage_reconcile_2026_07', async () => {
   console.log(`[migration] WO-480: bill stage 'procurement' → 'accounts' (${wo480.rowCount} row updated)`);
 });
 
+// ── One-time: WO-480 (P25/WO09/5722/SUR) was subsequently paid directly in
+// Bill Tracker (₹1,64,604 RTGS on 2026-07-19), but the certification never
+// caught up — this was the reverse (bill→cert) half of the sync gap; the
+// forward (cert→bill) direction was already fixed in PATCH /:id/status and
+// this reverse direction is now fixed in tqs-bills.routes.js's
+// PATCH /:id/payment. This is the one-off catch-up for the already-paid bill.
+runSchemaInit('sukkali_ramesh_wo480_cert_paid_catchup_2026_07', async () => {
+  const r = await query(
+    `UPDATE vendor_qs_certifications
+     SET status='paid', paid_amount=164604, payment_date='2026-07-19', payment_mode='RTGS', paid_at=NOW(), updated_at=NOW()
+     WHERE cert_number='P25/WO09/5722/SUR' AND status<>'paid'`
+  );
+  console.log(`[migration] P25/WO09/5722/SUR (WO-480): cert status → paid (${r.rowCount} row updated)`);
+});
+
 module.exports = router;
