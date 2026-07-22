@@ -3,21 +3,151 @@
 // Amendments themselves are added/removed from the WO detail panel
 // (WorkOrderPage.jsx) — this page is the cross-WO browse/search view,
 // mirroring the "PO Amendments" register.
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
-import { Search, FileText, Calendar, Building2, ExternalLink } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { Search, FileText, Calendar, Building2, ExternalLink, Plus, X } from 'lucide-react';
 import { clsx } from 'clsx';
 import { subcontractorAPI, projectAPI } from '../../api/client';
+import useAuthStore from '../../store/authStore';
 import { PageHeader } from '../../theme';
 
 const inr = v => Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
 
+// Same gate as WorkOrderPage's canAmendWO — procurement roles + admins.
+const WO_AMEND_ROLES = ['admin', 'management', 'project_manager', 'purchase_executive', 'contracts_manager'];
+function canAmendWO(user) {
+  if (!user) return false;
+  const role = (user.role || '').toLowerCase();
+  return role === 'super_admin' || role === 'managing_director'
+    || role.includes('procurement') || WO_AMEND_ROLES.includes(role);
+}
+
+/* ── Add Amendment modal with WO picker ─────────────────────────────────── */
+const EMPTY_FORM = { wo_id: '', description: '', amount_change: '', amendment_date: '' };
+function AddAmendmentModal({ open, onClose, onSaved }) {
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [woSearch, setWoSearch] = useState('');
+  const [saving, setSaving] = useState(false);
+  const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  const { data: workOrders = [] } = useQuery({
+    queryKey: ['work-orders-for-amendment'],
+    queryFn: () => subcontractorAPI.listWorkOrders().then(r => r.data?.data || []),
+    enabled: open,
+  });
+
+  const filteredWOs = useMemo(() => {
+    const q = woSearch.toLowerCase();
+    return !q ? workOrders : workOrders.filter(w =>
+      String(w.wo_number || '').toLowerCase().includes(q) ||
+      String(w.vendor_name || '').toLowerCase().includes(q) ||
+      String(w.project_name || '').toLowerCase().includes(q));
+  }, [workOrders, woSearch]);
+
+  const selectedWO   = workOrders.find(w => String(w.id) === String(form.wo_id));
+  const currentValue = Number(selectedWO?.total_value || selectedWO?.contract_amount || 0);
+  const newTotal     = currentValue + Number(form.amount_change || 0);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!form.wo_id) return toast.error('Select a work order');
+    if (!form.description.trim()) return toast.error('Description required');
+    setSaving(true);
+    try {
+      await subcontractorAPI.addWOAmendment(form.wo_id, {
+        description: form.description,
+        amount_change: Number(form.amount_change) || 0,
+        amendment_date: form.amendment_date || null,
+      });
+      toast.success('Amendment added');
+      setForm(EMPTY_FORM); setWoSearch('');
+      onSaved();
+      onClose();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Failed to add amendment');
+    } finally { setSaving(false); }
+  }
+
+  if (!open) return null;
+  const inp = 'w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 bg-white';
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b">
+          <h3 className="font-bold text-gray-900">Add Amendment / Variation</h3>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg"><X size={16} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Work Order *</label>
+            <input className={inp + ' mb-2'} placeholder="Search WO number, vendor, project…"
+              value={woSearch} onChange={e => setWoSearch(e.target.value)} />
+            <select required className={inp} value={form.wo_id} onChange={set('wo_id')}>
+              <option value="">Select work order…</option>
+              {filteredWOs.map(w => (
+                <option key={w.id} value={w.id}>
+                  {w.wo_number || '(no number)'} — {w.vendor_name || 'Unknown vendor'} — ₹{inr(w.total_value || w.contract_amount)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Description *</label>
+            <textarea required rows={3} className={inp + ' resize-none'}
+              placeholder="Describe the variation, scope change, or extension…"
+              value={form.description} onChange={set('description')} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Amount Change (₹)</label>
+              <input type="number" step="0.01" className={inp} placeholder="+/- amount"
+                value={form.amount_change} onChange={set('amount_change')} />
+              <p className="text-xs text-gray-400 mt-1">Use negative for deductions</p>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Amendment Date</label>
+              <input type="date" className={inp} value={form.amendment_date} onChange={set('amendment_date')} />
+            </div>
+          </div>
+          {selectedWO && (
+            <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-100 text-sm">
+              <div className="flex justify-between text-gray-600 mb-1">
+                <span>Current Order Value</span><span className="font-semibold">₹{inr(currentValue)}</span>
+              </div>
+              <div className="flex justify-between text-gray-600 mb-2">
+                <span>Change Amount</span>
+                <span className={clsx('font-semibold', Number(form.amount_change) < 0 ? 'text-red-600' : 'text-emerald-600')}>
+                  {Number(form.amount_change) >= 0 ? '+' : ''}₹{inr(form.amount_change || 0)}
+                </span>
+              </div>
+              <div className="flex justify-between text-gray-900 font-bold border-t border-indigo-200 pt-2">
+                <span>Revised Value</span><span>₹{inr(newTotal)}</span>
+              </div>
+            </div>
+          )}
+        </form>
+        <div className="px-5 py-4 border-t flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
+          <button onClick={handleSubmit} disabled={saving}
+            className="px-5 py-2 text-sm font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60">
+            {saving ? 'Saving…' : 'Add Amendment'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function WOAmendmentLogPage() {
   const navigate = useNavigate();
+  const qc = useQueryClient();
+  const user = useAuthStore(s => s.user);
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
+  const [addOpen, setAddOpen] = useState(false);
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -71,7 +201,19 @@ export default function WOAmendmentLogPage() {
             <option value="">All Projects</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
+          {canAmendWO(user) && (
+            <button onClick={() => setAddOpen(true)}
+              className="flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition-colors whitespace-nowrap">
+              <Plus size={15} /> Add Amendment
+            </button>
+          )}
         </div>
+
+        <AddAmendmentModal
+          open={addOpen}
+          onClose={() => setAddOpen(false)}
+          onSaved={() => qc.invalidateQueries({ queryKey: ['wo-amendments'] })}
+        />
 
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
