@@ -189,7 +189,7 @@ export default function ProcurementAdvanceVoucherPrint() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
           <img src="/bcim-logo.png" alt="BCIM" style={{ height: '40px', objectFit: 'contain' }} />
           <h1 style={{ fontSize: '17px', fontWeight: 700, letterSpacing: '0.5px', margin: 0, flex: 1, textAlign: 'center' }}>
-            PAYMENT CERTIFICATION
+            ADVANCE VOUCHER
           </h1>
           <QRCodeSVG value={`${getPublicAppOrigin()}/verify/advance/${voucher.id}`} size={40} />
         </div>
