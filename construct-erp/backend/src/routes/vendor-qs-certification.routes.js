@@ -171,6 +171,76 @@ const billPayableCap = (bill = {}) => {
   return round2(certified);
 };
 
+// Resolves a PO item to its amendment-family "current" quantity/rate.
+// POs like POTQS001, POTQS001-A1, POTQS001-A3, POTQS001-A4 each restate the
+// FULL cumulative order to date for a given material, so the true ordered
+// qty is whatever the LATEST amendment says — not the specific revision a
+// historical bill happened to be linked against. Grouped by a leading grade
+// token (M10/M25/M30/M35…) since the mix-design text differs per revision.
+async function resolveGradeChain(executor, poItemId, cache) {
+  if (cache.has(poItemId)) return cache.get(poItemId);
+  const itemRes = await executor.query(`
+    SELECT pi.id, pi.material_name, pi.quantity, pi.rate, pi.unit,
+           po.po_number, po.po_date, po.project_id,
+           pr.company_id
+      FROM po_items pi
+      JOIN purchase_orders po ON po.id = pi.po_id
+      JOIN projects pr ON pr.id = po.project_id
+     WHERE pi.id = $1`, [poItemId]);
+  if (!itemRes.rows.length) { cache.set(poItemId, null); return null; }
+  const item = itemRes.rows[0];
+  const baseNumber = String(item.po_number || '').replace(/-A\d+$/i, '');
+  const gradeMatch = String(item.material_name || '').match(/^([A-Za-z]+\s?\d+)/);
+  const grade = gradeMatch ? gradeMatch[1].replace(/\s+/g, '').toUpperCase() : null;
+
+  if (!grade || !baseNumber) {
+    const result = {
+      chainKey: `item:${poItemId}`,
+      currentItemId: poItemId,
+      currentQty: n(item.quantity), currentRate: n(item.rate), currentUnit: item.unit,
+      chainItemIds: [poItemId],
+    };
+    cache.set(poItemId, result);
+    return result;
+  }
+
+  const chainPOs = await executor.query(`
+    SELECT id, po_number, po_date FROM purchase_orders
+     WHERE project_id = $1
+       AND (LOWER(po_number) = LOWER($2) OR LOWER(po_number) ~ ('^' || LOWER($2) || '-a[0-9]+$'))
+     ORDER BY po_date DESC NULLS LAST, created_at DESC`,
+    [item.project_id, baseNumber]);
+
+  const chainItemIds = [];
+  let current = null;
+  for (const po of chainPOs.rows) {
+    const its = await executor.query(
+      `SELECT id, material_name, quantity, rate, unit FROM po_items WHERE po_id=$1`, [po.id]);
+    for (const it of its.rows) {
+      if (String(it.material_name || '').toUpperCase().startsWith(grade)) {
+        chainItemIds.push(it.id);
+        if (!current) current = it; // chainPOs sorted DESC by date → first hit is the latest
+      }
+    }
+  }
+
+  const result = chainItemIds.length
+    ? {
+        chainKey: `chain:${baseNumber.toUpperCase()}:${grade}`,
+        currentItemId: current.id,
+        currentQty: n(current.quantity), currentRate: n(current.rate), currentUnit: current.unit,
+        chainItemIds,
+      }
+    : {
+        chainKey: `item:${poItemId}`,
+        currentItemId: poItemId,
+        currentQty: n(item.quantity), currentRate: n(item.rate), currentUnit: item.unit,
+        chainItemIds: [poItemId],
+      };
+  cache.set(poItemId, result);
+  return result;
+}
+
 async function nextCertNumber(companyId, db = query) {
   const yr = new Date().getFullYear();
   const { rows } = await db(
@@ -193,26 +263,48 @@ async function buildSummaryFromBills(executor, billIds, companyId, excludeCertif
   const { rows } = await executor.query(`
     SELECT li.*, b.inv_number, b.sl_number, b.bill_type,
            pi.material_name AS po_item_name, pi.quantity AS po_ordered_qty, pi.rate AS po_ordered_rate, pi.unit AS po_ordered_unit,
-           wi.description AS wo_item_name, wi.quantity AS wo_ordered_qty, wi.rate AS wo_ordered_rate, wi.unit AS wo_ordered_unit,
-           COALESCE(prev.qs_qty, 0) AS qs_prev_qty
+           wi.description AS wo_item_name, wi.quantity AS wo_ordered_qty, wi.rate AS wo_ordered_rate, wi.unit AS wo_ordered_unit
     FROM tqs_bill_line_items li
     JOIN tqs_bills b ON b.id = li.bill_id
     LEFT JOIN po_items pi ON pi.id = li.po_item_id
     LEFT JOIN work_order_items wi ON wi.id = li.wo_item_id
-    LEFT JOIN (
-      SELECT
-        COALESCE(item_ref_id::text, LOWER(TRIM(description))) AS item_key,
-        SUM(qs_pres_qty) AS qs_qty
-      FROM vendor_qs_certification_items i
-      JOIN vendor_qs_certifications c ON c.id = i.certification_id
-      WHERE c.company_id = $2
-        AND c.status NOT IN ('cancelled', 'rejected')
-        AND ($3::uuid IS NULL OR c.id <> $3::uuid)
-      GROUP BY COALESCE(item_ref_id::text, LOWER(TRIM(description)))
-    ) prev ON prev.item_key = COALESCE((li.po_item_id)::text, (li.wo_item_id)::text, LOWER(TRIM(COALESCE(li.item_name, ''))))
     WHERE li.bill_id = ANY($1::uuid[])
     ORDER BY b.inv_number, li.sort_order, li.id
-  `, [billIds, companyId, excludeCertificationId]);
+  `, [billIds]);
+
+  // Resolve the amendment chain for every distinct PO item referenced —
+  // this is what lets order_qty/balance reflect the LATEST amendment's
+  // total instead of whichever single revision a given bill was linked to.
+  const chainCache = new Map();
+  for (const row of rows) {
+    if (row.po_item_id) await resolveGradeChain(executor, row.po_item_id, chainCache);
+  }
+
+  // Raw "already certified elsewhere" quantities, keyed by the bill line's
+  // own item_ref_id (or description, for unlinked lines) — same source data
+  // as before, just fetched separately so it can be re-aggregated by chain.
+  const priorRes = await executor.query(`
+    SELECT COALESCE(item_ref_id::text, LOWER(TRIM(description))) AS item_key,
+           SUM(qs_pres_qty) AS qty
+      FROM vendor_qs_certification_items i
+      JOIN vendor_qs_certifications c ON c.id = i.certification_id
+     WHERE c.company_id = $1
+       AND c.status NOT IN ('cancelled', 'rejected')
+       AND ($2::uuid IS NULL OR c.id <> $2::uuid)
+     GROUP BY COALESCE(item_ref_id::text, LOWER(TRIM(description)))
+  `, [companyId, excludeCertificationId]);
+  const priorByRawKey = new Map(priorRes.rows.map(r => [r.item_key, n(r.qty)]));
+
+  // Sum prior-certified qty across every sibling PO item in the same
+  // amendment chain (POTQS001 + A1 + A3 + A4…), not just the one this bill
+  // happens to reference — otherwise "previously certified" undercounts.
+  const priorByChainKey = new Map();
+  for (const chain of chainCache.values()) {
+    if (!chain || priorByChainKey.has(chain.chainKey)) continue;
+    let total = 0;
+    for (const siblingId of chain.chainItemIds) total += priorByRawKey.get(siblingId) || 0;
+    priorByChainKey.set(chain.chainKey, total);
+  }
 
   const linkedRefs = [...new Set(rows.map(r => r.po_item_id || r.wo_item_id).filter(Boolean))];
   const singleLinkedRef = linkedRefs.length === 1 ? linkedRefs[0] : null;
@@ -223,19 +315,24 @@ async function buildSummaryFromBills(executor, billIds, companyId, excludeCertif
     const invQty = n(row.quantity);
     const effectiveRow = singleLinkedRef && !(row.po_item_id || row.wo_item_id) ? singleLinkedRow : row;
     const effectiveIsWO = effectiveRow?.wo_item_id || effectiveRow?.bill_type === 'wo';
-    const orderQty = n(effectiveIsWO ? effectiveRow?.wo_ordered_qty : effectiveRow?.po_ordered_qty) || invQty;
+    const chain = !effectiveIsWO && effectiveRow?.po_item_id ? chainCache.get(effectiveRow.po_item_id) : null;
+
+    const orderQty = effectiveIsWO
+      ? (n(effectiveRow?.wo_ordered_qty) || invQty)
+      : (chain ? chain.currentQty : (n(effectiveRow?.po_ordered_qty) || invQty));
     // Fall back to basic_amount / qty when the line isn't linked to a WO/PO
     // item AND its own `rate` column is blank (common for lump-sum bill
     // entries that only captured a total) — otherwise the certified amount
     // silently comes out as qty * 0.
     const linkedRate = n(effectiveIsWO ? (effectiveRow?.wo_ordered_rate || row.rate) : (effectiveRow?.po_ordered_rate || row.rate));
     const rate = linkedRate || (invQty ? n(row.basic_amount) / invQty : 0);
-    const qsPrevQty = n(row.qs_prev_qty);
+    const rawKey = row.po_item_id || row.wo_item_id || String(row.item_name || '').trim().toLowerCase();
+    const qsPrevQty = chain ? (priorByChainKey.get(chain.chainKey) || 0) : (priorByRawKey.get(rawKey) || 0);
     const qsPresQty = Math.max(0, invQty);
     const taxAmount = n(row.cgst_amt) + n(row.sgst_amt) + n(row.igst_amt) || n(row.gst_amount);
     const description = effectiveRow?.po_item_name || effectiveRow?.wo_item_name || row.item_name || '';
-    const unit = effectiveRow?.po_ordered_unit || effectiveRow?.wo_ordered_unit || row.unit || '';
-    const key = singleLinkedRef || row.po_item_id || row.wo_item_id || `${description.trim().toLowerCase()}|${unit}|${rate}`;
+    const unit = chain?.currentUnit || effectiveRow?.po_ordered_unit || effectiveRow?.wo_ordered_unit || row.unit || '';
+    const key = chain ? chain.chainKey : (singleLinkedRef || row.po_item_id || row.wo_item_id || `${description.trim().toLowerCase()}|${unit}|${rate}`);
     const existing = grouped.get(key);
     if (existing) {
       existing.bill_ids.push(row.bill_id);
@@ -254,7 +351,7 @@ async function buildSummaryFromBills(executor, billIds, companyId, excludeCertif
       bill_line_item_id: row.id,
       bill_line_item_ids: [row.id],
       source_inv_number: row.inv_number || row.sl_number,
-      item_ref_id: singleLinkedRef || row.po_item_id || row.wo_item_id || null,
+      item_ref_id: chain?.currentItemId || singleLinkedRef || row.po_item_id || row.wo_item_id || null,
       description,
       unit,
       order_qty: orderQty,
@@ -626,7 +723,13 @@ router.get('/:id', async (req, res) => {
               v.vendor_type,
               CASE
                 WHEN c.order_type = 'wo' THEN COALESCE(wo.contract_amount, wo.total_value)
-                ELSE COALESCE(po.grand_total, po.sub_total)
+                -- Amendment-aware: a PO's own amendments (POTQS001-A1, -A3, -A4…)
+                -- each restate the FULL cumulative order to date, so the true
+                -- current contract value is the LATEST amendment in the family,
+                -- not just whichever specific revision this cert happens to
+                -- reference — otherwise "Balance to Finish" goes negative once
+                -- cumulative certified value exceeds one single old revision.
+                ELSE COALESCE(latest_po.grand_total, latest_po.sub_total, po.grand_total, po.sub_total)
               END AS order_total_value,
               creator.name AS created_by_name,
               approver.name AS approved_by_name,
@@ -645,6 +748,18 @@ router.get('/:id', async (req, res) => {
        LEFT JOIN work_orders wo
               ON LOWER(TRIM(wo.wo_number)) = LOWER(TRIM(c.order_number))
              AND c.order_type = 'wo'
+       LEFT JOIN LATERAL (
+         SELECT po2.grand_total, po2.sub_total
+           FROM purchase_orders po2
+          WHERE c.order_type != 'wo'
+            AND po2.project_id IN (SELECT id FROM projects WHERE company_id = c.company_id)
+            AND (
+              LOWER(TRIM(po2.po_number)) = LOWER(TRIM(regexp_replace(c.order_number, '-A[0-9]+$', '', 'i')))
+              OR LOWER(TRIM(po2.po_number)) ~ ('^' || LOWER(TRIM(regexp_replace(c.order_number, '-A[0-9]+$', '', 'i'))) || '-a[0-9]+$')
+            )
+          ORDER BY po2.po_date DESC NULLS LAST, po2.created_at DESC
+          LIMIT 1
+       ) latest_po ON TRUE
        WHERE c.id=$1 AND c.company_id=$2`,
       [req.params.id, req.user.company_id]
     );
