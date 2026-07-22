@@ -2999,13 +2999,15 @@ router.put('/:id', async (req, res) => {
       'total_amount',
     ];
     const fields = req.body;
-    // UUID columns — empty string must become NULL or Postgres throws "invalid input syntax for type uuid"
+    // UUID/date columns — empty string must become NULL or Postgres throws
+    // "invalid input syntax for type uuid/date"
     const UUID_COLS = new Set(['vendor_id', 'po_id', 'grn_id']);
+    const DATE_COLS = new Set(['po_date', 'inv_date', 'received_date', 'hire_period_from', 'hire_period_to']);
     let sets = [], params = [req.params.id, req.user.company_id], i = 3;
     Object.keys(fields).forEach(k => {
       if (!allowed.includes(k)) return;
       const v = fields[k];
-      const sanitized = UUID_COLS.has(k) ? (v && String(v).trim() ? v : null) : v;
+      const sanitized = (UUID_COLS.has(k) || DATE_COLS.has(k)) ? (v && String(v).trim() ? v : null) : v;
       sets.push(`${k} = $${i++}`);
       params.push(sanitized);
     });
