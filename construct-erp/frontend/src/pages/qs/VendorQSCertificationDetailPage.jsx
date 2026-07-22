@@ -41,10 +41,14 @@ const T = {
   docTitle: { fontSize: '13px', fontWeight: 'bold', color: rust, textAlign: 'right', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '4px' },
   badge:    { display: 'inline-block', background: navy, color: '#fff', fontSize: '9.5px', fontWeight: 'bold', padding: '3px 10px', borderRadius: '2px', letterSpacing: '0.5px' },
   certDt:   { fontSize: '9.5px', color: '#222', marginTop: '4px', textAlign: 'right', fontStyle: 'italic', fontWeight: '600' },
-  infoPanel:{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 24px', marginBottom: '10px', background: lightBg, border: `1px solid #C8D8EE`, padding: '7px 10px', fontSize: '10.5px' },
-  infoRow:  { display: 'flex', alignItems: 'baseline', gap: '4px', paddingBottom: '2px', borderBottom: '1px dotted #D0DCF0' },
+  infoPanel:{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 24px', marginBottom: '10px', background: lightBg, border: `1px solid #C8D8EE`, padding: '7px 10px', fontSize: '10.5px', breakInside: 'avoid', pageBreakInside: 'avoid' },
+  // flexWrap + minWidth:0 on the value let a long comma-separated invoice
+  // list (many invoice numbers/dates) wrap onto multiple lines instead of
+  // overflowing the row — without minWidth:0 a flex item's content can force
+  // the row wider than its container instead of wrapping.
+  infoRow:  { display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '4px', paddingBottom: '2px', borderBottom: '1px dotted #D0DCF0', breakInside: 'avoid', pageBreakInside: 'avoid' },
   infoLbl:  { fontWeight: 'bold', color: navy, minWidth: '150px', flexShrink: 0, fontSize: '9.5px', textTransform: 'uppercase', letterSpacing: '0.3px' },
-  infoVal:  { color: '#0A0A0A', fontSize: '10.5px', fontWeight: '600' },
+  infoVal:  { color: '#0A0A0A', fontSize: '10.5px', fontWeight: '600', flex: '1 1 auto', minWidth: 0, wordBreak: 'break-word', overflowWrap: 'anywhere' },
   secHead:  { background: navy, color: '#fff', fontWeight: 'bold', fontSize: '10px', padding: '4px 10px', marginTop: '10px', marginBottom: '3px', letterSpacing: '0.8px', textTransform: 'uppercase' },
   tbl:      { width: '100%', borderCollapse: 'collapse', fontSize: '9px', tableLayout: 'fixed' },
   th:       { background: navy, color: '#fff', padding: '4px 3px', textAlign: 'center', border: `1px solid #8AAAD0`, fontWeight: 'bold', verticalAlign: 'middle', letterSpacing: '0.2px', fontSize: '9px', lineHeight: '1.3' },
@@ -430,7 +434,12 @@ function PaymentCertificate({ cert }) {
         dateLabel={`Recommendation Date: ${fmt(cert.created_at)}`}
       />
 
-      {/* ── Info panel — two-column layout matching Excel template ── */}
+      {/* ── Info panel — two-column layout matching Excel template ──
+          breakInside:'avoid' keeps this whole block on one printed page —
+          without it, a cert with many linked invoices (long Date of
+          Invoice / Invoice Number(s) values) can straddle a page break and
+          the browser print engine silently drops/clips the overflow half,
+          which looks like the invoice list "went missing". */}
       <div style={T.secHead}>Contract &amp; Invoice Details</div>
       <div style={{
         display: 'grid',
@@ -440,6 +449,8 @@ function PaymentCertificate({ cert }) {
         border: '1px solid #C8D8EE',
         fontSize: '10.5px',
         background: lightBg,
+        breakInside: 'avoid',
+        pageBreakInside: 'avoid',
       }}>
         {/* Left column */}
         <div style={{ padding: '6px 10px', borderRight: '1px solid #C8D8EE' }}>
