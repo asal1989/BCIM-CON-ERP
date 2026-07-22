@@ -1899,6 +1899,7 @@ function EditBillModal({ bill, projects, onClose }) {
     vendor_name:      bill.vendor_name       || '',
     vendor_id:        bill.vendor_id         || '',
     project_id:       bill.project_id        || '',
+    po_id:            bill.po_id             || '',
     po_number:        bill.po_number         || '',
     po_date:          bill.po_date           ? bill.po_date.slice(0, 10) : '',
     inv_number:       bill.inv_number        || '',
@@ -1938,6 +1939,80 @@ function EditBillModal({ bill, projects, onClose }) {
   });
   const lineItems = billDetail?.line_items || [];
   const hasLineItems = lineItems.length > 0;
+
+  // ── PO linkage: pick an approved PO to auto-fill header refs and import its
+  // line items (at remaining invoiceable qty) so quantities can be edited below.
+  const [importingPO, setImportingPO] = useState(false);
+  const { data: availablePOs = [] } = useQuery({
+    queryKey: ['tqs-lookup-pos-edit', form.project_id, form.vendor_id, form.vendor_name],
+    queryFn: () => tqsBillsAPI.lookupPOs({
+      ...(form.project_id ? { project_id: form.project_id } : {}),
+      ...(form.vendor_id ? { vendor_id: form.vendor_id } : form.vendor_name ? { vendor_name: form.vendor_name } : {}),
+    }).then(r => r.data?.data || []),
+    enabled: form.bill_type === 'po',
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const handlePOPick = async (poId) => {
+    if (!poId) { set('po_id', ''); return; }
+    const po = availablePOs.find(p => String(p.id) === String(poId));
+    if (!po) return;
+
+    setForm(f => ({
+      ...f,
+      po_id:       po.id,
+      po_number:   po.po_number || f.po_number,
+      po_date:     po.po_date ? po.po_date.slice(0, 10) : f.po_date,
+      vendor_id:   po.vendor_id || f.vendor_id,
+      vendor_name: f.vendor_name || po.vendor_name || '',
+      project_id:  f.project_id || po.project_id || '',
+    }));
+
+    if (hasLineItems && !window.confirm(
+      `This bill already has ${lineItems.length} line item(s).\n\nImport the PO's items as ADDITIONAL lines?\n(Existing lines are kept — delete any you don't need from the table below.)`
+    )) return;
+
+    setImportingPO(true);
+    try {
+      const [poRes, balRes] = await Promise.all([
+        poAPI.get(poId),
+        tqsBillsAPI.lookupPOBalance(poId),
+      ]);
+      const poData  = poRes.data?.data || poRes.data;
+      const poItems = poData?.items || poData?.po_items || [];
+      const poIsTaxInclusive = Boolean(poData?.gst_inclusive);
+      const balMap  = {};
+      for (const b of (balRes.data?.data || [])) balMap[b.po_item_id] = b;
+
+      if (!poItems.length) {
+        toast.success(`PO ${po.po_number} linked — no line items found on the PO`);
+        return;
+      }
+      for (const it of poItems) {
+        const bal = balMap[it.id] || {};
+        const isDiscountLine = String(it.material_name || it.item_name || it.description || '').trim().toLowerCase() === 'discount'
+          || Number(it.total_amount || 0) < 0;
+        await tqsBillsAPI.createLineItem(bill.id, {
+          item_name:  it.material_name || it.item_name || it.description || '',
+          unit:       it.unit || '',
+          quantity:   isDiscountLine ? 0 : (bal.remaining_qty != null ? bal.remaining_qty : (it.quantity || 0)),
+          rate:       isDiscountLine ? 0 : (it.rate || 0),
+          gst_pct:    poIsTaxInclusive ? 0 : (it.gst_rate ?? it.gst_pct ?? 18),
+          gst_mode:   form.tax_mode === 'interstate' ? 'interstate' : 'intrastate',
+          cost_head:  it.cost_head || '',
+          boq_item_id:it.boq_item_id || '',
+          po_item_id: it.id || null,
+        });
+      }
+      qc.invalidateQueries({ queryKey: ['tqs-bill-detail', bill.id] });
+      qc.invalidateQueries({ queryKey: ['tqs-bills'] });
+      toast.success(`PO ${po.po_number} linked — ${poItems.length} item${poItems.length > 1 ? 's' : ''} imported at remaining qty. Adjust quantities below and Save each line.`);
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to import PO line items');
+    } finally {
+      setImportingPO(false);
+    }
+  };
   const distinctGstRates = [...new Set(lineItems.map(it => parseFloat(it.gst_pct) || 0))];
   const itemsBasic = lineItems.reduce((s, it) => s + (parseFloat(it.basic_amount) || 0), 0);
   const itemsCgst  = lineItems.reduce((s, it) => s + (parseFloat(it.cgst_amt) || 0), 0);
@@ -2071,6 +2146,22 @@ function EditBillModal({ bill, projects, onClose }) {
                 <Lbl>Invoice Month</Lbl>
                 <input className={F} placeholder="e.g. APRIL-2026" value={form.inv_month} onChange={e => set('inv_month', e.target.value)} />
               </div>
+              {form.bill_type === 'po' && (
+                <div className="col-span-2">
+                  <Lbl>Link Purchase Order</Lbl>
+                  <select className={F} value={form.po_id} onChange={e => handlePOPick(e.target.value)} disabled={importingPO}>
+                    <option value="">— Select approved PO to auto-load line items —</option>
+                    {availablePOs.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.po_number} — {p.vendor_name} — ₹{inr(p.total_amount)}
+                      </option>
+                    ))}
+                  </select>
+                  {importingPO
+                    ? <p className="text-[11px] text-indigo-600 mt-1 font-medium">Importing PO line items…</p>
+                    : <p className="text-[11px] text-slate-400 mt-1">Picking a PO fills the header and imports its items at remaining qty — edit quantities in the Line Items table below.</p>}
+                </div>
+              )}
               <div>
                 <Lbl>PO / WO Number</Lbl>
                 <input className={F} value={form.po_number} onChange={e => set('po_number', e.target.value)} />

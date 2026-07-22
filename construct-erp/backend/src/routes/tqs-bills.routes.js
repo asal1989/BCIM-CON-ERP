@@ -3162,6 +3162,7 @@ router.post('/:id/line-items', async (req, res) => {
     const {
       item_name = '', category, unit = '', quantity = 0, rate = 0,
       gst_pct = 0, gst_mode = 'intrastate', cost_head, boq_item_id, boq_chapter,
+      po_item_id,
     } = req.body;
 
     const qty   = parseFloat(quantity) || 0;
@@ -3180,16 +3181,16 @@ router.post('/:id/line-items', async (req, res) => {
         bill_id, item_name, category, unit, quantity, rate, basic_amount,
         gst_pct, gst_mode, cgst_pct, cgst_amt, sgst_pct, sgst_amt,
         igst_pct, igst_amt, gst_amount, total_amount,
-        cost_head, boq_item_id, boq_chapter
+        cost_head, boq_item_id, boq_chapter, po_item_id
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
       ) RETURNING *
     `, [
       req.params.id, item_name || 'New Item', category || null, unit, qty, rt, basic.toFixed(2),
       gstP, mode, cgP, cgA.toFixed(2), sgP, sgA.toFixed(2), igP, igA.toFixed(2),
       gstAmt.toFixed(2), totalAmt.toFixed(2),
       BOQ_COST_HEADS.includes(cost_head) ? cost_head : null,
-      boq_item_id || null, boq_chapter || null,
+      boq_item_id || null, boq_chapter || null, po_item_id || null,
     ]);
     await logHistory(req.params.id, 'system', `Line item "${r.rows[0].item_name}" added`, req.user.id);
     res.status(201).json({ data: r.rows[0] });
