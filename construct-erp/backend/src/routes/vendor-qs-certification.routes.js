@@ -579,91 +579,20 @@ router.post('/summary-items', async (req, res) => {
       return res.status(400).json({ error: 'Some selected invoices are invalid' });
     }
 
-    const { rows } = await query(`
-      SELECT li.*, b.inv_number, b.sl_number, b.bill_type,
-             pi.material_name AS po_item_name, pi.quantity AS po_ordered_qty, pi.rate AS po_ordered_rate, pi.unit AS po_ordered_unit,
-             wi.description AS wo_item_name, wi.quantity AS wo_ordered_qty, wi.rate AS wo_ordered_rate, wi.unit AS wo_ordered_unit,
-             COALESCE(prev.qs_qty, 0) AS qs_prev_qty
-      FROM tqs_bill_line_items li
-      JOIN tqs_bills b ON b.id = li.bill_id
-      LEFT JOIN po_items pi ON pi.id = li.po_item_id
-      LEFT JOIN work_order_items wi ON wi.id = li.wo_item_id
-      LEFT JOIN (
-        SELECT
-          COALESCE(item_ref_id::text, LOWER(TRIM(description))) AS item_key,
-          SUM(qs_pres_qty) AS qs_qty
-        FROM vendor_qs_certification_items i
-        JOIN vendor_qs_certifications c ON c.id = i.certification_id
-        WHERE c.company_id = $2 AND c.status NOT IN ('cancelled', 'rejected')
-        GROUP BY COALESCE(item_ref_id::text, LOWER(TRIM(description)))
-      ) prev ON prev.item_key = COALESCE((li.po_item_id)::text, (li.wo_item_id)::text, LOWER(TRIM(COALESCE(li.item_name, ''))))
-      WHERE li.bill_id = ANY($1::uuid[])
-      ORDER BY b.inv_number, li.sort_order, li.id
-    `, [bill_ids, req.user.company_id]);
-
-    const linkedRefs = [...new Set(rows.map(r => r.po_item_id || r.wo_item_id).filter(Boolean))];
-    const singleLinkedRef = linkedRefs.length === 1 ? linkedRefs[0] : null;
-    const singleLinkedRow = singleLinkedRef ? rows.find(r => (r.po_item_id || r.wo_item_id) === singleLinkedRef) : null;
-    const grouped = new Map();
-    rows.forEach(row => {
-      const isWO = row.wo_item_id || row.bill_type === 'wo';
-      const invQty = n(row.quantity);
-      const effectiveRow = singleLinkedRef && !(row.po_item_id || row.wo_item_id) ? singleLinkedRow : row;
-      const effectiveIsWO = effectiveRow?.wo_item_id || effectiveRow?.bill_type === 'wo';
-      const orderQty = n(effectiveIsWO ? effectiveRow?.wo_ordered_qty : effectiveRow?.po_ordered_qty) || invQty;
-      // Fall back to basic_amount / qty when the line isn't linked to a WO/PO
-      // item AND its own `rate` column is blank (common for lump-sum bill
-      // entries that only captured a total) — otherwise the certified amount
-      // silently comes out as qty * 0.
-      const linkedRate = n(effectiveIsWO ? (effectiveRow?.wo_ordered_rate || row.rate) : (effectiveRow?.po_ordered_rate || row.rate));
-      const rate = linkedRate || (invQty ? n(row.basic_amount) / invQty : 0);
-      const qsPrevQty = n(row.qs_prev_qty);
-      const qsPresQty = Math.max(0, invQty);
-      const taxAmount = n(row.cgst_amt) + n(row.sgst_amt) + n(row.igst_amt) || n(row.gst_amount);
-      const description = effectiveRow?.po_item_name || effectiveRow?.wo_item_name || row.item_name || '';
-      const unit = effectiveRow?.po_ordered_unit || effectiveRow?.wo_ordered_unit || row.unit || '';
-      const key = singleLinkedRef || row.po_item_id || row.wo_item_id || `${description.trim().toLowerCase()}|${unit}|${rate}`;
-      const existing = grouped.get(key);
-      if (existing) {
-        existing.bill_ids.push(row.bill_id);
-        existing.bill_line_item_ids.push(row.id);
-        existing.source_inv_number = [...new Set([...String(existing.source_inv_number || '').split(', ').filter(Boolean), row.inv_number || row.sl_number].filter(Boolean))].join(', ');
-        existing.inv_pres_qty = round2(n(existing.inv_pres_qty) + invQty);
-        existing.qs_pres_qty = round2(n(existing.qs_pres_qty) + qsPresQty);
-        existing.tax_amount = round2(n(existing.tax_amount) + taxAmount);
-        existing.amount = round2(n(existing.qs_pres_qty) * rate);
-        existing.balance_qty = Math.max(0, orderQty - qsPrevQty - n(existing.qs_pres_qty));
-        return;
-      }
-      grouped.set(key, {
-        bill_id: row.bill_id,
-        bill_ids: [row.bill_id],
-        bill_line_item_id: row.id,
-        bill_line_item_ids: [row.id],
-        source_inv_number: row.inv_number || row.sl_number,
-        item_ref_id: singleLinkedRef || row.po_item_id || row.wo_item_id || null,
-        description,
-        unit,
-        order_qty: orderQty,
-        order_rate: rate,
-        inv_prev_qty: 0,
-        inv_pres_qty: invQty,
-        qs_prev_qty: qsPrevQty,
-        qs_pres_qty: qsPresQty,
-        tax_amount: taxAmount,
-        amount: round2(qsPresQty * rate),
-        balance_qty: Math.max(0, orderQty - qsPrevQty - qsPresQty),
-        remarks: '',
-      });
-    });
-    const items = Array.from(grouped.values());
+    // Amendment-chain-aware summary (same logic used at certification
+    // create/refresh time) — was previously duplicated here with its own
+    // stale, non-amendment-aware copy, which is why this preview screen kept
+    // showing a single PO revision's order qty even after that was fixed
+    // elsewhere.
+    const { items: builtItems } = await buildSummaryFromBills({ query }, bill_ids, req.user.company_id, null);
+    const items = builtItems;
 
     // Bills entered as a lump sum (common for WO bills) never got rows in
     // tqs_bill_line_items — without a fallback the abstract sheet comes out
     // completely empty for them even though the bill is otherwise valid.
     // Synthesize one line item from the bill's own basic_amount so QS can
     // still certify it.
-    const billIdsWithLineItems = new Set(rows.map(r => r.bill_id));
+    const billIdsWithLineItems = new Set(items.flatMap(it => it.bill_ids || [it.bill_id]).filter(Boolean));
     for (const b of billsRes.rows) {
       if (billIdsWithLineItems.has(b.id)) continue;
       const basicAmt = n(b.basic_amount) || Math.max(0, n(b.total_amount) - n(b.gst_amount) - n(b.transport_charges) - n(b.other_charges));
