@@ -1532,6 +1532,22 @@ router.patch('/:id/status', async (req, res) => {
           `, [bill_id]);
         }
       }
+
+      // Approving to Accounts (or marking paid directly via this endpoint,
+      // rather than through POST /:id/payment) previously left every linked
+      // bill's own workflow_status wherever it happened to be — the exact
+      // mismatch class found and hand-fixed on LANCO LH-10 (P0-395, WO-480,
+      // etc.). Keep Bill Tracker's stage following the certification's from
+      // here on. Never downgrade a bill that's already 'paid'.
+      if (status === 'accounts' || status === 'paid') {
+        await client.query(`
+          UPDATE tqs_bills b
+          SET workflow_status=$1, updated_at=NOW()
+          FROM vendor_qs_certification_bills cb
+          WHERE cb.certification_id=$2 AND b.id=cb.bill_id
+            AND b.workflow_status NOT IN ('paid')
+        `, [status, req.params.id]);
+      }
       return rows[0];
     });
 
