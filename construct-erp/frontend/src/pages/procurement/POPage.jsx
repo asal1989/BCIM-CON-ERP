@@ -1221,6 +1221,57 @@ function PORejectModal({ po, onClose, onConfirm, isPending }) {
   );
 }
 
+/* ─── PO Terminate Modal ─── */
+function POTerminateModal({ po, onClose, onConfirm, isPending }) {
+  const [reason, setReason] = useState('');
+  const canSubmit = reason.trim().length > 0;
+  return (
+    <div className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center">
+              <XCircle className="w-4 h-4 text-orange-500" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Terminate Purchase Order</p>
+              <p className="text-xs text-slate-500">{po?.po_ref_no || po?.po_number || po?.serial_no_formatted}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="px-5 py-4 space-y-3">
+          <div className="bg-orange-50 border border-orange-200 rounded-xl px-3 py-2.5 text-sm">
+            <p className="font-semibold text-orange-800">{(po?.vendor_name || '').toUpperCase()}</p>
+            <p className="text-xs text-orange-600 mt-0.5">{inr(po?.grand_total)} — Supply/work stopped midway</p>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5">Reason for Termination <span className="text-red-500">*</span></label>
+            <textarea
+              rows={3}
+              autoFocus
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              placeholder="e.g. Vendor unable to supply, non-performance, financial default…"
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-50 resize-none transition-all"
+            />
+            {!canSubmit && <p className="text-[11px] text-slate-400 mt-1">Reason is required to record why the order was stopped.</p>}
+            <p className="text-[11px] text-slate-400 mt-1.5">The linked MR's items will immediately become available again for a new PO.</p>
+          </div>
+        </div>
+        <div className="flex gap-3 px-5 pb-5">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors">Cancel</button>
+          <button onClick={() => onConfirm(reason.trim())} disabled={isPending || !canSubmit}
+            className="flex-1 py-2.5 rounded-xl text-white text-sm font-black disabled:opacity-50 transition-all"
+            style={{ background: 'linear-gradient(135deg,#F97316,#EA580C)' }}>
+            {isPending ? 'Terminating…' : 'Terminate PO'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Detail Slide-over ─── */
 const BILL_STATUS = {
   draft:    { label: 'Draft',    cls: 'bg-slate-100 text-slate-600 border-slate-200' },
@@ -1237,11 +1288,12 @@ function canManageProcurement(user) {
   return role === 'super_admin' || role === 'managing_director' || role.includes('procurement');
 }
 
-function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, onReject, isApproving, isRejecting, user }) {
+function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, onReject, onTerminate, isApproving, isRejecting, isTerminating, user }) {
   const qc = useQueryClient();
   const [sigModal,    setSigModal]    = useState(null);  // { stage }
   const [mailModal,   setMailModal]   = useState(false);
   const [rejectModal, setRejectModal] = useState(false); // reject reason modal
+  const [terminateModal, setTerminateModal] = useState(false);
   const liveStatus = detailedPO?.status ?? po.status;
   const printZoneRef = React.useRef(null);
 
@@ -1636,6 +1688,30 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
           </div>{/* end right column */}
         </div>{/* end two-column body */}
 
+        {/* Terminate button — visible while the PO is still active */}
+        {!['fully_received', 'rejected', 'cancelled'].includes(liveStatus) && (
+          <div className="px-6 py-3 border-t border-slate-100 bg-orange-50 flex items-center justify-between gap-3">
+            <p className="text-xs text-orange-700 font-medium">Vendor unable to supply or work stopped midway?</p>
+            <button
+              onClick={() => setTerminateModal(true)}
+              disabled={isTerminating}
+              className="shrink-0 px-4 h-8 rounded-lg border border-orange-300 bg-white text-orange-700 text-xs font-semibold hover:bg-orange-100 transition-colors disabled:opacity-50">
+              {isTerminating ? 'Terminating…' : '✕ Terminate PO'}
+            </button>
+          </div>
+        )}
+
+        {/* Termination reason — shown once terminated */}
+        {liveStatus === 'cancelled' && (detailedPO || po)?.termination_reason && (
+          <div className="px-6 py-3 border-t border-slate-100 bg-orange-50 flex items-start gap-2">
+            <XCircle className="w-4 h-4 text-orange-500 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-xs font-semibold text-orange-800">Terminated</p>
+              <p className="text-xs text-orange-700 mt-0.5">{(detailedPO || po).termination_reason}</p>
+            </div>
+          </div>
+        )}
+
         {/* Attachments */}
         <div className="px-6 py-4 border-t border-slate-100">
           <RecordAttachments
@@ -1653,6 +1729,14 @@ function PODetailPanel({ po, detailedPO, company, onClose, onEdit, onApprove, on
             isPending={isRejecting}
             onClose={() => setRejectModal(false)}
             onConfirm={(reason) => { onReject(reason); setRejectModal(false); }}
+          />
+        )}
+        {terminateModal && (
+          <POTerminateModal
+            po={detailedPO || po}
+            isPending={isTerminating}
+            onClose={() => setTerminateModal(false)}
+            onConfirm={(reason) => { onTerminate(reason); setTerminateModal(false); }}
           />
         )}
         {mailModal && (
@@ -2253,6 +2337,16 @@ export default function POPage() {
     onError: e => toast.error(e?.response?.data?.error || 'Reject failed'),
   });
 
+  const terminateMutation = useMutation({
+    mutationFn: ({ id, reason }) => poAPI.terminate(id, reason),
+    onSuccess: () => {
+      toast.success('Purchase Order terminated — linked MR items are available again');
+      setSelectedPO(null);
+      qc.invalidateQueries({ queryKey: ['purchase-orders'] });
+    },
+    onError: e => toast.error(e?.response?.data?.error || 'Termination failed'),
+  });
+
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => poAPI.update(id, data),
     onSuccess: (res) => {
@@ -2647,8 +2741,10 @@ export default function POPage() {
             approveMutation.mutate({ id: selectedPO.id, stage });
           }}
           onReject={(reason) => rejectMutation.mutate({ id: selectedPO.id, reason })}
+          onTerminate={(reason) => terminateMutation.mutate({ id: selectedPO.id, reason })}
           isApproving={approveMutation.isPending}
           isRejecting={rejectMutation.isPending}
+          isTerminating={terminateMutation.isPending}
           user={user}
         />
       )}

@@ -1466,6 +1466,134 @@ router.post('/', async (req, res) => {
 });
 
 // Reject PO — must be before /:id/:stage to avoid being swallowed by the generic route
+runSchemaInit('purchase_orders_termination_columns', async () => {
+  await query(`
+    ALTER TABLE purchase_orders
+      ADD COLUMN IF NOT EXISTS termination_reason TEXT,
+      ADD COLUMN IF NOT EXISTS terminated_by UUID REFERENCES users(id),
+      ADD COLUMN IF NOT EXISTS terminated_at TIMESTAMPTZ
+  `);
+});
+
+// PATCH /:id/terminate — close a PO mid-way when vendor abandons work/supply.
+// Sets status='cancelled' (the existing status the rest of the app — MR
+// remaining-qty calcs, PO listings, etc. — already treats as "not active"),
+// so the linked MR's items immediately become available again for a new PO.
+router.patch('/:id/terminate', authorize('super_admin', 'admin', 'project_manager', 'procurement_manager', 'managing_director', 'md', 'ceo'), async (req, res) => {
+  try {
+    const reason = (req.body?.reason || '').trim();
+    if (!reason) return res.status(400).json({ error: 'A termination reason is required.' });
+    await getAccessiblePo(req, req.params.id);
+
+    const result = await query(
+      `UPDATE purchase_orders po
+       SET status='cancelled', termination_reason=$3, terminated_by=$4, terminated_at=NOW(), updated_at=NOW()
+       FROM projects p
+       WHERE po.id=$1 AND po.project_id = p.id AND p.company_id=$2
+         AND po.status NOT IN ('cancelled','rejected','fully_received')
+       RETURNING po.*, p.name AS project_name,
+                 (SELECT name FROM vendors WHERE id = po.vendor_id) AS vendor_name`,
+      [req.params.id, req.user.company_id, reason, req.user.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Purchase Order not found, already closed, or fully received.' });
+
+    const po = result.rows[0];
+    res.json({ data: po, message: 'Purchase Order terminated' });
+
+    // Fire-and-forget email to MD, Procurement, Super Admin
+    (async () => {
+      try {
+        const { rows: recipients } = await query(
+          `SELECT DISTINCT email, name FROM users
+           WHERE company_id=$1
+             AND role IN ('managing_director','md','ceo','procurement_manager','super_admin')
+             AND is_active=TRUE AND email IS NOT NULL`,
+          [req.user.company_id]
+        );
+        if (!recipients.length) return;
+
+        const terminatedBy = req.user.name || req.user.email || 'System';
+        const poRef = po.po_ref_no || po.serial_no_formatted || po.po_number;
+        const poValue = Number(po.grand_total || 0).toLocaleString('en-IN');
+        const erp = process.env.API_BASE_URL || 'https://erp.bcim.in';
+
+        await sendMail({
+          to: recipients.map(r => r.email),
+          subject: `⚠ Purchase Order Terminated — ${poRef}`,
+          html: `
+<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:24px 0">
+<tr><td align="center">
+<table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;border-collapse:collapse">
+  <tr><td style="background:#7c2d12;height:4px;border-radius:6px 6px 0 0;font-size:1px">&nbsp;</td></tr>
+  <tr><td style="background:#1e3a8a;padding:20px 24px">
+    <p style="margin:0;color:#fff;font-size:15px;font-weight:700">BCIM CONSTRUCTIONS</p>
+    <p style="margin:4px 0 0;color:#93c5fd;font-size:11px;font-weight:600;letter-spacing:1px">PURCHASE ORDER — TERMINATION NOTICE</p>
+  </td></tr>
+  <tr><td style="background:#fff;padding:24px">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;margin-bottom:20px">
+      <tr><td style="background:#ea580c;padding:8px 16px;border-radius:7px 7px 0 0">
+        <p style="margin:0;color:#fff;font-size:11px;font-weight:700;letter-spacing:1px">TERMINATED PURCHASE ORDER</p>
+      </td></tr>
+      <tr><td style="padding:16px">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-size:12px;width:40%">PO Number</td>
+            <td style="padding:6px 0;font-size:13px;font-weight:700;color:#0f172a">${poRef}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-size:12px;border-top:1px solid #f1f5f9">Vendor</td>
+            <td style="padding:6px 0;font-size:13px;font-weight:600;color:#0f172a;border-top:1px solid #f1f5f9">${po.vendor_name || '—'}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-size:12px;border-top:1px solid #f1f5f9">Project</td>
+            <td style="padding:6px 0;font-size:13px;font-weight:600;color:#0f172a;border-top:1px solid #f1f5f9">${po.project_name || '—'}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-size:12px;border-top:1px solid #f1f5f9">Order Value</td>
+            <td style="padding:6px 0;font-size:13px;font-weight:700;color:#b91c1c;border-top:1px solid #f1f5f9">₹${poValue}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#64748b;font-size:12px;border-top:1px solid #f1f5f9">Terminated By</td>
+            <td style="padding:6px 0;font-size:13px;color:#0f172a;border-top:1px solid #f1f5f9">${terminatedBy}</td>
+          </tr>
+        </table>
+      </td></tr>
+    </table>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px">
+      <tr><td style="background:#fef9c3;border-left:4px solid #ca8a04;padding:12px 14px">
+        <p style="margin:0;font-size:12px;font-weight:700;color:#713f12">Reason for Termination</p>
+        <p style="margin:6px 0 0;font-size:13px;color:#78350f;line-height:1.6">${reason}</p>
+      </td></tr>
+    </table>
+
+    <table cellpadding="0" cellspacing="0">
+      <tr><td style="background:#1e3a8a;border-radius:6px">
+        <a href="${erp}/procurement/purchase-orders" style="display:inline-block;color:#fff;padding:10px 22px;text-decoration:none;font-weight:700;font-size:12px">
+          View Purchase Order in ERP →
+        </a>
+      </td></tr>
+    </table>
+  </td></tr>
+  <tr><td style="background:#f8fafc;padding:14px 24px;border-top:1px solid #e2e8f0">
+    <p style="margin:0;font-size:11px;color:#94a3b8">Automated alert · BCIM ERP · <a href="mailto:hr@bcim.in" style="color:#3b82f6;text-decoration:none">hr@bcim.in</a></p>
+  </td></tr>
+  <tr><td style="background:#1e3a8a;height:4px;border-radius:0 0 6px 6px;font-size:1px">&nbsp;</td></tr>
+</table>
+</td></tr></table>
+</body></html>`,
+          text: `Purchase Order Terminated\n\nPO: ${poRef}\nVendor: ${po.vendor_name || '—'}\nProject: ${po.project_name || '—'}\nValue: ₹${poValue}\nTerminated by: ${terminatedBy}\n\nReason: ${reason}\n\nView: ${erp}/procurement/purchase-orders`,
+        });
+      } catch (mailErr) {
+        console.error('PO termination email failed:', mailErr.message);
+      }
+    })();
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// Reject PO — must be before /:id/:stage to avoid being swallowed by the generic route
 router.patch('/:id/reject', async (req, res) => {
   try {
     await getAccessiblePo(req, req.params.id);
