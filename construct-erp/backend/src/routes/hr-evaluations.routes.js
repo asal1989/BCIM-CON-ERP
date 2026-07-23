@@ -53,6 +53,19 @@ const initTable = async () => {
 };
 runSchemaInit('hr-performance-evaluations', initTable);
 
+// The table already existed live before review_type/project_site/training_required/
+// comments_remarks were added to the CREATE statement above, so on production
+// "CREATE TABLE IF NOT EXISTS" silently no-op'd and never added them — backfill here.
+runSchemaInit('hr-performance-evaluations-legacy-columns', async () => {
+  await query(`
+    ALTER TABLE hr_performance_evaluations
+      ADD COLUMN IF NOT EXISTS review_type TEXT DEFAULT 'monthly',
+      ADD COLUMN IF NOT EXISTS project_site TEXT,
+      ADD COLUMN IF NOT EXISTS training_required TEXT,
+      ADD COLUMN IF NOT EXISTS comments_remarks TEXT
+  `);
+});
+
 // 4-stage approval chain: Immediate Manager -> Project Manager -> HR Manager -> Managing Director
 runSchemaInit('hr-performance-evaluations-approval-chain', async () => {
   await query(`
