@@ -23,7 +23,7 @@ const STATUS_CONFIG = {
   qs:                  { label: 'QS Cert',       cls: 'bg-emerald-100 text-emerald-700' },
   accounts:            { label: 'Accounts',      cls: 'bg-purple-100 text-purple-700' },
   procurement:         { label: 'Procurement',   cls: 'bg-orange-100 text-orange-700' },
-  qs_sign:             { label: 'QS Sign',       cls: 'bg-violet-100 text-violet-700' },
+  qs_sign:             { label: 'MD Sign Off',   cls: 'bg-purple-100 text-purple-700' },
   paid:                { label: 'Paid',          cls: 'bg-emerald-100 text-emerald-700' },
   partial:             { label: 'Partial',       cls: 'bg-teal-100 text-teal-700' },
 };
@@ -3576,6 +3576,7 @@ export default function TQSBillsPage() {
                         accounts:            { badge: 'bg-violet-100 text-violet-800', label: 'Accounts' },
                         partial:             { badge: 'bg-sky-100 text-sky-800',       label: 'Partial' },
                         procurement:         { badge: 'bg-orange-100 text-orange-800', label: 'Procurement' },
+                        qs_sign:             { badge: 'bg-purple-100 text-purple-800', label: 'MD Sign Off' },
                         paid:                { badge: 'bg-emerald-100 text-emerald-800', label: 'Paid' },
                       };
                       const wfCfg = WF_CFG[b.workflow_status] || { badge: 'bg-slate-100 text-slate-700', label: b.workflow_status };

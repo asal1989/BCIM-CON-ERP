@@ -37,7 +37,7 @@ const TABS = [
   { id: 'stores',      label: 'Stores',                       icon: Warehouse    },
   { id: 'doc_control', label: 'Document Controller',          icon: Inbox        },
   { id: 'qs',          label: 'QS & Procurement Certification', icon: Award      },
-  { id: 'qs_sign',     label: 'QS Sign',                      icon: PenLine      },
+  { id: 'qs_sign',     label: 'MD Sign Off',                  icon: PenLine      },
   { id: 'payment',     label: 'Payment',                      icon: IndianRupee  },
 ];
 
@@ -978,7 +978,7 @@ const WORKFLOW_STEPS = [
   { id: 'qs',                  label: 'QS Cert'     },
   { id: 'accounts',            label: 'Accounts'    },
   { id: 'procurement',         label: 'Procurement' },
-  { id: 'qs_sign',             label: 'QS Sign'     },
+  { id: 'qs_sign',             label: 'MD Sign Off' },
   { id: 'paid',                label: 'Paid'        },
 ];
 const HIRE_WORKFLOW_STEPS = [
