@@ -1962,24 +1962,28 @@ function ProjectChip() {
   const GLOBAL_ROLES = ['super_admin', 'admin', 'managing_director', 'director', 'ceo', 'cfo', 'md'];
   const isGlobal = GLOBAL_ROLES.includes(user?.role);
 
-  if (!selectedProjectId && isGlobal) return null; // global users without picked project — hide chip
+  // Global users normally have no project selected (they see all projects
+  // company-wide by default) — that used to hide this chip entirely, which
+  // meant they had no way to ever reach /select-project through the UI at
+  // all, since global roles also skip the auto-redirect on login. Show a
+  // neutral "All Projects" chip instead so the picker stays reachable.
   return (
     <button
       onClick={() => navigate('/select-project')}
-      title={selectedProjectName ? `Switch project (current: ${selectedProjectName})` : 'Select a project'}
+      title={selectedProjectName ? `Switch project (current: ${selectedProjectName})` : isGlobal ? 'Viewing all projects — click to scope to one' : 'Select a project'}
       style={{
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '5px 11px',
         borderRadius: 8,
-        background: selectedProjectId ? 'rgba(255,255,255,0.10)' : 'rgba(239,68,68,0.18)',
-        border: `1px solid ${selectedProjectId ? 'rgba(255,255,255,0.20)' : 'rgba(252,165,165,0.55)'}`,
+        background: selectedProjectId ? 'rgba(255,255,255,0.10)' : isGlobal ? 'rgba(255,255,255,0.10)' : 'rgba(239,68,68,0.18)',
+        border: `1px solid ${selectedProjectId ? 'rgba(255,255,255,0.20)' : isGlobal ? 'rgba(255,255,255,0.20)' : 'rgba(252,165,165,0.55)'}`,
         cursor: 'pointer',
         color: '#fff',
         maxWidth: 220,
         transition: 'background 0.15s',
       }}
       onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.18)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = selectedProjectId ? 'rgba(255,255,255,0.10)' : 'rgba(239,68,68,0.18)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = selectedProjectId || isGlobal ? 'rgba(255,255,255,0.10)' : 'rgba(239,68,68,0.18)'; }}
     >
       <Building2 size={13} style={{ flexShrink: 0, color: '#FBBF24' }} />
       <div style={{ overflow: 'hidden', textAlign: 'left' }}>
@@ -1991,7 +1995,7 @@ function ProjectChip() {
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           maxWidth: 170,
         }}>
-          {selectedProjectName || 'Select project'}
+          {selectedProjectName || (isGlobal ? 'All Projects' : 'Select project')}
         </div>
       </div>
       <Replace size={11} style={{ flexShrink: 0, opacity: 0.7 }} />
@@ -2244,6 +2248,11 @@ export default function Layout() {
         {/* Right actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 6px', flexShrink: 0, borderLeft: '1px solid rgba(255,255,255,0.1)' }}>
 
+          {/* Current project / switch project — was defined but never mounted,
+              so there was no way to reach /select-project after the first login. */}
+          <div className="lg-show" style={{ marginRight: 6 }}>
+            <ProjectChip />
+          </div>
 
           {/* Language — hidden on mobile */}
           <div style={{ position: 'relative' }} className="lg-show">
