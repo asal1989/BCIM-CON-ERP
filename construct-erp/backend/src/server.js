@@ -133,6 +133,7 @@ const hrEmpAssetsRoutes   = require('./routes/hr-employee-assets.routes');
 const hrTravelRoutes      = require('./routes/hr-travel.routes');
 const hrRecruitmentRoutes = require('./routes/hr-recruitment.routes');
 const apiKeysRoutes       = require('./routes/api-keys.routes');
+const integrationRoutes   = require('./routes/integration.routes');
 const publicCareersRoutes = require('./routes/public-careers.routes');
 const essRoutes           = require('./routes/ess.routes');
 const snagRoutes          = require('./routes/snag.routes');
@@ -569,6 +570,7 @@ app.use(`${API}/hr-admin/emp-assets`,  hrEmpAssetsRoutes);
 app.use(`${API}/hr-admin/travel`,      hrTravelRoutes);
 app.use(`${API}/hr-admin/recruitment`, hrRecruitmentRoutes);
 app.use(`${API}/settings/api-keys`,   apiKeysRoutes);
+app.use(`${API}/integration`,         integrationRoutes);
 app.use('/api/public/careers',        publicCareersRoutes);
 // Shifts router defines its paths as /shifts, /employee-shifts, /overtime,
 // /comp-off — mounting it at /hr-admin/shifts produced /hr-admin/shifts/shifts
