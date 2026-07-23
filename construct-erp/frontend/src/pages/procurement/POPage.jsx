@@ -59,6 +59,7 @@ const STATUS_CONFIG = {
   part_received:  { label: 'Part Received',       short: 'Part Rcvd',  color: 'bg-cyan-50 text-cyan-700 border-cyan-200',        dot: 'bg-cyan-500',    icon: Package,      stage: 4 },
   fully_received: { label: 'Fully Received',      short: 'Received',    color: 'bg-green-50 text-green-700 border-green-200',     dot: 'bg-green-500',   icon: Check,        stage: 5 },
   rejected:       { label: 'Rejected',            short: 'Rejected',    color: 'bg-red-50 text-red-700 border-red-200',           dot: 'bg-red-400',     icon: XCircle,      stage: 0 },
+  cancelled:      { label: 'Terminated',          short: 'Terminated',  color: 'bg-orange-50 text-orange-700 border-orange-200',  dot: 'bg-orange-400',  icon: XCircle,      stage: 0 },
 };
 
 const STAGE_ACTIONS = [
