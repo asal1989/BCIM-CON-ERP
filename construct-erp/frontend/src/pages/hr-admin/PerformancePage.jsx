@@ -74,9 +74,14 @@ const OVERALL_BANDS = [
 ];
 
 // ── Print CSS ─────────────────────────────────────────────────────────────────
+// Turns the on-screen modal into a proper standalone A4 document: flattens the
+// screen "card" chrome (rounded corners/shadows) into bordered form sections,
+// keeps each section from splitting awkwardly across a page break, and gives
+// tables real borders + row-level break protection instead of relying on the
+// screen styling to carry over as-is.
 const PERF_PRINT_CSS = `
 @media print {
-  @page { size: A4 portrait; margin: 10mm; }
+  @page { size: A4 portrait; margin: 12mm 10mm; }
   html, body {
     margin:0 !important; padding:0 !important; background:#fff !important;
     -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important;
@@ -96,10 +101,36 @@ const PERF_PRINT_CSS = `
   }
   #perf-print-card {
     box-shadow:none !important; max-width:100% !important; width:100% !important;
-    border-radius:0 !important;
+    border-radius:0 !important; height:auto !important; display:block !important;
+  }
+  #perf-print-body {
+    overflow:visible !important; height:auto !important; display:block !important;
+    padding:0 !important;
   }
   .print-only { display:block !important; }
-  .perf-sig-section { page-break-inside:avoid !important; margin-top:24px !important; }
+
+  /* Flatten every screen "card" into a plain bordered form section, and never
+     let a section split mid-way across a page break. */
+  .perf-block {
+    border-radius:0 !important; box-shadow:none !important;
+    border:1px solid #b6bfcc !important; background:#fff !important;
+    padding:9px 12px !important; margin:0 0 9px 0 !important;
+    page-break-inside:avoid !important; break-inside:avoid !important;
+  }
+  .perf-block + .perf-block { margin-top:9px !important; }
+  .perf-info-grid { display:grid !important; grid-template-columns:repeat(3, 1fr) !important; gap:6px 16px !important; }
+  .perf-qual-grid { display:grid !important; grid-template-columns:repeat(3, 1fr) !important; gap:9px !important; }
+  .perf-goals-grid { display:grid !important; grid-template-columns:repeat(2, 1fr) !important; gap:9px !important; }
+
+  table { border-collapse:collapse !important; width:100% !important; }
+  table th, table td { border:1px solid #b6bfcc !important; }
+  table tr { page-break-inside:avoid !important; break-inside:avoid !important; }
+  table thead { display:table-header-group; } /* repeat header row if a table spans pages */
+
+  .perf-sig-section {
+    page-break-inside:avoid !important; break-inside:avoid !important;
+    margin-top:16px !important; border-top:1px solid #b6bfcc; padding-top:14px;
+  }
 }
 @media screen {
   .print-only { display:none !important; }
@@ -223,9 +254,9 @@ function DetailView({ ev, onClose }) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <div id="perf-print-body" className="flex-1 overflow-y-auto p-6 space-y-5">
           {/* Review type badge */}
-          <div className="flex items-center gap-3">
+          <div className="perf-block flex items-center gap-3">
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Review Type:</span>
             <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${ev.review_type === 'quarterly' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
               {reviewLabel}
@@ -234,14 +265,14 @@ function DetailView({ ev, onClose }) {
           </div>
 
           {ev.status === 'rejected' && ev.rejection_reason && (
-            <div className="p-3 bg-red-50 rounded-xl border border-red-100">
+            <div className="perf-block p-3 bg-red-50 rounded-xl border border-red-100">
               <p className="text-xs font-bold text-red-600 uppercase tracking-wide mb-1">Rejection Reason</p>
               <p className="text-sm text-red-800">{ev.rejection_reason}</p>
             </div>
           )}
 
           {/* Employee info */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-4 bg-gray-50 rounded-xl border border-gray-100">
+          <div className="perf-block perf-info-grid grid grid-cols-2 md:grid-cols-3 gap-3 p-4 bg-gray-50 rounded-xl border border-gray-100">
             {[
               ['Employee Name', ev.employee_name],
               ['Emp. ID / Code', ev.employee_code || '—'],
@@ -260,7 +291,7 @@ function DetailView({ ev, onClose }) {
           </div>
 
           {/* Rating scale legend */}
-          <div className="p-3 bg-amber-50 rounded-xl border border-amber-100">
+          <div className="perf-block p-3 bg-amber-50 rounded-xl border border-amber-100">
             <p className="text-xs font-bold text-amber-800 mb-2">Rating Scale</p>
             <div className="flex flex-wrap gap-3">
               {RATING_SCALE.map(r => (
@@ -273,7 +304,7 @@ function DetailView({ ev, onClose }) {
 
           {/* KRA scores table */}
           {kras.length > 0 && (
-            <div>
+            <div className="perf-block">
               <h3 className="font-semibold text-gray-700 mb-3">KRA / KPI Scoring</h3>
               <div className="overflow-x-auto rounded-xl border border-gray-200">
                 <table className="w-full text-sm">
@@ -324,7 +355,7 @@ function DetailView({ ev, onClose }) {
           )}
 
           {/* Overall rating */}
-          <div className="p-4 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50">
+          <div className="perf-block p-4 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50">
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Overall Performance Rating</p>
             <div className="flex flex-wrap gap-3 mb-3">
               {OVERALL_BANDS.map(b => (
@@ -342,13 +373,13 @@ function DetailView({ ev, onClose }) {
           </div>
 
           {/* Qualitative fields */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="perf-qual-grid grid grid-cols-1 md:grid-cols-3 gap-4">
             {[
               { label: 'Major Strengths',        val: ev.strengths },
               { label: 'Areas for Improvement',  val: ev.areas_of_improvement },
               { label: 'Training Required',       val: ev.training_required },
             ].map(({ label, val }) => (
-              <div key={label} className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+              <div key={label} className="perf-block p-4 bg-gray-50 rounded-xl border border-gray-100">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{label}</p>
                 <p className="text-sm text-gray-700 whitespace-pre-wrap min-h-[48px]">{val || '—'}</p>
               </div>
@@ -356,15 +387,15 @@ function DetailView({ ev, onClose }) {
           </div>
 
           {/* Goals & Comments */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="perf-goals-grid grid grid-cols-1 md:grid-cols-2 gap-4">
             {ev.goals_next_period && (
-              <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+              <div className="perf-block p-4 bg-blue-50 rounded-xl border border-blue-100">
                 <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2">Goals for Next Period</p>
                 <p className="text-sm text-gray-700 whitespace-pre-wrap">{ev.goals_next_period}</p>
               </div>
             )}
             {ev.comments_remarks && (
-              <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
+              <div className="perf-block p-4 bg-amber-50 rounded-xl border border-amber-100">
                 <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">Comments / Remarks</p>
                 <p className="text-sm text-gray-700 whitespace-pre-wrap">{ev.comments_remarks}</p>
               </div>
