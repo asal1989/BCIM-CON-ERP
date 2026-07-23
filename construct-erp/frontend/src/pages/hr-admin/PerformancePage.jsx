@@ -33,14 +33,14 @@ const RATING_CFG = {
 
 // 4-stage approval chain: Immediate Manager -> Project Manager -> HR Manager -> Managing Director
 const STATUS_CFG = {
-  draft:            { label: 'Draft',                        bg: 'bg-gray-100',    text: 'text-gray-600'    },
-  self_submitted:   { label: 'Self Submitted',                bg: 'bg-blue-50',     text: 'text-blue-700'    },
-  manager_approved: { label: 'Immediate Manager Approved',    bg: 'bg-indigo-50',   text: 'text-indigo-700'  },
-  pm_approved:      { label: 'Project Manager Approved',      bg: 'bg-purple-50',   text: 'text-purple-700'  },
-  hr_approved:      { label: 'HR Manager Approved',           bg: 'bg-pink-50',     text: 'text-pink-700'    },
-  approved:         { label: 'MD Approved',                   bg: 'bg-emerald-50',  text: 'text-emerald-700' },
-  acknowledged:     { label: 'Acknowledged',                  bg: 'bg-teal-50',     text: 'text-teal-700'    },
-  rejected:         { label: 'Rejected',                      bg: 'bg-red-50',      text: 'text-red-700'     },
+  draft:            { label: 'Draft',                        bg: 'bg-gray-100',    text: 'text-gray-600',    dot: 'bg-gray-400'    },
+  self_submitted:   { label: 'Self Submitted',                bg: 'bg-blue-50',     text: 'text-blue-700',    dot: 'bg-blue-500'    },
+  manager_approved: { label: 'Immediate Manager Approved',    bg: 'bg-indigo-50',   text: 'text-indigo-700',  dot: 'bg-indigo-500'  },
+  pm_approved:      { label: 'Project Manager Approved',      bg: 'bg-purple-50',   text: 'text-purple-700',  dot: 'bg-purple-500'  },
+  hr_approved:      { label: 'HR Manager Approved',           bg: 'bg-pink-50',     text: 'text-pink-700',    dot: 'bg-pink-500'    },
+  approved:         { label: 'MD Approved',                   bg: 'bg-emerald-50',  text: 'text-emerald-700', dot: 'bg-emerald-500' },
+  acknowledged:     { label: 'Acknowledged',                  bg: 'bg-teal-50',     text: 'text-teal-700',    dot: 'bg-teal-500'    },
+  rejected:         { label: 'Rejected',                      bg: 'bg-red-50',      text: 'text-red-700',     dot: 'bg-red-500'     },
 };
 
 const APPROVAL_STAGES = [
@@ -713,6 +713,12 @@ function EvalFormModal({ editing, onClose }) {
   );
 }
 
+const avatarGrad = (n) => {
+  const palette = [['#6366F1','#4F46E5'],['#0EA5E9','#0284C7'],['#10B981','#059669'],['#F59E0B','#D97706'],['#EF4444','#DC2626'],['#8B5CF6','#7C3AED']];
+  return palette[(n?.charCodeAt(0) || 0) % palette.length];
+};
+const initials = (n) => (n || 'U').split(' ').map(x => x[0]).join('').slice(0, 2).toUpperCase();
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function PerformancePage() {
   const qc = useQueryClient();
@@ -720,6 +726,8 @@ export default function PerformancePage() {
   const [editing,  setEditing]    = useState(null);
   const [viewing,  setViewing]    = useState(null);
   const [filterStatus, setFilter] = useState('');
+  const [filterMonth, setFilterMonth] = useState('');
+  const [filterDept,  setFilterDept]  = useState('');
 
   const { data, isLoading } = useQuery({
     queryKey: ['hr-evaluations'],
@@ -745,7 +753,14 @@ export default function PerformancePage() {
     onError: (e) => toast.error(e.response?.data?.error || 'Failed'),
   });
 
-  const filtered = filterStatus ? rows.filter(r => r.status === filterStatus) : rows;
+  const departments = useMemo(() => [...new Set(rows.map(r => r.dept_name).filter(Boolean))].sort(), [rows]);
+  const months = useMemo(() => [...new Set(rows.map(r => r.eval_period).filter(Boolean))], [rows]);
+
+  const filtered = rows.filter(r =>
+    (!filterStatus || r.status === filterStatus) &&
+    (!filterMonth  || r.eval_period === filterMonth) &&
+    (!filterDept   || r.dept_name === filterDept)
+  );
 
   const totalEvals = rows.length;
   const pendingMgr = rows.filter(r => ['self_submitted','manager_approved','pm_approved','hr_approved'].includes(r.status)).length;
@@ -753,6 +768,30 @@ export default function PerformancePage() {
   const avgScore   = rows.length
     ? (rows.reduce((s, r) => s + parseFloat(r.manager_total || r.self_total || 0), 0) / rows.length).toFixed(1)
     : '—';
+
+  // Real month-over-month deltas (not decorative) — compares evaluations dated
+  // in the current calendar month against the previous one, using eval_date.
+  const trend = useMemo(() => {
+    const now = dayjs();
+    const inMonth = (r, offset) => r.eval_date && dayjs(r.eval_date).isSame(now.subtract(offset, 'month'), 'month');
+    const thisM = rows.filter(r => inMonth(r, 0));
+    const lastM = rows.filter(r => inMonth(r, 1));
+    const pct = (curr, prev) => {
+      if (!prev) return curr ? { text: 'New', up: true } : null;
+      const delta = ((curr - prev) / prev) * 100;
+      return { text: `${Math.abs(delta).toFixed(1)}%`, up: delta >= 0 };
+    };
+    const avgOf = list => list.length
+      ? list.reduce((s, r) => s + parseFloat(r.manager_total || r.self_total || 0), 0) / list.length
+      : 0;
+    return {
+      total:    pct(thisM.length, lastM.length),
+      avgScore: pct(avgOf(thisM), avgOf(lastM)),
+      pending:  pct(thisM.filter(r => ['self_submitted','manager_approved','pm_approved','hr_approved'].includes(r.status)).length,
+                     lastM.filter(r => ['self_submitted','manager_approved','pm_approved','hr_approved'].includes(r.status)).length),
+      approved: pct(thisM.filter(r => r.status === 'approved').length, lastM.filter(r => r.status === 'approved').length),
+    };
+  }, [rows]);
 
   return (
     <div className="p-6 space-y-6 min-h-screen" style={{ background: '#F8FAFC' }}>
@@ -762,22 +801,24 @@ export default function PerformancePage() {
       <div className="no-print space-y-6">
 
       {/* Page header */}
-      <div className="relative overflow-hidden rounded-2xl" style={{ background: `linear-gradient(135deg, ${NAVY}, #1e3a8a)` }}>
-        <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-[0.07]"
-          style={{ background: 'radial-gradient(circle,#fff,transparent 70%)', transform: 'translate(25%,-25%)' }}/>
-        <div className="relative z-10 px-8 py-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="relative overflow-hidden rounded-2xl" style={{ background: 'linear-gradient(120deg, #4338CA 0%, #7C3AED 55%, #C026D3 100%)' }}>
+        <div className="absolute top-0 right-0 w-72 h-72 rounded-full opacity-[0.12]"
+          style={{ background: 'radial-gradient(circle,#fff,transparent 70%)', transform: 'translate(25%,-30%)' }}/>
+        <div className="absolute bottom-0 left-1/3 w-56 h-56 rounded-full opacity-[0.08]"
+          style={{ background: 'radial-gradient(circle,#fff,transparent 70%)', transform: 'translate(-25%,40%)' }}/>
+        <div className="relative z-10 px-8 py-7 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center">
+            <div className="flex items-center gap-2 mb-1.5">
+              <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
                 <ClipboardList size={16} className="text-white"/>
               </div>
               <span className="text-white/70 text-sm font-medium">HR & Admin</span>
             </div>
             <h1 className="text-2xl font-bold text-white">Performance Evaluation</h1>
-            <p className="text-white/60 text-sm mt-0.5">Monthly / Quarterly KRA-based review for all department employees</p>
+            <p className="text-white/70 text-sm mt-0.5">Monthly / Quarterly KRA-based review for all department employees</p>
           </div>
           <button onClick={() => { setEditing(null); setShowForm(true); }}
-            className="flex items-center gap-2 px-5 py-2.5 bg-white/15 hover:bg-white/25 border border-white/20 rounded-xl text-white text-sm font-semibold transition-colors">
+            className="flex items-center gap-2 px-5 py-2.5 bg-white text-indigo-700 rounded-xl text-sm font-semibold shadow-sm hover:bg-white/90 transition-colors">
             <Plus size={16}/> New Evaluation
           </button>
         </div>
@@ -786,36 +827,61 @@ export default function PerformancePage() {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total Evaluations', value: totalEvals, icon: FileText,    color: 'text-blue-600',    bg: 'bg-blue-50'    },
-          { label: 'Avg Score',         value: avgScore,   icon: TrendingUp,  color: 'text-purple-600',  bg: 'bg-purple-50'  },
-          { label: 'Pending Review',    value: pendingMgr, icon: Clock,       color: 'text-amber-600',   bg: 'bg-amber-50'   },
-          { label: 'Approved',          value: approved,   icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-        ].map(({ label, value, icon: Icon, color, bg }) => (
-          <div key={label} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center flex-shrink-0`}>
-              <Icon size={18} className={color}/>
+          { label: 'Total Evaluations', value: totalEvals, icon: FileText,    color: '#2563EB', bg: 'bg-blue-50',    trend: trend.total    },
+          { label: 'Average Score',    value: `${avgScore}/100`, icon: TrendingUp, color: '#9333EA', bg: 'bg-purple-50',  trend: trend.avgScore },
+          { label: 'Pending Review',   value: pendingMgr, icon: Clock,       color: '#D97706', bg: 'bg-amber-50',   trend: trend.pending, invert: true },
+          { label: 'Approved',         value: approved,   icon: CheckCircle, color: '#059669', bg: 'bg-emerald-50', trend: trend.approved },
+        ].map(({ label, value, icon: Icon, color, bg, trend: t, invert }) => (
+          <div key={label} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-3">
+              <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center`}>
+                <Icon size={18} style={{ color }}/>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-gray-500">{label}</p>
-              <p className={`text-xl font-bold ${color}`}>{value}</p>
-            </div>
+            <p className="text-2xl font-bold text-gray-900">{value}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{label}</p>
+            {t && (
+              <p className={`text-xs font-medium mt-1.5 flex items-center gap-1 ${(invert ? !t.up : t.up) ? 'text-emerald-600' : 'text-rose-600'}`}>
+                {t.up ? '↑' : '↓'} {t.text} {t.text !== 'New' && 'vs last month'}
+              </p>
+            )}
           </div>
         ))}
       </div>
 
       {/* Filter */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-sm text-gray-500 font-medium">Filter:</span>
-        {['', 'draft', 'self_submitted', 'manager_approved', 'pm_approved', 'hr_approved', 'approved', 'acknowledged', 'rejected'].map(s => {
-          const cfg = s ? STATUS_CFG[s] : null;
-          return (
-            <button key={s} onClick={() => setFilter(s)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border
-                ${filterStatus === s ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}>
-              {s ? cfg?.label : 'All'}
-            </button>
-          );
-        })}
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Filter by Status</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 focus:outline-none focus:border-indigo-400">
+              <option value="">All Periods</option>
+              {months.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+            <select value={filterDept} onChange={e => setFilterDept(e.target.value)}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 focus:outline-none focus:border-indigo-400">
+              <option value="">All Departments</option>
+              {departments.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+            {(filterMonth || filterDept || filterStatus) && (
+              <button onClick={() => { setFilterMonth(''); setFilterDept(''); setFilter(''); }}
+                className="text-sm text-gray-500 hover:text-gray-700 px-2 py-1.5">Clear</button>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {['', 'draft', 'self_submitted', 'manager_approved', 'pm_approved', 'hr_approved', 'approved', 'acknowledged', 'rejected'].map(s => {
+            const cfg = s ? STATUS_CFG[s] : null;
+            return (
+              <button key={s} onClick={() => setFilter(s)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border
+                  ${filterStatus === s ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}>
+                {s ? cfg?.label : 'All'}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Table */}
@@ -849,11 +915,20 @@ export default function PerformancePage() {
               {filtered.map(ev => {
                 const rc = RATING_CFG[ev.overall_rating] || {};
                 const sc = STATUS_CFG[ev.status] || {};
+                const [g1, g2] = avatarGrad(ev.employee_name);
                 return (
                   <tr key={ev.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-5 py-3">
-                      <p className="font-semibold text-gray-800">{ev.employee_name}</p>
-                      <p className="text-xs text-gray-400">{ev.employee_code} · {ev.dept_name || '—'}</p>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                          style={{ background: `linear-gradient(135deg, ${g1}, ${g2})` }}>
+                          {initials(ev.employee_name)}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-800">{ev.employee_name}</p>
+                          <p className="text-xs text-gray-400">{ev.employee_code} · {ev.dept_name || '—'}</p>
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-gray-700">{ev.eval_period || '—'}</td>
                     <td className="px-4 py-3">
@@ -869,11 +944,14 @@ export default function PerformancePage() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       {ev.overall_rating
-                        ? <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${rc.bg} ${rc.text}`}>{ev.overall_rating}</span>
+                        ? <span className={`text-xs font-semibold ${rc.text}`}>{ev.overall_rating}</span>
                         : <span className="text-gray-300">—</span>}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${sc.bg} ${sc.text}`}>{sc.label || ev.status}</span>
+                      <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${sc.text}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${sc.dot || 'bg-gray-400'}`}/>
+                        {sc.label || ev.status}
+                      </span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
