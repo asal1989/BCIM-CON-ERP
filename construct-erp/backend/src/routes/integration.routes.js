@@ -74,7 +74,7 @@ router.get('/work-orders', async (req, res) => {
     const { rows } = await query(
       `SELECT
          p.project_code                                AS "projectCode",
-         COALESCE(wo.serial_no_formatted, wo.wo_number) AS "workOrderNo",
+         wo.wo_number                                   AS "workOrderNo",
          COALESCE(wo.subject, wo.scope_of_work,
                   wo.work_description)                AS "title",
          v.name                                        AS "vendorName",
