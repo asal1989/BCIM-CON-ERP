@@ -83,9 +83,22 @@ const PERF_PRINT_CSS = `
 @media print {
   @page { size: A4 portrait; margin: 12mm 10mm; }
   html, body {
+    height:auto !important; min-height:0 !important; overflow:visible !important;
     margin:0 !important; padding:0 !important; background:#fff !important;
     -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important;
   }
+  /* The app shell (Layout) pins overflow:hidden + a fixed viewport height on its
+     root wrapper, which clips print output to a single page — unlock it here. */
+  .erp-layout-enter, .erp-layout-enter > *, .erp-layout-enter > * > *,
+  #root, body > div {
+    height:auto !important; max-height:none !important; overflow:visible !important;
+  }
+  /* Hide literally everything else on the page — including the list view
+     behind this modal — and show only the print report itself. This is more
+     reliable than hiding individual elements by class, since it doesn't
+     depend on enumerating every sibling that must not print. */
+  body * { visibility:hidden !important; }
+  #perf-print-root, #perf-print-root * { visibility:visible !important; }
   nav, header, footer, aside,
   .no-print,
   .sidebar, .topbar, .app-header, .app-sidebar,
@@ -743,6 +756,10 @@ export default function PerformancePage() {
 
   return (
     <div className="p-6 space-y-6 min-h-screen" style={{ background: '#F8FAFC' }}>
+      {/* Everything below (header, stats, filters, table) must never print —
+          only the DetailView print modal (rendered at the bottom of this
+          component) should ever end up on paper. */}
+      <div className="no-print space-y-6">
 
       {/* Page header */}
       <div className="relative overflow-hidden rounded-2xl" style={{ background: `linear-gradient(135deg, ${NAVY}, #1e3a8a)` }}>
@@ -897,6 +914,7 @@ export default function PerformancePage() {
             </tbody>
           </table>
         )}
+      </div>
       </div>
 
       {showForm && <EvalFormModal editing={editing} onClose={() => { setShowForm(false); setEditing(null); }} />}
