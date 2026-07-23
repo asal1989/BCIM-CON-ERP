@@ -2043,6 +2043,7 @@ export const hrEvaluationsAPI = {
   create:       (data)   => api.post('/hr-admin/evaluations', data),
   update:       (id, d)  => api.put(`/hr-admin/evaluations/${id}`, d),
   updateStatus: (id, s)  => api.patch(`/hr-admin/evaluations/${id}/status`, { status: s }),
+  reject:       (id, reason) => api.patch(`/hr-admin/evaluations/${id}/reject`, { reason }),
   remove:       (id)     => api.delete(`/hr-admin/evaluations/${id}`),
 };
 

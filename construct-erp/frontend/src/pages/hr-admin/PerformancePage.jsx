@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ClipboardList, Plus, X, ChevronRight, Star, TrendingUp,
-  Users, CheckCircle, Clock, Eye, Trash2, Award, FileText, Printer,
+  Users, CheckCircle, Clock, Eye, Trash2, Award, FileText, Printer, XCircle,
 } from 'lucide-react';
 import { hrEvaluationsAPI, hrEmployeesAPI } from '../../api/client';
 import dayjs from 'dayjs';
@@ -31,13 +31,29 @@ const RATING_CFG = {
   'Needs Improvement': { bg: 'bg-red-50',     text: 'text-red-700',     pct: 30 },
 };
 
+// 4-stage approval chain: Immediate Manager -> Project Manager -> HR Manager -> Managing Director
 const STATUS_CFG = {
-  draft:            { label: 'Draft',            bg: 'bg-gray-100',    text: 'text-gray-600'    },
-  self_submitted:   { label: 'Self Submitted',   bg: 'bg-blue-50',     text: 'text-blue-700'    },
-  manager_reviewed: { label: 'Manager Reviewed', bg: 'bg-purple-50',   text: 'text-purple-700'  },
-  approved:         { label: 'Approved',         bg: 'bg-emerald-50',  text: 'text-emerald-700' },
-  acknowledged:     { label: 'Acknowledged',     bg: 'bg-teal-50',     text: 'text-teal-700'    },
+  draft:            { label: 'Draft',                        bg: 'bg-gray-100',    text: 'text-gray-600'    },
+  self_submitted:   { label: 'Self Submitted',                bg: 'bg-blue-50',     text: 'text-blue-700'    },
+  manager_approved: { label: 'Immediate Manager Approved',    bg: 'bg-indigo-50',   text: 'text-indigo-700'  },
+  pm_approved:      { label: 'Project Manager Approved',      bg: 'bg-purple-50',   text: 'text-purple-700'  },
+  hr_approved:      { label: 'HR Manager Approved',           bg: 'bg-pink-50',     text: 'text-pink-700'    },
+  approved:         { label: 'MD Approved',                   bg: 'bg-emerald-50',  text: 'text-emerald-700' },
+  acknowledged:     { label: 'Acknowledged',                  bg: 'bg-teal-50',     text: 'text-teal-700'    },
+  rejected:         { label: 'Rejected',                      bg: 'bg-red-50',      text: 'text-red-700'     },
 };
+
+const APPROVAL_STAGES = [
+  { from: 'self_submitted',   to: 'manager_approved', label: 'Approve — Immediate Manager', icon: 'ChevronRight' },
+  { from: 'manager_approved', to: 'pm_approved',      label: 'Approve — Project Manager',   icon: 'ChevronRight' },
+  { from: 'pm_approved',      to: 'hr_approved',       label: 'Approve — HR Manager',        icon: 'ChevronRight' },
+  { from: 'hr_approved',      to: 'approved',          label: 'Approve — Managing Director', icon: 'Award' },
+];
+
+const MONTH_NAMES = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December',
+];
 
 // Rating scale legend (matches document)
 const RATING_SCALE = [
@@ -217,6 +233,13 @@ function DetailView({ ev, onClose }) {
             <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${sc.bg} ${sc.text}`}>{sc.label}</span>
           </div>
 
+          {ev.status === 'rejected' && ev.rejection_reason && (
+            <div className="p-3 bg-red-50 rounded-xl border border-red-100">
+              <p className="text-xs font-bold text-red-600 uppercase tracking-wide mb-1">Rejection Reason</p>
+              <p className="text-sm text-red-800">{ev.rejection_reason}</p>
+            </div>
+          )}
+
           {/* Employee info */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-4 bg-gray-50 rounded-xl border border-gray-100">
             {[
@@ -227,7 +250,7 @@ function DetailView({ ev, onClose }) {
               ['Project / Site', ev.project_site || '—'],
               ['Review Period', ev.eval_period || '—'],
               ['Review Date', ev.eval_date ? dayjs(ev.eval_date).format('DD MMM YYYY') : '—'],
-              ['Reporting Manager', ev.evaluator_name || '—'],
+              ['Immediate Manager', ev.evaluator_name || '—'],
             ].map(([k, v]) => (
               <div key={k}>
                 <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">{k}</p>
@@ -353,9 +376,9 @@ function DetailView({ ev, onClose }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
               {[
                 { role: 'Employee Signature',    name: ev.employee_name || '' },
-                { role: 'Reporting Manager',     name: ev.evaluator_name || '' },
-                { role: 'Department Head',       name: '' },
-                { role: 'HR Department',         name: '' },
+                { role: 'Immediate Manager',     name: ev.evaluator_name || '' },
+                { role: 'Project Manager',       name: '' },
+                { role: 'HR Manager',            name: '' },
                 { role: 'Managing Director',     name: '' },
               ].map(sig => (
                 <div key={sig.role} style={{ flex: 1, textAlign: 'center' }}>
@@ -375,7 +398,7 @@ function DetailView({ ev, onClose }) {
           <div className="no-print border-t pt-4">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Signatures (on print)</p>
             <div className="grid grid-cols-5 gap-3">
-              {['Employee', 'Reporting Manager', 'Department Head', 'HR Department', 'Managing Director'].map(role => (
+              {['Employee', 'Immediate Manager', 'Project Manager', 'HR Manager', 'Managing Director'].map(role => (
                 <div key={role} className="text-center p-3 bg-gray-50 rounded-lg border border-dashed border-gray-200">
                   <p className="text-xs text-gray-500 font-medium">{role}</p>
                   <div className="mt-2 h-6 border-b border-gray-300"/>
@@ -417,6 +440,30 @@ function EvalFormModal({ editing, onClose }) {
     comments_remarks:      editing?.comments_remarks      || '',
     increment_recommended: editing?.increment_recommended || '',
   }));
+
+  // Month/Quarter + Year pickers that compose form.eval_period (e.g. "July 2026" / "Q2 2026")
+  const parsedPeriod = useMemo(() => {
+    const raw = editing?.eval_period || '';
+    const qMatch = raw.match(/Q([1-4])\s*(\d{4})/i);
+    if (qMatch) return { month: dayjs().month(), quarter: parseInt(qMatch[1], 10), year: parseInt(qMatch[2], 10) };
+    const mMatch = MONTH_NAMES.findIndex(m => raw.toLowerCase().startsWith(m.toLowerCase()));
+    const yMatch = raw.match(/(\d{4})/);
+    return {
+      month: mMatch >= 0 ? mMatch : dayjs().month(),
+      quarter: Math.floor(dayjs().month() / 3) + 1,
+      year: yMatch ? parseInt(yMatch[1], 10) : dayjs().year(),
+    };
+  }, [editing]);
+  const [periodMonth, setPeriodMonth]     = useState(parsedPeriod.month);
+  const [periodQuarter, setPeriodQuarter] = useState(parsedPeriod.quarter);
+  const [periodYear, setPeriodYear]       = useState(parsedPeriod.year);
+
+  React.useEffect(() => {
+    const period = form.review_type === 'quarterly'
+      ? `Q${periodQuarter} ${periodYear}`
+      : `${MONTH_NAMES[periodMonth]} ${periodYear}`;
+    setForm(f => (f.eval_period === period ? f : { ...f, eval_period: period }));
+  }, [form.review_type, periodMonth, periodQuarter, periodYear]);
 
   const [kras, setKras] = useState(() => {
     if (editing?.kra_scores?.length) return editing.kra_scores.map(k => ({ ...k }));
@@ -503,9 +550,21 @@ function EvalFormModal({ editing, onClose }) {
               </select>
             </div>
             <div>
-              <label className={lbl}>Review Month / Quarter *</label>
-              <input value={form.eval_period} onChange={e => set('eval_period', e.target.value)}
-                placeholder="e.g. July 2026 / Q2 2026" className={inp} required />
+              <label className={lbl}>{form.review_type === 'quarterly' ? 'Review Quarter *' : 'Review Month *'}</label>
+              <div className="flex gap-2">
+                {form.review_type === 'quarterly' ? (
+                  <select value={periodQuarter} onChange={e => setPeriodQuarter(Number(e.target.value))} className={inp} required>
+                    {[1,2,3,4].map(q => <option key={q} value={q}>Q{q}</option>)}
+                  </select>
+                ) : (
+                  <select value={periodMonth} onChange={e => setPeriodMonth(Number(e.target.value))} className={inp} required>
+                    {MONTH_NAMES.map((m, i) => <option key={m} value={i}>{m}</option>)}
+                  </select>
+                )}
+                <select value={periodYear} onChange={e => setPeriodYear(Number(e.target.value))} className={inp} style={{ maxWidth: 110 }} required>
+                  {Array.from({ length: 6 }, (_, i) => dayjs().year() - 2 + i).map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
             </div>
             <div>
               <label className={lbl}>Review Date</label>
@@ -636,10 +695,16 @@ export default function PerformancePage() {
     onError: (e) => toast.error(e.response?.data?.error || 'Cannot delete'),
   });
 
+  const rejectMut = useMutation({
+    mutationFn: ({ id, reason }) => hrEvaluationsAPI.reject(id, reason),
+    onSuccess: () => { toast.success('Evaluation rejected'); qc.invalidateQueries(['hr-evaluations']); },
+    onError: (e) => toast.error(e.response?.data?.error || 'Failed'),
+  });
+
   const filtered = filterStatus ? rows.filter(r => r.status === filterStatus) : rows;
 
   const totalEvals = rows.length;
-  const pendingMgr = rows.filter(r => r.status === 'self_submitted').length;
+  const pendingMgr = rows.filter(r => ['self_submitted','manager_approved','pm_approved','hr_approved'].includes(r.status)).length;
   const approved   = rows.filter(r => r.status === 'approved').length;
   const avgScore   = rows.length
     ? (rows.reduce((s, r) => s + parseFloat(r.manager_total || r.self_total || 0), 0) / rows.length).toFixed(1)
@@ -693,7 +758,7 @@ export default function PerformancePage() {
       {/* Filter */}
       <div className="flex items-center gap-3 flex-wrap">
         <span className="text-sm text-gray-500 font-medium">Filter:</span>
-        {['', 'draft', 'self_submitted', 'manager_reviewed', 'approved', 'acknowledged'].map(s => {
+        {['', 'draft', 'self_submitted', 'manager_approved', 'pm_approved', 'hr_approved', 'approved', 'acknowledged', 'rejected'].map(s => {
           const cfg = s ? STATUS_CFG[s] : null;
           return (
             <button key={s} onClick={() => setFilter(s)}
@@ -772,13 +837,22 @@ export default function PerformancePage() {
                           <button onClick={() => statusMut.mutate({ id: ev.id, status: 'self_submitted' })} title="Submit"
                             className="p-1.5 hover:bg-emerald-50 rounded-lg text-emerald-500"><ChevronRight size={14}/></button>
                         )}
-                        {ev.status === 'self_submitted' && (
-                          <button onClick={() => statusMut.mutate({ id: ev.id, status: 'manager_reviewed' })} title="Mark Reviewed"
-                            className="p-1.5 hover:bg-purple-50 rounded-lg text-purple-500"><CheckCircle size={14}/></button>
+                        {APPROVAL_STAGES.filter(st => st.from === ev.status).map(st => (
+                          <button key={st.to} onClick={() => statusMut.mutate({ id: ev.id, status: st.to })} title={st.label}
+                            className="p-1.5 hover:bg-purple-50 rounded-lg text-purple-500">
+                            {st.icon === 'Award' ? <Award size={14}/> : <CheckCircle size={14}/>}
+                          </button>
+                        ))}
+                        {ev.status === 'approved' && (
+                          <button onClick={() => statusMut.mutate({ id: ev.id, status: 'acknowledged' })} title="Acknowledge"
+                            className="p-1.5 hover:bg-teal-50 rounded-lg text-teal-500"><CheckCircle size={14}/></button>
                         )}
-                        {ev.status === 'manager_reviewed' && (
-                          <button onClick={() => statusMut.mutate({ id: ev.id, status: 'approved' })} title="Approve"
-                            className="p-1.5 hover:bg-teal-50 rounded-lg text-teal-500"><Award size={14}/></button>
+                        {!['draft','approved','acknowledged','rejected'].includes(ev.status) && (
+                          <button onClick={() => {
+                            const reason = window.prompt('Reason for rejecting this evaluation:');
+                            if (reason && reason.trim()) rejectMut.mutate({ id: ev.id, reason: reason.trim() });
+                          }} title="Reject"
+                            className="p-1.5 hover:bg-red-50 rounded-lg text-red-400"><XCircle size={14}/></button>
                         )}
                         {ev.status === 'draft' && (
                           <button onClick={() => { if (window.confirm('Delete this draft?')) deleteMut.mutate(ev.id); }}

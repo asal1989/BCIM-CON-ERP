@@ -53,6 +53,26 @@ const initTable = async () => {
 };
 runSchemaInit('hr-performance-evaluations', initTable);
 
+// 4-stage approval chain: Immediate Manager -> Project Manager -> HR Manager -> Managing Director
+runSchemaInit('hr-performance-evaluations-approval-chain', async () => {
+  await query(`
+    ALTER TABLE hr_performance_evaluations
+      ADD COLUMN IF NOT EXISTS manager_approved_by UUID REFERENCES users(id),
+      ADD COLUMN IF NOT EXISTS pm_approved_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS pm_approved_by UUID REFERENCES users(id),
+      ADD COLUMN IF NOT EXISTS hr_approved_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS hr_approved_by UUID REFERENCES users(id),
+      ADD COLUMN IF NOT EXISTS approved_by UUID REFERENCES users(id),
+      ADD COLUMN IF NOT EXISTS acknowledged_by UUID REFERENCES users(id),
+      ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS rejected_by UUID REFERENCES users(id),
+      ADD COLUMN IF NOT EXISTS rejection_reason TEXT
+  `);
+  // Pre-existing rows used the old single-stage "manager_reviewed" status —
+  // carry them forward as the new equivalent stage so nothing looks stuck.
+  await query(`UPDATE hr_performance_evaluations SET status = 'manager_approved' WHERE status = 'manager_reviewed'`);
+});
+
 const ratingLabel = (score) => {
   if (score >= 90) return 'Outstanding';
   if (score >= 80) return 'Very Good';
@@ -179,19 +199,45 @@ router.put('/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Approval chain: draft -> self_submitted -> manager_approved (Immediate Manager)
+// -> pm_approved (Project Manager) -> hr_approved (HR Manager) -> approved (Managing
+// Director) -> acknowledged (employee). Any stage may instead move to 'rejected'.
+const STAGE_COLUMNS = {
+  self_submitted:   { ts: 'self_submitted_at' },
+  manager_approved: { ts: 'manager_reviewed_at', by: 'manager_approved_by' },
+  pm_approved:      { ts: 'pm_approved_at',      by: 'pm_approved_by' },
+  hr_approved:      { ts: 'hr_approved_at',      by: 'hr_approved_by' },
+  approved:         { ts: 'approved_at',         by: 'approved_by' },
+  acknowledged:     { ts: 'acknowledged_at',     by: 'acknowledged_by' },
+};
+
 router.patch('/:id/status', async (req, res) => {
   try {
     const { status } = req.body;
-    const tsField = {
-      self_submitted:   'self_submitted_at',
-      manager_reviewed: 'manager_reviewed_at',
-      approved:         'approved_at',
-      acknowledged:     'acknowledged_at',
-    }[status];
-    const sql = tsField
-      ? `UPDATE hr_performance_evaluations SET status=$1, ${tsField}=NOW(), updated_at=NOW() WHERE id=$2 AND company_id=$3 RETURNING *`
-      : `UPDATE hr_performance_evaluations SET status=$1, updated_at=NOW() WHERE id=$2 AND company_id=$3 RETURNING *`;
-    const { rows } = await query(sql, [status, req.params.id, req.user.company_id]);
+    const stage = STAGE_COLUMNS[status];
+    const sets = ['status=$1', 'updated_at=NOW()'];
+    const params = [status];
+    let i = 2;
+    if (stage?.ts) { sets.push(`${stage.ts}=NOW()`); }
+    if (stage?.by) { sets.push(`${stage.by}=$${i++}`); params.push(req.user.id); }
+    params.push(req.params.id, req.user.company_id);
+    const sql = `UPDATE hr_performance_evaluations SET ${sets.join(', ')} WHERE id=$${i++} AND company_id=$${i} RETURNING *`;
+    const { rows } = await query(sql, params);
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.patch('/:id/reject', async (req, res) => {
+  try {
+    const reason = (req.body?.reason || '').trim();
+    if (!reason) return res.status(400).json({ error: 'A rejection reason is required.' });
+    const { rows } = await query(
+      `UPDATE hr_performance_evaluations
+       SET status='rejected', rejected_at=NOW(), rejected_by=$1, rejection_reason=$2, updated_at=NOW()
+       WHERE id=$3 AND company_id=$4 RETURNING *`,
+      [req.user.id, reason, req.params.id, req.user.company_id]
+    );
     if (!rows.length) return res.status(404).json({ error: 'Not found' });
     res.json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
