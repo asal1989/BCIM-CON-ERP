@@ -31,6 +31,10 @@ const managerRoles = [
   'project_manager',
   'project_head',
   'department_head',
+  'managing_director',
+  'md',
+  'ceo',
+  'manager',
 ];
 
 // Separate migration so it runs even if 'ess-mobile' was already applied
@@ -730,6 +734,112 @@ router.patch('/manager/attendance-corrections/:id/:action', requireManager, asyn
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
+  }
+});
+
+// ── Manager Desk: Performance Evaluations pending at this manager's stage ──
+// Each stage of the chain is visible to a different audience:
+//  - self_submitted  -> the employee's own reporting manager (Immediate Manager)
+//  - manager_approved -> anyone with a Project Manager role
+//  - pm_approved      -> anyone with an HR role
+//  - hr_approved       -> anyone with a Managing Director / admin role
+const EVAL_STAGE_AUDIENCE = {
+  project_manager:    ['manager_approved'],
+  project_head:       ['manager_approved'],
+  hr:                 ['pm_approved'],
+  hr_admin:           ['pm_approved'],
+  hr_manager:         ['pm_approved'],
+  managing_director:  ['hr_approved'],
+  md:                 ['hr_approved'],
+  ceo:                ['hr_approved'],
+  admin:              ['hr_approved'],
+  super_admin:        ['manager_approved', 'pm_approved', 'hr_approved'],
+};
+const EVAL_NEXT_STATUS = {
+  self_submitted:   'manager_approved',
+  manager_approved: 'pm_approved',
+  pm_approved:      'hr_approved',
+  hr_approved:      'approved',
+};
+const EVAL_STAGE_COLUMNS = {
+  manager_approved: { ts: 'manager_reviewed_at', by: 'manager_approved_by' },
+  pm_approved:      { ts: 'pm_approved_at',      by: 'pm_approved_by' },
+  hr_approved:      { ts: 'hr_approved_at',      by: 'hr_approved_by' },
+  approved:         { ts: 'approved_at',         by: 'approved_by' },
+};
+
+router.get('/manager/evaluations', requireManager, async (req, res) => {
+  try {
+    const role = String(req.user.role || '').trim().toLowerCase().replace(/[^\w-]/g, '');
+    const roleStatuses = EVAL_STAGE_AUDIENCE[role] || [];
+    const statuses = new Set(roleStatuses);
+
+    const params = [ownCompany(req)];
+    const conditions = [];
+
+    // Immediate Manager stage: only this manager's own direct reports.
+    params.push(req.user.id);
+    conditions.push(`(e.status = 'self_submitted' AND ep.reporting_manager_id = $${params.length})`);
+
+    if (statuses.size) {
+      params.push([...statuses]);
+      conditions.push(`e.status = ANY($${params.length}::text[])`);
+    }
+
+    const { rows } = await query(
+      `SELECT e.*, u.name AS employee_name, u.employee_code
+       FROM hr_performance_evaluations e
+       JOIN users u ON u.id = e.employee_id
+       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+       WHERE e.company_id = $1 AND (${conditions.join(' OR ')})
+       ORDER BY e.created_at DESC
+       LIMIT 200`,
+      params
+    );
+    res.json({ data: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/manager/evaluations/:id/:action', requireManager, async (req, res) => {
+  const { action } = req.params;
+  if (!['approve', 'reject'].includes(action)) {
+    return res.status(400).json({ error: 'Invalid evaluation action' });
+  }
+  try {
+    const { rows: existing } = await query(
+      `SELECT id, status FROM hr_performance_evaluations WHERE id=$1 AND company_id=$2`,
+      [req.params.id, ownCompany(req)]
+    );
+    if (!existing.length) return res.status(404).json({ error: 'Evaluation not found' });
+
+    if (action === 'reject') {
+      const { rows } = await query(
+        `UPDATE hr_performance_evaluations
+         SET status='rejected', rejected_at=NOW(), rejected_by=$1, rejection_reason=$2, updated_at=NOW()
+         WHERE id=$3 RETURNING *`,
+        [ownUser(req), req.body.rejection_reason || null, req.params.id]
+      );
+      return res.json({ data: rows[0] });
+    }
+
+    const nextStatus = EVAL_NEXT_STATUS[existing[0].status];
+    if (!nextStatus) return res.status(400).json({ error: `Cannot approve an evaluation at status "${existing[0].status}"` });
+    const stage = EVAL_STAGE_COLUMNS[nextStatus];
+    const sets = ['status=$1', 'updated_at=NOW()'];
+    const params = [nextStatus];
+    let i = 2;
+    if (stage?.ts) sets.push(`${stage.ts}=NOW()`);
+    if (stage?.by) { sets.push(`${stage.by}=$${i++}`); params.push(ownUser(req)); }
+    params.push(req.params.id);
+    const { rows } = await query(
+      `UPDATE hr_performance_evaluations SET ${sets.join(', ')} WHERE id=$${i} RETURNING *`,
+      params
+    );
+    res.json({ data: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

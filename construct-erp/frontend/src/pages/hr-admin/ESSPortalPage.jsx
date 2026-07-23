@@ -2367,11 +2367,13 @@ function ManagerDeskTab() {
   const qc          = useQueryClient();
   const leaves      = useQuery({ queryKey: ['ess-manager-leaves'],      queryFn: () => essAPI.managerLeaveRequests({ status: 'pending' }).then(unwrap), retry: false });
   const corrections = useQuery({ queryKey: ['ess-manager-corrections'], queryFn: () => essAPI.managerCorrections({ status: 'pending' }).then(unwrap), retry: false });
+  const evaluations = useQuery({ queryKey: ['ess-manager-evaluations'], queryFn: () => essAPI.managerEvaluations().then(unwrap), retry: false });
   const GCA = { background:'rgba(255,255,255,0.88)', border:'1px solid rgba(255,255,255,0.95)', borderRadius:16, boxShadow:'0 2px 16px rgba(0,0,0,.055),0 1px 3px rgba(0,0,0,.04)' };
   const STA = { fontSize:10.5, color:'#94A3B8', textTransform:'uppercase', letterSpacing:'0.1em', fontWeight:600, marginBottom:8, display:'block' };
-  const refresh     = () => { qc.invalidateQueries({ queryKey: ['ess-manager-leaves'] }); qc.invalidateQueries({ queryKey: ['ess-manager-corrections'] }); };
+  const refresh     = () => { qc.invalidateQueries({ queryKey: ['ess-manager-leaves'] }); qc.invalidateQueries({ queryKey: ['ess-manager-corrections'] }); qc.invalidateQueries({ queryKey: ['ess-manager-evaluations'] }); };
   const leaveAction      = useMutation({ mutationFn: ({ id, action, rejection_reason }) => essAPI.managerLeaveAction(id, action, rejection_reason ? { rejection_reason } : {}),      onSuccess: refresh, onError: (e) => toast.error(e?.response?.data?.error || 'Action failed') });
   const correctionAction = useMutation({ mutationFn: ({ id, action, rejection_reason }) => essAPI.managerCorrectionAction(id, action, rejection_reason ? { rejection_reason } : {}), onSuccess: refresh, onError: (e) => toast.error(e?.response?.data?.error || 'Action failed') });
+  const evaluationAction = useMutation({ mutationFn: ({ id, action, rejection_reason }) => essAPI.managerEvaluationAction(id, action, rejection_reason ? { rejection_reason } : {}), onSuccess: refresh, onError: (e) => toast.error(e?.response?.data?.error || 'Action failed') });
 
   const [rejectModal, setRejectModal] = useState({ open: false, type: null, id: null });
   const [rejectReason, setRejectReason] = useState('');
@@ -2382,13 +2384,22 @@ function ManagerDeskTab() {
     const { type, id } = rejectModal;
     if (type === 'leave')      leaveAction.mutate({ id, action: 'reject', rejection_reason: rejectReason });
     if (type === 'correction') correctionAction.mutate({ id, action: 'reject', rejection_reason: rejectReason });
+    if (type === 'evaluation') evaluationAction.mutate({ id, action: 'reject', rejection_reason: rejectReason });
     closeReject();
+  };
+
+  const EVAL_STAGE_LABEL = {
+    self_submitted:   'Approve as Immediate Manager',
+    manager_approved: 'Approve as Project Manager',
+    pm_approved:      'Approve as HR Manager',
+    hr_approved:       'Approve as Managing Director',
   };
 
   const pendingLeaveCnt = (leaves.data || []).length;
   const pendingCorrCnt  = (corrections.data || []).length;
+  const pendingEvalCnt  = (evaluations.data || []).length;
 
-  if (leaves.error?.response?.status === 403 && corrections.error?.response?.status === 403) {
+  if (leaves.error?.response?.status === 403 && corrections.error?.response?.status === 403 && evaluations.error?.response?.status === 403) {
     return (
       <TabShell
         bg="#ECFEFF"
@@ -2421,10 +2432,11 @@ function ManagerDeskTab() {
       icon={CheckCircle2}
       label="Manager Desk"
       title="Team Approvals"
-      subtitle="Pending leave requests and attendance corrections from your team"
+      subtitle="Pending leave requests, attendance corrections and performance evaluations from your team"
       stats={[
         { label: 'Pending Leave', value: pendingLeaveCnt, color: pendingLeaveCnt > 0 ? '#DC2626' : '#059669' },
         { label: 'Pending Corrections', value: pendingCorrCnt, color: pendingCorrCnt > 0 ? '#DC2626' : '#059669' },
+        { label: 'Pending Evaluations', value: pendingEvalCnt, color: pendingEvalCnt > 0 ? '#DC2626' : '#059669' },
       ]}
     >
       {rejectModal.open && (
@@ -2473,6 +2485,24 @@ function ManagerDeskTab() {
             )},
           ]}
           rows={corrections.data || []}
+        />
+      </div>
+
+      <div style={{ ...GCA, padding:20 }}>
+        <span style={STA}>Performance Evaluations</span>
+        <p style={{ fontSize:11.5, color:'#64748B', marginBottom:14 }}>Evaluations awaiting your approval stage</p>
+        <Table
+          columns={[
+            { key: 'employee_name', label: 'Employee' },
+            { key: 'eval_period',   label: 'Period'   },
+            { key: 'review_type',   label: 'Type', render: r => (r.review_type === 'quarterly' ? 'Quarterly' : 'Monthly') },
+            { key: 'manager_total', label: 'Score', render: r => (r.manager_total ? parseFloat(r.manager_total).toFixed(1) : (r.self_total ? parseFloat(r.self_total).toFixed(1) : '—')) },
+            { key: 'stage', label: 'Stage', render: r => EVAL_STAGE_LABEL[r.status] || r.status },
+            { key: 'actions', label: 'Action', render: r => (
+              <ActionButtons onApprove={() => evaluationAction.mutate({ id: r.id, action: 'approve' })} onReject={() => openReject('evaluation', r.id)} />
+            )},
+          ]}
+          rows={evaluations.data || []}
         />
       </div>
     </TabShell>

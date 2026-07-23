@@ -2207,6 +2207,8 @@ export const essAPI = {
   managerLeaveAction:   (id, action, data = {}) => api.patch(`/ess/manager/leave-requests/${id}/${action}`, data),
   managerCorrections:   (params)       => api.get('/ess/manager/attendance-corrections', { params }),
   managerCorrectionAction:(id, action, data = {}) => api.patch(`/ess/manager/attendance-corrections/${id}/${action}`, data),
+  managerEvaluations:   (params)       => api.get('/ess/manager/evaluations', { params }),
+  managerEvaluationAction:(id, action, data = {}) => api.patch(`/ess/manager/evaluations/${id}/${action}`, data),
   assetLookup:          (code)         => api.get('/ess/assets/lookup', { params: { code } }),
   notifications:        ()             => api.get('/ess/notifications'),
   documents:            ()             => api.get('/ess/documents'),
