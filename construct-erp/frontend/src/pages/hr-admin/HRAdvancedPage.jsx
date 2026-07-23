@@ -12,21 +12,54 @@ const input = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text
 const label = 'mb-1 block text-[11px] font-black uppercase tracking-wide text-slate-600';
 const btn = 'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-black transition disabled:opacity-50';
 
-const tabs = [
-  { id: 'recruitment', label: 'Recruitment', icon: Briefcase },
-  { id: 'roster', label: 'Shifts / Roster', icon: CalendarCheck },
-  { id: 'regularization', label: 'Regularization', icon: CheckCircle2 },
-  { id: 'leave', label: 'Leave Automation', icon: Clock3 },
-  { id: 'compliance', label: 'Payroll Compliance', icon: ShieldCheck },
-  { id: 'training', label: 'Training', icon: FileCheck2 },
-  { id: 'performance', label: 'Performance', icon: CheckCircle2 },
-  { id: 'cases', label: 'Cases', icon: XCircle },
-  { id: 'exit', label: 'Exit Clearance', icon: Users },
-  { id: 'letters', label: 'Letters', icon: FileText },
-  { id: 'policies', label: 'Policies', icon: BookOpen },
-  { id: 'service', label: 'Service Desk', icon: Headphones },
-  { id: 'analytics', label: 'HR Analytics', icon: IndianRupee },
+// Grouped into categories (instead of one flat 13-button wrap) so the nav
+// reads as a set of related sections rather than a wall of buttons.
+const tabGroups = [
+  {
+    group: 'Talent & Growth',
+    tabs: [
+      { id: 'recruitment', label: 'Recruitment', icon: Briefcase },
+      { id: 'training',    label: 'Training',     icon: FileCheck2 },
+      { id: 'performance', label: 'Performance',   icon: CheckCircle2 },
+    ],
+  },
+  {
+    group: 'Attendance & Leave',
+    tabs: [
+      { id: 'roster',         label: 'Shifts / Roster', icon: CalendarCheck },
+      { id: 'regularization', label: 'Regularization',  icon: CheckCircle2 },
+      { id: 'leave',          label: 'Leave Automation', icon: Clock3 },
+    ],
+  },
+  {
+    group: 'Payroll & Compliance',
+    tabs: [
+      { id: 'compliance', label: 'Payroll Compliance', icon: ShieldCheck },
+    ],
+  },
+  {
+    group: 'Employee Relations',
+    tabs: [
+      { id: 'cases',   label: 'Cases',          icon: XCircle },
+      { id: 'exit',    label: 'Exit Clearance', icon: Users },
+      { id: 'letters', label: 'Letters',        icon: FileText },
+    ],
+  },
+  {
+    group: 'Governance & Support',
+    tabs: [
+      { id: 'policies', label: 'Policies',     icon: BookOpen },
+      { id: 'service',  label: 'Service Desk', icon: Headphones },
+    ],
+  },
+  {
+    group: 'Insights',
+    tabs: [
+      { id: 'analytics', label: 'HR Analytics', icon: IndianRupee },
+    ],
+  },
 ];
+const tabs = tabGroups.flatMap(g => g.tabs);
 
 const unwrap = (res) => res?.data?.data || [];
 const today = () => new Date().toISOString().slice(0, 10);
@@ -719,31 +752,43 @@ export default function HRAdvancedPage() {
         <p className="mt-1 text-sm font-semibold text-blue-100">Recruitment, roster, regularization, policies, HR letters, training, performance and compliance.</p>
       </div>
       <div className="px-6 py-5">
-        <div className="mb-5 flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
-          {tabs.map((t) => {
-            const Icon = t.icon;
-            const selected = active === t.id;
-            return (
-              <button key={t.id} onClick={() => setActive(t.id)}
-                className={`${btn} ${selected ? 'bg-blue-700 text-white shadow' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'}`}>
-                <Icon className="h-4 w-4" />{t.label}
-              </button>
-            );
-          })}
+        <div className="flex flex-col md:flex-row gap-5 items-start">
+          <nav className="w-full md:w-64 flex-shrink-0 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            {tabGroups.map((g, gi) => (
+              <div key={g.group} className={gi > 0 ? 'border-t border-slate-100' : ''}>
+                <p className="px-4 pt-3 pb-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{g.group}</p>
+                <div className="pb-2">
+                  {g.tabs.map((t) => {
+                    const Icon = t.icon;
+                    const selected = active === t.id;
+                    return (
+                      <button key={t.id} onClick={() => setActive(t.id)}
+                        className={`flex w-full items-center gap-2.5 px-4 py-2 text-sm font-bold text-left transition
+                          ${selected ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}>
+                        <Icon className="h-4 w-4 flex-shrink-0" />{t.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </nav>
+          <div className="flex-1 min-w-0 w-full">
+            {active === 'recruitment' && <RecruitmentTab {...common} />}
+            {active === 'roster' && <RosterTab {...common} />}
+            {active === 'regularization' && <RegularizationTab {...common} />}
+            {active === 'leave' && <LeaveAutomationTab {...common} />}
+            {active === 'compliance' && <PayrollComplianceTab {...common} />}
+            {active === 'training' && <TrainingTab {...common} />}
+            {active === 'performance' && <PerformanceTab {...common} />}
+            {active === 'cases' && <CasesTab {...common} />}
+            {active === 'exit' && <ExitTab {...common} />}
+            {active === 'letters' && <LettersTab {...common} />}
+            {active === 'policies' && <PoliciesTab {...common} />}
+            {active === 'service' && <ServiceDeskTab {...common} />}
+            {active === 'analytics' && <AnalyticsTab />}
+          </div>
         </div>
-        {active === 'recruitment' && <RecruitmentTab {...common} />}
-        {active === 'roster' && <RosterTab {...common} />}
-        {active === 'regularization' && <RegularizationTab {...common} />}
-        {active === 'leave' && <LeaveAutomationTab {...common} />}
-        {active === 'compliance' && <PayrollComplianceTab {...common} />}
-        {active === 'training' && <TrainingTab {...common} />}
-        {active === 'performance' && <PerformanceTab {...common} />}
-        {active === 'cases' && <CasesTab {...common} />}
-        {active === 'exit' && <ExitTab {...common} />}
-        {active === 'letters' && <LettersTab {...common} />}
-        {active === 'policies' && <PoliciesTab {...common} />}
-        {active === 'service' && <ServiceDeskTab {...common} />}
-        {active === 'analytics' && <AnalyticsTab />}
       </div>
     </div>
   );
