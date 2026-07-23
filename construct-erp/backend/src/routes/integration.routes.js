@@ -5,8 +5,11 @@
 
 const express = require('express');
 const crypto  = require('crypto');
+const path    = require('path');
+const fs      = require('fs');
 const router  = express.Router();
 const { query } = require('../config/database');
+const { downloadFromOneDrive, isConfigured: onedriveConfigured } = require('../services/onedrive.service');
 
 const APP_URL = process.env.PUBLIC_APP_URL || process.env.FRONTEND_URL || 'https://erp.bcim.in';
 
@@ -79,11 +82,18 @@ router.get('/work-orders', async (req, res) => {
          cb.name                                       AS "createdBy",
          wo.status                                     AS "status",
          wo.id                                         AS "id",
-         wo.updated_at                                 AS "updatedAt"
+         wo.updated_at                                 AS "updatedAt",
+         doc.id                                        AS "docId"
        FROM work_orders wo
        JOIN   projects p  ON p.id  = wo.project_id
        LEFT JOIN vendors v  ON v.id  = wo.vendor_id
        LEFT JOIN users  cb ON cb.id = wo.created_by
+       LEFT JOIN LATERAL (
+         SELECT id FROM documents
+         WHERE module = 'work_order' AND module_record_id = wo.id
+           AND file_type = '.pdf'
+         ORDER BY created_at DESC LIMIT 1
+       ) doc ON true
        WHERE ${conditions.join(' AND ')}
        ORDER BY wo.updated_at DESC
        LIMIT $${idx}`,
@@ -99,6 +109,7 @@ router.get('/work-orders', async (req, res) => {
       createdBy:   r.createdBy,
       status:      r.status,
       fileUrl:     `${APP_URL}/verify/wo/${r.id}`,
+      pdfUrl:      r.docId ? `${APP_URL}/api/v1/integration/documents/${r.docId}/file` : null,
       updatedAt:   r.updatedAt,
     }));
 
@@ -139,11 +150,18 @@ router.get('/purchase-orders', async (req, res) => {
          po.authorized_md_at                                   AS "approvedAt",
          po.status                                             AS "status",
          po.id                                                 AS "id",
-         po.updated_at                                         AS "updatedAt"
+         po.updated_at                                         AS "updatedAt",
+         doc.id                                                AS "docId"
        FROM purchase_orders po
        JOIN   projects p  ON p.id  = po.project_id
        LEFT JOIN vendors v  ON v.id  = po.vendor_id
        LEFT JOIN users  md ON md.id = po.authorized_md_by
+       LEFT JOIN LATERAL (
+         SELECT id FROM documents
+         WHERE module = 'purchase_order' AND module_record_id = po.id
+           AND file_type = '.pdf'
+         ORDER BY created_at DESC LIMIT 1
+       ) doc ON true
        WHERE ${conditions.join(' AND ')}
        ORDER BY po.updated_at DESC
        LIMIT $${idx}`,
@@ -161,6 +179,7 @@ router.get('/purchase-orders', async (req, res) => {
       approvedAt:      r.approvedAt,
       status:          r.status,
       fileUrl:         `${APP_URL}/verify/po/${r.id}`,
+      pdfUrl:          r.docId ? `${APP_URL}/api/v1/integration/documents/${r.docId}/file` : null,
       updatedAt:       r.updatedAt,
     }));
 
@@ -204,11 +223,18 @@ router.get('/mrs', async (req, res) => {
          md.name                                           AS "approvedBy",
          mr.approved_md_at                                 AS "approvedAt",
          mr.id                                             AS "id",
-         mr.updated_at                                     AS "updatedAt"
+         mr.updated_at                                     AS "updatedAt",
+         doc.id                                            AS "docId"
        FROM material_requisitions mr
        JOIN   projects p  ON p.id  = mr.project_id
        LEFT JOIN users rb ON rb.id = mr.raised_by
        LEFT JOIN users md ON md.id = mr.approved_md_by
+       LEFT JOIN LATERAL (
+         SELECT id FROM documents
+         WHERE module = 'mrs' AND module_record_id = mr.id
+           AND file_type = '.pdf'
+         ORDER BY created_at DESC LIMIT 1
+       ) doc ON true
        WHERE ${conditions.join(' AND ')}
        ORDER BY mr.updated_at DESC
        LIMIT $${idx}`,
@@ -250,12 +276,47 @@ router.get('/mrs', async (req, res) => {
       approvedAt:   r.approvedAt,
       items:        itemsByMrs[r.id] || [],
       fileUrl:      `${APP_URL}/verify/mrs/${r.id}`,
+      pdfUrl:       r.docId ? `${APP_URL}/api/v1/integration/documents/${r.docId}/file` : null,
       updatedAt:    r.updatedAt,
     }));
 
     res.json(data);
   } catch (err) {
     console.error('[Integration] GET /mrs error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/v1/integration/documents/:docId/file ─────────────────────────
+// Proxy download for DMS — same API key auth as all other routes.
+// Scoped by company_id so cross-company doc access is impossible.
+router.get('/documents/:docId/file', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT local_url, onedrive_id, file_name, file_type
+       FROM documents
+       WHERE id = $1 AND company_id = $2`,
+      [req.params.docId, req.apiCompanyId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Document not found' });
+    const doc = rows[0];
+
+    res.setHeader('Content-Disposition', `attachment; filename="${doc.file_name}"`);
+
+    if (doc.onedrive_id && onedriveConfigured()) {
+      const { buffer, contentType } = await downloadFromOneDrive(doc.onedrive_id);
+      res.setHeader('Content-Type', contentType);
+      return res.send(buffer);
+    }
+
+    if (doc.local_url) {
+      const filePath = path.join(__dirname, '../../uploads', path.basename(doc.local_url));
+      if (fs.existsSync(filePath)) return res.sendFile(filePath);
+    }
+
+    return res.status(410).json({ error: 'File bytes not available (ephemeral storage cleared on last deploy)' });
+  } catch (err) {
+    console.error('[Integration] GET /documents/:docId/file error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
