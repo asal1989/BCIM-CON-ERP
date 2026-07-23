@@ -3665,6 +3665,129 @@ router.patch('/:id/payment-certificate/sign', async (req, res) => {
 });
 
 // ── PATCH /tqs/bills/:id/payment ───────────────────────────────────────────
+// ── POST /tqs/bills/accounts-jv-by-cert ─────────────────────────────────────
+// Applies the Accounts JV Date + remarks to every bill on a QS certification
+// that hasn't had its JV date set yet, in one action — each bill keeps its
+// own already-certified deduction amounts (advance/TDS/retention/other),
+// only the shared JV date is written and its journal entry (re)posted.
+// MUST be defined before /:id routes so Express doesn't swallow it as a param.
+router.post('/accounts-jv-by-cert', requireTqsStageAccess('accounts'), async (req, res) => {
+  try {
+    const { certification_id, accts_jv_date, accts_remarks } = req.body;
+    if (!certification_id) return res.status(400).json({ error: 'certification_id required' });
+    requireDateFields(req.body, [
+      { key: 'accts_jv_date', label: 'JV Date (Accounts)' },
+    ]);
+
+    const n = (v) => parseFloat(v || 0) || 0;
+
+    const billsRes = await query(`
+      SELECT b.id, b.sl_number, b.bill_type, b.total_amount, b.gst_amount, b.tcs_amt,
+             b.vendor_id, b.vendor_name, b.wo_number, b.po_number, b.project_id, b.grn_id, b.workflow_status,
+             u.advance_recovered, u.tds_deduction, u.retention_money, u.other_deductions,
+             u.accts_received_from_qs_date
+      FROM vendor_qs_certification_bills cb
+      JOIN tqs_bills b ON b.id = cb.bill_id
+      LEFT JOIN tqs_bill_updates u ON u.bill_id = b.id
+      WHERE cb.certification_id = $1
+        AND b.company_id = $2
+        AND b.is_deleted = FALSE
+        AND u.accts_jv_date IS NULL
+    `, [certification_id, req.user.company_id]);
+    if (!billsRes.rows.length) {
+      return res.status(400).json({ error: 'No bills on this certification are currently awaiting an Accounts JV Date.' });
+    }
+
+    const acctsReceivedFromQsDate = new Date().toISOString().slice(0, 10);
+
+    for (const bill of billsRes.rows) {
+      const advance_recovered = n(bill.advance_recovered);
+      const tds_deduction     = n(bill.tds_deduction);
+      const retention_money   = n(bill.retention_money);
+      const other_deductions  = n(bill.other_deductions);
+      const baseAmount    = n(bill.total_amount);
+      const totalDed      = advance_recovered + tds_deduction + retention_money + other_deductions;
+      const certified_net = baseAmount - totalDed;
+
+      await query(`
+        INSERT INTO tqs_bill_updates (
+          bill_id,
+          accts_received_from_qs_date, accts_jv_date, accts_remarks,
+          advance_recovered, tds_deduction, retention_money, other_deductions,
+          total_deductions, certified_net, balance_to_pay,
+          updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10,NOW())
+        ON CONFLICT (bill_id) DO UPDATE SET
+          accts_received_from_qs_date = COALESCE(tqs_bill_updates.accts_received_from_qs_date, EXCLUDED.accts_received_from_qs_date),
+          accts_jv_date        = EXCLUDED.accts_jv_date,
+          accts_remarks        = COALESCE(EXCLUDED.accts_remarks, tqs_bill_updates.accts_remarks),
+          updated_at           = NOW()
+      `, [
+        bill.id,
+        bill.accts_received_from_qs_date?.toISOString?.().slice(0, 10) || acctsReceivedFromQsDate,
+        accts_jv_date || null,
+        accts_remarks || null,
+        advance_recovered, tds_deduction, retention_money, other_deductions,
+        totalDed, certified_net,
+      ]);
+
+      if (bill.workflow_status === 'qs') {
+        await query(`UPDATE tqs_bills SET workflow_status='procurement', updated_at=NOW() WHERE id=$1`, [bill.id]);
+      }
+
+      await logHistory(bill.id, 'accounts',
+        `Accounts processed — Advance Rec: ₹${advance_recovered.toFixed(0)}, TDS: ₹${tds_deduction.toFixed(0)}, Net: ₹${certified_net.toFixed(0)} (bulk JV via certification, ${billsRes.rows.length} bills)`,
+        req.user.id);
+
+      // ── Auto-post Journal Voucher for the booked bill (same logic as the single-bill route) ──
+      try {
+        const total       = n(bill.total_amount);
+        const gst         = n(bill.gst_amount);
+        const tcs         = n(bill.tcs_amt);
+        const expenseBase = total - gst - tcs;
+        const apCredit    = total - tds_deduction - retention_money;
+        const isWO        = (bill.bill_type === 'wo') || (!!bill.wo_number && !bill.po_number);
+        const grinCode    = await resolveGrinClearingCode(req.user.company_id, bill.grn_id);
+        const expenseCode = grinCode || (isWO ? '5100' : '5000');
+        const ref         = bill.sl_number || bill.id;
+
+        if (total > 0) {
+          await query(
+            `DELETE FROM journal_entries WHERE company_id = $1 AND source = 'auto_tqs_bill' AND reference = $2`,
+            [req.user.company_id, ref]
+          ).catch(() => {});
+
+          const expenseLabel = grinCode ? 'GRIN clearing' : (isWO ? 'Subcontractor' : 'Material');
+          const lines = [
+            { code: expenseCode, debit: expenseBase, description: `${expenseLabel} — ${bill.vendor_name || ''} ${ref}` },
+          ];
+          if (gst > 0)              lines.push({ code: '1300', debit: gst, description: `Input GST / ITC — ${ref}` });
+          if (tcs > 0)              lines.push({ code: '1310', debit: tcs, description: `TCS collected by vendor — ${ref}` });
+          lines.push({ code: '2000', credit: apCredit, description: `Payable to ${bill.vendor_name || 'vendor'} — ${ref}` });
+          if (tds_deduction > 0)    lines.push({ code: '2200', credit: tds_deduction, description: `TDS deducted — ${ref}` });
+          if (retention_money > 0)  lines.push({ code: '2300', credit: retention_money, description: `Retention withheld — ${ref}` });
+
+          await postAutoJournalStandalone({
+            companyId: req.user.company_id,
+            userId:    req.user.id,
+            entryDate: accts_jv_date,
+            projectId: bill.project_id || null,
+            reference: ref,
+            narration: `Bill booking — ${bill.vendor_name || ''} (${ref})`,
+            source:    'auto_tqs_bill',
+            lines,
+          });
+        }
+      } catch (_) { /* best-effort: never block the accounts stage over JV posting */ }
+    }
+
+    res.json({ data: { bills_updated: billsRes.rows.length } });
+  } catch (err) {
+    console.error(err);
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
 router.patch('/:id/accounts', requireTqsStageAccess('accounts'), async (req, res) => {
   try {
     await getAccessibleBill(req, req.params.id);
@@ -3954,6 +4077,68 @@ router.patch('/:id/procurement', requireTqsStageAccess('procurement'), async (re
     }
 
     res.json({ data: { workflow_status: 'qs_sign', bills_updated: billIds.length } });
+  } catch (err) {
+    console.error(err);
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// ── POST /tqs/bills/qs-sign-by-cert ─────────────────────────────────────────
+// Applies the QS — MD Signature Collection dates + remarks to every bill on
+// a QS certification in one action. MUST be defined before /:id routes so
+// Express doesn't swallow it as a param.
+router.post('/qs-sign-by-cert', requireTqsStageAccess('qs_sign'), async (req, res) => {
+  try {
+    const {
+      certification_id,
+      qs_sign_received_from_procurement_date,
+      qs_sign_date,
+      qs_sign_handed_to_accounts_date,
+      qs_sign_remarks,
+    } = req.body;
+    if (!certification_id) return res.status(400).json({ error: 'certification_id required' });
+    requireDateFields(req.body, [
+      { key: 'qs_sign_received_from_procurement_date', label: 'Received from Procurement Date' },
+      { key: 'qs_sign_date', label: 'MD Signed Date' },
+      { key: 'qs_sign_handed_to_accounts_date', label: 'Handed to Accounts Date' },
+    ]);
+
+    const billsRes = await query(`
+      SELECT b.id
+      FROM vendor_qs_certification_bills cb
+      JOIN tqs_bills b ON b.id = cb.bill_id
+      WHERE cb.certification_id = $1
+        AND b.company_id = $2
+        AND b.workflow_status = 'qs_sign'
+        AND b.is_deleted = FALSE
+    `, [certification_id, req.user.company_id]);
+    const billIds = billsRes.rows.map(r => r.id);
+    if (!billIds.length) {
+      return res.status(400).json({ error: 'No bills on this certification are currently awaiting QS — MD Signature Collection.' });
+    }
+
+    for (const bid of billIds) {
+      await query(`
+        INSERT INTO tqs_bill_updates (bill_id, qs_sign_received_from_procurement_date, qs_sign_date, qs_sign_handed_to_accounts_date, qs_sign_remarks, updated_at)
+        VALUES ($1, $2, $3, $4, $5, NOW())
+        ON CONFLICT (bill_id) DO UPDATE SET
+          qs_sign_received_from_procurement_date = COALESCE(EXCLUDED.qs_sign_received_from_procurement_date, tqs_bill_updates.qs_sign_received_from_procurement_date),
+          qs_sign_date                    = COALESCE(EXCLUDED.qs_sign_date, tqs_bill_updates.qs_sign_date),
+          qs_sign_handed_to_accounts_date = COALESCE(EXCLUDED.qs_sign_handed_to_accounts_date, tqs_bill_updates.qs_sign_handed_to_accounts_date),
+          qs_sign_remarks                 = COALESCE(EXCLUDED.qs_sign_remarks, tqs_bill_updates.qs_sign_remarks),
+          updated_at                      = NOW()
+      `, [bid, qs_sign_received_from_procurement_date || null, qs_sign_date || null, qs_sign_handed_to_accounts_date || null, qs_sign_remarks || null]);
+    }
+
+    await query(`UPDATE tqs_bills SET workflow_status='accounts', updated_at=NOW() WHERE id = ANY($1::uuid[])`, [billIds]);
+
+    const histNote = `Received from Procurement${qs_sign_received_from_procurement_date ? ` on ${qs_sign_received_from_procurement_date}` : ''}; MD Signature collected${qs_sign_date ? ` on ${qs_sign_date}` : ''}${qs_sign_handed_to_accounts_date ? `, handed to Accounts: ${qs_sign_handed_to_accounts_date}` : ''} (bulk handoff via certification, ${billIds.length} bills)`;
+    for (const bid of billIds) {
+      await logHistory(bid, 'qs_sign', histNote, req.user.id);
+      await logHistory(bid, 'system', 'Moved to Accounts for Payment', req.user.id);
+    }
+
+    res.json({ data: { workflow_status: 'accounts', bills_updated: billIds.length } });
   } catch (err) {
     console.error(err);
     res.status(err.statusCode || 500).json({ error: err.message });

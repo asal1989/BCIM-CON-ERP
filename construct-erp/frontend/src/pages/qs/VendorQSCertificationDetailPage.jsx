@@ -989,6 +989,41 @@ export default function VendorQSCertificationDetailPage() {
     onError: err => toast.error(err?.response?.data?.error || 'Procurement Handoff failed'),
   });
 
+  // ── QS — MD Signature Collection — apply to every bill on this cert at once.
+  const [showQsSign, setShowQsSign] = useState(false);
+  const [qsSignForm, setQsSignForm] = useState({
+    qs_sign_received_from_procurement_date: '',
+    qs_sign_date: '',
+    qs_sign_handed_to_accounts_date: '',
+    qs_sign_remarks: '',
+  });
+  const qsSignMut = useMutation({
+    mutationFn: () => tqsBillsAPI.qsSignByCert({ certification_id: id, ...qsSignForm }),
+    onSuccess: (res) => {
+      const count = res.data?.data?.bills_updated ?? 0;
+      toast.success(`MD Signature recorded for ${count} bill${count === 1 ? '' : 's'}`);
+      setShowQsSign(false);
+      setQsSignForm({ qs_sign_received_from_procurement_date: '', qs_sign_date: '', qs_sign_handed_to_accounts_date: '', qs_sign_remarks: '' });
+      qc.invalidateQueries({ queryKey: ['vendor-qs-certification', id] });
+    },
+    onError: err => toast.error(err?.response?.data?.error || 'QS — MD Signature Collection failed'),
+  });
+
+  // ── Accounts JV Date — apply to every bill on this cert still missing one.
+  const [showAcctsJv, setShowAcctsJv] = useState(false);
+  const [acctsJvForm, setAcctsJvForm] = useState({ accts_jv_date: '', accts_remarks: '' });
+  const acctsJvMut = useMutation({
+    mutationFn: () => tqsBillsAPI.accountsJvByCert({ certification_id: id, ...acctsJvForm }),
+    onSuccess: (res) => {
+      const count = res.data?.data?.bills_updated ?? 0;
+      toast.success(`JV date saved for ${count} bill${count === 1 ? '' : 's'}`);
+      setShowAcctsJv(false);
+      setAcctsJvForm({ accts_jv_date: '', accts_remarks: '' });
+      qc.invalidateQueries({ queryKey: ['vendor-qs-certification', id] });
+    },
+    onError: err => toast.error(err?.response?.data?.error || 'Accounts JV save failed'),
+  });
+
   const refreshMut = useMutation({
     mutationFn: () => vendorQSCertificationAPI.refreshFromBills(id),
     onSuccess: (res) => {
@@ -1300,6 +1335,164 @@ export default function VendorQSCertificationDetailPage() {
                   </button>
                   <button
                     onClick={() => setShowHandoff(false)}
+                    className="px-4 py-2 text-slate-500 text-sm font-medium rounded-lg hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* ── QS — MD Signature Collection — bulk-apply to every bill on this cert ── */}
+      {(() => {
+        const qsSignBills = (cert.bills || []).filter(b => b.workflow_status === 'qs_sign');
+        if (!qsSignBills.length) return null;
+        return (
+          <div className="no-print bg-white rounded-xl border border-violet-200 shadow-sm px-5 py-4 mb-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-violet-600" />
+                <p className="text-sm font-semibold text-slate-800">
+                  QS — MD Signature Collection
+                  <span className="ml-2 text-xs font-medium text-violet-700 bg-violet-50 border border-violet-200 rounded-full px-2 py-0.5">
+                    {qsSignBills.length} of {cert.bills.length} bill{cert.bills.length === 1 ? '' : 's'} awaiting signature
+                  </span>
+                </p>
+              </div>
+              {!showQsSign && (
+                <button
+                  onClick={() => setShowQsSign(true)}
+                  className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm"
+                >
+                  <CheckCircle2 className="w-4 h-4" /> Record for {qsSignBills.length} Bill{qsSignBills.length === 1 ? '' : 's'}
+                </button>
+              )}
+            </div>
+            {showQsSign && (
+              <div className="mt-3 space-y-3">
+                <p className="text-xs text-slate-500">
+                  Applies the same dates to all {qsSignBills.length} bill{qsSignBills.length === 1 ? '' : 's'} on this certification and moves them to Accounts for Payment — no need to open each bill individually.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-900 mb-1">Received from Procurement Date <span className="text-red-500">*</span></label>
+                    <input type="date" required
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500 outline-none"
+                      value={qsSignForm.qs_sign_received_from_procurement_date}
+                      onChange={e => setQsSignForm(f => ({ ...f, qs_sign_received_from_procurement_date: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-900 mb-1">MD Signed Date <span className="text-red-500">*</span></label>
+                    <input type="date" required
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500 outline-none"
+                      value={qsSignForm.qs_sign_date}
+                      onChange={e => setQsSignForm(f => ({ ...f, qs_sign_date: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-900 mb-1">Handed to Accounts Date <span className="text-red-500">*</span></label>
+                    <input type="date" required
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500 outline-none"
+                      value={qsSignForm.qs_sign_handed_to_accounts_date}
+                      onChange={e => setQsSignForm(f => ({ ...f, qs_sign_handed_to_accounts_date: e.target.value }))} />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-900 mb-1">Remarks</label>
+                  <textarea rows={2}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500 outline-none resize-none"
+                    value={qsSignForm.qs_sign_remarks}
+                    onChange={e => setQsSignForm(f => ({ ...f, qs_sign_remarks: e.target.value }))} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      if (!qsSignForm.qs_sign_received_from_procurement_date || !qsSignForm.qs_sign_date || !qsSignForm.qs_sign_handed_to_accounts_date) {
+                        toast.error('All three dates are required');
+                        return;
+                      }
+                      qsSignMut.mutate();
+                    }}
+                    disabled={qsSignMut.isPending}
+                    className="px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-lg disabled:opacity-50"
+                  >
+                    {qsSignMut.isPending ? 'Applying…' : `Apply to All ${qsSignBills.length} Bills`}
+                  </button>
+                  <button
+                    onClick={() => setShowQsSign(false)}
+                    className="px-4 py-2 text-slate-500 text-sm font-medium rounded-lg hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* ── Accounts JV Date — bulk-apply to every bill on this cert still missing one ── */}
+      {(() => {
+        const acctsJvBills = (cert.bills || []).filter(b => !b.accts_jv_date);
+        if (!acctsJvBills.length) return null;
+        return (
+          <div className="no-print bg-white rounded-xl border border-blue-200 shadow-sm px-5 py-4 mb-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <IndianRupee className="w-4 h-4 text-blue-600" />
+                <p className="text-sm font-semibold text-slate-800">
+                  Accounts JV Date
+                  <span className="ml-2 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5">
+                    {acctsJvBills.length} of {cert.bills.length} bill{cert.bills.length === 1 ? '' : 's'} awaiting JV date
+                  </span>
+                </p>
+              </div>
+              {!showAcctsJv && (
+                <button
+                  onClick={() => setShowAcctsJv(true)}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm"
+                >
+                  <IndianRupee className="w-4 h-4" /> Save JV Date for {acctsJvBills.length} Bill{acctsJvBills.length === 1 ? '' : 's'}
+                </button>
+              )}
+            </div>
+            {showAcctsJv && (
+              <div className="mt-3 space-y-3">
+                <p className="text-xs text-slate-500">
+                  Applies the same JV date to all {acctsJvBills.length} bill{acctsJvBills.length === 1 ? '' : 's'} on this certification still missing one — each bill keeps its own already-certified deduction amounts, and its journal entry is posted individually.
+                </p>
+                <div className="max-w-xs">
+                  <label className="block text-xs font-medium text-slate-900 mb-1">JV Date (Accounts) <span className="text-red-500">*</span></label>
+                  <input type="date" required
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    value={acctsJvForm.accts_jv_date}
+                    onChange={e => setAcctsJvForm(f => ({ ...f, accts_jv_date: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-900 mb-1">Remarks</label>
+                  <textarea rows={2}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                    value={acctsJvForm.accts_remarks}
+                    onChange={e => setAcctsJvForm(f => ({ ...f, accts_remarks: e.target.value }))} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      if (!acctsJvForm.accts_jv_date) {
+                        toast.error('JV Date is required');
+                        return;
+                      }
+                      acctsJvMut.mutate();
+                    }}
+                    disabled={acctsJvMut.isPending}
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-50"
+                  >
+                    {acctsJvMut.isPending ? 'Saving…' : `Apply to All ${acctsJvBills.length} Bills`}
+                  </button>
+                  <button
+                    onClick={() => setShowAcctsJv(false)}
                     className="px-4 py-2 text-slate-500 text-sm font-medium rounded-lg hover:bg-slate-50"
                   >
                     Cancel

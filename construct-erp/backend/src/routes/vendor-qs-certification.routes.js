@@ -698,9 +698,10 @@ router.get('/:id', async (req, res) => {
     );
     if (!cert.rows.length) return res.status(404).json({ error: 'Certification not found' });
     const bills = await query(`
-      SELECT cb.*, b.workflow_status
+      SELECT cb.*, b.workflow_status, u.accts_jv_date
       FROM vendor_qs_certification_bills cb
       LEFT JOIN tqs_bills b ON b.id = cb.bill_id
+      LEFT JOIN tqs_bill_updates u ON u.bill_id = b.id
       WHERE cb.certification_id=$1 ORDER BY cb.inv_date
     `, [req.params.id]);
     const items = await query(`SELECT * FROM vendor_qs_certification_items WHERE certification_id=$1 ORDER BY source_inv_number, description`, [req.params.id]);
