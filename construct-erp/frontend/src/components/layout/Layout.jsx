@@ -2248,6 +2248,11 @@ export default function Layout() {
         {/* Right actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 6px', flexShrink: 0, borderLeft: '1px solid rgba(255,255,255,0.1)' }}>
 
+          {/* Current project / switch project — was defined but never mounted,
+              so there was no way to reach /select-project after the first login. */}
+          <div className="lg-show" style={{ marginRight: 6 }}>
+            <ProjectChip />
+          </div>
 
           {/* Language — hidden on mobile */}
           <div style={{ position: 'relative' }} className="lg-show">
