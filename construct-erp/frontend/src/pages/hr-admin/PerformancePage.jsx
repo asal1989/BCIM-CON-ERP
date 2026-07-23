@@ -954,31 +954,37 @@ export default function PerformancePage() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-1">
+                      <div className="flex items-center justify-center gap-1.5 flex-wrap">
                         <button onClick={() => setViewing(ev)} title="View"
                           className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-500"><Eye size={14}/></button>
                         <button onClick={() => { setEditing(ev); setShowForm(true); }} title="Edit"
                           className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500"><FileText size={14}/></button>
                         {ev.status === 'draft' && (
-                          <button onClick={() => statusMut.mutate({ id: ev.id, status: 'self_submitted' })} title="Submit"
-                            className="p-1.5 hover:bg-emerald-50 rounded-lg text-emerald-500"><ChevronRight size={14}/></button>
+                          <button onClick={() => statusMut.mutate({ id: ev.id, status: 'self_submitted' })}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-600 hover:bg-emerald-100">
+                            <ChevronRight size={12}/> Submit
+                          </button>
                         )}
                         {APPROVAL_STAGES.filter(st => st.from === ev.status).map(st => (
-                          <button key={st.to} onClick={() => statusMut.mutate({ id: ev.id, status: st.to })} title={st.label}
-                            className="p-1.5 hover:bg-purple-50 rounded-lg text-purple-500">
-                            {st.icon === 'Award' ? <Award size={14}/> : <CheckCircle size={14}/>}
+                          <button key={st.to} onClick={() => statusMut.mutate({ id: ev.id, status: st.to })}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-600 hover:bg-emerald-100">
+                            <CheckCircle size={12}/> Accept
                           </button>
                         ))}
                         {ev.status === 'approved' && (
-                          <button onClick={() => statusMut.mutate({ id: ev.id, status: 'acknowledged' })} title="Acknowledge"
-                            className="p-1.5 hover:bg-teal-50 rounded-lg text-teal-500"><CheckCircle size={14}/></button>
+                          <button onClick={() => statusMut.mutate({ id: ev.id, status: 'acknowledged' })}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-teal-50 text-teal-600 hover:bg-teal-100">
+                            <CheckCircle size={12}/> Acknowledge
+                          </button>
                         )}
                         {!['draft','approved','acknowledged','rejected'].includes(ev.status) && (
                           <button onClick={() => {
                             const reason = window.prompt('Reason for rejecting this evaluation:');
                             if (reason && reason.trim()) rejectMut.mutate({ id: ev.id, reason: reason.trim() });
-                          }} title="Reject"
-                            className="p-1.5 hover:bg-red-50 rounded-lg text-red-400"><XCircle size={14}/></button>
+                          }}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-red-50 text-red-600 hover:bg-red-100">
+                            <XCircle size={12}/> Reject
+                          </button>
                         )}
                         {ev.status === 'draft' && (
                           <button onClick={() => { if (window.confirm('Delete this draft?')) deleteMut.mutate(ev.id); }}
