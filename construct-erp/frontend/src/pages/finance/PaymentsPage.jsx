@@ -847,8 +847,7 @@ export default function PaymentsPage() {
           Modal: Record New Payment
       ══════════════════════════════════════════════════════════════════════ */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[94vh] overflow-y-auto shadow-2xl flex flex-col">
+        <div className="fixed inset-0 z-50 flex flex-col bg-white">
 
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 flex-shrink-0">
@@ -863,7 +862,8 @@ export default function PaymentsPage() {
               </button>
             </div>
 
-            <div className="px-6 py-5 space-y-5 flex-1">
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+            <div className="max-w-3xl mx-auto space-y-5">
 
               {/* ── Step 1: Payment Type ── */}
               <div>
