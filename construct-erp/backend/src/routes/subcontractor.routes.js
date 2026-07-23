@@ -52,6 +52,36 @@ runSchemaInit('wo_amendments', async () => {
   `);
 });
 
+// Full PO-style parity for WO amendments: status/approval workflow + a link to
+// the new versioned "-A{n}" work_orders row a full item-revision amendment creates.
+// (Simple "Log Other Change" style entries leave new_wo_id NULL and reuse the base wo_id.)
+runSchemaInit('wo_amendments_v2_status', async () => {
+  await query(`
+    ALTER TABLE wo_amendments
+      ADD COLUMN IF NOT EXISTS amendment_ref TEXT,
+      ADD COLUMN IF NOT EXISTS amendment_type TEXT,
+      ADD COLUMN IF NOT EXISTS value_impact NUMERIC(15,2),
+      ADD COLUMN IF NOT EXISTS impact_type TEXT DEFAULT 'none',
+      ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+      ADD COLUMN IF NOT EXISTS approved_by UUID REFERENCES users(id),
+      ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS raised_by TEXT,
+      ADD COLUMN IF NOT EXISTS new_wo_id UUID REFERENCES work_orders(id),
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()
+  `);
+  // Pre-existing entries were simple manual ledger notes with no approval concept —
+  // treat them as already-approved so they don't suddenly appear "pending".
+  await query(`UPDATE wo_amendments SET status = 'approved' WHERE status IS NULL`);
+  await query(`UPDATE wo_amendments SET value_impact = ABS(COALESCE(amount_change,0)) WHERE value_impact IS NULL`);
+  await query(`
+    UPDATE wo_amendments SET impact_type = CASE
+      WHEN COALESCE(amount_change,0) > 0 THEN 'increase'
+      WHEN COALESCE(amount_change,0) < 0 THEN 'decrease'
+      ELSE 'none' END
+    WHERE impact_type IS NULL OR impact_type = 'none'
+  `);
+});
+
 // Public verification endpoint (no auth — QR scan)
 router.get('/public/verify/:id', async (req, res) => {
   try {
@@ -150,6 +180,240 @@ router.delete('/work-orders/:id/amendments/:aid', authorize(...WO_AMEND_ROLES), 
       `DELETE FROM wo_amendments WHERE id=$1 AND wo_id=$2 AND company_id=$3`,
       [req.params.aid, req.params.id, req.user.company_id]);
     res.json({ message: 'Deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// WO AMENDMENTS — full PO-style parity: item-level revision persisted as a new
+// "-A{n}" suffixed work_orders row, plus a wo_amendments entry for the
+// approval log. Mirrors purchase_orders' stripAmendSuffix/nextAmendSuffix/
+// amend pattern in po.routes.js.
+// ───────────────────────────────────────────────────────────────────────────
+function stripWoAmendSuffix(ref) {
+  return String(ref || '').replace(/-A\d+$/i, '');
+}
+
+// queryFn must be directly callable as queryFn(sql, params).
+async function nextWoAmendSuffix(queryFn, companyId, baseRef) {
+  const r = await queryFn(
+    `SELECT wo.wo_number AS ref
+     FROM work_orders wo JOIN projects p ON p.id = wo.project_id
+     WHERE p.company_id = $1
+       AND UPPER(REGEXP_REPLACE(wo.wo_number, '-A[0-9]+$', '', 'i')) = UPPER($2)
+     UNION ALL
+     SELECT amendment_ref AS ref
+     FROM wo_amendments
+     WHERE company_id = $1 AND amendment_ref IS NOT NULL
+       AND UPPER(REGEXP_REPLACE(amendment_ref, '-A[0-9]+$', '', 'i')) = UPPER($2)`,
+    [companyId, baseRef]
+  );
+  let max = 0;
+  for (const row of r.rows) {
+    const m = String(row.ref || '').match(/-A(\d+)$/i);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return max + 1;
+}
+
+// GET /work-orders/:id/amendment-context — base WO + items (with already-billed
+// qty for the "revised below already-billed" warning) + next -A{n} preview.
+router.get('/work-orders/:id/amendment-context', async (req, res) => {
+  try {
+    const woRes = await query(
+      `SELECT wo.*, v.name AS vendor_name
+       FROM work_orders wo
+       JOIN projects p ON p.id = wo.project_id
+       LEFT JOIN vendors v ON v.id = wo.vendor_id
+       WHERE wo.id = $1 AND p.company_id = $2`,
+      [req.params.id, req.user.company_id]
+    );
+    const wo = woRes.rows[0];
+    if (!wo) return res.status(404).json({ error: 'Work Order not found' });
+
+    const items = await query(
+      `SELECT i.*,
+        COALESCE((
+          SELECT SUM(bi.billed_qty)
+          FROM subcontractor_bill_items bi JOIN subcontractor_bills b ON b.id = bi.bill_id
+          WHERE b.status <> 'rejected' AND bi.wo_item_id = i.id
+        ), 0) + COALESCE((
+          SELECT SUM(li.quantity)
+          FROM tqs_bill_line_items li JOIN tqs_bills b ON b.id = li.bill_id
+          WHERE b.is_deleted = FALSE AND li.wo_item_id = i.id
+        ), 0) AS billed_quantity
+       FROM work_order_items i WHERE i.wo_id = $1 ORDER BY i.sequence_no NULLS LAST, i.id`,
+      [req.params.id]
+    );
+
+    const baseRef = stripWoAmendSuffix(wo.wo_number);
+    const suffix = await nextWoAmendSuffix(query, req.user.company_id, baseRef);
+
+    res.json({
+      data: {
+        ...wo,
+        items: items.rows,
+        base_ref_no: baseRef,
+        next_amendment_ref: `${baseRef}-A${suffix}`,
+      },
+    });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// POST /work-orders/:id/amend — create the revised WO (new -A{n} record) + a wo_amendments log entry
+router.post('/work-orders/:id/amend', authorize(...WO_AMEND_ROLES), async (req, res) => {
+  try {
+    const {
+      items = [], reason_code, reason_remarks, raised_by,
+      terms_conditions, end_date,
+    } = req.body;
+
+    const result = await withTransaction(async (client) => {
+      const baseRes = await client.query(
+        `SELECT wo.* FROM work_orders wo
+         JOIN projects p ON p.id = wo.project_id
+         WHERE wo.id = $1 AND p.company_id = $2`,
+        [req.params.id, req.user.company_id]
+      );
+      const base = baseRes.rows[0];
+      if (!base) { const e = new Error('Work Order not found'); e.statusCode = 404; throw e; }
+
+      const baseRef = stripWoAmendSuffix(base.wo_number);
+      const suffix = await nextWoAmendSuffix((sql, params) => client.query(sql, params), req.user.company_id, baseRef);
+      const newRef = `${baseRef}-A${suffix}`;
+
+      const newTerms = terms_conditions !== undefined ? terms_conditions : base.terms_conditions;
+      const newEndDate = end_date !== undefined && end_date ? end_date : base.end_date;
+
+      const headerRes = await client.query(
+        `INSERT INTO work_orders (
+          project_id, vendor_id, wo_number, wo_date, subject, work_description, scope_of_work,
+          start_date, end_date, terms_conditions, cost_head, work_category, tower_block,
+          status, created_by, gst_pct, tds_pct, retention_pct, advance_recovery_pct, mrs_id, mrs_ids
+        ) VALUES ($1,$2,$3,$4,$5,$5,$6,$7,$8,$9,$10,$11,$12,'pending',$13,$14,$15,$16,$17,$18,$19)
+        RETURNING *`,
+        [base.project_id, base.vendor_id, newRef, base.wo_date, base.subject, base.scope_of_work,
+         base.start_date, newEndDate, newTerms, base.cost_head, base.work_category, base.tower_block,
+         req.user.id, base.gst_pct, base.tds_pct, base.retention_pct, base.advance_recovery_pct,
+         base.mrs_id, base.mrs_ids]
+      );
+      const newWoId = headerRes.rows[0].id;
+
+      // If no line items were submitted (pure terms/duration amendment), carry the
+      // base WO's items over unchanged so the revised WO stays complete.
+      let lineItems = items;
+      if (!lineItems.length) {
+        const baseItems = await client.query(
+          `SELECT description, unit, quantity, rate, gst_rate, remarks
+           FROM work_order_items WHERE wo_id = $1 ORDER BY sequence_no NULLS LAST, id`,
+          [req.params.id]
+        );
+        lineItems = baseItems.rows;
+      }
+
+      let newTotal = 0;
+      for (let i = 0; i < lineItems.length; i++) {
+        const it = lineItems[i];
+        const qty = parseFloat(it.quantity) || 0;
+        const rate = parseFloat(it.rate) || 0;
+        newTotal += qty * rate;
+        await client.query(
+          `INSERT INTO work_order_items (wo_id, description, unit, quantity, rate, gst_rate, remarks, sequence_no)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [newWoId, it.description, it.unit || 'Nos', qty, rate,
+           parseFloat(it.gst_rate) || parseFloat(base.gst_pct) || 18, it.remarks || null, i + 1]
+        );
+      }
+      const finalRes = await client.query(
+        `UPDATE work_orders SET total_value=$1, contract_amount=$1 WHERE id=$2 RETURNING *`,
+        [newTotal, newWoId]
+      );
+
+      const diff = newTotal - parseFloat(base.total_value || 0);
+      const impactType = diff > 0 ? 'increase' : diff < 0 ? 'decrease' : 'none';
+
+      const { rows: last } = await client.query(
+        `SELECT MAX(amendment_number) AS mx FROM wo_amendments WHERE wo_id=$1`, [req.params.id]);
+      const amendNum = (last[0].mx || 0) + 1;
+
+      const amendRes = await client.query(
+        `INSERT INTO wo_amendments (
+          wo_id, new_wo_id, company_id, amendment_number, amendment_ref, amendment_type, description,
+          amount_change, value_impact, impact_type, raised_by, amendment_date, status, revised_order_value, created_by
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,CURRENT_DATE,'pending',$12,$13) RETURNING *`,
+        [newWoId, newWoId, req.user.company_id, amendNum, newRef, reason_code || 'Qty Change',
+         reason_remarks || `Amendment ${newRef} of ${baseRef}`, diff, Math.abs(diff), impactType,
+         raised_by || req.user.name, newTotal, req.user.id]
+      );
+
+      return { wo: finalRes.rows[0], amendment: amendRes.rows[0] };
+    });
+
+    res.status(201).json({ data: result });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// PATCH /wo-amendments/:id — edit a pending amendment's fields (procurement roles only)
+router.patch('/wo-amendments/:id', authorize(...PROCUREMENT_ROLES), async (req, res) => {
+  try {
+    const { rows: existing } = await query(
+      `SELECT a.* FROM wo_amendments a
+       JOIN work_orders wo ON wo.id = a.wo_id JOIN projects p ON p.id = wo.project_id
+       WHERE a.id = $1 AND a.company_id = $2 AND p.company_id = $2`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!existing.length) return res.status(404).json({ error: 'Amendment not found' });
+    if (existing[0].status !== 'pending') {
+      return res.status(400).json({ error: `Cannot edit an amendment at status "${existing[0].status}". Only pending amendments can be edited.` });
+    }
+    const { description, amount_change, amendment_date, amendment_type, raised_by } = req.body;
+    const sets = []; const params = [req.params.id, req.user.company_id]; let i = 3;
+    if (description !== undefined) { sets.push(`description = $${i++}`); params.push(description); }
+    if (amount_change !== undefined) { sets.push(`amount_change = $${i++}`, `value_impact = ABS($${i - 1})`); params.push(Number(amount_change) || 0); }
+    if (amendment_date !== undefined) { sets.push(`amendment_date = $${i++}`); params.push(amendment_date || null); }
+    if (amendment_type !== undefined) { sets.push(`amendment_type = $${i++}`); params.push(amendment_type); }
+    if (raised_by !== undefined) { sets.push(`raised_by = $${i++}`); params.push(raised_by); }
+    if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
+    sets.push('updated_at = NOW()');
+    const r = await query(
+      `UPDATE wo_amendments SET ${sets.join(', ')} WHERE id = $1 AND company_id = $2 RETURNING *`,
+      params
+    );
+    res.json({ data: r.rows[0] });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+router.patch('/wo-amendments/:id/approve', authorize(...WO_AMEND_ROLES), async (req, res) => {
+  try {
+    const r = await query(
+      `UPDATE wo_amendments a SET status = 'approved', approved_by = $1, approved_at = NOW(), updated_at = NOW()
+       FROM work_orders wo, projects p
+       WHERE a.id = $2 AND a.company_id = $3 AND wo.id = a.wo_id AND p.id = wo.project_id AND p.company_id = $3
+       RETURNING a.*`,
+      [req.user.id, req.params.id, req.user.company_id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Amendment not found' });
+    // Approving an item-revision amendment activates the new versioned WO record.
+    if (r.rows[0].new_wo_id) {
+      await query(`UPDATE work_orders SET status = 'approved', updated_at = NOW() WHERE id = $1`, [r.rows[0].new_wo_id]);
+    }
+    res.json({ data: r.rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.patch('/wo-amendments/:id/reject', authorize(...WO_AMEND_ROLES), async (req, res) => {
+  try {
+    const r = await query(
+      `UPDATE wo_amendments a SET status = 'rejected', updated_at = NOW()
+       FROM work_orders wo, projects p
+       WHERE a.id = $1 AND a.company_id = $2 AND wo.id = a.wo_id AND p.id = wo.project_id AND p.company_id = $2
+       RETURNING a.*`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Amendment not found' });
+    if (r.rows[0].new_wo_id) {
+      await query(`UPDATE work_orders SET status = 'rejected', rejection_reason = 'Amendment rejected', updated_at = NOW() WHERE id = $1`, [r.rows[0].new_wo_id]);
+    }
+    res.json({ data: r.rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

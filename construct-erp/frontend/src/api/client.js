@@ -195,6 +195,11 @@ export const subcontractorAPI = {
   addWOAmendment:    (id, d)  => api.post(`/subcontractors/work-orders/${id}/amendments`, d),
   delWOAmendment:    (id, aid)=> api.delete(`/subcontractors/work-orders/${id}/amendments/${aid}`),
   listWOAmendments:  (params) => api.get('/subcontractors/wo-amendments', { params }),
+  woAmendmentContext:(id)     => api.get(`/subcontractors/work-orders/${id}/amendment-context`),
+  submitWOAmendment: (id, d)  => api.post(`/subcontractors/work-orders/${id}/amend`, d),
+  patchWOAmendment:  (id, d)  => api.patch(`/subcontractors/wo-amendments/${id}`, d),
+  approveWOAmendment:(id)     => api.patch(`/subcontractors/wo-amendments/${id}/approve`),
+  rejectWOAmendment: (id)     => api.patch(`/subcontractors/wo-amendments/${id}/reject`),
   downloadWOTemplate:()       => api.get('/subcontractors/work-orders/import/template', { responseType: 'blob' }),
   excelImportPreview:(file)   => { const fd = new FormData(); fd.append('file', file); return api.post('/subcontractors/work-orders/import/excel', fd, { headers: { 'Content-Type': undefined } }); },
   // Measurements
