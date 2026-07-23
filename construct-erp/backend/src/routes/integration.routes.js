@@ -183,6 +183,94 @@ router.get('/purchase-orders', async (req, res) => {
   }
 });
 
+// ── GET /api/v1/integration/mrs ────────────────────────────────────────────
+// Material Requisition Slips.
+// Query params: status, since, project, limit
+// status values: pending | stores_verified | approved_pm | approved_mgmt | approved_md
+router.get('/mrs', async (req, res) => {
+  try {
+    const status  = req.query.status  || null;   // no default — return all stages
+    const since   = parseSince(req.query.since);
+    const project = req.query.project || null;
+    const limit   = Math.min(parseInt(req.query.limit) || 200, 1000);
+
+    const conditions = ['p.company_id = $1'];
+    const params     = [req.apiCompanyId];
+    let   idx        = 2;
+
+    if (status)  { conditions.push(`mr.status = $${idx++}`);              params.push(status); }
+    if (since)   { conditions.push(`mr.updated_at >= $${idx++}`);         params.push(since); }
+    if (project) { conditions.push(`p.project_code ILIKE $${idx++}`);     params.push(project); }
+
+    const { rows } = await query(
+      `SELECT
+         p.project_code                            AS "projectCode",
+         p.name                                    AS "projectName",
+         COALESCE(mr.serial_no_formatted,
+                  mr.mrs_number)                   AS "mrsNo",
+         mr.purpose                                AS "purpose",
+         mr.department                             AS "department",
+         mr.status                                 AS "status",
+         rb.name                                   AS "requestedBy",
+         mr.created_at                             AS "requestedAt",
+         md.name                                   AS "approvedBy",
+         mr.approved_md_at                         AS "approvedAt",
+         mr.id                                     AS "id",
+         mr.updated_at                             AS "updatedAt"
+       FROM material_requisitions mr
+       JOIN   projects p  ON p.id  = mr.project_id
+       LEFT JOIN users rb ON rb.id = mr.raised_by
+       LEFT JOIN users md ON md.id = mr.approved_md_by
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY mr.updated_at DESC
+       LIMIT $${idx}`,
+      [...params, limit]
+    );
+
+    // Fetch items for all returned MRS in one query
+    const ids = rows.map(r => r.id);
+    let itemsByMrs = {};
+    if (ids.length) {
+      const { rows: items } = await query(
+        `SELECT mrs_id, material_name, quantity, unit
+         FROM mrs_items
+         WHERE mrs_id = ANY($1::uuid[])
+         ORDER BY sort_order`,
+        [ids]
+      );
+      for (const it of items) {
+        if (!itemsByMrs[it.mrs_id]) itemsByMrs[it.mrs_id] = [];
+        itemsByMrs[it.mrs_id].push({
+          materialName: it.material_name,
+          quantity:     parseFloat(it.quantity) || 0,
+          unit:         it.unit,
+        });
+      }
+    }
+
+    const data = rows.map(r => ({
+      projectCode:  r.projectCode,
+      projectName:  r.projectName,
+      mrsNo:        r.mrsNo,
+      purpose:      r.purpose,
+      department:   r.department,
+      status:       r.status,
+      requestedBy:  r.requestedBy,
+      requestedAt:  r.requestedAt,
+      approvedBy:   r.approvedBy,
+      approvedAt:   r.approvedAt,
+      items:        itemsByMrs[r.id] || [],
+      fileUrl:      `${APP_URL}/verify/mrs/${r.id}`,
+      updatedAt:    r.updatedAt,
+    }));
+
+    res.json(data);
+  } catch (err) {
+    console.error('[Integration] GET /mrs error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── GET /api/v1/integration/ping ───────────────────────────────────────────
 // Health check — confirms the API key is valid and returns its metadata.
 router.get('/ping', async (req, res) => {
