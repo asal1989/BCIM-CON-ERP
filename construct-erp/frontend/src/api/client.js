@@ -1761,6 +1761,7 @@ export const tqsBillsAPI = {
   updateQS:     (id, d)    => api.patch(`/tqs/bills/${id}/qs`, d),
   updateAccounts:(id, d)   => api.patch(`/tqs/bills/${id}/accounts`, d),
   updateProcurement:(id, d)=> api.patch(`/tqs/bills/${id}/procurement`, d),
+  procurementHandoffByCert:(d)=> api.post('/tqs/bills/procurement-handoff-by-cert', d),
   updateQSSign: (id, d)    => api.patch(`/tqs/bills/${id}/qs-sign`, d),
   updatePayment:(id, d)    => api.patch(`/tqs/bills/${id}/payment`, d),
   markPaid:    (id)        => api.patch(`/tqs/bills/${id}/mark-paid`),

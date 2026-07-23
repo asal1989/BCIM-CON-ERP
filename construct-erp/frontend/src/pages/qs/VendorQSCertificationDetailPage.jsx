@@ -3,9 +3,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { vendorQSCertificationAPI } from '../../api/client';
+import { vendorQSCertificationAPI, tqsBillsAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
-import { ArrowLeft, Pencil, Printer, RefreshCw, X, IndianRupee, CheckCircle2, FileText, Trash2 } from 'lucide-react';
+import { ArrowLeft, Pencil, Printer, RefreshCw, X, IndianRupee, CheckCircle2, FileText, Trash2, Truck } from 'lucide-react';
 
 // Only the QS certifier (or a super_admin/admin) may edit the certificate
 // number and GST — matches the CERT_APPROVER_EMAIL gate on the backend.
@@ -968,6 +968,27 @@ export default function VendorQSCertificationDetailPage() {
     onError: err => toast.error(err?.response?.data?.error || 'Revert failed'),
   });
 
+  // ── Procurement Handoff — apply the received-from-accounts / handed-to-QS
+  // dates to every bill on this certification in one action, instead of
+  // procurement having to open each linked bill individually.
+  const [showHandoff, setShowHandoff] = useState(false);
+  const [handoffForm, setHandoffForm] = useState({
+    proc_received_from_accounts_date: '',
+    proc_handed_over_to_accounts_date: '',
+    procurement_remarks: '',
+  });
+  const handoffMut = useMutation({
+    mutationFn: () => tqsBillsAPI.procurementHandoffByCert({ certification_id: id, ...handoffForm }),
+    onSuccess: (res) => {
+      const count = res.data?.data?.bills_updated ?? 0;
+      toast.success(`Procurement Handoff applied to ${count} bill${count === 1 ? '' : 's'}`);
+      setShowHandoff(false);
+      setHandoffForm({ proc_received_from_accounts_date: '', proc_handed_over_to_accounts_date: '', procurement_remarks: '' });
+      qc.invalidateQueries({ queryKey: ['vendor-qs-certification', id] });
+    },
+    onError: err => toast.error(err?.response?.data?.error || 'Procurement Handoff failed'),
+  });
+
   const refreshMut = useMutation({
     mutationFn: () => vendorQSCertificationAPI.refreshFromBills(id),
     onSuccess: (res) => {
@@ -1209,6 +1230,86 @@ export default function VendorQSCertificationDetailPage() {
           )}
         </div>
       </div>
+
+      {/* ── Procurement Handoff — bulk-apply to every bill on this cert ── */}
+      {(() => {
+        const procBills = (cert.bills || []).filter(b => b.workflow_status === 'procurement');
+        if (!procBills.length) return null;
+        return (
+          <div className="no-print bg-white rounded-xl border border-orange-200 shadow-sm px-5 py-4 mb-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <Truck className="w-4 h-4 text-orange-600" />
+                <p className="text-sm font-semibold text-slate-800">
+                  Procurement Handoff
+                  <span className="ml-2 text-xs font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-full px-2 py-0.5">
+                    {procBills.length} of {cert.bills.length} bill{cert.bills.length === 1 ? '' : 's'} awaiting handoff
+                  </span>
+                </p>
+              </div>
+              {!showHandoff && (
+                <button
+                  onClick={() => setShowHandoff(true)}
+                  className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm"
+                >
+                  <Truck className="w-4 h-4" /> Hand Off {procBills.length} Bill{procBills.length === 1 ? '' : 's'}
+                </button>
+              )}
+            </div>
+            {showHandoff && (
+              <div className="mt-3 space-y-3">
+                <p className="text-xs text-slate-500">
+                  Applies the same dates to all {procBills.length} bill{procBills.length === 1 ? '' : 's'} on this certification and moves them to QS for MD Signature — no need to open each bill individually.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-900 mb-1">Received from Accounts Date <span className="text-red-500">*</span></label>
+                    <input type="date" required
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                      value={handoffForm.proc_received_from_accounts_date}
+                      onChange={e => setHandoffForm(f => ({ ...f, proc_received_from_accounts_date: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-900 mb-1">Handed to QS (for MD Signature) Date <span className="text-red-500">*</span></label>
+                    <input type="date" required
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                      value={handoffForm.proc_handed_over_to_accounts_date}
+                      onChange={e => setHandoffForm(f => ({ ...f, proc_handed_over_to_accounts_date: e.target.value }))} />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-900 mb-1">Procurement Remarks</label>
+                  <textarea rows={2}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none resize-none"
+                    value={handoffForm.procurement_remarks}
+                    onChange={e => setHandoffForm(f => ({ ...f, procurement_remarks: e.target.value }))} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      if (!handoffForm.proc_received_from_accounts_date || !handoffForm.proc_handed_over_to_accounts_date) {
+                        toast.error('Both dates are required');
+                        return;
+                      }
+                      handoffMut.mutate();
+                    }}
+                    disabled={handoffMut.isPending}
+                    className="px-5 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium rounded-lg disabled:opacity-50"
+                  >
+                    {handoffMut.isPending ? 'Applying…' : `Apply to All ${procBills.length} Bills`}
+                  </button>
+                  <button
+                    onClick={() => setShowHandoff(false)}
+                    className="px-4 py-2 text-slate-500 text-sm font-medium rounded-lg hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Print area ── */}
       <div className="print-area space-y-6">

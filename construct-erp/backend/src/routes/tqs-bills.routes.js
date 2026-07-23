@@ -3842,6 +3842,69 @@ router.patch('/:id/accounts', requireTqsStageAccess('accounts'), async (req, res
   }
 });
 
+// ── POST /tqs/bills/procurement-handoff-by-cert ────────────────────────────
+// Applies the Procurement Handoff (received-from-accounts / handed-to-QS
+// dates + remarks) to every bill on a QS certification in one action,
+// instead of opening each of the certification's bills individually.
+// MUST be defined before /:id routes so Express doesn't swallow it as a param
+router.post('/procurement-handoff-by-cert', requireTqsStageAccess('procurement'), async (req, res) => {
+  try {
+    const {
+      certification_id,
+      proc_received_from_accounts_date,
+      proc_handed_over_to_accounts_date,
+      procurement_remarks,
+    } = req.body;
+    if (!certification_id) return res.status(400).json({ error: 'certification_id required' });
+    requireDateFields(req.body, [
+      { key: 'proc_received_from_accounts_date', label: 'Received from Accounts Date' },
+      { key: 'proc_handed_over_to_accounts_date', label: 'Handed to QS Date' },
+    ]);
+
+    const billsRes = await query(`
+      SELECT b.id
+      FROM vendor_qs_certification_bills cb
+      JOIN tqs_bills b ON b.id = cb.bill_id
+      WHERE cb.certification_id = $1
+        AND b.company_id = $2
+        AND b.workflow_status = 'procurement'
+        AND b.is_deleted = FALSE
+    `, [certification_id, req.user.company_id]);
+    const billIds = billsRes.rows.map(r => r.id);
+    if (!billIds.length) {
+      return res.status(400).json({ error: 'No bills on this certification are currently awaiting Procurement Handoff.' });
+    }
+
+    await query(`
+      UPDATE tqs_bill_updates SET
+        proc_received_from_accounts_date=$1,
+        proc_handed_over_to_accounts_date=$2,
+        procurement_remarks=$3,
+        updated_at=NOW()
+      WHERE bill_id = ANY($4::uuid[])
+    `, [
+      proc_received_from_accounts_date || null,
+      proc_handed_over_to_accounts_date || null,
+      procurement_remarks || null,
+      billIds,
+    ]);
+
+    await query(`UPDATE tqs_bills SET workflow_status='qs_sign', updated_at=NOW() WHERE id = ANY($1::uuid[])`, [billIds]);
+
+    for (const bid of billIds) {
+      await logHistory(bid, 'procurement',
+        `Received from Accounts: ${proc_received_from_accounts_date || '—'}, Handed to QS for MD Signature: ${proc_handed_over_to_accounts_date || '—'} (bulk handoff via certification, ${billIds.length} bills)`,
+        req.user.id);
+      await logHistory(bid, 'system', 'Moved to QS for MD Signature', req.user.id);
+    }
+
+    res.json({ data: { workflow_status: 'qs_sign', bills_updated: billIds.length } });
+  } catch (err) {
+    console.error(err);
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
 router.patch('/:id/procurement', requireTqsStageAccess('procurement'), async (req, res) => {
   try {
     await getAccessibleBill(req, req.params.id);
