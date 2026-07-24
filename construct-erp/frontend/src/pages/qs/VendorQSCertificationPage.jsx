@@ -968,8 +968,11 @@ export default function VendorQSCertificationPage() {
               {vendorSummary.length === 0 ? (
                 <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-400 text-sm">No certifications yet.</td></tr>
               ) : vendorSummary.map(v => (
-                <tr key={v.vendor_name} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-4 py-2.5 font-semibold text-slate-800">{v.vendor_name}</td>
+                <tr key={v.vendor_name}
+                  onClick={() => { setSearch(v.vendor_name); setView('table'); setStatusTab('all'); }}
+                  className="hover:bg-emerald-50 transition-colors cursor-pointer"
+                  title={`View ${v.vendor_name}'s RA bills`}>
+                  <td className="px-4 py-2.5 font-semibold text-emerald-700 underline decoration-dotted underline-offset-2">{v.vendor_name}</td>
                   <td className="px-4 py-2.5 text-center text-slate-600" style={{ fontVariantNumeric: 'tabular-nums' }}>{v.count}</td>
                   <td className="px-4 py-2.5 text-right text-slate-700" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(v.invoiceValue)}</td>
                   <td className="px-4 py-2.5 text-right text-slate-700" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(v.certified)}</td>
