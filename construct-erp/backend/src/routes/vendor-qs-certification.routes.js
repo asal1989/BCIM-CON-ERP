@@ -99,11 +99,6 @@ async function ensureTables() {
   // (moved off the Bill Tracker's per-bill QS tab, which no longer collects them)
   try { await query(`ALTER TABLE vendor_qs_certifications ADD COLUMN IF NOT EXISTS qs_received_date DATE`); } catch (_) {}
   try { await query(`ALTER TABLE vendor_qs_certifications ADD COLUMN IF NOT EXISTS qs_certified_date DATE`); } catch (_) {}
-  // ── Credit note deduction — read-only, sourced from applied Credit Notes
-  // (credit-notes.routes.js syncs credit_note_val onto tqs_bills when a note
-  // is applied). Summed across the certification's selected bills.
-  try { await query(`ALTER TABLE vendor_qs_certifications ADD COLUMN IF NOT EXISTS credit_note_amount NUMERIC(14,2) DEFAULT 0`); } catch (_) {}
-  try { await query(`ALTER TABLE tqs_bill_updates ADD COLUMN IF NOT EXISTS credit_note_amt NUMERIC(14,2) DEFAULT 0`); } catch (_) {}
   await query(`
     UPDATE tqs_bill_updates u
     SET pc_number = c.cert_number,
@@ -157,6 +152,18 @@ async function ensureTables() {
   `);
 }
 runSchemaInit('vendor_qs_certifications', ensureTables);
+
+// ── Credit note deduction — read-only, sourced from applied Credit Notes
+// (credit-notes.routes.js syncs credit_note_val onto tqs_bills when a note
+// is applied). Summed across the certification's selected bills.
+// Given its own migration name: 'vendor_qs_certifications' was already
+// marked applied in schema_migrations by an earlier deploy, so adding these
+// ALTERs into ensureTables() above would never actually run them.
+async function addCreditNoteColumns() {
+  await query(`ALTER TABLE vendor_qs_certifications ADD COLUMN IF NOT EXISTS credit_note_amount NUMERIC(14,2) DEFAULT 0`);
+  await query(`ALTER TABLE tqs_bill_updates ADD COLUMN IF NOT EXISTS credit_note_amt NUMERIC(14,2) DEFAULT 0`);
+}
+runSchemaInit('vendor_qs_certifications_credit_note_v1', addCreditNoteColumns);
 
 const n = (v) => parseFloat(v || 0) || 0;
 const round2 = (v) => Math.round(n(v) * 100) / 100;
