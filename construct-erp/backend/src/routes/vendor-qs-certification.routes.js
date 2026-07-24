@@ -835,30 +835,39 @@ router.post('/', async (req, res) => {
         : (itemTax || billsRes.rows.reduce((s, b) => s + n(b.gst_amount), 0)));
 
       // Invoice total = sum of selected bills' total_amount (basic + GST, exactly what vendor billed).
-      // This is the correct base for net_payable and TDS — it matches the frontend display.
       const invoiceBillTotal = billsRes.rows.reduce((s, b) => s + n(b.total_amount), 0);
+      // Certifying less than what was invoiced (qs_pres_qty < inv_pres_qty on the
+      // abstract sheet) must actually reduce gross/tax/net — not just the printed
+      // abstract. Scale the bill's own (trustworthy) invoice total by the ratio of
+      // certified to invoiced basis, computed from the line items themselves.
+      // Deliberately NOT summing mappedItems.amount directly as the base: that's
+      // qty × po_items.rate, which for a GST-inclusive PO would double-count tax
+      // (the same issue previously fixed for gross_amount) — scaling the real
+      // invoice total sidesteps that regardless of whether a given PO's rate is
+      // inclusive or exclusive. Falls back to fraction=1 (full invoice) when
+      // there's nothing to compare against (e.g. the lump-sum systemItems
+      // fallback, where inv_pres_qty/order_rate aren't meaningful).
+      const invoicedBasisFromItems = mappedItems.reduce((s, it) => s + n(it.inv_pres_qty) * n(it.order_rate), 0);
+      const certifiedBasisFromItems = mappedItems.reduce((s, it) => s + n(it.amount), 0) + headerExtras;
+      const certifiedFraction = invoicedBasisFromItems > 0 ? certifiedBasisFromItems / invoicedBasisFromItems : 1;
+      const certifiedInvoiceTotal = round0(invoiceBillTotal * certifiedFraction);
       // gross_amount (the certification's "before tax" summary figure, shown in the
-      // printed Abstract as part of "Total Gross Certified" = gross + tax) is derived
-      // from the real invoice total minus tax, NOT summed independently from
-      // qty × PO-rate. Some POs quote a GST-INCLUSIVE rate (po_items.rate already
-      // includes tax) — for those, qty × rate IS the full inclusive amount, so
-      // summing it as "gross" and then adding tax_amount on top double-counted
-      // the tax in this one summary figure (net_payable itself was never affected,
-      // since it already derives from invoiceBillTotal below). Deriving gross this
-      // way keeps gross + tax == invoiceBillTotal always, regardless of whether any
-      // given PO's rate happens to be tax-inclusive or -exclusive.
-      const gross = round0(invoiceBillTotal - billTax);
+      // printed Abstract as part of "Total Gross Certified" = gross + tax) is
+      // derived from the certified invoice total minus tax, keeping
+      // gross + tax == certifiedInvoiceTotal always.
+      const gross = round0(certifiedInvoiceTotal - billTax);
 
       // ── TDS auto-calculation ────────────────────────────────────────────
-      // TDS base = invoice total (what vendor billed incl. GST), matching frontend useEffect.
-      // Priority: explicit tds_amount > (tds_rate % × invoiceBillTotal) > vendor default tds_rate
+      // TDS base = certified invoice total (what's actually being paid, incl. GST),
+      // matching the frontend useEffect.
+      // Priority: explicit tds_amount > (tds_rate % × certifiedInvoiceTotal) > vendor default tds_rate
       let appliedTdsRate = 0;
       let tds_amount = 0;
       if (tds_amount_input !== undefined && tds_amount_input !== '' && tds_amount_input !== null) {
         // Frontend explicitly provided amount — use as-is
         tds_amount = round0(tds_amount_input);
         // back-calculate rate for storage
-        appliedTdsRate = invoiceBillTotal > 0 ? round2((tds_amount / invoiceBillTotal) * 100) : 0;
+        appliedTdsRate = certifiedInvoiceTotal > 0 ? round2((tds_amount / certifiedInvoiceTotal) * 100) : 0;
       } else {
         // Look up vendor's tds_rate
         const rateToUse = (tds_rate_input !== undefined && tds_rate_input !== '')
@@ -871,7 +880,7 @@ router.post('/', async (req, res) => {
               return 0;
             })();
         appliedTdsRate = rateToUse;
-        tds_amount = round0(invoiceBillTotal * appliedTdsRate / 100);
+        tds_amount = round0(certifiedInvoiceTotal * appliedTdsRate / 100);
       }
       // ───────────────────────────────────────────────────────────────────
 
@@ -883,9 +892,11 @@ router.post('/', async (req, res) => {
       // from an already-applied Credit Note (see credit-notes.routes.js).
       const creditNoteAmount = round0(billsRes.rows.reduce((s, b) => s + n(b.credit_note_val), 0));
       const totalDed = tds_amount + advanceRecovered + retentionAmount + otherDeductions + creditNoteAmount;
-      // Net = invoice total (vendor's billed amount) minus all deductions.
-      // Using invoiceBillTotal instead of gross+billTax so GST embedded in total_amount is included.
-      const netPayable = round0(invoiceBillTotal - totalDed);
+      // Net = certified invoice total (scaled by qty actually certified, see
+      // certifiedInvoiceTotal above) minus all deductions. Using
+      // certifiedInvoiceTotal instead of gross+billTax so GST embedded in
+      // total_amount is included.
+      const netPayable = round0(certifiedInvoiceTotal - totalDed);
 
       // "Previously certified" must span the whole PO amendment family
       // (POTQS001, -A1, -A3, -A4…), not just an exact order_number string

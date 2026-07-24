@@ -195,6 +195,17 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
     const tax = Math.round(form.gst_tax !== '' ? Number(form.gst_tax || 0) : autoTax);
     const deductions = Math.round(Number(form.tds_amount || 0) + Number(form.advance_recovered || 0) + Number(form.retention_amount || 0) + Number(form.other_deductions || 0) + creditNoteTotal);
     const invoiceTotal = selected.reduce((s, b) => s + Number(b.total_amount || 0), 0);
+    // Scale the bill's own (trustworthy) invoice total by how much of the
+    // invoiced qty was actually certified — via qs_pres_qty vs inv_pres_qty on
+    // the abstract sheet — so reducing Present Qty actually reduces what's
+    // payable, not just the printed abstract. Deliberately NOT summing
+    // summaryRows.amount directly as the base: that comes from po_items.rate,
+    // which for a GST-inclusive PO would double-count tax (same issue fixed
+    // for gross_amount previously) — scaling the real invoice total sidesteps
+    // that regardless of whether a given PO's rate is inclusive or exclusive.
+    const invoicedBasis = summaryRows.reduce((s, r) => s + Number(r.inv_pres_qty || 0) * Number(r.order_rate || 0), 0);
+    const certifiedFraction = invoicedBasis > 0 ? gross / invoicedBasis : 1;
+    const certifiedInvoiceTotal = Math.round(invoiceTotal * certifiedFraction);
     return {
       invoiceTotal,
       count: selected.length,
@@ -203,11 +214,7 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
       tax,
       deductions,
       creditNoteTotal,
-      // Net = invoice total (what vendor billed, incl. GST) minus deductions,
-      // rounded to the nearest rupee for the abstract sheet / payment certificate.
-      // Do NOT use summaryRows gross here — it is the QS-certified work value
-      // (excl. GST), which causes net < invoice when GST is embedded in total_amount.
-      net: Math.round(invoiceTotal - deductions),
+      net: Math.round(certifiedInvoiceTotal - deductions),
     };
   }, [invoices, selectedBillIds, summaryRows, form.gst_tax, form.tds_amount, form.advance_recovered, form.retention_amount, form.other_deductions, creditNoteTotal]);
 
@@ -251,16 +258,22 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
   };
 
   // TDS is deducted on basic amount only (excl. GST) per CBDT Circular 23/2017.
+  // Base is scaled by how much of the invoiced qty was actually certified
+  // (via qs_pres_qty on the abstract sheet) — so certifying less than what
+  // was invoiced reduces TDS too, not just the printed abstract.
   useEffect(() => {
     const rate = Number(form.tds_rate || 0);
     if (!rate) { set('tds_amount', ''); return; }
+    const invoicedBasis = summaryRows.reduce((s, r) => s + Number(r.inv_pres_qty || 0) * Number(r.order_rate || 0), 0);
+    const certifiedBasis = summaryRows.reduce((s, r) => s + Number(r.amount || 0), 0);
+    const certifiedFraction = invoicedBasis > 0 ? certifiedBasis / invoicedBasis : 1;
     const tdsBase = invoices
       .filter(b => selectedBillIds.includes(b.id))
-      .reduce((s, b) => s + Number(b.basic_amount || 0), 0);
+      .reduce((s, b) => s + Number(b.basic_amount || 0), 0) * certifiedFraction;
     if (!tdsBase) return;
     set('tds_amount', String(Math.round(tdsBase * rate / 100)));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.tds_rate, selectedBillIds, invoices]);
+  }, [form.tds_rate, selectedBillIds, invoices, summaryRows]);
 
   const handleOrderType = (type) => {
     setForm(p => ({ ...p, order_type: type, order_number: '' }));
@@ -282,7 +295,14 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
       if (i !== idx) return row;
       const next = { ...row, [key]: value };
       if (['qs_pres_qty', 'qs_prev_qty', 'order_rate', 'inv_pres_qty', 'order_qty'].includes(key)) {
+        const oldAmount = Number(row.amount || 0);
+        // Preserve this row's effective tax rate and scale tax_amount with it —
+        // otherwise reducing Present Qty zeroes the amount but leaves tax_amount
+        // frozen at the original (higher) figure, so "GST/Tax (auto from rows)"
+        // never reflects what was actually certified.
+        const taxRate = oldAmount > 0 ? Number(row.tax_amount || 0) / oldAmount : 0;
         next.amount = Math.round(Number(next.qs_pres_qty || 0) * Number(next.order_rate || 0));
+        next.tax_amount = Math.round(next.amount * taxRate);
         next.balance_qty = Math.max(0, Number(next.order_qty || 0) - Number(next.qs_prev_qty || 0) - Number(next.qs_pres_qty || 0));
       }
       return next;
