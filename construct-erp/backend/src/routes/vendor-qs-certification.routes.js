@@ -437,7 +437,13 @@ router.get('/', async (req, res) => {
     if (status) { where.push(`c.status = $${i++}`); params.push(status); }
 
     const { rows } = await query(`
-      SELECT c.*, p.name AS project_name
+      SELECT c.*, p.name AS project_name,
+             COALESCE((
+               SELECT SUM(b.total_amount)
+               FROM vendor_qs_certification_bills cb
+               JOIN tqs_bills b ON b.id = cb.bill_id
+               WHERE cb.certification_id = c.id
+             ), 0) AS invoice_value
       FROM vendor_qs_certifications c
       LEFT JOIN projects p ON p.id = c.project_id
       WHERE ${where.join(' AND ')}

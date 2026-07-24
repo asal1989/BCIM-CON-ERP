@@ -704,6 +704,7 @@ export default function VendorQSCertificationPage() {
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
   const [statusTab, setStatusTab] = useState('all');
+  const [view, setView] = useState('table'); // 'table' | 'vendors'
   const { user } = useAuthStore();
   const canApprove = (user?.email || '').toLowerCase() === CERT_APPROVER_EMAIL;
   const qc = useQueryClient();
@@ -807,12 +808,35 @@ export default function VendorQSCertificationPage() {
     deleteMut.mutate(cert.id);
   };
 
+  const deductionsOf = (c) => Number(c.tds_amount || 0) + Number(c.advance_recovered || 0)
+    + Number(c.retention_amount || 0) + Number(c.other_deductions || 0) + Number(c.credit_note_amount || 0);
+  // Certified value = certified gross + tax (the certified invoice total, incl GST);
+  // Invoice value = what the vendor originally billed (sum of linked bills' totals,
+  // returned as invoice_value by the API). They differ when qty is partially certified.
+  const certifiedValueOf = (c) => Number(c.gross_amount || 0) + Number(c.tax_amount || 0);
+
   const totals = certs.reduce((acc, c) => {
-    acc.gross += Number(c.gross_amount || 0);
+    acc.invoiceValue += Number(c.invoice_value || 0);
+    acc.certified += certifiedValueOf(c);
     acc.net += Number(c.net_payable || 0);
-    acc.deductions += Number(c.tds_amount || 0) + Number(c.advance_recovered || 0) + Number(c.retention_amount || 0) + Number(c.other_deductions || 0);
+    acc.paid += Number(c.paid_amount || 0);
+    acc.deductions += deductionsOf(c);
     return acc;
-  }, { gross: 0, net: 0, deductions: 0 });
+  }, { invoiceValue: 0, certified: 0, net: 0, paid: 0, deductions: 0 });
+
+  // Per-vendor rollup for the Vendor Summary view.
+  const vendorSummary = Object.values(certs.reduce((m, c) => {
+    const key = (c.vendor_name || '—').trim();
+    if (!m[key]) m[key] = { vendor_name: key, count: 0, invoiceValue: 0, certified: 0, deductions: 0, net: 0, paid: 0 };
+    const v = m[key];
+    v.count += 1;
+    v.invoiceValue += Number(c.invoice_value || 0);
+    v.certified += certifiedValueOf(c);
+    v.deductions += deductionsOf(c);
+    v.net += Number(c.net_payable || 0);
+    v.paid += Number(c.paid_amount || 0);
+    return m;
+  }, {})).sort((a, b) => b.net - a.net);
 
   const STATUS_TABS = [
     { key: 'all',       label: 'All'       },
@@ -851,12 +875,14 @@ export default function VendorQSCertificationPage() {
           </button>
         </div>
         {/* KPI strip inside hero */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-white/10 border-t border-white/10">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-px bg-white/10 border-t border-white/10">
           {[
-            { label: 'Certifications',  value: certs.length,       isCount: true,  Icon: FileCheck2  },
-            { label: 'Gross Certified', value: totals.gross,       isCount: false, Icon: IndianRupee },
-            { label: 'Deductions',      value: totals.deductions,  isCount: false, Icon: FileText    },
-            { label: 'Net Payable',     value: totals.net,         isCount: false, Icon: Award       },
+            { label: 'Certifications',  value: certs.length,        isCount: true,  Icon: FileCheck2  },
+            { label: 'Invoice Value',   value: totals.invoiceValue, isCount: false, Icon: FileText    },
+            { label: 'Certified Value', value: totals.certified,    isCount: false, Icon: IndianRupee },
+            { label: 'Deductions',      value: totals.deductions,   isCount: false, Icon: FileText    },
+            { label: 'Net Payable',     value: totals.net,          isCount: false, Icon: Award       },
+            { label: 'Paid',            value: totals.paid,         isCount: false, Icon: IndianRupee },
           ].map(k => (
             <div key={k.label} className="px-6 py-3.5" style={{ background: 'rgba(255,255,255,0.04)' }}>
               <div className="flex items-center gap-1.5 mb-1">
@@ -893,25 +919,87 @@ export default function VendorQSCertificationPage() {
         )}
       </div>
 
-      {/* ── Status tabs ── */}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {STATUS_TABS.map(t => {
-          const count = t.key === 'all' ? certs.length : (statusCounts[t.key] || 0);
-          const on = statusTab === t.key;
-          return (
-            <button key={t.key} onClick={() => setStatusTab(t.key)}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 border transition-all ${
-                on ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm'
-                   : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-300 hover:text-emerald-700'}`}>
-              {t.label}
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${on ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}
-                style={{ fontVariantNumeric: 'tabular-nums' }}>{count}</span>
+      {/* ── View toggle + Status tabs ── */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {view === 'table' && STATUS_TABS.map(t => {
+            const count = t.key === 'all' ? certs.length : (statusCounts[t.key] || 0);
+            const on = statusTab === t.key;
+            return (
+              <button key={t.key} onClick={() => setStatusTab(t.key)}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 border transition-all ${
+                  on ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm'
+                     : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-300 hover:text-emerald-700'}`}>
+                {t.label}
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${on ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}
+                  style={{ fontVariantNumeric: 'tabular-nums' }}>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
+          {[{ id: 'table', label: 'Table' }, { id: 'vendors', label: 'Vendor Summary' }].map(v => (
+            <button key={v.id} onClick={() => setView(v.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                view === v.id ? 'bg-emerald-700 text-white' : 'text-slate-500 hover:text-slate-700'}`}>
+              {v.label}
             </button>
-          );
-        })}
+          ))}
+        </div>
       </div>
 
+      {/* ── Vendor Summary view ── */}
+      {view === 'vendors' && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wide">
+                <th className="px-4 py-3 text-left font-semibold">Vendor</th>
+                <th className="px-4 py-3 text-center font-semibold">Certs</th>
+                <th className="px-4 py-3 text-right font-semibold">Invoice Value</th>
+                <th className="px-4 py-3 text-right font-semibold">Certified Value</th>
+                <th className="px-4 py-3 text-right font-semibold">Deductions</th>
+                <th className="px-4 py-3 text-right font-semibold">Net Payable</th>
+                <th className="px-4 py-3 text-right font-semibold">Paid</th>
+                <th className="px-4 py-3 text-right font-semibold">Balance</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {vendorSummary.length === 0 ? (
+                <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-400 text-sm">No certifications yet.</td></tr>
+              ) : vendorSummary.map(v => (
+                <tr key={v.vendor_name} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-4 py-2.5 font-semibold text-slate-800">{v.vendor_name}</td>
+                  <td className="px-4 py-2.5 text-center text-slate-600" style={{ fontVariantNumeric: 'tabular-nums' }}>{v.count}</td>
+                  <td className="px-4 py-2.5 text-right text-slate-700" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(v.invoiceValue)}</td>
+                  <td className="px-4 py-2.5 text-right text-slate-700" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(v.certified)}</td>
+                  <td className="px-4 py-2.5 text-right text-amber-700" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(v.deductions)}</td>
+                  <td className="px-4 py-2.5 text-right font-semibold text-slate-900" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(v.net)}</td>
+                  <td className="px-4 py-2.5 text-right text-emerald-700" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(v.paid)}</td>
+                  <td className="px-4 py-2.5 text-right font-semibold text-red-600" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(Math.max(0, v.net - v.paid))}</td>
+                </tr>
+              ))}
+            </tbody>
+            {vendorSummary.length > 0 && (
+              <tfoot className="bg-slate-50 border-t border-slate-200 font-bold text-slate-800">
+                <tr>
+                  <td className="px-4 py-3">Total ({vendorSummary.length} vendors)</td>
+                  <td className="px-4 py-3 text-center" style={{ fontVariantNumeric: 'tabular-nums' }}>{certs.length}</td>
+                  <td className="px-4 py-3 text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(totals.invoiceValue)}</td>
+                  <td className="px-4 py-3 text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(totals.certified)}</td>
+                  <td className="px-4 py-3 text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(totals.deductions)}</td>
+                  <td className="px-4 py-3 text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(totals.net)}</td>
+                  <td className="px-4 py-3 text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(totals.paid)}</td>
+                  <td className="px-4 py-3 text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(Math.max(0, totals.net - totals.paid))}</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+      )}
+
       {/* ── Card rows ── */}
+      {view === 'table' && (
       <div className="space-y-2.5">
         {isLoading ? (
           <div className="bg-white rounded-2xl border border-slate-200 py-14 text-center text-slate-400 text-sm shadow-sm">Loading certifications...</div>
@@ -1048,6 +1136,7 @@ export default function VendorQSCertificationPage() {
           </div>
         )}
       </div>
+      )}
 
       {showModal && (
         <CertificationModal
