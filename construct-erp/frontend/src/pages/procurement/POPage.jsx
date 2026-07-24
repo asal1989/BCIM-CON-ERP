@@ -764,6 +764,14 @@ function NewPOModal({ onClose, vendors, projects, mrsList = [], onCreate, onUpda
                   <option value="USD">USD – US Dollar</option>
                 </select>
               </Field>
+              <div className="col-span-2 md:col-span-3 space-y-1.5">
+                <label className="text-xs font-medium text-slate-500">Narration</label>
+                <input className={INP} placeholder="e.g. Against MR BCIM-TQS-BLR-MR-000"
+                  value={form.notes} onChange={e => set('notes', e.target.value)} />
+                <p className="text-[10px] text-slate-400">
+                  Printed on the PO under "Narration:". Auto-filled with "Against MR ..." when materials are pulled from an MR — edit or clear it here if needed.
+                </p>
+              </div>
             </div>
           </div>
 
