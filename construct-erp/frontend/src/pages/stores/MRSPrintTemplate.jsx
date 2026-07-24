@@ -573,7 +573,7 @@ const MRSPrintTemplate = React.forwardRef(({ data }, ref) => {
               <th>Sl</th>
               <th>Item Code</th>
               <th>Description</th>
-              <th>Model / Make</th>
+              <th>Category</th>
               <th>Unit</th>
               <th>Qty</th>
               <th>Required</th>
@@ -589,11 +589,11 @@ const MRSPrintTemplate = React.forwardRef(({ data }, ref) => {
                   <td className="mrs-num">{item ? i + 1 : ''}</td>
                   <td className="mrs-muted">{item?.item_code || ''}</td>
                   <td className="mrs-desc">{item ? material(item) : ''}</td>
-                  <td style={{ fontWeight: 700 }}>{item?.make_model || item?.brand || item?.model_make || ''}</td>
+                  <td style={{ fontWeight: 700 }}>{item?.category || ''}</td>
                   <td className="mrs-unit">{item?.unit || ''}</td>
                   <td className="mrs-qty">{qty(item)}</td>
                   <td className="mrs-date">{item ? fmtDate(item.required_date || item.date_required, '') : ''}</td>
-                  <td>{item?.vendor || item?.preferred_vendor || ''}</td>
+                  <td>{item?.preferred_vendor_name || item?.vendor || ''}</td>
                   <td>{item?.purpose || item?.remarks || ''}</td>
                 </tr>
               );

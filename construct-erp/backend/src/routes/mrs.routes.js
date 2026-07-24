@@ -736,6 +736,7 @@ router.get('/:id([0-9a-fA-F-]{36})', async (req, res) => {
               mr.tower_sig_img, mr.pm_sig_img, mr.srpm_sig_img, mr.mgmt_sig_img, mr.md_sig_img,
               p.name AS project_name, p.project_code, p.company_id, p.mrs_workflow,
               u.name AS raised_by_name, u.signature_url AS raised_by_sig,
+              sv.name AS stores_verified_name, sv.signature_url AS stores_verified_sig,
               t.name AS verified_tower_name, t.signature_url AS verified_tower_sig,
               pm.name AS approved_pm_name, pm.signature_url AS approved_pm_sig,
               spm.name AS approved_srpm_name, spm.signature_url AS approved_srpm_sig,
@@ -745,6 +746,7 @@ router.get('/:id([0-9a-fA-F-]{36})', async (req, res) => {
        FROM material_requisitions mr
        JOIN projects p ON mr.project_id = p.id
        JOIN users u ON mr.raised_by = u.id
+       LEFT JOIN users sv ON mr.stores_approved_by = sv.id::text
        LEFT JOIN users t ON mr.verified_tower_mgr_by = t.id
        LEFT JOIN users pm ON mr.approved_pm_by = pm.id
        LEFT JOIN users spm ON mr.approved_sr_pm_by = spm.id
@@ -779,10 +781,12 @@ router.get('/:id([0-9a-fA-F-]{36})', async (req, res) => {
        SELECT mi.*,
               COALESCE(mi.md_approved_qty, mi.quantity) AS effective_qty,
               COALESCE(mi.md_included, TRUE) AS effective_included,
-              COALESCE(direct.ordered_qty, 0) + COALESCE(fallback.ordered_qty, 0) AS ordered_qty
+              COALESCE(direct.ordered_qty, 0) + COALESCE(fallback.ordered_qty, 0) AS ordered_qty,
+              pv.name AS preferred_vendor_name
        FROM mrs_items mi
        LEFT JOIN direct ON direct.mrs_item_id = mi.id
        LEFT JOIN fallback ON fallback.mname = regexp_replace(lower(trim(mi.material_name)), '[^a-z0-9]+', '', 'g')
+       LEFT JOIN vendors pv ON pv.id = mi.preferred_vendor_id
        WHERE mi.mrs_id = $1 ORDER BY mi.sort_order`,
       [req.params.id]
     );
