@@ -178,12 +178,22 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
     }
   }, [pendingAdvanceBalance]);
 
+  // Read-only — sourced from the selected bills' own credit_note_val, which
+  // credit-notes.routes.js writes onto tqs_bills once a Credit Note is
+  // Applied. Not a manual field: it should just show up once the note is
+  // applied against one of these invoices.
+  const creditNoteTotal = useMemo(() => {
+    return invoices
+      .filter(b => selectedBillIds.includes(b.id))
+      .reduce((s, b) => s + Number(b.credit_note_val || 0), 0);
+  }, [invoices, selectedBillIds]);
+
   const totals = useMemo(() => {
     const selected = invoices.filter(b => selectedBillIds.includes(b.id));
     const gross = Math.round(summaryRows.reduce((s, r) => s + Number(r.amount || 0), 0));
     const autoTax = Math.round(summaryRows.reduce((s, r) => s + Number(r.tax_amount || 0), 0));
     const tax = Math.round(form.gst_tax !== '' ? Number(form.gst_tax || 0) : autoTax);
-    const deductions = Math.round(Number(form.tds_amount || 0) + Number(form.advance_recovered || 0) + Number(form.retention_amount || 0) + Number(form.other_deductions || 0));
+    const deductions = Math.round(Number(form.tds_amount || 0) + Number(form.advance_recovered || 0) + Number(form.retention_amount || 0) + Number(form.other_deductions || 0) + creditNoteTotal);
     const invoiceTotal = selected.reduce((s, b) => s + Number(b.total_amount || 0), 0);
     return {
       invoiceTotal,
@@ -192,13 +202,14 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
       autoTax,
       tax,
       deductions,
+      creditNoteTotal,
       // Net = invoice total (what vendor billed, incl. GST) minus deductions,
       // rounded to the nearest rupee for the abstract sheet / payment certificate.
       // Do NOT use summaryRows gross here — it is the QS-certified work value
       // (excl. GST), which causes net < invoice when GST is embedded in total_amount.
       net: Math.round(invoiceTotal - deductions),
     };
-  }, [invoices, selectedBillIds, summaryRows, form.gst_tax, form.tds_amount, form.advance_recovered, form.retention_amount, form.other_deductions]);
+  }, [invoices, selectedBillIds, summaryRows, form.gst_tax, form.tds_amount, form.advance_recovered, form.retention_amount, form.other_deductions, creditNoteTotal]);
 
   const loadSummaryMut = useMutation({
     mutationFn: () => vendorQSCertificationAPI.summaryItems({ bill_ids: selectedBillIds }),
@@ -424,6 +435,15 @@ function CertificationModal({ onClose, projects, vendors, initialData = {} }) {
             <div>
               <label className="text-[11px] font-medium text-slate-900 font-medium uppercase">Other Deductions</label>
               <input type="number" className={fieldCls} value={form.other_deductions} onChange={e => set('other_deductions', e.target.value)} />
+            </div>
+            <div>
+              <label className="text-[11px] font-medium text-slate-900 font-medium uppercase">Credit Note</label>
+              <input type="text" readOnly disabled
+                className={`${fieldCls} bg-red-50 border-red-200 text-red-700 font-semibold cursor-not-allowed`}
+                value={creditNoteTotal > 0 ? `− Rs ${inr(creditNoteTotal)}` : 'Rs 0'} />
+              <div className="mt-1 min-h-[18px] text-[11px] text-slate-400">
+                {creditNoteTotal > 0 ? 'Applied credit note(s) on selected bill(s)' : 'No applied credit note'}
+              </div>
             </div>
             <div className="flex items-end">
               <label className="flex items-center gap-2 text-sm font-medium text-slate-900 cursor-pointer">

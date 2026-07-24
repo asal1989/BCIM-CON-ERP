@@ -99,6 +99,11 @@ async function ensureTables() {
   // (moved off the Bill Tracker's per-bill QS tab, which no longer collects them)
   try { await query(`ALTER TABLE vendor_qs_certifications ADD COLUMN IF NOT EXISTS qs_received_date DATE`); } catch (_) {}
   try { await query(`ALTER TABLE vendor_qs_certifications ADD COLUMN IF NOT EXISTS qs_certified_date DATE`); } catch (_) {}
+  // ── Credit note deduction — read-only, sourced from applied Credit Notes
+  // (credit-notes.routes.js syncs credit_note_val onto tqs_bills when a note
+  // is applied). Summed across the certification's selected bills.
+  try { await query(`ALTER TABLE vendor_qs_certifications ADD COLUMN IF NOT EXISTS credit_note_amount NUMERIC(14,2) DEFAULT 0`); } catch (_) {}
+  try { await query(`ALTER TABLE tqs_bill_updates ADD COLUMN IF NOT EXISTS credit_note_amt NUMERIC(14,2) DEFAULT 0`); } catch (_) {}
   await query(`
     UPDATE tqs_bill_updates u
     SET pc_number = c.cert_number,
@@ -474,7 +479,8 @@ router.get('/pending-invoices', async (req, res) => {
       SELECT b.id, b.sl_number, b.bill_type, b.vendor_id, b.vendor_name,
              b.project_id, p.name AS project_name,
              COALESCE(b.wo_number, b.po_number) AS order_number,
-             b.inv_number, b.inv_date, b.basic_amount, b.total_amount, b.workflow_status
+             b.inv_number, b.inv_date, b.basic_amount, b.total_amount, b.workflow_status,
+             b.credit_note_num, COALESCE(b.credit_note_val, 0) AS credit_note_val
       FROM tqs_bills b
       LEFT JOIN projects p ON p.id = b.project_id
       WHERE ${where.join(' AND ')}
@@ -865,7 +871,11 @@ router.post('/', async (req, res) => {
       const advanceRecovered = round0(advance_recovered);
       const retentionAmount  = round0(retention_amount);
       const otherDeductions  = round0(other_deductions);
-      const totalDed = tds_amount + advanceRecovered + retentionAmount + otherDeductions;
+      // Read-only, derived server-side from the bills' own credit_note_val —
+      // never trust a client-supplied figure for this since it's sourced
+      // from an already-applied Credit Note (see credit-notes.routes.js).
+      const creditNoteAmount = round0(billsRes.rows.reduce((s, b) => s + n(b.credit_note_val), 0));
+      const totalDed = tds_amount + advanceRecovered + retentionAmount + otherDeductions + creditNoteAmount;
       // Net = invoice total (vendor's billed amount) minus all deductions.
       // Using invoiceBillTotal instead of gross+billTax so GST embedded in total_amount is included.
       const netPayable = round0(invoiceBillTotal - totalDed);
@@ -906,8 +916,8 @@ router.post('/', async (req, res) => {
           gross_amount, tax_amount, tds_amount, tds_rate, advance_recovered, retention_amount,
           other_deductions, net_payable, previous_certified_amount,
           cumulative_certified_amount, is_final_bill, remarks, certified_at, created_by,
-          qs_received_date, qs_certified_date
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'certified',$10,$11,$12,$13,$23,$14,$15,$16,$17,$18,$19,$20,$21,NOW(),$22,$24,$25)
+          qs_received_date, qs_certified_date, credit_note_amount
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'certified',$10,$11,$12,$13,$23,$14,$15,$16,$17,$18,$19,$20,$21,NOW(),$22,$24,$25,$26)
         RETURNING *
       `, [
         req.user.company_id, project_id, vendor_id || null, vendor_name, order_type, order_number || null,
@@ -917,6 +927,7 @@ router.post('/', async (req, res) => {
         appliedTdsRate,  // $23
         qs_received_date || null,  // $24
         qs_certified_date || null, // $25
+        creditNoteAmount,          // $26
       ]);
 
       const selectedBillTotal = Math.max(1, billsRes.rows.reduce((s, x) => s + n(x.total_amount), 0));
@@ -930,7 +941,11 @@ router.post('/', async (req, res) => {
         const billTds = allocate(tds_amount, b.total_amount);
         const billRetention = allocate(retention_amount, b.total_amount);
         const billOtherDeduction = allocate(other_deductions, b.total_amount);
-        const billTotalDeductions = billAdvanceRecovery + billTds + billRetention + billOtherDeduction;
+        // Not proportionally allocated like the others — a credit note is
+        // already tied to this exact bill (credit_note_val), not split
+        // across every other invoice selected into the same certification.
+        const billCreditNote = n(b.credit_note_val);
+        const billTotalDeductions = billAdvanceRecovery + billTds + billRetention + billOtherDeduction + billCreditNote;
         await client.query(
           `INSERT INTO vendor_qs_certification_bills (certification_id, bill_id, sl_number, inv_number, inv_date, total_amount)
            VALUES ($1,$2,$3,$4,$5,$6)`,
@@ -942,10 +957,10 @@ router.post('/', async (req, res) => {
             qs_gross, qs_tax, qs_total,
             ra_sequence, ra_bill_number, pc_number, pc_generated_at,
             advance_recovered, tds_deduction, retention_money,
-            other_deductions, total_deductions,
+            other_deductions, credit_note_amt, total_deductions,
             handed_over_accounts_date, accts_jv_date, updated_at
           )
-          VALUES ($1,$2,$2,$14,COALESCE($15,CURRENT_DATE),$3,$4,$5,$6,$7,$8,NOW(),$9,$10,$11,$12,$13,CURRENT_DATE,COALESCE($15,CURRENT_DATE),NOW())
+          VALUES ($1,$2,$2,$14,COALESCE($15,CURRENT_DATE),$3,$4,$5,$6,$7,$8,NOW(),$9,$10,$11,$12,$16,$13,CURRENT_DATE,COALESCE($15,CURRENT_DATE),NOW())
           ON CONFLICT (bill_id) DO UPDATE SET
             certified_net=EXCLUDED.certified_net,
             balance_to_pay=EXCLUDED.balance_to_pay,
@@ -961,6 +976,7 @@ router.post('/', async (req, res) => {
             tds_deduction=EXCLUDED.tds_deduction,
             retention_money=EXCLUDED.retention_money,
             other_deductions=EXCLUDED.other_deductions,
+            credit_note_amt=EXCLUDED.credit_note_amt,
             total_deductions=EXCLUDED.total_deductions,
             pc_generated_at=COALESCE(tqs_bill_updates.pc_generated_at, EXCLUDED.pc_generated_at),
             handed_over_accounts_date=COALESCE(tqs_bill_updates.handed_over_accounts_date, EXCLUDED.handed_over_accounts_date),
@@ -985,6 +1001,7 @@ router.post('/', async (req, res) => {
           billTotalDeductions,
           qs_received_date || null,   // $14
           qs_certified_date || null,  // $15
+          billCreditNote,              // $16
         ]);
         // QS certification now routes straight to Procurement (Accounts is no
         // longer a blocking waypoint — see PATCH /:id/qs in tqs-bills.routes.js
