@@ -211,7 +211,7 @@ function AbstractSheet({ cert }) {
       <div style={T.infoPanel}>
         <InfoRow label="Project Name"            value={cert.project_name} />
         <InfoRow label="Vendor / Contractor"     value={cert.vendor_name} />
-        <InfoRow label="Package Description"     value={cert.remarks || `${cert.order_type?.toUpperCase() || 'WO'} Certification`} />
+        <InfoRow label="Package Description"     value={cert.order_narration || cert.remarks || `${cert.order_type?.toUpperCase() || 'WO'} Certification`} />
         <InfoRow label="RA Bill No."             value={raBillNo} />
         <InfoRow label="Work / Purchase Order"   value={cert.order_number} />
         <InfoRow label="Date of Invoice"         value={invDates || '—'} />
@@ -426,7 +426,10 @@ function PaymentCertificate({ cert }) {
   ];
 
   // Package description: use cert remarks as the work package label (same as AbstractSheet)
-  const packageDesc = cert.remarks || `${cert.order_type?.toUpperCase() || 'WO'} Certification`;
+  // Package Description = the Narration printed on the source PO/WO itself
+  // (BCIM-PUR-F-03's "Narration:" line) — falls back to the QS's own remarks,
+  // then a generic placeholder, only if the order has no narration recorded.
+  const packageDesc = cert.order_narration || cert.remarks || `${cert.order_type?.toUpperCase() || 'WO'} Certification`;
 
   return (
     <section className="print-sheet print-payment" style={{ ...T.page, ...T.sheet, padding: '2mm 8mm 10mm 8mm' }}>
