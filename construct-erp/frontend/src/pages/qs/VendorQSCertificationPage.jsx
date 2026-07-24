@@ -27,6 +27,7 @@ import {
   X,
   Pencil,
   Trash2,
+  ChevronRight,
 } from 'lucide-react';
 
 // Whole-rupee display — QS certification abstract sheet and payment
@@ -705,6 +706,7 @@ export default function VendorQSCertificationPage() {
   const [projectFilter, setProjectFilter] = useState('');
   const [statusTab, setStatusTab] = useState('all');
   const [view, setView] = useState('table'); // 'table' | 'vendors'
+  const [expandedVendor, setExpandedVendor] = useState(null);
   const { user } = useAuthStore();
   const canApprove = (user?.email || '').toLowerCase() === CERT_APPROVER_EMAIL;
   const qc = useQueryClient();
@@ -824,10 +826,12 @@ export default function VendorQSCertificationPage() {
     return acc;
   }, { invoiceValue: 0, certified: 0, net: 0, paid: 0, deductions: 0 });
 
-  // Per-vendor rollup for the Vendor Summary view.
+  // Per-vendor rollup for the Vendor Summary view — keeps each vendor's own
+  // certifications (RA bills) so the row can expand inline without switching
+  // views or refetching.
   const vendorSummary = Object.values(certs.reduce((m, c) => {
     const key = (c.vendor_name || '—').trim();
-    if (!m[key]) m[key] = { vendor_name: key, count: 0, invoiceValue: 0, certified: 0, deductions: 0, net: 0, paid: 0 };
+    if (!m[key]) m[key] = { vendor_name: key, count: 0, invoiceValue: 0, certified: 0, deductions: 0, net: 0, paid: 0, bills: [] };
     const v = m[key];
     v.count += 1;
     v.invoiceValue += Number(c.invoice_value || 0);
@@ -835,8 +839,10 @@ export default function VendorQSCertificationPage() {
     v.deductions += deductionsOf(c);
     v.net += Number(c.net_payable || 0);
     v.paid += Number(c.paid_amount || 0);
+    v.bills.push(c);
     return m;
   }, {})).sort((a, b) => b.net - a.net);
+  vendorSummary.forEach(v => v.bills.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
 
   const STATUS_TABS = [
     { key: 'all',       label: 'All'       },
@@ -967,12 +973,18 @@ export default function VendorQSCertificationPage() {
             <tbody className="divide-y divide-slate-100">
               {vendorSummary.length === 0 ? (
                 <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-400 text-sm">No certifications yet.</td></tr>
-              ) : vendorSummary.map(v => (
-                <tr key={v.vendor_name}
-                  onClick={() => { setSearch(v.vendor_name); setView('table'); setStatusTab('all'); }}
-                  className="hover:bg-emerald-50 transition-colors cursor-pointer"
-                  title={`View ${v.vendor_name}'s RA bills`}>
-                  <td className="px-4 py-2.5 font-semibold text-emerald-700 underline decoration-dotted underline-offset-2">{v.vendor_name}</td>
+              ) : vendorSummary.map(v => {
+                const open = expandedVendor === v.vendor_name;
+                return (
+                <React.Fragment key={v.vendor_name}>
+                <tr
+                  onClick={() => setExpandedVendor(open ? null : v.vendor_name)}
+                  className={`hover:bg-emerald-50 transition-colors cursor-pointer ${open ? 'bg-emerald-50/60' : ''}`}
+                  title={`${open ? 'Hide' : 'Show'} ${v.vendor_name}'s RA bills`}>
+                  <td className="px-4 py-2.5 font-semibold text-emerald-700 flex items-center gap-1.5">
+                    <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+                    {v.vendor_name}
+                  </td>
                   <td className="px-4 py-2.5 text-center text-slate-600" style={{ fontVariantNumeric: 'tabular-nums' }}>{v.count}</td>
                   <td className="px-4 py-2.5 text-right text-slate-700" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(v.invoiceValue)}</td>
                   <td className="px-4 py-2.5 text-right text-slate-700" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(v.certified)}</td>
@@ -981,7 +993,49 @@ export default function VendorQSCertificationPage() {
                   <td className="px-4 py-2.5 text-right text-emerald-700" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(v.paid)}</td>
                   <td className="px-4 py-2.5 text-right font-semibold text-red-600" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(Math.max(0, v.net - v.paid))}</td>
                 </tr>
-              ))}
+                {open && (
+                  <tr>
+                    <td colSpan={8} className="p-0 bg-slate-50">
+                      <table className="w-full text-[13px]">
+                        <thead>
+                          <tr className="text-slate-400 text-[10px] uppercase tracking-wide border-y border-slate-200">
+                            <th className="pl-11 pr-3 py-2 text-left font-semibold">RA Bill</th>
+                            <th className="px-3 py-2 text-left font-semibold">Cert No.</th>
+                            <th className="px-3 py-2 text-left font-semibold">Project</th>
+                            <th className="px-3 py-2 text-right font-semibold">Invoice Value</th>
+                            <th className="px-3 py-2 text-right font-semibold">Certified Value</th>
+                            <th className="px-3 py-2 text-right font-semibold">Deductions</th>
+                            <th className="px-3 py-2 text-right font-semibold">Net Payable</th>
+                            <th className="px-3 py-2 text-right font-semibold">Paid</th>
+                            <th className="px-3 py-2 text-center font-semibold">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {v.bills.map(c => (
+                            <tr key={c.id}
+                              onClick={(e) => { e.stopPropagation(); navigate(`${basePath}/${c.id}`); }}
+                              className="hover:bg-white cursor-pointer transition-colors">
+                              <td className="pl-11 pr-3 py-2 font-semibold text-slate-700">{c.ra_bill_number || `RA-${c.ra_sequence}`}</td>
+                              <td className="px-3 py-2 text-slate-500">{c.cert_number}</td>
+                              <td className="px-3 py-2 text-slate-500">{c.project_name || '—'}</td>
+                              <td className="px-3 py-2 text-right text-slate-600" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(c.invoice_value)}</td>
+                              <td className="px-3 py-2 text-right text-slate-600" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(certifiedValueOf(c))}</td>
+                              <td className="px-3 py-2 text-right text-amber-600" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(deductionsOf(c))}</td>
+                              <td className="px-3 py-2 text-right font-semibold text-slate-800" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(c.net_payable)}</td>
+                              <td className="px-3 py-2 text-right text-emerald-700" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(c.paid_amount)}</td>
+                              <td className="px-3 py-2 text-center">
+                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide ${statusClass(c.status)}`}>{c.status}</span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
+                );
+              })}
             </tbody>
             {vendorSummary.length > 0 && (
               <tfoot className="bg-slate-50 border-t border-slate-200 font-bold text-slate-800">
