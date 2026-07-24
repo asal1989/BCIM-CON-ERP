@@ -684,10 +684,12 @@ router.get('/:id', async (req, res) => {
                 ELSE COALESCE(latest_po.grand_total, latest_po.sub_total, po.grand_total, po.sub_total)
               END AS order_total_value,
               -- Narration printed on the source PO/WO itself (BCIM-PUR-F-03's
-              -- own "Narration:" line) — used as the Payment Certificate's
-              -- "Package Description" instead of a generic "WO Certification"
-              -- placeholder.
-              COALESCE(wo.notes, po.notes) AS order_narration,
+              -- own "Narration:" line for POs) — used as the Payment
+              -- Certificate's "Package Description" instead of a generic
+              -- "WO Certification" placeholder. work_orders has no notes
+              -- column (its print template's own Narration line has always
+              -- been blank) — scope_of_work is the closest equivalent.
+              COALESCE(wo.scope_of_work, po.notes) AS order_narration,
               creator.name AS created_by_name,
               approver.name AS approved_by_name,
               rejecter.name AS rejected_by_name
