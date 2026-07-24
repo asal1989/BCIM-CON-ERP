@@ -2005,7 +2005,7 @@ router.get('/concrete-tracker', async (req, res) => {
 
     // 3. DPR Concrete per day
     const dprParams = [cid];
-    let dprWhere = 'd.project_id = (SELECT id FROM projects WHERE company_id = $1 LIMIT 1)';
+    let dprWhere = 'd.project_id IN (SELECT id FROM projects WHERE company_id = $1)';
     if (project_id) {
       dprWhere = 'd.project_id = $2';
       dprParams.push(project_id);
