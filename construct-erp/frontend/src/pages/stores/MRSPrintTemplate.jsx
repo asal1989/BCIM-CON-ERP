@@ -96,6 +96,11 @@ const MRSPrintTemplate = React.forwardRef(({ data }, ref) => {
             width: 100% !important;
             min-height: 178mm !important;
           }
+          /* Guard against global print CSS (Layout.jsx hides header/nav
+             elements app-wide when printing) ever hiding the doc header. */
+          .mrs-header {
+            display: grid !important;
+          }
         }
 
         .mrs-print-doc {
@@ -497,7 +502,11 @@ const MRSPrintTemplate = React.forwardRef(({ data }, ref) => {
       `}</style>
 
       <div className="mrs-sheet">
-        <header className="mrs-header">
+        {/* Deliberately a <div>, not <header>: Layout.jsx's global print CSS
+            hides every semantic <header> element (to remove app chrome when
+            printing), which deleted this whole block — logo, MRS No, QR —
+            from printed output. */}
+        <div className="mrs-header">
           <div className="mrs-logo-box">
             <img src="/bcim-logo.png" alt="BCIM" />
             <div>
@@ -530,7 +539,7 @@ const MRSPrintTemplate = React.forwardRef(({ data }, ref) => {
             </div>
             <QRCodeSVG value={verificationUrl} size={48} />
           </div>
-        </header>
+        </div>
 
         <section className="mrs-info-grid">
           <div className="mrs-info-card">
