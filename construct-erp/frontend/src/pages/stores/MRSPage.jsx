@@ -465,7 +465,7 @@ export default function MRSPage() {
   });
   const { data: detailedMRS } = useQuery({
     queryKey: ['mrs', user?.id, selectedMRS?.id],
-    queryFn: () => mrsAPI.get(selectedMRS.id).then(r => r.data?.data ?? r.data ?? []).catch(() => []),
+    queryFn: () => mrsAPI.get(selectedMRS.id).then(r => r.data?.data ?? r.data ?? null).catch(() => null),
     enabled: !!user?.id && !!selectedMRS?.id,
   });
 

@@ -60,7 +60,7 @@ function ApprovalBox({ title, name, date, badge, done }) {
 }
 
 const MRSPrintTemplate = React.forwardRef(({ data }, ref) => {
-  if (!data) return <div ref={ref} style={{ padding: 40, textAlign: 'center' }}>Preparing document...</div>;
+  if (!data || !data.id) return <div ref={ref} style={{ padding: 40, textAlign: 'center' }}>Preparing document...</div>;
 
   const verificationUrl = `${getPublicAppOrigin()}/verify/mrs/${data.id}`;
   const items = data.items || [];
@@ -82,12 +82,12 @@ const MRSPrintTemplate = React.forwardRef(({ data }, ref) => {
             margin: 0 !important;
             padding: 0 !important;
             background: #fff !important;
-            width: 297mm !important;
+            width: 100% !important;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
           .mrs-print-doc {
-            width: 281mm !important;
+            width: 100% !important;
             max-width: none !important;
             margin: 0 !important;
             padding: 0 !important;
