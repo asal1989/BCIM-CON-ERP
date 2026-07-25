@@ -43,7 +43,7 @@ const navGroups = [
     { to: '/projects/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/projects',           icon: Building2,       label: 'Project Master' },
     { to: '/projects',           icon: Building,        label: 'Project Overview' },
-    { to: '/qs/boq-dashboard',   icon: FileSpreadsheet, label: 'BOQ' },
+    { to: '/qs/boq',             icon: FileSpreadsheet, label: 'BOQ' },
     { to: '/planning/wbs',       icon: GanttChartSquare,label: 'Schedule' },
     { to: '/projects/drawings',  icon: FileSearch,      label: 'Drawings' },
     { to: '/dms',                icon: FolderOpen,      label: 'Documents' },
