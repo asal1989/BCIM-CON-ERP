@@ -401,7 +401,12 @@ async function buildPdfBuffer({ companyName, projectName, dateStr, dateISO, rows
       printBackground: true,
       margin: { top: '10mm', bottom: '10mm', left: '8mm', right: '8mm' },
     });
-    return buffer;
+    // puppeteer v25's page.pdf() returns a plain Uint8Array, not a Node
+    // Buffer — Uint8Array.prototype.toString('base64') silently ignores the
+    // argument and does an Array-style comma-join instead of base64 encoding
+    // (which is exactly what Graph's "Cannot convert ... to Edm.Binary" error
+    // was choking on). Wrap explicitly so .toString('base64') downstream works.
+    return Buffer.from(buffer);
   } finally {
     await browser.close();
   }
