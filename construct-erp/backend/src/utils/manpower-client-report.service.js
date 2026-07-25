@@ -377,7 +377,10 @@ function buildPdfHtml({ companyName, projectName, dateStr, dateISO, companySumma
 }
 
 async function buildPdfBuffer({ companyName, projectName, dateStr, dateISO, rows, companySummary, grandTotal }) {
-  const puppeteer = require('puppeteer');
+  // puppeteer v25+ ships as an ES Module — require() fails in this CommonJS
+  // file ("require() of ES Module ... not supported"). Dynamic import()
+  // works fine from CommonJS as long as we're inside an async function.
+  const { default: puppeteer } = await import('puppeteer');
   const { resolveChromiumPath } = require('./chromium-resolver');
 
   const pivot = buildPivot(rows, grandTotal);
