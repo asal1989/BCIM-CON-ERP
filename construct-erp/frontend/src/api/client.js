@@ -176,6 +176,13 @@ export const projectAPI = {
   delete:    (id)     => api.delete(`/projects/${id}`),
 };
 
+export const drawingAPI = {
+  list:   (params)    => api.get('/drawings', { params }),
+  create: (data)      => api.post('/drawings', data),
+  update: (id, data)  => api.put(`/drawings/${id}`, data),
+  delete: (id)        => api.delete(`/drawings/${id}`),
+};
+
 export const subcontractorAPI = {
   // Dashboard
   getDashboard:      (params) => api.get('/subcontractors/dashboard', { params }),

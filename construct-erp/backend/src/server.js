@@ -27,6 +27,7 @@ const { pool } = require('./config/database');
 // Route imports
 const authRoutes = require('./routes/auth.routes');
 const projectRoutes = require('./routes/project.routes');
+const drawingRoutes = require('./routes/drawing.routes');
 const boqRoutes = require('./routes/boq.routes');
 const boqBudgetRoutes = require('./routes/boq-budget.routes');
 const measurementRoutes = require('./routes/measurement.routes');
@@ -397,6 +398,7 @@ app.use(`${API}/auth`, authRoutes);
 
 // Core
 app.use(`${API}/projects`, projectRoutes);
+app.use(`${API}/drawings`, drawingRoutes);
 
 // QS Module
 app.use(`${API}/boq`, boqRoutes);

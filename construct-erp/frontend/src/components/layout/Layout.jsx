@@ -36,9 +36,22 @@ const navGroups = [
   { label: 'Overview', items: [
     { to: '/approvals', icon: BadgeCheck,      label: 'My Approvals' },
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/projects',  icon: Building2,       label: 'Projects' },
     { to: '/apps',      icon: Globe,           label: 'BCIM Apps' },
     { to: '/chat',      icon: MessageSquare,   label: 'Team Chat' },
+  ]},
+  { label: 'Projects', items: [
+    { to: '/projects/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/projects',           icon: Building2,       label: 'Project Master' },
+    { to: '/projects',           icon: Building,        label: 'Project Overview' },
+    { to: '/qs/boq-dashboard',   icon: FileSpreadsheet, label: 'BOQ' },
+    { to: '/planning/wbs',       icon: GanttChartSquare,label: 'Schedule' },
+    { to: '/projects/drawings',  icon: FileSearch,      label: 'Drawings' },
+    { to: '/dms',                icon: FolderOpen,      label: 'Documents' },
+    { to: '/planning/milestones',icon: Flag,            label: 'Milestones' },
+    { to: '/hr-admin/project-staff', icon: Users,       label: 'Project Team' },
+    { to: '/qs/ra-bills',        icon: Receipt,         label: 'Client Billing' },
+    { to: '/planning/reports',   icon: BarChart3,       label: 'Reports' },
+    { to: '/planning/p6-dashboard', icon: Activity,     label: 'Analytics' },
   ]},
   { label: 'Planning', items: [
     { to: '/planning',              icon: GanttChartSquare, label: 'P&E Dashboard' },
@@ -399,6 +412,7 @@ const navGroups = [
 
 const GROUP_COLORS = {
   'Overview':          '#6366F1',
+  'Projects':          '#0EA5E9',
   'Planning':          '#3B82F6',
   'Procurement':       '#F59E0B',
   'Tender Management': '#06B6D4',

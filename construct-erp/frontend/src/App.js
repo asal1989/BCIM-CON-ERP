@@ -57,6 +57,8 @@ const NotFound    = lazy(() => import('./pages/NotFound'));
 const ProjectList         = lazy(() => import('./pages/projects/ProjectList'));
 const ProjectDetail       = lazy(() => import('./pages/projects/ProjectDetail'));
 const ProjectCreate       = lazy(() => import('./pages/projects/ProjectCreate'));
+const ProjectsDashboard   = lazy(() => import('./pages/projects/ProjectsDashboard'));
+const DrawingsPage        = lazy(() => import('./pages/projects/DrawingsPage'));
 const QSDashboardPage     = lazy(() => import('./pages/qs/QSDashboardPage'));
 const BOQPage                  = lazy(() => import('./pages/qs/BOQPage'));
 const BOQMappingPage           = lazy(() => import('./pages/qs/BOQMappingPage'));
@@ -675,6 +677,8 @@ export default function App() {
                 <Route path="dashboard" element={<RequireModule module="Overview"><Dashboard /></RequireModule>} />
 
                 {/* Projects */}
+                <Route path="projects/dashboard" element={<RequireModule module="Overview"><ProjectsDashboard /></RequireModule>} />
+                <Route path="projects/drawings"  element={<RequireModule module="Overview"><DrawingsPage /></RequireModule>} />
                 <Route path="projects" element={<RequireModule module="Overview"><ProjectList /></RequireModule>} />
                 <Route path="projects/new" element={<RequireModule module="Overview"><ProjectCreate /></RequireModule>} />
                 <Route path="projects/:id" element={<RequireModule module="Overview"><ProjectDetail /></RequireModule>} />
