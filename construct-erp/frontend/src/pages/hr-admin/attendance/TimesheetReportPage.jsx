@@ -90,6 +90,7 @@ const COL_KEYS = {
   'Name':        'name',
   'Designation': 'designation',
   'Department':  'department',
+  'Trade':       'trade',
   'Company':     'company',
   'P/A':         'attendance_status',
   'In Time':     'in_time',
@@ -98,6 +99,9 @@ const COL_KEYS = {
   'Hrs':         'hours_worked',
   'Shift':       'shift',
   'Location':    'location',
+  'Eng/FM/Ch/CM':    'eng_fm_ch_cm',
+  'Incharge':        'incharge_name',
+  'Tower Incharge':  'tower_incharge',
   'Emp Status':  'status',
   'Reason':      'reason',
 };
@@ -320,13 +324,15 @@ export default function TimesheetReportPage() {
   useEffect(() => { load(); }, [load]);
 
   const handleExport = () => {
-    const headers = ['S.No','EMP ID','Name','Designation','Department','Company','P/A',
-      'In Time','Out Time','Late Min','Hrs Worked','Overtime Hrs','Shift','Location','Emp Status','Reason'];
+    const headers = ['S.No','EMP ID','Name','Designation','Department','Trade','Company','P/A',
+      'In Time','Out Time','Late Min','Hrs Worked','Overtime Hrs','Shift','Location',
+      'Eng/FM/Ch/CM','Incharge Name','Tower Incharge','Emp Status','Reason'];
     const csvRows = filteredRows.map((r, i) => [
-      i+1, r.emp_id||'', r.name, r.designation, r.department,
+      i+1, r.emp_id||'', r.name, r.designation, r.department, r.trade||'',
       r.company, r.attendance_status, r.in_time||'', r.out_time||'',
       r.late_minutes||0, r.hours_worked||'', r.overtime_hours||'',
-      r.shift, r.location, r.status, r.reason||'',
+      r.shift, r.location, r.eng_fm_ch_cm||'', r.incharge_name||'', r.tower_incharge||'',
+      r.status, r.reason||'',
     ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(','));
     const blob = new Blob([[headers.join(','), ...csvRows].join('\n')], { type:'text/csv' });
     const a = document.createElement('a');
@@ -688,8 +694,9 @@ export default function TimesheetReportPage() {
                   position:'sticky', top:0, zIndex:2,
                   boxShadow:'0 1px 0 #E5E7EB',
                 }}>
-                  {['#','EMP ID','Name','Designation','Department','Company',
-                    'P/A','In Time','Out Time','Late Min','Hrs','OT','Shift','Location','Emp Status','Reason',
+                  {['#','EMP ID','Name','Designation','Department','Trade','Company',
+                    'P/A','In Time','Out Time','Late Min','Hrs','OT','Shift','Location',
+                    'Eng/FM/Ch/CM','Incharge','Tower Incharge','Emp Status','Reason',
                   ].map(h => {
                     const key = COL_KEYS[h];
                     const active = sortKey === key;
@@ -718,7 +725,7 @@ export default function TimesheetReportPage() {
               <tbody>
                 {filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={16} style={{ textAlign:'center', padding:56, color:'#9CA3AF', fontSize:13 }}>
+                    <td colSpan={20} style={{ textAlign:'center', padding:56, color:'#9CA3AF', fontSize:13 }}>
                       {rows.length === 0 ? `No records found for ${date}` : 'No records match your filter'}
                     </td>
                   </tr>
@@ -745,6 +752,7 @@ export default function TimesheetReportPage() {
                       </td>
                       <td style={{ ...td, color:'#6B7280', fontSize:11 }}>{r.designation}</td>
                       <td style={{ ...td, color:'#374151' }}>{r.department}</td>
+                      <td style={{ ...td, color:'#6B7280' }}>{r.trade || <span style={{ color:'#D1D5DB' }}>—</span>}</td>
                       <td style={td}>
                         <span style={{
                           fontSize:10, fontWeight:700, letterSpacing:0.3,
@@ -780,6 +788,9 @@ export default function TimesheetReportPage() {
                       </td>
                       <td style={{ ...td, color:'#374151' }}>{r.shift}</td>
                       <td style={{ ...td, color:'#374151' }}>{r.location}</td>
+                      <td style={{ ...td, color:'#6B7280' }}>{r.eng_fm_ch_cm || <span style={{ color:'#D1D5DB' }}>—</span>}</td>
+                      <td style={{ ...td, color:'#6B7280' }}>{r.incharge_name || <span style={{ color:'#D1D5DB' }}>—</span>}</td>
+                      <td style={{ ...td, color:'#6B7280' }}>{r.tower_incharge || <span style={{ color:'#D1D5DB' }}>—</span>}</td>
                       <td style={td}>
                         <span style={{
                           fontSize:10, fontWeight:700,
@@ -812,7 +823,7 @@ export default function TimesheetReportPage() {
                       {' / '}
                       <span style={{ color:'#B45309', fontWeight:800 }}>{summary.leave}L</span>
                     </td>
-                    <td colSpan={9} style={td}/>
+                    <td colSpan={13} style={td}/>
                   </tr>
                 </tfoot>
               )}
@@ -826,7 +837,8 @@ export default function TimesheetReportPage() {
             <table className="print-table" style={{ borderCollapse:'collapse', width:'100%', fontSize:12 }}>
               <thead>
                 <tr>
-                  {['#','EMP ID','Name','Designation','Dept','Company','P/A','In','Out','Late','Hrs','OT','Shift','Location','Status','Reason']
+                  {['#','EMP ID','Name','Designation','Dept','Trade','Company','P/A','In','Out','Late','Hrs','OT','Shift','Location',
+                    'Eng/FM/Ch/CM','Incharge','Tower Incharge','Status','Reason']
                     .map(h => <th key={h}>{h}</th>)}
                 </tr>
               </thead>
@@ -838,7 +850,7 @@ export default function TimesheetReportPage() {
                   const dl = dRows.filter(r => r.attendance_status === 'leave').length;
                   return [
                     <tr key={`dept-${dept}`} className="dept-header-row">
-                      <td colSpan={16} style={{ padding:'3px 6px', fontWeight:700, fontSize:7.5 }}>
+                      <td colSpan={20} style={{ padding:'3px 6px', fontWeight:700, fontSize:7.5 }}>
                         {dept} &nbsp;—&nbsp; {dp}P / {da}A{dh > 0 ? ` / ${dh}HD` : ''}{dl > 0 ? ` / ${dl}L` : ''} &nbsp; ({dRows.length} total)
                       </td>
                     </tr>,
@@ -849,6 +861,7 @@ export default function TimesheetReportPage() {
                         <td style={{ fontWeight:600 }}>{r.name}</td>
                         <td>{r.designation}</td>
                         <td>{r.department}</td>
+                        <td>{r.trade || '—'}</td>
                         <td>{r.company}</td>
                         <td style={{ textAlign:'center' }}><Pill status={r.attendance_status}/></td>
                         <td>{r.in_time || '—'}</td>
@@ -860,6 +873,9 @@ export default function TimesheetReportPage() {
                         <td style={{ textAlign:'center' }}>{r.overtime_hours > 0 ? `+${r.overtime_hours}h` : '—'}</td>
                         <td>{r.shift}</td>
                         <td>{r.location}</td>
+                        <td>{r.eng_fm_ch_cm || '—'}</td>
+                        <td>{r.incharge_name || '—'}</td>
+                        <td>{r.tower_incharge || '—'}</td>
                         <td style={{ fontWeight:700, color: r.status === 'ACTIVE' ? '#15803D' : '#B91C1C' }}>{r.status}</td>
                         <td style={{ color:'#555' }}>{r.reason || '—'}</td>
                       </tr>
@@ -875,7 +891,7 @@ export default function TimesheetReportPage() {
                   <td style={{ textAlign:'center', fontWeight:700, padding:'4px 6px', borderTop:'2px solid #1B3A6B' }}>
                     {summary.present}P / {summary.absent}A / {summary.half||0}HD / {summary.leave}L
                   </td>
-                  <td colSpan={9} style={{ borderTop:'2px solid #1B3A6B' }}/>
+                  <td colSpan={13} style={{ borderTop:'2px solid #1B3A6B' }}/>
                 </tr>
               </tfoot>
             </table>

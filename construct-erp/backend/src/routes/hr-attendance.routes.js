@@ -7,10 +7,12 @@ const { query } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
 
 router.use(authenticate);
-router.use(authorize('super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager', 'manager', 'department_head', 'project_manager', 'project_head'));
+router.use(authorize('super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager', 'manager', 'department_head', 'project_manager', 'project_head',
+  'managing_director', 'director', 'ceo', 'cfo', 'md'));
 
 // Full HR roles see all employees; project/dept roles see only their project
-const FULL_HR_ROLES = new Set(['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager']);
+const FULL_HR_ROLES = new Set(['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager',
+  'managing_director', 'director', 'ceo', 'cfo', 'md']);
 
 async function getProjectScope(req) {
   const role = String(req.user?.role || '').toLowerCase();
@@ -52,6 +54,16 @@ const initTable = async () => {
   `);
 };
 runSchemaInit('hr-attendance', initTable);
+
+// Day-specific muster fields from the site's Daily Labour Report (Trade/Company
+// are per-employee and live on employee_profiles; these vary day to day)
+runSchemaInit('hr_attendance_muster_columns', async () => {
+  await query(`ALTER TABLE hr_attendance ADD COLUMN IF NOT EXISTS shift          VARCHAR(20) DEFAULT 'DAY'`);
+  await query(`ALTER TABLE hr_attendance ADD COLUMN IF NOT EXISTS site           VARCHAR(150)`);
+  await query(`ALTER TABLE hr_attendance ADD COLUMN IF NOT EXISTS eng_fm_ch_cm   VARCHAR(150)`);
+  await query(`ALTER TABLE hr_attendance ADD COLUMN IF NOT EXISTS incharge_name  VARCHAR(150)`);
+  await query(`ALTER TABLE hr_attendance ADD COLUMN IF NOT EXISTS tower_incharge VARCHAR(150)`);
+});
 
 // ═══════════════════════════════════════════════════════════
 // GET — monthly grid (company-wide or per user)
@@ -580,15 +592,20 @@ router.get('/timesheet-report', async (req, res) => {
         u.name,
         COALESCE(des.name, u.designation, '—')             AS designation,
         COALESCE(dep.name, u.department, '—')              AS department,
-        CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
-             THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END AS company,
+        COALESCE(ep.contractor_name,
+          CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
+               THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END) AS company,
+        ep.trade                            AS trade,
         COALESCE(a.status, '${noRecordStatus}') AS attendance_status,
         TO_CHAR(a.in_time,  'HH12:MI AM')  AS in_time,
         TO_CHAR(a.out_time, 'HH12:MI AM')  AS out_time,
         a.late_minutes,
         a.remarks                           AS reason,
-        COALESCE(ep.work_location, '—')    AS location,
-        'DAY'                               AS shift,
+        COALESCE(a.site, ep.work_location, '—') AS location,
+        COALESCE(a.shift, 'DAY')            AS shift,
+        a.eng_fm_ch_cm                      AS eng_fm_ch_cm,
+        a.incharge_name                     AS incharge_name,
+        a.tower_incharge                    AS tower_incharge,
         CASE WHEN COALESCE(ep.employment_status,'active') = 'active'
              THEN 'ACTIVE' ELSE 'INACTIVE' END AS status,
         u.id::text                          AS user_id,
@@ -635,6 +652,7 @@ router.get('/timesheet-report', async (req, res) => {
           w.skill_type                        AS designation,
           'CIVIL'                             AS department,
           sc.name                             AS company,
+          w.skill_type                        AS trade,
           COALESCE(a.status, '${noRecordStatus}') AS attendance_status,
           TO_CHAR(a.in_time,  'HH12:MI AM')      AS in_time,
           TO_CHAR(a.out_time, 'HH12:MI AM')      AS out_time,
@@ -642,6 +660,9 @@ router.get('/timesheet-report', async (req, res) => {
           a.remarks                              AS reason,
           COALESCE(p.name, '—')                AS location,
           'DAY'                                  AS shift,
+          NULL::text                             AS eng_fm_ch_cm,
+          NULL::text                             AS incharge_name,
+          NULL::text                             AS tower_incharge,
           CASE WHEN w.status = 'active' THEN 'ACTIVE' ELSE 'INACTIVE' END AS status,
           w.id::text                             AS user_id,
           'labour'                               AS row_type,
@@ -795,12 +816,15 @@ router.get('/monthly-report', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const { status, in_time, out_time, late_minutes, remarks } = req.body;
+    const { status, in_time, out_time, late_minutes, remarks, shift, site, eng_fm_ch_cm, incharge_name, tower_incharge } = req.body;
     const { rows } = await query(
-      `UPDATE hr_attendance SET status=$1, in_time=$2, out_time=$3, late_minutes=$4, remarks=$5
+      `UPDATE hr_attendance SET status=$1, in_time=$2, out_time=$3, late_minutes=$4, remarks=$5,
+         shift=COALESCE($8,shift), site=COALESCE($9,site), eng_fm_ch_cm=COALESCE($10,eng_fm_ch_cm),
+         incharge_name=COALESCE($11,incharge_name), tower_incharge=COALESCE($12,tower_incharge)
        WHERE id=$6 AND company_id=$7 RETURNING *`,
       [status, in_time || null, out_time || null, late_minutes || 0, remarks || null,
-       req.params.id, req.user.company_id]
+       req.params.id, req.user.company_id,
+       shift || null, site || null, eng_fm_ch_cm || null, incharge_name || null, tower_incharge || null]
     );
     res.json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -811,15 +835,22 @@ router.put('/:id', async (req, res) => {
 // ═══════════════════════════════════════════════════════════
 router.post('/', async (req, res) => {
   try {
-    const { user_id, attendance_date, status, in_time, out_time, late_minutes, remarks } = req.body;
+    const { user_id, attendance_date, status, in_time, out_time, late_minutes, remarks,
+      shift, site, eng_fm_ch_cm, incharge_name, tower_incharge } = req.body;
     const { rows } = await query(
-      `INSERT INTO hr_attendance (user_id, company_id, attendance_date, status, in_time, out_time, late_minutes, remarks)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      `INSERT INTO hr_attendance (user_id, company_id, attendance_date, status, in_time, out_time, late_minutes, remarks,
+         shift, site, eng_fm_ch_cm, incharge_name, tower_incharge)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        ON CONFLICT (user_id, attendance_date)
-       DO UPDATE SET status=$4, in_time=$5, out_time=$6, late_minutes=$7, remarks=$8
+       DO UPDATE SET status=$4, in_time=$5, out_time=$6, late_minutes=$7, remarks=$8,
+         shift=COALESCE($9,hr_attendance.shift), site=COALESCE($10,hr_attendance.site),
+         eng_fm_ch_cm=COALESCE($11,hr_attendance.eng_fm_ch_cm),
+         incharge_name=COALESCE($12,hr_attendance.incharge_name),
+         tower_incharge=COALESCE($13,hr_attendance.tower_incharge)
        RETURNING *`,
       [user_id, req.user.company_id, attendance_date, status || 'present',
-       in_time || null, out_time || null, late_minutes || 0, remarks || null]
+       in_time || null, out_time || null, late_minutes || 0, remarks || null,
+       shift || null, site || null, eng_fm_ch_cm || null, incharge_name || null, tower_incharge || null]
     );
     res.status(201).json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }

@@ -156,6 +156,14 @@ runSchemaInit('hr-employees-cols-v2', async () => {
   await q(`ALTER TABLE employee_profiles ADD COLUMN IF NOT EXISTS notice_period_days INT DEFAULT 30`);
 });
 
+// Trade + contractor company for site labour — static per-employee attributes
+// used by the Timesheet Report (from the Daily Labour Report format)
+runSchemaInit('hr-employees-trade-contractor', async () => {
+  const { query: q } = require('../config/database');
+  await q(`ALTER TABLE employee_profiles ADD COLUMN IF NOT EXISTS trade            VARCHAR(100)`);
+  await q(`ALTER TABLE employee_profiles ADD COLUMN IF NOT EXISTS contractor_name  VARCHAR(200)`);
+});
+
 runSchemaInit('hr-employees-docs-sharepoint', async () => {
   const { query: q } = require('../config/database');
   await q(`ALTER TABLE employee_documents ADD COLUMN IF NOT EXISTS sharepoint_id TEXT`);
