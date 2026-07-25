@@ -1,7 +1,0 @@
-[phases.setup]
-# unzip: PUPPETEER_SKIP_DOWNLOAD isn't being honored by this custom
-# buildCommand pipeline (Puppeteer's postinstall still attempts its own
-# Chromium/Firefox download regardless), so let that download actually
-# succeed instead of fighting it — chromium-resolver.js still prefers the
-# Nix-provided "chromium" below at runtime, this bundled copy is a fallback.
-nixPkgs = ["nodejs_20", "chromium", "unzip"]

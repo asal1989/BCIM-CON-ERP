@@ -6,6 +6,7 @@
 const fs   = require('fs');
 const path = require('path');
 const cron = require('node-cron');
+const PDFDocument = require('pdfkit');
 const logger = require('./logger');
 const { query } = require('../config/database');
 const { sendMail } = require('../services/mail.service');
@@ -232,184 +233,273 @@ function buildEmailHtml({ companyName, projectName, dateStr, companySummary, gra
 </html>`;
 }
 
-// ── Build the PDF attachment by rendering HTML (same layout as the live
-// Manpower Report print view) through headless Chromium — merged company
-// cells, Site x Shift pivot columns, grand totals, signature footer.
-function escapeHtml(s) {
-  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
 
-function buildPdfHtml({ companyName, projectName, dateStr, dateISO, companySummary, grandTotal, pivot }) {
-  const { columns, companyGroups, colTotal } = pivot;
-  const printedAt = new Date().toLocaleString('en-IN', { timeZone: TZ, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
-  const reportDateShort = new Date(dateISO + 'T00:00:00').toLocaleDateString('en-GB');
+// ── Build the PDF attachment natively with pdfkit ────────────────────────────
+// Deliberately NOT rendered through headless Chromium: on the Nixpacks build
+// image Chromium has no font packages installed, so every glyph rendered blank
+// (borders and logo drew fine, all text vanished). pdfkit draws with the PDF
+// base-14 fonts (Helvetica), which every PDF reader supplies itself — no
+// browser, no system fonts, no extra build packages needed.
+//
+// Layout mirrors the reference report: merged company cells spanning their
+// designation rows, Site x Shift pivot columns with DAY sub-headers, a repeated
+// header + grand-total row on every page, and a signature footer.
+function buildPdfBuffer({ companyName, projectName, dateStr, dateISO, rows, companySummary, grandTotal }) {
+  return new Promise((resolve, reject) => {
+    const pivot = buildPivot(rows, grandTotal);
+    const { columns, companyGroups, colTotal } = pivot;
 
-  const summaryRows = companySummary.map(c => `
-    <tr>
-      <td class="lft bold">${escapeHtml(c.company)}</td>
-      <td class="ctr">${c.designations}</td>
-      <td class="ctr bold navy">${c.total}</td>
-      <td class="ctr">${grandTotal ? ((c.total / grandTotal) * 100).toFixed(1) : '0.0'}%</td>
-    </tr>`).join('');
+    const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 0 });
+    const chunks = [];
+    doc.on('data', c => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
 
-  const totalCols = columns.reduce((n, c) => n + c.shifts.length, 0);
+    const PAGE_W = doc.page.width;
+    const PAGE_H = doc.page.height;
+    const LEFT = 28;
+    const RIGHT = PAGE_W - 28;
+    const W = RIGHT - LEFT;
+    const BOTTOM = PAGE_H - 30;
 
-  const pivotHeaderTop = `
-    <th class="lft" rowspan="2" style="min-width:150px">Company</th>
-    <th class="lft" rowspan="2" style="min-width:170px">Designation</th>
-    ${columns.map(c => `<th colspan="${c.shifts.length}">${escapeHtml(c.label)}</th>`).join('')}
-    <th class="ctr" rowspan="2">Total</th>`;
-  const pivotHeaderSub = columns.flatMap(c => c.shifts.map(s => `<th class="ctr sub">${escapeHtml(s)}</th>`)).join('');
+    const NAVY = '#1B3A6B', NAVY2 = '#2C4D82', ZEBRA = '#F3F6FB', BORDER = '#C8D2E0',
+          COMPANY_BG = '#EEF2FF', TOTAL_BG = '#DBEAFE', GT_BG = '#E8EEF7',
+          TXT = '#1E293B', MUTED = '#C9D2DE';
 
-  const pivotBody = companyGroups.map(g => {
-    const rowsHtml = g.designationRows.map((d, i) => `
-      <tr>
-        ${i === 0 ? `<td class="lft bold company-cell" rowspan="${g.designationRows.length}">${escapeHtml(g.company)}</td>` : ''}
-        <td class="lft">${escapeHtml(d.designation)}</td>
-        ${columns.flatMap(c => c.shifts.map(s => {
-          const v = d.cells[`${c.key}|${s}`];
-          return `<td class="ctr">${v || '—'}</td>`;
-        })).join('')}
-        <td class="ctr bold navy total-cell">${d.total}</td>
-      </tr>`).join('');
-    return rowsHtml;
-  }).join('');
-
-  const grandTotalRow = `
-    <tr class="grand-total-row">
-      <td class="lft bold" colspan="2">Grand Total</td>
-      ${columns.flatMap(c => c.shifts.map(s => `<td class="ctr bold">${colTotal(c.key, s) || '—'}</td>`)).join('')}
-      <td class="ctr bold navy">${grandTotal}</td>
-    </tr>`;
-
-  return `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><style>
-  * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; color:#1e293b; margin:0; padding:24px 28px; font-size:9.5pt; }
-  .header { display:flex; align-items:center; border-bottom:3px solid #1B3A6B; padding-bottom:10px; margin-bottom:16px; }
-  .header img { height:46px; margin-right:16px; }
-  .header-center { flex:1; text-align:center; }
-  .company-name { font-size:8pt; font-weight:700; letter-spacing:2px; color:#555; }
-  .report-title { font-size:16pt; font-weight:800; color:#1B3A6B; letter-spacing:0.5px; margin:2px 0; }
-  .project-line { font-size:8.5pt; color:#555; }
-  .header-right { text-align:right; font-size:7.5pt; color:#444; line-height:1.6; white-space:nowrap; }
-  .header-right .badge { display:inline-block; background:#1B3A6B; color:#fff; font-weight:800; font-size:9pt; padding:3px 10px; border-radius:3px; margin-top:2px; }
-  .section-title { font-size:9.5pt; font-weight:800; color:#1B3A6B; letter-spacing:0.5px; text-transform:uppercase; margin:14px 0 6px; }
-  table { width:100%; border-collapse:collapse; margin-bottom:4px; }
-  th, td { border:1px solid #cbd5e1; padding:4px 8px; font-size:8.5pt; }
-  th { background:#1B3A6B; color:#fff; font-weight:700; text-align:left; text-transform:uppercase; font-size:7.5pt; letter-spacing:0.3px; }
-  th.sub { font-size:7pt; background:#2c4d82; }
-  td.lft { text-align:left; }
-  td.ctr, th.ctr { text-align:center; }
-  td.bold { font-weight:700; }
-  td.navy { color:#1B3A6B; }
-  tbody tr:nth-child(even) td { background:#F3F6FB; }
-  .company-cell { background:#EEF2FF !important; vertical-align:top; }
-  .total-cell { background:#DBEAFE !important; }
-  .grand-total-row td { background:#E8EEF7 !important; border-top:2px solid #1B3A6B; font-size:9pt; }
-  .sig-section { margin-top:36px; page-break-inside:avoid; }
-  .sig-row { display:flex; justify-content:space-between; gap:16px; }
-  .sig-col { flex:1; text-align:center; }
-  .sig-line { border-bottom:1.5px solid #333; height:34px; margin-bottom:6px; }
-  .sig-role { font-size:8pt; font-weight:700; color:#1B3A6B; }
-  .sig-name { font-size:7.5pt; color:#555; margin-top:2px; }
-  .sig-date { font-size:7.5pt; color:#888; margin-top:2px; }
-  .footer-note { text-align:center; margin-top:14px; padding-top:10px; border-top:1px solid #e2e8f0; font-size:7pt; color:#94a3b8; }
-</style></head>
-<body>
-
-  <div class="header">
-    <img src="${LOGO_SRC}" alt="BCIM" />
-    <div class="header-center">
-      <div class="company-name">${escapeHtml(companyName.toUpperCase())}</div>
-      <div class="report-title">OVERALL DAILY MANPOWER REPORT</div>
-      <div class="project-line">PROJECT: ${escapeHtml(projectName.toUpperCase())}</div>
-    </div>
-    <div class="header-right">
-      REPORT DATE: ${reportDateShort}<br>
-      PRINTED: ${printedAt}<br>
-      <span class="badge">TOTAL PRESENT: ${grandTotal}</span>
-    </div>
-  </div>
-
-  <div class="section-title">Company-wise Present Summary</div>
-  <table>
-    <thead><tr>
-      <th class="lft">Company / Contractor</th>
-      <th class="ctr">No. of Designations</th>
-      <th class="ctr">Total Present</th>
-      <th class="ctr">% of Total</th>
-    </tr></thead>
-    <tbody>
-      ${summaryRows}
-      <tr class="grand-total-row">
-        <td class="lft bold">Grand Total</td>
-        <td class="ctr bold">${companySummary.reduce((s, c) => s + c.designations, 0)}</td>
-        <td class="ctr bold navy">${grandTotal}</td>
-        <td class="ctr bold">100%</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <div class="section-title">Detailed Manpower — Site &times; Shift</div>
-  <table>
-    <thead>
-      <tr>${pivotHeaderTop}</tr>
-      <tr>${pivotHeaderSub}</tr>
-    </thead>
-    <tbody>
-      ${pivotBody}
-      ${grandTotalRow}
-    </tbody>
-  </table>
-
-  <div class="sig-section">
-    <div class="sig-row">
-      <div class="sig-col"><div class="sig-line"></div><div class="sig-role">PREPARED BY</div><div class="sig-name">HR Executive</div><div class="sig-date">Date: ____________</div></div>
-      <div class="sig-col"><div class="sig-line"></div><div class="sig-role">VERIFIED BY</div><div class="sig-name">HR Manager</div><div class="sig-date">Date: ____________</div></div>
-      <div class="sig-col"><div class="sig-line"></div><div class="sig-role">SITE INCHARGE</div><div class="sig-name">Project Manager</div><div class="sig-date">Date: ____________</div></div>
-      <div class="sig-col"><div class="sig-line"></div><div class="sig-role">APPROVED BY</div><div class="sig-name">Management / Director</div><div class="sig-date">Date: ____________</div></div>
-    </div>
-    <div class="footer-note">SYSTEM-GENERATED REPORT &nbsp;|&nbsp; ${escapeHtml(companyName.toUpperCase())} &nbsp;|&nbsp; ${printedAt}</div>
-  </div>
-
-</body></html>`;
-}
-
-async function buildPdfBuffer({ companyName, projectName, dateStr, dateISO, rows, companySummary, grandTotal }) {
-  // puppeteer v25+ ships as an ES Module — require() fails in this CommonJS
-  // file ("require() of ES Module ... not supported"). Dynamic import()
-  // works fine from CommonJS as long as we're inside an async function.
-  const { default: puppeteer } = await import('puppeteer');
-  const { resolveChromiumPath } = require('./chromium-resolver');
-
-  const pivot = buildPivot(rows, grandTotal);
-  const html = buildPdfHtml({ companyName, projectName, dateStr, dateISO, companySummary, grandTotal, pivot });
-
-  const executablePath = resolveChromiumPath();
-  const browser = await puppeteer.launch({
-    headless: true,
-    executablePath: executablePath || undefined,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-  });
-  try {
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'load' });
-    const buffer = await page.pdf({
-      format: 'A4',
-      landscape: true,
-      printBackground: true,
-      margin: { top: '10mm', bottom: '10mm', left: '8mm', right: '8mm' },
+    const printedAt = new Date().toLocaleString('en-IN', {
+      timeZone: TZ, day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: true,
     });
-    // puppeteer v25's page.pdf() returns a plain Uint8Array, not a Node
-    // Buffer — Uint8Array.prototype.toString('base64') silently ignores the
-    // argument and does an Array-style comma-join instead of base64 encoding
-    // (which is exactly what Graph's "Cannot convert ... to Edm.Binary" error
-    // was choking on). Wrap explicitly so .toString('base64') downstream works.
-    return Buffer.from(buffer);
-  } finally {
-    await browser.close();
-  }
+    const reportDateShort = new Date(dateISO + 'T00:00:00').toLocaleDateString('en-GB');
+
+    // ── primitives ──────────────────────────────────────────────────────────
+    function cell(text, x, y, w, h, o = {}) {
+      const size = o.size || 7.5;
+      if (o.bg) doc.rect(x, y, w, h).fill(o.bg);
+      doc.font(o.bold ? 'Helvetica-Bold' : 'Helvetica')
+        .fontSize(size)
+        .fillColor(o.color || TXT)
+        .text(String(text ?? ''), x + 4, y + (h - size) / 2 - 0.5, {
+          width: w - 8, align: o.align || 'left', lineBreak: false, ellipsis: true,
+        });
+    }
+    function grid(x, y, w, h) {
+      doc.rect(x, y, w, h).lineWidth(0.5).strokeColor(BORDER).stroke();
+    }
+
+    function drawPageHeader() {
+      const top = 26;
+      try { doc.image(LOGO_PATH, LEFT, top, { height: 26 }); } catch (_) {}
+
+      doc.font('Helvetica').fontSize(7).fillColor('#666')
+        .text(companyName.toUpperCase(), LEFT, top + 1,
+          { width: W, align: 'center', characterSpacing: 2, lineBreak: false });
+      doc.font('Helvetica-Bold').fontSize(14).fillColor(NAVY)
+        .text('OVERALL DAILY MANPOWER REPORT', LEFT, top + 12,
+          { width: W, align: 'center', lineBreak: false });
+      doc.font('Helvetica').fontSize(7.5).fillColor('#555')
+        .text(`PROJECT: ${String(projectName).toUpperCase()}`, LEFT, top + 30,
+          { width: W, align: 'center', lineBreak: false });
+
+      doc.font('Helvetica').fontSize(7).fillColor('#444')
+        .text(`REPORT DATE: ${reportDateShort}`, RIGHT - 220, top, { width: 220, align: 'right', lineBreak: false })
+        .text(`PRINTED: ${printedAt}`, RIGHT - 220, top + 9, { width: 220, align: 'right', lineBreak: false });
+
+      const badge = `TOTAL PRESENT: ${grandTotal}`;
+      doc.font('Helvetica-Bold').fontSize(8);
+      const bw = doc.widthOfString(badge) + 18;
+      doc.roundedRect(RIGHT - bw, top + 20, bw, 15, 2).fill(NAVY);
+      doc.fillColor('#fff').text(badge, RIGHT - bw, top + 24, { width: bw, align: 'center', lineBreak: false });
+
+      doc.moveTo(LEFT, top + 44).lineTo(RIGHT, top + 44).lineWidth(2).strokeColor(NAVY).stroke();
+      return top + 54;
+    }
+
+    function sectionTitle(text, y) {
+      doc.font('Helvetica-Bold').fontSize(8).fillColor(NAVY)
+        .text(text.toUpperCase(), LEFT, y, { characterSpacing: 0.8, lineBreak: false });
+      doc.moveTo(LEFT, y + 11).lineTo(RIGHT, y + 11).lineWidth(0.8).strokeColor(NAVY).stroke();
+      return y + 17;
+    }
+
+    // ── page 1: header + company-wise summary ───────────────────────────────
+    let y = drawPageHeader();
+    y = sectionTitle('Company-wise Present Summary', y);
+
+    const sCols = [
+      { label: 'COMPANY / CONTRACTOR', w: 320, align: 'left' },
+      { label: 'NO. OF DESIGNATIONS',  w: 150, align: 'center' },
+      { label: 'TOTAL PRESENT',        w: 150, align: 'center' },
+      { label: '% OF TOTAL',           w: W - 620, align: 'center' },
+    ];
+    const SH = 16;
+
+    let x = LEFT;
+    doc.rect(LEFT, y, W, SH).fill(NAVY);
+    sCols.forEach(c => { cell(c.label, x, y, c.w, SH, { bold: true, color: '#fff', size: 7, align: c.align }); x += c.w; });
+    y += SH;
+
+    companySummary.forEach((c, i) => {
+      x = LEFT;
+      const bg = i % 2 ? ZEBRA : '#ffffff';
+      const vals = [
+        c.company,
+        c.designations,
+        c.total,
+        grandTotal ? `${((c.total / grandTotal) * 100).toFixed(1)}%` : '0%',
+      ];
+      sCols.forEach((col, j) => {
+        cell(vals[j], x, y, col.w, SH, {
+          bg, align: col.align, bold: j === 0 || j === 2, color: j === 2 ? NAVY : TXT,
+        });
+        grid(x, y, col.w, SH);
+        x += col.w;
+      });
+      y += SH;
+    });
+
+    x = LEFT;
+    const gvals = ['GRAND TOTAL', companySummary.reduce((s, c) => s + c.designations, 0), grandTotal, '100%'];
+    sCols.forEach((col, j) => {
+      cell(gvals[j], x, y, col.w, SH, { bg: GT_BG, bold: true, align: col.align, color: j === 2 ? NAVY : TXT });
+      grid(x, y, col.w, SH);
+      x += col.w;
+    });
+    y += SH + 16;
+
+    // ── detailed pivot table ────────────────────────────────────────────────
+    y = sectionTitle('Detailed Manpower — Site x Shift', y);
+
+    const flatShiftCols = columns.flatMap(c => c.shifts.map(s => ({ bucket: c.key, shift: s, key: `${c.key}|${s}` })));
+    const C_COMPANY = 140, C_DESIG = 175, C_TOTAL = 75;
+    const dynW = Math.max(42, (W - C_COMPANY - C_DESIG - C_TOTAL) / Math.max(1, flatShiftCols.length));
+    const RH = 14, HDR1 = 15, HDR2 = 13, HDR_H = HDR1 + HDR2, GT_H = 16;
+
+    function drawDetailHeader(yy) {
+      doc.rect(LEFT, yy, W, HDR_H).fill(NAVY);
+      cell('COMPANY', LEFT, yy, C_COMPANY, HDR_H, { bold: true, color: '#fff', size: 7 });
+      cell('DESIGNATION', LEFT + C_COMPANY, yy, C_DESIG, HDR_H, { bold: true, color: '#fff', size: 7 });
+      let xx = LEFT + C_COMPANY + C_DESIG;
+      columns.forEach(c => {
+        const cw = dynW * c.shifts.length;
+        cell(c.label.toUpperCase(), xx, yy, cw, HDR1, { bold: true, color: '#fff', size: 7, align: 'center' });
+        doc.rect(xx, yy + HDR1, cw, HDR2).fill(NAVY2);
+        let sx = xx;
+        c.shifts.forEach(s => {
+          cell(String(s).toUpperCase(), sx, yy + HDR1, dynW, HDR2, { bold: true, color: '#fff', size: 6.5, align: 'center' });
+          sx += dynW;
+        });
+        xx += cw;
+      });
+      cell('TOTAL', xx, yy, C_TOTAL, HDR_H, { bold: true, color: '#fff', size: 7, align: 'center' });
+      return yy + HDR_H;
+    }
+
+    // Flatten company groups, then pre-compute pagination so merged company
+    // cells can be drawn per page-segment (a group split across a page break
+    // gets its label redrawn on the next page).
+    const flatRows = [];
+    companyGroups.forEach(g => g.designationRows.forEach(d => flatRows.push({
+      company: g.company, designation: d.designation, cells: d.cells, total: d.total,
+    })));
+
+    const CONT_TOP = 80 + HDR_H; // continuation pages: header(80) + table header
+    const pages = [];
+    {
+      let cur = [];
+      let yy = y + HDR_H;
+      for (const r of flatRows) {
+        if (yy + RH > BOTTOM - GT_H) { pages.push(cur); cur = []; yy = CONT_TOP; }
+        cur.push(r);
+        yy += RH;
+      }
+      pages.push(cur);
+    }
+
+    let lastRowY = y;
+    pages.forEach((pageRows, pi) => {
+      let ry;
+      if (pi === 0) {
+        ry = drawDetailHeader(y);
+      } else {
+        doc.addPage();
+        ry = drawDetailHeader(drawPageHeader());
+      }
+
+      // designation + value cells
+      let rowY = ry;
+      pageRows.forEach((r, i) => {
+        const bg = i % 2 ? ZEBRA : '#ffffff';
+        cell(r.designation, LEFT + C_COMPANY, rowY, C_DESIG, RH, { bg });
+        grid(LEFT + C_COMPANY, rowY, C_DESIG, RH);
+        let xx = LEFT + C_COMPANY + C_DESIG;
+        flatShiftCols.forEach(sc => {
+          const v = r.cells[sc.key];
+          cell(v || '—', xx, rowY, dynW, RH, { bg, align: 'center', bold: !!v, color: v ? TXT : MUTED });
+          grid(xx, rowY, dynW, RH);
+          xx += dynW;
+        });
+        cell(r.total, xx, rowY, C_TOTAL, RH, { bg: TOTAL_BG, align: 'center', bold: true, color: NAVY });
+        grid(xx, rowY, C_TOTAL, RH);
+        rowY += RH;
+      });
+
+      // merged company cells for each contiguous run on this page
+      let idx = 0, segY = ry;
+      while (idx < pageRows.length) {
+        let j = idx;
+        while (j < pageRows.length && pageRows[j].company === pageRows[idx].company) j++;
+        const segH = (j - idx) * RH;
+        cell(pageRows[idx].company, LEFT, segY, C_COMPANY, segH, { bg: COMPANY_BG, bold: true });
+        grid(LEFT, segY, C_COMPANY, segH);
+        segY += segH;
+        idx = j;
+      }
+
+      // grand total row, repeated at the foot of every page
+      cell('GRAND TOTAL', LEFT, rowY, C_COMPANY + C_DESIG, GT_H, { bg: GT_BG, bold: true, align: 'right', size: 8 });
+      grid(LEFT, rowY, C_COMPANY + C_DESIG, GT_H);
+      let gx = LEFT + C_COMPANY + C_DESIG;
+      flatShiftCols.forEach(sc => {
+        const t = colTotal(sc.bucket, sc.shift);
+        cell(t || '—', gx, rowY, dynW, GT_H, { bg: GT_BG, align: 'center', bold: true, size: 8 });
+        grid(gx, rowY, dynW, GT_H);
+        gx += dynW;
+      });
+      cell(grandTotal, gx, rowY, C_TOTAL, GT_H, { bg: GT_BG, align: 'center', bold: true, color: NAVY, size: 8 });
+      grid(gx, rowY, C_TOTAL, GT_H);
+      rowY += GT_H;
+      lastRowY = rowY;
+    });
+
+    // ── signature footer ────────────────────────────────────────────────────
+    let sy = lastRowY + 20;
+    if (sy + 70 > BOTTOM) { doc.addPage(); drawPageHeader(); sy = 100; }
+    doc.moveTo(LEFT, sy).lineTo(RIGHT, sy).lineWidth(0.5).strokeColor('#DDDDDD').stroke();
+    sy += 16;
+    const sigs = [
+      ['PREPARED BY', 'HR Executive'],
+      ['VERIFIED BY', 'HR Manager'],
+      ['SITE INCHARGE', 'Project Manager'],
+      ['APPROVED BY', 'Management / Director'],
+    ];
+    const sw = W / 4;
+    sigs.forEach(([role, name], i) => {
+      const sx = LEFT + i * sw;
+      doc.moveTo(sx + 24, sy + 26).lineTo(sx + sw - 24, sy + 26).lineWidth(1).strokeColor('#333333').stroke();
+      doc.font('Helvetica-Bold').fontSize(7).fillColor(NAVY)
+        .text(role, sx, sy + 32, { width: sw, align: 'center', lineBreak: false });
+      doc.font('Helvetica').fontSize(6.5).fillColor('#555')
+        .text(name, sx, sy + 41, { width: sw, align: 'center', lineBreak: false });
+      doc.font('Helvetica').fontSize(6.5).fillColor('#888')
+        .text('Date: ____________', sx, sy + 50, { width: sw, align: 'center', lineBreak: false });
+    });
+    doc.font('Helvetica').fontSize(6).fillColor('#AAAAAA')
+      .text(`SYSTEM-GENERATED REPORT  |  ${companyName.toUpperCase()}  |  ${printedAt}`,
+        LEFT, sy + 66, { width: W, align: 'center', lineBreak: false });
+
+    doc.end();
+  });
 }
 
 // ── Main runner ───────────────────────────────────────────────────────────────
