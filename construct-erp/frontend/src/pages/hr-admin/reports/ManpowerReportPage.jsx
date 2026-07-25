@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hrAttendanceAPI, projectAPI } from '../../../api/client';
-import { Printer, Download, RefreshCw, ChevronRight, LayoutGrid, Building2 } from 'lucide-react';
+import { Printer, Download, RefreshCw, ChevronRight, LayoutGrid, Building2, Mail } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const SUMMARY_COLORS = ['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d','#ea580c','#4f46e5'];
 
@@ -34,6 +35,7 @@ export default function ManpowerReportPage() {
   const [date, setDate] = useState(today());
   const [projectFilter, setProjectFilter] = useState('');
   const [tab, setTab] = useState('detail'); // 'detail' | 'summary'
+  const [sendingTest, setSendingTest] = useState(false);
 
   const { data: projectsData } = useQuery({
     queryKey: ['projects-active-mp'],
@@ -85,6 +87,22 @@ export default function ManpowerReportPage() {
     }
     return Object.values(map).sort((a, b) => b.total - a.total);
   }, [rows]);
+
+  const handleSendTestEmail = async () => {
+    setSendingTest(true);
+    try {
+      const res = await hrAttendanceAPI.manpowerReportTestEmail(date).then(r => r.data);
+      if (!res.ok) {
+        toast.error(res.reason || 'Could not send test email');
+      } else {
+        toast.success(`Test email sent to ${res.recipients?.join(', ') || 'your inbox'}`);
+      }
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to send test email');
+    } finally {
+      setSendingTest(false);
+    }
+  };
 
   const handleExport = () => {
     if (tab === 'summary') {
@@ -144,6 +162,11 @@ export default function ManpowerReportPage() {
           </button>
           <button onClick={handleExport} style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#f0fdf4', color: '#15803d', border: '1px solid #86efac', borderRadius: 7, padding: '6px 14px', fontSize: 13, cursor: 'pointer' }}>
             <Download size={13} /> Export CSV
+          </button>
+          <button onClick={handleSendTestEmail} disabled={sendingTest}
+            title="Sends today's report to your own email — preview of the automated 10 AM client send"
+            style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: 7, padding: '6px 14px', fontSize: 13, cursor: sendingTest ? 'wait' : 'pointer', opacity: sendingTest ? 0.6 : 1 }}>
+            <Mail size={13} /> {sendingTest ? 'Sending…' : 'Send Test Email'}
           </button>
           <button onClick={() => window.print()} style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#1a56db', color: '#fff', border: 'none', borderRadius: 7, padding: '6px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
             <Printer size={13} /> Print / PDF

@@ -802,6 +802,22 @@ router.get('/manpower-report', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// POST /manpower-report/test-email — sends today's manpower report PDF+summary
+// to the LOGGED-IN USER's own email only, never to the real client list, purely
+// to preview what the automated 10 AM send will look like.
+router.post('/manpower-report/test-email', async (req, res) => {
+  try {
+    if (!req.user.email) return res.status(400).json({ error: 'Your account has no email address on file.' });
+    const { runManpowerClientReport } = require('../utils/manpower-client-report.service');
+    const result = await runManpowerClientReport({
+      date: req.body.date,
+      manual: true,
+      recipients: [req.user.email],
+    });
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ═══════════════════════════════════════════════════════════
 // GET /monthly-report  ?year=2026&month=7&project_id=&department_id=
 // Returns one row per (employee, date) for the whole month

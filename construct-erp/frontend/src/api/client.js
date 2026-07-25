@@ -1966,6 +1966,7 @@ export const hrAttendanceAPI = {
   update:  (id, d)  => api.put(`/hr-admin/attendance/${id}`, d),
   timesheetReport: (params) => api.get('/hr-admin/attendance/timesheet-report', { params }),
   manpowerReport:  (params) => api.get('/hr-admin/attendance/manpower-report', { params }),
+  manpowerReportTestEmail: (date) => api.post('/hr-admin/attendance/manpower-report/test-email', { date }),
   monthlyReport:  (params) => api.get('/hr-admin/attendance/monthly-report', { params }),
   yearlySummary:  (params) => api.get('/hr-admin/attendance/yearly-summary', { params }),
   runLateAlerts:  (data)   => api.post('/hr-admin/attendance/late-alerts/run', data || {}),
