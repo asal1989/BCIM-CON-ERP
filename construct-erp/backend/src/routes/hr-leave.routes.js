@@ -80,34 +80,89 @@ function workingDays(fromDate, toDate, halfDay) {
 // ═══════════════════════════════════════════════════════════
 router.get('/balances', async (req, res) => {
   try {
-    const { user_id, year } = req.query;
+    const { user_id, year, department } = req.query;
     const yr = parseInt(year) || new Date().getFullYear();
-    const uid = user_id || req.user.id;
 
-    // Get all leave types for company
-    const types = await query(
-      `SELECT * FROM hr_leave_types WHERE company_id=$1 AND is_active=TRUE`,
-      [req.user.company_id]
-    );
-
-    // Upsert default balance rows for each type if not exists
-    for (const lt of types.rows) {
-      await query(
-        `INSERT INTO hr_leave_balances (user_id, leave_type_id, year, accrued, closing_balance)
-         VALUES ($1,$2,$3,$4,$4) ON CONFLICT (user_id, leave_type_id, year) DO NOTHING`,
-        [uid, lt.id, yr, lt.days_per_year]
+    // ── Single-employee mode (ESS "my leave balance") ──────────────────────
+    if (user_id) {
+      const uid = user_id;
+      const types = await query(
+        `SELECT * FROM hr_leave_types WHERE company_id=$1 AND is_active=TRUE`,
+        [req.user.company_id]
       );
+      for (const lt of types.rows) {
+        await query(
+          `INSERT INTO hr_leave_balances (user_id, leave_type_id, year, accrued, closing_balance)
+           VALUES ($1,$2,$3,$4,$4) ON CONFLICT (user_id, leave_type_id, year) DO NOTHING`,
+          [uid, lt.id, yr, lt.days_per_year]
+        );
+      }
+      const { rows } = await query(
+        `SELECT lb.*, lt.name as leave_type_name, lt.code, lt.is_paid
+         FROM hr_leave_balances lb
+         JOIN hr_leave_types lt ON lt.id = lb.leave_type_id
+         WHERE lb.user_id=$1 AND lb.year=$2 AND lt.is_active=TRUE
+         ORDER BY lt.name`,
+        [uid, yr]
+      );
+      return res.json({ data: rows });
     }
 
-    const { rows } = await query(
-      `SELECT lb.*, lt.name as leave_type_name, lt.code, lt.is_paid
+    // ── Company-wide roster mode (HR & Admin → Reports → Leave Summary) ────
+    const projectId = await getProjectScopeLeave(req);
+
+    let empSql = `
+      SELECT u.id, u.employee_code, u.name AS employee_name,
+             COALESCE(dep.name, u.department, '-')    AS department,
+             COALESCE(des.name, u.designation, '-')    AS designation
+      FROM users u
+      LEFT JOIN employee_profiles ep  ON ep.user_id = u.id
+      LEFT JOIN hr_departments dep    ON dep.id = ep.department_id
+      LEFT JOIN hr_designations des   ON des.id = ep.designation_id
+      WHERE u.company_id = $1 AND u.is_active = TRUE`;
+    const empParams = [req.user.company_id];
+    let idx = 2;
+    if (department) { empSql += ` AND COALESCE(dep.name, u.department, '') ILIKE $${idx}`; empParams.push(`%${department}%`); idx++; }
+    if (projectId !== null) { empSql += ` AND ep.project_id=$${idx}`; empParams.push(projectId); idx++; }
+    empSql += ` ORDER BY u.name`;
+
+    const emps = await query(empSql, empParams);
+    if (!emps.rows.length) return res.json({ data: [] });
+
+    // Bulk-seed default balance rows for every (employee × leave type) combo missing this year
+    await query(
+      `INSERT INTO hr_leave_balances (user_id, leave_type_id, year, accrued, closing_balance)
+       SELECT u.id, lt.id, $2, lt.days_per_year, lt.days_per_year
+       FROM users u CROSS JOIN hr_leave_types lt
+       WHERE u.company_id = $1 AND u.is_active = TRUE AND lt.company_id = $1 AND lt.is_active = TRUE
+       ON CONFLICT (user_id, leave_type_id, year) DO NOTHING`,
+      [req.user.company_id, yr]
+    );
+
+    const empIds = emps.rows.map(e => e.id);
+    const balRes = await query(
+      `SELECT lb.user_id, lb.taken, lb.closing_balance, lt.code, lt.name AS leave_type_name
        FROM hr_leave_balances lb
        JOIN hr_leave_types lt ON lt.id = lb.leave_type_id
-       WHERE lb.user_id=$1 AND lb.year=$2 AND lt.is_active=TRUE
-       ORDER BY lt.name`,
-      [uid, yr]
+       WHERE lb.user_id = ANY($1::uuid[]) AND lb.year = $2 AND lt.is_active = TRUE`,
+      [empIds, yr]
     );
-    res.json({ data: rows });
+
+    const balByUser = {};
+    for (const b of balRes.rows) {
+      const key = b.code || b.leave_type_name;
+      if (!balByUser[b.user_id]) balByUser[b.user_id] = {};
+      balByUser[b.user_id][key] = { available: parseFloat(b.closing_balance || 0), used: parseFloat(b.taken || 0) };
+    }
+
+    const data = emps.rows.map(e => ({
+      employee_code: e.employee_code,
+      employee_name: e.employee_name,
+      department: e.department,
+      designation: e.designation,
+      ...(balByUser[e.id] || {}),
+    }));
+    res.json({ data });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
