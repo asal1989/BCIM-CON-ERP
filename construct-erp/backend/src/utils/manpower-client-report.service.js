@@ -298,7 +298,7 @@ async function runManpowerClientReport({ date, manual = false, recipients: recip
   const subject = `Daily Manpower Report — ${projectName} — ${dateStr}`;
   const attachments = [{
     filename: `Manpower-Report-${targetDate}.pdf`,
-    content: pdfBuffer.toString('base64'),
+    base64: pdfBuffer.toString('base64'),
     contentType: 'application/pdf',
   }];
 
