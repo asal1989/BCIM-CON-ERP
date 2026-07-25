@@ -744,9 +744,9 @@ router.get('/manpower-report', async (req, res) => {
 
     const staffRes = await query(`
       SELECT
-        COALESCE(ep.contractor_name,
+        UPPER(TRIM(COALESCE(ep.contractor_name,
           CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
-               THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END) AS company,
+               THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END))) AS company,
         COALESCE(des.name, u.designation, '—')       AS designation,
         COALESCE(a.site, '')                              AS site,
         COALESCE(a.shift, 'DAY')                          AS shift,
@@ -758,9 +758,9 @@ router.get('/manpower-report', async (req, res) => {
       WHERE a.company_id = $1 AND a.attendance_date = $2 AND a.status = 'present'
         ${staffProjectFilter}
       GROUP BY
-        COALESCE(ep.contractor_name,
+        UPPER(TRIM(COALESCE(ep.contractor_name,
           CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
-               THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END),
+               THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END))),
         COALESCE(des.name, u.designation, '—'),
         a.site, a.shift
     `, staffParams);
@@ -777,7 +777,7 @@ router.get('/manpower-report', async (req, res) => {
 
     const scRes = await query(`
       SELECT
-        sc.name                                           AS company,
+        UPPER(TRIM(sc.name))                              AS company,
         COALESCE(w.skill_type, '—')                      AS designation,
         ''                                                AS site,
         'DAY'                                             AS shift,
