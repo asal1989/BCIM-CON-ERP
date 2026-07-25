@@ -48,6 +48,20 @@ function statusClass(status) {
   return map[status] || map.draft;
 }
 
+// Labels for the linked bill's live Bill Tracker stage — separate from the
+// certification's own status (accounts/paid), since procurement can send a
+// bill back for correction after the certification already exists.
+const BILL_STAGE_LABELS = {
+  pending:             'Pending',
+  stores:              'Stores',
+  document_controller: 'Doc Control',
+  qs:                  'QS Cert',
+  accounts:            'Accounts',
+  procurement:         'Procurement',
+  qs_sign:             'MD Sign Off',
+  paid:                'Paid',
+};
+
 function RejectCertModal({ cert, onClose, onConfirm, isPending }) {
   const [remarks, setRemarks] = useState('');
   return (
@@ -1025,6 +1039,11 @@ export default function VendorQSCertificationPage() {
                               <td className="px-3 py-2 text-right text-emerald-700" style={{ fontVariantNumeric: 'tabular-nums' }}>₹{inr(c.paid_amount)}</td>
                               <td className="px-3 py-2 text-center">
                                 <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide ${statusClass(c.status)}`}>{c.status}</span>
+                                {c.bill_workflow_status && c.bill_workflow_status !== c.status && (
+                                  <div className="text-[9px] text-slate-400 mt-1 whitespace-nowrap">
+                                    Bill: {BILL_STAGE_LABELS[c.bill_workflow_status] || c.bill_workflow_status}
+                                  </div>
+                                )}
                               </td>
                             </tr>
                           ))}
@@ -1121,7 +1140,14 @@ export default function VendorQSCertificationPage() {
                       <p className="text-[13px] font-extrabold whitespace-nowrap" style={{ color: a.color, fontVariantNumeric: 'tabular-nums' }}>₹{inr(a.val)}</p>
                     </div>
                   ))}
-                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${statusClass(c.status)}`}>{c.status}</span>
+                  <div className="text-center">
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${statusClass(c.status)}`}>{c.status}</span>
+                    {c.bill_workflow_status && c.bill_workflow_status !== c.status && (
+                      <div className="text-[9px] text-slate-400 mt-1 whitespace-nowrap">
+                        Bill: {BILL_STAGE_LABELS[c.bill_workflow_status] || c.bill_workflow_status}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Actions */}

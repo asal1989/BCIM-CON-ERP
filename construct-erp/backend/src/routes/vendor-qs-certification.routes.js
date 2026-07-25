@@ -443,7 +443,17 @@ router.get('/', async (req, res) => {
                FROM vendor_qs_certification_bills cb
                JOIN tqs_bills b ON b.id = cb.bill_id
                WHERE cb.certification_id = c.id
-             ), 0) AS invoice_value
+             ), 0) AS invoice_value,
+             (
+               -- Live workflow stage of the linked bill(s) in Bill Tracker — kept
+               -- separate from the certification's own status (accounts/paid),
+               -- since procurement can send a bill back for correction (e.g. to
+               -- "MD Sign Off") after the certification already exists.
+               SELECT mode() WITHIN GROUP (ORDER BY b.workflow_status)
+               FROM vendor_qs_certification_bills cb
+               JOIN tqs_bills b ON b.id = cb.bill_id
+               WHERE cb.certification_id = c.id
+             ) AS bill_workflow_status
       FROM vendor_qs_certifications c
       LEFT JOIN projects p ON p.id = c.project_id
       WHERE ${where.join(' AND ')}
