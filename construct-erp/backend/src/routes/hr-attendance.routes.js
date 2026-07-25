@@ -765,32 +765,7 @@ router.get('/manpower-report', async (req, res) => {
         a.site, a.shift
     `, staffParams);
 
-    // ── SC workers (subcontractor labour) ────────────────────────────────────
-    const scParams = [cid, reportDate];
-    let scProjectFilter = '';
-    if (effectiveProjectId === 'HEAD_OFFICE') {
-      scProjectFilter = ' AND 1=0';
-    } else if (effectiveProjectId) {
-      scProjectFilter = ' AND w.project_id = $3';
-      scParams.push(effectiveProjectId);
-    }
-
-    const scRes = await query(`
-      SELECT
-        UPPER(TRIM(sc.name))                              AS company,
-        COALESCE(w.skill_type, '—')                      AS designation,
-        ''                                                AS site,
-        'DAY'                                             AS shift,
-        COUNT(*)::int                                     AS headcount
-      FROM sc_attendance a
-      JOIN sc_workers w          ON w.id = a.worker_id
-      LEFT JOIN sc_subcontractors sc ON sc.id = w.sc_id
-      WHERE a.company_id = $1 AND a.attendance_date = $2 AND a.status = 'present'
-        ${scProjectFilter}
-      GROUP BY sc.name, COALESCE(w.skill_type, '—')
-    `, scParams);
-
-    const rows = [...staffRes.rows, ...scRes.rows];
+    const rows = staffRes.rows;
 
     // Pivot in JS: rows keyed by company+designation, columns = site bucket + shift
     const rowMap = {};
