@@ -2111,7 +2111,7 @@ export default function Layout() {
 
   const filteredGroups = navGroups
     .filter(g => {
-      if (['admin', 'super_admin'].includes(user?.role)) return true;
+      if (GLOBAL_ROLES.includes(user?.role)) return true;
       // If no modules configured at all, show everything (fallback for unconfigured accounts)
       if (!user?.accessible_modules?.length) return true;
       const aliases = g.label === 'Bill Tracker'      ? ['Bill Tracker', 'DQS Tracker']
