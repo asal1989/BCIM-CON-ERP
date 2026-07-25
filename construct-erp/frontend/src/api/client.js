@@ -2072,6 +2072,7 @@ export const hrEsslAPI = {
   getUnmatched:   ()           => api.get('/hr-admin/essl/unmatched'),
   deviceLogs:     (params)     => api.get('/hr-admin/essl/device-logs', { params }),
   importLogs:     (formData)   => api.post('/hr-admin/essl/import-logs', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  health:         ()           => api.get('/hr-admin/essl/health'),
 };
 
 export const hrComplianceAPI = {

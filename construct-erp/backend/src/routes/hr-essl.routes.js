@@ -122,6 +122,32 @@ router.post('/agent-push', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+/* ═══════════════════════════════════════════════════════════
+   POST /hr-admin/essl/heartbeat  (NO auth middleware — uses API key)
+   Called by the local agent on EVERY tick, whether or not there was
+   data to push. This is the only reliable "agent is alive right now"
+   signal — last_sync only moves when there are swipes, so it goes
+   quiet for hours overnight even when the agent is perfectly healthy.
+   Body: { api_key, company_id, tables_found, raw_swipe_count }
+══════════════════════════════════════════════════════════════ */
+router.post('/heartbeat', async (req, res) => {
+  const { api_key, company_id, tables_found, raw_swipe_count } = req.body;
+  if (!api_key || !company_id) return res.status(400).json({ error: 'api_key and company_id required' });
+  try {
+    const cfgRow = await query(
+      `SELECT id FROM hr_essl_config WHERE company_id=$1 AND push_api_key=$2`,
+      [company_id, api_key]
+    );
+    if (!cfgRow.rows.length) return res.status(401).json({ error: 'Invalid API key' });
+
+    await query(
+      `UPDATE hr_essl_config SET last_heartbeat=NOW(), last_heartbeat_meta=$2 WHERE company_id=$1`,
+      [company_id, JSON.stringify({ tables_found: tables_found || [], raw_swipe_count: raw_swipe_count ?? null })]
+    );
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── All routes below require JWT authentication ───────────────────────────────
 router.use(authenticate);
 router.use(authorize('super_admin', 'admin', 'hr_admin'));
@@ -146,6 +172,12 @@ async function initTable() {
   `);
   // Add push_api_key column for local agent authentication
   await query(`ALTER TABLE hr_essl_config ADD COLUMN IF NOT EXISTS push_api_key TEXT`);
+  // last_heartbeat is updated on EVERY agent tick (even empty ones) so "is the
+  // agent alive right now" doesn't depend on there being new swipes to push —
+  // last_sync only moves when there's actual data, which goes quiet overnight
+  // and would otherwise look identical to the agent having crashed.
+  await query(`ALTER TABLE hr_essl_config ADD COLUMN IF NOT EXISTS last_heartbeat TIMESTAMPTZ`);
+  await query(`ALTER TABLE hr_essl_config ADD COLUMN IF NOT EXISTS last_heartbeat_meta JSONB`);
 
   // Raw biometric punch log — one row per swipe from the ESSL device
   await query(`
@@ -739,6 +771,59 @@ router.get('/sync-history', async (req, res) => {
       if (cfg.rows[0]?.last_sync) rows.push({ synced_at: cfg.rows[0].last_sync, source: 'essl_agent', status: 'success' });
     }
     res.json({ data: rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════
+   GET /hr-admin/essl/health
+   Sync agent health for the "ESSL Sync Health" dashboard page —
+   is the local agent alive right now, when did real data last
+   arrive, how much volume in the last 24h, and recent errors.
+══════════════════════════════════════════════════════════════ */
+router.get('/health', async (req, res) => {
+  try {
+    const cid = req.user.company_id;
+    const cfgRes = await query(
+      `SELECT last_sync, last_heartbeat, last_heartbeat_meta FROM hr_essl_config WHERE company_id=$1`,
+      [cid]
+    );
+    const cfg = cfgRes.rows[0] || {};
+
+    const now = Date.now();
+    const heartbeatAgeSec = cfg.last_heartbeat ? Math.round((now - new Date(cfg.last_heartbeat).getTime()) / 1000) : null;
+    const lastSyncAgeSec  = cfg.last_sync      ? Math.round((now - new Date(cfg.last_sync).getTime()) / 1000)      : null;
+
+    // Alive = a heartbeat arrived within the last 3 minutes (loop tick is ~1 min).
+    // Stale = we've heard from it before but not recently. Never = no heartbeat ever recorded.
+    let status = 'never';
+    if (heartbeatAgeSec !== null) status = heartbeatAgeSec <= 180 ? 'alive' : 'stale';
+
+    const [swipes24h, swipesToday, lastSwipe, recentErrors, recentNotFound] = await Promise.all([
+      query(`SELECT COUNT(*)::int AS n FROM essl_device_logs WHERE company_id=$1 AND swipe_time >= NOW() - INTERVAL '24 hours'`, [cid]),
+      query(`SELECT COUNT(*)::int AS n FROM essl_device_logs WHERE company_id=$1 AND swipe_time::date = CURRENT_DATE`, [cid]),
+      query(`SELECT MAX(swipe_time) AS t FROM essl_device_logs WHERE company_id=$1`, [cid]),
+      query(`SELECT synced_at, from_date, to_date, records_count, status, error_msg FROM hr_essl_sync_log
+             WHERE company_id=$1 AND status='error' ORDER BY synced_at DESC LIMIT 10`, [cid]).catch(() => ({ rows: [] })),
+      query(`SELECT dl.emp_code, COUNT(*)::int AS n, MAX(dl.swipe_time) AS last_seen
+             FROM essl_device_logs dl
+             LEFT JOIN users u ON LOWER(TRIM(u.employee_code))=LOWER(TRIM(dl.emp_code)) AND u.company_id=dl.company_id
+             WHERE dl.company_id=$1 AND u.id IS NULL AND dl.swipe_time >= NOW() - INTERVAL '7 days'
+             GROUP BY dl.emp_code ORDER BY n DESC LIMIT 15`, [cid]),
+    ]);
+
+    res.json({
+      status,
+      last_heartbeat: cfg.last_heartbeat,
+      heartbeat_age_sec: heartbeatAgeSec,
+      last_heartbeat_meta: cfg.last_heartbeat_meta,
+      last_sync: cfg.last_sync,
+      last_sync_age_sec: lastSyncAgeSec,
+      last_swipe_time: lastSwipe.rows[0]?.t || null,
+      swipes_today: swipesToday.rows[0]?.n || 0,
+      swipes_24h: swipes24h.rows[0]?.n || 0,
+      recent_errors: recentErrors.rows,
+      unmatched_codes_7d: recentNotFound.rows,
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

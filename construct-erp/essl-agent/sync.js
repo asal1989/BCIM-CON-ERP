@@ -193,6 +193,46 @@ function groupSwipes(rows) {
   });
 }
 
+// ── Generic JSON POST to any ERP endpoint (derives host/port from push_url) ──
+function postJSON(pathname, payload) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(payload);
+    const url  = new URL(cfg.erp.push_url);
+    const opts = {
+      hostname: url.hostname,
+      port:     url.port || (url.protocol === 'https:' ? 443 : 80),
+      path:     pathname,
+      method:   'POST',
+      headers:  { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+    };
+
+    const lib = url.protocol === 'https:' ? https : http;
+    const req = lib.request(opts, res => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch { resolve({ raw: data }); }
+      });
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+// ── Heartbeat — called every tick regardless of whether there was data to
+// push, so the ERP's Sync Health dashboard can tell "agent alive, just no
+// new swipes" apart from "agent stopped running" (last_sync alone can't).
+function sendHeartbeat(meta) {
+  const heartbeatPath = cfg.erp.push_url.replace(/\/agent-push\/?$/, '/heartbeat');
+  return postJSON(heartbeatPath, {
+    api_key: cfg.erp.api_key,
+    company_id: cfg.erp.company_id,
+    ...meta,
+  }).catch(err => console.log(`[ESSL Agent] Heartbeat failed (non-fatal): ${err.message}`));
+}
+
 // ── Push records to cloud ERP ─────────────────────────────────────────────────
 function pushToERP(records, raw_swipes) {
   return new Promise((resolve, reject) => {
@@ -245,10 +285,16 @@ async function runSync({ fromDT, toDT, label }) {
     const tables    = await existingTables(conn, allTables);
     console.log(`[ESSL Agent] Tables found: ${tables.join(', ') || 'none'}`);
 
-    if (!tables.length) { console.log('[ESSL Agent] No DeviceLogs tables for this range.'); return; }
+    if (!tables.length) {
+      console.log('[ESSL Agent] No DeviceLogs tables for this range.');
+      sendHeartbeat({ tables_found: tables, raw_swipe_count: 0 });
+      return;
+    }
 
     const rawSwipes = await pullSwipes(conn, tables, fromDT, toDT);
     console.log(`[ESSL Agent] Raw swipes: ${rawSwipes.length}`);
+    // Fire-and-forget — never let a heartbeat failure slow down or break the sync tick
+    sendHeartbeat({ tables_found: tables, raw_swipe_count: rawSwipes.length });
 
     const records = groupSwipes(rawSwipes);
     console.log(`[ESSL Agent] Attendance records: ${records.length}`);
