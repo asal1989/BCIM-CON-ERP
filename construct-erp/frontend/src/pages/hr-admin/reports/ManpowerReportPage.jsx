@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hrAttendanceAPI, projectAPI } from '../../../api/client';
-import { Printer, Download, RefreshCw, ChevronRight, LayoutGrid, Building2, Mail } from 'lucide-react';
+import { Printer, Download, RefreshCw, ChevronRight, LayoutGrid, Building2, Mail, HardHat, Users, Briefcase, TrendingUp } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const SUMMARY_COLORS = ['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d','#ea580c','#4f46e5'];
@@ -88,6 +88,13 @@ export default function ManpowerReportPage() {
     return Object.values(map).sort((a, b) => b.total - a.total);
   }, [rows]);
 
+  const kpis = useMemo(() => ({
+    companies: companySummary.length,
+    designations: companySummary.reduce((s, c) => s + c.designations, 0),
+    topCompany: companySummary[0]?.company || '—',
+    topCompanyPct: grandTotal && companySummary[0] ? Math.round((companySummary[0].total / grandTotal) * 100) : 0,
+  }), [companySummary, grandTotal]);
+
   const handleSendTestEmail = async () => {
     setSendingTest(true);
     try {
@@ -135,65 +142,108 @@ export default function ManpowerReportPage() {
   const th = { padding: '6px 8px', border: '1px solid #cbd5e1', background: '#eef2f7', fontWeight: 700, fontSize: 11, color: '#1e293b', textAlign: 'center' };
   const td = { padding: '5px 8px', border: '1px solid #e2e8f0', fontSize: 12, textAlign: 'center' };
 
+  const selectCls = {
+    border: '1px solid #E2E8F0', borderRadius: 8, padding: '7px 12px', fontSize: 13,
+    background: '#fff', color: '#334155', outline: 'none', cursor: 'pointer',
+  };
+  const labelCls = { fontSize: 10.5, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, display: 'block' };
+
   return (
-    <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
+    <div style={{ background: '#F8FAFC', minHeight: '100vh' }}>
       <style>{PRINT_CSS}</style>
 
-      <div className="no-print" style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3, fontSize: 12, color: '#9ca3af' }}>
-            <span>HR Admin</span><ChevronRight size={11} /><span>Reports</span><ChevronRight size={11} />
-            <span style={{ color: '#1a56db', fontWeight: 600 }}>Manpower Report</span>
+      {/* ── Header ─────────────────────────────────────────────────────── */}
+      <div className="no-print" style={{ padding: '20px 24px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 42, height: 42, borderRadius: 12, background: 'linear-gradient(135deg,#1A56DB,#3B82F6)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(26,86,219,0.25)' }}>
+              <HardHat size={21} color="#fff" />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#9ca3af', marginBottom: 2 }}>
+                <span>HR Admin</span><ChevronRight size={11} /><span>Reports</span>
+              </div>
+              <h1 style={{ fontWeight: 800, fontSize: 19, color: '#0F172A', margin: 0, letterSpacing: '-0.01em' }}>Overall Daily Manpower Report</h1>
+              <p style={{ margin: '2px 0 0', fontSize: 12.5, color: '#64748B' }}>{fmtDate(date)} · {selectedProjectName}</p>
+            </div>
           </div>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#111827' }}>Overall Daily Manpower Report</h2>
-          <p style={{ margin: '2px 0 0', fontSize: 12, color: '#6b7280' }}>{fmtDate(date)} &nbsp;·&nbsp; Grand Total: <strong>{grandTotal}</strong></p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={() => refetch()} disabled={isFetching} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', color: '#374151', border: '1px solid #D1D5DB', borderRadius: 9, padding: '9px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+              <RefreshCw size={14} style={{ animation: isFetching ? 'spin 1s linear infinite' : 'none' }} /> Refresh
+            </button>
+            <button onClick={handleExport} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F0FDF4', color: '#15803D', border: '1px solid #86EFAC', borderRadius: 9, padding: '9px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+              <Download size={14} /> Export CSV
+            </button>
+            <button onClick={handleSendTestEmail} disabled={sendingTest}
+              title="Sends today's report to your own email — preview of the automated 10 AM client send"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#FFF7ED', color: '#C2410C', border: '1px solid #FED7AA', borderRadius: 9, padding: '9px 16px', cursor: sendingTest ? 'wait' : 'pointer', opacity: sendingTest ? 0.6 : 1, fontSize: 13, fontWeight: 700 }}>
+              <Mail size={14} /> {sendingTest ? 'Sending…' : 'Send Test Email'}
+            </button>
+            <button onClick={() => window.print()} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'linear-gradient(135deg,#1A56DB,#3B82F6)', color: '#fff', border: 'none', borderRadius: 9, padding: '9px 18px', cursor: 'pointer', fontSize: 13, fontWeight: 700, boxShadow: '0 2px 8px rgba(26,86,219,0.3)' }}>
+              <Printer size={14} /> Print / PDF
+            </button>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)}
-            style={{ border: '1px solid #d1d5db', borderRadius: 6, padding: '6px 10px', fontSize: 13 }} />
-          <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)}
-            style={{ border: '1px solid #d1d5db', borderRadius: 6, padding: '6px 10px', fontSize: 13, minWidth: 160 }}>
-            <option value="">All Projects</option>
-            <option value="HEAD_OFFICE">Head Office</option>
-            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          <button onClick={() => refetch()} disabled={isFetching} style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#f9fafb', color: '#374151', border: '1px solid #d1d5db', borderRadius: 7, padding: '6px 14px', fontSize: 13, cursor: 'pointer' }}>
-            <RefreshCw size={13} style={{ animation: isFetching ? 'spin 1s linear infinite' : 'none' }} /> Refresh
-          </button>
-          <button onClick={handleExport} style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#f0fdf4', color: '#15803d', border: '1px solid #86efac', borderRadius: 7, padding: '6px 14px', fontSize: 13, cursor: 'pointer' }}>
-            <Download size={13} /> Export CSV
-          </button>
-          <button onClick={handleSendTestEmail} disabled={sendingTest}
-            title="Sends today's report to your own email — preview of the automated 10 AM client send"
-            style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: 7, padding: '6px 14px', fontSize: 13, cursor: sendingTest ? 'wait' : 'pointer', opacity: sendingTest ? 0.6 : 1 }}>
-            <Mail size={13} /> {sendingTest ? 'Sending…' : 'Send Test Email'}
-          </button>
-          <button onClick={() => window.print()} style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#1a56db', color: '#fff', border: 'none', borderRadius: 7, padding: '6px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
-            <Printer size={13} /> Print / PDF
-          </button>
-        </div>
-      </div>
 
-      {/* Tabs */}
-      <div className="no-print" style={{ padding: '16px 24px 0', display: 'flex', gap: 8 }}>
-        <button onClick={() => setTab('detail')} style={{
-          display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8,
-          border: tab === 'detail' ? '1.5px solid #1a56db' : '1px solid #e2e8f0',
-          background: tab === 'detail' ? '#eff6ff' : '#fff',
-          color: tab === 'detail' ? '#1a56db' : '#64748b',
-          fontSize: 13, fontWeight: 700, cursor: 'pointer',
-        }}>
-          <LayoutGrid size={14} /> Detailed (Site × Shift)
-        </button>
-        <button onClick={() => setTab('summary')} style={{
-          display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8,
-          border: tab === 'summary' ? '1.5px solid #1a56db' : '1px solid #e2e8f0',
-          background: tab === 'summary' ? '#eff6ff' : '#fff',
-          color: tab === 'summary' ? '#1a56db' : '#64748b',
-          fontSize: 13, fontWeight: 700, cursor: 'pointer',
-        }}>
-          <Building2 size={14} /> Company-wise Present Summary
-        </button>
+        {/* Filter bar */}
+        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: '14px 16px', marginBottom: 16, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <div>
+            <label style={labelCls}>Date</label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={selectCls} />
+          </div>
+          <div>
+            <label style={labelCls}>Project</label>
+            <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)} style={{ ...selectCls, minWidth: 190 }}>
+              <option value="">All Projects</option>
+              <option value="HEAD_OFFICE">Head Office</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* KPI strip */}
+        {!isLoading && rows.length > 0 && (
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+            {[
+              { icon: Users,      label: 'Total Present',  value: grandTotal,             accent: '#16A34A', bg: '#F0FDF4' },
+              { icon: Building2,  label: 'Companies',      value: kpis.companies,         accent: '#7C3AED', bg: '#F5F3FF' },
+              { icon: Briefcase,  label: 'Designations',   value: kpis.designations,      accent: '#0EA5E9', bg: '#F0F9FF' },
+              { icon: TrendingUp, label: 'Top Contributor', value: kpis.topCompany, sub: `${kpis.topCompanyPct}% of total`, accent: '#EA580C', bg: '#FFF7ED' },
+            ].map(k => (
+              <div key={k.label} style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: '12px 16px', flex: '1 1 180px', minWidth: 180 }}>
+                <div style={{ width: 38, height: 38, borderRadius: 10, background: k.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <k.icon size={18} color={k.accent} />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: k.sub ? 14 : 20, fontWeight: 800, color: '#0F172A', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{k.value}</div>
+                  <div style={{ fontSize: 11, color: '#64748B', fontWeight: 600 }}>{k.sub || k.label}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setTab('detail')} style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8,
+            border: tab === 'detail' ? '1.5px solid #1a56db' : '1px solid #e2e8f0',
+            background: tab === 'detail' ? '#eff6ff' : '#fff',
+            color: tab === 'detail' ? '#1a56db' : '#64748b',
+            fontSize: 13, fontWeight: 700, cursor: 'pointer',
+          }}>
+            <LayoutGrid size={14} /> Detailed (Site × Shift)
+          </button>
+          <button onClick={() => setTab('summary')} style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8,
+            border: tab === 'summary' ? '1.5px solid #1a56db' : '1px solid #e2e8f0',
+            background: tab === 'summary' ? '#eff6ff' : '#fff',
+            color: tab === 'summary' ? '#1a56db' : '#64748b',
+            fontSize: 13, fontWeight: 700, cursor: 'pointer',
+          }}>
+            <Building2 size={14} /> Company-wise Present Summary
+          </button>
+        </div>
       </div>
 
       <div id="mp-print-root" style={{ padding: 24 }}>
