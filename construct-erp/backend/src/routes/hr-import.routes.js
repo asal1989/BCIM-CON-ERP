@@ -251,7 +251,7 @@ router.post('/employees', upload.single('file'), async (req, res) => {
         const bankName = pick(row, 'Bank Name');
         const empType  = pick(row, 'Employment Type', 'Employee Type').toLowerCase() || 'permanent';
         const statusRaw = pick(row, 'Status', 'Employment Status').toLowerCase();
-        const empStatus = ['active','resigned','terminated'].includes(statusRaw) ? statusRaw : 'active';
+        const empStatus = ['active','resigned','terminated','absconded'].includes(statusRaw) ? statusRaw : 'active';
         const address  = pick(row, 'Permanent Address', 'Address', 'Current Address');
         const noticeDays = parseInt(pick(row, 'Notice Period', 'Notice Period (Days)')) || 30;
         const ctcRaw   = pick(row, 'CTC', 'Annual CTC', 'CTC Annual', 'CTC Current_PA', 'CTC-p.m.', 'CTC Before Last Appraisal');
@@ -361,17 +361,18 @@ router.post('/employees', upload.single('file'), async (req, res) => {
             const userRes = await client.query(
               `INSERT INTO users (company_id, employee_code, name, email, phone, role,
                                   designation, department, is_active, password_hash)
-               VALUES ($1,$2,$3,$4,$5,'employee',$6,$7,true,$8)
+               VALUES ($1,$2,$3,$4,$5,'employee',$6,$7,$9,$8)
                ON CONFLICT (email) DO UPDATE
                  SET employee_code = EXCLUDED.employee_code,
                      name          = EXCLUDED.name,
                      phone         = COALESCE(EXCLUDED.phone, users.phone),
                      designation   = COALESCE(EXCLUDED.designation, users.designation),
                      department    = COALESCE(EXCLUDED.department, users.department),
+                     is_active     = EXCLUDED.is_active,
                      updated_at    = NOW()
                RETURNING id`,
               [companyId, empCode, name, userEmail, phone||null,
-               desig||null, dept||null, defaultPwd]
+               desig||null, dept||null, defaultPwd, empStatus === 'active']
             );
             const userId = userRes.rows[0].id;
             await client.query(
