@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hrAttendanceAPI, projectAPI } from '../../../api/client';
-import { Download, Fingerprint, Users, UserCheck, UserX, Clock, CalendarOff, Timer } from 'lucide-react';
+import { Download, Fingerprint, Users, UserCheck, UserX, Clock, CalendarOff, Timer, Printer } from 'lucide-react';
+import { REPORT_PRINT_CSS_LANDSCAPE, ReportPrintHeader, ReportPrintSignature } from '../../../components/reports/ReportPrintKit';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const CY = new Date().getFullYear();
@@ -168,9 +169,10 @@ export default function MonthlyStatusPage() {
 
   return (
     <div style={{ padding: '20px 24px', background: '#F8FAFC', minHeight: '100vh' }}>
+      <style>{REPORT_PRINT_CSS_LANDSCAPE}</style>
 
       {/* Header */}
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18, flexWrap:'wrap', gap:12 }}>
+      <div className="no-print" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18, flexWrap:'wrap', gap:12 }}>
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
           <div style={{ width:42, height:42, borderRadius:12, background:'linear-gradient(135deg,#7C3AED,#A78BFA)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 12px rgba(124,58,237,0.25)' }}>
             <Fingerprint size={21} color="#fff" />
@@ -180,13 +182,18 @@ export default function MonthlyStatusPage() {
             <p style={{ margin:'2px 0 0', fontSize:12.5, color:'#64748B' }}>{MONTHS[month-1]} {year} · Raw biometric In/Out grid</p>
           </div>
         </div>
-        <button onClick={exportCSV} style={{ display:'flex', alignItems:'center', gap:7, background:'linear-gradient(135deg,#7C3AED,#8B5CF6)', color:'#fff', border:'none', borderRadius:9, padding:'9px 18px', cursor:'pointer', fontSize:13, fontWeight:700, boxShadow:'0 2px 8px rgba(124,58,237,0.3)' }}>
-          <Download size={14}/> Export CSV
-        </button>
+        <div style={{ display:'flex', gap:8 }}>
+          <button onClick={exportCSV} style={{ display:'flex', alignItems:'center', gap:7, background:'linear-gradient(135deg,#7C3AED,#8B5CF6)', color:'#fff', border:'none', borderRadius:9, padding:'9px 18px', cursor:'pointer', fontSize:13, fontWeight:700, boxShadow:'0 2px 8px rgba(124,58,237,0.3)' }}>
+            <Download size={14}/> Export CSV
+          </button>
+          <button onClick={() => window.print()} style={{ display:'flex', alignItems:'center', gap:7, background:'#1A56DB', color:'#fff', border:'none', borderRadius:9, padding:'9px 18px', cursor:'pointer', fontSize:13, fontWeight:700 }}>
+            <Printer size={14}/> Print / PDF
+          </button>
+        </div>
       </div>
 
       {/* Filter bar */}
-      <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:12, padding:'14px 16px', marginBottom:16, display:'flex', gap:16, flexWrap:'wrap' }}>
+      <div className="no-print" style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:12, padding:'14px 16px', marginBottom:16, display:'flex', gap:16, flexWrap:'wrap' }}>
         <div>
           <label style={labelCls}>Month</label>
           <select value={month} onChange={e=>setMonth(+e.target.value)} style={selectCls}>
@@ -223,7 +230,7 @@ export default function MonthlyStatusPage() {
 
       {/* KPI strip */}
       {!isLoading && rows.length > 0 && (
-        <div style={{ display:'flex', gap:12, flexWrap:'wrap', marginBottom:16 }}>
+        <div className="no-print" style={{ display:'flex', gap:12, flexWrap:'wrap', marginBottom:16 }}>
           <KpiTile icon={Users}      label="Employees"    value={kpis.employees} accent="#3B82F6" bg="#EFF6FF" />
           <KpiTile icon={UserCheck}  label="Present days"  value={kpis.present}   accent="#16A34A" bg="#F0FDF4" />
           <KpiTile icon={UserX}      label="Absent days"   value={kpis.absent}    accent="#DC2626" bg="#FEF2F2" />
@@ -234,7 +241,7 @@ export default function MonthlyStatusPage() {
       )}
 
       {/* Legend */}
-      <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:12, flexWrap:'wrap' }}>
+      <div className="no-print" style={{ display:'flex', alignItems:'center', gap:14, marginBottom:12, flexWrap:'wrap' }}>
         {LEGEND.map(l => (
           <span key={l.label} style={{ display:'flex', alignItems:'center', gap:6, fontSize:11.5, color:'#475569', fontWeight:600 }}>
             <span style={{ width:12, height:12, borderRadius:4, background:l.bg, border:`1px solid ${l.border}`, display:'inline-block' }} />
@@ -249,16 +256,18 @@ export default function MonthlyStatusPage() {
       </div>
 
       {/* Biometric-style In/Out grid */}
+      <div id="report-print-root">
+        <ReportPrintHeader reportTitle="Monthly Attendance Report" subtitle={`${MONTHS[month-1]} ${year}${company ? ' · ' + company : ''}`} />
       <div style={{ overflow:'auto', background:'#fff', borderRadius:12, border:'1px solid #E2E8F0', maxHeight:'68vh', boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
         {isLoading ? (
-          <div style={{ textAlign:'center', padding:'56px', color:'#94A3B8' }}>
+          <div className="no-print" style={{ textAlign:'center', padding:'56px', color:'#94A3B8' }}>
             <div style={{ width:28, height:28, border:'3px solid #EDE9FE', borderTopColor:'#7C3AED', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 0.8s linear infinite' }} />
             Loading attendance data…
           </div>
         ) : rows.length === 0 ? (
-          <div style={{ textAlign:'center', padding:'56px', color:'#94A3B8' }}>No attendance data for {MONTHS[month-1]} {year}</div>
+          <div className="no-print" style={{ textAlign:'center', padding:'56px', color:'#94A3B8' }}>No attendance data for {MONTHS[month-1]} {year}</div>
         ) : (
-          <table style={{ borderCollapse:'collapse', fontSize:10.5, width:'100%' }}>
+          <table className="report-print-table" style={{ borderCollapse:'collapse', fontSize:10.5, width:'100%' }}>
             <thead>
               <tr>
                 <th style={{ ...thBase, position:'sticky', left:0, top:0, background:'#F1F5F9', zIndex:3, minWidth:44 }} rowSpan={2}>Emp ID</th>
@@ -333,6 +342,8 @@ export default function MonthlyStatusPage() {
             </tbody>
           </table>
         )}
+      </div>
+      {!isLoading && rows.length > 0 && <ReportPrintSignature />}
       </div>
 
       <style>{`

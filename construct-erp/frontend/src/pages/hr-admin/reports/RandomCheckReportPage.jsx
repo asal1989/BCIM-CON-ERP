@@ -1,7 +1,8 @@
 import React, { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hrAttendanceAPI, projectAPI } from '../../../api/client';
-import { Download, Shuffle } from 'lucide-react';
+import { Download, Shuffle, Printer } from 'lucide-react';
+import { REPORT_PRINT_CSS, ReportPrintHeader, ReportPrintSignature } from '../../../components/reports/ReportPrintKit';
 
 const today = () => new Date().toISOString().slice(0,10);
 
@@ -43,19 +44,25 @@ export default function RandomCheckReportPage() {
 
   return (
     <div className="p-4">
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+      <style>{REPORT_PRINT_CSS}</style>
+      <div className="no-print" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <Shuffle size={22} style={{ color:'#7C3AED' }} />
           <h1 style={{ fontWeight:700, fontSize:18, color:'#1E293B', margin:0 }}>Random Check Report</h1>
         </div>
         {displayRows.length > 0 && (
-          <button onClick={exportCSV} style={{ display:'flex', alignItems:'center', gap:6, background:'#7C3AED', color:'#fff', border:'none', borderRadius:6, padding:'6px 14px', cursor:'pointer', fontSize:13, fontWeight:600 }}>
-            <Download size={14}/> Export CSV
-          </button>
+          <div style={{ display:'flex', gap:8 }}>
+            <button onClick={exportCSV} style={{ display:'flex', alignItems:'center', gap:6, background:'#7C3AED', color:'#fff', border:'none', borderRadius:6, padding:'6px 14px', cursor:'pointer', fontSize:13, fontWeight:600 }}>
+              <Download size={14}/> Export CSV
+            </button>
+            <button onClick={() => window.print()} style={{ display:'flex', alignItems:'center', gap:6, background:'#1A56DB', color:'#fff', border:'none', borderRadius:6, padding:'6px 14px', cursor:'pointer', fontSize:13, fontWeight:600 }}>
+              <Printer size={14}/> Print / PDF
+            </button>
+          </div>
         )}
       </div>
 
-      <div style={{ background:'#fff', borderRadius:10, border:'1px solid #E2E8F0', padding:20, marginBottom:16 }}>
+      <div className="no-print" style={{ background:'#fff', borderRadius:10, border:'1px solid #E2E8F0', padding:20, marginBottom:16 }}>
         <div style={{ display:'flex', gap:12, flexWrap:'wrap', alignItems:'flex-end' }}>
           <div>
             <label style={{ fontSize:12, fontWeight:600, color:'#475569', display:'block', marginBottom:4 }}>Date</label>
@@ -88,17 +95,19 @@ export default function RandomCheckReportPage() {
       </div>
 
       {!sample ? (
-        <div style={{ textAlign:'center', padding:'50px', color:'#94A3B8', background:'#fff', borderRadius:8, border:'1px dashed #CBD5E1' }}>
+        <div className="no-print" style={{ textAlign:'center', padding:'50px', color:'#94A3B8', background:'#fff', borderRadius:8, border:'1px dashed #CBD5E1' }}>
           <Shuffle size={40} style={{ marginBottom:12, opacity:0.3 }} />
           <p style={{ margin:0 }}>Click "Generate Sample" to randomly select employees for attendance verification</p>
         </div>
       ) : (
-        <div style={{ overflowX:'auto', background:'#fff', borderRadius:8, border:'1px solid #E2E8F0' }}>
-          <div style={{ padding:'10px 14px', borderBottom:'1px solid #E2E8F0', background:'#FAFAFF', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <div id="report-print-root">
+          <ReportPrintHeader reportTitle="Random Check Report" subtitle={`Date: ${date} — ${displayRows.length} employees selected (${samplePct}% sample)`} />
+          <div style={{ overflowX:'auto', background:'#fff', borderRadius:8, border:'1px solid #E2E8F0' }}>
+          <div className="no-print" style={{ padding:'10px 14px', borderBottom:'1px solid #E2E8F0', background:'#FAFAFF', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
             <span style={{ fontWeight:700, color:'#7C3AED', fontSize:13 }}>Random Sample — {displayRows.length} employees selected</span>
             <span style={{ fontSize:12, color:'#64748B' }}>Date: {date}</span>
           </div>
-          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+          <table className="report-print-table" style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
             <thead>
               <tr style={{ background:'#F8FAFC', borderBottom:'2px solid #E2E8F0' }}>
                 {['#','Emp ID','Name','Department','Designation','Status','In Time','Out Time','Verified'].map(h=>(
@@ -124,6 +133,8 @@ export default function RandomCheckReportPage() {
               ))}
             </tbody>
           </table>
+          </div>
+          <ReportPrintSignature />
         </div>
       )}
     </div>

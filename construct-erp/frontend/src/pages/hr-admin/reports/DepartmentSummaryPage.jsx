@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hrAttendanceAPI, projectAPI } from '../../../api/client';
-import { Download, Building2 } from 'lucide-react';
+import { Download, Building2, Printer } from 'lucide-react';
+import { REPORT_PRINT_CSS, ReportPrintHeader, ReportPrintSignature } from '../../../components/reports/ReportPrintKit';
 
 const today = () => new Date().toISOString().slice(0,10);
 const firstOfMonth = () => { const d=new Date(); d.setDate(1); return d.toISOString().slice(0,10); };
@@ -35,17 +36,23 @@ export default function DepartmentSummaryPage() {
 
   return (
     <div className="p-4">
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+      <style>{REPORT_PRINT_CSS}</style>
+      <div className="no-print" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <Building2 size={22} style={{ color:'#7C3AED' }} />
           <h1 style={{ fontWeight:700, fontSize:18, color:'#1E293B', margin:0 }}>Department Attendance Summary</h1>
         </div>
-        <button onClick={exportCSV} style={{ display:'flex', alignItems:'center', gap:6, background:'#7C3AED', color:'#fff', border:'none', borderRadius:6, padding:'6px 14px', cursor:'pointer', fontSize:13, fontWeight:600 }}>
-          <Download size={14}/> Export CSV
-        </button>
+        <div style={{ display:'flex', gap:8 }}>
+          <button onClick={exportCSV} style={{ display:'flex', alignItems:'center', gap:6, background:'#7C3AED', color:'#fff', border:'none', borderRadius:6, padding:'6px 14px', cursor:'pointer', fontSize:13, fontWeight:600 }}>
+            <Download size={14}/> Export CSV
+          </button>
+          <button onClick={() => window.print()} style={{ display:'flex', alignItems:'center', gap:6, background:'#1A56DB', color:'#fff', border:'none', borderRadius:6, padding:'6px 14px', cursor:'pointer', fontSize:13, fontWeight:600 }}>
+            <Printer size={14}/> Print / PDF
+          </button>
+        </div>
       </div>
 
-      <div style={{ display:'flex', gap:10, flexWrap:'wrap', marginBottom:14 }}>
+      <div className="no-print" style={{ display:'flex', gap:10, flexWrap:'wrap', marginBottom:14 }}>
         <div style={{ display:'flex', alignItems:'center', gap:6 }}>
           <label style={{ fontSize:12, color:'#64748B' }}>From</label>
           <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{ border:'1px solid #CBD5E1', borderRadius:6, padding:'5px 8px', fontSize:13 }} />
@@ -60,13 +67,15 @@ export default function DepartmentSummaryPage() {
         </select>
       </div>
 
-      <div style={{ overflowX:'auto', background:'#fff', borderRadius:8, border:'1px solid #E2E8F0' }}>
+      <div id="report-print-root">
+        <ReportPrintHeader reportTitle="Department Attendance Summary" subtitle={`${from} to ${to}`} />
+        <div style={{ overflowX:'auto', background:'#fff', borderRadius:8, border:'1px solid #E2E8F0' }}>
         {isLoading ? (
-          <div style={{ textAlign:'center', padding:'40px', color:'#94A3B8' }}>Loading...</div>
+          <div className="no-print" style={{ textAlign:'center', padding:'40px', color:'#94A3B8' }}>Loading...</div>
         ) : rows.length === 0 ? (
-          <div style={{ textAlign:'center', padding:'40px', color:'#94A3B8' }}>No data for selected period</div>
+          <div className="no-print" style={{ textAlign:'center', padding:'40px', color:'#94A3B8' }}>No data for selected period</div>
         ) : (
-          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+          <table className="report-print-table" style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
             <thead>
               <tr style={{ background:'#F8FAFC', borderBottom:'2px solid #E2E8F0' }}>
                 {['Department','Present','Absent','Leave','Half Day','Total','% Attendance'].map(h=>(
@@ -114,6 +123,8 @@ export default function DepartmentSummaryPage() {
             </tfoot>
           </table>
         )}
+        </div>
+        {!isLoading && rows.length > 0 && <ReportPrintSignature />}
       </div>
     </div>
   );

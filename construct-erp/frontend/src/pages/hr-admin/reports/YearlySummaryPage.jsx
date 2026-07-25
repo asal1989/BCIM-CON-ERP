@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hrAttendanceAPI, hrEmployeesAPI, scAPI } from '../../../api/client';
-import { Download, CalendarDays } from 'lucide-react';
+import { Download, CalendarDays, Printer } from 'lucide-react';
+import { REPORT_PRINT_CSS_LANDSCAPE, ReportPrintHeader, ReportPrintSignature } from '../../../components/reports/ReportPrintKit';
 
 const CY = new Date().getFullYear();
 const YEARS = [CY-2, CY-1, CY];
@@ -51,30 +52,38 @@ export default function YearlySummaryPage() {
 
   return (
     <div className="p-4">
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+      <style>{REPORT_PRINT_CSS_LANDSCAPE}</style>
+      <div className="no-print" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <CalendarDays size={22} style={{ color:'#7C3AED' }} />
           <h1 style={{ fontWeight:700, fontSize:18, color:'#1E293B', margin:0 }}>Yearly Attendance Summary</h1>
         </div>
-        <button onClick={exportCSV} style={{ display:'flex', alignItems:'center', gap:6, background:'#7C3AED', color:'#fff', border:'none', borderRadius:6, padding:'6px 14px', cursor:'pointer', fontSize:13, fontWeight:600 }}>
-          <Download size={14}/> Export CSV
-        </button>
+        <div style={{ display:'flex', gap:8 }}>
+          <button onClick={exportCSV} style={{ display:'flex', alignItems:'center', gap:6, background:'#7C3AED', color:'#fff', border:'none', borderRadius:6, padding:'6px 14px', cursor:'pointer', fontSize:13, fontWeight:600 }}>
+            <Download size={14}/> Export CSV
+          </button>
+          <button onClick={() => window.print()} style={{ display:'flex', alignItems:'center', gap:6, background:'#1A56DB', color:'#fff', border:'none', borderRadius:6, padding:'6px 14px', cursor:'pointer', fontSize:13, fontWeight:600 }}>
+            <Printer size={14}/> Print / PDF
+          </button>
+        </div>
       </div>
 
-      <div style={{ display:'flex', gap:10, flexWrap:'wrap', marginBottom:14 }}>
+      <div className="no-print" style={{ display:'flex', gap:10, flexWrap:'wrap', marginBottom:14 }}>
         <select value={year} onChange={e=>setYear(+e.target.value)} style={{ border:'1px solid #CBD5E1', borderRadius:6, padding:'5px 10px', fontSize:13 }}>
           {YEARS.map(y=><option key={y} value={y}>{y}</option>)}
         </select>
         <input value={dept} onChange={e=>setDept(e.target.value)} placeholder="Filter by department..." style={{ border:'1px solid #CBD5E1', borderRadius:6, padding:'5px 10px', fontSize:13 }} />
       </div>
 
-      <div style={{ overflowX:'auto', background:'#fff', borderRadius:8, border:'1px solid #E2E8F0' }}>
+      <div id="report-print-root">
+        <ReportPrintHeader reportTitle="Yearly Attendance Summary" subtitle={`Year ${year}`} />
+        <div style={{ overflowX:'auto', background:'#fff', borderRadius:8, border:'1px solid #E2E8F0' }}>
         {isLoading ? (
-          <div style={{ textAlign:'center', padding:'40px', color:'#94A3B8' }}>Loading...</div>
+          <div className="no-print" style={{ textAlign:'center', padding:'40px', color:'#94A3B8' }}>Loading...</div>
         ) : (emps||[]).length === 0 ? (
-          <div style={{ textAlign:'center', padding:'40px', color:'#94A3B8' }}>No employees found</div>
+          <div className="no-print" style={{ textAlign:'center', padding:'40px', color:'#94A3B8' }}>No employees found</div>
         ) : (
-          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+          <table className="report-print-table" style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
             <thead>
               <tr style={{ background:'#F8FAFC', borderBottom:'2px solid #E2E8F0' }}>
                 <th style={{ padding:'8px 10px', textAlign:'left', fontWeight:700, color:'#475569', whiteSpace:'nowrap' }}>Emp ID</th>
@@ -115,6 +124,8 @@ export default function YearlySummaryPage() {
             </tbody>
           </table>
         )}
+        </div>
+        {!isLoading && (emps||[]).length > 0 && <ReportPrintSignature />}
       </div>
     </div>
   );

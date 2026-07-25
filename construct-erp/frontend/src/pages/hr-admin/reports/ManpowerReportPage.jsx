@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hrAttendanceAPI, projectAPI } from '../../../api/client';
 import { Printer, Download, RefreshCw, ChevronRight, LayoutGrid, Building2 } from 'lucide-react';
+import { ReportPrintHeader, ReportPrintSignature } from '../../../components/reports/ReportPrintKit';
 
 const SUMMARY_COLORS = ['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d','#ea580c','#4f46e5'];
 
@@ -20,6 +21,10 @@ const PRINT_CSS = `
   #mp-print-root { display:block !important; }
   .mp-table { width:100% !important; border-collapse:collapse !important; font-size:8pt !important; }
   .mp-table th, .mp-table td { border:1px solid #333 !important; padding:3px 5px !important; }
+  .print-only { display:block !important; }
+}
+@media screen {
+  .print-only { display:none !important; }
 }
 `;
 
@@ -161,6 +166,7 @@ export default function ManpowerReportPage() {
       </div>
 
       <div id="mp-print-root" style={{ padding: 24 }}>
+        <ReportPrintHeader reportTitle="Overall Daily Manpower Report" subtitle={fmtDate(date)} />
         {isLoading ? (
           <div style={{ textAlign: 'center', padding: 56, color: '#9ca3af' }}>Loading manpower data…</div>
         ) : rows.length === 0 ? (
@@ -277,6 +283,7 @@ export default function ManpowerReportPage() {
             </table>
           </div>
         )}
+        {!isLoading && rows.length > 0 && <ReportPrintSignature />}
       </div>
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>

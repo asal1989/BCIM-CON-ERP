@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hrEsslAPI } from '../../../api/client';
-import { Download, ScrollText } from 'lucide-react';
+import { Download, ScrollText, Printer } from 'lucide-react';
+import { REPORT_PRINT_CSS, ReportPrintHeader, ReportPrintSignature } from '../../../components/reports/ReportPrintKit';
 
 const today = () => new Date().toISOString().slice(0,10);
 const DIR_BADGE = { in: ['#D1FAE5','#065F46','IN'], out: ['#FEE2E2','#991B1B','OUT'] };
@@ -44,7 +45,8 @@ export default function LogRecordsPage() {
 
   return (
     <div className="p-4">
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+      <style>{REPORT_PRINT_CSS}</style>
+      <div className="no-print" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <ScrollText size={22} style={{ color:'#7C3AED' }} />
           <div>
@@ -52,12 +54,17 @@ export default function LogRecordsPage() {
             <p style={{ fontSize:11, color:'#94A3B8', margin:0 }}>Raw biometric swipes from ESSL — stored in Postgres</p>
           </div>
         </div>
-        <button onClick={exportCSV} style={{ display:'flex', alignItems:'center', gap:6, background:'#7C3AED', color:'#fff', border:'none', borderRadius:6, padding:'6px 14px', cursor:'pointer', fontSize:13, fontWeight:600 }}>
-          <Download size={14}/> Export CSV
-        </button>
+        <div style={{ display:'flex', gap:8 }}>
+          <button onClick={exportCSV} style={{ display:'flex', alignItems:'center', gap:6, background:'#7C3AED', color:'#fff', border:'none', borderRadius:6, padding:'6px 14px', cursor:'pointer', fontSize:13, fontWeight:600 }}>
+            <Download size={14}/> Export CSV
+          </button>
+          <button onClick={() => window.print()} style={{ display:'flex', alignItems:'center', gap:6, background:'#1A56DB', color:'#fff', border:'none', borderRadius:6, padding:'6px 14px', cursor:'pointer', fontSize:13, fontWeight:600 }}>
+            <Printer size={14}/> Print / PDF
+          </button>
+        </div>
       </div>
 
-      <div style={{ display:'flex', gap:10, flexWrap:'wrap', marginBottom:14 }}>
+      <div className="no-print" style={{ display:'flex', gap:10, flexWrap:'wrap', marginBottom:14 }}>
         <div style={{ display:'flex', alignItems:'center', gap:6 }}>
           <label style={{ fontSize:12, color:'#64748B' }}>From</label>
           <input type="date" value={from} onChange={e=>{ setFrom(e.target.value); setPage(1); }} style={{ border:'1px solid #CBD5E1', borderRadius:6, padding:'5px 8px', fontSize:13 }} />
@@ -78,16 +85,18 @@ export default function LogRecordsPage() {
         )}
       </div>
 
-      <div style={{ overflowX:'auto', background:'#fff', borderRadius:8, border:'1px solid #E2E8F0' }}>
+      <div id="report-print-root">
+        <ReportPrintHeader reportTitle="Device Log Records" subtitle={`${from} to ${to}`} />
+        <div style={{ overflowX:'auto', background:'#fff', borderRadius:8, border:'1px solid #E2E8F0' }}>
         {isLoading ? (
-          <div style={{ textAlign:'center', padding:'40px', color:'#94A3B8' }}>Loading device logs...</div>
+          <div className="no-print" style={{ textAlign:'center', padding:'40px', color:'#94A3B8' }}>Loading device logs...</div>
         ) : rows.length === 0 ? (
-          <div style={{ textAlign:'center', padding:'40px', color:'#94A3B8' }}>
+          <div className="no-print" style={{ textAlign:'center', padding:'40px', color:'#94A3B8' }}>
             No device logs found for selected date range.<br/>
             <span style={{ fontSize:11 }}>Logs are saved automatically every 5 minutes by the ESSL agent.</span>
           </div>
         ) : (
-          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+          <table className="report-print-table" style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
             <thead>
               <tr style={{ background:'#F8FAFC', borderBottom:'2px solid #E2E8F0' }}>
                 {['Emp Code','Name','Department','Designation','Swipe Time','Direction','Source'].map(h=>(
@@ -116,10 +125,12 @@ export default function LogRecordsPage() {
             </tbody>
           </table>
         )}
+        </div>
+        {!isLoading && rows.length > 0 && <ReportPrintSignature />}
       </div>
 
       {rows.length > 0 && (
-        <div style={{ display:'flex', justifyContent:'flex-end', gap:8, marginTop:12 }}>
+        <div className="no-print" style={{ display:'flex', justifyContent:'flex-end', gap:8, marginTop:12 }}>
           <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}
             style={{ padding:'5px 12px', border:'1px solid #CBD5E1', borderRadius:6, background:page===1?'#F8FAFC':'#fff', cursor:page===1?'default':'pointer', fontSize:12 }}>← Prev</button>
           <span style={{ padding:'5px 8px', fontSize:12, color:'#64748B' }}>Page {page}</span>

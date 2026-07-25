@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hrAttendanceAPI, projectAPI } from '../../../api/client';
 import { Download, Printer, ClipboardList } from 'lucide-react';
+import { ReportPrintSignature } from '../../../components/reports/ReportPrintKit';
 
 const today     = () => new Date().toISOString().slice(0,10);
 const yesterday = () => { const d = new Date(); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); };
@@ -35,7 +36,7 @@ const PRINT_CSS = `
   #dar-table-wrap { overflow:visible !important; border:none !important; }
   #dar-table-wrap table { font-size:10px !important; }
   #dar-table-wrap th { background:#1B3A6B !important; color:#fff !important; }
-  .dar-sig-section { page-break-inside:avoid !important; margin-top:28px !important; }
+  .dar-sig-section, .report-sig-section { page-break-inside:avoid !important; margin-top:28px !important; }
 }
 @media screen {
   .print-only { display:none !important; }
@@ -194,26 +195,7 @@ export default function DailyAttendanceReportPage() {
       </div>
 
       {/* Signature section (print only) */}
-      <div className="print-only dar-sig-section" style={{ marginTop: 32, borderTop: '1px solid #ccc', paddingTop: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20 }}>
-          {[
-            { role: 'Prepared By', name: 'HR Executive' },
-            { role: 'Verified By', name: 'HR Manager / Admin' },
-            { role: 'Site Incharge', name: 'Project Manager' },
-            { role: 'Approved By', name: 'Management / Director' },
-          ].map(sig => (
-            <div key={sig.role} style={{ flex: 1, textAlign: 'center' }}>
-              <div style={{ borderBottom: '1.5px solid #333', marginBottom: 6, height: 40 }} />
-              <div style={{ fontSize: 9, fontWeight: 700, color: '#1B3A6B' }}>{sig.role}</div>
-              <div style={{ fontSize: 8, color: '#555', marginTop: 2 }}>{sig.name}</div>
-              <div style={{ fontSize: 8, color: '#888', marginTop: 2 }}>Date: ____________</div>
-            </div>
-          ))}
-        </div>
-        <div style={{ textAlign: 'center', marginTop: 12, fontSize: 8, color: '#888' }}>
-          This is a system-generated report - {companyName} | Printed on: {new Date().toLocaleString('en-IN')}
-        </div>
-      </div>
+      <ReportPrintSignature companyName={companyName} />
     </div>
   );
 }
