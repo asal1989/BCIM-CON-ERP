@@ -805,13 +805,14 @@ router.get('/device-logs', async (req, res) => {
         u.id              AS user_id,
         ep.department_id,
         dep.name          AS department_name,
-        ep.designation
+        COALESCE(des.name, u.designation) AS designation
       FROM essl_device_logs dl
       LEFT JOIN users u
         ON u.company_id = dl.company_id
        AND LOWER(TRIM(u.employee_code)) = LOWER(TRIM(dl.emp_code))
       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
-      LEFT JOIN hr_departments dep  ON dep.id = ep.department_id
+      LEFT JOIN hr_departments dep   ON dep.id = ep.department_id
+      LEFT JOIN hr_designations des  ON des.id = ep.designation_id
       WHERE dl.company_id = $1`;
 
     if (from)     { sql2 += ` AND dl.swipe_time >= $${idx}`; params.push(from + ' 00:00:00'); idx++; }
