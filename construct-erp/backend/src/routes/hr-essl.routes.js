@@ -173,12 +173,6 @@ async function initTable() {
   `);
   // Add push_api_key column for local agent authentication
   await query(`ALTER TABLE hr_essl_config ADD COLUMN IF NOT EXISTS push_api_key TEXT`);
-  // last_heartbeat is updated on EVERY agent tick (even empty ones) so "is the
-  // agent alive right now" doesn't depend on there being new swipes to push —
-  // last_sync only moves when there's actual data, which goes quiet overnight
-  // and would otherwise look identical to the agent having crashed.
-  await query(`ALTER TABLE hr_essl_config ADD COLUMN IF NOT EXISTS last_heartbeat TIMESTAMPTZ`);
-  await query(`ALTER TABLE hr_essl_config ADD COLUMN IF NOT EXISTS last_heartbeat_meta JSONB`);
 
   // Raw biometric punch log — one row per swipe from the ESSL device
   await query(`
@@ -196,6 +190,18 @@ async function initTable() {
   await query(`CREATE INDEX IF NOT EXISTS idx_essl_logs_emp ON essl_device_logs(company_id, emp_code, swipe_time DESC)`);
 }
 runSchemaInit('hr-essl', initTable);
+
+// last_heartbeat is updated on EVERY agent tick (even empty ones) so "is the
+// agent alive right now" doesn't depend on there being new swipes to push —
+// last_sync only moves when there's actual data, which goes quiet overnight
+// and would otherwise look identical to the agent having crashed.
+// Separately keyed from 'hr-essl' above — that migration name was already
+// marked applied on production before these columns existed, and
+// runSchemaInit never re-runs a name it has already recorded.
+runSchemaInit('hr-essl-heartbeat-cols', async () => {
+  await query(`ALTER TABLE hr_essl_config ADD COLUMN IF NOT EXISTS last_heartbeat TIMESTAMPTZ`);
+  await query(`ALTER TABLE hr_essl_config ADD COLUMN IF NOT EXISTS last_heartbeat_meta JSONB`);
+});
 
 // ─── Build mssql config from saved row ───────────────────────────────────────
 function buildMssqlConfig(cfg) {
