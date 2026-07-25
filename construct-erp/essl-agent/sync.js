@@ -65,12 +65,17 @@ function buildMssqlCfg() {
 
 // ── Persistent connection pool (reused across loop ticks) ─────────────────────
 let pool = null;
+let diagnosticsShown = false;
 
 async function getPool() {
   if (pool && pool.connected) return pool;
   if (pool) { try { await pool.close(); } catch (_) {} pool = null; }
   pool = await new sql.ConnectionPool(buildMssqlCfg()).connect();
   console.log('[ESSL Agent] SQL pool connected.');
+  if (!diagnosticsShown) {
+    diagnosticsShown = true;
+    await logAvailableTables(pool);
+  }
   return pool;
 }
 
@@ -88,13 +93,39 @@ function monthlyTables(from, to) {
 
 async function existingTables(conn, tables) {
   const result = [];
+  const misses = [];
   for (const t of tables) {
     try {
       await conn.request().query(`SELECT TOP 1 DeviceLogId FROM [${t}]`);
       result.push(t);
-    } catch (_) {}
+    } catch (e) {
+      misses.push(`${t} (${e.message.split('\n')[0]})`);
+    }
+  }
+  if (misses.length) {
+    console.log(`[ESSL Agent] Tables NOT found / not queryable: ${misses.join(', ')}`);
   }
   return result;
+}
+
+// One-time startup diagnostic: list every table actually in the ESSL database
+// so a table-name mismatch (the #1 cause of "runs but never syncs") is obvious
+// immediately instead of silently producing zero rows forever.
+async function logAvailableTables(conn) {
+  try {
+    const r = await conn.request().query(
+      `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME`
+    );
+    const names = r.recordset.map(row => row.TABLE_NAME);
+    const deviceLogTables = names.filter(n => /devicelog/i.test(n));
+    console.log(`[ESSL Agent] Database has ${names.length} tables total.`);
+    console.log(`[ESSL Agent] Tables matching "devicelog" (case-insensitive): ${deviceLogTables.join(', ') || 'NONE FOUND — check table naming!'}`);
+    if (!names.includes('Employees')) {
+      console.log(`[ESSL Agent] WARNING: no "Employees" table found — the EmployeeCode/NumericCode join in pullSwipes() will fail.`);
+    }
+  } catch (e) {
+    console.log(`[ESSL Agent] Could not list tables for diagnostics: ${e.message}`);
+  }
 }
 
 // ── Detect which direction column the ESSL DB uses ───────────────────────────
@@ -224,11 +255,19 @@ async function runSync({ fromDT, toDT, label }) {
 
     if (!records.length && !rawSwipes.length) { console.log('[ESSL Agent] Nothing to push.'); return; }
 
-    console.log(`[ESSL Agent] Pushing to ERP...`);
+    console.log(`[ESSL Agent] Pushing ${records.length} records to ${cfg.erp.push_url} ...`);
     const result = await pushToERP(records, rawSwipes);
-    console.log(`[ESSL Agent] Synced: ${result.synced || 0} | Skipped: ${result.skipped || 0} | Raw saved: ${result.raw_saved || 0}`);
-    if (result.not_found?.length) console.log(`[ESSL Agent] Not found in ERP: ${result.not_found.join(', ')}`);
-    if (result.errors?.length)    console.log('[ESSL Agent] Errors:', result.errors);
+    if (result.synced === undefined && result.error === undefined) {
+      // Unexpected shape — likely an HTML error page, auth failure, or wrong URL
+      console.log('[ESSL Agent] UNEXPECTED response from ERP (not the expected JSON shape):');
+      console.log(JSON.stringify(result).slice(0, 500));
+    } else if (result.error) {
+      console.log(`[ESSL Agent] ERP REJECTED the push: ${result.error}`);
+    } else {
+      console.log(`[ESSL Agent] Synced: ${result.synced || 0} | Skipped: ${result.skipped || 0} | Raw saved: ${result.raw_saved || 0}`);
+      if (result.not_found?.length) console.log(`[ESSL Agent] Not found in ERP (employee_code mismatch): ${result.not_found.join(', ')}`);
+      if (result.errors?.length)    console.log('[ESSL Agent] Errors:', result.errors);
+    }
 
   } catch (err) {
     console.error('[ESSL Agent] ERROR:', err.message);
