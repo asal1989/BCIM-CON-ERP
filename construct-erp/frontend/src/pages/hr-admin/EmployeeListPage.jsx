@@ -40,9 +40,13 @@ const TYPE_CFG = {
 };
 
 const CATEGORY_CFG = {
-  staff:   { label: 'BCIM Staff',    bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200'   },
-  workman: { label: 'BCIM Workers',  bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' },
+  staff:         { label: 'BCIM Staff',    bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200'   },
+  workman:       { label: 'BCIM Workers',  bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' },
+  subcontractor: { label: 'Subcontractor', bg: 'bg-violet-50', text: 'text-violet-700', border: 'border-violet-200' },
 };
+const categoryOf = (emp) =>
+  isSubcontractorEmp(emp) ? CATEGORY_CFG.subcontractor
+  : CATEGORY_CFG[emp.employee_category] || CATEGORY_CFG.staff;
 
 const fade = (d = 0) => ({
   initial: { opacity: 0, y: 14 },
@@ -55,7 +59,7 @@ function EmpCard({ emp, onClick }) {
   const [g1, g2] = avatarGrad(emp.name);
   const status   = STATUS_CFG[emp.employment_status] || STATUS_CFG.active;
   const type     = TYPE_CFG[emp.employment_type]     || TYPE_CFG.permanent;
-  const category = CATEGORY_CFG[emp.employee_category] || CATEGORY_CFG.staff;
+  const category = categoryOf(emp);
 
   return (
     <motion.div
