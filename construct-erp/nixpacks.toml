@@ -1,2 +1,9 @@
 [phases.setup]
 nixPkgs = ["nodejs_20", "chromium"]
+
+[variables]
+# Puppeteer's own postinstall tries to download a bundled Chromium build and
+# fails in this image (no unzip available to extract the archive). Not needed
+# anyway — chromium-resolver.js finds the Nix-provided "chromium" package
+# above via `which` at runtime instead.
+PUPPETEER_SKIP_DOWNLOAD = "true"
