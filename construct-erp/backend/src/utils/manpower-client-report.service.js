@@ -6,7 +6,6 @@
 const fs   = require('fs');
 const path = require('path');
 const cron = require('node-cron');
-const PDFDocument = require('pdfkit');
 const logger = require('./logger');
 const { query } = require('../config/database');
 const { sendMail } = require('../services/mail.service');
@@ -84,18 +83,62 @@ async function fetchManpowerData(companyId, projectId, targetDate) {
       a.site, a.shift
   `, params);
 
-  const companyMap = {};
+  const companyTotal = new Map();
+  const companyDesigs = new Map();
   const companyOrder = [];
   for (const r of rows) {
-    if (!companyMap[r.company]) { companyMap[r.company] = 0; companyOrder.push(r.company); }
-    companyMap[r.company] += r.headcount;
+    if (!companyTotal.has(r.company)) { companyTotal.set(r.company, 0); companyDesigs.set(r.company, new Set()); companyOrder.push(r.company); }
+    companyTotal.set(r.company, companyTotal.get(r.company) + r.headcount);
+    companyDesigs.get(r.company).add(r.designation);
   }
   const companySummary = companyOrder
-    .map(c => ({ company: c, total: companyMap[c] }))
+    .map(c => ({ company: c, designations: companyDesigs.get(c).size, total: companyTotal.get(c) }))
     .sort((a, b) => b.total - a.total);
   const grandTotal = companySummary.reduce((s, c) => s + c.total, 0);
 
   return { rows, companySummary, grandTotal };
+}
+
+// ── Pivot raw rows into { columns, companyGroups, grandTotal } — same shape
+// the live Manpower Report page builds client-side, reused here so the PDF
+// matches exactly (Company merged rows > Designation, Site x Shift columns).
+function buildPivot(rows, grandTotal) {
+  const colSet = new Map(); // bucketKey -> { label, shifts:Set }
+  for (const r of rows) {
+    const bucket = bucketSite(r.site);
+    if (!colSet.has(bucket.key)) colSet.set(bucket.key, { label: bucket.label, shifts: new Set() });
+    colSet.get(bucket.key).shifts.add(r.shift);
+  }
+  const bucketOrder = [...SITE_BUCKETS.map(b => b.key), 'other'];
+  const columns = bucketOrder
+    .filter(k => colSet.has(k))
+    .map(k => ({ key: k, label: colSet.get(k).label, shifts: [...colSet.get(k).shifts].sort() }));
+
+  const byCompany = new Map();
+  for (const r of rows) {
+    if (!byCompany.has(r.company)) byCompany.set(r.company, new Map());
+    const desigMap = byCompany.get(r.company);
+    if (!desigMap.has(r.designation)) desigMap.set(r.designation, { cells: {}, total: 0 });
+    const bucket = bucketSite(r.site);
+    const cellKey = `${bucket.key}|${r.shift}`;
+    const entry = desigMap.get(r.designation);
+    entry.cells[cellKey] = (entry.cells[cellKey] || 0) + r.headcount;
+    entry.total += r.headcount;
+  }
+
+  const companyGroups = [...byCompany.entries()].map(([company, desigMap]) => {
+    const designationRows = [...desigMap.entries()]
+      .map(([designation, d]) => ({ designation, cells: d.cells, total: d.total }))
+      .sort((a, b) => a.designation.localeCompare(b.designation));
+    const subtotal = designationRows.reduce((s, d) => s + d.total, 0);
+    return { company, designationRows, subtotal };
+  }).sort((a, b) => b.subtotal - a.subtotal);
+
+  const colTotal = (colKey, shift) => rows
+    .filter(r => bucketSite(r.site).key === colKey && r.shift === shift)
+    .reduce((s, r) => s + r.headcount, 0);
+
+  return { columns, companyGroups, grandTotal, colTotal };
 }
 
 // ── Build the client-facing HTML email body ───────────────────────────────────
@@ -189,80 +232,176 @@ function buildEmailHtml({ companyName, projectName, dateStr, companySummary, gra
 </html>`;
 }
 
-// ── Build the detailed PDF attachment (Company > Designation, headcount) ─────
-function buildPdfBuffer({ companyName, projectName, dateStr, rows, companySummary, grandTotal }) {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 40 });
-    const chunks = [];
-    doc.on('data', c => chunks.push(c));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
+// ── Build the PDF attachment by rendering HTML (same layout as the live
+// Manpower Report print view) through headless Chromium — merged company
+// cells, Site x Shift pivot columns, grand totals, signature footer.
+function escapeHtml(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
-    // Header
-    try { doc.image(LOGO_PATH, 40, 36, { height: 34 }); } catch (_) {}
-    doc.fontSize(8).fillColor('#555').text(companyName.toUpperCase(), 90, 40, { characterSpacing: 1 });
-    doc.fontSize(15).fillColor('#1B3A6B').font('Helvetica-Bold').text('OVERALL DAILY MANPOWER REPORT', 90, 52);
-    doc.fontSize(9).fillColor('#444').font('Helvetica').text(`${projectName} · ${dateStr}`, 90, 72);
-    doc.moveTo(40, 92).lineTo(555, 92).lineWidth(2).strokeColor('#1B3A6B').stroke();
+function buildPdfHtml({ companyName, projectName, dateStr, dateISO, companySummary, grandTotal, pivot }) {
+  const { columns, companyGroups, colTotal } = pivot;
+  const printedAt = new Date().toLocaleString('en-IN', { timeZone: TZ, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+  const reportDateShort = new Date(dateISO + 'T00:00:00').toLocaleDateString('en-GB');
 
-    // Company summary table
-    let y = 110;
-    doc.fontSize(11).fillColor('#1B3A6B').font('Helvetica-Bold').text('Company-wise Summary', 40, y);
-    y += 20;
-    doc.fontSize(9).font('Helvetica-Bold');
-    doc.rect(40, y, 515, 18).fill('#1B3A6B');
-    doc.fillColor('#fff').text('Company', 46, y + 5).text('Headcount', 380, y + 5, { width: 80, align: 'right' }).text('%', 470, y + 5, { width: 75, align: 'right' });
-    y += 18;
-    doc.font('Helvetica').fontSize(9);
-    companySummary.forEach((c, i) => {
-      const bg = i % 2 === 0 ? '#ffffff' : '#f3f6fb';
-      doc.rect(40, y, 515, 16).fill(bg);
-      doc.fillColor('#0f172a').text(c.company, 46, y + 4)
-        .text(String(c.total), 380, y + 4, { width: 80, align: 'right' })
-        .text(grandTotal ? `${((c.total / grandTotal) * 100).toFixed(1)}%` : '0%', 470, y + 4, { width: 75, align: 'right' });
-      y += 16;
-    });
-    doc.rect(40, y, 515, 18).fill('#eef2f7');
-    doc.font('Helvetica-Bold').fillColor('#1B3A6B')
-      .text('Grand Total', 46, y + 5)
-      .text(String(grandTotal), 380, y + 5, { width: 80, align: 'right' })
-      .text('100%', 470, y + 5, { width: 75, align: 'right' });
-    y += 34;
+  const summaryRows = companySummary.map(c => `
+    <tr>
+      <td class="lft bold">${escapeHtml(c.company)}</td>
+      <td class="ctr">${c.designations}</td>
+      <td class="ctr bold navy">${c.total}</td>
+      <td class="ctr">${grandTotal ? ((c.total / grandTotal) * 100).toFixed(1) : '0.0'}%</td>
+    </tr>`).join('');
 
-    // Detailed pivot: Company / Designation / Site / Shift / Headcount
-    doc.fontSize(11).fillColor('#1B3A6B').font('Helvetica-Bold').text('Detailed Breakdown', 40, y);
-    y += 20;
-    doc.fontSize(8).font('Helvetica-Bold');
-    doc.rect(40, y, 515, 16).fill('#1B3A6B');
-    doc.fillColor('#fff')
-      .text('Company', 46, y + 4, { width: 130 })
-      .text('Designation', 176, y + 4, { width: 150 })
-      .text('Site', 326, y + 4, { width: 90 })
-      .text('Shift', 416, y + 4, { width: 60 })
-      .text('Count', 476, y + 4, { width: 70, align: 'right' });
-    y += 16;
-    doc.font('Helvetica').fontSize(8);
-    rows
-      .sort((a, b) => a.company.localeCompare(b.company) || a.designation.localeCompare(b.designation))
-      .forEach((r, i) => {
-        if (y > 780) { doc.addPage(); y = 40; }
-        const bg = i % 2 === 0 ? '#ffffff' : '#f3f6fb';
-        doc.rect(40, y, 515, 14).fill(bg);
-        const bucket = bucketSite(r.site);
-        doc.fillColor('#1e293b')
-          .text(r.company, 46, y + 3, { width: 130 })
-          .text(r.designation, 176, y + 3, { width: 150 })
-          .text(bucket.label, 326, y + 3, { width: 90 })
-          .text(r.shift, 416, y + 3, { width: 60 })
-          .text(String(r.headcount), 476, y + 3, { width: 70, align: 'right' });
-        y += 14;
-      });
+  const totalCols = columns.reduce((n, c) => n + c.shifts.length, 0);
 
-    doc.fontSize(7).fillColor('#94a3b8')
-      .text(`Automated report · Generated ${new Date().toLocaleString('en-IN', { timeZone: TZ })}`, 40, 800, { width: 515, align: 'center' });
+  const pivotHeaderTop = `
+    <th class="lft" rowspan="2" style="min-width:150px">Company</th>
+    <th class="lft" rowspan="2" style="min-width:170px">Designation</th>
+    ${columns.map(c => `<th colspan="${c.shifts.length}">${escapeHtml(c.label)}</th>`).join('')}
+    <th class="ctr" rowspan="2">Total</th>`;
+  const pivotHeaderSub = columns.flatMap(c => c.shifts.map(s => `<th class="ctr sub">${escapeHtml(s)}</th>`)).join('');
 
-    doc.end();
+  const pivotBody = companyGroups.map(g => {
+    const rowsHtml = g.designationRows.map((d, i) => `
+      <tr>
+        ${i === 0 ? `<td class="lft bold company-cell" rowspan="${g.designationRows.length}">${escapeHtml(g.company)}</td>` : ''}
+        <td class="lft">${escapeHtml(d.designation)}</td>
+        ${columns.flatMap(c => c.shifts.map(s => {
+          const v = d.cells[`${c.key}|${s}`];
+          return `<td class="ctr">${v || '—'}</td>`;
+        })).join('')}
+        <td class="ctr bold navy total-cell">${d.total}</td>
+      </tr>`).join('');
+    return rowsHtml;
+  }).join('');
+
+  const grandTotalRow = `
+    <tr class="grand-total-row">
+      <td class="lft bold" colspan="2">Grand Total</td>
+      ${columns.flatMap(c => c.shifts.map(s => `<td class="ctr bold">${colTotal(c.key, s) || '—'}</td>`)).join('')}
+      <td class="ctr bold navy">${grandTotal}</td>
+    </tr>`;
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; color:#1e293b; margin:0; padding:24px 28px; font-size:9.5pt; }
+  .header { display:flex; align-items:center; border-bottom:3px solid #1B3A6B; padding-bottom:10px; margin-bottom:16px; }
+  .header img { height:46px; margin-right:16px; }
+  .header-center { flex:1; text-align:center; }
+  .company-name { font-size:8pt; font-weight:700; letter-spacing:2px; color:#555; }
+  .report-title { font-size:16pt; font-weight:800; color:#1B3A6B; letter-spacing:0.5px; margin:2px 0; }
+  .project-line { font-size:8.5pt; color:#555; }
+  .header-right { text-align:right; font-size:7.5pt; color:#444; line-height:1.6; white-space:nowrap; }
+  .header-right .badge { display:inline-block; background:#1B3A6B; color:#fff; font-weight:800; font-size:9pt; padding:3px 10px; border-radius:3px; margin-top:2px; }
+  .section-title { font-size:9.5pt; font-weight:800; color:#1B3A6B; letter-spacing:0.5px; text-transform:uppercase; margin:14px 0 6px; }
+  table { width:100%; border-collapse:collapse; margin-bottom:4px; }
+  th, td { border:1px solid #cbd5e1; padding:4px 8px; font-size:8.5pt; }
+  th { background:#1B3A6B; color:#fff; font-weight:700; text-align:left; text-transform:uppercase; font-size:7.5pt; letter-spacing:0.3px; }
+  th.sub { font-size:7pt; background:#2c4d82; }
+  td.lft { text-align:left; }
+  td.ctr, th.ctr { text-align:center; }
+  td.bold { font-weight:700; }
+  td.navy { color:#1B3A6B; }
+  tbody tr:nth-child(even) td { background:#F3F6FB; }
+  .company-cell { background:#EEF2FF !important; vertical-align:top; }
+  .total-cell { background:#DBEAFE !important; }
+  .grand-total-row td { background:#E8EEF7 !important; border-top:2px solid #1B3A6B; font-size:9pt; }
+  .sig-section { margin-top:36px; page-break-inside:avoid; }
+  .sig-row { display:flex; justify-content:space-between; gap:16px; }
+  .sig-col { flex:1; text-align:center; }
+  .sig-line { border-bottom:1.5px solid #333; height:34px; margin-bottom:6px; }
+  .sig-role { font-size:8pt; font-weight:700; color:#1B3A6B; }
+  .sig-name { font-size:7.5pt; color:#555; margin-top:2px; }
+  .sig-date { font-size:7.5pt; color:#888; margin-top:2px; }
+  .footer-note { text-align:center; margin-top:14px; padding-top:10px; border-top:1px solid #e2e8f0; font-size:7pt; color:#94a3b8; }
+</style></head>
+<body>
+
+  <div class="header">
+    <img src="${LOGO_SRC}" alt="BCIM" />
+    <div class="header-center">
+      <div class="company-name">${escapeHtml(companyName.toUpperCase())}</div>
+      <div class="report-title">OVERALL DAILY MANPOWER REPORT</div>
+      <div class="project-line">PROJECT: ${escapeHtml(projectName.toUpperCase())}</div>
+    </div>
+    <div class="header-right">
+      REPORT DATE: ${reportDateShort}<br>
+      PRINTED: ${printedAt}<br>
+      <span class="badge">TOTAL PRESENT: ${grandTotal}</span>
+    </div>
+  </div>
+
+  <div class="section-title">Company-wise Present Summary</div>
+  <table>
+    <thead><tr>
+      <th class="lft">Company / Contractor</th>
+      <th class="ctr">No. of Designations</th>
+      <th class="ctr">Total Present</th>
+      <th class="ctr">% of Total</th>
+    </tr></thead>
+    <tbody>
+      ${summaryRows}
+      <tr class="grand-total-row">
+        <td class="lft bold">Grand Total</td>
+        <td class="ctr bold">${companySummary.reduce((s, c) => s + c.designations, 0)}</td>
+        <td class="ctr bold navy">${grandTotal}</td>
+        <td class="ctr bold">100%</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="section-title">Detailed Manpower — Site &times; Shift</div>
+  <table>
+    <thead>
+      <tr>${pivotHeaderTop}</tr>
+      <tr>${pivotHeaderSub}</tr>
+    </thead>
+    <tbody>
+      ${pivotBody}
+      ${grandTotalRow}
+    </tbody>
+  </table>
+
+  <div class="sig-section">
+    <div class="sig-row">
+      <div class="sig-col"><div class="sig-line"></div><div class="sig-role">PREPARED BY</div><div class="sig-name">HR Executive</div><div class="sig-date">Date: ____________</div></div>
+      <div class="sig-col"><div class="sig-line"></div><div class="sig-role">VERIFIED BY</div><div class="sig-name">HR Manager</div><div class="sig-date">Date: ____________</div></div>
+      <div class="sig-col"><div class="sig-line"></div><div class="sig-role">SITE INCHARGE</div><div class="sig-name">Project Manager</div><div class="sig-date">Date: ____________</div></div>
+      <div class="sig-col"><div class="sig-line"></div><div class="sig-role">APPROVED BY</div><div class="sig-name">Management / Director</div><div class="sig-date">Date: ____________</div></div>
+    </div>
+    <div class="footer-note">SYSTEM-GENERATED REPORT &nbsp;|&nbsp; ${escapeHtml(companyName.toUpperCase())} &nbsp;|&nbsp; ${printedAt}</div>
+  </div>
+
+</body></html>`;
+}
+
+async function buildPdfBuffer({ companyName, projectName, dateStr, dateISO, rows, companySummary, grandTotal }) {
+  const puppeteer = require('puppeteer');
+  const { resolveChromiumPath } = require('./chromium-resolver');
+
+  const pivot = buildPivot(rows, grandTotal);
+  const html = buildPdfHtml({ companyName, projectName, dateStr, dateISO, companySummary, grandTotal, pivot });
+
+  const executablePath = resolveChromiumPath();
+  const browser = await puppeteer.launch({
+    headless: true,
+    executablePath: executablePath || undefined,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
   });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'load' });
+    const buffer = await page.pdf({
+      format: 'A4',
+      landscape: true,
+      printBackground: true,
+      margin: { top: '10mm', bottom: '10mm', left: '8mm', right: '8mm' },
+    });
+    return buffer;
+  } finally {
+    await browser.close();
+  }
 }
 
 // ── Main runner ───────────────────────────────────────────────────────────────
@@ -293,7 +432,7 @@ async function runManpowerClientReport({ date, manual = false, recipients: recip
   }
 
   const html = buildEmailHtml({ companyName, projectName, dateStr, companySummary, grandTotal });
-  const pdfBuffer = await buildPdfBuffer({ companyName, projectName, dateStr, rows, companySummary, grandTotal });
+  const pdfBuffer = await buildPdfBuffer({ companyName, projectName, dateStr, dateISO: targetDate, rows, companySummary, grandTotal });
 
   const subject = `Daily Manpower Report — ${projectName} — ${dateStr}`;
   const attachments = [{
