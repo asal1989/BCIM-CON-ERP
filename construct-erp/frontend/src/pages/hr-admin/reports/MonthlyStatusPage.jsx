@@ -7,6 +7,12 @@ const MONTHS = ['January','February','March','April','May','June','July','August
 const CY = new Date().getFullYear();
 const YEARS = [CY-2, CY-1, CY];
 
+const CATEGORIES = [
+  { value: 'all',    label: 'All (Staff + Labour)' },
+  { value: 'staff',  label: 'Staff only' },
+  { value: 'labour', label: 'Labour / Workers only' },
+];
+
 function daysInMonth(y, m) { return new Date(y, m, 0).getDate(); }
 
 // Returns 0=Sun … 6=Sat for day d in month m (1-based) of year y
@@ -17,14 +23,15 @@ export default function MonthlyStatusPage() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year,  setYear]  = useState(now.getFullYear());
   const [project, setProject] = useState('');
+  const [category, setCategory] = useState('all');
 
   const { data: projects } = useQuery({ queryKey:['projects'], queryFn:()=>projectAPI.list().then(r=>r.data?.data||r.data||[]) });
 
   const days = daysInMonth(year, month);
 
   const { data: apiData, isLoading } = useQuery({
-    queryKey: ['monthly-status', year, month, project],
-    queryFn:  () => hrAttendanceAPI.monthlyReport({ year, month, project_id: project||undefined })
+    queryKey: ['monthly-status', year, month, project, category],
+    queryFn:  () => hrAttendanceAPI.monthlyReport({ year, month, project_id: project||undefined, category })
                     .then(r => r.data || {}),
     enabled: true,
   });
@@ -41,18 +48,24 @@ export default function MonthlyStatusPage() {
     if (dayOfWeek(year, month, d) === 0) sundaySet.add(d);
   }
 
-  // Group by employee — each day holds the raw punch In/Out times
+  // Group by employee — each day holds the raw punch In/Out + status + lateness
   const empMap = {};
   attendanceRows.forEach(row => {
     const key = row.emp_id || row.user_id;
     if (!empMap[key]) empMap[key] = {
       emp_id: row.emp_id, name: row.name,
       designation: row.designation, department: row.department,
+      row_type: row.row_type,
       days: {},
     };
     const d = new Date(row.attendance_date || row.date);
     const day = d.getDate();
-    empMap[key].days[day] = { in: row.in_time || null, out: row.out_time || null };
+    empMap[key].days[day] = {
+      in: row.in_time || null,
+      out: row.out_time || null,
+      status: (row.attendance_status || '').toLowerCase(),
+      lateMin: parseInt(row.late_minutes || 0, 10),
+    };
   });
   const rows = Object.values(empMap);
 
@@ -64,14 +77,33 @@ export default function MonthlyStatusPage() {
     return { color:'#475569' };
   }
 
+  // Resolve cell presentation: background + label override for absent/leave/half-day/late
+  function cellState(p, d) {
+    const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isHoliday = holidaySet.has(dateStr);
+    const isSunday  = sundaySet.has(d);
+    if (isHoliday) return { bg:'#F5F3FF' };
+    if (isSunday)  return { bg:'#FBFCFD' };
+    if (!p) return { bg:undefined };
+    if (p.status === 'absent' || (!p.in && !p.out && !p.status))
+      return { bg:'#FEE2E2', label:'A', labelColor:'#991B1B' };
+    if (p.status === 'leave')
+      return { bg:'#FEF3C7', label:'L', labelColor:'#92400E' };
+    if (p.status === 'half_day')
+      return { bg:'#DBEAFE', label:'HD', labelColor:'#1E40AF' };
+    if (p.lateMin > 0)
+      return { bg:'#FFEDD5', late:true };
+    return { bg:undefined };
+  }
+
   const exportCSV = () => {
     const header = ['Emp ID','Name','Designation','Department'];
-    for (let d = 1; d <= days; d++) header.push(`${d} In`, `${d} Out`);
+    for (let d = 1; d <= days; d++) header.push(`${d} In`, `${d} Out`, `${d} Status`);
     const csvRows = rows.map(r => {
       const row = [r.emp_id, r.name, r.designation||'', r.department||''];
       for (let d = 1; d <= days; d++) {
         const p = r.days[d];
-        row.push(p?.in || '', p?.out || '');
+        row.push(p?.in || '', p?.out || '', p?.status || '');
       }
       return row;
     });
@@ -102,6 +134,9 @@ export default function MonthlyStatusPage() {
         <select value={year} onChange={e=>setYear(+e.target.value)} style={{ border:'1px solid #CBD5E1', borderRadius:6, padding:'5px 10px', fontSize:13 }}>
           {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
+        <select value={category} onChange={e=>setCategory(e.target.value)} style={{ border:'1px solid #CBD5E1', borderRadius:6, padding:'5px 10px', fontSize:13, fontWeight:600, color:'#7C3AED' }}>
+          {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+        </select>
         <select value={project} onChange={e=>setProject(e.target.value)} style={{ border:'1px solid #CBD5E1', borderRadius:6, padding:'5px 10px', fontSize:13 }}>
           <option value=''>All Projects</option>
           {(projects||[]).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -110,6 +145,18 @@ export default function MonthlyStatusPage() {
 
       {/* Legend */}
       <div style={{ display:'flex', gap:12, marginBottom:12, flexWrap:'wrap', fontSize:11 }}>
+        <span style={{ display:'flex', alignItems:'center', gap:5 }}>
+          <span style={{ width:10, height:10, background:'#FEE2E2', border:'1px solid #D9D9D9', display:'inline-block' }} /> Absent
+        </span>
+        <span style={{ display:'flex', alignItems:'center', gap:5 }}>
+          <span style={{ width:10, height:10, background:'#FEF3C7', border:'1px solid #D9D9D9', display:'inline-block' }} /> Leave
+        </span>
+        <span style={{ display:'flex', alignItems:'center', gap:5 }}>
+          <span style={{ width:10, height:10, background:'#FFEDD5', border:'1px solid #D9D9D9', display:'inline-block' }} /> Late-in
+        </span>
+        <span style={{ display:'flex', alignItems:'center', gap:5 }}>
+          <span style={{ width:10, height:10, background:'#DBEAFE', border:'1px solid #D9D9D9', display:'inline-block' }} /> Half day
+        </span>
         <span style={{ display:'flex', alignItems:'center', gap:5 }}>
           <span style={{ width:10, height:10, background:'#F8FAFC', border:'1px solid #D9D9D9', display:'inline-block' }} /> Sunday
         </span>
@@ -175,12 +222,26 @@ export default function MonthlyStatusPage() {
                   {Array.from({length:days},(_,i) => {
                     const d = i+1;
                     const p = r.days[d];
-                    const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-                    const cellBg = holidaySet.has(dateStr) ? '#FBFAFF' : sundaySet.has(d) ? '#FBFCFD' : (idx%2 ? '#FAFAFA' : '#fff');
+                    const cs = cellState(p, d);
+                    const rowBg = idx%2 ? '#FAFAFA' : '#fff';
+                    const bg = cs.bg || rowBg;
+
+                    if (cs.label) {
+                      return (
+                        <td key={d} colSpan={2} style={{ ...tdBase, background: bg, color: cs.labelColor, fontWeight:700 }}>
+                          {cs.label}
+                        </td>
+                      );
+                    }
                     return (
                       <React.Fragment key={d}>
-                        <td style={{ ...tdBase, background: cellBg, color: p?.in ? '#16A34A' : '#CBD5E1' }}>{p?.in || '—'}</td>
-                        <td style={{ ...tdBase, background: cellBg, color: p?.out ? '#DC2626' : '#CBD5E1' }}>{p?.out || '—'}</td>
+                        <td
+                          title={cs.late ? `Late by ${p.lateMin} min` : undefined}
+                          style={{ ...tdBase, background: bg, color: p?.in ? (cs.late ? '#C2410C' : '#16A34A') : '#CBD5E1', fontWeight: cs.late ? 700 : 400 }}
+                        >
+                          {p?.in || '—'}
+                        </td>
+                        <td style={{ ...tdBase, background: bg, color: p?.out ? '#DC2626' : '#CBD5E1' }}>{p?.out || '—'}</td>
                       </React.Fragment>
                     );
                   })}
