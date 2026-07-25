@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hrAttendanceAPI, projectAPI } from '../../../api/client';
 import { Printer, Download, RefreshCw, ChevronRight, LayoutGrid, Building2 } from 'lucide-react';
-import { ReportPrintHeader, ReportPrintSignature } from '../../../components/reports/ReportPrintKit';
 
 const SUMMARY_COLORS = ['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d','#ea580c','#4f46e5'];
 
@@ -11,20 +10,23 @@ const fmtDate = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { d
 
 const PRINT_CSS = `
 @media print {
-  @page { size: A4 landscape; margin: 10mm; }
-  html, body { margin:0 !important; padding:0 !important; background:#fff !important; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
-  nav, header, footer, aside, .no-print,
-  .sidebar, .topbar, .app-header, .app-sidebar,
-  [class*="sidebar"], [class*="Sidebar"], [class*="topbar"], [class*="Topbar"], [class*="navbar"], [class*="Navbar"] {
-    display:none !important; width:0 !important; height:0 !important; overflow:hidden !important;
-  }
-  #mp-print-root { display:block !important; }
-  .mp-table { width:100% !important; border-collapse:collapse !important; font-size:8pt !important; }
-  .mp-table th, .mp-table td { border:1px solid #333 !important; padding:3px 5px !important; }
-  .print-only { display:block !important; }
+  @page { size: A4 landscape; margin: 10mm 8mm; }
+  html, body { margin:0!important; padding:0!important; background:#fff!important; overflow:visible!important; -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }
+  body * { visibility:hidden!important; }
+  #mp-print-root, #mp-print-root * { visibility:visible!important; }
+  #mp-print-root { position:fixed!important; top:0!important; left:0!important; width:100%!important; background:#fff!important; font-family:Arial,Helvetica,sans-serif; font-size:9pt; color:#000; }
+  .mp-print-table { width:100%!important; border-collapse:collapse!important; font-size:8pt!important; }
+  .mp-print-table th { background:#1B3A6B!important; color:#fff!important; padding:4px 6px!important; border:1px solid #1B3A6B!important; font-size:7.5pt!important; font-weight:700!important; -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }
+  .mp-print-table td { padding:3px 6px!important; border:1px solid #bbb!important; vertical-align:middle!important; font-size:8pt!important; }
+  .mp-print-table tr:nth-child(even) td { background:#F3F6FB!important; -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }
+  .mp-print-table tfoot td { background:#E8EEF7!important; font-weight:800!important; -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }
+  .mp-print-company-cell { background:#f0f4fa!important; -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }
+  .mp-print-total-cell { background:#dbeafe!important; color:#1e40af!important; -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }
+  .print-only { display:block!important; }
+  .mp-sig-section { page-break-inside:avoid!important; margin-top:14px!important; }
 }
 @media screen {
-  .print-only { display:none !important; }
+  .print-only { display:none!important; }
 }
 `;
 
@@ -47,6 +49,12 @@ export default function ManpowerReportPage() {
   const columns = data?.columns || [];
   const rows = data?.rows || [];
   const grandTotal = data?.grandTotal || 0;
+
+  const selectedProjectName = useMemo(() => {
+    if (!projectFilter) return 'All Projects';
+    if (projectFilter === 'HEAD_OFFICE') return 'Head Office';
+    return projects.find(p => p.id === projectFilter)?.name || '';
+  }, [projectFilter, projects]);
 
   // Precompute company rowspans for merged-cell rendering
   const rowSpans = useMemo(() => {
@@ -166,18 +174,150 @@ export default function ManpowerReportPage() {
       </div>
 
       <div id="mp-print-root" style={{ padding: 24 }}>
-        <ReportPrintHeader reportTitle="Overall Daily Manpower Report" subtitle={fmtDate(date)} />
+
+        {/* ── PRINT-ONLY HEADER ─────────────────────────────────────────────── */}
+        <div className="print-only" style={{ borderBottom: '3px solid #1B3A6B', paddingBottom: 10, marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <img src="/bcim-logo.png" alt="BCIM Logo" style={{ height: 52, width: 'auto', objectFit: 'contain', flexShrink: 0 }} />
+            <div style={{ flex: 1, textAlign: 'center' }}>
+              <div style={{ fontSize: 8, fontWeight: 600, color: '#555', letterSpacing: 3, textTransform: 'uppercase' }}>BCIM Constructions Pvt. Ltd.</div>
+              <div style={{ fontSize: 16, fontWeight: 900, color: '#1B3A6B', letterSpacing: 0.5, margin: '3px 0' }}>OVERALL DAILY MANPOWER REPORT</div>
+              <div style={{ fontSize: 9, color: '#444', fontWeight: 600 }}>Project: {selectedProjectName}</div>
+            </div>
+            <div style={{ textAlign: 'right', fontSize: 8.5, color: '#444', minWidth: 150, flexShrink: 0 }}>
+              <div style={{ marginBottom: 2 }}><strong>Report Date:</strong> {fmtDate(date)}</div>
+              <div style={{ marginBottom: 6 }}><strong>Printed:</strong> {new Date().toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+              <div style={{ background: '#1B3A6B', color: '#fff', borderRadius: 4, padding: '4px 10px', display: 'inline-block', fontWeight: 800, fontSize: 11 }}>
+                Total Present: {grandTotal}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── PRINT-ONLY BODY: Summary + Detail ────────────────────────────── */}
+        {!isLoading && rows.length > 0 && (
+          <div className="print-only">
+            {/* Company-wise summary */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: '#1B3A6B', textTransform: 'uppercase', letterSpacing: 1, borderBottom: '1.5px solid #1B3A6B', paddingBottom: 3, marginBottom: 6 }}>
+                Company-wise Present Summary
+              </div>
+              <table className="mp-print-table">
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'left', width: '40%' }}>Company / Contractor</th>
+                    <th style={{ textAlign: 'center' }}>No. of Designations</th>
+                    <th style={{ textAlign: 'center' }}>Total Present</th>
+                    <th style={{ textAlign: 'center' }}>% of Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {companySummary.map((c, i) => (
+                    <tr key={c.company}>
+                      <td style={{ fontWeight: 700 }}>{c.company}</td>
+                      <td style={{ textAlign: 'center', color: '#555' }}>{c.designations}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 800, color: '#1B3A6B' }}>{c.total}</td>
+                      <td style={{ textAlign: 'center' }}>{grandTotal ? `${((c.total / grandTotal) * 100).toFixed(1)}%` : '0%'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td style={{ fontWeight: 800 }}>Grand Total</td>
+                    <td style={{ textAlign: 'center', fontWeight: 800 }}>{companySummary.reduce((s, c) => s + c.designations, 0)}</td>
+                    <td style={{ textAlign: 'center', fontWeight: 900, color: '#1B3A6B' }}>{grandTotal}</td>
+                    <td style={{ textAlign: 'center', fontWeight: 800 }}>100%</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {/* Site × Shift detail */}
+            {columns.length > 0 && (
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: '#1B3A6B', textTransform: 'uppercase', letterSpacing: 1, borderBottom: '1.5px solid #1B3A6B', paddingBottom: 3, marginBottom: 6 }}>
+                  Detailed Manpower — Site × Shift
+                </div>
+                <table className="mp-print-table">
+                  <thead>
+                    <tr>
+                      <th rowSpan={2} style={{ textAlign: 'left', width: '14%' }}>Company</th>
+                      <th rowSpan={2} style={{ textAlign: 'left', width: '18%' }}>Designation</th>
+                      {columns.map(c => (
+                        <th key={c.key} colSpan={c.shifts.length} style={{ textAlign: 'center' }}>{c.label}</th>
+                      ))}
+                      <th rowSpan={2} style={{ textAlign: 'center' }}>Total</th>
+                    </tr>
+                    <tr>
+                      {columns.map(c => c.shifts.map(s => (
+                        <th key={`${c.key}-${s}`} style={{ textAlign: 'center', background: '#2d5fa6' }}>{s}</th>
+                      )))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r, i) => (
+                      <tr key={i}>
+                        {rowSpans[i] !== undefined && (
+                          <td className="mp-print-company-cell" style={{ fontWeight: 700, verticalAlign: 'top' }} rowSpan={rowSpans[i]}>
+                            {r.company}
+                          </td>
+                        )}
+                        <td style={{ textAlign: 'left' }}>{r.designation}</td>
+                        {columns.map(c => c.shifts.map(s => {
+                          const v = r.cells[`${c.key}|${s}`];
+                          return <td key={`${c.key}-${s}`} style={{ textAlign: 'center', color: v ? '#000' : '#ccc', fontWeight: v ? 700 : 400 }}>{v || '—'}</td>;
+                        }))}
+                        <td className="mp-print-total-cell" style={{ textAlign: 'center', fontWeight: 800 }}>{r.total}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colSpan={2} style={{ textAlign: 'right', fontWeight: 800 }}>Grand Total</td>
+                      {columns.map(c => c.shifts.map(s => (
+                        <td key={`${c.key}-${s}-t`} style={{ textAlign: 'center', fontWeight: 800 }}>{colTotal(c.key, s) || '—'}</td>
+                      )))}
+                      <td style={{ textAlign: 'center', fontWeight: 900, color: '#1B3A6B' }}>{grandTotal}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+
+            {/* Signature section */}
+            <div className="mp-sig-section" style={{ marginTop: 20, borderTop: '1px solid #ccc', paddingTop: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+                {['Prepared By\nHR Executive', 'Verified By\nHR Manager', 'Site Incharge\nProject Manager', 'Approved By\nManagement / Director'].map(s => {
+                  const [role, name] = s.split('\n');
+                  return (
+                    <div key={role} style={{ flex: 1, textAlign: 'center' }}>
+                      <div style={{ borderBottom: '1.5px solid #333', marginBottom: 6, height: 36 }} />
+                      <div style={{ fontSize: 8, fontWeight: 700, color: '#1B3A6B' }}>{role}</div>
+                      <div style={{ fontSize: 7.5, color: '#555', marginTop: 2 }}>{name}</div>
+                      <div style={{ fontSize: 7.5, color: '#888', marginTop: 2 }}>Date: ___________</div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ textAlign: 'center', marginTop: 8, fontSize: 7, color: '#aaa' }}>
+                System-generated report &nbsp;|&nbsp; BCIM Constructions Pvt. Ltd. &nbsp;|&nbsp; {new Date().toLocaleString('en-IN')}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── SCREEN CONTENT (hidden on print) ──────────────────────────────── */}
         {isLoading ? (
-          <div style={{ textAlign: 'center', padding: 56, color: '#9ca3af' }}>Loading manpower data…</div>
+          <div className="no-print" style={{ textAlign: 'center', padding: 56, color: '#9ca3af' }}>Loading manpower data…</div>
         ) : rows.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 56, color: '#9ca3af', background: '#fff', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+          <div className="no-print" style={{ textAlign: 'center', padding: 56, color: '#9ca3af', background: '#fff', borderRadius: 10, border: '1px solid #e5e7eb' }}>
             No "present" attendance records found for {fmtDate(date)}.<br />
-            <span style={{ fontSize: 12 }}>This report is built from Site/Shift data on attendance records — make sure the day's muster has been recorded.</span>
+            <span style={{ fontSize: 12 }}>Make sure the day's muster has been recorded.</span>
           </div>
         ) : tab === 'summary' ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 480px) 1fr', gap: 20, alignItems: 'start' }}>
+          <div className="no-print" style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 480px) 1fr', gap: 20, alignItems: 'start' }}>
             <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-              <table className="mp-table" style={{ borderCollapse: 'collapse', width: '100%' }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%' }}>
                 <thead>
                   <tr>
                     <th style={{ ...th, textAlign: 'left' }}>Company</th>
@@ -209,14 +349,11 @@ export default function ManpowerReportPage() {
                 </tfoot>
               </table>
             </div>
-
-            {/* Horizontal bar visualization */}
             <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #e5e7eb', padding: 20 }}>
               <p style={{ margin: '0 0 16px', fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Headcount by Company</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {companySummary.map((c, i) => {
                   const pct = grandTotal ? (c.total / grandTotal) * 100 : 0;
-                  const color = SUMMARY_COLORS[i % SUMMARY_COLORS.length];
                   return (
                     <div key={c.company}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 12.5 }}>
@@ -224,7 +361,7 @@ export default function ManpowerReportPage() {
                         <span style={{ fontWeight: 800, color: '#1e293b' }}>{c.total}</span>
                       </div>
                       <div style={{ height: 10, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 99, transition: 'width 0.4s' }} />
+                        <div style={{ height: '100%', width: `${pct}%`, background: SUMMARY_COLORS[i % SUMMARY_COLORS.length], borderRadius: 99, transition: 'width 0.4s' }} />
                       </div>
                     </div>
                   );
@@ -233,8 +370,8 @@ export default function ManpowerReportPage() {
             </div>
           </div>
         ) : (
-          <div style={{ overflowX: 'auto', background: '#fff', borderRadius: 10, border: '1px solid #e5e7eb' }}>
-            <table className="mp-table" style={{ borderCollapse: 'collapse', width: '100%' }}>
+          <div className="no-print" style={{ overflowX: 'auto', background: '#fff', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%' }}>
               <thead>
                 <tr>
                   <th style={{ ...th, minWidth: 140 }} rowSpan={2}>Company</th>
@@ -283,7 +420,6 @@ export default function ManpowerReportPage() {
             </table>
           </div>
         )}
-        {!isLoading && rows.length > 0 && <ReportPrintSignature />}
       </div>
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
