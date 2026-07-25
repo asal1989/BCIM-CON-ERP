@@ -596,6 +596,8 @@ router.get('/timesheet-report', async (req, res) => {
           CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
                THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END) AS company,
         ep.trade                            AS trade,
+        COALESCE(proj.name, 'Head Office')  AS project_name,
+        COALESCE(proj.id::text, 'HEAD_OFFICE') AS project_id,
         COALESCE(a.status, '${noRecordStatus}') AS attendance_status,
         TO_CHAR(a.in_time,  'HH12:MI AM')  AS in_time,
         TO_CHAR(a.out_time, 'HH12:MI AM')  AS out_time,
@@ -621,6 +623,7 @@ router.get('/timesheet-report', async (req, res) => {
       LEFT JOIN employee_profiles ep   ON ep.user_id = u.id
       LEFT JOIN hr_departments dep     ON dep.id = ep.department_id
       LEFT JOIN hr_designations des    ON des.id = ep.designation_id
+      LEFT JOIN projects proj          ON proj.id = ep.project_id
       LEFT JOIN hr_attendance a        ON a.user_id = u.id
                                      AND a.attendance_date = $2
                                      AND a.company_id = $1
@@ -630,7 +633,7 @@ router.get('/timesheet-report', async (req, res) => {
         ${categoryFilter}
         ${deptFilter}
         ${projectFilter}
-      ORDER BY dep.name NULLS LAST, u.name
+      ORDER BY proj.name NULLS LAST, dep.name NULLS LAST, u.name
     `, staffParams)).rows;
 
     // ── SC Workers (Labour) query ─────────────────────────────────────────────
@@ -653,6 +656,8 @@ router.get('/timesheet-report', async (req, res) => {
           'CIVIL'                             AS department,
           sc.name                             AS company,
           w.skill_type                        AS trade,
+          COALESCE(p.name, 'Head Office')        AS project_name,
+          COALESCE(p.id::text, 'HEAD_OFFICE')    AS project_id,
           COALESCE(a.status, '${noRecordStatus}') AS attendance_status,
           TO_CHAR(a.in_time,  'HH12:MI AM')      AS in_time,
           TO_CHAR(a.out_time, 'HH12:MI AM')      AS out_time,

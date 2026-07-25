@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hrAttendanceAPI, projectAPI } from '../../../api/client';
 import { Download, Printer, ClipboardList } from 'lucide-react';
@@ -67,9 +67,26 @@ export default function DailyAttendanceReportPage() {
   const totalLate = lateRows.reduce((s,r)=>s+(r.late_minutes||0),0);
   const avgLate  = lateRows.length>0 ? Math.round(totalLate/lateRows.length) : 0;
 
+  // Group rows by project (Head Office included as its own group) so the
+  // report reads as one section per project instead of one flat mixed list.
+  const projectGroups = useMemo(() => {
+    const map = new Map();
+    rows.forEach(r => {
+      const key = r.project_name || 'Head Office';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(r);
+    });
+    // Head Office last, everything else alphabetical
+    return [...map.entries()].sort(([a], [b]) => {
+      if (a === 'Head Office') return 1;
+      if (b === 'Head Office') return -1;
+      return a.localeCompare(b);
+    });
+  }, [rows]);
+
   const exportCSV = () => {
-    const header = ['Emp ID','Name','Designation','Department','Status','In Time','Out Time','Late (min)','Source'];
-    const csvRows = rows.map(r=>[r.emp_id||'',r.name||'',r.designation||'',r.department||'',r.attendance_status||r.status||'',r.in_time||'',r.out_time||'',r.late_minutes||0,r.source||'']);
+    const header = ['Project','Emp ID','Name','Designation','Department','Status','In Time','Out Time','Late (min)','Source'];
+    const csvRows = rows.map(r=>[r.project_name||'Head Office',r.emp_id||'',r.name||'',r.designation||'',r.department||'',r.attendance_status||r.status||'',r.in_time||'',r.out_time||'',r.late_minutes||0,r.source||'']);
     const csv = [header,...csvRows].map(r=>r.join(',')).join('\n');
     const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.download=`daily-attendance-${date}.csv`; a.click();
   };
@@ -161,37 +178,56 @@ export default function DailyAttendanceReportPage() {
         )}
       </div>
 
-      <div id="dar-table-wrap" style={{ overflowX:'auto', background:'#fff', borderRadius:8, border:'1px solid #E2E8F0' }}>
+      <div id="dar-table-wrap" style={{ display:'flex', flexDirection:'column', gap:14 }}>
         {isLoading ? (
-          <div style={{ textAlign:'center', padding:'40px', color:'#94A3B8' }}>Loading...</div>
+          <div style={{ textAlign:'center', padding:'40px', color:'#94A3B8', background:'#fff', borderRadius:8, border:'1px solid #E2E8F0' }}>Loading...</div>
         ) : rows.length === 0 ? (
-          <div style={{ textAlign:'center', padding:'40px', color:'#94A3B8' }}>No attendance data for {date}</div>
-        ) : (
-          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-            <thead>
-              <tr style={{ background:'#F8FAFC', borderBottom:'2px solid #E2E8F0' }}>
-                {['#','Emp ID','Name','Designation','Department','Status','In Time','Out Time','Late (min)'].map(h=>(
-                  <th key={h} style={{ padding:'9px 12px', textAlign: ['In Time','Out Time','Late (min)','Status'].includes(h)?'center':'left', fontWeight:700, color:'#475569', whiteSpace:'nowrap' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r,i)=>(
-                <tr key={i} style={{ borderBottom:'1px solid #F1F5F9' }}>
-                  <td style={{ padding:'7px 12px', color:'#94A3B8', fontSize:11 }}>{i+1}</td>
-                  <td style={{ padding:'7px 12px', color:'#64748B', fontFamily:'monospace' }}>{r.emp_id||'-'}</td>
-                  <td style={{ padding:'7px 12px', fontWeight:600, color:'#1E293B', whiteSpace:'nowrap' }}>{r.name||'-'}</td>
-                  <td style={{ padding:'7px 12px', color:'#64748B' }}>{r.designation||'-'}</td>
-                  <td style={{ padding:'7px 12px', color:'#64748B' }}>{r.department||'-'}</td>
-                  <td style={{ padding:'7px 12px', textAlign:'center' }}><Pill s={r.attendance_status||r.status} /></td>
-                  <td style={{ padding:'7px 12px', textAlign:'center', color:'#475569', fontFamily:'monospace' }}>{r.in_time||'-'}</td>
-                  <td style={{ padding:'7px 12px', textAlign:'center', color:'#475569', fontFamily:'monospace' }}>{r.out_time||'-'}</td>
-                  <td style={{ padding:'7px 12px', textAlign:'center', color:(r.late_minutes||0)>0?'#DC2626':'#94A3B8', fontWeight:(r.late_minutes||0)>0?700:400 }}>{r.late_minutes||0}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+          <div style={{ textAlign:'center', padding:'40px', color:'#94A3B8', background:'#fff', borderRadius:8, border:'1px solid #E2E8F0' }}>No attendance data for {date}</div>
+        ) : projectGroups.map(([projName, pRows]) => {
+          const pPresent = pRows.filter(r=>(r.attendance_status||r.status||'').toLowerCase()==='present').length;
+          const pAbsent  = pRows.filter(r=>(r.attendance_status||r.status||'').toLowerCase()==='absent').length;
+          const isHO = projName === 'Head Office';
+          return (
+            <div key={projName} style={{ overflowX:'auto', background:'#fff', borderRadius:8, border:'1px solid #E2E8F0' }}>
+              <div style={{
+                display:'flex', alignItems:'center', justifyContent:'space-between',
+                padding:'9px 14px', background: isHO ? '#EEF2FF' : '#F5F3FF',
+                borderBottom:'1px solid #E2E8F0', borderRadius:'8px 8px 0 0',
+              }}>
+                <span style={{ fontWeight:800, fontSize:13, color: isHO ? '#3730A3' : '#5B21B6' }}>
+                  {isHO ? '🏢 ' : '📍 '}{projName}
+                </span>
+                <span style={{ fontSize:11.5, color:'#64748B', fontWeight:600 }}>
+                  {pRows.length} total &nbsp;·&nbsp; <span style={{ color:'#059669' }}>{pPresent} present</span> &nbsp;·&nbsp; <span style={{ color:'#DC2626' }}>{pAbsent} absent</span>
+                </span>
+              </div>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+                <thead>
+                  <tr style={{ background:'#F8FAFC', borderBottom:'2px solid #E2E8F0' }}>
+                    {['#','Emp ID','Name','Designation','Department','Status','In Time','Out Time','Late (min)'].map(h=>(
+                      <th key={h} style={{ padding:'9px 12px', textAlign: ['In Time','Out Time','Late (min)','Status'].includes(h)?'center':'left', fontWeight:700, color:'#475569', whiteSpace:'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {pRows.map((r,i)=>(
+                    <tr key={i} style={{ borderBottom:'1px solid #F1F5F9' }}>
+                      <td style={{ padding:'7px 12px', color:'#94A3B8', fontSize:11 }}>{i+1}</td>
+                      <td style={{ padding:'7px 12px', color:'#64748B', fontFamily:'monospace' }}>{r.emp_id||'-'}</td>
+                      <td style={{ padding:'7px 12px', fontWeight:600, color:'#1E293B', whiteSpace:'nowrap' }}>{r.name||'-'}</td>
+                      <td style={{ padding:'7px 12px', color:'#64748B' }}>{r.designation||'-'}</td>
+                      <td style={{ padding:'7px 12px', color:'#64748B' }}>{r.department||'-'}</td>
+                      <td style={{ padding:'7px 12px', textAlign:'center' }}><Pill s={r.attendance_status||r.status} /></td>
+                      <td style={{ padding:'7px 12px', textAlign:'center', color:'#475569', fontFamily:'monospace' }}>{r.in_time||'-'}</td>
+                      <td style={{ padding:'7px 12px', textAlign:'center', color:'#475569', fontFamily:'monospace' }}>{r.out_time||'-'}</td>
+                      <td style={{ padding:'7px 12px', textAlign:'center', color:(r.late_minutes||0)>0?'#DC2626':'#94A3B8', fontWeight:(r.late_minutes||0)>0?700:400 }}>{r.late_minutes||0}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })}
       </div>
 
       {/* Signature section (print only) */}
