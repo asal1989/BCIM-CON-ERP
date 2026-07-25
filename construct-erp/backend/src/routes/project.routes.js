@@ -14,6 +14,7 @@ runSchemaInit('projects_extra_columns', async () => {
   await query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS business_unit  VARCHAR(100)`);
   await query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS gst_applicable VARCHAR(10)  DEFAULT 'yes'`);
   await query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS notes          TEXT`);
+  await query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS company_name   VARCHAR(200)`);
 });
 
 router.use(authenticate);

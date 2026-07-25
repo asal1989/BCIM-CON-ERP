@@ -232,7 +232,7 @@ const createProject = async (req, res) => {
       rera_number, nhai_contract, contract_value,
       start_date, end_date,
       project_manager_id, site_engineer_id, qs_engineer_id,
-      gst_type, category, currency, award_date, business_unit, gst_applicable, notes,
+      gst_type, category, currency, award_date, business_unit, gst_applicable, notes, company_name,
     } = req.body;
 
     const result = await query(
@@ -244,8 +244,8 @@ const createProject = async (req, res) => {
         start_date, end_date,
         project_manager_id, site_engineer_id, qs_engineer_id,
         gst_type, status,
-        category, currency, award_date, business_unit, gst_applicable, notes
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,'active',$21,$22,$23,$24,$25,$26)
+        category, currency, award_date, business_unit, gst_applicable, notes, company_name
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,'active',$21,$22,$23,$24,$25,$26,$27)
       RETURNING *`,
       [
         req.user.company_id, project_code, name, type, description,
@@ -256,7 +256,7 @@ const createProject = async (req, res) => {
         project_manager_id, site_engineer_id, qs_engineer_id,
         gst_type || 'intra',
         category || null, currency || 'INR', award_date || null,
-        business_unit || null, gst_applicable || 'yes', notes || null,
+        business_unit || null, gst_applicable || 'yes', notes || null, company_name || null,
       ]
     );
     res.status(201).json({ message: 'Project created successfully.', data: result.rows[0] });
@@ -273,7 +273,7 @@ const updateProject = async (req, res) => {
       'location', 'city', 'state', 'contract_value', 'start_date', 'end_date',
       'project_manager_id', 'site_engineer_id', 'qs_engineer_id',
       'status', 'progress_pct', 'gst_type', 'rera_number', 'client_advance_received',
-      'category', 'currency', 'award_date', 'business_unit', 'gst_applicable', 'notes'];
+      'category', 'currency', 'award_date', 'business_unit', 'gst_applicable', 'notes', 'company_name'];
 
     const updates = [];
     const params = [];

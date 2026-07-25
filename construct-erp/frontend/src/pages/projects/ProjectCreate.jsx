@@ -10,8 +10,8 @@ import api from '../../api/client';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
 import {
-  ArrowLeft, Save, Building2, ChevronRight, Image, TrendingUp,
-  Clock, AlertTriangle, IndianRupee, Users, Plus, Trash2, User,
+  ArrowLeft, Save, Building2, ChevronRight, Image, MapPin,
+  Plus, Trash2, Pencil, Home, Upload,
 } from 'lucide-react';
 
 const schema = z.object({
@@ -34,6 +34,7 @@ const schema = z.object({
   gst_type:             z.enum(['intra','inter']).optional(),
   gst_applicable:       z.string().optional(),
   business_unit:        z.string().optional(),
+  company_name:         z.string().optional(),
   description:          z.string().optional(),
   notes:                z.string().optional(),
   status:               z.string().optional(),
@@ -54,14 +55,15 @@ const INDIAN_STATES = [
 const TABS = ['Basic Details', 'Additional Details', 'Financial Details', 'Notes'];
 
 const inp = {
-  base: { width: '100%', padding: '7px 10px', border: '1px solid #e2e8f0', borderRadius: 7, fontSize: 12, color: '#0f172a', outline: 'none', background: '#fff', boxSizing: 'border-box', transition: 'border-color 0.15s' },
+  base: { width: '100%', padding: '9px 12px', border: '1px solid #dbe2ea', borderRadius: 8, fontSize: 13, color: '#1e293b', outline: 'none', background: '#fff', boxSizing: 'border-box', transition: 'border-color 0.15s' },
 };
-const lbl = { fontSize: 11, fontWeight: 600, color: '#475569', marginBottom: 4, display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em' };
+const lbl = { fontSize: 12, fontWeight: 500, color: '#475569', marginBottom: 6, display: 'block' };
 const err = { fontSize: 10, color: '#ef4444', marginTop: 2 };
+const REQ = <span style={{ color: '#ef4444' }}> *</span>;
 
 function F({ label, error, children, span }) {
   return (
-    <div style={{ gridColumn: span === 2 ? '1 / -1' : undefined }}>
+    <div style={{ gridColumn: span === 3 ? '1 / -1' : span === 2 ? 'span 2' : undefined }}>
       {label && <label style={lbl}>{label}</label>}
       {children}
       {error && <p style={err}>{error}</p>}
@@ -72,9 +74,7 @@ function F({ label, error, children, span }) {
 function crore(v) {
   const n = parseFloat(v || 0);
   if (!n) return '₹0';
-  if (n >= 1e7) return `₹${(n / 1e7).toFixed(2)} Cr`;
-  if (n >= 1e5) return `₹${(n / 1e5).toFixed(2)} L`;
-  return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+  return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 }
 
 function timeElapsed(start, end) {
@@ -92,16 +92,26 @@ function delayDays(end, status) {
   return now.isAfter(e) ? now.diff(e, 'day') : 0;
 }
 
-function ProgressRow({ label, value, color }) {
+function StatusBadge({ value, tone }) {
+  const tones = {
+    green:  { bg: '#dcfce7', text: '#16a34a' },
+    amber:  { bg: '#fef3c7', text: '#b45309' },
+    red:    { bg: '#fee2e2', text: '#dc2626' },
+    blue:   { bg: '#dbeafe', text: '#2563eb' },
+  };
+  const c = tones[tone] || tones.blue;
   return (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-        <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>{label}</span>
-        <span style={{ fontSize: 11, fontWeight: 800, color }}>{value}%</span>
-      </div>
-      <div style={{ height: 6, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${Math.min(100, value)}%`, background: color, borderRadius: 99, transition: 'width 0.4s' }} />
-      </div>
+    <span style={{ padding: '3px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700, background: c.bg, color: c.text }}>
+      {value}
+    </span>
+  );
+}
+
+function StatusRow({ label, value, tone }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid #f1f5f9' }}>
+      <span style={{ fontSize: 13, color: '#475569' }}>{label}</span>
+      <StatusBadge value={value} tone={tone} />
     </div>
   );
 }
@@ -112,6 +122,7 @@ export default function ProjectCreate() {
   const isEdit = !!id;
   const qc = useQueryClient();
   const [tab, setTab] = useState(0);
+  const [imgPreview, setImgPreview] = useState(null);
 
   const { data: project, isLoading: projLoading } = useQuery({
     queryKey: ['project', id],
@@ -130,6 +141,10 @@ export default function ProjectCreate() {
   });
 
   const watchedValues = watch();
+
+  // Project Members (Key Personnel) — separate list, independent of PM/SE/QS single-select fields
+  const [members, setMembers] = useState([]);
+  const [memberDraft, setMemberDraft] = useState(null); // { role, user_id } while adding/editing
 
   useEffect(() => {
     if (isEdit && project?.id) {
@@ -154,6 +169,7 @@ export default function ProjectCreate() {
         gst_type:           project.gst_type || 'intra',
         gst_applicable:     project.gst_applicable || 'yes',
         business_unit:      project.business_unit || '',
+        company_name:       project.company_name || '',
         description:        project.description || '',
         notes:              project.notes || '',
         status:             project.status || 'active',
@@ -164,6 +180,21 @@ export default function ProjectCreate() {
       });
     }
   }, [project, isEdit, reset]);
+
+  // Seed the members table from PM / SE / QS whenever those fields or the user list change
+  useEffect(() => {
+    if (!allUsers.length) return;
+    const seeded = [
+      watchedValues.project_manager_id && { role: 'Project Manager', user_id: watchedValues.project_manager_id },
+      watchedValues.site_engineer_id   && { role: 'Site Engineer',   user_id: watchedValues.site_engineer_id },
+      watchedValues.qs_engineer_id     && { role: 'QS Engineer',     user_id: watchedValues.qs_engineer_id },
+    ].filter(Boolean);
+    setMembers(prev => {
+      const extra = prev.filter(m => !['Project Manager','Site Engineer','QS Engineer'].includes(m.role));
+      return [...seeded, ...extra];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedValues.project_manager_id, watchedValues.site_engineer_id, watchedValues.qs_engineer_id, allUsers.length]);
 
   const mutation = useMutation({
     mutationFn: (data) => {
@@ -190,103 +221,129 @@ export default function ProjectCreate() {
 
   if (isEdit && projLoading) {
     return (
-      <div style={{ padding: 32, maxWidth: 900, margin: '0 auto' }}>
+      <div style={{ padding: 32, maxWidth: 1100, margin: '0 auto' }}>
         {[1,2,3].map(n => <div key={n} style={{ height: 120, background: '#f1f5f9', borderRadius: 12, marginBottom: 12, animation: 'pulse 1.5s infinite' }} />)}
       </div>
     );
   }
 
-  // Project Status panel computed values
   const progress  = parseFloat(watchedValues.progress_pct || 0);
   const elapsed   = timeElapsed(watchedValues.start_date, watchedValues.end_date);
   const delayD    = delayDays(watchedValues.end_date, watchedValues.status);
-  const pmUser    = allUsers.find(u => u.id === watchedValues.project_manager_id);
-  const seUser    = allUsers.find(u => u.id === watchedValues.site_engineer_id);
-  const qsUser    = allUsers.find(u => u.id === watchedValues.qs_engineer_id);
+  const contractV = parseFloat(watchedValues.contract_value || 0);
+  const spentV    = contractV * (progress / 100) * 0.9; // approximation until Accounts module wired
+  const budgetUtil = contractV > 0 ? Math.min(100, Math.round((spentV / contractV) * 100)) : 0;
+  const billingProgress = Math.min(100, Math.round(progress * 0.8));
 
-  const teamMembers = [
-    pmUser && { role: 'Project Manager', user: pmUser, field: 'project_manager_id' },
-    seUser && { role: 'Site Engineer',   user: seUser, field: 'site_engineer_id' },
-    qsUser && { role: 'QS Engineer',     user: qsUser, field: 'qs_engineer_id' },
-  ].filter(Boolean);
+  const statusTone = {
+    active: 'green', planning: 'blue', delayed: 'red', on_hold: 'amber', completed: 'green',
+  }[watchedValues.status] || 'blue';
 
-  const statusColor = {
-    active: '#22c55e', planning: '#3b82f6', delayed: '#ef4444', on_hold: '#94a3b8', completed: '#14b8a6',
-  }[watchedValues.status] || '#3b82f6';
+  const handleImagePick = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setImgPreview(reader.result);
+    reader.readAsDataURL(file);
+  };
+
+  const addMemberRow = () => {
+    setMemberDraft({ role: '', user_id: '', isNew: true, idx: members.length });
+    setMembers(prev => [...prev, { role: '', user_id: '' }]);
+  };
+  const removeMemberRow = (idx) => {
+    setMembers(prev => prev.filter((_, i) => i !== idx));
+    if (memberDraft?.idx === idx) setMemberDraft(null);
+  };
+  const updateMemberRow = (idx, field, value) => {
+    setMembers(prev => prev.map((m, i) => i === idx ? { ...m, [field]: value } : m));
+  };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f1f5f9' }}>
-      {/* Breadcrumb bar */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '10px 24px' }}>
+    <div style={{ minHeight: '100vh', background: '#f4f6f9' }}>
+      {/* Breadcrumb / title bar */}
+      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '16px 28px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#94a3b8' }}>
-            <span style={{ cursor: 'pointer', color: '#64748b' }} onClick={() => navigate('/projects')}>Projects</span>
-            <ChevronRight size={13} />
-            <span style={{ cursor: 'pointer', color: '#64748b' }} onClick={() => navigate('/projects')}>Project Master</span>
-            <ChevronRight size={13} />
-            <span style={{ fontWeight: 600, color: '#0f172a' }}>{isEdit ? (project?.name || 'Edit Project') : 'New Project'}</span>
+          <div>
+            <h1 style={{ fontSize: 21, fontWeight: 700, color: '#0f172a', margin: '0 0 4px' }}>Project Master</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: '#94a3b8' }}>
+              <Home size={12} />
+              <span style={{ cursor: 'pointer' }} onClick={() => navigate('/dashboard')}>Home</span>
+              <ChevronRight size={12} />
+              <span style={{ cursor: 'pointer' }} onClick={() => navigate('/projects')}>Projects</span>
+              <ChevronRight size={12} />
+              <span style={{ fontWeight: 600, color: '#334155' }}>Project Master</span>
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 10 }}>
             <button
               type="button"
               onClick={() => navigate(-1)}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', border: '1px solid #e2e8f0', borderRadius: 7, background: '#fff', fontSize: 12, color: '#475569', cursor: 'pointer', fontWeight: 600 }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', border: '1px solid #dbe2ea', borderRadius: 8, background: '#fff', fontSize: 13, color: '#475569', cursor: 'pointer', fontWeight: 600 }}
             >
-              <ArrowLeft size={13} /> Back
+              <ArrowLeft size={14} /> Back
             </button>
-            {!isEdit && (
-              <button
-                type="button"
-                onClick={() => reset()}
-                style={{ padding: '6px 14px', border: '1px solid #e2e8f0', borderRadius: 7, background: '#fff', fontSize: 12, color: '#475569', cursor: 'pointer', fontWeight: 600 }}
-              >
-                Clear
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => reset()}
+              style={{ padding: '9px 16px', border: '1px solid #dbe2ea', borderRadius: 8, background: '#fff', fontSize: 13, color: '#475569', cursor: 'pointer', fontWeight: 600 }}
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/projects/new')}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 8, background: '#2563eb', border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+            >
+              <Plus size={14} /> New Project
+            </button>
           </div>
         </div>
       </div>
 
       <form onSubmit={handleSubmit(mutation.mutate)}>
-        <div style={{ padding: '20px 24px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 16, alignItems: 'start' }}>
+        <div style={{ padding: '20px 28px', maxWidth: 1440, margin: '0 auto' }}>
 
-            {/* LEFT: Tabbed form */}
-            <div>
-              {/* Tab Header */}
-              <div style={{ background: '#fff', borderRadius: '12px 12px 0 0', border: '1px solid #e2e8f0', borderBottom: 'none', display: 'flex' }}>
+          {/* Project Information card */}
+          <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', marginBottom: 16 }}>
+            <div style={{ padding: '16px 22px 0' }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: '0 0 14px' }}>Project Information</h2>
+              {/* Tabs */}
+              <div style={{ display: 'flex', gap: 24, borderBottom: '1px solid #e2e8f0' }}>
                 {TABS.map((t, i) => (
                   <button
                     key={t}
                     type="button"
                     onClick={() => setTab(i)}
                     style={{
-                      flex: 1, padding: '12px 8px', border: 'none', borderBottom: tab === i ? '2px solid #0ea5e9' : '2px solid transparent',
-                      background: 'none', fontSize: 12, fontWeight: tab === i ? 700 : 600,
-                      color: tab === i ? '#0ea5e9' : '#94a3b8', cursor: 'pointer', transition: 'all 0.15s',
+                      padding: '0 0 10px', border: 'none', borderBottom: tab === i ? '2px solid #2563eb' : '2px solid transparent',
+                      background: 'none', fontSize: 13.5, fontWeight: tab === i ? 700 : 500,
+                      color: tab === i ? '#2563eb' : '#64748b', cursor: 'pointer', transition: 'all 0.15s',
                     }}
                   >
                     {t}
                   </button>
                 ))}
               </div>
+            </div>
 
-              {/* Tab Body */}
-              <div style={{ background: '#fff', borderRadius: '0 0 12px 12px', border: '1px solid #e2e8f0', padding: 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 20, padding: 22, alignItems: 'start' }}>
 
-                {/* TAB 0: Basic Details */}
+              {/* Form fields */}
+              <div>
                 {tab === 0 && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                    <F label="Project Code *" error={errors.project_code?.message}>
-                      <input {...register('project_code')} style={inp.base} placeholder="PRJ-001" disabled={isEdit} />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+                    <F label={<>Project Code{REQ}</>} error={errors.project_code?.message}>
+                      <input {...register('project_code')} style={inp.base} placeholder="PRJ-2025-001" disabled={isEdit} />
                     </F>
-                    <F label="Project Name *" error={errors.name?.message} span={2}>
-                      <input {...register('name')} style={{ ...inp.base, gridColumn: '1/-1' }} placeholder="e.g. Skyline Heights — 2B+G+18 Tower" />
+                    <F label={<>Project Name{REQ}</>} error={errors.name?.message}>
+                      <input {...register('name')} style={inp.base} placeholder="e.g. BCIM Commercial Complex" />
                     </F>
-                    <F label="Client *" error={errors.client_name?.message}>
+                    <F label={<>Client{REQ}</>} error={errors.client_name?.message}>
                       <input {...register('client_name')} style={inp.base} placeholder="Client Name" />
                     </F>
-                    <F label="Project Type *" error={errors.type?.message}>
+
+                    <F label={<>Project Type{REQ}</>} error={errors.type?.message}>
                       <select {...register('type')} style={inp.base}>
                         <option value="residential">Residential</option>
                         <option value="commercial">Commercial</option>
@@ -297,6 +354,7 @@ export default function ProjectCreate() {
                     <F label="Project Category">
                       <select {...register('category')} style={inp.base}>
                         <option value="">Select Category</option>
+                        <option value="building">Building</option>
                         <option value="apartment">Apartment</option>
                         <option value="villa">Villa / Row House</option>
                         <option value="plotted">Plotted Development</option>
@@ -310,40 +368,52 @@ export default function ProjectCreate() {
                         <option value="other">Other</option>
                       </select>
                     </F>
-                    <F label="Project Location" error={errors.location?.message}>
-                      <input {...register('location')} style={inp.base} placeholder="Site address" />
-                    </F>
-                    <F label="Contract Value">
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <select {...register('currency')} style={{ ...inp.base, width: 80, flexShrink: 0 }}>
-                          <option value="INR">INR</option>
-                          <option value="USD">USD</option>
-                          <option value="EUR">EUR</option>
-                          <option value="AED">AED</option>
-                        </select>
-                        <input {...register('contract_value')} type="number" style={inp.base} placeholder="85000000" />
+                    <F label={<>Project Location{REQ}</>} error={errors.location?.message}>
+                      <div style={{ position: 'relative' }}>
+                        <input {...register('location')} style={{ ...inp.base, paddingRight: 34 }} placeholder="Bengaluru, Karnataka, India" />
+                        <MapPin size={14} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                       </div>
+                    </F>
+
+                    <F label={<>Contract Value (₹){REQ}</>} error={errors.contract_value?.message}>
+                      <input {...register('contract_value')} type="number" style={{ ...inp.base, fontFamily: 'monospace' }} placeholder="125000000.00" />
+                    </F>
+                    <F label={<>Currency{REQ}</>}>
+                      <select {...register('currency')} style={inp.base}>
+                        <option value="INR">INR - Indian Rupee</option>
+                        <option value="USD">USD - US Dollar</option>
+                        <option value="EUR">EUR - Euro</option>
+                        <option value="AED">AED - UAE Dirham</option>
+                      </select>
                     </F>
                     <F label="Award Date">
                       <input {...register('award_date')} type="date" style={inp.base} />
                     </F>
-                    <F label="Project Manager">
+
+                    <F label={<>Project Manager{REQ}</>}>
                       <select {...register('project_manager_id')} style={inp.base}>
-                        <option value="">— None —</option>
+                        <option value="">— Select —</option>
                         {allUsers.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
                       </select>
                     </F>
                     <F label="Site Engineer">
                       <select {...register('site_engineer_id')} style={inp.base}>
-                        <option value="">— None —</option>
+                        <option value="">— Select —</option>
                         {allUsers.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
                       </select>
                     </F>
-                    <F label="Start Date">
+                    <F label={<>Start Date{REQ}</>}>
                       <input {...register('start_date')} type="date" style={inp.base} />
                     </F>
+
                     <F label="Business Unit">
-                      <input {...register('business_unit')} style={inp.base} placeholder="e.g. Residential Division" />
+                      <select {...register('business_unit')} style={inp.base}>
+                        <option value="">Select Business Unit</option>
+                        <option value="Residential Division">Residential Division</option>
+                        <option value="Commercial Division">Commercial Division</option>
+                        <option value="Infrastructure">Infrastructure</option>
+                        <option value="Industrial">Industrial</option>
+                      </select>
                     </F>
                     <F label="GST Applicable">
                       <select {...register('gst_applicable')} style={inp.base}>
@@ -351,10 +421,14 @@ export default function ProjectCreate() {
                         <option value="no">No</option>
                       </select>
                     </F>
-                    <F label="End Date">
+                    <F label={<>End Date{REQ}</>}>
                       <input {...register('end_date')} type="date" style={inp.base} />
                     </F>
-                    <F label="Status">
+
+                    <F label="Description" span={2}>
+                      <textarea {...register('description')} style={{ ...inp.base, resize: 'vertical', minHeight: 70 }} placeholder="Construction of Commercial Complex with Basement + G + 10 Floors." />
+                    </F>
+                    <F label={<>Status{REQ}</>}>
                       <select {...register('status')} style={inp.base}>
                         <option value="planning">Planning</option>
                         <option value="active">Active</option>
@@ -363,20 +437,20 @@ export default function ProjectCreate() {
                         <option value="completed">Completed</option>
                       </select>
                     </F>
+
+                    <F label={<>Company{REQ}</>}>
+                      <input {...register('company_name')} style={inp.base} placeholder="BCIM Engineering Pvt Ltd" />
+                    </F>
                     {isEdit && (
                       <F label="Progress (%)">
-                        <input {...register('progress_pct')} type="number" min="0" max="100" step="0.1" style={{ ...inp.base, fontFamily: 'monospace' }} placeholder="0" />
+                        <input {...register('progress_pct')} type="number" min="0" max="100" step="0.1" style={{ ...inp.base, fontFamily: 'monospace' }} />
                       </F>
                     )}
-                    <F label="Description" span={2}>
-                      <textarea {...register('description')} style={{ ...inp.base, resize: 'vertical', minHeight: 72 }} placeholder="Brief project scope and details..." />
-                    </F>
                   </div>
                 )}
 
-                {/* TAB 1: Additional Details */}
                 {tab === 1 && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
                     <F label="City" error={errors.city?.message}>
                       <input {...register('city')} style={inp.base} placeholder="Bangalore" />
                     </F>
@@ -403,20 +477,19 @@ export default function ProjectCreate() {
                     </F>
                     <F label="QS / Quantity Surveyor">
                       <select {...register('qs_engineer_id')} style={inp.base}>
-                        <option value="">— None —</option>
+                        <option value="">— Select —</option>
                         {allUsers.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
                       </select>
                     </F>
                   </div>
                 )}
 
-                {/* TAB 2: Financial Details */}
                 {tab === 2 && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                    <div style={{ gridColumn: '1/-1', padding: '12px 16px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+                    <div style={{ gridColumn: '1/-1', padding: '14px 18px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
                       <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 4px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contract Value</p>
-                      <p style={{ fontSize: 22, fontWeight: 800, color: '#0f172a', margin: 0 }}>{crore(watchedValues.contract_value)}</p>
-                      <p style={{ fontSize: 10, color: '#94a3b8', margin: '4px 0 0' }}>{watchedValues.currency || 'INR'}</p>
+                      <p style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', margin: 0 }}>{crore(watchedValues.contract_value)}</p>
+                      <p style={{ fontSize: 11, color: '#94a3b8', margin: '4px 0 0' }}>{watchedValues.currency || 'INR'}</p>
                     </div>
                     <F label="Award Date">
                       <input {...register('award_date')} type="date" style={inp.base} />
@@ -426,14 +499,6 @@ export default function ProjectCreate() {
                     </F>
                     <F label="End Date">
                       <input {...register('end_date')} type="date" style={inp.base} />
-                    </F>
-                    <F label="Currency">
-                      <select {...register('currency')} style={inp.base}>
-                        <option value="INR">INR — Indian Rupee</option>
-                        <option value="USD">USD — US Dollar</option>
-                        <option value="EUR">EUR — Euro</option>
-                        <option value="AED">AED — UAE Dirham</option>
-                      </select>
                     </F>
                     {isEdit && (
                       <>
@@ -445,13 +510,9 @@ export default function ProjectCreate() {
                         </F>
                       </>
                     )}
-                    <div style={{ gridColumn: '1/-1', borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
-                      <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 4px' }}>Financial summary for this project is available in the Accounts module.</p>
-                    </div>
                   </div>
                 )}
 
-                {/* TAB 3: Notes */}
                 {tab === 3 && (
                   <div>
                     <F label="Project Notes / Remarks">
@@ -461,143 +522,143 @@ export default function ProjectCreate() {
                         placeholder="Add any notes, special conditions, client remarks, or scope clarifications here..."
                       />
                     </F>
-                    <div style={{ marginTop: 16, padding: '12px 14px', background: '#fffbeb', borderRadius: 8, border: '1px solid #fde68a' }}>
-                      <p style={{ fontSize: 11, color: '#92400e', margin: 0, fontWeight: 600 }}>Note: For detailed project notes and document attachments, use the Documents section under this project.</p>
-                    </div>
                   </div>
                 )}
               </div>
 
-              {/* Save button strip */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
-                <button type="button" onClick={() => navigate(-1)} style={{ padding: '8px 18px', border: '1px solid #e2e8f0', borderRadius: 8, background: '#fff', fontSize: 13, color: '#475569', cursor: 'pointer', fontWeight: 600 }}>
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={mutation.isPending}
-                  style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 20px', borderRadius: 8, background: '#0ea5e9', border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: mutation.isPending ? 0.6 : 1 }}
-                >
-                  <Save size={14} />
-                  {mutation.isPending ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save Changes' : 'Create Project')}
-                </button>
+              {/* RIGHT PANEL */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* Project Image */}
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: '#334155', margin: '0 0 10px' }}>Project Image</p>
+                  <div style={{ height: 150, borderRadius: 10, overflow: 'hidden', border: '1px solid #e2e8f0', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {imgPreview ? (
+                      <img src={imgPreview} alt="Project" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <Image size={28} color="#cbd5e1" />
+                    )}
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 8, padding: '8px 14px', border: '1px solid #dbe2ea', borderRadius: 8, background: '#fff', fontSize: 12.5, color: '#2563eb', fontWeight: 700, cursor: 'pointer' }}>
+                    <Upload size={13} /> Change Image
+                    <input type="file" accept="image/*" onChange={handleImagePick} style={{ display: 'none' }} />
+                  </label>
+                </div>
+
+                {/* Project Status */}
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: '#334155', margin: '0 0 6px' }}>Project Status</p>
+                  <StatusRow label="Overall Progress" value={`${Math.round(progress)}%`} tone={progress >= 70 ? 'green' : progress >= 30 ? 'blue' : 'amber'} />
+                  <StatusRow label="Time Elapsed" value={`${elapsed}%`} tone="blue" />
+                  <StatusRow label="Delay (Days)" value={delayD} tone={delayD > 0 ? 'red' : 'green'} />
+                  <StatusRow label="Budget Utilization" value={`${budgetUtil}%`} tone={budgetUtil >= 90 ? 'red' : budgetUtil >= 70 ? 'amber' : 'green'} />
+                  <div style={{ borderBottom: 'none' }}>
+                    <StatusRow label="Billing Progress" value={`${billingProgress}%`} tone="blue" />
+                  </div>
+                </div>
               </div>
             </div>
+          </div>
 
-            {/* RIGHT PANEL */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Project Members (Key Personnel) — full width table */}
+          <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', padding: '18px 22px', marginBottom: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: 0 }}>Project Members (Key Personnel)</h2>
+              <button
+                type="button"
+                onClick={addMemberRow}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#2563eb', border: 'none', color: '#fff', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
+              >
+                <Plus size={13} /> Add Member
+              </button>
+            </div>
 
-              {/* Project Image */}
-              <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', padding: 16 }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 10px' }}>Project Image</p>
-                <div style={{ height: 140, background: '#f8fafc', borderRadius: 8, border: '2px dashed #e2e8f0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}>
-                  <div style={{ width: 42, height: 42, borderRadius: 12, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Image size={20} color="#3b82f6" />
-                  </div>
-                  <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Click to upload</span>
-                  <span style={{ fontSize: 10, color: '#cbd5e1' }}>PNG, JPG up to 5MB</span>
-                </div>
-              </div>
-
-              {/* Project Status */}
-              <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', padding: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                  <p style={{ fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Project Status</p>
-                  <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700, background: statusColor + '18', color: statusColor }}>
-                    {(watchedValues.status || 'planning').replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}
-                  </span>
-                </div>
-
-                <ProgressRow label="Overall Progress" value={Math.round(progress)} color="#0ea5e9" />
-                <ProgressRow label="Time Elapsed" value={elapsed} color="#f59e0b" />
-
-                {/* Delay + Budget as stat tiles */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-                  <div style={{ padding: '10px 12px', borderRadius: 8, background: delayD > 0 ? '#fff1f2' : '#f0fdf4', border: `1px solid ${delayD > 0 ? '#fecdd3' : '#bbf7d0'}` }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-                      <AlertTriangle size={11} color={delayD > 0 ? '#ef4444' : '#22c55e'} />
-                      <span style={{ fontSize: 9, fontWeight: 700, color: delayD > 0 ? '#ef4444' : '#16a34a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Delay</span>
-                    </div>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: delayD > 0 ? '#be123c' : '#15803d' }}>{delayD}</div>
-                    <div style={{ fontSize: 9, color: '#94a3b8' }}>days</div>
-                  </div>
-                  <div style={{ padding: '10px 12px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-                      <IndianRupee size={11} color="#8b5cf6" />
-                      <span style={{ fontSize: 9, fontWeight: 700, color: '#8b5cf6', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Contract</span>
-                    </div>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>{crore(watchedValues.contract_value)}</div>
-                    <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 2 }}>{watchedValues.currency || 'INR'}</div>
-                  </div>
-                </div>
-
-                {/* Key dates */}
-                {(watchedValues.start_date || watchedValues.end_date) && (
-                  <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 12 }}>
-                    {watchedValues.start_date && (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <span style={{ fontSize: 10, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <Clock size={10} /> Start Date
-                        </span>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: '#475569' }}>{dayjs(watchedValues.start_date).format('DD MMM YYYY')}</span>
-                      </div>
-                    )}
-                    {watchedValues.end_date && (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 10, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <TrendingUp size={10} /> End Date
-                        </span>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: delayD > 0 ? '#ef4444' : '#475569' }}>{dayjs(watchedValues.end_date).format('DD MMM YYYY')}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Project Members */}
-              <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', padding: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <p style={{ fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Project Members</p>
-                  <Users size={14} color="#94a3b8" />
-                </div>
-                {teamMembers.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '16px 0', color: '#94a3b8' }}>
-                    <User size={24} style={{ margin: '0 auto 6px', opacity: 0.4 }} />
-                    <p style={{ fontSize: 11, margin: 0 }}>Assign team in Basic Details tab</p>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {teamMembers.map(m => (
-                      <div key={m.field} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: '#f8fafc' }}>
-                        <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <User size={14} color="#3b82f6" />
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 11, fontWeight: 700, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.user.name || m.user.email}</div>
-                          <div style={{ fontSize: 10, color: '#94a3b8' }}>{m.role}</div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setValue(m.field, '')}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1', padding: 2 }}
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
+                    {['S.No', 'Role', 'Name', 'Department', 'Email', 'Phone', 'Action'].map(h => (
+                      <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11.5, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
                     ))}
-                  </div>
-                )}
-                {teamMembers.length < 3 && (
-                  <button
-                    type="button"
-                    onClick={() => setTab(0)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 5, width: '100%', marginTop: 8, padding: '7px 10px', borderRadius: 7, border: '1px dashed #e2e8f0', background: 'none', fontSize: 11, color: '#94a3b8', cursor: 'pointer', justifyContent: 'center', fontWeight: 600 }}
-                  >
-                    <Plus size={12} /> Add Member
-                  </button>
-                )}
-              </div>
+                  </tr>
+                </thead>
+                <tbody>
+                  {members.map((m, i) => {
+                    const u = allUsers.find(x => x.id === m.user_id);
+                    const editing = memberDraft?.idx === i;
+                    return (
+                      <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '10px', color: '#64748b' }}>{i + 1}</td>
+                        <td style={{ padding: '10px' }}>
+                          {editing ? (
+                            <input
+                              value={m.role}
+                              onChange={e => updateMemberRow(i, 'role', e.target.value)}
+                              style={{ ...inp.base, padding: '6px 8px', fontSize: 12 }}
+                              placeholder="Role"
+                            />
+                          ) : (
+                            <span style={{ fontWeight: 600, color: '#0f172a' }}>{m.role || '—'}</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '10px' }}>
+                          {editing ? (
+                            <select
+                              value={m.user_id}
+                              onChange={e => updateMemberRow(i, 'user_id', e.target.value)}
+                              style={{ ...inp.base, padding: '6px 8px', fontSize: 12 }}
+                            >
+                              <option value="">— Select —</option>
+                              {allUsers.map(usr => <option key={usr.id} value={usr.id}>{usr.name || usr.email}</option>)}
+                            </select>
+                          ) : (
+                            u?.name || u?.email || '—'
+                          )}
+                        </td>
+                        <td style={{ padding: '10px', color: '#64748b' }}>{u?.department || '—'}</td>
+                        <td style={{ padding: '10px', color: '#64748b' }}>{u?.email || '—'}</td>
+                        <td style={{ padding: '10px', color: '#64748b' }}>{u?.phone || '—'}</td>
+                        <td style={{ padding: '10px' }}>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button
+                              type="button"
+                              onClick={() => setMemberDraft(editing ? null : { idx: i })}
+                              style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #dbeafe', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                            >
+                              <Pencil size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeMemberRow(i)}
+                              style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #fecdd3', background: '#fff1f2', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {members.length === 0 && (
+                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, color: '#94a3b8', fontSize: 13 }}>No members added yet. Assign a Project Manager above or click "Add Member".</td></tr>
+                  )}
+                </tbody>
+              </table>
             </div>
+          </div>
+
+          {/* Save strip */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingBottom: 24 }}>
+            <button type="button" onClick={() => navigate(-1)} style={{ padding: '10px 20px', border: '1px solid #dbe2ea', borderRadius: 8, background: '#fff', fontSize: 13.5, color: '#475569', cursor: 'pointer', fontWeight: 600 }}>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={mutation.isPending}
+              style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 24px', borderRadius: 8, background: '#2563eb', border: 'none', color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', opacity: mutation.isPending ? 0.6 : 1 }}
+            >
+              <Save size={14} />
+              {mutation.isPending ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save Changes' : 'Create Project')}
+            </button>
           </div>
         </div>
       </form>
