@@ -836,6 +836,9 @@ router.get('/monthly-report', async (req, res) => {
         COALESCE(dep.name, u.department,
           CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
                THEN 'BCIM Workers' ELSE '—' END)  AS department,
+        COALESCE(ep.contractor_name,
+          CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
+               THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END) AS company,
         a.attendance_date::text                AS attendance_date,
         COALESCE(a.status, 'absent')           AS attendance_status,
         TO_CHAR(a.in_time,  'HH12:MI AM')     AS in_time,
@@ -871,6 +874,7 @@ router.get('/monthly-report', async (req, res) => {
         w.worker_name                          AS name,
         COALESCE(w.skill_type, '—')           AS designation,
         COALESCE(sc.name, 'SC Worker')         AS department,
+        COALESCE(sc.name, 'SC Worker')         AS company,
         a.attendance_date::text                AS attendance_date,
         COALESCE(a.status, 'absent')           AS attendance_status,
         TO_CHAR(a.in_time,  'HH12:MI AM')     AS in_time,
