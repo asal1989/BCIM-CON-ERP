@@ -8,9 +8,11 @@ const { runSchemaInit } = require('../utils/schemaInit');
 const { notifyLeaveRequested, notifyLeaveApproved, notifyLeaveRejected } = require('../services/notif.helper');
 
 router.use(authenticate);
-router.use(authorize('super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager', 'manager', 'department_head'));
+router.use(authorize('super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager', 'manager', 'department_head',
+  'managing_director', 'director', 'ceo', 'cfo', 'md'));
 
-const FULL_HR_ROLES_LEAVE = new Set(['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager']);
+const FULL_HR_ROLES_LEAVE = new Set(['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager',
+  'managing_director', 'director', 'ceo', 'cfo', 'md']);
 async function getProjectScopeLeave(req) {
   const role = String(req.user?.role || '').toLowerCase();
   if (FULL_HR_ROLES_LEAVE.has(role)) return null;
