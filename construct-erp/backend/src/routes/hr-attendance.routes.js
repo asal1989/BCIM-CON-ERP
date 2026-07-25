@@ -732,16 +732,17 @@ router.get('/manpower-report', async (req, res) => {
     const scopeProjectId = await getProjectScope(req);
     const effectiveProjectId = scopeProjectId !== null ? scopeProjectId : (project_id || null);
 
-    const params = [cid, reportDate];
-    let projectFilter = '';
+    // ── ERP users (BCIM staff + direct-hire workmen) ─────────────────────────
+    const staffParams = [cid, reportDate];
+    let staffProjectFilter = '';
     if (effectiveProjectId === 'HEAD_OFFICE') {
-      projectFilter = ' AND ep.project_id IS NULL';
+      staffProjectFilter = ' AND ep.project_id IS NULL';
     } else if (effectiveProjectId) {
-      projectFilter = ' AND ep.project_id = $3';
-      params.push(effectiveProjectId);
+      staffProjectFilter = ' AND ep.project_id = $3';
+      staffParams.push(effectiveProjectId);
     }
 
-    const { rows } = await query(`
+    const staffRes = await query(`
       SELECT
         COALESCE(ep.contractor_name,
           CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
@@ -755,14 +756,41 @@ router.get('/manpower-report', async (req, res) => {
       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
       LEFT JOIN hr_designations des  ON des.id = ep.designation_id
       WHERE a.company_id = $1 AND a.attendance_date = $2 AND a.status = 'present'
-        ${projectFilter}
+        ${staffProjectFilter}
       GROUP BY
         COALESCE(ep.contractor_name,
           CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
                THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END),
         COALESCE(des.name, u.designation, '—'),
         a.site, a.shift
-    `, params);
+    `, staffParams);
+
+    // ── SC workers (subcontractor labour) ────────────────────────────────────
+    const scParams = [cid, reportDate];
+    let scProjectFilter = '';
+    if (effectiveProjectId === 'HEAD_OFFICE') {
+      scProjectFilter = ' AND 1=0';
+    } else if (effectiveProjectId) {
+      scProjectFilter = ' AND w.project_id = $3';
+      scParams.push(effectiveProjectId);
+    }
+
+    const scRes = await query(`
+      SELECT
+        sc.name                                           AS company,
+        COALESCE(w.skill_type, '—')                      AS designation,
+        ''                                                AS site,
+        'DAY'                                             AS shift,
+        COUNT(*)::int                                     AS headcount
+      FROM sc_attendance a
+      JOIN sc_workers w          ON w.id = a.worker_id
+      LEFT JOIN sc_subcontractors sc ON sc.id = w.sc_id
+      WHERE a.company_id = $1 AND a.attendance_date = $2 AND a.status = 'present'
+        ${scProjectFilter}
+      GROUP BY sc.name, COALESCE(w.skill_type, '—')
+    `, scParams);
+
+    const rows = [...staffRes.rows, ...scRes.rows];
 
     // Pivot in JS: rows keyed by company+designation, columns = site bucket + shift
     const rowMap = {};
