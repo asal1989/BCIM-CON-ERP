@@ -36,9 +36,10 @@ if not exist config.json (
   echo.
   echo  ERROR: config.json not found!
   echo  Copy config.example.json to config.json and fill in:
-  echo    - essl.password  (your SQL Server sa password)
-  echo    - erp.api_key    (from ERP: HR Admin - ESSL Sync - Agent Setup)
+  echo    - essl.password  ^(your SQL Server sa password^)
+  echo    - erp.api_key    ^(from ERP: HR Admin - ESSL Sync - Agent Setup^)
   echo.
+  pause
   exit /b 1
 )
 
