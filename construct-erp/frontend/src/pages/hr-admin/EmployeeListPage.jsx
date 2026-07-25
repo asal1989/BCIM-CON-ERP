@@ -6,8 +6,15 @@ import { useNavigate } from 'react-router-dom';
 import {
   Users, Plus, Search, UserCheck, UserX, Briefcase, Building2,
   LayoutGrid, List, ChevronRight, X, SlidersHorizontal,
-  Phone, Mail, Calendar, ArrowUpRight, Link2, HardHat,
+  Phone, Mail, Calendar, ArrowUpRight, Link2, HardHat, Truck,
 } from 'lucide-react';
+
+// A "direct" BCIM worker has no contractor_name, or it's just BCIM's own name.
+// Anything else (Astha Enterprises, Habibur Rahaman, etc.) is a subcontractor employee.
+const BCIM_OWN_NAMES = new Set(['', 'bcim', 'bcim staff', 'bcim workers']);
+const isSubcontractorEmp = (e) =>
+  e.employee_category === 'workman' &&
+  !BCIM_OWN_NAMES.has((e.contractor_name || '').trim().toLowerCase());
 import { hrEmployeesAPI, hrMastersAPI } from '../../api/client';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -105,6 +112,11 @@ function EmpCard({ emp, onClick }) {
             <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${type.bg} ${type.text}`}>
               {type.label}
             </span>
+            {isSubcontractorEmp(emp) && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200 flex items-center gap-1">
+                <Truck className="w-2.5 h-2.5" /> {emp.contractor_name}
+              </span>
+            )}
           </div>
         )}
         <div className="flex items-center gap-1 text-xs text-gray-400">
@@ -131,6 +143,7 @@ export default function EmployeeListPage() {
   const [statusFilter,    setStatusFilter]    = useState('active');
   const [typeFilter,      setTypeFilter]      = useState('');
   const [categoryFilter,  setCategoryFilter]  = useState('');
+  const [contractorScope, setContractorScope] = useState(''); // '' | 'direct' | 'subcontractor' — only meaningful when categoryFilter === 'workman'
   const [view,            setView]            = useState('card');
   const [showFilters,     setShowFilters]     = useState(false);
 
@@ -156,18 +169,22 @@ export default function EmployeeListPage() {
   const allEmployees = empData?.data || [];
   const departments  = deptData?.data || [];
 
-  // client-side type filter
-  const employees = useMemo(() =>
-    typeFilter ? allEmployees.filter(e => e.employment_type === typeFilter) : allEmployees,
-    [allEmployees, typeFilter]
-  );
+  // client-side type + contractor-scope filter
+  const employees = useMemo(() => {
+    let list = typeFilter ? allEmployees.filter(e => e.employment_type === typeFilter) : allEmployees;
+    if (contractorScope === 'direct') list = list.filter(e => !isSubcontractorEmp(e));
+    else if (contractorScope === 'subcontractor') list = list.filter(isSubcontractorEmp);
+    return list;
+  }, [allEmployees, typeFilter, contractorScope]);
 
   // KPIs from full list
   const kpis = useMemo(() => ({
-    total:      allEmployees.length,
-    staff:      allEmployees.filter(e => !e.employee_category || e.employee_category === 'staff').length,
-    workers:    allEmployees.filter(e => e.employee_category === 'workman').length,
-    permanent:  allEmployees.filter(e => e.employment_type === 'permanent').length,
+    total:         allEmployees.length,
+    staff:         allEmployees.filter(e => !e.employee_category || e.employee_category === 'staff').length,
+    workers:       allEmployees.filter(e => e.employee_category === 'workman').length,
+    directWorkers: allEmployees.filter(e => e.employee_category === 'workman' && !isSubcontractorEmp(e)).length,
+    subcontractor: allEmployees.filter(isSubcontractorEmp).length,
+    permanent:     allEmployees.filter(e => e.employment_type === 'permanent').length,
   }), [allEmployees]);
 
   const activeFilters = [deptFilter, typeFilter, categoryFilter].filter(Boolean).length;
@@ -199,48 +216,55 @@ export default function EmployeeListPage() {
       </motion.div>
 
       {/* ── Category Tabs ──────────────────────────────────────────────────── */}
-      <motion.div {...fade(0.04)} className="flex gap-3">
+      <motion.div {...fade(0.04)} className="flex gap-3 flex-wrap">
         {[
-          { value: '',        label: 'All Employees', icon: Users,    color: '#6366F1', bg: '#EEF2FF', count: kpis.total   },
-          { value: 'staff',   label: 'BCIM Staff',    icon: Briefcase,color: '#2563EB', bg: '#EFF6FF', count: kpis.staff   },
-          { value: 'workman', label: 'BCIM Workers',  icon: HardHat,  color: '#EA580C', bg: '#FFF7ED', count: kpis.workers },
-        ].map(tab => (
-          <motion.button
-            key={tab.value}
-            onClick={() => setCategoryFilter(prev => prev === tab.value ? (tab.value === '' ? '' : '') : tab.value)}
-            whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}
-            className={`flex items-center gap-3 px-5 py-3 rounded-2xl border text-sm font-semibold transition-all shadow-sm ${
-              categoryFilter === tab.value
-                ? 'border-2 shadow-md'
-                : 'bg-white border-gray-100 text-gray-600 hover:border-gray-200'
-            }`}
-            style={categoryFilter === tab.value ? {
-              background: tab.bg, borderColor: tab.color, color: tab.color,
-            } : {}}
-          >
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-              style={{ background: categoryFilter === tab.value ? 'rgba(255,255,255,0.6)' : tab.bg }}>
-              <tab.icon className="w-4 h-4" style={{ color: tab.color }} />
-            </div>
-            <div className="text-left">
-              <p className="leading-tight">{tab.label}</p>
-              <p className="text-lg font-black leading-tight">{tab.count}</p>
-            </div>
-          </motion.button>
-        ))}
+          { value: '',        scope: '',              label: 'All Employees',        icon: Users,     color: '#6366F1', bg: '#EEF2FF', count: kpis.total         },
+          { value: 'staff',   scope: '',              label: 'BCIM Staff',           icon: Briefcase, color: '#2563EB', bg: '#EFF6FF', count: kpis.staff         },
+          { value: 'workman', scope: 'direct',        label: 'BCIM Direct Workers',  icon: HardHat,   color: '#EA580C', bg: '#FFF7ED', count: kpis.directWorkers },
+          { value: 'workman', scope: 'subcontractor', label: 'Subcontractor Employees', icon: Truck,  color: '#7C3AED', bg: '#F5F3FF', count: kpis.subcontractor },
+        ].map(tab => {
+          const active = categoryFilter === tab.value && contractorScope === tab.scope;
+          return (
+            <motion.button
+              key={`${tab.value}-${tab.scope}`}
+              onClick={() => { setCategoryFilter(tab.value); setContractorScope(tab.scope); }}
+              whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}
+              className={`flex items-center gap-3 px-5 py-3 rounded-2xl border text-sm font-semibold transition-all shadow-sm ${
+                active ? 'border-2 shadow-md' : 'bg-white border-gray-100 text-gray-600 hover:border-gray-200'
+              }`}
+              style={active ? { background: tab.bg, borderColor: tab.color, color: tab.color } : {}}
+            >
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: active ? 'rgba(255,255,255,0.6)' : tab.bg }}>
+                <tab.icon className="w-4 h-4" style={{ color: tab.color }} />
+              </div>
+              <div className="text-left">
+                <p className="leading-tight">{tab.label}</p>
+                <p className="text-lg font-black leading-tight">{tab.count}</p>
+              </div>
+            </motion.button>
+          );
+        })}
       </motion.div>
 
       {/* ── KPI Strip ──────────────────────────────────────────────────────── */}
       <motion.div {...fade(0.05)} className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total Active',    value: kpis.total,     icon: UserCheck,  color: '#6366F1', bg: '#EEF2FF', filter: ''          },
-          { label: 'BCIM Staff',      value: kpis.staff,     icon: Briefcase,  color: '#2563EB', bg: '#EFF6FF', filter: 'staff', catFilter: true },
-          { label: 'BCIM Workers',    value: kpis.workers,   icon: HardHat,    color: '#EA580C', bg: '#FFF7ED', filter: 'workman', catFilter: true },
-          { label: 'Permanent',       value: kpis.permanent, icon: UserCheck,  color: '#10B981', bg: '#ECFDF5', filter: 'permanent' },
+          { label: 'Total Active',           value: kpis.total,         icon: UserCheck,  color: '#6366F1', bg: '#EEF2FF', filter: ''          },
+          { label: 'BCIM Staff',             value: kpis.staff,         icon: Briefcase,  color: '#2563EB', bg: '#EFF6FF', filter: 'staff', catFilter: true },
+          { label: 'Subcontractor Employees',value: kpis.subcontractor, icon: Truck,      color: '#7C3AED', bg: '#F5F3FF', filter: 'workman', catFilter: true, scope: 'subcontractor' },
+          { label: 'Permanent',              value: kpis.permanent,     icon: UserCheck,  color: '#10B981', bg: '#ECFDF5', filter: 'permanent' },
         ].map((c, i) => (
           <motion.button
             key={c.label}
-            onClick={() => c.catFilter ? setCategoryFilter(prev => prev === c.filter ? '' : c.filter) : setTypeFilter(prev => prev === c.filter ? '' : c.filter)}
+            onClick={() => {
+              if (c.catFilter) {
+                setCategoryFilter(prev => prev === c.filter ? '' : c.filter);
+                setContractorScope(prev => (categoryFilter === c.filter && prev === (c.scope || '')) ? '' : (c.scope || ''));
+              } else {
+                setTypeFilter(prev => prev === c.filter ? '' : c.filter);
+              }
+            }}
             whileHover={{ y: -2 }}
             whileTap={{ scale: 0.97 }}
             className={`bg-white rounded-2xl p-4 text-left shadow-sm border transition-all ${
@@ -453,7 +477,14 @@ export default function EmployeeListPage() {
                       <p className="text-xs text-gray-400">{emp.employee_code}</p>
                     </div>
                   </div>
-                  <div className="col-span-2 text-sm text-slate-900 truncate pr-3">{emp.department_name || '—'}</div>
+                  <div className="col-span-2 pr-3">
+                    <div className="text-sm text-slate-900 truncate">{emp.department_name || '—'}</div>
+                    {isSubcontractorEmp(emp) && (
+                      <div className="text-[10px] font-bold text-violet-700 truncate flex items-center gap-1 mt-0.5">
+                        <Truck className="w-2.5 h-2.5" /> {emp.contractor_name}
+                      </div>
+                    )}
+                  </div>
                   <div className="col-span-2 text-sm text-slate-900 truncate pr-3">{emp.designation_name || emp.designation || '—'}</div>
                   <div className="col-span-2">
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${type.bg} ${type.text}`}>{type.label}</span>

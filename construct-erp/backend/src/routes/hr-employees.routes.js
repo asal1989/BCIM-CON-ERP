@@ -183,6 +183,7 @@ const employeeSelect = `
          ep.emergency_contact_name, ep.emergency_contact_phone,
          ep.employment_type, ep.employee_category, ep.reporting_manager_id, mgr.name as reporting_manager_name,
          ep.work_location, ep.project_id, proj.name as project_name, proj.project_code,
+         ep.trade, ep.contractor_name,
          ep.probation_end_date, ep.notice_period_days,
          ep.date_of_leaving, ep.leaving_reason, ep.employment_status, ep.profile_photo_url,
          dep.name as department_name, des.name as designation_name, des.grade
