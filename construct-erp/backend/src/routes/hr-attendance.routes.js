@@ -756,7 +756,12 @@ router.get('/manpower-report', async (req, res) => {
       LEFT JOIN hr_designations des  ON des.id = ep.designation_id
       WHERE a.company_id = $1 AND a.attendance_date = $2 AND a.status = 'present'
         ${projectFilter}
-      GROUP BY company, designation, a.site, a.shift
+      GROUP BY
+        COALESCE(ep.contractor_name,
+          CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
+               THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END),
+        COALESCE(des.name, u.designation, '—'),
+        a.site, a.shift
     `, params);
 
     // Pivot in JS: rows keyed by company+designation, columns = site bucket + shift
