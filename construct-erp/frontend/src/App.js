@@ -907,7 +907,7 @@ export default function App() {
                 <Route path="hr-admin/compliance-tracker" element={<RequireModule module="HR & Admin"><ComplianceTrackerPage /></RequireModule>} />
                 <Route path="hr-admin/reports/confirmation" element={<RequireModule module="HR & Admin"><HRConfirmationReportPage /></RequireModule>} />
                 <Route path="hr-admin/employees" element={<RequireModule module="HR & Admin"><HREmployeeListPage /></RequireModule>} />
-                <Route path="hr-admin/project-staff" element={<RequireModule module="HR & Admin"><HRProjectStaffPage /></RequireModule>} />
+                <Route path="hr-admin/project-staff" element={<RequireAnyModule modules={['HR & Admin','Overview']}><HRProjectStaffPage /></RequireAnyModule>} />
                 <Route path="hr-admin/checklist" element={<RequireModule module="HR & Admin"><HRChecklistPage /></RequireModule>} />
                 <Route path="hr-admin/ops-checklist" element={<RequireModule module="HR & Admin"><HROpsChecklistPage /></RequireModule>} />
                 <Route path="hr-admin/payroll-reports" element={<RequireModule module="HR & Admin"><HRPayrollReportsPage /></RequireModule>} />
