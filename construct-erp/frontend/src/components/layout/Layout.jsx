@@ -2119,6 +2119,7 @@ export default function Layout() {
         : g.label === 'Accounts'         ? ['Accounts', 'Finance']
         : g.label === 'Plant & Machinery'? ['Plant & Machinery', 'Assets & IT']
         : g.label === 'Hire & Rental'    ? ['Hire & Rental', 'Assets & IT']
+        : g.label === 'Projects'         ? ['Projects', 'Overview']
         : [g.label];
       return aliases.some(label => user?.accessible_modules?.includes(label));
     })
