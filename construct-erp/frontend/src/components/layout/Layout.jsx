@@ -271,6 +271,7 @@ const navGroups = [
     { to: '/hr-admin/reports/yearly-summary',     icon: CalendarDays,    label: 'Yearly Summary' },
     { to: '/hr-admin/reports/attendance-summary', icon: FileBarChart,    label: 'Attendance Summary Report' },
     { to: '/hr-admin/reports/leave-summary',      icon: CalendarOff,     label: 'Leave Summary' },
+    { to: '/hr-admin/reports/manpower',           icon: HardHat,         label: 'Manpower Report' },
     { to: '/hr-admin/reports/employee-details',   icon: Users,           label: 'Employee Details' },
     { to: '/hr-admin/reports/shift-schedule',     icon: Clock,           label: 'Shift Scheduler' },
     { to: '/hr-admin/reports/department-summary', icon: Building2,       label: 'Department Summary' },
@@ -493,7 +494,7 @@ const NAV_SECTIONS = {
     { label: 'Performance',       paths: ['/hr-admin/appraisals','/hr-admin/performance','/hr-admin/recruitment','/hr-admin/training','/hr-admin/advanced'] },
     { label: 'Emp. Services',     paths: ['/hr-admin/letters','/hr-admin/policies','/hr-admin/emp-assets','/hr-admin/travel','/hr-admin/segments','/hr-admin/emp-filters'] },
     { label: 'Site Workers',      paths: ['/hr/workers','/hr/attendance','/hr/payroll'] },
-    { label: 'Reports',           paths: ['/hr-admin/reports','/hr-admin/reports/daily-attendance','/hr-admin/reports/monthly-status','/hr-admin/reports/yearly-summary','/hr-admin/reports/attendance-summary','/hr-admin/reports/leave-summary','/hr-admin/reports/employee-details','/hr-admin/reports/shift-schedule','/hr-admin/reports/department-summary','/hr-admin/reports/log-records','/hr-admin/reports/random-check'] },
+    { label: 'Reports',           paths: ['/hr-admin/reports','/hr-admin/reports/daily-attendance','/hr-admin/reports/monthly-status','/hr-admin/reports/yearly-summary','/hr-admin/reports/attendance-summary','/hr-admin/reports/leave-summary','/hr-admin/reports/manpower','/hr-admin/reports/employee-details','/hr-admin/reports/shift-schedule','/hr-admin/reports/department-summary','/hr-admin/reports/log-records','/hr-admin/reports/random-check'] },
     { label: 'Setup & Tools',     paths: ['/hr-admin/essl-sync','/hr-admin/attendance/recalculate','/hr-admin/import','/hr-admin/documents','/hr-admin/compliance','/hr-admin/compliance-tracker'] },
   ],
   'Bill Tracker': [

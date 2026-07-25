@@ -705,6 +705,96 @@ router.get('/timesheet-report', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
+// GET /manpower-report  ?date=YYYY-MM-DD&project_id=
+// Overall Daily Manpower Report — pivot of Company × Designation
+// against Site × Shift, headcount = present employees that day.
+// ═══════════════════════════════════════════════════════════
+const SITE_BUCKETS = [
+  { key: 'tower',  label: 'Tower',  match: s => s.includes('tower') },
+  { key: 'stp',    label: 'STP',    match: s => s.includes('stp') },
+  { key: 'ug',     label: 'UG',     match: s => s.includes('ug') },
+  { key: 'store',  label: 'Store',  match: s => s.includes('store') },
+  { key: 'labour', label: 'Labour', match: s => s.includes('labour') || s.includes('camp') },
+  { key: 'staff',  label: 'Staff',  match: s => s.includes('staff') || s === '' || s === '—' },
+];
+function bucketSite(raw) {
+  const s = String(raw || '').trim().toLowerCase();
+  for (const b of SITE_BUCKETS) if (b.match(s)) return b;
+  return { key: 'other', label: 'Other' };
+}
+
+router.get('/manpower-report', async (req, res) => {
+  try {
+    const { date, project_id } = req.query;
+    const reportDate = date || new Date().toISOString().slice(0, 10);
+    const cid = req.user.company_id;
+
+    const scopeProjectId = await getProjectScope(req);
+    const effectiveProjectId = scopeProjectId !== null ? scopeProjectId : (project_id || null);
+
+    const params = [cid, reportDate];
+    let projectFilter = '';
+    if (effectiveProjectId === 'HEAD_OFFICE') {
+      projectFilter = ' AND ep.project_id IS NULL';
+    } else if (effectiveProjectId) {
+      projectFilter = ' AND ep.project_id = $3';
+      params.push(effectiveProjectId);
+    }
+
+    const { rows } = await query(`
+      SELECT
+        COALESCE(ep.contractor_name,
+          CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
+               THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END) AS company,
+        COALESCE(des.name, u.designation, '—')       AS designation,
+        COALESCE(a.site, '')                              AS site,
+        COALESCE(a.shift, 'DAY')                          AS shift,
+        COUNT(*)::int                                     AS headcount
+      FROM hr_attendance a
+      JOIN users u                  ON u.id = a.user_id
+      LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+      LEFT JOIN hr_designations des  ON des.id = ep.designation_id
+      WHERE a.company_id = $1 AND a.attendance_date = $2 AND a.status = 'present'
+        ${projectFilter}
+      GROUP BY company, designation, a.site, a.shift
+    `, params);
+
+    // Pivot in JS: rows keyed by company+designation, columns = site bucket + shift
+    const rowMap = {};
+    const colSet = {};       // bucketKey -> { label, shifts:Set }
+    for (const r of rows) {
+      const bucket = bucketSite(r.site);
+      if (!colSet[bucket.key]) colSet[bucket.key] = { label: bucket.label, shifts: new Set() };
+      colSet[bucket.key].shifts.add(r.shift);
+
+      const rowKey = `${r.company}||${r.designation}`;
+      if (!rowMap[rowKey]) rowMap[rowKey] = { company: r.company, designation: r.designation, cells: {}, total: 0 };
+      const cellKey = `${bucket.key}|${r.shift}`;
+      rowMap[rowKey].cells[cellKey] = (rowMap[rowKey].cells[cellKey] || 0) + r.headcount;
+      rowMap[rowKey].total += r.headcount;
+    }
+
+    // Order columns: Tower, STP, UG, Store, Labour, Staff, Other (skip buckets with no data)
+    const bucketOrder = [...SITE_BUCKETS.map(b => b.key), 'other'];
+    const columns = bucketOrder
+      .filter(k => colSet[k])
+      .map(k => ({ key: k, label: colSet[k].label, shifts: [...colSet[k].shifts].sort() }));
+
+    // Order rows: by company (first-seen order), then designation (first-seen order)
+    const companyOrder = [];
+    for (const r of rows) if (!companyOrder.includes(r.company)) companyOrder.push(r.company);
+    const dataRows = Object.values(rowMap).sort((a, b) => {
+      const ci = companyOrder.indexOf(a.company) - companyOrder.indexOf(b.company);
+      return ci !== 0 ? ci : 0;
+    });
+
+    const grandTotal = dataRows.reduce((s, r) => s + r.total, 0);
+
+    res.json({ date: reportDate, columns, rows: dataRows, grandTotal });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
 // GET /monthly-report  ?year=2026&month=7&project_id=&department_id=
 // Returns one row per (employee, date) for the whole month
 // ═══════════════════════════════════════════════════════════
