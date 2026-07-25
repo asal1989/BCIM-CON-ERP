@@ -150,7 +150,8 @@ router.post('/heartbeat', async (req, res) => {
 
 // ── All routes below require JWT authentication ───────────────────────────────
 router.use(authenticate);
-router.use(authorize('super_admin', 'admin', 'hr_admin'));
+router.use(authorize('super_admin', 'admin', 'hr_admin', 'hr', 'hr_manager',
+  'managing_director', 'director', 'ceo', 'cfo', 'md'));
 
 // ─── Auto-create settings table to persist MSSQL config per company ──────────
 async function initTable() {

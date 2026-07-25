@@ -37,7 +37,7 @@ function Card({ icon: Icon, label, value, sub, accent, bg }) {
 }
 
 export default function EsslSyncHealthPage() {
-  const { data, isLoading, refetch, isFetching, dataUpdatedAt } = useQuery({
+  const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['essl-health'],
     queryFn: () => hrEsslAPI.health().then(r => r.data),
     refetchInterval: 30000, // auto-refresh every 30s
@@ -65,6 +65,12 @@ export default function EsslSyncHealthPage() {
 
       {isLoading ? (
         <div style={{ textAlign:'center', padding:56, color:'#94A3B8' }}>Loading…</div>
+      ) : isError || !data ? (
+        <div style={{ textAlign:'center', padding:56, background:'#fff', border:'1px solid #FECACA', borderRadius:12 }}>
+          <AlertTriangle size={28} color="#DC2626" style={{ marginBottom:10 }} />
+          <div style={{ fontWeight:700, color:'#991B1B', marginBottom:4 }}>Couldn't load sync health</div>
+          <div style={{ fontSize:12.5, color:'#94A3B8' }}>{error?.response?.data?.error || error?.message || 'Unknown error'}</div>
+        </div>
       ) : (
         <>
           {/* Status banner */}
