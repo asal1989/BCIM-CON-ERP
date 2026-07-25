@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hrAttendanceAPI, projectAPI } from '../../../api/client';
-import { Printer, Download, RefreshCw, ChevronRight } from 'lucide-react';
+import { Printer, Download, RefreshCw, ChevronRight, LayoutGrid, Building2 } from 'lucide-react';
+
+const SUMMARY_COLORS = ['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d','#ea580c','#4f46e5'];
 
 const today = () => new Date().toISOString().slice(0, 10);
 const fmtDate = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -24,6 +26,7 @@ const PRINT_CSS = `
 export default function ManpowerReportPage() {
   const [date, setDate] = useState(today());
   const [projectFilter, setProjectFilter] = useState('');
+  const [tab, setTab] = useState('detail'); // 'detail' | 'summary'
 
   const { data: projectsData } = useQuery({
     queryKey: ['projects-active-mp'],
@@ -58,7 +61,32 @@ export default function ManpowerReportPage() {
     for (const r of rows) sum += r.cells[`${colKey}|${shift}`] || 0;
     return sum;
   };
+
+  // Company-wise present summary — grouped + sorted from the same detail rows
+  const companySummary = useMemo(() => {
+    const map = {};
+    for (const r of rows) {
+      if (!map[r.company]) map[r.company] = { company: r.company, total: 0, designations: 0 };
+      map[r.company].total += r.total;
+      map[r.company].designations += 1;
+    }
+    return Object.values(map).sort((a, b) => b.total - a.total);
+  }, [rows]);
+
   const handleExport = () => {
+    if (tab === 'summary') {
+      const header = ['Company', 'Designations', 'Total Present', '% of Grand Total'];
+      const csvRows = companySummary.map(c => [
+        c.company, c.designations, c.total, grandTotal ? `${((c.total/grandTotal)*100).toFixed(1)}%` : '0%',
+      ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(','));
+      const blob = new Blob([[header.join(','), ...csvRows].join('\n')], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `manpower-company-summary-${date}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      return;
+    }
     const header = ['Company', 'Designation', ...columns.flatMap(c => c.shifts.map(s => `${c.label} ${s}`)), 'Grand Total'];
     const csvRows = rows.map(r => [
       r.company, r.designation,
@@ -110,6 +138,28 @@ export default function ManpowerReportPage() {
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="no-print" style={{ padding: '16px 24px 0', display: 'flex', gap: 8 }}>
+        <button onClick={() => setTab('detail')} style={{
+          display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8,
+          border: tab === 'detail' ? '1.5px solid #1a56db' : '1px solid #e2e8f0',
+          background: tab === 'detail' ? '#eff6ff' : '#fff',
+          color: tab === 'detail' ? '#1a56db' : '#64748b',
+          fontSize: 13, fontWeight: 700, cursor: 'pointer',
+        }}>
+          <LayoutGrid size={14} /> Detailed (Site × Shift)
+        </button>
+        <button onClick={() => setTab('summary')} style={{
+          display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8,
+          border: tab === 'summary' ? '1.5px solid #1a56db' : '1px solid #e2e8f0',
+          background: tab === 'summary' ? '#eff6ff' : '#fff',
+          color: tab === 'summary' ? '#1a56db' : '#64748b',
+          fontSize: 13, fontWeight: 700, cursor: 'pointer',
+        }}>
+          <Building2 size={14} /> Company-wise Present Summary
+        </button>
+      </div>
+
       <div id="mp-print-root" style={{ padding: 24 }}>
         {isLoading ? (
           <div style={{ textAlign: 'center', padding: 56, color: '#9ca3af' }}>Loading manpower data…</div>
@@ -117,6 +167,64 @@ export default function ManpowerReportPage() {
           <div style={{ textAlign: 'center', padding: 56, color: '#9ca3af', background: '#fff', borderRadius: 10, border: '1px solid #e5e7eb' }}>
             No "present" attendance records found for {fmtDate(date)}.<br />
             <span style={{ fontSize: 12 }}>This report is built from Site/Shift data on attendance records — make sure the day's muster has been recorded.</span>
+          </div>
+        ) : tab === 'summary' ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 480px) 1fr', gap: 20, alignItems: 'start' }}>
+            <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+              <table className="mp-table" style={{ borderCollapse: 'collapse', width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th style={{ ...th, textAlign: 'left' }}>Company</th>
+                    <th style={th}>Designations</th>
+                    <th style={th}>Total Present</th>
+                    <th style={th}>% of Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {companySummary.map((c, i) => (
+                    <tr key={c.company} style={{ background: i % 2 ? '#fafafa' : '#fff' }}>
+                      <td style={{ ...td, textAlign: 'left', fontWeight: 700, color: '#1e293b' }}>
+                        <span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: SUMMARY_COLORS[i % SUMMARY_COLORS.length], marginRight: 8 }} />
+                        {c.company}
+                      </td>
+                      <td style={{ ...td, color: '#64748b' }}>{c.designations}</td>
+                      <td style={{ ...td, fontWeight: 800, color: '#1a56db' }}>{c.total}</td>
+                      <td style={{ ...td, color: '#64748b' }}>{grandTotal ? `${((c.total / grandTotal) * 100).toFixed(1)}%` : '0%'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background: '#eef2f7' }}>
+                    <td style={{ ...td, textAlign: 'left', fontWeight: 800 }}>Grand Total</td>
+                    <td style={{ ...td, fontWeight: 800 }}>{companySummary.reduce((s, c) => s + c.designations, 0)}</td>
+                    <td style={{ ...td, fontWeight: 900, color: '#1a56db' }}>{grandTotal}</td>
+                    <td style={{ ...td, fontWeight: 800 }}>100%</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {/* Horizontal bar visualization */}
+            <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #e5e7eb', padding: 20 }}>
+              <p style={{ margin: '0 0 16px', fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Headcount by Company</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {companySummary.map((c, i) => {
+                  const pct = grandTotal ? (c.total / grandTotal) * 100 : 0;
+                  const color = SUMMARY_COLORS[i % SUMMARY_COLORS.length];
+                  return (
+                    <div key={c.company}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 12.5 }}>
+                        <span style={{ fontWeight: 600, color: '#334155' }}>{c.company}</span>
+                        <span style={{ fontWeight: 800, color: '#1e293b' }}>{c.total}</span>
+                      </div>
+                      <div style={{ height: 10, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 99, transition: 'width 0.4s' }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         ) : (
           <div style={{ overflowX: 'auto', background: '#fff', borderRadius: 10, border: '1px solid #e5e7eb' }}>
