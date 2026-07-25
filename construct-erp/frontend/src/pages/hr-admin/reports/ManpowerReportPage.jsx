@@ -14,7 +14,7 @@ const PRINT_CSS = `
   html, body { margin:0!important; padding:0!important; background:#fff!important; overflow:visible!important; -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }
   body * { visibility:hidden!important; }
   #mp-print-root, #mp-print-root * { visibility:visible!important; }
-  #mp-print-root { position:fixed!important; top:0!important; left:0!important; width:100%!important; background:#fff!important; font-family:Arial,Helvetica,sans-serif; font-size:9pt; color:#000; }
+  #mp-print-root { position:absolute!important; top:0!important; left:0!important; width:100%!important; background:#fff!important; font-family:Arial,Helvetica,sans-serif; font-size:9pt; color:#000; }
   .mp-print-table { width:100%!important; border-collapse:collapse!important; font-size:8pt!important; }
   .mp-print-table th { background:#1B3A6B!important; color:#fff!important; padding:4px 6px!important; border:1px solid #1B3A6B!important; font-size:7.5pt!important; font-weight:700!important; -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }
   .mp-print-table td { padding:3px 6px!important; border:1px solid #bbb!important; vertical-align:middle!important; font-size:8pt!important; }
@@ -180,7 +180,7 @@ export default function ManpowerReportPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <img src="/bcim-logo.png" alt="BCIM Logo" style={{ height: 52, width: 'auto', objectFit: 'contain', flexShrink: 0 }} />
             <div style={{ flex: 1, textAlign: 'center' }}>
-              <div style={{ fontSize: 8, fontWeight: 600, color: '#555', letterSpacing: 3, textTransform: 'uppercase' }}>BCIM Constructions Pvt. Ltd.</div>
+              <div style={{ fontSize: 8, fontWeight: 600, color: '#555', letterSpacing: 3, textTransform: 'uppercase' }}>BCIM Engineering Private Limited</div>
               <div style={{ fontSize: 16, fontWeight: 900, color: '#1B3A6B', letterSpacing: 0.5, margin: '3px 0' }}>OVERALL DAILY MANPOWER REPORT</div>
               <div style={{ fontSize: 9, color: '#444', fontWeight: 600 }}>Project: {selectedProjectName}</div>
             </div>
@@ -300,7 +300,7 @@ export default function ManpowerReportPage() {
                 })}
               </div>
               <div style={{ textAlign: 'center', marginTop: 8, fontSize: 7, color: '#aaa' }}>
-                System-generated report &nbsp;|&nbsp; BCIM Constructions Pvt. Ltd. &nbsp;|&nbsp; {new Date().toLocaleString('en-IN')}
+                System-generated report &nbsp;|&nbsp; BCIM Engineering Private Limited &nbsp;|&nbsp; {new Date().toLocaleString('en-IN')}
               </div>
             </div>
           </div>
