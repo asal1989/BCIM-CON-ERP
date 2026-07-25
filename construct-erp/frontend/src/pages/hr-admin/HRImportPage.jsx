@@ -19,7 +19,7 @@ const TABS = [
   { id:'attendance', label:'Attendance',         icon:Clock },
 ];
 
-const EMPLOYEE_SAMPLE = `Employee Code,Employee Name,Email,Mobile,Department,Designation,Date of Joining,Date of Birth,Gender,PAN,UAN,Bank Account No,IFSC Code,Bank Name,Employment Type,Employee Category,Status,CTC\nBCIM-0001,Ravi Kumar,ravi@company.com,9876543210,Engineering,Site Engineer,01-04-2023,15-06-1990,male,ABCDE1234F,100234567890,123456789012,SBIN0001234,SBI,permanent,BCIM Staff,active,600000\n18001,Suresh M,,9876543211,Civil,Mason,01-01-2022,10-03-1985,male,XYZAB5678G,100234567891,234567890123,HDFC0001234,HDFC,permanent,BCIM Workers,active,`;
+const EMPLOYEE_SAMPLE = `Employee Code,Employee Name,Email,Mobile,Department,Designation,Date of Joining,Date of Birth,Gender,PAN,UAN,Bank Account No,IFSC Code,Bank Name,Employment Type,Employee Category,Status,CTC,Project,Trade,Company\nBCIM-0001,Ravi Kumar,ravi@company.com,9876543210,Engineering,Site Engineer,01-04-2023,15-06-1990,male,ABCDE1234F,100234567890,123456789012,SBIN0001234,SBI,permanent,BCIM Staff,active,600000,,,\n18001,Suresh M,,9876543211,Civil,Mason,01-01-2022,10-03-1985,male,XYZAB5678G,100234567891,234567890123,HDFC0001234,HDFC,permanent,BCIM Workers,active,,DQS Towers,Mason,Astha Enterprises`;
 const ATTENDANCE_WIDE_SAMPLE = `Employee Code,Employee Name,01,02,03,04,05,06,07,08,09,10\nEMP001,Ravi Kumar,P,P,P,P,P,WO,WO,P,P,P\nEMP002,Priya Sharma,P,P,A,P,P,WO,WO,P,P,P`;
 
 function downloadSample(content, filename) {
@@ -169,9 +169,10 @@ function EmployeeImportTab() {
       <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-sm text-blue-800 space-y-1">
         <p className="font-black text-blue-900">How to import employees:</p>
         <p>1. Upload your Excel (.xlsx) or CSV file below — standard column names are auto-mapped.</p>
-        <p>2. A <strong>Project</strong> column (last column) assigns each employee to their site/project location.</p>
-        <p>3. <strong>Create mode</strong> → new employees created; default login password = employee code.</p>
-        <p>4. <strong>Update mode</strong> → only updates profiles for employees already in the system.</p>
+        <p>2. A <strong>Project</strong> column links each employee to a project by exact name or project code — matched against Project Master, so it must match what's there (e.g. "DQS Towers", not "DQS Site"). No match → left unassigned, safe to fix later.</p>
+        <p>3. <strong>Trade</strong> and <strong>Company</strong> columns are optional — Company is the actual contractor/subcontractor name (e.g. "Astha Enterprises"), shown as-is in reports instead of a generic "BCIM Workers" label.</p>
+        <p>4. <strong>Create mode</strong> → new employees created; default login password = employee code.</p>
+        <p>5. <strong>Update mode</strong> → only updates profiles for employees already in the system.</p>
       </div>
 
       <button onClick={()=>downloadSample(EMPLOYEE_SAMPLE,'employee-sample.csv')}

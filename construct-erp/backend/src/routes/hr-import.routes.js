@@ -184,11 +184,28 @@ router.post('/employees', upload.single('file'), async (req, res) => {
     const mode = req.body.mode || 'create'; // 'create' | 'update'
     const records = await parseFile(req.file);
 
-    // Pre-load departments & designations for name→id lookup
+    // Pre-load departments, designations & projects for name→id lookup
     const deptRows = await query(`SELECT id, LOWER(name) as name FROM hr_departments WHERE company_id=$1`, [companyId]);
     const desigRows = await query(`SELECT id, LOWER(name) as name FROM hr_designations WHERE company_id=$1`, [companyId]);
+    const projRows  = await query(`SELECT id, LOWER(name) as name, LOWER(COALESCE(project_code,'')) as code FROM projects WHERE company_id=$1`, [companyId]);
     const deptMap  = Object.fromEntries(deptRows.rows.map(r => [r.name, r.id]));
     const desigMap = Object.fromEntries(desigRows.rows.map(r => [r.name, r.id]));
+    const projByName = Object.fromEntries(projRows.rows.map(r => [r.name, r.id]));
+    const projByCode = Object.fromEntries(projRows.rows.filter(r => r.code).map(r => [r.code, r.id]));
+
+    // Resolve a free-text "Project" cell to a real projects.id — exact name/code
+    // match first, then substring match if it uniquely identifies one project.
+    // Returns null (never guesses) if nothing matches, so callers can fall back
+    // to storing the raw text in work_location for manual reconciliation later.
+    function resolveProjectId(text) {
+      const t = text.trim().toLowerCase();
+      if (!t) return null;
+      if (projByCode[t]) return projByCode[t];
+      if (projByName[t]) return projByName[t];
+      const nameHits = projRows.rows.filter(r => r.name.includes(t) || t.includes(r.name));
+      if (nameHits.length === 1) return nameHits[0].id;
+      return null;
+    }
 
     const results = { created: 0, updated: 0, skipped: 0, errors: [] };
     // Debug: capture what the first row looks like after parsing
@@ -242,6 +259,9 @@ router.post('/employees', upload.single('file'), async (req, res) => {
         const categoryRaw = pick(row, 'Employee Category', 'Category', 'Staff Type', 'Category-Proposed').toLowerCase();
         const empCategory = categoryRaw.includes('work') ? 'workman' : 'staff';
         const workLocation = pick(row, 'Project', 'Project Location', 'Site', 'Location', 'work_location');
+        const projectId = resolveProjectId(workLocation);
+        const trade      = pick(row, 'Trade', 'trade');
+        const contractorName = pick(row, 'Company', 'Contractor', 'Contractor Name', 'Subcontractor');
 
         if (!empCode && !name) {
           results.errors.push({ row: rowNum, error: 'Missing Employee Code and Name' });
@@ -287,8 +307,8 @@ router.post('/employees', upload.single('file'), async (req, res) => {
                 blood_group, pan_number, aadhaar_number, uan_number, pf_account_number,
                 esi_number, bank_account_number, bank_ifsc, bank_name,
                 employment_type, employee_category, employment_status, permanent_address, notice_period_days,
-                work_location, updated_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,NOW())
+                work_location, project_id, trade, contractor_name, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,NOW())
              ON CONFLICT (user_id) DO UPDATE SET
                department_id=EXCLUDED.department_id,
                designation_id=EXCLUDED.designation_id,
@@ -312,13 +332,16 @@ router.post('/employees', upload.single('file'), async (req, res) => {
                permanent_address=COALESCE(NULLIF(EXCLUDED.permanent_address,''), employee_profiles.permanent_address),
                notice_period_days=EXCLUDED.notice_period_days,
                work_location=COALESCE(NULLIF(EXCLUDED.work_location,''), employee_profiles.work_location),
+               project_id=COALESCE(EXCLUDED.project_id, employee_profiles.project_id),
+               trade=COALESCE(NULLIF(EXCLUDED.trade,''), employee_profiles.trade),
+               contractor_name=COALESCE(NULLIF(EXCLUDED.contractor_name,''), employee_profiles.contractor_name),
                updated_at=NOW()`,
             [userId, companyId, deptId, desigId,
              doj, dob, gender||null, fatherName||null, marital||null,
              blood||null, pan||null, aadhaar||null, uan||null, pf||null,
              esi||null, bankAcc||null, ifsc||null, bankName||null,
              empType||'permanent', empCategory, empStatus, address||null, noticeDays,
-             workLocation||null]
+             workLocation||null, projectId, trade||null, contractorName||null]
           );
           results.updated++;
         } else {
@@ -358,14 +381,14 @@ router.post('/employees', upload.single('file'), async (req, res) => {
                   blood_group, pan_number, aadhaar_number, uan_number, pf_account_number,
                   esi_number, bank_account_number, bank_ifsc, bank_name,
                   employment_type, employee_category, employment_status, permanent_address, notice_period_days,
-                  work_location)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`,
+                  work_location, project_id, trade, contractor_name)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
               [userId, companyId, deptId, desigId,
                doj, dob, gender||null, fatherName||null, marital||null,
                blood||null, pan||null, aadhaar||null, uan||null, pf||null,
                esi||null, bankAcc||null, ifsc||null, bankName||null,
                empType||'permanent', empCategory, empStatus, address||null, noticeDays,
-               workLocation||null]
+               workLocation||null, projectId, trade||null, contractorName||null]
             );
 
             // Auto-assign salary if CTC present
