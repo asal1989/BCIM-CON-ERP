@@ -869,6 +869,32 @@ router.put('/manpower-report/configs/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// POST /manpower-report/configs/:id/send-now — sends today's report to the
+// config's REAL recipients immediately, rather than waiting for the 10 AM
+// automated send. Distinct from /test-email, which always redirects to the
+// caller's own inbox.
+router.post('/manpower-report/configs/:id/send-now', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT * FROM manpower_report_configs WHERE id=$1 AND company_id=$2`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Config not found' });
+    const cfg = rows[0];
+
+    const { runManpowerClientReport } = require('../utils/manpower-client-report.service');
+    const result = await runManpowerClientReport({
+      date: req.body.date,
+      manual: true,
+      company_id: cfg.company_id,
+      project_id: cfg.project_id,
+      project_name: cfg.project_name,
+      recipients: cfg.recipients,
+    });
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.delete('/manpower-report/configs/:id', async (req, res) => {
   try {
     const { rowCount } = await query(

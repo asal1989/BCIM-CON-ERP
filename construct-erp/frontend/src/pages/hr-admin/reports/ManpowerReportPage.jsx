@@ -584,6 +584,7 @@ export default function ManpowerReportPage() {
 function ManpowerConfigModal({ onClose, projects, date }) {
   const [saving, setSaving] = useState(false);
   const [testingId, setTestingId] = useState(null);
+  const [sendingNowId, setSendingNowId] = useState(null);
   const [newProjectId, setNewProjectId] = useState('');
   const [newRecipients, setNewRecipients] = useState('');
 
@@ -643,6 +644,18 @@ function ManpowerConfigModal({ onClose, projects, date }) {
     } finally { setTestingId(null); }
   };
 
+  const handleSendNow = async (cfg) => {
+    if (!window.confirm(`Send today's report to the REAL recipients now?\n\n${cfg.recipients}\n\nThis goes out immediately, not as a test.`)) return;
+    setSendingNowId(cfg.id);
+    try {
+      const res = await hrAttendanceAPI.manpowerReportConfigs.sendNow(cfg.id, date).then(r => r.data);
+      if (!res.ok) toast.error(res.reason || 'Could not send email');
+      else toast.success(`Sent to ${res.recipients?.join(', ') || 'recipients'}`);
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to send email');
+    } finally { setSendingNowId(null); }
+  };
+
   const inputCls = { border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 11px', fontSize: 12.5, fontWeight: 600, color: '#1E293B', outline: 'none', width: '100%' };
 
   return (
@@ -675,6 +688,11 @@ function ManpowerConfigModal({ onClose, projects, date }) {
                     title="Send a test copy to your own email"
                     style={{ border: '1px solid #E2E8F0', background: '#fff', borderRadius: 8, padding: '6px 10px', fontSize: 11.5, fontWeight: 700, color: '#334155', cursor: testingId === cfg.id ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
                     <Send size={12} /> {testingId === cfg.id ? '…' : 'Test'}
+                  </button>
+                  <button onClick={() => handleSendNow(cfg)} disabled={sendingNowId === cfg.id}
+                    title="Send today's report to the real recipients right now"
+                    style={{ border: '1px solid #BFDBFE', background: '#EFF6FF', borderRadius: 8, padding: '6px 10px', fontSize: 11.5, fontWeight: 700, color: '#1D4ED8', cursor: sendingNowId === cfg.id ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <Mail size={12} /> {sendingNowId === cfg.id ? '…' : 'Send Now'}
                   </button>
                   <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
                     <input type="checkbox" checked={cfg.enabled} onChange={() => handleToggle(cfg)} style={{ width: 15, height: 15, cursor: 'pointer' }} />
