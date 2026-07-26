@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hrAttendanceAPI, projectAPI } from '../../../api/client';
-import { Printer, Download, RefreshCw, ChevronRight, LayoutGrid, Building2, Mail, HardHat, Users, Briefcase, TrendingUp } from 'lucide-react';
+import { Printer, Download, RefreshCw, ChevronRight, LayoutGrid, Building2, Mail, HardHat, Users, Briefcase, TrendingUp, Calendar, MapPin, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const SUMMARY_COLORS = ['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d','#ea580c','#4f46e5'];
+const initials = (s) => (s || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 
 const today = () => new Date().toISOString().slice(0, 10);
 const fmtDate = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -139,84 +140,139 @@ export default function ManpowerReportPage() {
     URL.revokeObjectURL(a.href);
   };
 
-  const th = { padding: '6px 8px', border: '1px solid #cbd5e1', background: '#eef2f7', fontWeight: 700, fontSize: 11, color: '#1e293b', textAlign: 'center' };
-  const td = { padding: '5px 8px', border: '1px solid #e2e8f0', fontSize: 12, textAlign: 'center' };
+  const th = { padding: '10px 10px', borderBottom: '2px solid #E2E8F0', background: '#F8FAFC', fontWeight: 800, fontSize: 10.5, color: '#475569', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.03em', position: 'sticky', top: 0, zIndex: 1 };
+  const td = { padding: '9px 10px', borderBottom: '1px solid #F1F5F9', fontSize: 12.5, textAlign: 'center' };
 
   const selectCls = {
-    border: '1px solid #E2E8F0', borderRadius: 8, padding: '7px 12px', fontSize: 13,
-    background: '#fff', color: '#334155', outline: 'none', cursor: 'pointer',
+    border: '1px solid #E2E8F0', borderRadius: 9, padding: '8px 12px 8px 34px', fontSize: 13,
+    background: '#fff', color: '#1E293B', outline: 'none', cursor: 'pointer', fontWeight: 600,
+    appearance: 'none', WebkitAppearance: 'none',
   };
-  const labelCls = { fontSize: 10.5, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, display: 'block' };
+  const labelCls = { fontSize: 10, fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6, display: 'block' };
+
+  const actionBtnBase = {
+    display: 'flex', alignItems: 'center', gap: 6, borderRadius: 10, padding: '9px 15px',
+    cursor: 'pointer', fontSize: 12.5, fontWeight: 700, border: '1px solid transparent',
+    transition: 'transform 0.12s ease, box-shadow 0.12s ease', whiteSpace: 'nowrap',
+  };
 
   return (
-    <div style={{ background: '#F8FAFC', minHeight: '100vh' }}>
+    <div className="mp-page-root" style={{ background: 'radial-gradient(1200px 400px at 20% -10%, #EFF4FF 0%, #F8FAFC 55%)', minHeight: '100vh' }}>
       <style>{PRINT_CSS}</style>
+      <style>{`
+        .mp-hover-lift:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(15,23,42,0.10); }
+        .mp-btn:hover { transform: translateY(-1px); }
+        .mp-kpi-card:hover { transform: translateY(-3px); box-shadow: 0 14px 28px rgba(15,23,42,0.09); }
+        .mp-row:hover td { background: #F1F5FE !important; }
+        .mp-select-wrap select:focus, .mp-select-wrap input:focus { outline: 2px solid #93C5FD; outline-offset: 1px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
 
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="no-print" style={{ padding: '20px 24px 0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 42, height: 42, borderRadius: 12, background: 'linear-gradient(135deg,#1A56DB,#3B82F6)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(26,86,219,0.25)' }}>
-              <HardHat size={21} color="#fff" />
-            </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#9ca3af', marginBottom: 2 }}>
-                <span>HR Admin</span><ChevronRight size={11} /><span>Reports</span>
+      {/* ── Hero header banner ────────────────────────────────────────── */}
+      <div className="no-print" style={{ padding: '22px 24px 0' }}>
+        <div style={{
+          position: 'relative', overflow: 'hidden', borderRadius: 20,
+          background: 'linear-gradient(120deg,#0B1739 0%,#132A63 45%,#1A56DB 100%)',
+          padding: '24px 28px', marginBottom: 18, boxShadow: '0 18px 40px -12px rgba(11,23,57,0.45)',
+        }}>
+          {/* decorative glow orbs */}
+          <div style={{ position: 'absolute', top: -60, right: -40, width: 220, height: 220, borderRadius: '50%', background: 'radial-gradient(circle,rgba(59,130,246,0.35),transparent 70%)' }} />
+          <div style={{ position: 'absolute', bottom: -80, left: '30%', width: 260, height: 260, borderRadius: '50%', background: 'radial-gradient(circle,rgba(99,102,241,0.18),transparent 70%)' }} />
+
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ width: 50, height: 50, borderRadius: 14, background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
+                <HardHat size={24} color="#fff" />
               </div>
-              <h1 style={{ fontWeight: 800, fontSize: 19, color: '#0F172A', margin: 0, letterSpacing: '-0.01em' }}>Overall Daily Manpower Report</h1>
-              <p style={{ margin: '2px 0 0', fontSize: 12.5, color: '#64748B' }}>{fmtDate(date)} · {selectedProjectName}</p>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'rgba(255,255,255,0.55)', marginBottom: 3, fontWeight: 600 }}>
+                  <span>HR Admin</span><ChevronRight size={11} /><span>Reports</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 8, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 99, padding: '2px 8px', color: '#BFDBFE', fontSize: 10, fontWeight: 800, letterSpacing: '0.03em' }}>
+                    <Sparkles size={10} /> LIVE
+                  </span>
+                </div>
+                <h1 style={{ fontWeight: 800, fontSize: 22, color: '#fff', margin: 0, letterSpacing: '-0.015em' }}>Overall Daily Manpower Report</h1>
+                <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'rgba(255,255,255,0.68)', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Calendar size={12} /> {fmtDate(date)}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><MapPin size={12} /> {selectedProjectName}</span>
+                </p>
+              </div>
             </div>
+
+            {!isLoading && rows.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 14, padding: '10px 20px', backdropFilter: 'blur(4px)' }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Users size={17} color="#fff" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: '#fff', lineHeight: 1 }}>{grandTotal}</div>
+                  <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.6)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Present</div>
+                </div>
+              </div>
+            )}
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button onClick={() => refetch()} disabled={isFetching} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', color: '#374151', border: '1px solid #D1D5DB', borderRadius: 9, padding: '9px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
-              <RefreshCw size={14} style={{ animation: isFetching ? 'spin 1s linear infinite' : 'none' }} /> Refresh
+
+          {/* action buttons row */}
+          <div style={{ position: 'relative', display: 'flex', gap: 9, flexWrap: 'wrap', marginTop: 20 }}>
+            <button className="mp-btn" onClick={() => refetch()} disabled={isFetching} style={{ ...actionBtnBase, background: 'rgba(255,255,255,0.10)', color: '#fff', border: '1px solid rgba(255,255,255,0.22)' }}>
+              <RefreshCw size={13} style={{ animation: isFetching ? 'spin 1s linear infinite' : 'none' }} /> Refresh
             </button>
-            <button onClick={handleExport} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F0FDF4', color: '#15803D', border: '1px solid #86EFAC', borderRadius: 9, padding: '9px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
-              <Download size={14} /> Export CSV
+            <button className="mp-btn" onClick={handleExport} style={{ ...actionBtnBase, background: 'rgba(255,255,255,0.10)', color: '#fff', border: '1px solid rgba(255,255,255,0.22)' }}>
+              <Download size={13} /> Export CSV
             </button>
-            <button onClick={handleSendTestEmail} disabled={sendingTest}
+            <button className="mp-btn" onClick={handleSendTestEmail} disabled={sendingTest}
               title="Sends today's report to your own email — preview of the automated 10 AM client send"
-              style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#FFF7ED', color: '#C2410C', border: '1px solid #FED7AA', borderRadius: 9, padding: '9px 16px', cursor: sendingTest ? 'wait' : 'pointer', opacity: sendingTest ? 0.6 : 1, fontSize: 13, fontWeight: 700 }}>
-              <Mail size={14} /> {sendingTest ? 'Sending…' : 'Send Test Email'}
+              style={{ ...actionBtnBase, background: 'rgba(255,255,255,0.10)', color: '#fff', border: '1px solid rgba(255,255,255,0.22)', cursor: sendingTest ? 'wait' : 'pointer', opacity: sendingTest ? 0.6 : 1 }}>
+              <Mail size={13} /> {sendingTest ? 'Sending…' : 'Send Test Email'}
             </button>
-            <button onClick={() => window.print()} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'linear-gradient(135deg,#1A56DB,#3B82F6)', color: '#fff', border: 'none', borderRadius: 9, padding: '9px 18px', cursor: 'pointer', fontSize: 13, fontWeight: 700, boxShadow: '0 2px 8px rgba(26,86,219,0.3)' }}>
-              <Printer size={14} /> Print / PDF
+            <button className="mp-btn" onClick={() => window.print()} style={{ ...actionBtnBase, background: '#fff', color: '#132A63', boxShadow: '0 6px 16px rgba(0,0,0,0.18)', marginLeft: 'auto' }}>
+              <Printer size={13} /> Print / PDF
             </button>
           </div>
         </div>
 
         {/* Filter bar */}
-        <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: '14px 16px', marginBottom: 16, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          <div>
+        <div className="mp-select-wrap" style={{ background: '#fff', border: '1px solid #E7ECF3', borderRadius: 14, padding: '14px 18px', marginBottom: 18, display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-end', boxShadow: '0 2px 8px rgba(15,23,42,0.03)' }}>
+          <div style={{ position: 'relative' }}>
             <label style={labelCls}>Date</label>
+            <Calendar size={14} color="#94A3B8" style={{ position: 'absolute', left: 11, bottom: 10.5, pointerEvents: 'none' }} />
             <input type="date" value={date} onChange={e => setDate(e.target.value)} style={selectCls} />
           </div>
-          <div>
+          <div style={{ position: 'relative' }}>
             <label style={labelCls}>Project</label>
-            <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)} style={{ ...selectCls, minWidth: 190 }}>
+            <MapPin size={14} color="#94A3B8" style={{ position: 'absolute', left: 11, bottom: 10.5, pointerEvents: 'none' }} />
+            <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)} style={{ ...selectCls, minWidth: 210 }}>
               <option value="">All Projects</option>
               <option value="HEAD_OFFICE">Head Office</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
+          <div style={{ marginLeft: 'auto', fontSize: 11.5, color: '#94A3B8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+            {isFetching && <><RefreshCw size={12} style={{ animation: 'spin 1s linear infinite' }} /> Syncing latest data…</>}
+          </div>
         </div>
 
         {/* KPI strip */}
         {!isLoading && rows.length > 0 && (
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 18 }}>
             {[
-              { icon: Users,      label: 'Total Present',  value: grandTotal,             accent: '#16A34A', bg: '#F0FDF4' },
-              { icon: Building2,  label: 'Companies',      value: kpis.companies,         accent: '#7C3AED', bg: '#F5F3FF' },
-              { icon: Briefcase,  label: 'Designations',   value: kpis.designations,      accent: '#0EA5E9', bg: '#F0F9FF' },
-              { icon: TrendingUp, label: 'Top Contributor', value: kpis.topCompany, sub: `${kpis.topCompanyPct}% of total`, accent: '#EA580C', bg: '#FFF7ED' },
+              { icon: Users,      label: 'Total Present',   value: grandTotal,        accent: '#16A34A', grad: 'linear-gradient(135deg,#22C55E,#16A34A)' },
+              { icon: Building2,  label: 'Companies',       value: kpis.companies,    accent: '#7C3AED', grad: 'linear-gradient(135deg,#A78BFA,#7C3AED)' },
+              { icon: Briefcase,  label: 'Designations',    value: kpis.designations, accent: '#0EA5E9', grad: 'linear-gradient(135deg,#38BDF8,#0EA5E9)' },
+              { icon: TrendingUp, label: 'Top Contributor',  value: kpis.topCompany, sub: `${kpis.topCompanyPct}% of total headcount`, accent: '#EA580C', grad: 'linear-gradient(135deg,#FB923C,#EA580C)' },
             ].map(k => (
-              <div key={k.label} style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: '12px 16px', flex: '1 1 180px', minWidth: 180 }}>
-                <div style={{ width: 38, height: 38, borderRadius: 10, background: k.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <k.icon size={18} color={k.accent} />
+              <div key={k.label} className="mp-kpi-card mp-hover-lift" style={{
+                position: 'relative', display: 'flex', alignItems: 'center', gap: 14, background: '#fff',
+                border: '1px solid #EEF1F6', borderRadius: 16, padding: '16px 18px', flex: '1 1 210px', minWidth: 210,
+                transition: 'transform 0.15s ease, box-shadow 0.15s ease', overflow: 'hidden',
+              }}>
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: k.grad }} />
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: k.grad, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: `0 6px 14px -4px ${k.accent}66` }}>
+                  <k.icon size={20} color="#fff" />
                 </div>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: k.sub ? 14 : 20, fontWeight: 800, color: '#0F172A', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{k.value}</div>
-                  <div style={{ fontSize: 11, color: '#64748B', fontWeight: 600 }}>{k.sub || k.label}</div>
+                  <div style={{ fontSize: k.sub ? 15 : 22, fontWeight: 800, color: '#0F172A', lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{k.value}</div>
+                  <div style={{ fontSize: 11.5, color: '#64748B', fontWeight: 600, marginTop: 1 }}>{k.sub || k.label}</div>
                 </div>
               </div>
             ))}
@@ -224,22 +280,24 @@ export default function ManpowerReportPage() {
         )}
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'inline-flex', gap: 4, background: '#EEF2F9', padding: 4, borderRadius: 12, marginBottom: 4 }}>
           <button onClick={() => setTab('detail')} style={{
-            display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8,
-            border: tab === 'detail' ? '1.5px solid #1a56db' : '1px solid #e2e8f0',
-            background: tab === 'detail' ? '#eff6ff' : '#fff',
-            color: tab === 'detail' ? '#1a56db' : '#64748b',
-            fontSize: 13, fontWeight: 700, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 9,
+            border: 'none', background: tab === 'detail' ? '#fff' : 'transparent',
+            color: tab === 'detail' ? '#1A56DB' : '#64748b',
+            fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+            boxShadow: tab === 'detail' ? '0 2px 8px rgba(15,23,42,0.08)' : 'none',
+            transition: 'all 0.15s ease',
           }}>
             <LayoutGrid size={14} /> Detailed (Site × Shift)
           </button>
           <button onClick={() => setTab('summary')} style={{
-            display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8,
-            border: tab === 'summary' ? '1.5px solid #1a56db' : '1px solid #e2e8f0',
-            background: tab === 'summary' ? '#eff6ff' : '#fff',
-            color: tab === 'summary' ? '#1a56db' : '#64748b',
-            fontSize: 13, fontWeight: 700, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 9,
+            border: 'none', background: tab === 'summary' ? '#fff' : 'transparent',
+            color: tab === 'summary' ? '#1A56DB' : '#64748b',
+            fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+            boxShadow: tab === 'summary' ? '0 2px 8px rgba(15,23,42,0.08)' : 'none',
+            transition: 'all 0.15s ease',
           }}>
             <Building2 size={14} /> Company-wise Present Summary
           </button>
@@ -381,15 +439,19 @@ export default function ManpowerReportPage() {
 
         {/* ── SCREEN CONTENT (hidden on print) ──────────────────────────────── */}
         {isLoading ? (
-          <div className="no-print" style={{ textAlign: 'center', padding: 56, color: '#9ca3af' }}>Loading manpower data…</div>
+          <div className="no-print" style={{ textAlign: 'center', padding: 64, color: '#94A3B8', background: '#fff', borderRadius: 16, border: '1px solid #EEF1F6' }}>
+            <RefreshCw size={22} style={{ animation: 'spin 1s linear infinite', marginBottom: 10 }} />
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Loading manpower data…</div>
+          </div>
         ) : rows.length === 0 ? (
-          <div className="no-print" style={{ textAlign: 'center', padding: 56, color: '#9ca3af', background: '#fff', borderRadius: 10, border: '1px solid #e5e7eb' }}>
-            No "present" attendance records found for {fmtDate(date)}.<br />
+          <div className="no-print" style={{ textAlign: 'center', padding: 64, color: '#94A3B8', background: '#fff', borderRadius: 16, border: '1px solid #EEF1F6' }}>
+            <Users size={28} color="#CBD5E1" style={{ marginBottom: 10 }} />
+            <div style={{ fontWeight: 700, color: '#475569', fontSize: 13.5 }}>No "present" attendance records found for {fmtDate(date)}</div>
             <span style={{ fontSize: 12 }}>Make sure the day's muster has been recorded.</span>
           </div>
         ) : tab === 'summary' ? (
-          <div className="no-print" style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 480px) 1fr', gap: 20, alignItems: 'start' }}>
-            <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+          <div className="no-print" style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 480px) 1fr', gap: 18, alignItems: 'start' }}>
+            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #EEF1F6', overflow: 'hidden', boxShadow: '0 2px 10px rgba(15,23,42,0.04)' }}>
               <table style={{ borderCollapse: 'collapse', width: '100%' }}>
                 <thead>
                   <tr>
@@ -401,10 +463,16 @@ export default function ManpowerReportPage() {
                 </thead>
                 <tbody>
                   {companySummary.map((c, i) => (
-                    <tr key={c.company} style={{ background: i % 2 ? '#fafafa' : '#fff' }}>
+                    <tr key={c.company} className="mp-row">
                       <td style={{ ...td, textAlign: 'left', fontWeight: 700, color: '#1e293b' }}>
-                        <span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: SUMMARY_COLORS[i % SUMMARY_COLORS.length], marginRight: 8 }} />
-                        {c.company}
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{
+                            width: 22, height: 22, borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            background: SUMMARY_COLORS[i % SUMMARY_COLORS.length] + '1a', color: SUMMARY_COLORS[i % SUMMARY_COLORS.length],
+                            fontSize: 9, fontWeight: 800,
+                          }}>{initials(c.company)}</span>
+                          {c.company}
+                        </span>
                       </td>
                       <td style={{ ...td, color: '#64748b' }}>{c.designations}</td>
                       <td style={{ ...td, fontWeight: 800, color: '#1a56db' }}>{c.total}</td>
@@ -413,28 +481,32 @@ export default function ManpowerReportPage() {
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr style={{ background: '#eef2f7' }}>
-                    <td style={{ ...td, textAlign: 'left', fontWeight: 800 }}>Grand Total</td>
-                    <td style={{ ...td, fontWeight: 800 }}>{companySummary.reduce((s, c) => s + c.designations, 0)}</td>
-                    <td style={{ ...td, fontWeight: 900, color: '#1a56db' }}>{grandTotal}</td>
-                    <td style={{ ...td, fontWeight: 800 }}>100%</td>
+                  <tr style={{ background: '#F8FAFC' }}>
+                    <td style={{ ...td, textAlign: 'left', fontWeight: 800, borderBottom: 'none' }}>Grand Total</td>
+                    <td style={{ ...td, fontWeight: 800, borderBottom: 'none' }}>{companySummary.reduce((s, c) => s + c.designations, 0)}</td>
+                    <td style={{ ...td, fontWeight: 900, color: '#1a56db', borderBottom: 'none' }}>{grandTotal}</td>
+                    <td style={{ ...td, fontWeight: 800, borderBottom: 'none' }}>100%</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
-            <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #e5e7eb', padding: 20 }}>
-              <p style={{ margin: '0 0 16px', fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Headcount by Company</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #EEF1F6', padding: 22, boxShadow: '0 2px 10px rgba(15,23,42,0.04)' }}>
+              <p style={{ margin: '0 0 18px', fontSize: 11.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Headcount by Company</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 {companySummary.map((c, i) => {
                   const pct = grandTotal ? (c.total / grandTotal) * 100 : 0;
+                  const color = SUMMARY_COLORS[i % SUMMARY_COLORS.length];
                   return (
                     <div key={c.company}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 12.5 }}>
-                        <span style={{ fontWeight: 600, color: '#334155' }}>{c.company}</span>
-                        <span style={{ fontWeight: 800, color: '#1e293b' }}>{c.total}</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 12.5 }}>
+                        <span style={{ fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: 7 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                          {c.company}
+                        </span>
+                        <span style={{ fontWeight: 800, color: '#1e293b' }}>{c.total} <span style={{ color: '#94A3B8', fontWeight: 600, fontSize: 11 }}>({pct.toFixed(1)}%)</span></span>
                       </div>
-                      <div style={{ height: 10, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${pct}%`, background: SUMMARY_COLORS[i % SUMMARY_COLORS.length], borderRadius: 99, transition: 'width 0.4s' }} />
+                      <div style={{ height: 9, background: '#F1F5F9', borderRadius: 99, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: `linear-gradient(90deg, ${color}cc, ${color})`, borderRadius: 99, transition: 'width 0.5s ease' }} />
                       </div>
                     </div>
                   );
@@ -443,59 +515,57 @@ export default function ManpowerReportPage() {
             </div>
           </div>
         ) : (
-          <div className="no-print" style={{ overflowX: 'auto', background: '#fff', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+          <div className="no-print" style={{ overflowX: 'auto', background: '#fff', borderRadius: 16, border: '1px solid #EEF1F6', boxShadow: '0 2px 10px rgba(15,23,42,0.04)' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%' }}>
               <thead>
                 <tr>
-                  <th style={{ ...th, minWidth: 140 }} rowSpan={2}>Company</th>
+                  <th style={{ ...th, minWidth: 140, textAlign: 'left', borderTopLeftRadius: 16 }} rowSpan={2}>Company</th>
                   <th style={{ ...th, minWidth: 160, textAlign: 'left' }} rowSpan={2}>Designation</th>
                   {columns.map(c => (
                     <th key={c.key} style={th} colSpan={c.shifts.length}>{c.label}</th>
                   ))}
-                  <th style={{ ...th, minWidth: 90 }} rowSpan={2}>Grand Total</th>
+                  <th style={{ ...th, minWidth: 90, borderTopRightRadius: 16 }} rowSpan={2}>Grand Total</th>
                 </tr>
                 <tr>
                   {columns.map(c => c.shifts.map(s => (
-                    <th key={`${c.key}-${s}`} style={{ ...th, minWidth: 60, color: '#64748b' }}>{s}</th>
+                    <th key={`${c.key}-${s}`} style={{ ...th, minWidth: 60, color: '#94A3B8', top: 33 }}>{s}</th>
                   )))}
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r, i) => (
-                  <tr key={i} style={{ background: i % 2 ? '#fafafa' : '#fff' }}>
+                  <tr key={i} className="mp-row">
                     {rowSpans[i] !== undefined && (
-                      <td style={{ ...td, fontWeight: 700, color: '#1e293b', verticalAlign: 'top', background: '#f8fafc' }} rowSpan={rowSpans[i]}>
+                      <td style={{ ...td, textAlign: 'left', fontWeight: 700, color: '#1e293b', verticalAlign: 'top', background: '#FAFBFD' }} rowSpan={rowSpans[i]}>
                         {r.company}
                       </td>
                     )}
-                    <td style={{ ...td, textAlign: 'left', fontWeight: 500 }}>{r.designation}</td>
+                    <td style={{ ...td, textAlign: 'left', fontWeight: 500, color: '#334155' }}>{r.designation}</td>
                     {columns.map(c => c.shifts.map(s => {
                       const v = r.cells[`${c.key}|${s}`];
                       return (
-                        <td key={`${c.key}-${s}`} style={{ ...td, color: v ? '#0f172a' : '#d1d5db', fontWeight: v ? 700 : 400 }}>
-                          {v || ''}
+                        <td key={`${c.key}-${s}`} style={{ ...td, color: v ? '#0f172a' : '#e2e8f0', fontWeight: v ? 700 : 400 }}>
+                          {v || '—'}
                         </td>
                       );
                     }))}
-                    <td style={{ ...td, fontWeight: 800, color: '#1a56db', background: '#eff6ff' }}>{r.total}</td>
+                    <td style={{ ...td, fontWeight: 800, color: '#1a56db', background: '#F0F5FF' }}>{r.total}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr style={{ background: '#eef2f7' }}>
-                  <td colSpan={2} style={{ ...td, textAlign: 'right', fontWeight: 800, color: '#1e293b' }}>Grand Total</td>
+                <tr style={{ background: '#F8FAFC' }}>
+                  <td colSpan={2} style={{ ...td, textAlign: 'right', fontWeight: 800, color: '#1e293b', borderBottom: 'none' }}>Grand Total</td>
                   {columns.map(c => c.shifts.map(s => (
-                    <td key={`${c.key}-${s}-t`} style={{ ...td, fontWeight: 800 }}>{colTotal(c.key, s) || ''}</td>
+                    <td key={`${c.key}-${s}-t`} style={{ ...td, fontWeight: 800, borderBottom: 'none' }}>{colTotal(c.key, s) || '—'}</td>
                   )))}
-                  <td style={{ ...td, fontWeight: 900, color: '#1a56db' }}>{grandTotal}</td>
+                  <td style={{ ...td, fontWeight: 900, color: '#1a56db', background: '#EAF1FF', borderBottom: 'none' }}>{grandTotal}</td>
                 </tr>
               </tfoot>
             </table>
           </div>
         )}
       </div>
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
