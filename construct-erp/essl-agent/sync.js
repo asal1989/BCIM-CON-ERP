@@ -38,8 +38,13 @@ const OVERLAP_SECONDS    = 30; // re-query last 30s of previous window to catch 
 let lastSyncAt = null;
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
-function toDateStr(d)    { return d.toISOString().split('T')[0]; }
-function toDateTimeStr(d){ return d.toISOString().replace('T', ' ').slice(0, 19); }
+// IMPORTANT: ESSL/ZKTeco devices write LogDate as a naive LOCAL wall-clock
+// timestamp (no timezone), so query bounds sent to SQL Server must be built
+// from local time components — NOT .toISOString(), which always renders UTC
+// and would silently exclude every swipe from the last ~5.5h (IST offset).
+function pad(n) { return String(n).padStart(2, '0'); }
+function toDateStr(d)    { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+function toDateTimeStr(d){ return `${toDateStr(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
 function addDays(d, n)   { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
 function addMinutes(d, n){ return new Date(d.getTime() + n * 60000); }
 
