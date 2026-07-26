@@ -137,6 +137,68 @@ async function fetchManpowerData(companyId, projectId, targetDate) {
   return { rows, companySummary, grandTotal };
 }
 
+// ── Same as fetchManpowerData but for the "All Projects (combined)" config —
+// prefixes each row's company label with its project name (e.g.
+// "Tech-P3 — BCIM Staff") so the existing company-grouped PDF/email actually
+// shows a real project-wise breakdown instead of merging every project's
+// headcount into one undifferentiated total.
+async function fetchAllProjectsManpowerData(companyId, targetDate) {
+  const { rows: rawRows } = await query(`
+    SELECT
+      COALESCE(pr.name, 'Head Office')                  AS project,
+      COALESCE(ep.contractor_name,
+        CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
+             THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END) AS company,
+      COALESCE(des.name, u.designation, '—')       AS designation,
+      COALESCE(a.site, '')                              AS site,
+      COALESCE(a.shift, 'DAY')                          AS shift,
+      COUNT(*)::int                                     AS headcount
+    FROM hr_attendance a
+    JOIN users u                  ON u.id = a.user_id
+    LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+    LEFT JOIN hr_designations des  ON des.id = ep.designation_id
+    LEFT JOIN projects pr          ON pr.id = ep.project_id
+    WHERE a.company_id = $1 AND a.attendance_date = $2 AND a.status = 'present'
+    GROUP BY
+      COALESCE(pr.name, 'Head Office'),
+      COALESCE(ep.contractor_name,
+        CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
+             THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END),
+      COALESCE(des.name, u.designation, '—'),
+      a.site, a.shift
+  `, [companyId, targetDate]);
+
+  // Project-wise summary (its own table, shown first)
+  const projectTotal = new Map();
+  const projectOrder = [];
+  for (const r of rawRows) {
+    if (!projectTotal.has(r.project)) { projectTotal.set(r.project, 0); projectOrder.push(r.project); }
+    projectTotal.set(r.project, projectTotal.get(r.project) + r.headcount);
+  }
+  const projectSummary = projectOrder
+    .map(p => ({ project: p, total: projectTotal.get(p) }))
+    .sort((a, b) => b.total - a.total);
+
+  // Compound "Project — Company" label reuses every existing company-grouped
+  // pivot/PDF/email code path unchanged.
+  const rows = rawRows.map(r => ({ ...r, company: `${r.project} — ${r.company}` }));
+
+  const companyTotal = new Map();
+  const companyDesigs = new Map();
+  const companyOrder = [];
+  for (const r of rows) {
+    if (!companyTotal.has(r.company)) { companyTotal.set(r.company, 0); companyDesigs.set(r.company, new Set()); companyOrder.push(r.company); }
+    companyTotal.set(r.company, companyTotal.get(r.company) + r.headcount);
+    companyDesigs.get(r.company).add(r.designation);
+  }
+  const companySummary = companyOrder
+    .map(c => ({ company: c, designations: companyDesigs.get(c).size, total: companyTotal.get(c) }))
+    .sort((a, b) => b.total - a.total);
+  const grandTotal = companySummary.reduce((s, c) => s + c.total, 0);
+
+  return { rows, companySummary, grandTotal, projectSummary };
+}
+
 // ── Pivot raw rows into { columns, companyGroups, grandTotal } — same shape
 // the live Manpower Report page builds client-side, reused here so the PDF
 // matches exactly (Company merged rows > Designation, Site x Shift columns).
@@ -180,7 +242,7 @@ function buildPivot(rows, grandTotal) {
 }
 
 // ── Build the client-facing HTML email body ───────────────────────────────────
-function buildEmailHtml({ companyName, projectName, dateStr, companySummary, grandTotal }) {
+function buildEmailHtml({ companyName, projectName, dateStr, companySummary, grandTotal, projectSummary }) {
   const th = `padding:9px 12px;background:#1B3A6B;color:#fff;font-size:11px;font-weight:700;text-align:left;white-space:nowrap;border:1px solid #16305a`;
   const td = `padding:8px 12px;font-size:12px;color:#1e293b;border:1px solid #e2e8f0;vertical-align:middle`;
 
@@ -190,6 +252,21 @@ function buildEmailHtml({ companyName, projectName, dateStr, companySummary, gra
       <td style="${td};text-align:right;font-weight:700;color:#1B3A6B">${c.total}</td>
       <td style="${td};text-align:right;color:#64748b">${grandTotal ? ((c.total / grandTotal) * 100).toFixed(1) : '0.0'}%</td>
     </tr>`).join('');
+
+  const projectTableHtml = projectSummary ? `
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:20px">
+        <tr>
+          <th style="${th}">Project</th>
+          <th style="${th};text-align:right">Headcount</th>
+          <th style="${th};text-align:right">% of Total</th>
+        </tr>
+        ${projectSummary.map((p, i) => `
+        <tr style="background:${i % 2 === 0 ? '#fff' : '#f8fafc'}">
+          <td style="${td};font-weight:700">${p.project}</td>
+          <td style="${td};text-align:right;font-weight:700;color:#1B3A6B">${p.total}</td>
+          <td style="${td};text-align:right;color:#64748b">${grandTotal ? ((p.total / grandTotal) * 100).toFixed(1) : '0.0'}%</td>
+        </tr>`).join('')}
+      </table>` : '';
 
   return `<!DOCTYPE html>
 <html>
@@ -226,9 +303,11 @@ function buildEmailHtml({ companyName, projectName, dateStr, companySummary, gra
         The detailed trade-wise and designation-wise breakup is attached as a PDF.
       </p>
 
+      ${projectTableHtml}
+
       <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
         <tr>
-          <th style="${th}">Company</th>
+          <th style="${th}">${projectSummary ? 'Project — Company' : 'Company'}</th>
           <th style="${th};text-align:right">Headcount</th>
           <th style="${th};text-align:right">% of Total</th>
         </tr>
@@ -281,7 +360,8 @@ function buildEmailHtml({ companyName, projectName, dateStr, companySummary, gra
 // Layout mirrors the reference report: merged company cells spanning their
 // designation rows, Site x Shift pivot columns with DAY sub-headers, a repeated
 // header + grand-total row on every page, and a signature footer.
-function buildPdfBuffer({ companyName, projectName, dateStr, dateISO, rows, companySummary, grandTotal }) {
+function buildPdfBuffer({ companyName, projectName, dateStr, dateISO, rows, companySummary, grandTotal, projectSummary }) {
+  const isProjectWise = !!projectSummary;
   return new Promise((resolve, reject) => {
     const pivot = buildPivot(rows, grandTotal);
     const { columns, companyGroups, colTotal } = pivot;
@@ -361,10 +441,10 @@ function buildPdfBuffer({ companyName, projectName, dateStr, dateISO, rows, comp
 
     // ── page 1: header + company-wise summary ───────────────────────────────
     let y = drawPageHeader();
-    y = sectionTitle('Company-wise Present Summary', y);
+    y = sectionTitle(isProjectWise ? 'Project-wise Present Summary' : 'Company-wise Present Summary', y);
 
     const sCols = [
-      { label: 'COMPANY / CONTRACTOR', w: 320, align: 'left' },
+      { label: isProjectWise ? 'PROJECT — COMPANY / CONTRACTOR' : 'COMPANY / CONTRACTOR', w: 320, align: 'left' },
       { label: 'NO. OF DESIGNATIONS',  w: 150, align: 'center' },
       { label: 'TOTAL PRESENT',        w: 150, align: 'center' },
       { label: '% OF TOTAL',           w: W - 620, align: 'center' },
@@ -414,7 +494,7 @@ function buildPdfBuffer({ companyName, projectName, dateStr, dateISO, rows, comp
 
     function drawDetailHeader(yy) {
       doc.rect(LEFT, yy, W, HDR_H).fill(NAVY);
-      cell('COMPANY', LEFT, yy, C_COMPANY, HDR_H, { bold: true, color: '#fff', size: 7 });
+      cell(isProjectWise ? 'PROJECT / COMPANY' : 'COMPANY', LEFT, yy, C_COMPANY, HDR_H, { bold: true, color: '#fff', size: 7 });
       cell('DESIGNATION', LEFT + C_COMPANY, yy, C_DESIG, HDR_H, { bold: true, color: '#fff', size: 7 });
       let xx = LEFT + C_COMPANY + C_DESIG;
       columns.forEach(c => {
@@ -562,15 +642,17 @@ async function runManpowerClientReport({
   const companyName = companyRes.rows[0]?.name || 'BCIM';
   const dateStr = fmtDateLong(targetDate);
 
-  const { rows, companySummary, grandTotal } = await fetchManpowerData(companyId, projectId, targetDate);
+  const { rows, companySummary, grandTotal, projectSummary } = projectId === null
+    ? await fetchAllProjectsManpowerData(companyId, targetDate)
+    : await fetchManpowerData(companyId, projectId, targetDate);
 
   if (!rows.length) {
     logger.warn(`Manpower client report [${projectName}]: no present-attendance data for ${targetDate} — skipping send`);
     return { ok: false, reason: 'No attendance data for date', date: targetDate, project_name: projectName };
   }
 
-  const html = buildEmailHtml({ companyName, projectName, dateStr, companySummary, grandTotal });
-  const pdfBuffer = await buildPdfBuffer({ companyName, projectName, dateStr, dateISO: targetDate, rows, companySummary, grandTotal });
+  const html = buildEmailHtml({ companyName, projectName, dateStr, companySummary, grandTotal, projectSummary });
+  const pdfBuffer = await buildPdfBuffer({ companyName, projectName, dateStr, dateISO: targetDate, rows, companySummary, grandTotal, projectSummary });
 
   const subject = `Daily Manpower Report — ${projectName} — ${dateStr}`;
   const attachments = [{
