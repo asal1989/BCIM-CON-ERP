@@ -12,6 +12,7 @@ import ComplianceTable from './ComplianceTable';
 import ComplianceDrawer from './ComplianceDrawer';
 import ComplianceForm from './ComplianceForm';
 import ComplianceAnalytics from './ComplianceAnalytics';
+import StatutoryCompliance from './StatutoryCompliance';
 import { DUMMY_COMPLIANCES, daysUntil } from './complianceData';
 
 const EMPTY_FILTERS = { month: '', department: '', location: '', type: '', status: '', priority: '', search: '' };
@@ -41,7 +42,13 @@ function DeleteDialog({ item, onCancel, onConfirm }) {
   );
 }
 
+const TABS = [
+  { key: 'dashboard', label: 'Dashboard' },
+  { key: 'statutory', label: 'Statutory Compliance' },
+];
+
 export default function CompliancePage() {
+  const [tab,     setTab]     = useState('dashboard');
   const [items,   setItems]   = useState(DUMMY_COMPLIANCES);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
@@ -150,27 +157,48 @@ export default function CompliancePage() {
         </div>
       </motion.div>
 
-      {/* ── KPI cards ── */}
+      {/* ── Tabs ── */}
+      <div className="flex items-center gap-1.5 mb-5 border-b border-slate-200">
+        {TABS.map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className="relative px-4 py-2.5 text-sm font-semibold transition-colors"
+            style={{ color: tab === t.key ? '#2563EB' : '#64748B' }}>
+            {t.label}
+            {tab === t.key && (
+              <motion.div layoutId="compliance-tab-underline" className="absolute left-0 right-0 -bottom-px h-0.5 rounded-full"
+                style={{ background: '#2563EB' }} transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }} />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* ── KPI cards (shared across tabs) ── */}
       <div className="mb-4">
         <ComplianceKpiCards stats={stats} />
       </div>
 
-      {/* ── Filters ── */}
-      <div className="mb-4">
-        <ComplianceFilters onApply={setFilters} />
-      </div>
+      {tab === 'dashboard' ? (
+        <>
+          {/* ── Filters ── */}
+          <div className="mb-4">
+            <ComplianceFilters onApply={setFilters} />
+          </div>
 
-      {/* ── Grid + analytics rail ── */}
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-4 items-start">
-        <ComplianceTable
-          rows={filtered}
-          loading={loading}
-          onView={setDrawerItem}
-          onAction={handleRowAction}
-          onCreate={() => setFormOpen(true)}
-        />
-        <ComplianceAnalytics rows={items} />
-      </div>
+          {/* ── Grid + analytics rail ── */}
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-4 items-start">
+            <ComplianceTable
+              rows={filtered}
+              loading={loading}
+              onView={setDrawerItem}
+              onAction={handleRowAction}
+              onCreate={() => setFormOpen(true)}
+            />
+            <ComplianceAnalytics rows={items} />
+          </div>
+        </>
+      ) : (
+        <StatutoryCompliance />
+      )}
 
       {/* ── Overlays ── */}
       <ComplianceDrawer item={drawerItem} onClose={() => setDrawerItem(null)} />

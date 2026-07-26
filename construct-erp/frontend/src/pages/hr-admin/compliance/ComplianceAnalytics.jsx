@@ -7,8 +7,15 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
   LineChart, Line, XAxis, YAxis, CartesianGrid,
 } from 'recharts';
-import { CalendarClock, Activity, Upload, AlertTriangle, RefreshCw, CalendarDays } from 'lucide-react';
-import { C, RECENT_ACTIVITIES, TREND_DATA, fmtDate, daysUntil } from './complianceData';
+import { CalendarClock, Activity, Upload, AlertTriangle, RefreshCw, CalendarDays, Sparkles } from 'lucide-react';
+import { C, RECENT_ACTIVITIES, TREND_DATA, AI_INSIGHTS, fmtDate, daysUntil } from './complianceData';
+
+const INSIGHT_TONES = {
+  warning: { bg: '#FFFBEB', text: '#B45309', dot: '#F59E0B' },
+  danger:  { bg: '#FEF2F2', text: '#DC2626', dot: '#EF4444' },
+  info:    { bg: '#EFF6FF', text: '#2563EB', dot: '#3B82F6' },
+  success: { bg: '#ECFDF5', text: '#059669', dot: '#22C55E' },
+};
 
 const PIE_COLORS = ['#2563EB', '#22C55E', '#F59E0B', '#8B5CF6', '#06B6D4', '#EF4444', '#64748B'];
 
@@ -41,6 +48,20 @@ export default function ComplianceAnalytics({ rows }) {
 
   return (
     <div className="space-y-4">
+      <Panel title="AI Insights" icon={Sparkles} delay={0.2}>
+        <div className="space-y-2.5">
+          {AI_INSIGHTS.map(insight => {
+            const tone = INSIGHT_TONES[insight.tone] || INSIGHT_TONES.info;
+            return (
+              <div key={insight.id} className="flex items-start gap-2.5 rounded-xl p-3" style={{ background: tone.bg }}>
+                <span className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ background: tone.dot }} />
+                <p className="text-xs leading-relaxed" style={{ color: tone.text }}>{insight.text}</p>
+              </div>
+            );
+          })}
+        </div>
+      </Panel>
+
       <Panel title="Compliance by Department" icon={Activity} delay={0.25}>
         <div className="h-44">
           <ResponsiveContainer>

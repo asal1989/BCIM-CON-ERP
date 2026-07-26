@@ -80,3 +80,30 @@ export const TREND_DATA = [
 export const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
 export const daysUntil = (d) => Math.ceil((new Date(d) - new Date()) / 86400000);
+
+// ── Statutory Compliance — one fixed card per act/scheme, independent of the
+// ad-hoc DUMMY_COMPLIANCES list above (that's per-instance filings; this is
+// the always-present set of statutory obligations every enterprise HR must
+// track continuously, each with its own filing cadence and owner). ─────────
+export const STATUTORY_ITEMS = [
+  { code: 'EPF', name: 'Employees Provident Fund',        act: 'EPF & MP Act, 1952',            frequency: 'Monthly',     status: 'In Progress', dueDate: '2026-08-15', lastFiling: '2026-07-15', responsible: 'Nandhini R',  progress: 72, coveredEmployees: 338, description: 'Monthly ECR filing and contribution remittance (employer 12% + employee 12%) for all eligible employees.' },
+  { code: 'ESI',  name: 'Employees State Insurance',      act: 'ESI Act, 1948',                  frequency: 'Half-yearly', status: 'Compliant',    dueDate: '2026-11-11', lastFiling: '2026-05-11', responsible: 'Vignesh M',   progress: 100, coveredEmployees: 210, description: 'Half-yearly contribution return for workers earning within the ESI wage ceiling.' },
+  { code: 'PT',   name: 'Professional Tax',                act: 'Telangana PT Act, 1987',         frequency: 'Monthly',     status: 'Pending',      dueDate: '2026-07-20', lastFiling: '2026-06-20', responsible: 'Kavya S',     progress: 40, coveredEmployees: 338, description: 'Monthly PT deduction from salaries and remittance to the state commercial tax department.' },
+  { code: 'LWF',  name: 'Labour Welfare Fund',              act: 'TS Labour Welfare Fund Act',     frequency: 'Half-yearly', status: 'Compliant',    dueDate: '2026-12-31', lastFiling: '2026-06-30', responsible: 'Nandhini R',  progress: 100, coveredEmployees: 338, description: 'Half-yearly employer + employee contribution to the state labour welfare fund.' },
+  { code: 'IT',   name: 'Income Tax (TDS on Salary)',       act: 'Income Tax Act — Sec 192',       frequency: 'Quarterly',   status: 'In Progress', dueDate: '2026-07-31', lastFiling: '2026-04-30', responsible: 'Kavya S',     progress: 65, coveredEmployees: 338, description: 'Quarterly TDS return (Form 24Q) on employee salaries for the current financial quarter.' },
+  { code: 'BONUS',name: 'Bonus Act',                        act: 'Payment of Bonus Act, 1965',     frequency: 'Annual',      status: 'Pending',      dueDate: '2026-11-30', lastFiling: '2025-11-28', responsible: 'Priya Nair',  progress: 10, coveredEmployees: 296, description: 'Annual statutory bonus computation and disbursement (8.33%–20% of eligible wages).' },
+  { code: 'GRAT', name: 'Gratuity',                         act: 'Payment of Gratuity Act, 1972',  frequency: 'Annual',      status: 'Compliant',    dueDate: '2027-03-31', lastFiling: '2026-03-31', responsible: 'Nandhini R',  progress: 100, coveredEmployees: 338, description: 'Annual actuarial valuation and gratuity trust fund top-up for employees crossing 5 years of service.' },
+  { code: 'LE',   name: 'Leave Encashment',                 act: 'Company Leave Policy — HR/LP/04',frequency: 'Annual',      status: 'Compliant',    dueDate: '2027-01-31', lastFiling: '2026-01-31', responsible: 'Kavya S',     progress: 100, coveredEmployees: 338, description: 'Year-end encashment of unutilised earned leave beyond the carry-forward cap.' },
+  { code: 'MW',   name: 'Minimum Wages',                    act: 'Minimum Wages Act, 1948',        frequency: 'Half-yearly', status: 'Compliant',    dueDate: '2027-02-05', lastFiling: '2026-07-02', responsible: 'Vignesh M',   progress: 100, coveredEmployees: 210, description: 'Wage register revision to reflect the latest state minimum-wage notification.' },
+  { code: 'S&E',  name: 'Shops & Establishment',            act: 'TS S&E Act, 1988',               frequency: 'Annual',      status: 'Compliant',    dueDate: '2027-09-12', lastFiling: '2026-09-12', responsible: 'Suresh B',    progress: 100, coveredEmployees: 338, description: 'Registration renewal for the head office and administrative premises.' },
+  { code: 'CLRA', name: 'Contract Labour',                  act: 'CLRA Act, 1970',                 frequency: 'Annual',      status: 'Overdue',      dueDate: '2026-07-08', lastFiling: '2025-07-08', responsible: 'Arun Kumar',  progress: 25, coveredEmployees: 240, description: 'Principal employer registration and contractor labour license renewal for site workforce.' },
+  { code: 'FA',   name: 'Factory Act',                      act: 'Factories Act, 1948',            frequency: 'Annual',      status: 'In Progress', dueDate: '2026-09-30', lastFiling: '2025-09-28', responsible: 'Manoj Das',   progress: 55, coveredEmployees: 96,  description: 'Annual factory license renewal and statutory safety compliance filing for the batching plant.' },
+  { code: 'LL',   name: 'Labour License',                   act: 'CLRA Act, 1970 — Sec 12',        frequency: 'Annual',      status: 'Overdue',      dueDate: '2026-07-08', lastFiling: '2025-07-08', responsible: 'Arun Kumar',  progress: 25, coveredEmployees: 240, description: 'Renewal of the labour license covering contract workforce deployed at LH-10.' },
+];
+
+export const AI_INSIGHTS = [
+  { id: 1, tone: 'warning', text: '3 statutory filings due this week — PF Monthly Return, Professional Tax, and TDS 24Q.' },
+  { id: 2, tone: 'danger',  text: 'Contract Labour license and Labour License are both overdue since 08 Jul — principal employer liability risk.' },
+  { id: 3, tone: 'info',    text: 'ESI and Minimum Wages filings are fully compliant with no action needed until Nov 2026.' },
+  { id: 4, tone: 'success', text: 'Compliance score improved from 90% to 92% this month — driven by faster PF and PT closures.' },
+];
