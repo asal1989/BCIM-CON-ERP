@@ -78,6 +78,7 @@ let diagnosticsShown = false;
 let deviceLogColumns = null; // reported via heartbeat so it can be checked remotely
 let directionSource  = null; // which column (or fallback) detectDirectionExpr picked
 let deviceStatusCandidates = null; // candidate device-status tables (name/columns/sample), for building an online/offline device panel
+let directionSample = null; // Direction vs AttDirection sample rows, to figure out which column is the real in/out flag
 
 async function getPool() {
   if (pool && pool.connected) return pool;
@@ -170,6 +171,35 @@ async function logAvailableTables(conn) {
       console.log(`[ESSL Agent] Device-status table candidates: ${deviceStatusTables.join(', ')}`);
     } else {
       console.log(`[ESSL Agent] No device-status table found (searched for table names containing "device", excluding DeviceLogs).`);
+    }
+
+    // Investigate Direction vs AttDirection — the sync picked "Direction" as
+    // the in/out column, but two known punches (UserId 373/480, both marked
+    // "Check-Out" on the ESSL device's own log viewer) came through as "in".
+    // Sample both columns directly, including those two known users, so the
+    // real 0/1 encoding for each column can be figured out remotely.
+    if (deviceLogTables.length) {
+      try {
+        const table = deviceLogTables[deviceLogTables.length - 1];
+        const known = await conn.request().query(
+          `SELECT TOP 20 UserId, LogDate, Direction, AttDirection FROM [${table}] WHERE UserId IN (373,480) ORDER BY LogDate DESC`
+        );
+        const recent = await conn.request().query(
+          `SELECT TOP 20 UserId, LogDate, Direction, AttDirection FROM [${table}] ORDER BY LogDate DESC`
+        );
+        const distinctVals = await conn.request().query(
+          `SELECT DISTINCT Direction, AttDirection, COUNT(*) AS n FROM [${table}] GROUP BY Direction, AttDirection`
+        );
+        directionSample = {
+          table,
+          known_users_373_480: known.recordset,
+          recent_20: recent.recordset,
+          distinct_value_combos: distinctVals.recordset,
+        };
+        console.log(`[ESSL Agent] Direction/AttDirection sample captured for ${table} (${known.recordset.length} rows for UserId 373/480, ${distinctVals.recordset.length} distinct value combos).`);
+      } catch (e3) {
+        console.log(`[ESSL Agent] Direction sample query failed: ${e3.message.split('\n')[0]}`);
+      }
     }
   } catch (e) {
     console.log(`[ESSL Agent] Could not list tables for diagnostics: ${e.message}`);
@@ -337,14 +367,14 @@ async function runSync({ fromDT, toDT, label }) {
 
     if (!tables.length) {
       console.log('[ESSL Agent] No DeviceLogs tables for this range.');
-      sendHeartbeat({ tables_found: tables, raw_swipe_count: 0, device_log_columns: deviceLogColumns, direction_source: directionSource, device_status_candidates: deviceStatusCandidates });
+      sendHeartbeat({ tables_found: tables, raw_swipe_count: 0, device_log_columns: deviceLogColumns, direction_source: directionSource, device_status_candidates: deviceStatusCandidates, direction_sample: directionSample });
       return;
     }
 
     const rawSwipes = await pullSwipes(conn, tables, fromDT, toDT);
     console.log(`[ESSL Agent] Raw swipes: ${rawSwipes.length}`);
     // Fire-and-forget — never let a heartbeat failure slow down or break the sync tick
-    sendHeartbeat({ tables_found: tables, raw_swipe_count: rawSwipes.length, device_log_columns: deviceLogColumns, direction_source: directionSource, device_status_candidates: deviceStatusCandidates });
+    sendHeartbeat({ tables_found: tables, raw_swipe_count: rawSwipes.length, device_log_columns: deviceLogColumns, direction_source: directionSource, device_status_candidates: deviceStatusCandidates, direction_sample: directionSample });
 
     const records = groupSwipes(rawSwipes);
     console.log(`[ESSL Agent] Attendance records: ${records.length}`);

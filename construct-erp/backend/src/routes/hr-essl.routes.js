@@ -139,7 +139,7 @@ router.post('/agent-push', async (req, res) => {
    Body: { api_key, company_id, tables_found, raw_swipe_count }
 ══════════════════════════════════════════════════════════════ */
 router.post('/heartbeat', async (req, res) => {
-  const { api_key, company_id, tables_found, raw_swipe_count, device_log_columns, direction_source, device_status_candidates } = req.body;
+  const { api_key, company_id, tables_found, raw_swipe_count, device_log_columns, direction_source, device_status_candidates, direction_sample } = req.body;
   if (!api_key || !company_id) return res.status(400).json({ error: 'api_key and company_id required' });
   try {
     const cfgRow = await query(
@@ -156,6 +156,7 @@ router.post('/heartbeat', async (req, res) => {
         device_log_columns: device_log_columns || undefined,
         direction_source: direction_source || undefined,
         device_status_candidates: device_status_candidates || undefined,
+        direction_sample: direction_sample || undefined,
       })]
     );
     res.json({ success: true });
