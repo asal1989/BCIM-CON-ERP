@@ -105,14 +105,22 @@ router.post('/agent-push', async (req, res) => {
     }
 
     // ── Save raw swipes to essl_device_logs ───────────────────────────────
+    // The agent sends swipe_time as a naive IST wall-clock string (e.g.
+    // "2026-07-26 07:20:59"). This backend runs in UTC (Railway), so we must
+    // tag the string with the explicit +05:30 offset before it hits a
+    // TIMESTAMPTZ column — otherwise Postgres/pg silently interprets it as
+    // UTC and every swipe is stored ~5.5 hours later than it actually happened.
     if (raw_swipes.length) {
       for (const s of raw_swipes) {
+        const swipeTimeIST = /[Z+-]\d{2}:?\d{2}$|Z$/.test(String(s.swipe_time).trim())
+          ? s.swipe_time
+          : `${String(s.swipe_time).trim()}+05:30`;
         await query(
           `INSERT INTO essl_device_logs (company_id, emp_code, swipe_time, direction, source)
            VALUES ($1,$2,$3,$4,'agent')
            ON CONFLICT (company_id, emp_code, swipe_time)
            DO UPDATE SET direction=$4, source='agent'`,
-          [company_id, String(s.emp_code).trim(), s.swipe_time, s.direction || null]
+          [company_id, String(s.emp_code).trim(), swipeTimeIST, s.direction || null]
         ).catch(() => {});
       }
     }
@@ -616,12 +624,19 @@ router.post('/sync', async (req, res) => {
     }
 
     // ── Save raw swipes to essl_device_logs ───────────────────────────────
+    // row.swipe_time comes straight from SQL Server as a naive IST wall-clock
+    // string (CONVERT(...,120)). Tag it with +05:30 before any Date parsing —
+    // this Node process runs in UTC (Railway), so an untagged string would be
+    // silently misread as UTC, shifting every swipe ~5.5 hours later.
     for (const row of rawRows) {
+      const swipeTimeIST = /[Z+-]\d{2}:?\d{2}$|Z$/.test(String(row.swipe_time).trim())
+        ? row.swipe_time
+        : `${String(row.swipe_time).trim()}+05:30`;
       await query(
         `INSERT INTO essl_device_logs (company_id, emp_code, swipe_time, direction, source)
          VALUES ($1,$2,$3,$4,'manual_sync')
          ON CONFLICT (company_id, emp_code, swipe_time) DO NOTHING`,
-        [companyId, String(row.emp_code).trim(), new Date(row.swipe_time).toISOString(), row.direction || null]
+        [companyId, String(row.emp_code).trim(), swipeTimeIST, row.direction || null]
       ).catch(() => {});
     }
 

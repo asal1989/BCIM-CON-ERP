@@ -38,13 +38,17 @@ const OVERLAP_SECONDS    = 30; // re-query last 30s of previous window to catch 
 let lastSyncAt = null;
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
-// IMPORTANT: ESSL/ZKTeco devices write LogDate as a naive LOCAL wall-clock
+// IMPORTANT: ESSL/ZKTeco devices write LogDate as a naive IST wall-clock
 // timestamp (no timezone), so query bounds sent to SQL Server must be built
-// from local time components — NOT .toISOString(), which always renders UTC
-// and would silently exclude every swipe from the last ~5.5h (IST offset).
+// in IST too. We do NOT rely on the host machine's OS timezone (it may be
+// set to UTC, e.g. on a cloud/VPS-provisioned Windows box) — instead we
+// apply the fixed +05:30 IST offset explicitly, so this is correct
+// regardless of how the HRADMIN PC's system clock/timezone is configured.
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 function pad(n) { return String(n).padStart(2, '0'); }
-function toDateStr(d)    { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
-function toDateTimeStr(d){ return `${toDateStr(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
+function toIST(d) { return new Date(d.getTime() + IST_OFFSET_MS); }
+function toDateStr(d)    { const t = toIST(d); return `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-${pad(t.getUTCDate())}`; }
+function toDateTimeStr(d){ const t = toIST(d); return `${toDateStr(d)} ${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}:${pad(t.getUTCSeconds())}`; }
 function addDays(d, n)   { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
 function addMinutes(d, n){ return new Date(d.getTime() + n * 60000); }
 
