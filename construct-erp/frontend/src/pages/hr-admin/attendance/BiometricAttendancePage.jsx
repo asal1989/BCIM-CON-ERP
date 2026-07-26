@@ -75,25 +75,26 @@ function ImportLogsTab() {
 function DeviceStatusTab() {
   const { data, isLoading } = useQuery({
     queryKey: ['essl-devices'],
-    queryFn: () => hrEsslAPI.getDevices?.().then(r => r.data).catch(() => []),
+    queryFn: () => hrEsslAPI.getDevices?.().then(r => r.data?.data || []).catch(() => []),
     enabled: !!hrEsslAPI.getDevices,
+    refetchInterval: 30000,
   });
   const devices = Array.isArray(data) ? data : [];
   if (isLoading) return <div className="py-10 text-center text-slate-400 text-sm">Loading…</div>;
   if (!devices.length) return (
     <div className="py-10 text-center text-slate-300 text-sm border-2 border-dashed border-slate-100 rounded-xl">
-      No devices configured — add devices in ESSL settings
+      No device status data yet — the sync agent reports this every tick, check back shortly
     </div>
   );
   return (
     <div className="space-y-3">
       {devices.map(d => (
-        <div key={d.id} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl shadow-sm">
+        <div key={d.device_id} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl shadow-sm">
           <div className="flex items-center gap-3">
             <Monitor size={16} className="text-slate-400" />
             <div>
               <p className="text-sm font-semibold text-slate-800">{d.name}</p>
-              <p className="text-xs text-slate-400">{d.ip}</p>
+              <p className="text-xs text-slate-400">{d.location || d.ip_address || d.serial_number || '—'}</p>
             </div>
           </div>
           <span className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full ${d.online ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>

@@ -163,6 +163,43 @@ router.post('/heartbeat', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+/* ═══════════════════════════════════════════════════════════
+   POST /hr-admin/essl/device-status  (NO auth middleware — uses API key)
+   Receives the ESSL "Devices" master-table snapshot pushed every tick by
+   the local agent — mirrors the ESSL web dashboard's own online/offline
+   device list. Body: { api_key, company_id, devices: [{ device_id, name,
+   short_name, serial_number, location, device_type, ip_address, last_ping }] }
+══════════════════════════════════════════════════════════════ */
+router.post('/device-status', async (req, res) => {
+  const { api_key, company_id, devices = [] } = req.body;
+  if (!api_key || !company_id) return res.status(400).json({ error: 'api_key and company_id required' });
+  try {
+    const cfgRow = await query(
+      `SELECT id FROM hr_essl_config WHERE company_id=$1 AND push_api_key=$2`,
+      [company_id, api_key]
+    );
+    if (!cfgRow.rows.length) return res.status(401).json({ error: 'Invalid API key' });
+
+    for (const d of devices) {
+      // last_ping is a naive IST wall-clock string from the agent — tag with
+      // the explicit offset before it hits a TIMESTAMPTZ column (same fix as
+      // essl_device_logs.swipe_time: this backend runs in UTC on Railway).
+      const lastPingIST = d.last_ping && !/[Z+-]\d{2}:?\d{2}$|Z$/.test(String(d.last_ping).trim())
+        ? `${String(d.last_ping).trim()}+05:30`
+        : d.last_ping || null;
+      await query(
+        `INSERT INTO essl_device_status (company_id, device_id, name, short_name, serial_number, location, device_type, ip_address, last_ping, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+         ON CONFLICT (company_id, device_id)
+         DO UPDATE SET name=$3, short_name=$4, serial_number=$5, location=$6, device_type=$7, ip_address=$8, last_ping=$9, updated_at=NOW()`,
+        [company_id, d.device_id, d.name || null, d.short_name || null, d.serial_number || null,
+         d.location || null, d.device_type || null, d.ip_address || null, lastPingIST]
+      ).catch(() => {});
+    }
+    res.json({ success: true, updated: devices.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── All routes below require JWT authentication ───────────────────────────────
 router.use(authenticate);
 router.use(authorize('super_admin', 'admin', 'hr_admin', 'hr', 'hr_manager',
@@ -216,6 +253,28 @@ runSchemaInit('hr-essl', initTable);
 runSchemaInit('hr-essl-heartbeat-cols', async () => {
   await query(`ALTER TABLE hr_essl_config ADD COLUMN IF NOT EXISTS last_heartbeat TIMESTAMPTZ`);
   await query(`ALTER TABLE hr_essl_config ADD COLUMN IF NOT EXISTS last_heartbeat_meta JSONB`);
+});
+
+// Mirrors the ESSL web dashboard's own device list (DeviceSName, DeviceFName,
+// Serial No, Location, Last Ping) — one row per biometric device, upserted by
+// the agent every tick from the ESSL SQL Server's "Devices" master table.
+runSchemaInit('hr-essl-device-status', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS essl_device_status (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id    UUID NOT NULL,
+      device_id     INT NOT NULL,
+      name          TEXT,
+      short_name    TEXT,
+      serial_number TEXT,
+      location      TEXT,
+      device_type   TEXT,
+      ip_address    TEXT,
+      last_ping     TIMESTAMPTZ,
+      updated_at    TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (company_id, device_id)
+    )
+  `);
 });
 
 // ─── Build mssql config from saved row ───────────────────────────────────────
@@ -666,6 +725,31 @@ router.post('/sync', async (req, res) => {
 });
 
 /* ═══════════════════════════════════════════════════════════
+   GET /hr-admin/essl/devices
+   Biometric device online/offline list — mirrors the ESSL web dashboard.
+   A device is "online" if the agent saw a LastPing within the last 5
+   minutes (ESSL devices ping roughly every ~1 min when reachable).
+══════════════════════════════════════════════════════════════ */
+router.get('/devices', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT device_id, name, short_name, serial_number, location, device_type, ip_address, last_ping,
+              (last_ping IS NOT NULL AND last_ping >= NOW() - INTERVAL '5 minutes') AS online
+       FROM essl_device_status
+       WHERE company_id=$1
+       ORDER BY online DESC, name`,
+      [req.user.company_id]
+    );
+    res.json({
+      data: rows,
+      total: rows.length,
+      online: rows.filter(r => r.online).length,
+      offline: rows.filter(r => !r.online).length,
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════
    GET /hr-admin/essl/unmatched
    List ESSL employee codes that have no matching ERP employee
 ══════════════════════════════════════════════════════════════ */
@@ -776,18 +860,6 @@ router.get('/agent-key', async (req, res) => {
     )
   `).catch(() => {});
 })();
-
-/* GET /hr-admin/essl/devices */
-router.get('/devices', async (req, res) => {
-  try {
-    const r = await query(`SELECT id,host,port,database,instance,last_sync FROM hr_essl_config WHERE company_id=$1`, [req.user.company_id]);
-    if (!r.rows.length) return res.json({ data: [] });
-    const cfg = r.rows[0];
-    let online = false;
-    try { const c = await sql.connect({ ...buildMssqlConfig(cfg), connectionTimeout: 4000 }); await c.close().catch(()=>{}); online = true; } catch(_) {}
-    res.json({ data: [{ id: cfg.id, name: `ESSL (${cfg.host})`, ip: cfg.host, port: cfg.port||1433, online, last_sync: cfg.last_sync }] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
 
 /* GET /hr-admin/essl/sync-history */
 router.get('/sync-history', async (req, res) => {

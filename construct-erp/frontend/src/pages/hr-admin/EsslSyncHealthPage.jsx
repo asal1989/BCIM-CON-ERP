@@ -1,7 +1,7 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hrEsslAPI } from '../../api/client';
-import { Activity, RefreshCw, AlertTriangle, CheckCircle2, HelpCircle, Radio, Database, Clock, Users } from 'lucide-react';
+import { Activity, RefreshCw, AlertTriangle, CheckCircle2, HelpCircle, Radio, Database, Clock, Users, Monitor, WifiOff } from 'lucide-react';
 
 const STATUS_CFG = {
   alive: { label: 'Agent Alive', color: '#16A34A', bg: '#F0FDF4', border: '#BBF7D0', icon: CheckCircle2 },
@@ -42,6 +42,13 @@ export default function EsslSyncHealthPage() {
     queryFn: () => hrEsslAPI.health().then(r => r.data),
     refetchInterval: 30000, // auto-refresh every 30s
   });
+
+  const { data: deviceData } = useQuery({
+    queryKey: ['essl-devices'],
+    queryFn: () => hrEsslAPI.getDevices().then(r => r.data),
+    refetchInterval: 30000,
+  });
+  const devices = deviceData?.data || [];
 
   const status = STATUS_CFG[data?.status] || STATUS_CFG.never;
   const StatusIcon = status.icon;
@@ -95,6 +102,44 @@ export default function EsslSyncHealthPage() {
             <Card icon={Clock}    label="Swipes Today"     value={data.swipes_today} accent="#16A34A" bg="#F0FDF4" />
             <Card icon={Clock}    label="Swipes (24h)"     value={data.swipes_24h} accent="#EA580C" bg="#FFF7ED" />
             <Card icon={Users}    label="Unmatched Codes (7d)" value={data.unmatched_codes_7d.length} sub="employee_code not in ERP" accent="#DC2626" bg="#FEF2F2" />
+            <Card icon={Monitor}  label="Online Devices"   value={deviceData?.online ?? '—'} accent="#16A34A" bg="#F0FDF4" />
+            <Card icon={WifiOff}  label="Offline Devices"  value={deviceData?.offline ?? '—'} accent="#DC2626" bg="#FEF2F2" />
+          </div>
+
+          {/* Device online/offline list — mirrors the ESSL web dashboard */}
+          <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:12, padding:18, marginBottom:16 }}>
+            <h3 style={{ margin:'0 0 4px', fontSize:13, fontWeight:800, color:'#1E293B' }}>Biometric Devices</h3>
+            <p style={{ margin:'0 0 12px', fontSize:11.5, color:'#94A3B8' }}>Reported by the agent every tick from the ESSL "Devices" table — online if a ping was seen in the last 5 minutes.</p>
+            {devices.length === 0 ? (
+              <p style={{ fontSize:12.5, color:'#94A3B8', margin:0 }}>No device status data yet — waiting for the agent's next tick.</p>
+            ) : (
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5 }}>
+                <thead>
+                  <tr style={{ borderBottom:'1px solid #E2E8F0' }}>
+                    <th style={{ textAlign:'left', padding:'6px 8px', color:'#64748B', fontWeight:700 }}>Device</th>
+                    <th style={{ textAlign:'left', padding:'6px 8px', color:'#64748B', fontWeight:700 }}>Serial No.</th>
+                    <th style={{ textAlign:'left', padding:'6px 8px', color:'#64748B', fontWeight:700 }}>Location</th>
+                    <th style={{ textAlign:'right', padding:'6px 8px', color:'#64748B', fontWeight:700 }}>Last Ping</th>
+                    <th style={{ textAlign:'right', padding:'6px 8px', color:'#64748B', fontWeight:700 }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {devices.map(d => (
+                    <tr key={d.device_id} style={{ borderBottom:'1px solid #F1F5F9' }}>
+                      <td style={{ padding:'7px 8px', fontWeight:700, color:'#1E293B' }}>{d.name}</td>
+                      <td style={{ padding:'7px 8px', color:'#64748B', fontFamily:'monospace', fontSize:11.5 }}>{d.serial_number || '—'}</td>
+                      <td style={{ padding:'7px 8px', color:'#64748B' }}>{d.location || '—'}</td>
+                      <td style={{ padding:'7px 8px', textAlign:'right', color:'#94A3B8', fontSize:11 }}>{fmtTime(d.last_ping)}</td>
+                      <td style={{ padding:'7px 8px', textAlign:'right' }}>
+                        <span style={{ fontSize:11, fontWeight:800, padding:'3px 9px', borderRadius:99, background: d.online ? '#F0FDF4' : '#FEF2F2', color: d.online ? '#16A34A' : '#DC2626' }}>
+                          {d.online ? 'Online' : 'Offline'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
 
           {/* Two-column: errors + unmatched codes */}

@@ -197,7 +197,13 @@ async function logAvailableTables(conn) {
     // real 0/1 encoding for each column can be figured out remotely.
     if (deviceLogTables.length) {
       try {
-        const table = deviceLogTables[deviceLogTables.length - 1];
+        // Table names are "DeviceLogs_M_YYYY" (no zero-padding), so sorting
+        // alphabetically is NOT chronological ("_9_2025" > "_7_2026" as a
+        // string) — explicitly build the current month's table name instead
+        // of trusting sort order, so we sample live data, not a stale table.
+        const now = new Date();
+        const curMonthTable = `DeviceLogs_${now.getMonth() + 1}_${now.getFullYear()}`;
+        const table = deviceLogTables.includes(curMonthTable) ? curMonthTable : deviceLogTables[deviceLogTables.length - 1];
         const known = await conn.request().query(
           `SELECT TOP 20 UserId, LogDate, Direction, AttDirection FROM [${table}] WHERE UserId IN (373,480) ORDER BY LogDate DESC`
         );
@@ -239,6 +245,38 @@ async function detectDirectionExpr(conn, table) {
   directionSource = 'hour_fallback';
   console.warn('[ESSL Agent] Warning: no Direction/IoType/InOutMode column found; using hour-based approximation.');
   return `CASE WHEN DATEPART(HOUR, d.LogDate) < 12 THEN 'in' ELSE 'out' END`;
+}
+
+// ── Pull device online/offline status from the ESSL "Devices" master table ───
+// LastPing is a native SQL Server DATETIME (naive IST wall-clock, no
+// timezone) — the mssql/tedious driver hands it back as a JS Date whose
+// UTC getters mirror the raw stored numerals 1:1, so we read it with
+// getUTC* accessors (NOT the IST_OFFSET_MS shift used for locally-built
+// dates) and send the naive string as-is; the backend tags it +05:30.
+function naiveSqlDateStr(d) {
+  if (!d) return null;
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+}
+async function pullDeviceStatus(conn) {
+  try {
+    const r = await conn.request().query(`
+      SELECT DeviceId, DeviceFName, DeviceSName, SerialNumber, DeviceLocation, DeviceType, IpAddress, LastPing
+      FROM Devices
+    `);
+    return r.recordset.map(d => ({
+      device_id:     d.DeviceId,
+      name:          d.DeviceFName || d.DeviceSName || `Device ${d.DeviceId}`,
+      short_name:    d.DeviceSName || null,
+      serial_number: d.SerialNumber || null,
+      location:      d.DeviceLocation || null,
+      device_type:   d.DeviceType || null,
+      ip_address:    d.IpAddress || null,
+      last_ping:     naiveSqlDateStr(d.LastPing),
+    }));
+  } catch (e) {
+    console.log(`[ESSL Agent] Could not pull device status: ${e.message.split('\n')[0]}`);
+    return [];
+  }
 }
 
 // ── Pull swipe data from ESSL ─────────────────────────────────────────────────
@@ -330,6 +368,17 @@ function sendHeartbeat(meta) {
   }).catch(err => console.log(`[ESSL Agent] Heartbeat failed (non-fatal): ${err.message}`));
 }
 
+// ── Push device online/offline status to cloud ERP ────────────────────────────
+function pushDeviceStatus(devices) {
+  if (!devices.length) return Promise.resolve();
+  const devicesPath = cfg.erp.push_url.replace(/\/agent-push\/?$/, '/device-status');
+  return postJSON(devicesPath, {
+    api_key: cfg.erp.api_key,
+    company_id: cfg.erp.company_id,
+    devices,
+  }).catch(err => console.log(`[ESSL Agent] Device-status push failed (non-fatal): ${err.message}`));
+}
+
 // ── Push records to cloud ERP ─────────────────────────────────────────────────
 function pushToERP(records, raw_swipes) {
   return new Promise((resolve, reject) => {
@@ -377,6 +426,10 @@ async function runSync({ fromDT, toDT, label }) {
 
   try {
     const conn = await getPool();
+
+    // Fire-and-forget, every tick — device online/offline status is
+    // independent of whether there are new swipes this window.
+    pullDeviceStatus(conn).then(devices => pushDeviceStatus(devices));
 
     const allTables = monthlyTables(fromDT, toDT);
     const tables    = await existingTables(conn, allTables);
