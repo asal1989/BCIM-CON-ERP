@@ -1897,7 +1897,12 @@ function ECRGenerator() {
       a.download = `ECR_${String(month).padStart(2,'0')}_${year}.txt`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success('ECR file downloaded');
+      const skipped = parseInt(res.headers?.['x-skipped-no-uan'] || '0', 10);
+      if (skipped > 0) {
+        toast.error(`ECR downloaded, but ${skipped} employee${skipped === 1 ? '' : 's'} without a UAN on file ${skipped === 1 ? 'was' : 'were'} excluded — add their UAN before filing.`, { duration: 7000 });
+      } else {
+        toast.success('ECR file downloaded');
+      }
     } catch (e) {
       toast.error('Failed to generate ECR file');
     } finally { setLoading(false); }

@@ -962,19 +962,31 @@ router.get('/ecr-file', async (req, res) => {
       [req.user.company_id]
     );
     // ECR v2 format: UAN#MEMBER_NAME#GROSS_WAGES#EPF_WAGES#EPS_WAGES#EE_SHARE#ER_SHARE#NCP_DAYS#REFUND_OF_ADVANCES
+    // ER_SHARE is the employer's FULL 12% contribution (EPS 8.33% + EPF-diff
+    // 3.67%) -- previously only the 3.67% EPF-diff portion (pf.epf) was sent,
+    // silently dropping the EPS share (up to Rs.1,250/employee/month) from
+    // every generated file. Rows with no UAN on file are excluded rather than
+    // written as UAN=0 -- EPFO rejects the whole file on one invalid UAN, not
+    // just that row -- and the count is reported via a response header so the
+    // UI can warn before the file is relied on for an actual filing.
     const lines = ['#~#'];
+    let skippedNoUan = 0;
     rows.forEach(r => {
+      const uan = (r.uan_number || '').trim();
+      if (!uan) { skippedNoUan++; return; }
       const pf = pfCalc(r.basic, true);
-      const uan = r.uan_number || '0';
       const name = (r.name || '').toUpperCase().replace(/[^A-Z ]/g,'').trim();
       const gross = Math.round(parseFloat(r.gross_monthly)||0);
       const pfWage = Math.min(Math.round(parseFloat(r.basic)||0), PF_WAGE_CEILING);
-      lines.push([uan, name, gross, pfWage, pfWage, pf.emp, pf.epf, 0, 0].join('#~#'));
+      const erShare = pf.eps + pf.epf;
+      lines.push([uan, name, gross, pfWage, pfWage, pf.emp, erShare, 0, 0].join('#~#'));
     });
     lines.push('#~#');
     const content = lines.join('\n');
     res.setHeader('Content-Type', 'text/plain');
     res.setHeader('Content-Disposition', `attachment; filename="ECR_${String(month).padStart(2,'0')}_${year}.txt"`);
+    res.setHeader('X-Skipped-No-Uan', String(skippedNoUan));
+    res.setHeader('Access-Control-Expose-Headers', 'X-Skipped-No-Uan');
     res.send(content);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
