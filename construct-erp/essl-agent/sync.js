@@ -77,6 +77,7 @@ let pool = null;
 let diagnosticsShown = false;
 let deviceLogColumns = null; // reported via heartbeat so it can be checked remotely
 let directionSource  = null; // which column (or fallback) detectDirectionExpr picked
+let deviceStatusCandidates = null; // candidate device-status tables (name/columns/sample), for building an online/offline device panel
 
 async function getPool() {
   if (pool && pool.connected) return pool;
@@ -145,6 +146,30 @@ async function logAvailableTables(conn) {
       );
       deviceLogColumns = cr.recordset.map(row => row.COLUMN_NAME);
       console.log(`[ESSL Agent] Columns in ${deviceLogTables[deviceLogTables.length - 1]}: ${deviceLogColumns.join(', ')}`);
+    }
+
+    // Look for a device-status table (online/offline, last-ping) — the ESSL
+    // web dashboard shows this, but we've never read it. Report candidate
+    // tables + columns + a small sample via heartbeat so it can be inspected
+    // remotely and used to build an online/offline device panel in the ERP.
+    const deviceStatusTables = names.filter(n => /device/i.test(n) && !/devicelog/i.test(n));
+    if (deviceStatusTables.length) {
+      deviceStatusCandidates = [];
+      for (const t of deviceStatusTables.slice(0, 5)) {
+        try {
+          const colsR = await conn.request().query(
+            `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='${t}' ORDER BY ORDINAL_POSITION`
+          );
+          const cols = colsR.recordset.map(row => row.COLUMN_NAME);
+          const sampleR = await conn.request().query(`SELECT TOP 3 * FROM [${t}]`);
+          deviceStatusCandidates.push({ table: t, columns: cols, sample: sampleR.recordset });
+        } catch (e2) {
+          deviceStatusCandidates.push({ table: t, error: e2.message.split('\n')[0] });
+        }
+      }
+      console.log(`[ESSL Agent] Device-status table candidates: ${deviceStatusTables.join(', ')}`);
+    } else {
+      console.log(`[ESSL Agent] No device-status table found (searched for table names containing "device", excluding DeviceLogs).`);
     }
   } catch (e) {
     console.log(`[ESSL Agent] Could not list tables for diagnostics: ${e.message}`);
@@ -312,14 +337,14 @@ async function runSync({ fromDT, toDT, label }) {
 
     if (!tables.length) {
       console.log('[ESSL Agent] No DeviceLogs tables for this range.');
-      sendHeartbeat({ tables_found: tables, raw_swipe_count: 0, device_log_columns: deviceLogColumns, direction_source: directionSource });
+      sendHeartbeat({ tables_found: tables, raw_swipe_count: 0, device_log_columns: deviceLogColumns, direction_source: directionSource, device_status_candidates: deviceStatusCandidates });
       return;
     }
 
     const rawSwipes = await pullSwipes(conn, tables, fromDT, toDT);
     console.log(`[ESSL Agent] Raw swipes: ${rawSwipes.length}`);
     // Fire-and-forget — never let a heartbeat failure slow down or break the sync tick
-    sendHeartbeat({ tables_found: tables, raw_swipe_count: rawSwipes.length, device_log_columns: deviceLogColumns, direction_source: directionSource });
+    sendHeartbeat({ tables_found: tables, raw_swipe_count: rawSwipes.length, device_log_columns: deviceLogColumns, direction_source: directionSource, device_status_candidates: deviceStatusCandidates });
 
     const records = groupSwipes(rawSwipes);
     console.log(`[ESSL Agent] Attendance records: ${records.length}`);
