@@ -455,108 +455,281 @@ function WageRegister({ depts }) {
 }
 
 // ── Muster Roll ────────────────────────────────────────────────────────────────
+const DAY_ABBR = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const STATUS_PILL = {
+  P:  { bg:'#dcfce7', color:'#15803d', label:'P' },
+  A:  { bg:'#fee2e2', color:'#dc2626', label:'A' },
+  HD: { bg:'#fef9c3', color:'#b45309', label:'HD' },
+  L:  { bg:'#dbeafe', color:'#1d4ed8', label:'L' },
+  WO: { bg:'#f1f5f9', color:'#94a3b8', label:'WO' },
+  H:  { bg:'#f3e8ff', color:'#7c3aed', label:'H' },
+};
+
 function MusterRoll({ depts }) {
   const [month, setMonth] = useState(CURRENT_MONTH);
   const [year,  setYear]  = useState(CURRENT_YEAR);
   const [dept,  setDept]  = useState('');
+  const [category, setCategory] = useState('');
+  const [page, setPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(25);
 
   const { data: res, isLoading, refetch } = useQuery({
     queryKey: ['compliance-muster', month, year, dept],
     queryFn:  () => hrComplianceAPI.musterRoll({ month, year, dept: dept || undefined }).then(r => r.data),
   });
-  const rows   = res?.data || [];
-  const days   = res?.days || [];
 
-  const STATUS_COLOR = { P:'text-emerald-700 font-bold', A:'text-red-500', HD:'text-amber-600', L:'text-blue-600', WO:'text-gray-300' };
-  const fmtTime = (t) => t ? t.slice(0,5) : '—';
+  const allRows = res?.data || [];
+  const days    = res?.days || [];
+
+  const rows = useMemo(() => {
+    if (!category) return allRows;
+    return allRows.filter(r => {
+      if (category === 'staff')   return !r.employee_category || r.employee_category === 'staff';
+      if (category === 'workman') return r.employee_category === 'workman';
+      return true;
+    });
+  }, [allRows, category]);
+
+  const totalEmployees  = rows.length;
+  const totalPresent    = rows.reduce((s, r) => s + (r.present   || 0), 0);
+  const totalAbsent     = rows.reduce((s, r) => s + (r.absent    || 0), 0);
+  const totalWorking    = days.filter(d => !d.is_sunday).length;
+  const avgAttendance   = totalEmployees && totalWorking
+    ? ((totalPresent / (totalEmployees * totalWorking)) * 100).toFixed(1)
+    : '0.0';
+
+  const totalPages  = Math.max(1, Math.ceil(rows.length / rowsPerPage));
+  const paged       = rows.slice((page - 1) * rowsPerPage, page * rowsPerPage);
+  const fmtTime     = (t) => t ? t.slice(0, 5) : '—';
+
+  const monthLabel  = `${String(month).padStart(2,'0')} ${MONTHS[month-1].slice(0,3)} ${year}`;
+  const rangeLabel  = `01 ${MONTHS[month-1]} ${year} – ${new Date(year, month, 0).getDate()} ${MONTHS[month-1]} ${year}`;
+
+  const exportData  = rows.map(r => ({
+    'Sr No': r.sno, 'Employee Code': r.employee_code, 'Name': r.name,
+    'Department': r.department, 'Designation': r.designation || '',
+    'Sex': r.gender || '', 'Age': r.age ?? '',
+    'Shift': r.shift_start ? `${fmtTime(r.shift_start)}-${fmtTime(r.shift_end)}` : '',
+    ...Object.fromEntries((r.days || []).map((s, i) => [`${i+1}`, s])),
+    'Present': r.present, 'Absent': r.absent, 'HD': r.half_day, 'Leave': r.leave,
+    'Total Working': r.total_working, 'Hours Worked': r.total_hours_worked, 'OT Hours': r.overtime_hours,
+  }));
+
+  const KPI = [
+    { label:'Total Employees',    value: totalEmployees, sub:'Active Employees',   icon:'👥', iconBg:'#eff6ff', iconColor:'#2563eb' },
+    { label:'Total Present Days', value: totalPresent,   sub:'This Period',        icon:'✅', iconBg:'#f0fdf4', iconColor:'#16a34a' },
+    { label:'Total Working Days', value: totalWorking,   sub:'This Period',        icon:'🕐', iconBg:'#fffbeb', iconColor:'#d97706' },
+    { label:'Average Attendance', value: `${avgAttendance}%`, sub:'This Period',   icon:'📅', iconBg:'#fdf4ff', iconColor:'#9333ea' },
+    { label:'Total Absent Days',  value: totalAbsent,    sub:'This Period',        icon:'⚠️', iconBg:'#fff1f2', iconColor:'#e11d48' },
+  ];
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-3 items-center justify-between">
-        <div className="flex gap-3 items-center flex-wrap">
-          <MonthYearPicker month={month} year={year} onChange={(m,y) => { setMonth(m); setYear(y); }}/>
-          <select value={dept} onChange={e => setDept(e.target.value)}
-            className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none">
+    <div style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
+
+      {/* ── Page header ─────────────────────────────────────────────── */}
+      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:20, flexWrap:'wrap', gap:12 }}>
+        <div>
+          <h2 style={{ margin:0, fontSize:22, fontWeight:800, color:'#111827', display:'flex', alignItems:'center', gap:8 }}>
+            <span style={{ fontSize:20 }}>📋</span> Muster Roll Report
+          </h2>
+          <p style={{ margin:'4px 0 0', fontSize:12.5, color:'#6b7280' }}>
+            Statutory Muster Roll showing daily attendance of all employees as per labor law compliance.
+          </p>
+        </div>
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+          <ExportBtn color="rose" filename={`Muster_Roll_${month}_${year}`} data={exportData} />
+          <button onClick={() => window.print()} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:8, border:'1px solid #d1d5db', background:'#fff', color:'#374151', fontSize:13, cursor:'pointer', fontWeight:600 }}>
+            🖨️ Print
+          </button>
+          <button onClick={() => refetch()} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 18px', borderRadius:8, border:'none', background:'#1d4ed8', color:'#fff', fontSize:13, cursor:'pointer', fontWeight:700 }}>
+            <RefreshCw size={13}/> Generate Report
+          </button>
+        </div>
+      </div>
+
+      {/* ── Filter bar ──────────────────────────────────────────────── */}
+      <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, padding:'14px 18px', marginBottom:18, display:'flex', flexWrap:'wrap', gap:12, alignItems:'center' }}>
+        <div style={{ color:'#6b7280', fontSize:12, fontWeight:600, display:'flex', alignItems:'center', gap:5 }}>
+          <span>⚙️</span> FILTERS
+        </div>
+        {/* Department */}
+        <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+          <label style={{ fontSize:10, fontWeight:700, color:'#9ca3af', textTransform:'uppercase', letterSpacing:0.5 }}>Department</label>
+          <select value={dept} onChange={e => { setDept(e.target.value); setPage(1); }}
+            style={{ padding:'7px 12px', borderRadius:8, border:'1px solid #e5e7eb', fontSize:13, color:'#374151', background:'#fff', minWidth:160 }}>
             <option value="">All Departments</option>
             {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
         </div>
-        <div className="flex gap-2">
-          <button onClick={refetch} className="p-2 rounded-xl hover:bg-gray-100"><RefreshCw size={15} className="text-gray-500"/></button>
-          <ExportBtn color="rose" filename={`Muster_Roll_${month}_${year}`}
-            data={rows.map(r => ({
-              'Sr No': r.sno, 'Employee Code': r.employee_code, 'Name': r.name, 'Department': r.department,
-              'Sex': r.gender || '', 'Age': r.age ?? '',
-              'Shift Timing': r.shift_start ? `${fmtTime(r.shift_start)}-${fmtTime(r.shift_end)}` : '',
-              'Rest Interval (min)': r.rest_interval_minutes ?? '',
-              ...Object.fromEntries(r.days.map((s, i) => [`Day ${i + 1}`, s])),
-              'Present': r.present, 'Absent': r.absent, 'Half Day': r.half_day, 'Leave': r.leave,
-              'Total Working Days': r.total_working, 'Total Hours Worked': r.total_hours_worked, 'OT Hours': r.overtime_hours,
-            }))} />
+        {/* Date Range */}
+        <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+          <label style={{ fontSize:10, fontWeight:700, color:'#9ca3af', textTransform:'uppercase', letterSpacing:0.5 }}>Date Range</label>
+          <div style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 12px', borderRadius:8, border:'1px solid #e5e7eb', background:'#fff', fontSize:13, color:'#374151', cursor:'pointer' }}>
+            📅
+            <select value={month} onChange={e => { setMonth(parseInt(e.target.value)); setPage(1); }}
+              style={{ border:'none', outline:'none', fontSize:13, color:'#374151', cursor:'pointer', background:'transparent' }}>
+              {MONTHS.map((m,i) => <option key={i+1} value={i+1}>{m}</option>)}
+            </select>
+            <select value={year} onChange={e => { setYear(parseInt(e.target.value)); setPage(1); }}
+              style={{ border:'none', outline:'none', fontSize:13, color:'#374151', cursor:'pointer', background:'transparent' }}>
+              {[2023,2024,2025,2026,2027].map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+        </div>
+        {/* Employee Category */}
+        <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+          <label style={{ fontSize:10, fontWeight:700, color:'#9ca3af', textTransform:'uppercase', letterSpacing:0.5 }}>Employee Category</label>
+          <select value={category} onChange={e => { setCategory(e.target.value); setPage(1); }}
+            style={{ padding:'7px 12px', borderRadius:8, border:'1px solid #e5e7eb', fontSize:13, color:'#374151', background:'#fff', minWidth:160 }}>
+            <option value="">All Categories</option>
+            <option value="staff">Staff</option>
+            <option value="workman">Workman / Labour</option>
+          </select>
+        </div>
+        <div style={{ marginLeft:'auto', display:'flex', gap:8 }}>
+          <button onClick={() => { setDept(''); setCategory(''); setPage(1); refetch(); }}
+            style={{ padding:'8px 16px', borderRadius:8, border:'1px solid #e5e7eb', background:'#fff', color:'#6b7280', fontSize:13, cursor:'pointer' }}>
+            Clear
+          </button>
+          <button onClick={() => refetch()}
+            style={{ padding:'8px 18px', borderRadius:8, border:'none', background:'#1d4ed8', color:'#fff', fontSize:13, cursor:'pointer', fontWeight:700 }}>
+            Apply Filters
+          </button>
         </div>
       </div>
 
-      <div className="bg-rose-50 border border-rose-200 rounded-xl px-4 py-2 text-xs text-rose-700 flex gap-5">
-        <span><strong className="text-emerald-700">P</strong> = Present</span>
-        <span><strong className="text-red-500">A</strong> = Absent</span>
-        <span><strong className="text-amber-600">HD</strong> = Half Day</span>
-        <span><strong className="text-blue-600">L</strong> = Leave</span>
-        <span><strong className="text-gray-400">WO</strong> = Week Off</span>
+      {/* ── KPI cards ───────────────────────────────────────────────── */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:14, marginBottom:20 }}>
+        {KPI.map(k => (
+          <div key={k.label} style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, padding:'16px 18px', display:'flex', alignItems:'center', gap:14 }}>
+            <div style={{ width:44, height:44, borderRadius:10, background:k.iconBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, flexShrink:0 }}>
+              {k.icon}
+            </div>
+            <div>
+              <div style={{ fontSize:10, color:'#9ca3af', fontWeight:600, textTransform:'uppercase', letterSpacing:0.5, marginBottom:2 }}>{k.label}</div>
+              <div style={{ fontSize:22, fontWeight:900, color:'#111827', lineHeight:1 }}>{isLoading ? '…' : k.value}</div>
+              <div style={{ fontSize:10.5, color:'#9ca3af', marginTop:2 }}>{k.sub}</div>
+            </div>
+          </div>
+        ))}
       </div>
 
-      {isLoading ? <LoadingTable/> : (
-        <div className="overflow-x-auto rounded-2xl border border-gray-100" style={{boxShadow:'0 2px 10px rgba(10,31,92,0.06)'}}>
-          <table className="w-full text-[10px]">
-            <thead>
-              <tr className="bg-gray-50 text-gray-700 border-b-2 border-rose-500">
-                <th className="px-3 py-3 text-left font-bold sticky left-0 bg-gray-50">#</th>
-                <th className="px-3 py-3 text-left font-bold sticky left-6 bg-gray-50 min-w-[120px]">Name</th>
-                <th className="px-3 py-3 text-left font-bold">Dept</th>
-                <th className="px-2 py-3 text-center font-bold">Sex</th>
-                <th className="px-2 py-3 text-center font-bold">Age</th>
-                <th className="px-2 py-3 text-center font-bold whitespace-nowrap">Shift Timing</th>
-                <th className="px-2 py-3 text-center font-bold whitespace-nowrap">Rest Interval</th>
-                {days.map(d => (
-                  <th key={d.day} className={`px-1.5 py-3 text-center font-bold w-8 ${d.is_sunday ? 'text-red-200' : ''}`}>{d.day}</th>
-                ))}
-                <th className="px-3 py-3 text-center font-bold">P</th>
-                <th className="px-3 py-3 text-center font-bold">A</th>
-                <th className="px-3 py-3 text-center font-bold">HD</th>
-                <th className="px-3 py-3 text-center font-bold">L</th>
-                <th className="px-3 py-3 text-center font-bold">Total</th>
-                <th className="px-3 py-3 text-center font-bold whitespace-nowrap">Hours Worked</th>
-                <th className="px-3 py-3 text-center font-bold whitespace-nowrap">OT Hours</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {rows.map(r => (
-                <tr key={r.sno} className="hover:bg-rose-50/30">
-                  <td className="px-3 py-2 text-gray-400 sticky left-0 bg-white">{r.sno}</td>
-                  <td className="px-3 py-2 font-semibold text-gray-900 whitespace-nowrap sticky left-6 bg-white">{r.name}</td>
-                  <td className="px-3 py-2 text-gray-500">{r.department}</td>
-                  <td className="px-2 py-2 text-center text-gray-600 capitalize">{r.gender ? r.gender.charAt(0).toUpperCase() : '—'}</td>
-                  <td className="px-2 py-2 text-center text-gray-600">{r.age ?? '—'}</td>
-                  <td className="px-2 py-2 text-center text-gray-600 whitespace-nowrap">
-                    {r.shift_start ? `${fmtTime(r.shift_start)}–${fmtTime(r.shift_end)}` : '—'}
-                  </td>
-                  <td className="px-2 py-2 text-center text-gray-600">{r.rest_interval_minutes != null ? `${r.rest_interval_minutes}m` : '—'}</td>
-                  {r.days.map((s, i) => (
-                    <td key={i} className={`px-1 py-2 text-center ${STATUS_COLOR[s] || 'text-gray-600'}`}>{s}</td>
-                  ))}
-                  <td className="px-2 py-2 text-center font-bold text-emerald-700">{r.present}</td>
-                  <td className="px-2 py-2 text-center font-bold text-red-500">{r.absent}</td>
-                  <td className="px-2 py-2 text-center font-bold text-amber-600">{r.half_day}</td>
-                  <td className="px-2 py-2 text-center font-bold text-blue-600">{r.leave}</td>
-                  <td className="px-2 py-2 text-center font-black text-gray-900">{r.total_working}</td>
-                  <td className="px-2 py-2 text-center font-semibold text-gray-700">{r.total_hours_worked}</td>
-                  <td className="px-2 py-2 text-center font-semibold text-violet-600">{r.overtime_hours || '—'}</td>
+      {/* ── Table ───────────────────────────────────────────────────── */}
+      <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, overflow:'hidden' }}>
+        {/* Table header bar */}
+        <div style={{ padding:'14px 18px', borderBottom:'1px solid #f3f4f6', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <span style={{ fontWeight:800, fontSize:13, color:'#111827', letterSpacing:0.3 }}>MUSTER ROLL DETAILS</span>
+          <div style={{ display:'flex', alignItems:'center', gap:16 }}>
+            {[
+              { code:'P',  bg:'#dcfce7', color:'#15803d', label:'P - Present'  },
+              { code:'A',  bg:'#fee2e2', color:'#dc2626', label:'A - Absent'   },
+              { code:'WO', bg:'#f1f5f9', color:'#94a3b8', label:'WO - Weekly Off' },
+              { code:'H',  bg:'#f3e8ff', color:'#7c3aed', label:'H - Holiday'  },
+              { code:'L',  bg:'#dbeafe', color:'#1d4ed8', label:'L - Leave'    },
+            ].map(s => (
+              <span key={s.code} style={{ display:'flex', alignItems:'center', gap:4, fontSize:11.5, color:'#6b7280' }}>
+                <span style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:20, height:20, borderRadius:5, background:s.bg, color:s.color, fontWeight:800, fontSize:9 }}>{s.code}</span>
+                {s.label}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div style={{ padding:48, textAlign:'center', color:'#9ca3af' }}>Loading muster roll data…</div>
+        ) : (
+          <div style={{ overflowX:'auto' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11.5 }}>
+              <thead>
+                <tr style={{ background:'#f9fafb', borderBottom:'2px solid #e5e7eb' }}>
+                  <th style={{ padding:'10px 10px', textAlign:'center', fontWeight:700, color:'#6b7280', fontSize:11, whiteSpace:'nowrap', position:'sticky', left:0, background:'#f9fafb', zIndex:2 }}>#</th>
+                  <th style={{ padding:'10px 10px', textAlign:'left', fontWeight:700, color:'#6b7280', fontSize:11, whiteSpace:'nowrap', position:'sticky', left:32, background:'#f9fafb', zIndex:2, minWidth:100 }}>Emp Code</th>
+                  <th style={{ padding:'10px 10px', textAlign:'left', fontWeight:700, color:'#6b7280', fontSize:11, whiteSpace:'nowrap', minWidth:150 }}>Employee Name</th>
+                  <th style={{ padding:'10px 10px', textAlign:'left', fontWeight:700, color:'#6b7280', fontSize:11, whiteSpace:'nowrap', minWidth:110 }}>Department</th>
+                  <th style={{ padding:'10px 10px', textAlign:'left', fontWeight:700, color:'#6b7280', fontSize:11, whiteSpace:'nowrap', minWidth:120 }}>Designation</th>
+                  {days.map(d => {
+                    const dow = new Date(year, month-1, d.day).getDay();
+                    const isSun = dow === 0;
+                    return (
+                      <th key={d.day} style={{ padding:'6px 3px', textAlign:'center', fontWeight:700, color: isSun ? '#f87171' : '#6b7280', fontSize:10, width:28, minWidth:28 }}>
+                        <div style={{ fontWeight:800 }}>{String(d.day).padStart(2,'0')}</div>
+                        <div style={{ fontWeight:500, fontSize:9, color: isSun ? '#f87171' : '#9ca3af' }}>{DAY_ABBR[dow]}</div>
+                      </th>
+                    );
+                  })}
+                  <th style={{ padding:'10px 6px', textAlign:'center', fontWeight:700, color:'#15803d', fontSize:11, whiteSpace:'nowrap' }}>Total Present</th>
+                  <th style={{ padding:'10px 6px', textAlign:'center', fontWeight:700, color:'#dc2626', fontSize:11 }}>Absent</th>
+                  <th style={{ padding:'10px 6px', textAlign:'center', fontWeight:700, color:'#d97706', fontSize:11 }}>HD</th>
+                  <th style={{ padding:'10px 6px', textAlign:'center', fontWeight:700, color:'#1d4ed8', fontSize:11 }}>Leave</th>
                 </tr>
-              ))}
-              {!rows.length && <tr><td colSpan={50} className="px-3 py-10 text-center text-gray-400">No attendance data for selected period</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {paged.map((r, idx) => (
+                  <tr key={r.sno} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafa', borderBottom:'1px solid #f3f4f6' }}
+                    onMouseEnter={e => e.currentTarget.style.background='#eff6ff'}
+                    onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? '#fff' : '#fafafa'}>
+                    <td style={{ padding:'9px 10px', textAlign:'center', color:'#9ca3af', fontSize:11, position:'sticky', left:0, background:'inherit', zIndex:1 }}>{(page-1)*rowsPerPage + idx + 1}</td>
+                    <td style={{ padding:'9px 10px', color:'#1d4ed8', fontWeight:700, fontSize:11, fontFamily:'monospace', position:'sticky', left:32, background:'inherit', zIndex:1, whiteSpace:'nowrap' }}>{r.employee_code || '—'}</td>
+                    <td style={{ padding:'9px 10px', fontWeight:600, color:'#111827', whiteSpace:'nowrap' }}>{r.name}</td>
+                    <td style={{ padding:'9px 10px', color:'#6b7280', whiteSpace:'nowrap' }}>{r.department}</td>
+                    <td style={{ padding:'9px 10px', color:'#6b7280', whiteSpace:'nowrap', fontSize:11 }}>{r.designation || '—'}</td>
+                    {(r.days || []).map((s, i) => {
+                      const pill = STATUS_PILL[s] || { bg:'#f9fafb', color:'#6b7280', label: s };
+                      return (
+                        <td key={i} style={{ padding:'4px 2px', textAlign:'center' }}>
+                          <span style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:22, height:22, borderRadius:5, background:pill.bg, color:pill.color, fontWeight:800, fontSize:9 }}>
+                            {pill.label}
+                          </span>
+                        </td>
+                      );
+                    })}
+                    <td style={{ padding:'9px 6px', textAlign:'center', fontWeight:900, color:'#15803d', fontSize:13 }}>{r.present}</td>
+                    <td style={{ padding:'9px 6px', textAlign:'center', fontWeight:700, color:'#dc2626' }}>{r.absent || '—'}</td>
+                    <td style={{ padding:'9px 6px', textAlign:'center', fontWeight:700, color:'#d97706' }}>{r.half_day || '—'}</td>
+                    <td style={{ padding:'9px 6px', textAlign:'center', fontWeight:700, color:'#1d4ed8' }}>{r.leave || '—'}</td>
+                  </tr>
+                ))}
+                {!rows.length && (
+                  <tr><td colSpan={50} style={{ padding:'48px 12px', textAlign:'center', color:'#9ca3af' }}>No attendance data for selected period</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* ── Pagination ──────────────────────────────────────────── */}
+        {rows.length > 0 && (
+          <div style={{ padding:'12px 18px', borderTop:'1px solid #f3f4f6', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
+            <span style={{ fontSize:12.5, color:'#6b7280' }}>
+              Showing {Math.min((page-1)*rowsPerPage+1, rows.length)} to {Math.min(page*rowsPerPage, rows.length)} of <strong>{rows.length}</strong> entries
+            </span>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <span style={{ fontSize:12, color:'#6b7280' }}>Rows per page</span>
+              <select value={rowsPerPage} onChange={e => { setRowsPerPage(parseInt(e.target.value)); setPage(1); }}
+                style={{ padding:'4px 8px', borderRadius:6, border:'1px solid #e5e7eb', fontSize:12, background:'#fff' }}>
+                {[10,25,50,100].map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+              <div style={{ display:'flex', gap:4 }}>
+                <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page===1}
+                  style={{ width:30, height:30, borderRadius:6, border:'1px solid #e5e7eb', background: page===1 ? '#f9fafb' : '#fff', color: page===1 ? '#d1d5db' : '#374151', cursor: page===1 ? 'default' : 'pointer', fontSize:14, fontWeight:700 }}>‹</button>
+                {Array.from({length: Math.min(5, totalPages)}, (_, i) => {
+                  let p = i + 1;
+                  if (totalPages > 5 && page > 3) p = page - 2 + i;
+                  if (p > totalPages) return null;
+                  return (
+                    <button key={p} onClick={() => setPage(p)}
+                      style={{ width:30, height:30, borderRadius:6, border:'1px solid #e5e7eb', background: page===p ? '#1d4ed8' : '#fff', color: page===p ? '#fff' : '#374151', cursor:'pointer', fontSize:12, fontWeight: page===p ? 700 : 400 }}>
+                      {p}
+                    </button>
+                  );
+                })}
+                <button onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page===totalPages}
+                  style={{ width:30, height:30, borderRadius:6, border:'1px solid #e5e7eb', background: page===totalPages ? '#f9fafb' : '#fff', color: page===totalPages ? '#d1d5db' : '#374151', cursor: page===totalPages ? 'default' : 'pointer', fontSize:14, fontWeight:700 }}>›</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
