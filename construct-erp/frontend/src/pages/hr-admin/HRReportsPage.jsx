@@ -80,8 +80,9 @@ const REPORT_CATALOG = [
     { id: 'empm:documents',       label: 'Document Checklist Report' },
   ]},
   { title: 'Attendance & Leave', icon: CalendarCheck, items: [
-    { id: 'attendance', label: 'Monthly Attendance Report' },
-    { id: 'leave',      label: 'Leave Register' },
+    { id: 'attendance',  label: 'Monthly Attendance Report' },
+    { id: 'leave',       label: 'Leave Register' },
+    { id: 'muster-roll', label: 'Muster Roll Report' },
   ]},
   { title: 'Payroll', icon: BadgeIndianRupee, items: [
     { id: 'payroll',   label: 'Payroll Summary (Monthly)' },
@@ -1085,6 +1086,7 @@ export default function HRReportsPage() {
       case 'employees':             return <EmployeesTab employees={employees} headcountRows={headcountRows} />;
       case 'attendance':            return <AttendanceTab rows={attendanceRows} month={month} year={year} />;
       case 'leave':                 return <LeaveTab rows={leaveRows} />;
+      case 'muster-roll':           return <HRCompliancePage embedded initialTab="muster" />;
       case 'payroll':               return <PayrollTab records={payrollRecords} totals={payrollTotals} month={month} year={year} />;
       case 'pf-esi':                return <StatutoryTab pfRows={pfRows} esiRows={esiRows} month={month} year={year} />;
       case 'compliance':            return <ComplianceTab compliance={compliance} />;

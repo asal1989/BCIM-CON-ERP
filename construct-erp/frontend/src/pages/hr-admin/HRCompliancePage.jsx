@@ -2262,8 +2262,8 @@ function NavItem({ active, onClick, icon: Icon, label, badge }) {
   );
 }
 
-export default function HRCompliancePage({ embedded = false }) {
-  const [activeTab, setActiveTab] = useState('overview');
+export default function HRCompliancePage({ embedded = false, initialTab }) {
+  const [activeTab, setActiveTab] = useState(initialTab || 'overview');
 
   const { data: deptsRes } = useQuery({
     queryKey: ['compliance-depts'],
