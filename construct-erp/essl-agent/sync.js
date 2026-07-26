@@ -75,6 +75,8 @@ function buildMssqlCfg() {
 // ── Persistent connection pool (reused across loop ticks) ─────────────────────
 let pool = null;
 let diagnosticsShown = false;
+let deviceLogColumns = null; // reported via heartbeat so it can be checked remotely
+let directionSource  = null; // which column (or fallback) detectDirectionExpr picked
 
 async function getPool() {
   if (pool && pool.connected) return pool;
@@ -132,6 +134,18 @@ async function logAvailableTables(conn) {
     if (!names.includes('Employees')) {
       console.log(`[ESSL Agent] WARNING: no "Employees" table found — the EmployeeCode/NumericCode join in pullSwipes() will fail.`);
     }
+
+    // Report the actual column list of a DeviceLogs table via heartbeat so it
+    // can be inspected remotely — this machine's SQL Server isn't reachable
+    // from the cloud/dev side, so this is the only way to see real column
+    // names without asking someone to run a query on-site.
+    if (deviceLogTables.length) {
+      const cr = await conn.request().query(
+        `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='${deviceLogTables[deviceLogTables.length - 1]}' ORDER BY ORDINAL_POSITION`
+      );
+      deviceLogColumns = cr.recordset.map(row => row.COLUMN_NAME);
+      console.log(`[ESSL Agent] Columns in ${deviceLogTables[deviceLogTables.length - 1]}: ${deviceLogColumns.join(', ')}`);
+    }
   } catch (e) {
     console.log(`[ESSL Agent] Could not list tables for diagnostics: ${e.message}`);
   }
@@ -145,10 +159,12 @@ async function detectDirectionExpr(conn, table) {
   for (const col of ['Direction', 'IoType', 'InOutMode']) {
     try {
       await conn.request().query(`SELECT TOP 1 [${col}] FROM [${table}] WHERE 1=0`);
+      directionSource = col;
       return `CASE WHEN d.[${col}] = 0 THEN 'in' WHEN d.[${col}] = 1 THEN 'out' ELSE NULL END`;
     } catch (_) {}
   }
   // Fallback — hour-based approximation (inaccurate for shift workers)
+  directionSource = 'hour_fallback';
   console.warn('[ESSL Agent] Warning: no Direction/IoType/InOutMode column found; using hour-based approximation.');
   return `CASE WHEN DATEPART(HOUR, d.LogDate) < 12 THEN 'in' ELSE 'out' END`;
 }
@@ -296,14 +312,14 @@ async function runSync({ fromDT, toDT, label }) {
 
     if (!tables.length) {
       console.log('[ESSL Agent] No DeviceLogs tables for this range.');
-      sendHeartbeat({ tables_found: tables, raw_swipe_count: 0 });
+      sendHeartbeat({ tables_found: tables, raw_swipe_count: 0, device_log_columns: deviceLogColumns, direction_source: directionSource });
       return;
     }
 
     const rawSwipes = await pullSwipes(conn, tables, fromDT, toDT);
     console.log(`[ESSL Agent] Raw swipes: ${rawSwipes.length}`);
     // Fire-and-forget — never let a heartbeat failure slow down or break the sync tick
-    sendHeartbeat({ tables_found: tables, raw_swipe_count: rawSwipes.length });
+    sendHeartbeat({ tables_found: tables, raw_swipe_count: rawSwipes.length, device_log_columns: deviceLogColumns, direction_source: directionSource });
 
     const records = groupSwipes(rawSwipes);
     console.log(`[ESSL Agent] Attendance records: ${records.length}`);

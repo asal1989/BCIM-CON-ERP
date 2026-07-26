@@ -139,7 +139,7 @@ router.post('/agent-push', async (req, res) => {
    Body: { api_key, company_id, tables_found, raw_swipe_count }
 ══════════════════════════════════════════════════════════════ */
 router.post('/heartbeat', async (req, res) => {
-  const { api_key, company_id, tables_found, raw_swipe_count } = req.body;
+  const { api_key, company_id, tables_found, raw_swipe_count, device_log_columns, direction_source } = req.body;
   if (!api_key || !company_id) return res.status(400).json({ error: 'api_key and company_id required' });
   try {
     const cfgRow = await query(
@@ -150,7 +150,12 @@ router.post('/heartbeat', async (req, res) => {
 
     await query(
       `UPDATE hr_essl_config SET last_heartbeat=NOW(), last_heartbeat_meta=$2 WHERE company_id=$1`,
-      [company_id, JSON.stringify({ tables_found: tables_found || [], raw_swipe_count: raw_swipe_count ?? null })]
+      [company_id, JSON.stringify({
+        tables_found: tables_found || [],
+        raw_swipe_count: raw_swipe_count ?? null,
+        device_log_columns: device_log_columns || undefined,
+        direction_source: direction_source || undefined,
+      })]
     );
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
