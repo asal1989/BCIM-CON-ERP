@@ -829,7 +829,9 @@ router.get('/health', async (req, res) => {
       query(`SELECT dl.emp_code, COUNT(*)::int AS n, MAX(dl.swipe_time) AS last_seen
              FROM essl_device_logs dl
              LEFT JOIN users u ON LOWER(TRIM(u.employee_code))=LOWER(TRIM(dl.emp_code)) AND u.company_id=dl.company_id
-             WHERE dl.company_id=$1 AND u.id IS NULL AND dl.swipe_time >= NOW() - INTERVAL '7 days'
+             LEFT JOIN sc_workers w ON (LOWER(TRIM(w.essl_emp_code))=LOWER(TRIM(dl.emp_code)) OR LOWER(TRIM(w.worker_code))=LOWER(TRIM(dl.emp_code)))
+                                    AND w.company_id=dl.company_id
+             WHERE dl.company_id=$1 AND u.id IS NULL AND w.id IS NULL AND dl.swipe_time >= NOW() - INTERVAL '7 days'
              GROUP BY dl.emp_code ORDER BY n DESC LIMIT 15`, [cid]),
     ]);
 
