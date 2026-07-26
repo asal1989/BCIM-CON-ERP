@@ -468,6 +468,7 @@ function MusterRoll({ depts }) {
   const days   = res?.days || [];
 
   const STATUS_COLOR = { P:'text-emerald-700 font-bold', A:'text-red-500', HD:'text-amber-600', L:'text-blue-600', WO:'text-gray-300' };
+  const fmtTime = (t) => t ? t.slice(0,5) : '—';
 
   return (
     <div className="space-y-4">
@@ -482,6 +483,16 @@ function MusterRoll({ depts }) {
         </div>
         <div className="flex gap-2">
           <button onClick={refetch} className="p-2 rounded-xl hover:bg-gray-100"><RefreshCw size={15} className="text-gray-500"/></button>
+          <ExportBtn color="rose" filename={`Muster_Roll_${month}_${year}`}
+            data={rows.map(r => ({
+              'Sr No': r.sno, 'Employee Code': r.employee_code, 'Name': r.name, 'Department': r.department,
+              'Sex': r.gender || '', 'Age': r.age ?? '',
+              'Shift Timing': r.shift_start ? `${fmtTime(r.shift_start)}-${fmtTime(r.shift_end)}` : '',
+              'Rest Interval (min)': r.rest_interval_minutes ?? '',
+              ...Object.fromEntries(r.days.map((s, i) => [`Day ${i + 1}`, s])),
+              'Present': r.present, 'Absent': r.absent, 'Half Day': r.half_day, 'Leave': r.leave,
+              'Total Working Days': r.total_working, 'Total Hours Worked': r.total_hours_worked, 'OT Hours': r.overtime_hours,
+            }))} />
         </div>
       </div>
 
@@ -501,6 +512,10 @@ function MusterRoll({ depts }) {
                 <th className="px-3 py-3 text-left font-bold sticky left-0 bg-gray-50">#</th>
                 <th className="px-3 py-3 text-left font-bold sticky left-6 bg-gray-50 min-w-[120px]">Name</th>
                 <th className="px-3 py-3 text-left font-bold">Dept</th>
+                <th className="px-2 py-3 text-center font-bold">Sex</th>
+                <th className="px-2 py-3 text-center font-bold">Age</th>
+                <th className="px-2 py-3 text-center font-bold whitespace-nowrap">Shift Timing</th>
+                <th className="px-2 py-3 text-center font-bold whitespace-nowrap">Rest Interval</th>
                 {days.map(d => (
                   <th key={d.day} className={`px-1.5 py-3 text-center font-bold w-8 ${d.is_sunday ? 'text-red-200' : ''}`}>{d.day}</th>
                 ))}
@@ -509,6 +524,8 @@ function MusterRoll({ depts }) {
                 <th className="px-3 py-3 text-center font-bold">HD</th>
                 <th className="px-3 py-3 text-center font-bold">L</th>
                 <th className="px-3 py-3 text-center font-bold">Total</th>
+                <th className="px-3 py-3 text-center font-bold whitespace-nowrap">Hours Worked</th>
+                <th className="px-3 py-3 text-center font-bold whitespace-nowrap">OT Hours</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -517,6 +534,12 @@ function MusterRoll({ depts }) {
                   <td className="px-3 py-2 text-gray-400 sticky left-0 bg-white">{r.sno}</td>
                   <td className="px-3 py-2 font-semibold text-gray-900 whitespace-nowrap sticky left-6 bg-white">{r.name}</td>
                   <td className="px-3 py-2 text-gray-500">{r.department}</td>
+                  <td className="px-2 py-2 text-center text-gray-600 capitalize">{r.gender ? r.gender.charAt(0).toUpperCase() : '—'}</td>
+                  <td className="px-2 py-2 text-center text-gray-600">{r.age ?? '—'}</td>
+                  <td className="px-2 py-2 text-center text-gray-600 whitespace-nowrap">
+                    {r.shift_start ? `${fmtTime(r.shift_start)}–${fmtTime(r.shift_end)}` : '—'}
+                  </td>
+                  <td className="px-2 py-2 text-center text-gray-600">{r.rest_interval_minutes != null ? `${r.rest_interval_minutes}m` : '—'}</td>
                   {r.days.map((s, i) => (
                     <td key={i} className={`px-1 py-2 text-center ${STATUS_COLOR[s] || 'text-gray-600'}`}>{s}</td>
                   ))}
@@ -525,6 +548,8 @@ function MusterRoll({ depts }) {
                   <td className="px-2 py-2 text-center font-bold text-amber-600">{r.half_day}</td>
                   <td className="px-2 py-2 text-center font-bold text-blue-600">{r.leave}</td>
                   <td className="px-2 py-2 text-center font-black text-gray-900">{r.total_working}</td>
+                  <td className="px-2 py-2 text-center font-semibold text-gray-700">{r.total_hours_worked}</td>
+                  <td className="px-2 py-2 text-center font-semibold text-violet-600">{r.overtime_hours || '—'}</td>
                 </tr>
               ))}
               {!rows.length && <tr><td colSpan={50} className="px-3 py-10 text-center text-gray-400">No attendance data for selected period</td></tr>}

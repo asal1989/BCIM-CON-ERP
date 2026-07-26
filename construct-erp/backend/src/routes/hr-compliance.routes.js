@@ -284,13 +284,27 @@ router.get('/muster-roll', async (req, res) => {
   const totalDays = daysInMonth(m, y);
 
   try {
-    // Get active employees
+    // Get active employees, their gender/DOB, and their shift as of this
+    // month (commencing/closing time, rest interval) -- a proper statutory
+    // muster roll (see Form J / Register of Employment) needs these
+    // alongside the day-wise attendance grid, not just P/A/L codes.
     let empSql = `
       SELECT u.id, u.name, u.employee_code,
-        COALESCE(dep.name,'Unassigned') AS department
+        COALESCE(dep.name,'Unassigned') AS department,
+        ep.gender, ep.date_of_birth,
+        sh.start_time, sh.end_time, sh.break_minutes
       FROM users u
       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
       LEFT JOIN hr_departments dep ON dep.id = ep.department_id
+      LEFT JOIN LATERAL (
+        SELECT s.start_time, s.end_time, s.break_minutes
+        FROM hr_employee_shifts es
+        JOIN hr_shifts s ON s.id = es.shift_id
+        WHERE es.employee_id = u.id
+          AND es.effective_from <= (make_date($${dept ? 3 : 2}::int, ${m}, 1) + INTERVAL '1 month' - INTERVAL '1 day')::date
+          AND (es.effective_to IS NULL OR es.effective_to >= make_date($${dept ? 3 : 2}::int, ${m}, 1))
+        ORDER BY es.effective_from DESC LIMIT 1
+      ) sh ON TRUE
       WHERE u.company_id = $1
         AND u.is_active = TRUE
         AND u.role NOT IN ('super_admin','vendor','customer','contractor')
@@ -298,6 +312,7 @@ router.get('/muster-roll', async (req, res) => {
     `;
     const params = [req.user.company_id];
     if (dept) { empSql += ` AND dep.id = $${params.length + 1}`; params.push(dept); }
+    params.push(y);
     empSql += ' ORDER BY dep.name, u.name';
     const { rows: employees } = await query(empSql, params);
 
@@ -311,12 +326,37 @@ router.get('/muster-roll', async (req, res) => {
       [req.user.company_id, from, to]
     );
 
+    // Overtime hours for the month, from the dedicated OT log
+    const { rows: otRows } = await query(
+      `SELECT employee_id, COALESCE(SUM(ot_hours),0) AS ot_hours
+       FROM hr_overtime WHERE company_id = $1 AND ot_date BETWEEN $2 AND $3
+       GROUP BY employee_id`,
+      [req.user.company_id, from, to]
+    ).catch(() => ({ rows: [] }));
+    const otMap = {};
+    otRows.forEach(o => { otMap[o.employee_id] = parseFloat(o.ot_hours) || 0; });
+
     // Build lookup
     const attMap = {};
     att.forEach(a => {
       if (!attMap[a.user_id]) attMap[a.user_id] = {};
       attMap[a.user_id][a.date] = a;
     });
+
+    const calcAge = (dob) => {
+      if (!dob) return null;
+      const d = new Date(dob), now = new Date();
+      let age = now.getFullYear() - d.getFullYear();
+      if (now.getMonth() < d.getMonth() || (now.getMonth() === d.getMonth() && now.getDate() < d.getDate())) age--;
+      return age;
+    };
+    const hoursBetween = (inT, outT) => {
+      if (!inT || !outT) return 0;
+      const [ih, im] = inT.split(':').map(Number);
+      const [oh, om] = outT.split(':').map(Number);
+      const diff = (oh * 60 + om) - (ih * 60 + im);
+      return diff > 0 ? diff / 60 : 0;
+    };
 
     // Days array
     const days = Array.from({ length: totalDays }, (_, i) => {
@@ -328,7 +368,7 @@ router.get('/muster-roll', async (req, res) => {
 
     const data = employees.map((emp, idx) => {
       const empAtt = attMap[emp.id] || {};
-      let present = 0, absent = 0, half_day = 0, leave = 0;
+      let present = 0, absent = 0, half_day = 0, leave = 0, hoursWorked = 0;
       const dailyStatus = days.map(d => {
         const a = empAtt[d.date];
         if (!a) {
@@ -336,6 +376,7 @@ router.get('/muster-roll', async (req, res) => {
           absent++;
           return 'A';
         }
+        hoursWorked += hoursBetween(a.in_time, a.out_time);
         const s = a.status || 'present';
         if (s === 'present') { present++; return 'P'; }
         if (s === 'half_day') { half_day++; return 'HD'; }
@@ -349,12 +390,19 @@ router.get('/muster-roll', async (req, res) => {
         employee_code: emp.employee_code,
         name:          emp.name,
         department:    emp.department,
+        gender:        emp.gender || '',
+        age:           calcAge(emp.date_of_birth),
+        shift_start:   emp.start_time || null,
+        shift_end:     emp.end_time || null,
+        rest_interval_minutes: emp.break_minutes ?? null,
         days:          dailyStatus,
         present,
         half_day,
         leave,
         absent,
         total_working: present + half_day * 0.5,
+        total_hours_worked: Math.round(hoursWorked * 100) / 100,
+        overtime_hours: otMap[emp.id] || 0,
       };
     });
 
