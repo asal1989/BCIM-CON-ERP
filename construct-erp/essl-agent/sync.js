@@ -150,19 +150,36 @@ async function logAvailableTables(conn) {
     }
 
     // Look for a device-status table (online/offline, last-ping) — the ESSL
-    // web dashboard shows this, but we've never read it. Report candidate
-    // tables + columns + a small sample via heartbeat so it can be inspected
-    // remotely and used to build an online/offline device panel in the ERP.
-    const deviceStatusTables = names.filter(n => /device/i.test(n) && !/devicelog/i.test(n));
+    // web dashboard shows this (DeviceSName, DeviceFName, Serial No, Location,
+    // Last Ping, Status columns), but we've never read it. Search by COLUMN
+    // NAME first — much more reliable than guessing table names, since the
+    // master table isn't necessarily named "*Device*" itself — then fall back
+    // to table-name matching and report both via heartbeat.
+    let deviceMasterTables = [];
+    try {
+      const byCol = await conn.request().query(
+        `SELECT DISTINCT TABLE_NAME FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE COLUMN_NAME IN ('DeviceSName','DeviceFName','LastPing','DeviceStatus')`
+      );
+      deviceMasterTables = byCol.recordset.map(row => row.TABLE_NAME);
+      console.log(`[ESSL Agent] Tables with DeviceSName/DeviceFName/LastPing/DeviceStatus columns: ${deviceMasterTables.join(', ') || 'NONE FOUND'}`);
+    } catch (e2) {
+      console.log(`[ESSL Agent] Device-master column search failed: ${e2.message.split('\n')[0]}`);
+    }
+
+    const deviceStatusTables = [...new Set([
+      ...deviceMasterTables,
+      ...names.filter(n => /device/i.test(n) && !/devicelog/i.test(n)),
+    ])];
     if (deviceStatusTables.length) {
       deviceStatusCandidates = [];
-      for (const t of deviceStatusTables.slice(0, 5)) {
+      for (const t of deviceStatusTables.slice(0, 10)) {
         try {
           const colsR = await conn.request().query(
             `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='${t}' ORDER BY ORDINAL_POSITION`
           );
           const cols = colsR.recordset.map(row => row.COLUMN_NAME);
-          const sampleR = await conn.request().query(`SELECT TOP 3 * FROM [${t}]`);
+          const sampleR = await conn.request().query(`SELECT TOP 5 * FROM [${t}]`);
           deviceStatusCandidates.push({ table: t, columns: cols, sample: sampleR.recordset });
         } catch (e2) {
           deviceStatusCandidates.push({ table: t, error: e2.message.split('\n')[0] });
@@ -170,7 +187,7 @@ async function logAvailableTables(conn) {
       }
       console.log(`[ESSL Agent] Device-status table candidates: ${deviceStatusTables.join(', ')}`);
     } else {
-      console.log(`[ESSL Agent] No device-status table found (searched for table names containing "device", excluding DeviceLogs).`);
+      console.log(`[ESSL Agent] No device-status table found.`);
     }
 
     // Investigate Direction vs AttDirection — the sync picked "Direction" as
