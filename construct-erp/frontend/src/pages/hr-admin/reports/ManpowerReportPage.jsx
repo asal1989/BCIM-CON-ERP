@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hrAttendanceAPI, projectAPI } from '../../../api/client';
-import { Printer, Download, RefreshCw, ChevronRight, LayoutGrid, Building2, Mail, HardHat, Users, Briefcase, TrendingUp, Calendar, MapPin, Sparkles } from 'lucide-react';
+import { Printer, Download, RefreshCw, ChevronRight, LayoutGrid, Building2, Mail, HardHat, Users, Briefcase, TrendingUp, Calendar, MapPin, Sparkles, Settings, Plus, Trash2, X, Send } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const SUMMARY_COLORS = ['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d','#ea580c','#4f46e5'];
@@ -37,6 +37,7 @@ export default function ManpowerReportPage() {
   const [projectFilter, setProjectFilter] = useState('');
   const [tab, setTab] = useState('detail'); // 'detail' | 'summary'
   const [sendingTest, setSendingTest] = useState(false);
+  const [showConfigModal, setShowConfigModal] = useState(false);
 
   const { data: projectsData } = useQuery({
     queryKey: ['projects-active-mp'],
@@ -224,6 +225,11 @@ export default function ManpowerReportPage() {
               title="Sends today's report to your own email — preview of the automated 10 AM client send"
               style={{ ...actionBtnBase, background: 'rgba(255,255,255,0.10)', color: '#fff', border: '1px solid rgba(255,255,255,0.22)', cursor: sendingTest ? 'wait' : 'pointer', opacity: sendingTest ? 0.6 : 1 }}>
               <Mail size={13} /> {sendingTest ? 'Sending…' : 'Send Test Email'}
+            </button>
+            <button className="mp-btn" onClick={() => setShowConfigModal(true)}
+              title="Manage which projects get an automated daily email, and who receives each one"
+              style={{ ...actionBtnBase, background: 'rgba(255,255,255,0.10)', color: '#fff', border: '1px solid rgba(255,255,255,0.22)' }}>
+              <Settings size={13} /> Email Recipients
             </button>
             <button className="mp-btn" onClick={() => window.print()} style={{ ...actionBtnBase, background: '#fff', color: '#132A63', boxShadow: '0 6px 16px rgba(0,0,0,0.18)', marginLeft: 'auto' }}>
               <Printer size={13} /> Print / PDF
@@ -565,6 +571,139 @@ export default function ManpowerReportPage() {
             </table>
           </div>
         )}
+      </div>
+
+      {showConfigModal && (
+        <ManpowerConfigModal onClose={() => setShowConfigModal(false)} projects={projects} date={date} />
+      )}
+    </div>
+  );
+}
+
+// ── Manage per-project automated-email recipients ─────────────────────────────
+function ManpowerConfigModal({ onClose, projects, date }) {
+  const [saving, setSaving] = useState(false);
+  const [testingId, setTestingId] = useState(null);
+  const [newProjectId, setNewProjectId] = useState('');
+  const [newRecipients, setNewRecipients] = useState('');
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['manpower-report-configs'],
+    queryFn: () => hrAttendanceAPI.manpowerReportConfigs.list().then(r => r.data),
+  });
+  const configs = data?.data || [];
+
+  const projectLabel = (projectId) => {
+    if (!projectId) return 'All Projects (combined)';
+    if (projectId === 'HEAD_OFFICE') return 'Head Office';
+    return projects.find(p => p.id === projectId)?.name || projectId;
+  };
+
+  const handleAdd = async () => {
+    if (!newRecipients.trim()) { toast.error('Enter at least one recipient email'); return; }
+    setSaving(true);
+    try {
+      await hrAttendanceAPI.manpowerReportConfigs.create({
+        project_id: newProjectId || null,
+        project_name: projectLabel(newProjectId || null),
+        recipients: newRecipients.trim(),
+      });
+      setNewProjectId(''); setNewRecipients('');
+      refetch();
+      toast.success('Project added to daily manpower email list');
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to add project');
+    } finally { setSaving(false); }
+  };
+
+  const handleToggle = async (cfg) => {
+    try {
+      await hrAttendanceAPI.manpowerReportConfigs.update(cfg.id, { enabled: !cfg.enabled });
+      refetch();
+    } catch (e) { toast.error('Failed to update'); }
+  };
+
+  const handleDelete = async (cfg) => {
+    if (!window.confirm(`Remove "${cfg.project_name}" from the daily email list?`)) return;
+    try {
+      await hrAttendanceAPI.manpowerReportConfigs.delete(cfg.id);
+      refetch();
+      toast.success('Removed');
+    } catch (e) { toast.error('Failed to remove'); }
+  };
+
+  const handleTestSend = async (cfg) => {
+    setTestingId(cfg.id);
+    try {
+      const res = await hrAttendanceAPI.manpowerReportTestEmail(date, cfg.project_id, cfg.project_name).then(r => r.data);
+      if (!res.ok) toast.error(res.reason || 'Could not send test email');
+      else toast.success(`Test email sent to ${res.recipients?.join(', ') || 'your inbox'}`);
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to send test email');
+    } finally { setTestingId(null); }
+  };
+
+  const inputCls = { border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 11px', fontSize: 12.5, fontWeight: 600, color: '#1E293B', outline: 'none', width: '100%' };
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 640, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(15,23,42,0.35)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: '1px solid #EEF2F7' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0F172A' }}>Daily Manpower Email — Recipients</h2>
+            <p style={{ margin: '3px 0 0', fontSize: 12, color: '#64748B' }}>Each project below gets its own automated email at 10:00 AM IST, sent only to its own list.</p>
+          </div>
+          <button onClick={onClose} style={{ border: 'none', background: '#F1F5F9', borderRadius: 8, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#475569' }}>
+            <X size={15} />
+          </button>
+        </div>
+
+        <div style={{ padding: '16px 22px', overflowY: 'auto', flex: 1 }}>
+          {isLoading ? (
+            <p style={{ fontSize: 13, color: '#94A3B8' }}>Loading…</p>
+          ) : configs.length === 0 ? (
+            <p style={{ fontSize: 13, color: '#94A3B8', textAlign: 'center', padding: '24px 0' }}>No projects configured yet — add one below.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {configs.map(cfg => (
+                <div key={cfg.id} style={{ border: '1px solid #EEF2F7', borderRadius: 12, padding: '11px 14px', display: 'flex', alignItems: 'center', gap: 12, opacity: cfg.enabled ? 1 : 0.55 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0F172A' }}>{cfg.project_name}</div>
+                    <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cfg.recipients}</div>
+                  </div>
+                  <button onClick={() => handleTestSend(cfg)} disabled={testingId === cfg.id}
+                    title="Send a test copy to your own email"
+                    style={{ border: '1px solid #E2E8F0', background: '#fff', borderRadius: 8, padding: '6px 10px', fontSize: 11.5, fontWeight: 700, color: '#334155', cursor: testingId === cfg.id ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <Send size={12} /> {testingId === cfg.id ? '…' : 'Test'}
+                  </button>
+                  <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={cfg.enabled} onChange={() => handleToggle(cfg)} style={{ width: 15, height: 15, cursor: 'pointer' }} />
+                  </label>
+                  <button onClick={() => handleDelete(cfg)} style={{ border: 'none', background: 'transparent', color: '#DC2626', cursor: 'pointer', padding: 4, display: 'flex' }}>
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding: '16px 22px', borderTop: '1px solid #EEF2F7', background: '#F8FAFC', borderRadius: '0 0 16px 16px' }}>
+          <div style={{ fontSize: 10.5, fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Add Project</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <select value={newProjectId} onChange={e => setNewProjectId(e.target.value)} style={{ ...inputCls, width: 180, cursor: 'pointer' }}>
+              <option value="">All Projects (combined)</option>
+              <option value="HEAD_OFFICE">Head Office</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <input value={newRecipients} onChange={e => setNewRecipients(e.target.value)}
+              placeholder="client@example.com, pm@example.com" style={{ ...inputCls, flex: 1, minWidth: 200 }} />
+            <button onClick={handleAdd} disabled={saving}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#1A56DB', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 12.5, fontWeight: 700, cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.6 : 1 }}>
+              <Plus size={14} /> Add
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

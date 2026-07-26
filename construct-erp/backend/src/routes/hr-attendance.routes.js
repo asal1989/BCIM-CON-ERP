@@ -810,6 +810,8 @@ router.get('/manpower-report', async (req, res) => {
 // POST /manpower-report/test-email — sends today's manpower report PDF+summary
 // to the LOGGED-IN USER's own email only, never to the real client list, purely
 // to preview what the automated 10 AM send will look like.
+// Optional project_id/project_name in the body previews a specific project's
+// config instead of the legacy env-configured default.
 router.post('/manpower-report/test-email', async (req, res) => {
   try {
     if (!req.user.email) return res.status(400).json({ error: 'Your account has no email address on file.' });
@@ -818,8 +820,63 @@ router.post('/manpower-report/test-email', async (req, res) => {
       date: req.body.date,
       manual: true,
       recipients: [req.user.email],
+      project_id: req.body.project_id,
+      project_name: req.body.project_name,
     });
     res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// Manpower report project configs — one row per project that should get
+// its own daily automated email + recipient list.
+// ═══════════════════════════════════════════════════════════
+router.get('/manpower-report/configs', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT * FROM manpower_report_configs WHERE company_id=$1 ORDER BY project_name`,
+      [req.user.company_id]
+    );
+    res.json({ data: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/manpower-report/configs', async (req, res) => {
+  try {
+    const { project_id, project_name, recipients, enabled = true } = req.body;
+    if (!project_name || !recipients) return res.status(400).json({ error: 'project_name and recipients are required' });
+    const { rows } = await query(
+      `INSERT INTO manpower_report_configs (company_id, project_id, project_name, recipients, enabled, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [req.user.company_id, project_id || null, project_name, recipients, enabled, req.user.id]
+    );
+    res.status(201).json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/manpower-report/configs/:id', async (req, res) => {
+  try {
+    const { project_id, project_name, recipients, enabled } = req.body;
+    const { rows } = await query(
+      `UPDATE manpower_report_configs
+       SET project_id=COALESCE($1,project_id), project_name=COALESCE($2,project_name),
+           recipients=COALESCE($3,recipients), enabled=COALESCE($4,enabled), updated_at=NOW()
+       WHERE id=$5 AND company_id=$6 RETURNING *`,
+      [project_id, project_name, recipients, enabled, req.params.id, req.user.company_id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Config not found' });
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/manpower-report/configs/:id', async (req, res) => {
+  try {
+    const { rowCount } = await query(
+      `DELETE FROM manpower_report_configs WHERE id=$1 AND company_id=$2`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!rowCount) return res.status(404).json({ error: 'Config not found' });
+    res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

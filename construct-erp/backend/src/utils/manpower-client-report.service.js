@@ -10,10 +10,47 @@ const PDFDocument = require('pdfkit');
 const logger = require('./logger');
 const { query } = require('../config/database');
 const { sendMail } = require('../services/mail.service');
+const { runSchemaInit } = require('./schemaInit');
 
 const DEFAULT_CRON = '0 10 * * *';
 const TZ      = process.env.MANPOWER_REPORT_TZ || process.env.TZ || 'Asia/Kolkata';
 const ERP_URL = process.env.API_BASE_URL || 'https://erp.bcim.in';
+const DEFAULT_COMPANY_ID = process.env.MANPOWER_REPORT_COMPANY_ID || '83b84668-7840-444e-8df9-350202e7bca0';
+
+// ── manpower_report_configs — one row per project that should get its own
+// daily email + recipient list, so the report can cover any number of
+// projects instead of the single hardcoded one this started as. ────────────
+async function initConfigTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS manpower_report_configs (
+      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id   UUID NOT NULL REFERENCES companies(id),
+      project_id   TEXT,                 -- real project UUID as text, 'HEAD_OFFICE', or NULL for all-projects-combined
+      project_name TEXT NOT NULL,
+      recipients   TEXT NOT NULL,
+      enabled      BOOLEAN DEFAULT true,
+      created_by   UUID REFERENCES users(id),
+      created_at   TIMESTAMPTZ DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+}
+runSchemaInit('manpower-report-configs', initConfigTable);
+
+// One-time seed from the original env-based single-project setup, so the
+// existing DQS Towers report keeps sending after this migration to
+// per-project configs — only runs if there was a legacy env recipient list.
+runSchemaInit('manpower-report-configs-seed-legacy', async () => {
+  const legacyRecipients = process.env.MANPOWER_REPORT_CLIENT_EMAILS;
+  if (!legacyRecipients) return;
+  const projectId   = process.env.MANPOWER_REPORT_PROJECT_ID || '8bf8a91c-f64c-478a-b6f2-39ed621d9436';
+  const projectName = process.env.MANPOWER_REPORT_PROJECT_NAME || 'DQS Towers';
+  await query(
+    `INSERT INTO manpower_report_configs (company_id, project_id, project_name, recipients)
+     VALUES ($1,$2,$3,$4)`,
+    [DEFAULT_COMPANY_ID, projectId, projectName, legacyRecipients]
+  );
+});
 
 // Same site-bucket logic as GET /hr-admin/attendance/manpower-report — kept in
 // sync manually since this runs standalone via cron, not as an HTTP request.
@@ -502,20 +539,23 @@ function buildPdfBuffer({ companyName, projectName, dateStr, dateISO, rows, comp
   });
 }
 
-// ── Main runner ───────────────────────────────────────────────────────────────
-async function runManpowerClientReport({ date, manual = false, recipients: recipientOverride } = {}) {
+// ── Main runner — sends ONE project's report to ONE recipient list ───────────
+async function runManpowerClientReport({
+  date, manual = false, recipients: recipientOverride,
+  company_id: companyIdOverride, project_id: projectIdOverride, project_name: projectNameOverride,
+} = {}) {
   const targetDate = date || todayIST();
-  const companyId  = process.env.MANPOWER_REPORT_COMPANY_ID || '83b84668-7840-444e-8df9-350202e7bca0';
-  const projectId  = process.env.MANPOWER_REPORT_PROJECT_ID || '8bf8a91c-f64c-478a-b6f2-39ed621d9436';
-  const projectName = process.env.MANPOWER_REPORT_PROJECT_NAME || 'DQS Towers';
+  const companyId  = companyIdOverride || DEFAULT_COMPANY_ID;
+  const projectId  = projectIdOverride !== undefined ? projectIdOverride : (process.env.MANPOWER_REPORT_PROJECT_ID || '8bf8a91c-f64c-478a-b6f2-39ed621d9436');
+  const projectName = projectNameOverride || process.env.MANPOWER_REPORT_PROJECT_NAME || 'DQS Towers';
 
   const recipients = recipientOverride
     ? parseEmails(Array.isArray(recipientOverride) ? recipientOverride.join(',') : recipientOverride)
     : parseEmails(process.env.MANPOWER_REPORT_CLIENT_EMAILS);
 
   if (!recipients.length) {
-    logger.warn('Manpower client report: no recipients configured (set MANPOWER_REPORT_CLIENT_EMAILS)');
-    return { ok: false, reason: 'No recipients configured' };
+    logger.warn(`Manpower client report [${projectName}]: no recipients configured`);
+    return { ok: false, reason: 'No recipients configured', project_name: projectName };
   }
 
   const companyRes = await query(`SELECT name FROM companies WHERE id=$1`, [companyId]);
@@ -525,8 +565,8 @@ async function runManpowerClientReport({ date, manual = false, recipients: recip
   const { rows, companySummary, grandTotal } = await fetchManpowerData(companyId, projectId, targetDate);
 
   if (!rows.length) {
-    logger.warn(`Manpower client report: no present-attendance data for ${targetDate} — skipping send`);
-    return { ok: false, reason: 'No attendance data for date', date: targetDate };
+    logger.warn(`Manpower client report [${projectName}]: no present-attendance data for ${targetDate} — skipping send`);
+    return { ok: false, reason: 'No attendance data for date', date: targetDate, project_name: projectName };
   }
 
   const html = buildEmailHtml({ companyName, projectName, dateStr, companySummary, grandTotal });
@@ -543,7 +583,31 @@ async function runManpowerClientReport({ date, manual = false, recipients: recip
     .catch(e => ({ sent: false, error: e.message }));
 
   logger.info(`Manpower client report [${projectName}] ${targetDate}: ${grandTotal} deployed → ${recipients.join(', ')}`);
-  return { ok: true, ran_at: new Date().toISOString(), date: targetDate, grandTotal, recipients, mail: mailResult, manual };
+  return { ok: true, ran_at: new Date().toISOString(), date: targetDate, grandTotal, recipients, mail: mailResult, manual, project_name: projectName };
+}
+
+// ── Runs every enabled project config, one email each ────────────────────────
+async function runAllManpowerClientReports(date) {
+  const { rows: configs } = await query(
+    `SELECT * FROM manpower_report_configs WHERE enabled=true ORDER BY project_name`
+  );
+  if (!configs.length) {
+    logger.warn('Manpower client report: no enabled project configs found — nothing to send');
+    return { ok: false, reason: 'No project configs configured', results: [] };
+  }
+
+  const results = [];
+  for (const cfg of configs) {
+    const result = await runManpowerClientReport({
+      date,
+      company_id: cfg.company_id,
+      project_id: cfg.project_id,
+      project_name: cfg.project_name,
+      recipients: cfg.recipients,
+    }).catch(e => ({ ok: false, reason: e.message, project_name: cfg.project_name }));
+    results.push(result);
+  }
+  return { ok: true, results };
 }
 
 // ── Scheduler ─────────────────────────────────────────────────────────────────
@@ -555,13 +619,13 @@ function initManpowerClientReport() {
   const schedule = process.env.MANPOWER_REPORT_CRON || DEFAULT_CRON;
 
   cron.schedule(schedule, () => {
-    logger.info('Manpower client report: running daily send');
-    runManpowerClientReport()
-      .then(r => logger.info(`Manpower client report result: ${JSON.stringify({ ok: r.ok, reason: r.reason, grandTotal: r.grandTotal })}`))
+    logger.info('Manpower client report: running daily send for all project configs');
+    runAllManpowerClientReports()
+      .then(r => logger.info(`Manpower client report results: ${JSON.stringify(r.results?.map(x => ({ project: x.project_name, ok: x.ok, reason: x.reason, grandTotal: x.grandTotal })))}`))
       .catch(err => logger.error('Manpower client report failed:', err.message));
   }, { timezone: TZ });
 
   logger.info(`Manpower client-report scheduler initialized (${schedule} ${TZ})`);
 }
 
-module.exports = { runManpowerClientReport, initManpowerClientReport };
+module.exports = { runManpowerClientReport, runAllManpowerClientReports, initManpowerClientReport };
