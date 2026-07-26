@@ -232,18 +232,29 @@ async function logAvailableTables(conn) {
 // ── Detect which direction column the ESSL DB uses ───────────────────────────
 // ESSL etimetracklite versions differ: some use "Direction", some "IoType".
 // Values: 0 = Entry/IN, 1 = Exit/OUT.
-// Falls back to hour-of-day approximation only if neither column exists.
+// IMPORTANT: a column can EXIST but never actually be populated (confirmed on
+// this install — Direction is always '' and AttDirection always NULL across
+// 10k+ live rows). SQL Server implicitly converts '' to 0 in numeric
+// comparisons, so `Direction = 0` silently matched EVERY row, mapping every
+// swipe — in or out — to 'in'. So existence alone isn't enough: check for at
+// least one row with real (non-null, non-blank) data before trusting a column.
 async function detectDirectionExpr(conn, table) {
   for (const col of ['Direction', 'IoType', 'InOutMode']) {
     try {
-      await conn.request().query(`SELECT TOP 1 [${col}] FROM [${table}] WHERE 1=0`);
+      const r = await conn.request().query(
+        `SELECT TOP 1 1 AS x FROM [${table}] WHERE [${col}] IS NOT NULL AND LTRIM(RTRIM(CAST([${col}] AS VARCHAR(50)))) <> ''`
+      );
+      if (!r.recordset.length) {
+        console.log(`[ESSL Agent] Column [${col}] exists but has no populated data — skipping.`);
+        continue;
+      }
       directionSource = col;
       return `CASE WHEN d.[${col}] = 0 THEN 'in' WHEN d.[${col}] = 1 THEN 'out' ELSE NULL END`;
     } catch (_) {}
   }
   // Fallback — hour-based approximation (inaccurate for shift workers)
   directionSource = 'hour_fallback';
-  console.warn('[ESSL Agent] Warning: no Direction/IoType/InOutMode column found; using hour-based approximation.');
+  console.warn('[ESSL Agent] Warning: no populated Direction/IoType/InOutMode column found; using hour-based approximation.');
   return `CASE WHEN DATEPART(HOUR, d.LogDate) < 12 THEN 'in' ELSE 'out' END`;
 }
 
