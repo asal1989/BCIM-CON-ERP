@@ -277,7 +277,8 @@ const navGroups = [
     { to: '/hr-admin/reports/department-summary', icon: Building2,       label: 'Department Summary' },
     { to: '/hr-admin/reports/log-records',        icon: ScrollText,      label: 'Log Records' },
     { to: '/hr-admin/reports/random-check',       icon: Shuffle,         label: 'Random Check Report' },
-    // ── Setup & Tools ──
+  ]},
+  { label: 'Setup & Tools', items: [
     { to: '/hr-admin/essl-sync',          icon: Fingerprint,     label: 'ESSL Biometric' },
     { to: '/hr-admin/essl-sync/health',   icon: Activity,        label: 'ESSL Sync Health' },
     { to: '/hr-admin/attendance/recalculate', icon: RefreshCw,   label: 'Re-calculate Attendance' },
@@ -421,6 +422,7 @@ const GROUP_COLORS = {
   'QS & Billing':      '#10B981',
   'Accounts':          '#10B981',
   'HR & Admin':        '#7C3AED',
+  'Setup & Tools':     '#78716C',
   'Bill Tracker':      '#6366F1',
   'Quality (QA/QC)':   '#3B82F6',
   'HSE & Safety':      '#EF4444',
@@ -496,7 +498,6 @@ const NAV_SECTIONS = {
     { label: 'Emp. Services',     paths: ['/hr-admin/letters','/hr-admin/policies','/hr-admin/emp-assets','/hr-admin/travel','/hr-admin/segments','/hr-admin/emp-filters'] },
     { label: 'Site Workers',      paths: ['/hr/workers','/hr/attendance','/hr/payroll'] },
     { label: 'Reports',           paths: ['/hr-admin/reports','/hr-admin/reports/daily-attendance','/hr-admin/reports/monthly-status','/hr-admin/reports/yearly-summary','/hr-admin/reports/attendance-summary','/hr-admin/reports/leave-summary','/hr-admin/reports/manpower','/hr-admin/reports/employee-details','/hr-admin/reports/shift-schedule','/hr-admin/reports/department-summary','/hr-admin/reports/log-records','/hr-admin/reports/random-check'] },
-    { label: 'Setup & Tools',     paths: ['/hr-admin/essl-sync','/hr-admin/essl-sync/health','/hr-admin/attendance/recalculate','/hr-admin/import','/hr-admin/documents','/hr-admin/compliance','/hr-admin/compliance-tracker'] },
   ],
   'Bill Tracker': [
     { label: 'Bills',      paths: ['/tqs','/tqs/bills','/tqs/transmittal'] },
