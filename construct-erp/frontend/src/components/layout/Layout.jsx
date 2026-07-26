@@ -278,7 +278,7 @@ const navGroups = [
     { to: '/hr-admin/reports/log-records',        icon: ScrollText,      label: 'Log Records' },
     { to: '/hr-admin/reports/random-check',       icon: Shuffle,         label: 'Random Check Report' },
   ]},
-  { label: 'Setup & Tools', items: [
+  { label: 'Setup & Tools', superAdminOnly: true, items: [
     { to: '/hr-admin/essl-sync',          icon: Fingerprint,     label: 'ESSL Biometric' },
     { to: '/hr-admin/essl-sync/health',   icon: Activity,        label: 'ESSL Sync Health' },
     { to: '/hr-admin/attendance/recalculate', icon: RefreshCw,   label: 'Re-calculate Attendance' },
@@ -2113,6 +2113,10 @@ export default function Layout() {
 
   const filteredGroups = navGroups
     .filter(g => {
+      // superAdminOnly groups (e.g. Setup & Tools) are hidden from everyone
+      // else, including admin/MD/director — this check must come before the
+      // broad role bypass below, which would otherwise let them through.
+      if (g.superAdminOnly) return user?.role === 'super_admin';
       if (['admin','super_admin','managing_director','director','ceo','cfo','md'].includes(user?.role)) return true;
       // If no modules configured at all, show everything (fallback for unconfigured accounts)
       if (!user?.accessible_modules?.length) return true;
