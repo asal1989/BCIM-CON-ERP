@@ -1,5 +1,6 @@
 // src/pages/sc/SCLabour.jsx — Worker Registry + Daily Attendance + NMR (Muster Roll)
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { scAPI, projectAPI, hrEsslAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
@@ -208,6 +209,7 @@ function CreateNMRModal({ wos, onClose }) {
 // ─── NMR Detail Drawer ────────────────────────────────────────────────────────
 function NMRDrawer({ nmrId, onClose }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [comment, setComment] = useState('');
 
   const { data: raw, isLoading } = useQuery({
@@ -226,11 +228,16 @@ function NMRDrawer({ nmrId, onClose }) {
   const billMut    = useMutation({
     mutationFn: () => scAPI.raiseBillNMR(nmrId),
     onSuccess: (r) => {
-      toast.success(`Bill ${r.data.data.bill.bill_number} created — ₹${Number(r.data.data.bill.gross_amount).toLocaleString('en-IN',{maximumFractionDigits:0})}`);
+      const bill = r.data.data.bill;
+      toast.success(`Bill ${bill.bill_number} created — ₹${Number(bill.gross_amount).toLocaleString('en-IN',{maximumFractionDigits:0})}. Opening measurement sheet…`);
       qc.invalidateQueries({ queryKey: ['sc-nmr'] });
       qc.invalidateQueries({ queryKey: ['sc-bills'] });
       qc.invalidateQueries({ queryKey: ['sc-nmr-detail', nmrId] });
       onClose();
+      // Land straight on the new bill's detail/edit view — the NMR only
+      // seeds a single "Labour Charges" line item, so the user needs to
+      // get to the measurement sheet immediately to break it down further.
+      navigate(`/sc/bill-preparation?bill_id=${bill.id}`);
     },
     onError: e => toast.error(e?.response?.data?.error || 'Failed to raise bill'),
   });

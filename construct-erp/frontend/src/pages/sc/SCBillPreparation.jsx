@@ -1724,10 +1724,19 @@ export default function SCBillPreparation() {
   const [drawerBillId,  setDrawerBill]  = useState(null);
 
   // Deep-link support — e.g. "Raise Bill for this WO" from SCMeasurementBook
-  // navigates to /sc/bill-preparation?wo_id=...&open=1.
+  // navigates to /sc/bill-preparation?wo_id=...&open=1. Also supports
+  // ?bill_id=... to jump straight into an existing bill's detail/edit view
+  // (e.g. right after "Raise Bill" from an NMR, so the measurement sheet
+  // is immediately editable instead of leaving the user stranded on the
+  // NMR screen with no way back to the bill it just created).
   const [searchParams, setSearchParams] = useSearchParams();
   const deepLinkWoId = searchParams.get('wo_id') || '';
+  const deepLinkBillId = searchParams.get('bill_id') || '';
   useEffect(() => {
+    if (deepLinkBillId) {
+      setDrawerBill(deepLinkBillId);
+      setSearchParams({}, { replace: true });
+    }
     if (deepLinkWoId && searchParams.get('open') === '1') {
       setShowForm(true);
       setSearchParams({}, { replace: true });
