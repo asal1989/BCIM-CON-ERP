@@ -215,8 +215,8 @@ export default function DailyAttendanceReportPage() {
                       <td style={{ padding:'7px 12px', color:'#94A3B8', fontSize:11 }}>{i+1}</td>
                       <td style={{ padding:'7px 12px', color:'#64748B', fontFamily:'monospace' }}>{r.emp_id||'-'}</td>
                       <td style={{ padding:'7px 12px', fontWeight:600, color:'#1E293B', whiteSpace:'nowrap' }}>{r.name||'-'}</td>
-                      <td style={{ padding:'7px 12px', color:'#64748B' }}>{r.designation||'-'}</td>
-                      <td style={{ padding:'7px 12px', color:'#64748B' }}>{r.department||'-'}</td>
+                      <td style={{ padding:'7px 12px', color:'#0F172A', fontWeight:600 }}>{r.designation||'-'}</td>
+                      <td style={{ padding:'7px 12px', color:'#0F172A', fontWeight:600 }}>{r.department||'-'}</td>
                       <td style={{ padding:'7px 12px', textAlign:'center' }}><Pill s={r.attendance_status||r.status} /></td>
                       <td style={{ padding:'7px 12px', textAlign:'center', color:'#475569', fontFamily:'monospace' }}>{r.in_time||'-'}</td>
                       <td style={{ padding:'7px 12px', textAlign:'center', color:'#475569', fontFamily:'monospace' }}>{r.out_time||'-'}</td>
