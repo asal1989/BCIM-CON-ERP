@@ -2623,32 +2623,50 @@ const NMR_SKILLED_TRADES = ['Mason','Carpenter','Barbender','Scaffolder','Plumbe
 // rate — NOT the subcontractor's internal worker payroll rate — since that's
 // what BCIM is actually obligated to pay the subcontractor under the WO.
 function matchWOItemsToSkills(woItems, skillGroups) {
-  const usedSkills = new Set();
-  const matches = []; // { item, skills, totalHrs, netQty, wage }
-  for (const item of woItems) {
-    const desc = (item.description || '').toLowerCase();
-    let matched;
-    if (desc.includes('unskilled') || desc.includes('helper') || desc.includes('mazdoor')) {
-      matched = skillGroups.filter(s => !NMR_SKILLED_TRADES.includes(s.skill_type));
-    } else {
-      const trade = NMR_SKILLED_TRADES.find(t => desc.includes(t.toLowerCase()));
-      if (trade) matched = skillGroups.filter(s => s.skill_type === trade);
-      else if (desc.includes('skilled')) matched = skillGroups.filter(s => NMR_SKILLED_TRADES.includes(s.skill_type));
-      else matched = skillGroups;
-    }
-    const fresh = matched.filter(s => !usedSkills.has(s.skill_type));
-    if (fresh.length === 0) continue;
-    fresh.forEach(s => usedSkills.add(s.skill_type));
+  // Separate WO items into day-based and hour-based so each runs an independent
+  // skill-matching pass. This allows a WO to have both "Helper Man Days" (days)
+  // and "Helper Overtime Hours" (hours) without the second being skipped because
+  // Helper was already consumed by the first.
+  const isHourUnit = u => /^hr/i.test(u) || /hour/i.test(u);
 
-    const totalHrs = fresh.reduce((sum, s) => sum + parseFloat(s.total_hours || 0), 0);
-    const unit = item.unit || 'Hours';
-    const netQty = /^hr/.test(unit.toLowerCase()) || unit.toLowerCase().includes('hour')
-      ? parseFloat(totalHrs.toFixed(3))
-      : parseFloat((totalHrs / 8).toFixed(3));
-    const rate = parseFloat(item.rate || 0);
-    matches.push({ item, skills: fresh, totalHrs, netQty, rate, wage: parseFloat((netQty * rate).toFixed(2)) });
+  const dayItems  = woItems.filter(i => !isHourUnit(i.unit || ''));
+  const hourItems = woItems.filter(i =>  isHourUnit(i.unit || ''));
+
+  function runPass(items, getQty) {
+    const used = new Set();
+    const out  = [];
+    for (const item of items) {
+      const desc = (item.description || '').toLowerCase();
+      let matched;
+      if (desc.includes('unskilled') || desc.includes('helper') || desc.includes('mazdoor')) {
+        matched = skillGroups.filter(s => !NMR_SKILLED_TRADES.includes(s.skill_type));
+      } else {
+        const trade = NMR_SKILLED_TRADES.find(t => desc.includes(t.toLowerCase()));
+        if (trade) matched = skillGroups.filter(s => s.skill_type === trade);
+        else if (desc.includes('skilled')) matched = skillGroups.filter(s => NMR_SKILLED_TRADES.includes(s.skill_type));
+        else matched = skillGroups;
+      }
+      const fresh = matched.filter(s => !used.has(s.skill_type));
+      if (fresh.length === 0) continue;
+      fresh.forEach(s => used.add(s.skill_type));
+      const netQty = getQty(fresh);
+      const rate = parseFloat(item.rate || 0);
+      out.push({ item, skills: fresh, netQty, rate, wage: parseFloat((netQty * rate).toFixed(2)) });
+    }
+    return { out, used };
   }
-  const unmatched = skillGroups.filter(s => !usedSkills.has(s.skill_type));
+
+  // Day pass: qty = regular hours / 8
+  const dayPass = runPass(dayItems, fresh =>
+    parseFloat((fresh.reduce((s, sk) => s + parseFloat(sk.total_hours || 0), 0) / 8).toFixed(3)));
+
+  // Hour pass: qty = overtime hours (separate from day pass, no skill conflict)
+  const hrPass = runPass(hourItems, fresh =>
+    parseFloat(fresh.reduce((s, sk) => s + parseFloat(sk.total_ot_hours || 0), 0).toFixed(3)));
+
+  const matches = [...dayPass.out, ...hrPass.out];
+  // "unmatched" = skills not used by the day pass (hour-only items don't consume quota)
+  const unmatched = skillGroups.filter(s => !dayPass.used.has(s.skill_type));
   return { matches, unmatched };
 }
 
@@ -2830,6 +2848,7 @@ router.post('/nmr/:id/raise-bill', authorize(...PLANNER), async (req, res) => {
       const skillRows = await client.query(`
         SELECT w.skill_type,
           COALESCE(SUM(a.hours_worked), 0)                                      AS total_hours,
+          COALESCE(SUM(a.overtime_hours), 0)                                    AS total_ot_hours,
           COALESCE(SUM(a.wage_amount),0) + COALESCE(SUM(a.overtime_amount),0)   AS total_wages
         FROM sc_attendance a
         JOIN sc_workers w ON w.id = a.worker_id
@@ -2925,8 +2944,6 @@ router.post('/wo/:wo_id/sync-nmr-mb', authorize(...PLANNER), async (req, res) =>
     if (!billR.rows.length) return res.status(404).json({ error: 'Bill not found or not linked to an NMR' });
     const b = billR.rows[0];
 
-    const SKILLED_TRADES = ['Mason','Carpenter','Barbender','Scaffolder','Plumber','Electrician','Engineer','Supervisor','Painter'];
-
     await withTransaction(async (client) => {
       // Remove existing NMR-auto MB entries for this WO so we can recreate cleanly
       await client.query(
@@ -2937,6 +2954,7 @@ router.post('/wo/:wo_id/sync-nmr-mb', authorize(...PLANNER), async (req, res) =>
       const skillRows = await client.query(`
         SELECT w.skill_type,
           COALESCE(SUM(a.hours_worked), 0)                                      AS total_hours,
+          COALESCE(SUM(a.overtime_hours), 0)                                    AS total_ot_hours,
           COALESCE(SUM(a.wage_amount),0) + COALESCE(SUM(a.overtime_amount),0)   AS total_wages
         FROM sc_attendance a
         JOIN sc_workers w ON w.id = a.worker_id
@@ -2952,31 +2970,9 @@ router.post('/wo/:wo_id/sync-nmr-mb', authorize(...PLANNER), async (req, res) =>
       if (woItems.length === 0 || skillGroups.length === 0)
         throw new Error('No WO items or no attendance records found for this NMR period');
 
-      const avgRate = b.total_mandays > 0
-        ? parseFloat((parseFloat(b.gross_amount) / parseFloat(b.total_mandays)).toFixed(2)) : 0;
-
-      const usedSkills = new Set();
-      for (const item of woItems) {
-        const desc = item.description.toLowerCase();
-        let matched;
-        if (desc.includes('unskilled') || desc.includes('helper') || desc.includes('mazdoor')) {
-          matched = skillGroups.filter(s => !SKILLED_TRADES.includes(s.skill_type));
-        } else {
-          const trade = SKILLED_TRADES.find(t => desc.includes(t.toLowerCase()));
-          if (trade) matched = skillGroups.filter(s => s.skill_type === trade);
-          else if (desc.includes('skilled')) matched = skillGroups.filter(s => SKILLED_TRADES.includes(s.skill_type));
-          else matched = skillGroups;
-        }
-        const fresh = matched.filter(s => !usedSkills.has(s.skill_type));
-        if (fresh.length === 0) continue;
-        fresh.forEach(s => usedSkills.add(s.skill_type));
-
-        const totalHrs   = fresh.reduce((s, sk) => s + parseFloat(sk.total_hours || 0), 0);
-        const totalWages = fresh.reduce((s, sk) => s + parseFloat(sk.total_wages || 0), 0);
+      const { matches } = matchWOItemsToSkills(woItems, skillGroups);
+      for (const { item, skills: fresh, netQty } of matches) {
         const unit = item.unit || 'Hours';
-        const netQty = unit.toLowerCase().startsWith('hr')
-          ? parseFloat(totalHrs.toFixed(3))
-          : parseFloat((totalHrs / 8).toFixed(3));
 
         const mbNum = await nextMBNumber(client, CID(req), b.project_id);
         await client.query(`
