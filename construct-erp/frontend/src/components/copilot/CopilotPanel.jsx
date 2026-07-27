@@ -2,7 +2,7 @@
 // Docked chat drawer for the Bill Tracker AI Copilot pilot. Structural
 // pattern copied from NotificationPanel.jsx (backdrop + absolute panel).
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, X, Send, AlertTriangle, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
+import { Sparkles, X, Send, AlertTriangle, Mic, MicOff, Volume2, VolumeX, StopCircle } from 'lucide-react';
 import { clsx } from 'clsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -102,10 +102,12 @@ export default function CopilotPanel({ onClose, projectId }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [listening, setListening] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const [voiceOut, setVoiceOut] = useState(true);
   const bottomRef = useRef(null);
   const recognitionRef = useRef(null);
   const voiceOriginRef = useRef(false); // did the pending question come from the mic? drives hands-free follow-up
+  const cutShortRef = useRef(false); // user pressed Stop -- suppress hands-free re-listen for this reply
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -139,13 +141,18 @@ export default function CopilotPanel({ onClose, projectId }) {
         const utter = new SpeechSynthesisUtterance(spoken);
         utter.lang = 'en-IN';
         utter.rate = 1;
-        // Hands-free follow-up: if this question was asked by voice, listen
-        // again once the answer finishes speaking so a supervisor can ask a
-        // follow-up without touching the screen. Stays quiet on its own if
-        // there's no more speech (the recognizer's own silence timeout).
-        if (fromVoice && SpeechRecognitionCtor) {
-          utter.onend = () => toggleListening();
-        }
+        utter.onstart = () => setSpeaking(true);
+        utter.onend = () => {
+          setSpeaking(false);
+          // Hands-free follow-up: if this question was asked by voice, listen
+          // again once the answer finishes speaking so a supervisor can ask a
+          // follow-up without touching the screen. Stays quiet on its own if
+          // there's no more speech (the recognizer's own silence timeout).
+          // Skipped if the user cut the reply short with Stop (see stopSpeaking).
+          if (fromVoice && SpeechRecognitionCtor && !cutShortRef.current) toggleListening();
+          cutShortRef.current = false;
+        };
+        utter.onerror = () => setSpeaking(false);
         window.speechSynthesis.speak(utter);
       }
     } catch (err) {
@@ -158,6 +165,12 @@ export default function CopilotPanel({ onClose, projectId }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  function stopSpeaking() {
+    cutShortRef.current = true; // don't auto-relisten just because the user cut this reply off
+    window.speechSynthesis.cancel();
+    setSpeaking(false);
   }
 
   function handleKeyDown(e) {
@@ -219,7 +232,7 @@ export default function CopilotPanel({ onClose, projectId }) {
           <div className="flex items-center gap-1">
             {speechSynthesisSupported && (
               <button
-                onClick={() => { setVoiceOut(v => !v); window.speechSynthesis.cancel(); }}
+                onClick={() => { setVoiceOut(v => !v); stopSpeaking(); }}
                 title={voiceOut ? 'Voice replies on — click to mute' : 'Voice replies off — click to unmute'}
                 className={clsx('w-7 h-7 rounded-lg flex items-center justify-center transition-all',
                   voiceOut ? 'text-indigo-500 hover:bg-indigo-50' : 'text-slate-400 hover:bg-slate-100')}
@@ -288,6 +301,15 @@ export default function CopilotPanel({ onClose, projectId }) {
               <div className="flex items-center gap-2 bg-red-50 text-red-600 rounded-2xl rounded-bl-sm px-4 py-2.5 text-[13px] font-semibold">
                 <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> Listening…
               </div>
+            </div>
+          )}
+
+          {speaking && (
+            <div className="flex justify-start">
+              <button onClick={stopSpeaking}
+                className="flex items-center gap-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-2xl rounded-bl-sm px-4 py-2.5 text-[13px] font-semibold transition-colors">
+                <Volume2 className="w-3.5 h-3.5 animate-pulse" /> Speaking… <StopCircle className="w-3.5 h-3.5" /> Stop
+              </button>
             </div>
           )}
 
