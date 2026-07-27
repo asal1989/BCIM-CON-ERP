@@ -11,7 +11,7 @@ import React, { useState, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useReactToPrint } from 'react-to-print';
-import { FileText, Ruler, Table2, ChevronLeft, Send, Loader2, AlertCircle, Printer, Download, Pencil, Check, X, Trash2 } from 'lucide-react';
+import { FileText, Ruler, Table2, ChevronLeft, Send, Loader2, AlertCircle, Printer, Download, Pencil, Check, X, Trash2, RefreshCw } from 'lucide-react';
 import dayjs from 'dayjs';
 import toast from 'react-hot-toast';
 
@@ -132,6 +132,12 @@ export default function SCMeasurementBook({ wo_id, onClose, onRaiseBill }) {
 
   const invalidateMB = () => qc.invalidateQueries({ queryKey: ['sc-mb-approved', wo_id] });
 
+  const syncMut = useMutation({
+    mutationFn: () => scAPI.syncNmrMB(wo_id),
+    onSuccess: () => { toast.success('MB entries synced from NMR attendance'); invalidateMB(); },
+    onError: e => toast.error(e?.response?.data?.error || 'Sync failed — ensure a billed NMR exists for this WO'),
+  });
+
   const updateMut = useMutation({
     mutationFn: ({ id, data }) => scAPI.updateMB(id, data),
     onSuccess: () => { toast.success('Entry updated'); invalidateMB(); setEditingId(null); },
@@ -196,6 +202,15 @@ export default function SCMeasurementBook({ wo_id, onClose, onRaiseBill }) {
 
         <div className="flex items-center gap-2 flex-wrap">
           <StatusBar current={mbStatus} onChange={setMbStatus} />
+
+          {woDetail?.contractor_type === 'labour_contractor' && (
+            <button onClick={() => syncMut.mutate()} disabled={syncMut.isPending}
+              title="Re-create MB entries from NMR attendance data"
+              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors border border-amber-400">
+              <RefreshCw className={`w-4 h-4 ${syncMut.isPending ? 'animate-spin' : ''}`} />
+              {syncMut.isPending ? 'Syncing…' : 'Sync from NMR'}
+            </button>
+          )}
 
           <button onClick={handlePrint} disabled={isLoading} title="Print Measurement Book"
             className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors border border-white/20">

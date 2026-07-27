@@ -2844,6 +2844,94 @@ router.post('/nmr/:id/raise-bill', authorize(...PLANNER), async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
+// POST /sc/wo/:wo_id/sync-nmr-mb
+// Retroactively creates approved MB entries for an NMR-sourced bill (for bills
+// raised before the auto-create logic was added). Idempotent — clears existing
+// auto NMR MB entries for this WO first, then recreates them from attendance.
+router.post('/wo/:wo_id/sync-nmr-mb', authorize(...PLANNER), async (req, res) => {
+  try {
+    // Fetch the most recent billed NMR for this WO
+    const billR = await query(
+      `SELECT b.*, n.id AS nmr_id, n.nmr_number, n.period_from, n.period_to, n.sc_id AS nmr_sc_id, n.total_mandays
+       FROM sc_bills b
+       JOIN sc_nmr n ON n.bill_id = b.id
+       WHERE b.wo_id=$1 AND b.company_id=$2
+       ORDER BY b.created_at DESC LIMIT 1`,
+      [req.params.wo_id, CID(req)]);
+    if (!billR.rows.length) return res.status(404).json({ error: 'Bill not found or not linked to an NMR' });
+    const b = billR.rows[0];
+
+    const SKILLED_TRADES = ['Mason','Carpenter','Barbender','Scaffolder','Plumber','Electrician','Engineer','Supervisor','Painter'];
+
+    await withTransaction(async (client) => {
+      // Remove existing NMR-auto MB entries for this WO so we can recreate cleanly
+      await client.query(
+        `DELETE FROM sc_mb_entries WHERE wo_id=$1 AND company_id=$2 AND description LIKE $3`,
+        [b.wo_id, CID(req), `NMR ${b.nmr_number}%`]);
+
+      // Skill-wise attendance breakdown
+      const skillRows = await client.query(`
+        SELECT w.skill_type,
+          COALESCE(SUM(a.hours_worked), 0)                                      AS total_hours,
+          COALESCE(SUM(a.wage_amount),0) + COALESCE(SUM(a.overtime_amount),0)   AS total_wages
+        FROM sc_attendance a
+        JOIN sc_workers w ON w.id = a.worker_id
+        WHERE a.sc_id=$1 AND a.company_id=$2
+          AND a.attendance_date BETWEEN $3 AND $4
+        GROUP BY w.skill_type ORDER BY w.skill_type`,
+        [b.nmr_sc_id, CID(req), b.period_from, b.period_to]);
+      const skillGroups = skillRows.rows;
+
+      const woItemsR = await client.query(
+        `SELECT * FROM sc_wo_items WHERE wo_id=$1 ORDER BY sequence_no`, [b.wo_id]);
+      const woItems = woItemsR.rows;
+      if (woItems.length === 0 || skillGroups.length === 0)
+        throw new Error('No WO items or no attendance records found for this NMR period');
+
+      const avgRate = b.total_mandays > 0
+        ? parseFloat((parseFloat(b.gross_amount) / parseFloat(b.total_mandays)).toFixed(2)) : 0;
+
+      const usedSkills = new Set();
+      for (const item of woItems) {
+        const desc = item.description.toLowerCase();
+        let matched;
+        if (desc.includes('unskilled') || desc.includes('helper') || desc.includes('mazdoor')) {
+          matched = skillGroups.filter(s => !SKILLED_TRADES.includes(s.skill_type));
+        } else {
+          const trade = SKILLED_TRADES.find(t => desc.includes(t.toLowerCase()));
+          if (trade) matched = skillGroups.filter(s => s.skill_type === trade);
+          else if (desc.includes('skilled')) matched = skillGroups.filter(s => SKILLED_TRADES.includes(s.skill_type));
+          else matched = skillGroups;
+        }
+        const fresh = matched.filter(s => !usedSkills.has(s.skill_type));
+        if (fresh.length === 0) continue;
+        fresh.forEach(s => usedSkills.add(s.skill_type));
+
+        const totalHrs   = fresh.reduce((s, sk) => s + parseFloat(sk.total_hours || 0), 0);
+        const totalWages = fresh.reduce((s, sk) => s + parseFloat(sk.total_wages || 0), 0);
+        const unit = item.unit || 'Hours';
+        const netQty = unit.toLowerCase().startsWith('hr')
+          ? parseFloat(totalHrs.toFixed(3))
+          : parseFloat((totalHrs / 8).toFixed(3));
+
+        const mbNum = await nextMBNumber(client, CID(req), b.project_id);
+        await client.query(`
+          INSERT INTO sc_mb_entries
+            (company_id,project_id,wo_id,wo_item_id,sc_id,mb_number,mb_date,
+             description,unit,executed_qty,previous_qty,
+             status,approved_by,approved_at,created_by)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,'approved',$11,NOW(),$11)`,
+          [CID(req), b.project_id, b.wo_id, item.id, b.nmr_sc_id, mbNum,
+           b.period_to,
+           `NMR ${b.nmr_number} — ${fresh.map(s => s.skill_type).join(', ')}`,
+           unit, netQty, req.user.id]);
+      }
+    });
+
+    res.json({ data: { ok: true } });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
 // ════════════════════════════════════════════════════════════════════
 // ESSL BIOMETRIC ATTENDANCE INTEGRATION
 // ════════════════════════════════════════════════════════════════════

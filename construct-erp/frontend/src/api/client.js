@@ -1662,6 +1662,7 @@ export const scAPI = {
   rejectMB:           (id, d)   => api.patch(`/sc/mb/${id}/reject`, d),
   updateMB:           (id, d)   => api.patch(`/sc/mb/${id}`, d),
   deleteMB:           (id)      => api.delete(`/sc/mb/${id}`),
+  syncNmrMB:          (woId)    => api.post(`/sc/wo/${woId}/sync-nmr-mb`),
   // Advances
   listAdvances:       (p)       => api.get('/sc/advances', { params: p }),
   createAdvance:      (d)       => api.post('/sc/advances', d),
