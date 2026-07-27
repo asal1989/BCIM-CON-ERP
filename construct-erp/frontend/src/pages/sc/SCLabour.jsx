@@ -8,7 +8,7 @@ import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
 import {
   Plus, Search, RefreshCw, HardHat, Users, CheckCircle, X,
   FileText, ChevronRight, ThumbsUp, ThumbsDown, IndianRupee,
-  Clock, Send, Receipt, Eye, AlertTriangle, CheckCircle2,
+  Clock, Send, Receipt, Eye, AlertTriangle, CheckCircle2, Trash2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
@@ -663,6 +663,11 @@ export default function SCLabour() {
     onSuccess:()=>{ toast.success('ESSL code saved'); qc.invalidateQueries({queryKey:['sc-workers']}); },
     onError:e=>toast.error(e?.response?.data?.error||'Failed'),
   });
+  const deleteNmrMut = useMutation({
+    mutationFn: (id) => scAPI.deleteNMR(id),
+    onSuccess: () => { toast.success('NMR deleted'); qc.invalidateQueries({ queryKey: ['sc-nmr'] }); },
+    onError: e => toast.error(e?.response?.data?.error || 'Failed to delete NMR'),
+  });
   const deleteWorkerMut = useMutation({
     mutationFn: (id)=>scAPI.deleteWorker(id),
     onSuccess:()=>{ toast.success('Worker removed'); qc.invalidateQueries({queryKey:['sc-workers']}); },
@@ -965,11 +970,20 @@ export default function SCLabour() {
                             <td className="px-4 py-3">
                               <span className={clsx('text-[10px] px-2 py-0.5 rounded-full font-bold', sm.bg, sm.text)}>{sm.label}</span>
                             </td>
-                            <td className="px-4 py-3" onClick={e=>e.stopPropagation()}>
+                            <td className="px-4 py-3 flex items-center gap-1" onClick={e=>e.stopPropagation()}>
                               <button onClick={()=>setNmrDrawer(n.id)}
                                 className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50">
                                 <Eye className="w-4 h-4"/>
                               </button>
+                              {n.status !== 'billed' && (
+                                <button
+                                  onClick={() => { if (window.confirm(`Delete NMR ${n.nmr_number}? This cannot be undone.`)) deleteNmrMut.mutate(n.id); }}
+                                  disabled={deleteNmrMut.isPending}
+                                  title="Delete NMR"
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-40">
+                                  <Trash2 className="w-4 h-4"/>
+                                </button>
+                              )}
                             </td>
                           </tr>
                         );

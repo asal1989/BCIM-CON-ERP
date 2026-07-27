@@ -1683,6 +1683,7 @@ export const scAPI = {
   checkNMR:       (id, d)   => api.patch(`/sc/nmr/${id}/check`, d),
   approveNMR:     (id, d)   => api.patch(`/sc/nmr/${id}/approve`, d),
   raiseBillNMR:   (id)      => api.post(`/sc/nmr/${id}/raise-bill`),
+  deleteNMR:      (id)      => api.delete(`/sc/nmr/${id}`),
   // Retention Releases
   listRetentionRel:   (p)       => api.get('/sc/retention-releases', { params: p }),
   retentionSummary:   (p)       => api.get('/sc/retention-summary', { params: p }),

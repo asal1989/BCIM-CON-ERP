@@ -2642,7 +2642,7 @@ function matchWOItemsToSkills(woItems, skillGroups) {
 
     const totalHrs = fresh.reduce((sum, s) => sum + parseFloat(s.total_hours || 0), 0);
     const unit = item.unit || 'Hours';
-    const netQty = unit.toLowerCase().startsWith('hr')
+    const netQty = /^hr/.test(unit.toLowerCase()) || unit.toLowerCase().includes('hour')
       ? parseFloat(totalHrs.toFixed(3))
       : parseFloat((totalHrs / 8).toFixed(3));
     const rate = parseFloat(item.rate || 0);
@@ -2763,6 +2763,20 @@ router.patch('/nmr/:id/approve', authorize(...ADMIN,'project_manager','qs_engine
       [req.user.id, remarks||null, req.params.id, CID(req)]);
     if (!r.rows.length) return res.status(404).json({ error: 'NMR not found or not ready for approval' });
     res.json({ data: r.rows[0] });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /sc/nmr/:id — delete an NMR (blocked if already billed)
+router.delete('/nmr/:id', authorize(...ADMIN,'project_manager','qs_engineer'), async (req, res) => {
+  try {
+    const nmr = await query(`SELECT * FROM sc_nmr WHERE id=$1 AND company_id=$2`, [req.params.id, CID(req)]);
+    if (!nmr.rows.length) return res.status(404).json({ error: 'NMR not found' });
+    if (nmr.rows[0].status === 'billed') return res.status(400).json({ error: 'Cannot delete a billed NMR — delete the bill first to revert it to approved status, then delete.' });
+    await withTransaction(async client => {
+      await client.query(`DELETE FROM sc_mb_entries WHERE wo_id=$1 AND description LIKE 'NMR ' || $2 || '%'`, [nmr.rows[0].wo_id, nmr.rows[0].nmr_number]);
+      await client.query(`DELETE FROM sc_nmr WHERE id=$1 AND company_id=$2`, [req.params.id, CID(req)]);
+    });
+    res.json({ success: true });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
