@@ -784,7 +784,7 @@ router.get('/legacy-work-orders/:id', async (req, res) => {
 
 router.get('/work-orders/:id', async (req, res) => {
   try {
-    const wo = await query(`SELECT wo.*, sc.name AS sc_name, sc.sc_code, sc.gst_number AS sc_gst, sc.pan_number AS sc_pan, sc.bank_name, sc.account_number, sc.ifsc_code, p.name AS project_name, p.project_code FROM sc_work_orders wo JOIN sc_subcontractors sc ON sc.id=wo.sc_id JOIN projects p ON p.id=wo.project_id WHERE wo.id=$1 AND wo.company_id=$2`, [req.params.id, CID(req)]);
+    const wo = await query(`SELECT wo.*, sc.name AS sc_name, sc.sc_code, sc.contractor_type, sc.gst_number AS sc_gst, sc.pan_number AS sc_pan, sc.bank_name, sc.account_number, sc.ifsc_code, p.name AS project_name, p.project_code FROM sc_work_orders wo JOIN sc_subcontractors sc ON sc.id=wo.sc_id JOIN projects p ON p.id=wo.project_id WHERE wo.id=$1 AND wo.company_id=$2`, [req.params.id, CID(req)]);
     if (!wo.rows.length) return res.status(404).json({ error: 'Not found' });
     // Return live balance_qty computed from DB (not stored stale value)
     const items = await query(`
