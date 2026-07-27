@@ -1448,6 +1448,10 @@ router.delete('/bills/:id', authorize(...PLANNER), async (req, res) => {
       );
       // Unlink hire log entries that point to this bill
       await client.query(`UPDATE wo_hire_log SET status='draft', sc_bill_id=NULL, updated_at=NOW() WHERE sc_bill_id=$1`, [req.params.id]);
+      // Unlink any NMR this bill was raised from (sc_nmr.bill_id FK would
+      // otherwise block the delete outright) -- revert it to 'approved' so
+      // it can be re-billed rather than left dangling in 'billed' status.
+      await client.query(`UPDATE sc_nmr SET status='approved', bill_id=NULL, updated_at=NOW() WHERE bill_id=$1`, [req.params.id]);
       // Delete the bill (cascades to sc_bill_items and sc_bill_approvals)
       await client.query(`DELETE FROM sc_bills WHERE id=$1`, [req.params.id]);
       await recalculateWOConsumption(bill.wo_id, client);
