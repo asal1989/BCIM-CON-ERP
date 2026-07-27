@@ -76,6 +76,33 @@ const SpeechRecognitionCtor = typeof window !== 'undefined'
   : null;
 const speechSynthesisSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
 
+// The Web Speech API doesn't expose a gender field on voices, so classify by
+// name against common patterns from the engines actually shipped in
+// Chrome/Edge/Safari (Google, Microsoft, Apple voice packs).
+const FEMALE_NAME_HINTS = ['female','zira','samantha','victoria','susan','karen','moira','tessa',
+  'heera','veena','fiona','kate','serena','alex(female)','google us english','google uk english female',
+  'google हिन्दी','lekha'];
+const MALE_NAME_HINTS = ['male','david','mark','ravi','daniel','alex','fred','george','james',
+  'google uk english male','rishi','arthur'];
+
+function classifyVoiceGender(voice) {
+  const n = voice.name.toLowerCase();
+  if (FEMALE_NAME_HINTS.some(h => n.includes(h))) return 'female';
+  if (MALE_NAME_HINTS.some(h => n.includes(h))) return 'male';
+  return 'unknown';
+}
+
+// Prefer an Indian-English voice matching the requested gender, then any
+// English voice matching gender, then just any voice of that gender.
+function pickVoice(voices, gender) {
+  if (!voices.length) return null;
+  const byGender = voices.filter(v => classifyVoiceGender(v) === gender);
+  const pool = byGender.length ? byGender : voices;
+  return pool.find(v => v.lang === 'en-IN')
+    || pool.find(v => v.lang?.startsWith('en'))
+    || pool[0];
+}
+
 const MARKDOWN_COMPONENTS = {
   p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
   strong: ({ children }) => <strong className="font-bold">{children}</strong>,
@@ -104,6 +131,10 @@ export default function CopilotPanel({ onClose, projectId }) {
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [voiceOut, setVoiceOut] = useState(true);
+  const [voiceGender, setVoiceGender] = useState(() => {
+    try { return localStorage.getItem('copilotVoiceGender') || 'female'; } catch { return 'female'; }
+  });
+  const [voices, setVoices] = useState([]);
   const bottomRef = useRef(null);
   const recognitionRef = useRef(null);
   const voiceOriginRef = useRef(false); // did the pending question come from the mic? drives hands-free follow-up
@@ -118,6 +149,21 @@ export default function CopilotPanel({ onClose, projectId }) {
     recognitionRef.current?.stop();
     if (speechSynthesisSupported) window.speechSynthesis.cancel();
   }, []);
+
+  // Voice list loads asynchronously in Chrome/Edge -- it's often empty on
+  // the first call, populated only after 'voiceschanged' fires.
+  useEffect(() => {
+    if (!speechSynthesisSupported) return;
+    const loadVoices = () => setVoices(window.speechSynthesis.getVoices());
+    loadVoices();
+    window.speechSynthesis.addEventListener('voiceschanged', loadVoices);
+    return () => window.speechSynthesis.removeEventListener('voiceschanged', loadVoices);
+  }, []);
+
+  function selectVoiceGender(gender) {
+    setVoiceGender(gender);
+    try { localStorage.setItem('copilotVoiceGender', gender); } catch { /* ignore (private mode etc.) */ }
+  }
 
   async function handleSend(overrideText) {
     const text = (overrideText ?? input).trim();
@@ -139,7 +185,9 @@ export default function CopilotPanel({ onClose, projectId }) {
         window.speechSynthesis.cancel();
         const spoken = speakableCurrency(stripMarkdownForSpeech(res.data.reply));
         const utter = new SpeechSynthesisUtterance(spoken);
-        utter.lang = 'en-IN';
+        const matchedVoice = pickVoice(voices, voiceGender);
+        if (matchedVoice) { utter.voice = matchedVoice; utter.lang = matchedVoice.lang; }
+        else utter.lang = 'en-IN';
         utter.rate = 1;
         utter.onstart = () => setSpeaking(true);
         utter.onend = () => {
@@ -230,6 +278,21 @@ export default function CopilotPanel({ onClose, projectId }) {
             <span className="text-sm font-bold text-slate-900">Bill Tracker Copilot</span>
           </div>
           <div className="flex items-center gap-1">
+            {speechSynthesisSupported && (
+              <div className="flex items-center bg-slate-200/70 rounded-lg p-0.5 mr-1" title="Voice reply gender">
+                {['female', 'male'].map(g => (
+                  <button
+                    key={g}
+                    onClick={() => selectVoiceGender(g)}
+                    title={g === 'female' ? 'Female voice' : 'Male voice'}
+                    className={clsx('px-2 h-6 rounded-md text-[10.5px] font-bold uppercase tracking-wide transition-all',
+                      voiceGender === g ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700')}
+                  >
+                    {g === 'female' ? 'F' : 'M'}
+                  </button>
+                ))}
+              </div>
+            )}
             {speechSynthesisSupported && (
               <button
                 onClick={() => { setVoiceOut(v => !v); stopSpeaking(); }}
