@@ -1412,6 +1412,7 @@ function BillDetailPage({ billId, onClose }) {
     documentTitle: `SC_RA_Bill_${b?.bill_number || 'print'}`,
   });
   const [showEdit, setShowEdit] = useState(false);
+  const [showMB, setShowMB] = useState(false);
   const canEdit   = !['approved', 'paid'].includes(b.status);
   const canDelete = ['draft', 'rejected'].includes(b.status);
 
@@ -1473,6 +1474,12 @@ function BillDetailPage({ billId, onClose }) {
               <button onClick={() => handlePrint()}
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold text-slate-700 border border-slate-200 hover:bg-slate-50 transition">
                 <Printer className="w-4 h-4" /> Print RA Bill
+              </button>
+            )}
+            {!isLoading && b?.wo_id && (
+              <button onClick={() => setShowMB(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold text-indigo-700 border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 transition">
+                <FileText className="w-4 h-4" /> View Measurement Book
               </button>
             )}
             {b.status === 'draft' && (
@@ -1722,6 +1729,9 @@ function BillDetailPage({ billId, onClose }) {
 
       {showEdit && b?.id && (
         <EditBillModal bill={b} onClose={() => setShowEdit(false)} />
+      )}
+      {showMB && b?.wo_id && (
+        <SCMeasurementBook wo_id={b.wo_id} onClose={() => setShowMB(false)} onRaiseBill={() => setShowMB(false)} />
       )}
     </div>
   );
