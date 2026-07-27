@@ -20,7 +20,7 @@ router.use(authorize('super_admin', 'admin'));
 // legacy "Finance" alias still checked by a couple of routes after the Finance
 // module was merged into Accounts.
 const ALL_MODULES = [
-  'Overview', 'Planning', 'Procurement', 'Tender Management', 'Stores',
+  'Overview', 'Projects', 'Planning', 'Procurement', 'Tender Management', 'Stores',
   'QS & Billing', 'Accounts', 'Finance', 'HR & Admin', 'Bill Tracker',
   'Quality (QA/QC)', 'HSE & Safety', 'Assets & IT', 'Plant & Machinery',
   'Hire & Rental', 'DMS', 'Subcontractors', 'Administration',

@@ -69,7 +69,7 @@ const DEPARTMENTS = [
 ];
 
 const AVAILABLE_MODULES = [
-  'Overview','Planning','HR & Admin','Procurement','Tender Management',
+  'Overview','Projects','Planning','HR & Admin','Procurement','Tender Management',
   'Stores','Stores Petty Cash',
   'QS & Billing','Finance','Bill Tracker',
   'Quality (QA/QC)','HSE & Safety',
