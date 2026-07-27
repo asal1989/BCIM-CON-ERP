@@ -9,10 +9,11 @@
 
 import React, { useState, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useReactToPrint } from 'react-to-print';
-import { FileText, Ruler, Table2, ChevronLeft, Send, Loader2, AlertCircle, Printer, Download } from 'lucide-react';
+import { FileText, Ruler, Table2, ChevronLeft, Send, Loader2, AlertCircle, Printer, Download, Pencil, Check, X, Trash2 } from 'lucide-react';
 import dayjs from 'dayjs';
+import toast from 'react-hot-toast';
 
 import { scAPI, projectAPI } from '../../../api/client';
 import MBCover             from '../../qs/mb/MBCover';
@@ -54,13 +55,18 @@ const TABS = [
   { key: 'cover',        label: 'Cover Sheet',  Icon: FileText },
   { key: 'measurements', label: 'Measurements', Icon: Ruler    },
   { key: 'abstract',     label: 'Abstract',     Icon: Table2   },
+  { key: 'edit',         label: 'Edit Entries', Icon: Pencil   },
 ];
 
 export default function SCMeasurementBook({ wo_id, onClose, onRaiseBill }) {
   const navigate = useNavigate();
+  const qc = useQueryClient();
 
   const [activeTab, setActiveTab] = useState('cover');
   const [mbStatus,  setMbStatus]  = useState('Draft');
+  const [editingId,  setEditingId]  = useState(null);
+  const [editQty,    setEditQty]    = useState('');
+  const [editDesc,   setEditDesc]   = useState('');
 
   const [coverData, setCoverData] = useState({
     ra_bill_no:       '',
@@ -123,6 +129,30 @@ export default function SCMeasurementBook({ wo_id, onClose, onRaiseBill }) {
     ...(project || {}),
     work_order_number: woDetail?.wo_number,
   }), [project, woDetail]);
+
+  const invalidateMB = () => qc.invalidateQueries({ queryKey: ['sc-mb-approved', wo_id] });
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }) => scAPI.updateMB(id, data),
+    onSuccess: () => { toast.success('Entry updated'); invalidateMB(); setEditingId(null); },
+    onError: e => toast.error(e?.response?.data?.error || 'Update failed'),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id) => scAPI.deleteMB(id),
+    onSuccess: () => { toast.success('Entry deleted'); invalidateMB(); },
+    onError: e => toast.error(e?.response?.data?.error || 'Delete failed'),
+  });
+
+  const startEdit = (entry) => {
+    setEditingId(entry.id);
+    setEditQty(entry.executed_qty);
+    setEditDesc(entry.description);
+  };
+
+  const saveEdit = () => {
+    updateMut.mutate({ id: editingId, data: { executed_qty: parseFloat(editQty), description: editDesc } });
+  };
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -218,6 +248,107 @@ export default function SCMeasurementBook({ wo_id, onClose, onRaiseBill }) {
 
           {activeTab === 'measurements' && (
             <MBMeasurementDetail boqItems={boqItems} measurements={measurements} />
+          )}
+
+          {activeTab === 'edit' && (
+            <div className="p-6 max-w-5xl mx-auto space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-slate-800">Edit MB Entries</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Modify quantity or description of approved measurement entries.</p>
+                </div>
+                <span className="text-xs text-slate-400">{mbEntries.length} {mbEntries.length === 1 ? 'entry' : 'entries'}</span>
+              </div>
+
+              {mbEntries.length === 0 && (
+                <div className="text-center py-12 text-slate-400 text-sm">No MB entries yet for this work order.</div>
+              )}
+
+              {mbEntries.length > 0 && (
+                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">MB No.</th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Description</th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">BOQ Item</th>
+                        <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Unit</th>
+                        <th className="px-4 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Qty</th>
+                        <th className="px-4 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                        <th className="px-3 py-3"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mbEntries.map((entry, i) => (
+                        <tr key={entry.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}>
+                          {editingId === entry.id ? (
+                            <>
+                              <td className="px-4 py-3 font-mono text-xs text-indigo-700">{entry.mb_number}</td>
+                              <td className="px-4 py-2" colSpan={2}>
+                                <input
+                                  value={editDesc}
+                                  onChange={e => setEditDesc(e.target.value)}
+                                  className="w-full border border-indigo-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                                />
+                              </td>
+                              <td className="px-4 py-2 text-center text-xs text-slate-500">{entry.unit}</td>
+                              <td className="px-4 py-2">
+                                <input
+                                  type="number"
+                                  value={editQty}
+                                  onChange={e => setEditQty(e.target.value)}
+                                  step="0.001"
+                                  className="w-24 border border-indigo-300 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                                />
+                              </td>
+                              <td className="px-4 py-2 text-center">
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold uppercase">{entry.status}</span>
+                              </td>
+                              <td className="px-3 py-2">
+                                <div className="flex items-center gap-1">
+                                  <button onClick={saveEdit} disabled={updateMut.isPending}
+                                    className="p-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">
+                                    <Check className="w-3.5 h-3.5"/>
+                                  </button>
+                                  <button onClick={() => setEditingId(null)}
+                                    className="p-1.5 rounded-lg bg-slate-200 text-slate-600 hover:bg-slate-300">
+                                    <X className="w-3.5 h-3.5"/>
+                                  </button>
+                                </div>
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="px-4 py-3 font-mono text-xs text-indigo-700 whitespace-nowrap">{entry.mb_number}</td>
+                              <td className="px-4 py-3 text-sm text-slate-800 max-w-xs truncate">{entry.description}</td>
+                              <td className="px-4 py-3 text-xs text-slate-500">{entry.wo_item_desc || '—'}</td>
+                              <td className="px-4 py-3 text-center text-xs text-slate-500">{entry.unit}</td>
+                              <td className="px-4 py-3 text-right font-bold text-slate-800">{Number(entry.executed_qty).toLocaleString('en-IN', { maximumFractionDigits: 3 })}</td>
+                              <td className="px-4 py-3 text-center">
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold uppercase">{entry.status}</span>
+                              </td>
+                              <td className="px-3 py-3">
+                                <div className="flex items-center gap-1">
+                                  <button onClick={() => startEdit(entry)} title="Edit"
+                                    className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 transition">
+                                    <Pencil className="w-3.5 h-3.5"/>
+                                  </button>
+                                  <button onClick={() => { if (window.confirm('Delete this MB entry?')) deleteMut.mutate(entry.id); }}
+                                    disabled={deleteMut.isPending}
+                                    className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition disabled:opacity-50">
+                                    <Trash2 className="w-3.5 h-3.5"/>
+                                  </button>
+                                </div>
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           )}
 
           {activeTab === 'abstract' && (

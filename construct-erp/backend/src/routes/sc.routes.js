@@ -2066,6 +2066,25 @@ router.patch('/mb/:id/qaqc-clear', authorize('super_admin','admin','qs_engineer'
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
+router.patch('/mb/:id', authorize(...ADMIN,'project_manager','qs_engineer'), async (req, res) => {
+  try {
+    const { executed_qty, description, remarks } = req.body;
+    if (executed_qty === undefined && description === undefined && remarks === undefined)
+      return res.status(400).json({ error: 'Nothing to update' });
+    const sets = [], vals = [];
+    if (executed_qty !== undefined) { sets.push(`executed_qty=$${sets.length+1}`); vals.push(parseFloat(executed_qty)); }
+    if (description  !== undefined) { sets.push(`description=$${sets.length+1}`);  vals.push(description); }
+    if (remarks      !== undefined) { sets.push(`remarks=$${sets.length+1}`);      vals.push(remarks); }
+    sets.push(`updated_at=NOW()`);
+    vals.push(req.params.id, CID(req));
+    const r = await query(
+      `UPDATE sc_mb_entries SET ${sets.join(',')} WHERE id=$${vals.length-1} AND company_id=$${vals.length} RETURNING *`,
+      vals);
+    if (!r.rows.length) return res.status(404).json({ error: 'MB entry not found' });
+    res.json({ data: r.rows[0] });
+  } catch(e){ res.status(500).json({ error: e.message }); }
+});
+
 router.delete('/mb/:id', authorize(...ADMIN,'project_manager','qs_engineer'), async (req, res) => {
   try {
     const r = await query(`DELETE FROM sc_mb_entries WHERE id=$1 AND company_id=$2 RETURNING id`,
