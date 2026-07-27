@@ -2716,8 +2716,106 @@ router.post('/nmr/:id/raise-bill', authorize(...PLANNER), async (req, res) => {
          gross, gstPct, gst, tdsPct, tds, retPct, ret, net, req.user.id]);
 
       const billId = billR.rows[0].id;
-      await client.query(`INSERT INTO sc_bill_items (bill_id,description,unit,wo_qty,prev_qty,curr_qty,balance_qty,rate,sequence_no) VALUES ($1,$2,'Mandays',0,0,$3,0,$4,1)`,
-        [billId, `Labour Charges (NMR ${n.nmr_number})`, n.total_mandays, avgRate]);
+
+      // --- Skill-wise attendance breakdown for this NMR period ---
+      const SKILLED_TRADES = ['Mason','Carpenter','Barbender','Scaffolder','Plumber','Electrician','Engineer','Supervisor','Painter'];
+      const skillRows = await client.query(`
+        SELECT w.skill_type,
+          COALESCE(SUM(a.hours_worked), 0)                                      AS total_hours,
+          COALESCE(SUM(a.wage_amount),0) + COALESCE(SUM(a.overtime_amount),0)   AS total_wages
+        FROM sc_attendance a
+        JOIN sc_workers w ON w.id = a.worker_id
+        WHERE a.sc_id=$1 AND a.company_id=$2
+          AND a.attendance_date BETWEEN $3 AND $4
+        GROUP BY w.skill_type
+        ORDER BY w.skill_type`,
+        [n.sc_id, CID(req), n.period_from, n.period_to]);
+      const skillGroups = skillRows.rows;
+
+      // --- WO BOQ items ---
+      const woItemsR = await client.query(
+        `SELECT * FROM sc_wo_items WHERE wo_id=$1 ORDER BY sequence_no`, [n.wo_id]);
+      const woItems = woItemsR.rows;
+
+      if (woItems.length > 0 && skillGroups.length > 0) {
+        const usedSkills = new Set();
+        let seq = 1;
+
+        for (const item of woItems) {
+          const desc = item.description.toLowerCase();
+          let matched;
+          // "Unskilled" or "Helper" or "Mazdoor" → unskilled workers
+          if (desc.includes('unskilled') || desc.includes('helper') || desc.includes('mazdoor')) {
+            matched = skillGroups.filter(s => !SKILLED_TRADES.includes(s.skill_type));
+          } else {
+            // Specific trade name in description (but not prefixed with "Unskilled")
+            const trade = SKILLED_TRADES.find(t => desc.includes(t.toLowerCase()));
+            if (trade) {
+              matched = skillGroups.filter(s => s.skill_type === trade);
+            } else if (desc.includes('skilled')) {
+              matched = skillGroups.filter(s => SKILLED_TRADES.includes(s.skill_type));
+            } else {
+              matched = skillGroups; // generic labour item — all workers
+            }
+          }
+          // Only consume skill groups not already assigned to an earlier WO item
+          const fresh = matched.filter(s => !usedSkills.has(s.skill_type));
+          if (fresh.length === 0) continue;
+          fresh.forEach(s => usedSkills.add(s.skill_type));
+
+          const totalHrs   = fresh.reduce((sum, s) => sum + parseFloat(s.total_hours || 0), 0);
+          const totalWages = fresh.reduce((sum, s) => sum + parseFloat(s.total_wages || 0), 0);
+          const unit = (item.unit || 'Hours');
+          const netQty = unit.toLowerCase().startsWith('hr')
+            ? parseFloat(totalHrs.toFixed(3))
+            : parseFloat((totalHrs / 8).toFixed(3));        // Hours→Mandays
+          const effectiveRate = netQty > 0
+            ? parseFloat((totalWages / netQty).toFixed(2))
+            : parseFloat(item.rate || 0);
+
+          // Auto-create an approved MB entry so it shows in the Measurement Book
+          const mbNum = await nextMBNumber(client, CID(req), n.project_id);
+          await client.query(`
+            INSERT INTO sc_mb_entries
+              (company_id,project_id,wo_id,wo_item_id,sc_id,mb_number,mb_date,
+               description,unit,executed_qty,previous_qty,
+               status,approved_by,approved_at,created_by)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,'approved',$11,NOW(),$11)`,
+            [CID(req), n.project_id, n.wo_id, item.id, n.sc_id, mbNum,
+             n.period_to,
+             `NMR ${n.nmr_number} — ${fresh.map(s => s.skill_type).join(', ')}`,
+             unit, netQty, req.user.id]);
+
+          // Create bill item linked to WO item
+          await client.query(`
+            INSERT INTO sc_bill_items
+              (bill_id,wo_item_id,description,unit,wo_qty,prev_qty,curr_qty,balance_qty,rate,sequence_no)
+            VALUES ($1,$2,$3,$4,$5,0,$6,0,$7,$8)`,
+            [billId, item.id,
+             `${item.description} — NMR ${n.nmr_number}`,
+             unit, parseFloat(item.qty || 0), netQty, effectiveRate, seq++]);
+        }
+
+        // Any skill groups not matched to a WO item → catch-all bill item
+        const unmatched = skillGroups.filter(s => !usedSkills.has(s.skill_type));
+        if (unmatched.length > 0) {
+          const hrs   = unmatched.reduce((sum, s) => sum + parseFloat(s.total_hours || 0), 0);
+          const wages = unmatched.reduce((sum, s) => sum + parseFloat(s.total_wages || 0), 0);
+          const md    = parseFloat((hrs / 8).toFixed(3));
+          const rate  = md > 0 ? parseFloat((wages / md).toFixed(2)) : avgRate;
+          await client.query(`
+            INSERT INTO sc_bill_items (bill_id,description,unit,wo_qty,prev_qty,curr_qty,balance_qty,rate,sequence_no)
+            VALUES ($1,$2,'Mandays',0,0,$3,0,$4,$5)`,
+            [billId, `Other Labour — NMR ${n.nmr_number}`, md, rate, seq++]);
+        }
+      } else {
+        // Fallback if WO has no BOQ items: single aggregate line
+        await client.query(`
+          INSERT INTO sc_bill_items (bill_id,description,unit,wo_qty,prev_qty,curr_qty,balance_qty,rate,sequence_no)
+          VALUES ($1,$2,'Mandays',0,0,$3,0,$4,1)`,
+          [billId, `Labour Charges (NMR ${n.nmr_number})`, n.total_mandays, avgRate]);
+      }
+
       await client.query(`UPDATE sc_nmr SET status='billed', bill_id=$1, updated_at=NOW() WHERE id=$2`, [billId, req.params.id]);
       await client.query(`UPDATE sc_work_orders SET total_billed=total_billed+$1, retention_held=retention_held+$2, updated_at=NOW() WHERE id=$3`, [gross, ret, n.wo_id]);
       return billR.rows[0];
