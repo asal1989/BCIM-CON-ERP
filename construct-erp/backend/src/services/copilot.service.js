@@ -8,7 +8,7 @@ const { query } = require('../config/database');
 const { applyProjectScope, scopedProjectIds } = require('../middleware/projectScope');
 const { billOutstandingSql, getVendorLiabilitySummary } = require('./tqsLiability.service');
 
-const MODEL = process.env.BCIM_COPILOT_MODEL || 'claude-haiku-4-5-20251001';
+const MODEL = process.env.BCIM_COPILOT_MODEL || 'claude-sonnet-5';
 const MAX_TOKENS = Number(process.env.BCIM_COPILOT_MAX_TOKENS) || 2048;
 const MAX_TOOL_ITERATIONS = 6;
 const MAX_HISTORY_TURNS = 10;
