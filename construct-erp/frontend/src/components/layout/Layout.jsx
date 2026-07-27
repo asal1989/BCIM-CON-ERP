@@ -1004,6 +1004,7 @@ const PROC_SHORTCUTS = [
   { label: 'Purchase Orders',    to: '/procurement/po',               icon: ShoppingCart  },
   { label: 'Work Orders',        to: '/procurement/work-orders',      icon: Hammer        },
   { label: 'Material Requests',  to: '/procurement/material-request', icon: ClipboardList },
+  { label: 'BOQ Budget',         to: '/procurement/boq-budget',       icon: BarChart3     },
   { label: 'IGN',                to: '/stores/ign',                   icon: ClipboardCheck },
   { label: 'Petty Cash',         to: '/stores/petty-cash',            icon: Wallet        },
   { label: 'Bill Tracker',       to: '/tqs/bills',                    icon: FileText      },
@@ -2176,6 +2177,7 @@ export default function Layout() {
     if (isMDNavUser) return false; // MD already has its own bar
     const r = String(user?.role || '').toLowerCase();
     const d = String(user?.department || '').toLowerCase();
+    if (['murugesan@bcim.in'].includes(String(user?.email || '').toLowerCase())) return true;
     return r.includes('procurement') || d.includes('procurement') || d.includes('purchase');
   })();
   // Bill Tracker AI Copilot pilot — a separate access boundary from isMDNavUser

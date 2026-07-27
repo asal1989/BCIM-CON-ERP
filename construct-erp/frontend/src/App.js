@@ -443,6 +443,8 @@ function getHomeRoute(user) {
   if (!user) return '/login';
   if (isEssDomain() && !isEssFullAccessRole(user)) return '/ess';
   const role = String(user.role || '').toLowerCase();
+  // Individual landing overrides (curated quick-access nav, dashboard hidden from menu)
+  if (String(user.email || '').toLowerCase() === 'murugesan@bcim.in') return '/procurement/po';
   // Stores-specific roles → direct to their section
   if (role === 'security_guard') return '/stores/ign';
   if (role === 'store_keeper')   return '/stores';
