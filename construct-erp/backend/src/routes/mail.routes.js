@@ -51,7 +51,7 @@ router.post('/send', async (req, res) => {
 // Resends the "Login Access Details" welcome email (with a fresh password-reset
 // link) to an existing user, looked up by email.
 router.post('/welcome', async (req, res) => {
-  const { to } = req.body;
+  const { to, cc } = req.body;
   if (!to) return res.status(400).json({ error: 'to is required' });
   try {
     const { rows } = await query(
@@ -73,6 +73,7 @@ router.post('/welcome', async (req, res) => {
     const token    = await createPasswordResetToken(user.id);
     const result   = await sendWelcomeLoginMail({
       to:         user.email,
+      cc:         cc || undefined,
       name:       user.name,
       role:       user.role,
       department: user.department,

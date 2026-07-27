@@ -394,7 +394,7 @@ const getDeptContent = (department = '') => {
   return GENERAL_CONTENT;
 };
 
-const sendWelcomeLoginMail = async ({ to, name, role, department, company, loginUrl, resetUrl }) => {
+const sendWelcomeLoginMail = async ({ to, name, role, department, company, loginUrl, resetUrl, cc }) => {
   const displayName = name || 'User';
   const displayRole = role || 'User';
   const displayCompany = company || 'BCIM Engineering Private Limited';
@@ -576,7 +576,7 @@ const sendWelcomeLoginMail = async ({ to, name, role, department, company, login
     </div>
   `;
 
-  return sendMail({ to, subject, html, text });
+  return sendMail({ to, cc, subject, html, text });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
