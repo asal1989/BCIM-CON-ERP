@@ -162,145 +162,11 @@ function StepBar({ step }) {
   );
 }
 
-// ─── Attendance cell helpers (mirrors SCLabour constants) ────────────────────
-const ATT_CELL    = { present:'P', absent:'A', half_day:'H', holiday:'–' };
-const ATT_CELL_BG = { present:'bg-emerald-100 text-emerald-800', absent:'bg-red-100 text-red-700', half_day:'bg-amber-100 text-amber-700', holiday:'bg-slate-100 text-slate-500' };
-
-// ─── NMR Measurement Book viewer (inline panel) ───────────────────────────────
-function NMRMeasurementBook({ nmrId, onClose }) {
-  const { data: raw, isLoading } = useQuery({
-    queryKey: ['sc-nmr-detail', nmrId],
-    queryFn: () => scAPI.previewNMR(nmrId).then(r => r.data?.data ?? r.data ?? []),
-    staleTime: 0, enabled: !!nmrId,
-  });
-  const nmr     = raw?.nmr;
-  const dates   = raw?.dates || [];
-  const workers = raw?.workers || [];
-
-  return (
-    <div className="fixed inset-0 z-[60] bg-white flex flex-col overflow-hidden">
-      <div className="flex-shrink-0 flex items-center justify-between px-5 py-4"
-        style={{ background: `linear-gradient(135deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)` }}>
-        <div>
-          <p className="font-bold text-white text-sm">{nmr?.nmr_number || '…'} — Measurement Book</p>
-          <p className="text-[11px] mt-0.5" style={{ color:'rgba(255,255,255,0.65)' }}>
-            {nmr ? `${dayjs(nmr.period_from).format('DD MMM')} – ${dayjs(nmr.period_to).format('DD MMM YYYY')} · ${nmr.total_workers} workers · ${nmr.total_mandays} man-days` : ''}
-          </p>
-        </div>
-        <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-white"
-          style={{ background:'rgba(255,255,255,0.12)', border:'1px solid rgba(255,255,255,0.22)' }}>
-          <X className="w-4 h-4"/>
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-5 space-y-5">
-        {isLoading && <div className="text-center py-12 text-slate-400 text-sm">Loading muster roll…</div>}
-        {nmr && !isLoading && (
-          <>
-            {/* Summary KPIs */}
-            <div className="grid grid-cols-4 gap-3">
-              {[
-                { l:'Total Workers',  v: nmr.total_workers,             cls:'text-blue-700' },
-                { l:'Total Man-days', v: nmr.total_mandays,             cls:'text-indigo-700' },
-                { l:'Skilled Wages',  v: fmt(nmr.skilled_wages),        cls:'text-emerald-700' },
-                { l:'Total Wages',    v: fmt(nmr.total_wages),          cls:'text-orange-700', big:true },
-              ].map(({ l, v, cls, big }) => (
-                <div key={l} className={clsx('border rounded-xl p-3', big ? 'border-orange-200 bg-orange-50' : 'border-slate-100 bg-white')}>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{l}</p>
-                  <p className={clsx('font-bold', big ? 'text-xl' : 'text-lg', cls)}>{v}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Worker-Day Matrix */}
-            <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Nominal Muster Roll — Worker Attendance Matrix</p>
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="text-xs">
-                    <thead style={{ background:`linear-gradient(90deg,${Theme.navy} 0%,${Theme.navyDark} 100%)` }}>
-                      <tr>
-                        <th className="px-3 py-2 text-left text-white/80 whitespace-nowrap sticky left-0 z-10" style={{ background:Theme.navyDark, minWidth:140 }}>Worker</th>
-                        <th className="px-2 py-2 text-white/80 whitespace-nowrap" style={{ minWidth:70 }}>Trade / Rate</th>
-                        {dates.map(d => (
-                          <th key={d} className="px-1.5 py-2 text-center text-white/80 whitespace-nowrap" style={{ minWidth:36 }}>
-                            <div>{dayjs(d).format('ddd')}</div>
-                            <div style={{ fontSize:9 }}>{dayjs(d).format('D')}</div>
-                          </th>
-                        ))}
-                        <th className="px-2 py-2 text-center text-white/80 whitespace-nowrap">Days</th>
-                        <th className="px-2 py-2 text-center text-white/80 whitespace-nowrap">OT hrs</th>
-                        <th className="px-3 py-2 text-right text-white/80 whitespace-nowrap">Total Wages</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {workers.map((w, i) => (
-                        <tr key={w.worker_id||i} className={clsx('border-t border-slate-100', i%2===0?'bg-white':'bg-slate-50/30')}>
-                          <td className="px-3 py-2 sticky left-0 z-10 bg-inherit">
-                            <p className="font-semibold text-slate-800 whitespace-nowrap">{w.worker_name}</p>
-                            <p className="text-[10px] font-mono text-slate-400">{w.worker_code}</p>
-                          </td>
-                          <td className="px-2 py-2 whitespace-nowrap">
-                            <p className="text-slate-600">{w.skill_type}</p>
-                            <p className="text-[10px] font-bold text-blue-600">₹{Number(w.daily_rate).toLocaleString()}/day</p>
-                          </td>
-                          {w.days.map(day => {
-                            const st = day.status;
-                            const bg = st ? ATT_CELL_BG[st] : 'text-slate-400';
-                            return (
-                              <td key={day.date} className="px-1 py-2 text-center">
-                                <span className={clsx('inline-flex w-7 h-6 rounded text-[10px] font-bold items-center justify-center', bg||'text-slate-400')}>
-                                  {st ? ATT_CELL[st] : '–'}
-                                </span>
-                              </td>
-                            );
-                          })}
-                          <td className="px-2 py-2 text-center font-bold text-indigo-700">{w.mandays}</td>
-                          <td className="px-2 py-2 text-center text-slate-600">{w.overtime_hours>0?w.overtime_hours:'—'}</td>
-                          <td className="px-3 py-2 text-right font-bold text-emerald-700">{fmt(w.total_wages)}</td>
-                        </tr>
-                      ))}
-                      <tr className="border-t-2 border-slate-400 bg-slate-50 font-bold">
-                        <td className="px-3 py-2.5 sticky left-0 bg-slate-50" colSpan={2}>TOTAL</td>
-                        {dates.map(d => <td key={d}/>)}
-                        <td className="px-2 py-2.5 text-center text-indigo-700 text-sm">{nmr.total_mandays}</td>
-                        <td/>
-                        <td className="px-3 py-2.5 text-right text-orange-700 text-base">{fmt(nmr.total_wages)}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            {/* Legend */}
-            <div className="flex items-center gap-3 flex-wrap">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Legend:</p>
-              {[['P','Present','bg-emerald-100 text-emerald-800'],['A','Absent','bg-red-100 text-red-700'],['H','Half Day','bg-amber-100 text-amber-700'],['–','No Record','text-slate-400']].map(([code,label,cls])=>(
-                <div key={code} className="flex items-center gap-1">
-                  <span className={clsx('inline-flex w-6 h-5 rounded text-[10px] font-bold items-center justify-center',cls)}>{code}</span>
-                  <span className="text-[11px] text-slate-500">{label}</span>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-
-      <div className="flex-shrink-0 px-5 py-4 border-t bg-slate-50/60 flex justify-end">
-        <button onClick={onClose} className="px-5 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700">
-          ← Back to Bill
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ─── NMR-Based Bill Raiser (Labour Contractors) ──────────────────────────────
 function NMRBillModal({ wo, onClose }) {
   const qc = useQueryClient();
   const [selectedNmrId, setSelectedNmrId] = useState('');
-  const [viewMbNmrId, setViewMbNmrId] = useState(null);
+  const [showMB, setShowMB] = useState(false);
   const fmt2 = (n) => `₹${Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 
   const { data: nmrs=[], isLoading } = useQuery({
@@ -323,8 +189,8 @@ function NMRBillModal({ wo, onClose }) {
 
   const selected = nmrs.find(n => n.id === selectedNmrId);
 
-  if (viewMbNmrId) {
-    return <NMRMeasurementBook nmrId={viewMbNmrId} onClose={() => setViewMbNmrId(null)} />;
+  if (showMB) {
+    return <SCMeasurementBook wo_id={wo.id} onClose={() => setShowMB(false)} onRaiseBill={() => setShowMB(false)} />;
   }
 
   return (
@@ -398,9 +264,9 @@ function NMRBillModal({ wo, onClose }) {
                     </div>
                   )}
                 </button>
-                {/* View Measurement Book button — outside the selectable area */}
+                {/* View Measurement Book button — opens SCMeasurementBook for this WO */}
                 <div className="px-4 pb-3 flex justify-end border-t border-slate-100">
-                  <button type="button" onClick={e => { e.stopPropagation(); setViewMbNmrId(n.id); }}
+                  <button type="button" onClick={e => { e.stopPropagation(); setShowMB(true); }}
                     className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-700 border border-indigo-200 bg-white hover:bg-indigo-50 transition">
                     <FileText className="w-3.5 h-3.5"/> View Measurement Book
                   </button>
