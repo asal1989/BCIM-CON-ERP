@@ -1868,8 +1868,20 @@ router.post('/:project_id/chapter-budget', authorize(...BUDGET_WRITERS), async (
 
     const chapterTotal = chapterItems.reduce((s, i) => s + parseFloat(i.amount || 0), 0);
     const budget = parseFloat(total_budget);
+    const itemIds = chapterItems.map(i => i.id);
 
     const saved = await withTransaction(async (client) => {
+      // The "Budgeted value" shown in BOQ Summary is the sum across EVERY
+      // cost head for each item, not just this one -- so typing a total here
+      // only matched the display if no other cost head already had budget
+      // on these items. Clear all existing cost-head allocations for this
+      // chapter's items first, so the new Sub Con total we're about to write
+      // IS the chapter's whole budget, matching what the user typed.
+      await client.query(
+        `DELETE FROM boq_item_budget_breakdown WHERE boq_item_id = ANY($1::uuid[])`,
+        [itemIds]
+      );
+
       const results = [];
       for (const item of chapterItems) {
         const itemAmt = parseFloat(item.amount || 0);
