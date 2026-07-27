@@ -458,6 +458,7 @@ router.patch('/work-orders/:id/approve', authorize('super_admin', 'admin', 'proj
       [req.params.id, req.user.company_id]
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Work order not found or not in pending/draft status' });
+    logAudit(req, { action: 'approve', tableName: 'work_orders', recordId: result.rows[0].id, newValues: { status: 'submitted', stage: 'procurement' } });
     res.json({ data: result.rows[0], message: 'Work Order procurement approved' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -473,6 +474,7 @@ router.patch('/work-orders/:id/md-approve', authorize('super_admin', 'admin', 'm
       [req.params.id, req.user.company_id]
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Work order not found or not awaiting MD approval' });
+    logAudit(req, { action: 'approve', tableName: 'work_orders', recordId: result.rows[0].id, newValues: { status: 'approved', stage: 'md' } });
     res.json({ data: result.rows[0], message: 'Work Order MD authorized' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -489,6 +491,7 @@ router.patch('/work-orders/:id/reject', authorize('super_admin', 'admin', 'proje
       [req.params.id, req.user.company_id, reason]
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Work order not found' });
+    logAudit(req, { action: 'reject', tableName: 'work_orders', recordId: result.rows[0].id, newValues: { status: 'rejected', reason } });
     res.json({ data: result.rows[0], message: 'Work Order rejected' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -511,6 +514,7 @@ router.patch('/work-orders/:id/terminate', authorize('super_admin', 'admin', 'pr
     if (!result.rows.length) return res.status(404).json({ error: 'Work order not found or already closed/terminated.' });
 
     const wo = result.rows[0];
+    logAudit(req, { action: 'terminate', tableName: 'work_orders', recordId: wo.id, newValues: { status: 'terminated', reason } });
     res.json({ data: wo, message: 'Work Order terminated' });
 
     // Fire-and-forget email to MD, Procurement, Super Admin

@@ -1202,6 +1202,12 @@ router.patch('/:id', authorize(...PROCUREMENT_ROLES), async (req, res) => {
       return r.rows[0];
     });
 
+    logAudit(req, {
+      action: 'update', tableName: 'purchase_orders', recordId: result.id,
+      oldValues: { status: po.status, grand_total: po.grand_total, vendor_id: po.vendor_id },
+      newValues: { status: result.status, grand_total: result.grand_total, vendor_id: result.vendor_id },
+    });
+
     res.json({ data: result });
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
@@ -1431,6 +1437,11 @@ router.post('/', async (req, res) => {
       return finalRes.rows[0];
     });
 
+    logAudit(req, {
+      action: 'create', tableName: 'purchase_orders', recordId: result.id,
+      newValues: { po_number: result.po_number, vendor_id, project_id, status: result.status, grand_total: result.grand_total },
+    });
+
     // WhatsApp + push notifications (non-blocking)
     ;(async () => {
       try {
@@ -1498,6 +1509,12 @@ router.patch('/:id/terminate', authorize('super_admin', 'admin', 'project_manage
     if (!result.rows.length) return res.status(404).json({ error: 'Purchase Order not found, already closed, or fully received.' });
 
     const po = result.rows[0];
+
+    logAudit(req, {
+      action: 'terminate', tableName: 'purchase_orders', recordId: po.id,
+      newValues: { po_ref_no: po.po_ref_no || po.po_number, reason, terminated_by: req.user.id },
+    });
+
     res.json({ data: po, message: 'Purchase Order terminated' });
 
     // Fire-and-forget email to MD, Procurement, Super Admin
