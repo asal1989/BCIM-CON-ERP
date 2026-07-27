@@ -400,6 +400,7 @@ const navGroups = [
     { to: '/audit-log', icon: History, label: 'Audit Log' },
     { to: '/mail-center', icon: Mail, label: 'Mail Center' },
     { to: '/role-permissions', icon: ShieldCheck, label: 'Roles & Module Access' },
+    { to: '/user-module-access', icon: ShieldCheck, label: 'User Module Access' },
     { to: '/api-keys',         icon: Key,         label: 'API Keys' },
     { to: '/db-backup',        icon: Database,    label: 'DB Backup' },
   ]},
