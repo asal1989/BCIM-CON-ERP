@@ -2537,7 +2537,7 @@ router.get('/nmr/:id/preview', async (req, res) => {
 
     // All attendance in the period for these workers
     const attendance = await query(`
-      SELECT worker_id, attendance_date, status, hours_worked, overtime_hours, wage_amount, remarks
+      SELECT worker_id, attendance_date, status, hours_worked, overtime_hours, wage_amount, overtime_amount, remarks
       FROM sc_attendance
       WHERE sc_id=$1 AND company_id=$2 AND attendance_date BETWEEN $3 AND $4
       ORDER BY attendance_date`, [n.sc_id, CID(req), n.period_from, n.period_to]);
@@ -2557,23 +2557,25 @@ router.get('/nmr/:id/preview', async (req, res) => {
       attMap[key] = a;
     }
 
-    // Build matrix
+    // Build matrix — man-days and wages come from each attendance row's own
+    // hours_worked/wage_amount (already correct for both daily-rate workers,
+    // where hours_worked defaults to 8, and hour-basis workers with variable
+    // shift lengths), NOT re-derived from daily_rate x "was present that day".
+    // A flat day-count silently mis-costs anyone not on an exact 8hr shift.
     const matrix = workers.rows.map(w => {
       let mandays = 0, overtimeHours = 0, wages = 0;
-      const dailyRate = parseFloat(w.daily_rate) || 0; // NUMERIC columns come back as strings from pg
       const days = dates.map(date => {
         const key = `${w.id}_${date}`;
         const att = attMap[key];
         const status = att ? att.status : null; // null = no record
-        if (status === 'present')  { mandays += 1; wages += dailyRate; }
-        if (status === 'half_day') { mandays += 0.5; wages += dailyRate * 0.5; }
-        if (att && att.overtime_hours > 0) {
-          overtimeHours += parseFloat(att.overtime_hours);
-          wages += parseFloat(att.overtime_hours) * (dailyRate / 8);
+        if (att) {
+          mandays += (parseFloat(att.hours_worked) || 0) / 8;
+          wages += (parseFloat(att.wage_amount) || 0) + (parseFloat(att.overtime_amount) || 0);
+          if (att.overtime_hours > 0) overtimeHours += parseFloat(att.overtime_hours);
         }
         return { date, status, hours: att?.hours_worked||null, ot: att?.overtime_hours||null };
       });
-      return { ...w, days, mandays, overtime_hours: overtimeHours, total_wages: parseFloat(wages.toFixed(2)) };
+      return { ...w, days, mandays: parseFloat(mandays.toFixed(2)), overtime_hours: overtimeHours, total_wages: parseFloat(wages.toFixed(2)) };
     });
 
     res.json({ data: { nmr: n, dates, workers: matrix } });
@@ -2600,22 +2602,23 @@ router.post('/nmr', authorize(...PLANNER), async (req, res) => {
     const workers = await query(`SELECT id, skill_type, daily_rate FROM sc_workers WHERE sc_id=$1 AND (wo_id=$2 OR wo_id IS NULL) AND status='active'`, [sc_id, wo_id]);
 
     // Get all attendance records for this period
-    const attendance = await query(`SELECT worker_id, status, hours_worked, overtime_hours FROM sc_attendance WHERE sc_id=$1 AND company_id=$2 AND attendance_date BETWEEN $3 AND $4`, [sc_id, CID(req), period_from, period_to]);
+    const attendance = await query(`SELECT worker_id, status, hours_worked, overtime_hours, wage_amount, overtime_amount FROM sc_attendance WHERE sc_id=$1 AND company_id=$2 AND attendance_date BETWEEN $3 AND $4`, [sc_id, CID(req), period_from, period_to]);
 
-    // Build worker → daily_rate map
-    const rateMap = {};
-    for (const w of workers.rows) rateMap[w.id] = { rate: parseFloat(w.daily_rate||0), skill: w.skill_type };
+    // Build worker → skill map
+    const skillMap = {};
+    for (const w of workers.rows) skillMap[w.id] = w.skill_type;
 
-    // Aggregate wages
+    // Aggregate wages — from each attendance row's own hours_worked/wage_amount
+    // (already correct for both daily-rate workers, where hours_worked
+    // defaults to 8, and hour-basis workers with variable shift lengths),
+    // NOT re-derived from daily_rate x "was present that day". A flat
+    // day-count silently mis-costs anyone not on an exact 8hr shift.
     let totalMandays = 0, totalWages = 0, skilledWages = 0, unskilledWages = 0;
     const SKILLED = ['Mason','Carpenter','Barbender','Scaffolder','Plumber','Electrician','Engineer','Supervisor','Painter'];
     for (const a of attendance.rows) {
-      const { rate=0, skill='Unskilled' } = rateMap[a.worker_id] || {};
-      let dayWage = 0;
-      if (a.status === 'present')  { dayWage = rate; totalMandays += 1; }
-      if (a.status === 'half_day') { dayWage = rate * 0.5; totalMandays += 0.5; }
-      const otWage = parseFloat(a.overtime_hours||0) * (rate / 8);
-      dayWage += otWage;
+      const skill = skillMap[a.worker_id] || 'Unskilled';
+      totalMandays += (parseFloat(a.hours_worked) || 0) / 8;
+      const dayWage = (parseFloat(a.wage_amount) || 0) + (parseFloat(a.overtime_amount) || 0);
       totalWages += dayWage;
       if (SKILLED.includes(skill)) skilledWages += dayWage;
       else unskilledWages += dayWage;
@@ -2629,7 +2632,7 @@ router.post('/nmr', authorize(...PLANNER), async (req, res) => {
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
         [CID(req), wo.rows[0].project_id, wo_id, sc_id, nmr_number,
          period_from, period_to, workers.rows.length,
-         totalMandays, parseFloat(totalWages.toFixed(2)),
+         parseFloat(totalMandays.toFixed(2)), parseFloat(totalWages.toFixed(2)),
          parseFloat(skilledWages.toFixed(2)), parseFloat(unskilledWages.toFixed(2)),
          remarks||null, req.user.id]);
       return { nmr_number, nmrRow: r };
