@@ -2560,15 +2560,16 @@ router.get('/nmr/:id/preview', async (req, res) => {
     // Build matrix
     const matrix = workers.rows.map(w => {
       let mandays = 0, overtimeHours = 0, wages = 0;
+      const dailyRate = parseFloat(w.daily_rate) || 0; // NUMERIC columns come back as strings from pg
       const days = dates.map(date => {
         const key = `${w.id}_${date}`;
         const att = attMap[key];
         const status = att ? att.status : null; // null = no record
-        if (status === 'present')  { mandays += 1; wages += w.daily_rate; }
-        if (status === 'half_day') { mandays += 0.5; wages += w.daily_rate * 0.5; }
+        if (status === 'present')  { mandays += 1; wages += dailyRate; }
+        if (status === 'half_day') { mandays += 0.5; wages += dailyRate * 0.5; }
         if (att && att.overtime_hours > 0) {
           overtimeHours += parseFloat(att.overtime_hours);
-          wages += parseFloat(att.overtime_hours) * (w.daily_rate / 8);
+          wages += parseFloat(att.overtime_hours) * (dailyRate / 8);
         }
         return { date, status, hours: att?.hours_worked||null, ot: att?.overtime_hours||null };
       });
