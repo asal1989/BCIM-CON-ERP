@@ -22,6 +22,55 @@ function stripMarkdownForSpeech(text) {
     .trim();
 }
 
+// ── Speak currency amounts in Indian numbering (lakh/crore), not the
+// browser's default Western grouping -- "450000" read as "four hundred
+// fifty thousand" is technically correct but not how anyone in an Indian
+// finance conversation says it; "four lakh fifty thousand" is. ─────────────
+const ONES = ['zero','one','two','three','four','five','six','seven','eight','nine','ten',
+  'eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
+const TENS = ['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
+
+function twoDigitWords(n) {
+  if (n < 20) return ONES[n];
+  const t = Math.floor(n / 10), o = n % 10;
+  return TENS[t] + (o ? ' ' + ONES[o] : '');
+}
+function threeDigitWords(n) {
+  const h = Math.floor(n / 100), rest = n % 100;
+  if (!h) return twoDigitWords(rest);
+  return ONES[h] + ' hundred' + (rest ? ' ' + twoDigitWords(rest) : '');
+}
+function numberToIndianWords(num) {
+  num = Math.round(num);
+  if (num === 0) return 'zero';
+  const parts = [];
+  const crore = Math.floor(num / 10000000); num %= 10000000;
+  const lakh  = Math.floor(num / 100000);    num %= 100000;
+  const thou  = Math.floor(num / 1000);      num %= 1000;
+  if (crore) parts.push(threeDigitWords(crore) + ' crore');
+  if (lakh)  parts.push(threeDigitWords(lakh) + ' lakh');
+  if (thou)  parts.push(threeDigitWords(thou) + ' thousand');
+  if (num)   parts.push(threeDigitWords(num));
+  return parts.join(' ');
+}
+
+// Matches Rs/₹/INR amounts, e.g. "₹4,50,000", "Rs. 12,340.50", "INR 99"
+const CURRENCY_RE = /(?:₹|Rs\.?|INR)\s?([\d,]+(?:\.\d{1,2})?)/gi;
+
+function speakableCurrency(text) {
+  return String(text || '').replace(CURRENCY_RE, (match, digits) => {
+    const clean = digits.replace(/,/g, '');
+    const value = parseFloat(clean);
+    if (Number.isNaN(value)) return match;
+    const [rupeesPart, paisePart] = clean.split('.');
+    const rupeeWords = numberToIndianWords(parseInt(rupeesPart, 10));
+    const paise = paisePart ? Math.round(parseFloat(`0.${paisePart}`) * 100) : 0;
+    return paise
+      ? `${rupeeWords} rupees and ${numberToIndianWords(paise)} paise`
+      : `${rupeeWords} rupees`;
+  });
+}
+
 const SpeechRecognitionCtor = typeof window !== 'undefined'
   ? (window.SpeechRecognition || window.webkitSpeechRecognition)
   : null;
@@ -56,6 +105,7 @@ export default function CopilotPanel({ onClose, projectId }) {
   const [voiceOut, setVoiceOut] = useState(true);
   const bottomRef = useRef(null);
   const recognitionRef = useRef(null);
+  const voiceOriginRef = useRef(false); // did the pending question come from the mic? drives hands-free follow-up
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -70,6 +120,8 @@ export default function CopilotPanel({ onClose, projectId }) {
   async function handleSend(overrideText) {
     const text = (overrideText ?? input).trim();
     if (!text || loading) return;
+    const fromVoice = voiceOriginRef.current;
+    voiceOriginRef.current = false;
     setError('');
     setInput('');
 
@@ -83,9 +135,17 @@ export default function CopilotPanel({ onClose, projectId }) {
       setMessages(prev => [...prev, { role: 'assistant', content: res.data.reply }]);
       if (voiceOut && speechSynthesisSupported) {
         window.speechSynthesis.cancel();
-        const utter = new SpeechSynthesisUtterance(stripMarkdownForSpeech(res.data.reply));
+        const spoken = speakableCurrency(stripMarkdownForSpeech(res.data.reply));
+        const utter = new SpeechSynthesisUtterance(spoken);
         utter.lang = 'en-IN';
         utter.rate = 1;
+        // Hands-free follow-up: if this question was asked by voice, listen
+        // again once the answer finishes speaking so a supervisor can ask a
+        // follow-up without touching the screen. Stays quiet on its own if
+        // there's no more speech (the recognizer's own silence timeout).
+        if (fromVoice && SpeechRecognitionCtor) {
+          utter.onend = () => toggleListening();
+        }
         window.speechSynthesis.speak(utter);
       }
     } catch (err) {
@@ -127,6 +187,7 @@ export default function CopilotPanel({ onClose, projectId }) {
       // auto-sending straight to the copilot on a possibly-wrong question.
       let transcript = '';
       for (let i = 0; i < event.results.length; i++) transcript += event.results[i][0].transcript;
+      voiceOriginRef.current = true;
       setInput(transcript);
     };
     recognitionRef.current = recognition;
@@ -237,7 +298,7 @@ export default function CopilotPanel({ onClose, projectId }) {
         <div className="px-4 py-3 border-t border-slate-100 bg-slate-50 flex-shrink-0 flex items-end gap-2">
           <textarea
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => { voiceOriginRef.current = false; setInput(e.target.value); }}
             onKeyDown={handleKeyDown}
             placeholder={listening ? 'Listening…' : 'Ask about vendor bills, cash flow, aging, deductions…'}
             rows={1}
