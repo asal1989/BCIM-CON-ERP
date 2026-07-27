@@ -2,13 +2,30 @@
 // Docked chat drawer for the Bill Tracker AI Copilot pilot. Structural
 // pattern copied from NotificationPanel.jsx (backdrop + absolute panel).
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, X, Send, AlertTriangle } from 'lucide-react';
+import { Sparkles, X, Send, AlertTriangle, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
 import { clsx } from 'clsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { copilotAPI } from '../../api/client';
 
 const MAX_HISTORY_SENT = 10;
+
+// Strip markdown syntax before handing text to the speech synthesizer --
+// "**Rs 4,50,000**" read aloud verbatim would say "asterisk asterisk Rs...".
+function stripMarkdownForSpeech(text) {
+  return String(text || '')
+    .replace(/\|/g, ' ')
+    .replace(/[*_#`]/g, '')
+    .replace(/^-+\s*/gm, '')
+    .replace(/\n{2,}/g, '. ')
+    .replace(/\n/g, '. ')
+    .trim();
+}
+
+const SpeechRecognitionCtor = typeof window !== 'undefined'
+  ? (window.SpeechRecognition || window.webkitSpeechRecognition)
+  : null;
+const speechSynthesisSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
 
 const MARKDOWN_COMPONENTS = {
   p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
@@ -35,14 +52,23 @@ export default function CopilotPanel({ onClose, projectId }) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [listening, setListening] = useState(false);
+  const [voiceOut, setVoiceOut] = useState(true);
   const bottomRef = useRef(null);
+  const recognitionRef = useRef(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  async function handleSend() {
-    const text = input.trim();
+  // Stop any in-flight speech and mic capture when the panel closes/unmounts.
+  useEffect(() => () => {
+    recognitionRef.current?.stop();
+    if (speechSynthesisSupported) window.speechSynthesis.cancel();
+  }, []);
+
+  async function handleSend(overrideText) {
+    const text = (overrideText ?? input).trim();
     if (!text || loading) return;
     setError('');
     setInput('');
@@ -55,6 +81,13 @@ export default function CopilotPanel({ onClose, projectId }) {
       const history = nextMessages.slice(-MAX_HISTORY_SENT - 1, -1);
       const res = await copilotAPI.sendMessage({ message: text, history, project_id: projectId });
       setMessages(prev => [...prev, { role: 'assistant', content: res.data.reply }]);
+      if (voiceOut && speechSynthesisSupported) {
+        window.speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(stripMarkdownForSpeech(res.data.reply));
+        utter.lang = 'en-IN';
+        utter.rate = 1;
+        window.speechSynthesis.speak(utter);
+      }
     } catch (err) {
       const status = err?.response?.status;
       const msg = err?.response?.data?.error
@@ -72,6 +105,28 @@ export default function CopilotPanel({ onClose, projectId }) {
       e.preventDefault();
       handleSend();
     }
+  }
+
+  function toggleListening() {
+    if (!SpeechRecognitionCtor) return;
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const recognition = new SpeechRecognitionCtor();
+    recognition.lang = 'en-IN';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onstart = () => setListening(true);
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    recognition.onresult = (event) => {
+      const transcript = event.results?.[0]?.[0]?.transcript?.trim();
+      if (transcript) handleSend(transcript); // ask by voice -> answer comes back spoken, hands-free
+    };
+    recognitionRef.current = recognition;
+    recognition.start();
   }
 
   return (
@@ -96,12 +151,24 @@ export default function CopilotPanel({ onClose, projectId }) {
             <Sparkles className="w-4 h-4 text-indigo-500" />
             <span className="text-sm font-bold text-slate-900">Bill Tracker Copilot</span>
           </div>
-          <button
-            onClick={onClose}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1">
+            {speechSynthesisSupported && (
+              <button
+                onClick={() => { setVoiceOut(v => !v); window.speechSynthesis.cancel(); }}
+                title={voiceOut ? 'Voice replies on — click to mute' : 'Voice replies off — click to unmute'}
+                className={clsx('w-7 h-7 rounded-lg flex items-center justify-center transition-all',
+                  voiceOut ? 'text-indigo-500 hover:bg-indigo-50' : 'text-slate-400 hover:bg-slate-100')}
+              >
+                {voiceOut ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
         {/* Body */}
@@ -151,6 +218,14 @@ export default function CopilotPanel({ onClose, projectId }) {
             </div>
           )}
 
+          {listening && (
+            <div className="flex justify-start">
+              <div className="flex items-center gap-2 bg-red-50 text-red-600 rounded-2xl rounded-bl-sm px-4 py-2.5 text-[13px] font-semibold">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> Listening…
+              </div>
+            </div>
+          )}
+
           <div ref={bottomRef} />
         </div>
 
@@ -160,13 +235,25 @@ export default function CopilotPanel({ onClose, projectId }) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about vendor bills, cash flow, aging, deductions…"
+            placeholder={listening ? 'Listening…' : 'Ask about vendor bills, cash flow, aging, deductions…'}
             rows={1}
-            disabled={loading}
+            disabled={loading || listening}
             className="flex-1 resize-none rounded-xl border border-slate-200 px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 disabled:bg-slate-100"
           />
+          {SpeechRecognitionCtor && (
+            <button
+              onClick={toggleListening}
+              disabled={loading}
+              title={listening ? 'Stop listening' : 'Ask by voice'}
+              className={clsx('w-9 h-9 rounded-xl flex items-center justify-center transition-colors flex-shrink-0',
+                listening ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-slate-200 text-slate-600 hover:bg-slate-300',
+                loading && 'opacity-50 cursor-not-allowed')}
+            >
+              {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </button>
+          )}
           <button
-            onClick={handleSend}
+            onClick={() => handleSend()}
             disabled={loading || !input.trim()}
             className="w-9 h-9 rounded-xl flex items-center justify-center bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 transition-colors flex-shrink-0"
           >
