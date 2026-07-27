@@ -26,7 +26,24 @@ Rules:
 - If a tool errors or returns no rows, say so plainly rather than guessing.
 - Use the list_projects tool to resolve a project name to its id before calling other tools with a
   project filter, unless the user is clearly asking about "the current project" (see context below).
-- Keep answers concise and numbers-first.`;
+- Keep answers concise and numbers-first.
+- Format every rupee amount in Indian numbering (lakh/crore grouping), never Western thousands
+  grouping. E.g. write ₹1,20,29,440 — NOT ₹12,029,440. Grouping rule: the last 3 digits together,
+  then every 2 digits after that (12029440 -> 1,20,29,440; 450000 -> 4,50,000; 1234567 -> 12,34,567).`;
+
+// Deterministic safety net: the system prompt tells the model to use Indian
+// numbering, but LLM instruction-following on number formatting isn't
+// guaranteed every time. Re-group any Rs/₹ amount the model wrote in Western
+// thousands grouping into lakh/crore grouping before it reaches the user.
+const CURRENCY_AMOUNT_RE = /(₹|Rs\.?\s?)([\d,]+)(\.\d+)?/g;
+function toIndianCurrencyGrouping(text) {
+  return String(text || '').replace(CURRENCY_AMOUNT_RE, (match, prefix, digits, decimals) => {
+    const intPart = digits.replace(/,/g, '');
+    if (!intPart) return match;
+    const grouped = intPart.replace(/(\d)(?=(\d\d)+\d$)/g, '$1,');
+    return `${prefix}${grouped}${decimals || ''}`;
+  });
+}
 
 function anthropicClient() {
   if (!process.env.ANTHROPIC_API_KEY) return null;
@@ -373,7 +390,7 @@ async function chat({ req, message, history, projectId }) {
 
     if (response.stop_reason !== 'tool_use') {
       const textBlock = response.content.find(b => b.type === 'text');
-      return textBlock ? textBlock.text : '';
+      return textBlock ? toIndianCurrencyGrouping(textBlock.text) : '';
     }
 
     messages.push({ role: 'assistant', content: response.content });
