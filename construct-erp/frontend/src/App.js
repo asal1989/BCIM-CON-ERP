@@ -679,24 +679,25 @@ export default function App() {
                 <Route path="apps" element={<BCIMPortalPage />} />
                 <Route path="dashboard" element={<RequireModule module="Overview"><Dashboard /></RequireModule>} />
 
-                {/* Projects */}
-                <Route path="projects/dashboard" element={<RequireModule module="Overview"><ProjectsDashboard /></RequireModule>} />
-                <Route path="projects/drawings"  element={<RequireModule module="Overview"><DrawingsPage /></RequireModule>} />
-                <Route path="projects" element={<RequireModule module="Overview"><ProjectList /></RequireModule>} />
-                <Route path="projects/new" element={<RequireModule module="Overview"><ProjectCreate /></RequireModule>} />
-                <Route path="projects/:id" element={<RequireModule module="Overview"><ProjectDetail /></RequireModule>} />
-                <Route path="projects/:id/edit" element={<RequireModule module="Overview"><ProjectCreate /></RequireModule>} />
+                {/* Projects — reachable both from the Overview group and the
+                    dedicated Projects nav group, so each accepts either module. */}
+                <Route path="projects/dashboard" element={<RequireAnyModule modules={['Overview','Projects']}><ProjectsDashboard /></RequireAnyModule>} />
+                <Route path="projects/drawings"  element={<RequireAnyModule modules={['Overview','Projects']}><DrawingsPage /></RequireAnyModule>} />
+                <Route path="projects" element={<RequireAnyModule modules={['Overview','Projects']}><ProjectList /></RequireAnyModule>} />
+                <Route path="projects/new" element={<RequireAnyModule modules={['Overview','Projects']}><ProjectCreate /></RequireAnyModule>} />
+                <Route path="projects/:id" element={<RequireAnyModule modules={['Overview','Projects']}><ProjectDetail /></RequireAnyModule>} />
+                <Route path="projects/:id/edit" element={<RequireAnyModule modules={['Overview','Projects']}><ProjectCreate /></RequireAnyModule>} />
 
                 {/* QS & Billing */}
                 <Route path="qs" element={<RequireModule module="QS & Billing"><QSDashboardPage /></RequireModule>} />
-                <Route path="qs/boq"                  element={<RequireModule module="QS & Billing"><BOQPage /></RequireModule>} />
+                <Route path="qs/boq"                  element={<RequireAnyModule modules={['QS & Billing','Projects']}><BOQPage /></RequireAnyModule>} />
                 <Route path="qs/boq-mapping"          element={<RequireModule module="QS & Billing"><BOQMappingPage /></RequireModule>} />
                 <Route path="qs/boq-dashboard"        element={<RequireModule module="QS & Billing"><BOQDashboardPage /></RequireModule>} />
                 <Route path="qs/boq-budget-breakdown" element={<RequireBudgetAccess><BOQBudgetBreakdownPage /></RequireBudgetAccess>} />
                 <Route path="qs/measurements" element={<RequireModule module="QS & Billing"><MeasurementPage /></RequireModule>} />
                 <Route path="qs/measurements/book" element={<RequireModule module="QS & Billing"><MeasurementBookPage /></RequireModule>} />
                 <Route path="qs/client-work-orders" element={<RequireModule module="QS & Billing"><ClientWOPage /></RequireModule>} />
-                <Route path="qs/ra-bills" element={<RequireModule module="QS & Billing"><RABillPage /></RequireModule>} />
+                <Route path="qs/ra-bills" element={<RequireAnyModule modules={['QS & Billing','Projects']}><RABillPage /></RequireAnyModule>} />
                 <Route path="qs/ra-bills/new" element={<RequireModule module="QS & Billing"><RABillNewPage /></RequireModule>} />
                 <Route path="qs/ra-bills/:id" element={<RequireModule module="QS & Billing"><RABillDetail /></RequireModule>} />
                 <Route path="qs/po" element={<RequireModule module="QS & Billing"><POPage /></RequireModule>} />
@@ -910,7 +911,7 @@ export default function App() {
                 <Route path="hr-admin/compliance-tracker" element={<RequireModule module="HR & Admin"><ComplianceTrackerPage /></RequireModule>} />
                 <Route path="hr-admin/reports/confirmation" element={<RequireModule module="HR & Admin"><HRConfirmationReportPage /></RequireModule>} />
                 <Route path="hr-admin/employees" element={<RequireModule module="HR & Admin"><HREmployeeListPage /></RequireModule>} />
-                <Route path="hr-admin/project-staff" element={<RequireAnyModule modules={['HR & Admin','Overview']}><HRProjectStaffPage /></RequireAnyModule>} />
+                <Route path="hr-admin/project-staff" element={<RequireAnyModule modules={['HR & Admin','Overview','Projects']}><HRProjectStaffPage /></RequireAnyModule>} />
                 <Route path="hr-admin/checklist" element={<RequireModule module="HR & Admin"><HRChecklistPage /></RequireModule>} />
                 <Route path="hr-admin/ops-checklist" element={<RequireModule module="HR & Admin"><HROpsChecklistPage /></RequireModule>} />
                 <Route path="hr-admin/payroll-reports" element={<RequireModule module="HR & Admin"><HRPayrollReportsPage /></RequireModule>} />
@@ -979,13 +980,13 @@ export default function App() {
                 <Route path="planning/dpr" element={<Navigate to="/planning/dpr-console" replace />} />
                 <Route path="planning/dpr-console" element={<RequireModule module="Planning"><DPRConsole /></RequireModule>} />
                 <Route path="planning/activities" element={<RequireModule module="Planning"><ActivitiesPage /></RequireModule>} />
-                <Route path="planning/milestones" element={<RequireModule module="Planning"><MilestonePage /></RequireModule>} />
+                <Route path="planning/milestones" element={<RequireAnyModule modules={['Planning','Projects']}><MilestonePage /></RequireAnyModule>} />
                 <Route path="planning/look-ahead" element={<RequireModule module="Planning"><LookAheadPage /></RequireModule>} />
                 <Route path="planning/progress" element={<RequireModule module="Planning"><ProgressDashboard /></RequireModule>} />
                 <Route path="planning/delays"       element={<RequireModule module="Planning"><DelayAnalysisPage /></RequireModule>} />
-                <Route path="planning/reports"      element={<RequireModule module="Planning"><PlanningReportsPage /></RequireModule>} />
-                <Route path="planning/p6-dashboard" element={<RequireModule module="Planning"><P6Dashboard /></RequireModule>} />
-                <Route path="planning/wbs"          element={<RequireModule module="Planning"><WBSEditorPage /></RequireModule>} />
+                <Route path="planning/reports"      element={<RequireAnyModule modules={['Planning','Projects']}><PlanningReportsPage /></RequireAnyModule>} />
+                <Route path="planning/p6-dashboard" element={<RequireAnyModule modules={['Planning','Projects']}><P6Dashboard /></RequireAnyModule>} />
+                <Route path="planning/wbs"          element={<RequireAnyModule modules={['Planning','Projects']}><WBSEditorPage /></RequireAnyModule>} />
                 <Route path="planning/risks"        element={<RequireModule module="Planning"><RiskRegisterPage /></RequireModule>} />
                 <Route path="planning/mrp"          element={<RequireModule module="Planning"><MRPPage /></RequireModule>} />
 
