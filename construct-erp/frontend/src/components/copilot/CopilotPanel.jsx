@@ -116,14 +116,18 @@ export default function CopilotPanel({ onClose, projectId }) {
     const recognition = new SpeechRecognitionCtor();
     recognition.lang = 'en-IN';
     recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.interimResults = true; // show words as they're heard, so a mishear is obvious before sending
     recognition.maxAlternatives = 1;
-    recognition.onstart = () => setListening(true);
+    recognition.onstart = () => { setListening(true); setInput(''); };
     recognition.onend = () => setListening(false);
     recognition.onerror = () => setListening(false);
     recognition.onresult = (event) => {
-      const transcript = event.results?.[0]?.[0]?.transcript?.trim();
-      if (transcript) handleSend(transcript); // ask by voice -> answer comes back spoken, hands-free
+      // Speech recognition can mishear names/numbers -- land the transcript
+      // in the input box for the user to confirm or fix, rather than
+      // auto-sending straight to the copilot on a possibly-wrong question.
+      let transcript = '';
+      for (let i = 0; i < event.results.length; i++) transcript += event.results[i][0].transcript;
+      setInput(transcript);
     };
     recognitionRef.current = recognition;
     recognition.start();
