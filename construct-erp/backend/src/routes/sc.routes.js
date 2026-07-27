@@ -1451,6 +1451,16 @@ router.delete('/bills/:id', authorize(...PLANNER), async (req, res) => {
       // Unlink any NMR this bill was raised from (sc_nmr.bill_id FK would
       // otherwise block the delete outright) -- revert it to 'approved' so
       // it can be re-billed rather than left dangling in 'billed' status.
+      // Also clean up the MB entries raise-bill auto-created for it — otherwise
+      // re-raising the bill piles on a fresh duplicate set every time (the old
+      // ones are never referenced by anything once the bill is gone).
+      const nmrR = await client.query(`SELECT nmr_number FROM sc_nmr WHERE bill_id=$1`, [req.params.id]);
+      if (nmrR.rows.length) {
+        await client.query(
+          `DELETE FROM sc_mb_entries WHERE wo_id=$1 AND company_id=$2 AND description LIKE $3`,
+          [bill.wo_id, CID(req), `NMR ${nmrR.rows[0].nmr_number}%`]
+        );
+      }
       await client.query(`UPDATE sc_nmr SET status='approved', bill_id=NULL, updated_at=NOW() WHERE bill_id=$1`, [req.params.id]);
       // Delete the bill (cascades to sc_bill_items and sc_bill_approvals)
       await client.query(`DELETE FROM sc_bills WHERE id=$1`, [req.params.id]);
@@ -2735,6 +2745,14 @@ router.post('/nmr/:id/raise-bill', authorize(...PLANNER), async (req, res) => {
          gross, gstPct, gst, tdsPct, tds, retPct, ret, net, req.user.id]);
 
       const billId = billR.rows[0].id;
+
+      // Idempotency guard: clear any MB entries a previous raise-bill run for
+      // this same NMR left behind (e.g. the bill was deleted and re-raised)
+      // before creating a fresh set, so they never pile up as duplicates.
+      await client.query(
+        `DELETE FROM sc_mb_entries WHERE wo_id=$1 AND company_id=$2 AND description LIKE $3`,
+        [n.wo_id, CID(req), `NMR ${n.nmr_number}%`]
+      );
 
       // --- Skill-wise attendance breakdown for this NMR period ---
       const SKILLED_TRADES = ['Mason','Carpenter','Barbender','Scaffolder','Plumber','Electrician','Engineer','Supervisor','Painter'];
