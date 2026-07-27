@@ -4,7 +4,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 // Budget-setting writes only — matches the role list already used for
 // project budget writes in budget.routes.js. Reads stay open to any
 // authenticated user with project access (unchanged).
-const BUDGET_WRITERS = ['super_admin', 'admin', 'project_manager', 'accountant'];
+const BUDGET_WRITERS = ['super_admin', 'admin', 'project_manager', 'accountant', 'managing_director'];
 const { query, withTransaction } = require('../config/database');
 const { loadProjectScope, userCanAccessProject } = require('../middleware/projectScope');
 const { runSchemaInit } = require('../utils/schemaInit');
