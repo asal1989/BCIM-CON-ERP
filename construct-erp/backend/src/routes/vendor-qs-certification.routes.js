@@ -1047,7 +1047,37 @@ router.post('/', async (req, res) => {
         // QS certification now routes straight to Procurement (Accounts is no
         // longer a blocking waypoint — see PATCH /:id/qs in tqs-bills.routes.js
         // for the matching change on the Bill Tracker's own quick-cert path).
-        await client.query(`UPDATE tqs_bills SET workflow_status='procurement', updated_at=NOW() WHERE id=$1`, [b.id]);
+        //
+        // Exception: if this bill's allocated deductions (advance recovery,
+        // TDS, retention, other, credit note) already cover its certified
+        // value, billCertifiedNet is ₹0 — there's no cash payment left to
+        // make, so settle it now instead of sending it to Procurement/Payment
+        // to wait on a ₹0 payment run. Mirrors PATCH /:id/mark-paid in
+        // tqs-bills.routes.js, minus the MD-signature gate (nothing to
+        // authorise a payment for when the payable amount is zero).
+        if (billCertifiedNet <= 0) {
+          await client.query(`UPDATE tqs_bill_updates SET payment_status='paid', balance_to_pay=0, updated_at=NOW() WHERE bill_id=$1`, [b.id]);
+          await client.query(`UPDATE tqs_bills SET workflow_status='paid', updated_at=NOW() WHERE id=$1`, [b.id]);
+        } else {
+          await client.query(`UPDATE tqs_bills SET workflow_status='procurement', updated_at=NOW() WHERE id=$1`, [b.id]);
+        }
+      }
+
+      // If every bill on this certification ended up fully settled above
+      // (all zero-balance), the certification itself is effectively paid —
+      // reflect that on vendor_qs_certifications too rather than leaving it
+      // parked at 'certified' with nothing left to pay.
+      const unpaidCheck = await client.query(
+        `SELECT COUNT(*)::int AS cnt FROM vendor_qs_certification_bills cb
+         JOIN tqs_bills b ON b.id = cb.bill_id
+         WHERE cb.certification_id = $1 AND b.workflow_status <> 'paid'`,
+        [cert.rows[0].id]
+      );
+      if (unpaidCheck.rows[0].cnt === 0) {
+        await client.query(
+          `UPDATE vendor_qs_certifications SET status='paid', paid_amount=COALESCE(net_payable, paid_amount), paid_at=NOW(), updated_at=NOW() WHERE id=$1`,
+          [cert.rows[0].id]
+        );
       }
 
       let recoveryLeft = n(advance_recovered);
@@ -1274,6 +1304,16 @@ router.post('/:id/refresh-from-bills', async (req, res) => {
           billOtherDeduction,
           billTotalDeductions,
         ]);
+
+        // Same zero-balance settlement as the create path above: if this
+        // bill's recalculated deductions now cover its certified value
+        // (e.g. more advance recovery was added on edit), there's nothing
+        // left to pay — settle it instead of leaving it parked in
+        // Procurement/Payment waiting on a ₹0 payment run.
+        if (billCertifiedNet <= 0) {
+          await client.query(`UPDATE tqs_bill_updates SET payment_status='paid', balance_to_pay=0, updated_at=NOW() WHERE bill_id=$1`, [b.bill_id]);
+          await client.query(`UPDATE tqs_bills SET workflow_status='paid', updated_at=NOW() WHERE id=$1`, [b.bill_id]);
+        }
       }
 
       const updated = await client.query(`
@@ -1287,6 +1327,23 @@ router.post('/:id/refresh-from-bills', async (req, res) => {
         WHERE id=$5 AND company_id=$6
         RETURNING *
       `, [linkedBills.rows.length, gross, billTax, netPayable, req.params.id, req.user.company_id]);
+
+      // If every bill on this certification is now fully settled (all
+      // zero-balance after the recalculation above), reflect that on the
+      // certification itself instead of leaving it parked at its old status.
+      const anyUnpaid = await client.query(
+        `SELECT COUNT(*)::int AS cnt FROM vendor_qs_certification_bills cb
+         JOIN tqs_bills b ON b.id = cb.bill_id
+         WHERE cb.certification_id = $1 AND b.workflow_status <> 'paid'`,
+        [req.params.id]
+      );
+      if (anyUnpaid.rows[0].cnt === 0) {
+        const paidRes = await client.query(
+          `UPDATE vendor_qs_certifications SET status='paid', paid_amount=COALESCE(net_payable, paid_amount), paid_at=NOW(), updated_at=NOW() WHERE id=$1 RETURNING *`,
+          [req.params.id]
+        );
+        return { ...paidRes.rows[0], refreshed_items: items.length };
+      }
 
       return { ...updated.rows[0], refreshed_items: items.length };
     });

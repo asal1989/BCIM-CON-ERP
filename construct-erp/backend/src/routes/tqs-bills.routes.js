@@ -3490,7 +3490,16 @@ router.patch('/:id/qs', requireTqsStageAccess('qs'), async (req, res) => {
     // QS now routes straight to Procurement — Accounts is no longer a
     // blocking waypoint here (they can record the JV date on /:id/accounts
     // at any time; see that route for details).
-    await query(`UPDATE tqs_bills SET workflow_status='procurement', updated_at=NOW() WHERE id=$1`, [req.params.id]);
+    //
+    // Exception: if the deductions recorded at certification (advance
+    // recovery, TDS, retention, other) already cover the full certified
+    // value, certified_net is ₹0 — there's no cash payment left to make, so
+    // skip Procurement/Payment entirely and settle the bill now.
+    if (certified_net <= 0) {
+      await autoMarkPaidIfZeroBalance(req.params.id, req.user.id);
+    } else {
+      await query(`UPDATE tqs_bills SET workflow_status='procurement', updated_at=NOW() WHERE id=$1`, [req.params.id]);
+    }
 
     // ── Sync advance_recovered back to advance tracker (diff-based) ──────
     // Use the DIFFERENCE between new and old advance_recovered so that
@@ -3608,6 +3617,7 @@ router.patch('/:id/qs', requireTqsStageAccess('qs'), async (req, res) => {
         qs_gross: certifiedGross, qs_tax: certifiedTax,
         ra_bill_number: raNum, ra_sequence,
         previous_certified_amount, cumulative_certified_amount,
+        workflow_status: certified_net <= 0 ? 'paid' : 'procurement',
       },
     });
   } catch (err) {
@@ -3735,6 +3745,12 @@ router.post('/accounts-jv-by-cert', requireTqsStageAccess('accounts'), async (re
         await query(`UPDATE tqs_bills SET workflow_status='procurement', updated_at=NOW() WHERE id=$1`, [bill.id]);
       }
 
+      // Fully recovered via advance/TDS/retention/other deductions — nothing
+      // left to pay, so skip Procurement/Payment entirely and settle it now.
+      if (certified_net <= 0) {
+        await autoMarkPaidIfZeroBalance(bill.id, req.user.id);
+      }
+
       await logHistory(bill.id, 'accounts',
         `Accounts processed — Advance Rec: ₹${advance_recovered.toFixed(0)}, TDS: ₹${tds_deduction.toFixed(0)}, Net: ₹${certified_net.toFixed(0)} (bulk JV via certification, ${billsRes.rows.length} bills)`,
         req.user.id);
@@ -3856,6 +3872,12 @@ router.patch('/:id/accounts', requireTqsStageAccess('accounts'), async (req, res
       await query(`UPDATE tqs_bills SET workflow_status='procurement', updated_at=NOW() WHERE id=$1`, [req.params.id]);
     }
 
+    // Fully recovered via advance/TDS/retention/other deductions — nothing left
+    // to pay, so skip Procurement/Payment entirely and settle it now.
+    if (certified_net <= 0) {
+      await autoMarkPaidIfZeroBalance(req.params.id, req.user.id);
+    }
+
     // ── Sync advance recovery to tracker (FIFO) ────────────────────────────
     if (n(advance_recovered) > 0 && bill.vendor_name) {
       const vWhere = bill.vendor_id
@@ -3958,7 +3980,10 @@ router.patch('/:id/accounts', requireTqsStageAccess('accounts'), async (req, res
       }
     } catch (_) { /* best-effort: never block the accounts stage over JV posting */ }
 
-    res.json({ data: { workflow_status: 'procurement', certified_net, total_deductions: totalDed } });
+    res.json({ data: {
+      workflow_status: certified_net <= 0 ? 'paid' : 'procurement',
+      certified_net, total_deductions: totalDed,
+    } });
   } catch (err) {
     console.error(err);
     res.status(err.statusCode || 500).json({ error: err.message });
@@ -4200,6 +4225,52 @@ router.patch('/:id/qs-sign', requireTqsStageAccess('qs_sign'), async (req, res) 
     res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
+
+// Reusable guard — throws if MD signature not yet collected for a bill
+async function requireMdSignature(billId) {
+  const r = await query(
+    `SELECT u.qs_sign_date FROM tqs_bill_updates u WHERE u.bill_id = $1`,
+    [billId]
+  );
+  if (!r.rows.length || !r.rows[0].qs_sign_date) {
+    throw Object.assign(
+      new Error('MD signature not collected. Complete "QS — MD Signature Collection" before recording payment.'),
+      { statusCode: 400 }
+    );
+  }
+}
+
+// When Accounts recovers the full bill value via advance/TDS/retention/other
+// deductions, certified_net (and balance_to_pay) come out to ₹0 — there's no
+// actual cash payment left to make, so the bill shouldn't sit in the
+// Procurement/Payment queue waiting for someone to run a ₹0 payment. Mirrors
+// what PATCH /:id/mark-paid does, minus the MD-signature gate (there's nothing
+// to authorise a payment for when the payable amount is zero).
+async function autoMarkPaidIfZeroBalance(billId, actorId) {
+  await withTransaction(async (client) => {
+    await client.query(`
+      UPDATE tqs_bill_updates SET payment_status='paid', balance_to_pay=0, updated_at=NOW()
+      WHERE bill_id=$1
+    `, [billId]);
+    await client.query(`UPDATE tqs_bills SET workflow_status='paid', updated_at=NOW() WHERE id=$1`, [billId]);
+
+    // Reverse-sync linked certification, mirroring PATCH /:id/mark-paid
+    await client.query(`
+      UPDATE vendor_qs_certifications c
+      SET status='paid', paid_amount=COALESCE(c.net_payable, c.paid_amount), paid_at=NOW(), updated_at=NOW()
+      FROM vendor_qs_certification_bills cb
+      WHERE cb.certification_id=c.id AND cb.bill_id=$1 AND c.status<>'paid'
+        AND NOT EXISTS (
+          SELECT 1 FROM vendor_qs_certification_bills cb2
+          JOIN tqs_bills b2 ON b2.id=cb2.bill_id
+          WHERE cb2.certification_id=c.id AND b2.id<>$1 AND b2.workflow_status<>'paid'
+        )
+    `, [billId]);
+  });
+  await logHistory(billId, 'accounts',
+    'Auto-marked as Paid — Certified Net is ₹0 (fully recovered via advance/deductions, no payment due)',
+    actorId);
+}
 
 // Reusable guard — throws if MD signature not yet collected for a bill
 async function requireMdSignature(billId) {
