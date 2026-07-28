@@ -15,7 +15,7 @@ const BCIM_OWN_NAMES = new Set(['', 'bcim', 'bcim staff', 'bcim workers']);
 const isSubcontractorEmp = (e) =>
   e.employee_category === 'workman' &&
   !BCIM_OWN_NAMES.has((e.contractor_name || '').trim().toLowerCase());
-import { hrEmployeesAPI, hrMastersAPI } from '../../api/client';
+import { hrEmployeesAPI, hrMastersAPI, projectAPI } from '../../api/client';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const AVATAR_GRADS = [
@@ -144,6 +144,7 @@ export default function EmployeeListPage() {
   const navigate = useNavigate();
   const [search,          setSearch]          = useState('');
   const [deptFilter,      setDeptFilter]      = useState('');
+  const [projectFilter,   setProjectFilter]   = useState('');
   const [statusFilter,    setStatusFilter]    = useState('active');
   const [typeFilter,      setTypeFilter]      = useState('');
   const [categoryFilter,  setCategoryFilter]  = useState('');
@@ -152,13 +153,14 @@ export default function EmployeeListPage() {
   const [showFilters,     setShowFilters]     = useState(false);
 
   const { data: empData, isLoading } = useQuery({
-    queryKey: ['hr-employees', search, deptFilter, statusFilter, categoryFilter],
+    queryKey: ['hr-employees', search, deptFilter, projectFilter, statusFilter, categoryFilter],
     queryFn: () => hrEmployeesAPI.list(
       statusFilter === '__no_profile__'
         ? { no_profile: 'true' }
         : {
             search: search || undefined,
             department_id: deptFilter || undefined,
+            project_id: projectFilter || undefined,
             employment_status: statusFilter || undefined,
             employee_category: categoryFilter || undefined,
           }
@@ -170,8 +172,14 @@ export default function EmployeeListPage() {
     queryFn: () => hrMastersAPI.listDepts().then(r => r.data),
   });
 
+  const { data: projectData } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => projectAPI.list().then(r => r.data?.data || r.data || []),
+  });
+
   const allEmployees = empData?.data || [];
   const departments  = deptData?.data || [];
+  const projects     = projectData || [];
 
   // client-side type + contractor-scope filter
   const employees = useMemo(() => {
@@ -191,7 +199,7 @@ export default function EmployeeListPage() {
     permanent:     allEmployees.filter(e => e.employment_type === 'permanent').length,
   }), [allEmployees]);
 
-  const activeFilters = [deptFilter, typeFilter, categoryFilter].filter(Boolean).length;
+  const activeFilters = [deptFilter, projectFilter, typeFilter, categoryFilter].filter(Boolean).length;
 
   return (
     <div className="p-6 space-y-5" style={{ background: '#F8F9FA', minHeight: '100vh' }}>
@@ -381,6 +389,18 @@ export default function EmployeeListPage() {
                   </select>
                 </div>
                 <div>
+                  <label className="text-xs text-slate-600 font-medium block mb-1">Project</label>
+                  <select
+                    value={projectFilter}
+                    onChange={e => setProjectFilter(e.target.value)}
+                    className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-indigo-400"
+                  >
+                    <option value="">All Projects</option>
+                    <option value="unassigned">Unassigned</option>
+                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div>
                   <label className="text-xs text-slate-600 font-medium block mb-1">Employment Type</label>
                   <div className="flex gap-2">
                     {['', 'permanent', 'probation', 'contract', 'intern'].map(t => (
@@ -397,9 +417,9 @@ export default function EmployeeListPage() {
                     ))}
                   </div>
                 </div>
-                {(deptFilter || typeFilter) && (
+                {(deptFilter || projectFilter || typeFilter) && (
                   <button
-                    onClick={() => { setDeptFilter(''); setTypeFilter(''); }}
+                    onClick={() => { setDeptFilter(''); setProjectFilter(''); setTypeFilter(''); }}
                     className="self-end flex items-center gap-1 text-xs text-red-500 hover:text-red-600 font-medium"
                   >
                     <X className="w-3.5 h-3.5" /> Clear filters

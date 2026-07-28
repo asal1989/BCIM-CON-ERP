@@ -2808,10 +2808,38 @@ router.post('/nmr/:id/raise-bill', authorize(...PLANNER), async (req, res) => {
     if (n.status !== 'approved') return res.status(400).json({ error: 'NMR must be approved before raising a bill' });
     if (n.bill_id) return res.status(400).json({ error: 'Bill already raised from this NMR' });
 
-    const gross   = parseFloat(n.total_wages);
     const gstPct  = parseFloat(n.gst_pct  || 18);
     const tdsPct  = parseFloat(n.tds_pct  || 2);
     const retPct  = parseFloat(n.retention_pct || 5);
+
+    // Compute gross at WO contracted rates (not from the stored NMR total_wages,
+    // which may have been calculated under old worker-payroll-rate logic).
+    const [preSkillR, preWoR] = await Promise.all([
+      query(`SELECT w.skill_type,
+          COALESCE(SUM(a.hours_worked), 0)                                      AS total_hours,
+          COALESCE(SUM(a.overtime_hours), 0)                                    AS total_ot_hours,
+          COALESCE(SUM(a.wage_amount),0) + COALESCE(SUM(a.overtime_amount),0)   AS total_wages
+        FROM sc_attendance a
+        JOIN sc_workers w ON w.id = a.worker_id
+        WHERE a.sc_id=$1 AND a.company_id=$2
+          AND a.attendance_date BETWEEN $3 AND $4
+        GROUP BY w.skill_type ORDER BY w.skill_type`,
+        [n.sc_id, CID(req), n.period_from, n.period_to]),
+      query(`SELECT * FROM sc_wo_items WHERE wo_id=$1 ORDER BY sequence_no`, [n.wo_id])
+    ]);
+    const preSkillGroups = preSkillR.rows;
+    const preWoItems     = preWoR.rows;
+
+    let gross = parseFloat(n.total_wages); // fallback for WOs with no BOQ items
+    if (preWoItems.length > 0 && preSkillGroups.length > 0) {
+      const { matches: preMtch, unmatched: preUnm } = matchWOItemsToSkills(preWoItems, preSkillGroups);
+      let contracted = preMtch.reduce((s, m) => s + m.wage, 0);
+      // Skills not matched to any WO item: fall back to actual attendance wages
+      if (preUnm.length > 0)
+        contracted += preUnm.reduce((s, sk) => s + parseFloat(sk.total_wages || 0), 0);
+      gross = parseFloat(contracted.toFixed(2));
+    }
+
     const gst  = gross * gstPct  / 100;
     const tds  = gross * tdsPct  / 100;
     const ret  = gross * retPct  / 100;
@@ -2844,25 +2872,9 @@ router.post('/nmr/:id/raise-bill', authorize(...PLANNER), async (req, res) => {
         [n.wo_id, CID(req), `NMR ${n.nmr_number}%`]
       );
 
-      // --- Skill-wise attendance breakdown for this NMR period ---
-      const skillRows = await client.query(`
-        SELECT w.skill_type,
-          COALESCE(SUM(a.hours_worked), 0)                                      AS total_hours,
-          COALESCE(SUM(a.overtime_hours), 0)                                    AS total_ot_hours,
-          COALESCE(SUM(a.wage_amount),0) + COALESCE(SUM(a.overtime_amount),0)   AS total_wages
-        FROM sc_attendance a
-        JOIN sc_workers w ON w.id = a.worker_id
-        WHERE a.sc_id=$1 AND a.company_id=$2
-          AND a.attendance_date BETWEEN $3 AND $4
-        GROUP BY w.skill_type
-        ORDER BY w.skill_type`,
-        [n.sc_id, CID(req), n.period_from, n.period_to]);
-      const skillGroups = skillRows.rows;
-
-      // --- WO BOQ items ---
-      const woItemsR = await client.query(
-        `SELECT * FROM sc_wo_items WHERE wo_id=$1 ORDER BY sequence_no`, [n.wo_id]);
-      const woItems = woItemsR.rows;
+      // Reuse the skill groups and WO items already fetched above
+      const skillGroups = preSkillGroups;
+      const woItems     = preWoItems;
 
       if (woItems.length > 0 && skillGroups.length > 0) {
         let seq = 1;
