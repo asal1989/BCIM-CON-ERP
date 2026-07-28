@@ -5,6 +5,7 @@ const sql     = require('mssql');
 const { query, pool } = require('../config/database');
 const { authenticate, authorize } = require('../middleware/auth');
 const { runSchemaInit } = require('../utils/schemaInit');
+const { splitDayHours } = require('../utils/attendanceHours');
 
 const router = express.Router();
 
@@ -90,14 +91,18 @@ router.post('/agent-push', async (req, res) => {
             const diff = (oh * 60 + om) - (ih * 60 + im);
             if (diff > 0) hoursWorked = Math.min(parseFloat((diff / 60).toFixed(2)), 12);
           }
+          // Split into regular (<=8h) + overtime so the NMR/bill price this
+          // day against the right WO line items.
+          const h = splitDayHours(hoursWorked);
           await query(
             `INSERT INTO sc_attendance
-               (company_id, project_id, sc_id, wo_id, worker_id, attendance_date, status, hours_worked, in_time, out_time, remarks)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'essl_agent')
+               (company_id, project_id, sc_id, wo_id, worker_id, attendance_date, status, hours_worked, overtime_hours, in_time, out_time, remarks)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$11,$9,$10,'essl_agent')
              ON CONFLICT (worker_id, attendance_date) DO UPDATE
-               SET status=$7, hours_worked=$8, in_time=$9, out_time=$10, remarks='essl_agent'`,
+               SET status=$7, hours_worked=$8, overtime_hours=$11, in_time=$9, out_time=$10, remarks='essl_agent'`,
             [company_id, scWorker.project_id, scWorker.sc_id, scWorker.wo_id,
-             scWorker.id, rec.date, status, hoursWorked, inTime || null, (hasOut ? outTime : null)]
+             scWorker.id, rec.date, status, h.regular, inTime || null, (hasOut ? outTime : null),
+             h.overtime]
           );
         }
         results.synced++;
@@ -1213,24 +1218,25 @@ router.post('/sync-sc', async (req, res) => {
 
         if (existing.rows.length && !overwrite) { skipped++; continue; }
 
+        const h = splitDayHours(hoursWorked);
         if (existing.rows.length) {
           await query(
             `UPDATE sc_attendance SET status=$1, hours_worked=$2, wage_amount=$3,
-             overtime_hours=0, remarks=$4 WHERE id=$5`,
-            [status, Math.min(hoursWorked, 24), wage,
+             overtime_hours=$6, remarks=$4 WHERE id=$5`,
+            [status, h.regular, wage,
              `ESSL sync: ${g.swipes.length} punch(es) [etimetracklite]`,
-             existing.rows[0].id]
+             existing.rows[0].id, h.overtime]
           );
           updated++;
         } else {
           await query(
             `INSERT INTO sc_attendance (company_id, project_id, sc_id, wo_id, worker_id,
                attendance_date, status, hours_worked, overtime_hours, wage_amount, remarks, marked_by)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0,$9,$10,$11)`,
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$12,$9,$10,$11)`,
             [companyId, worker.project_id, worker.sc_id, worker.wo_id || null, worker.id,
-             g.date, status, Math.min(hoursWorked, 24), wage,
+             g.date, status, h.regular, wage,
              `ESSL sync: ${g.swipes.length} punch(es) [etimetracklite]`,
-             req.user.id]
+             req.user.id, h.overtime]
           );
           created++;
         }

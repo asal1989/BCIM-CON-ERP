@@ -10,6 +10,7 @@ const dayjs = require('dayjs');
 const esslService = require('../services/essl.service');
 const { notifyScBillSubmitted, notifyScWoSubmitted } = require('../services/notif.helper');
 const { runSchemaInit } = require('../utils/schemaInit');
+const { splitDayHours } = require('../utils/attendanceHours');
 const { BOQ_COST_HEADS } = require('../constants/boqCostHeads');
 const { uploadToOneDrive, isConfigured } = require('../services/onedrive.service');
 const { scBillScopeForRole } = require('../constants/scBillApprovalStages');
@@ -1022,8 +1023,11 @@ router.post('/attendance', authorize(...PLANNER), async (req, res) => {
   try {
     const { project_id, sc_id, wo_id, worker_id, attendance_date, status, hours_worked, overtime_hours, wage_amount, overtime_amount, location, remarks } = req.body;
     if (!worker_id) return res.status(400).json({ error: 'worker_id required' });
+    // Normalise the day into regular (<=8h) + overtime so the NMR and the
+    // bill raised from it price this day against the right WO line items.
+    const h = splitDayHours(hours_worked ?? 8, overtime_hours);
     const r = await query(`INSERT INTO sc_attendance (company_id,project_id,sc_id,wo_id,worker_id,attendance_date,status,hours_worked,overtime_hours,wage_amount,overtime_amount,location,remarks,marked_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
-      [CID(req),project_id||null,sc_id||null,wo_id||null,worker_id,attendance_date||new Date().toISOString().slice(0,10),status||'present',hours_worked||8,overtime_hours||0,wage_amount||0,overtime_amount||0,location||null,remarks||null,req.user.id]);
+      [CID(req),project_id||null,sc_id||null,wo_id||null,worker_id,attendance_date||new Date().toISOString().slice(0,10),status||'present',h.regular,h.overtime,wage_amount||0,overtime_amount||0,location||null,remarks||null,req.user.id]);
     res.status(201).json({ data: r.rows[0] });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
@@ -1035,8 +1039,9 @@ router.post('/attendance/bulk', authorize(...PLANNER), async (req, res) => {
     if (!Array.isArray(entries) || !entries.length) return res.status(400).json({ error: 'entries required' });
     let inserted = 0;
     for (const e of entries) {
-      await query(`INSERT INTO sc_attendance (company_id,project_id,sc_id,wo_id,worker_id,attendance_date,status,hours_worked,wage_amount,marked_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT DO NOTHING`,
-        [CID(req),e.project_id||null,e.sc_id||null,e.wo_id||null,e.worker_id,e.attendance_date,e.status||'present',e.hours_worked||8,e.wage_amount||0,req.user.id]);
+      const h = splitDayHours(e.hours_worked ?? 8, e.overtime_hours);
+      await query(`INSERT INTO sc_attendance (company_id,project_id,sc_id,wo_id,worker_id,attendance_date,status,hours_worked,overtime_hours,wage_amount,marked_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT DO NOTHING`,
+        [CID(req),e.project_id||null,e.sc_id||null,e.wo_id||null,e.worker_id,e.attendance_date,e.status||'present',h.regular,h.overtime,e.wage_amount||0,req.user.id]);
       inserted++;
     }
     res.json({ message: `${inserted} records saved` });
@@ -2613,28 +2618,23 @@ router.get('/nmr/:id/preview', async (req, res) => {
     }
     const skillGroups = Object.values(skillTotals);
 
-    // skill_type → { day_rate, day_item, ot_rate, ot_item }
+    // skill_type → { day_rate, day_item, ot_rate, ot_item, inc_rate, inc_item }
     const rateBySkill = {};
     const woSummary   = [];
     if (woItemsR.rows.length && skillGroups.length) {
-      const isHourUnit = u => /^hr/i.test(u || '') || /hour/i.test(u || '');
+      const SLOT = { regular: 'day', overtime: 'ot', incentive: 'inc' };
       const { matches } = matchWOItemsToSkills(woItemsR.rows, skillGroups);
       for (const m of matches) {
-        const hourly = isHourUnit(m.item.unit);
+        const slot = SLOT[m.basis] || 'day';
         for (const s of m.skills) {
           if (!rateBySkill[s.skill_type]) rateBySkill[s.skill_type] = {};
-          if (hourly) {
-            rateBySkill[s.skill_type].ot_rate = m.rate;
-            rateBySkill[s.skill_type].ot_item = m.item.description;
-          } else {
-            rateBySkill[s.skill_type].day_rate = m.rate;
-            rateBySkill[s.skill_type].day_item = m.item.description;
-          }
+          rateBySkill[s.skill_type][`${slot}_rate`] = m.rate;
+          rateBySkill[s.skill_type][`${slot}_item`] = m.item.description;
         }
         woSummary.push({
           description: m.item.description,
           unit:        m.item.unit,
-          basis:       hourly ? 'overtime' : 'regular',
+          basis:       m.basis,
           skills:      m.skills.map(s => s.skill_type),
           qty:         m.netQty,
           rate:        m.rate,
@@ -2645,7 +2645,8 @@ router.get('/nmr/:id/preview', async (req, res) => {
 
     // --- Build matrix -------------------------------------------------------
     // Regular man-days come from hours_worked/8 (hours_worked is the ≤8hr
-    // portion); overtime is tracked and priced separately.
+    // portion); overtime is tracked and priced separately. Incentive, where
+    // the WO carries such a line, is paid on every hour actually worked.
     const matrix = workers.rows.map(w => {
       let regHours = 0, overtimeHours = 0;
       const days = dates.map(date => {
@@ -2662,8 +2663,10 @@ router.get('/nmr/:id/preview', async (req, res) => {
       const mandays  = parseFloat((regHours / 8).toFixed(3));
       const dayRate  = parseFloat(r.day_rate || 0);
       const otRate   = parseFloat(r.ot_rate  || 0);
+      const incRate  = parseFloat(r.inc_rate || 0);
       const dayWages = parseFloat((mandays       * dayRate).toFixed(2));
       const otWages  = parseFloat((overtimeHours * otRate ).toFixed(2));
+      const incWages = parseFloat(((regHours + overtimeHours) * incRate).toFixed(2));
 
       return {
         ...w, days,
@@ -2673,11 +2676,14 @@ router.get('/nmr/:id/preview', async (req, res) => {
         overtime_hours: parseFloat(overtimeHours.toFixed(2)),
         wo_day_rate:    dayRate,
         wo_ot_rate:     otRate,
+        wo_inc_rate:    incRate,
         wo_day_item:    r.day_item || null,
         wo_ot_item:     r.ot_item  || null,
+        wo_inc_item:    r.inc_item || null,
         day_wages:      dayWages,
         ot_wages:       otWages,
-        total_wages:    parseFloat((dayWages + otWages).toFixed(2)),
+        inc_wages:      incWages,
+        total_wages:    parseFloat((dayWages + otWages + incWages).toFixed(2)),
       };
     });
 
@@ -2693,16 +2699,19 @@ const NMR_SKILLED_TRADES = ['Mason','Carpenter','Barbender','Scaffolder','Plumbe
 // rate — NOT the subcontractor's internal worker payroll rate — since that's
 // what BCIM is actually obligated to pay the subcontractor under the WO.
 function matchWOItemsToSkills(woItems, skillGroups) {
-  // Separate WO items into day-based and hour-based so each runs an independent
-  // skill-matching pass. This allows a WO to have both "Helper Man Days" (days)
-  // and "Helper Overtime Hours" (hours) without the second being skipped because
-  // Helper was already consumed by the first.
-  const isHourUnit = u => /^hr/i.test(u) || /hour/i.test(u);
+  // WO items are split into three independent matching passes, each with its
+  // own "already consumed" set, so one trade can legitimately appear on more
+  // than one line — e.g. a WO carrying "Helper Man Days" (days), "Helper
+  // Overtime" (hours) and "Incentive for Unskilled Labour" (hours) bills all
+  // three for the same Helper crew instead of skipping the later ones.
+  const isHourUnit  = u => /^hr/i.test(u) || /hour/i.test(u);
+  const isIncentive = d => /incentive/i.test(d || '');
 
-  const dayItems  = woItems.filter(i => !isHourUnit(i.unit || ''));
-  const hourItems = woItems.filter(i =>  isHourUnit(i.unit || ''));
+  const incentiveItems = woItems.filter(i =>  isIncentive(i.description));
+  const dayItems       = woItems.filter(i => !isIncentive(i.description) && !isHourUnit(i.unit || ''));
+  const hourItems      = woItems.filter(i => !isIncentive(i.description) &&  isHourUnit(i.unit || ''));
 
-  function runPass(items, getQty) {
+  function runPass(items, basis, getQty) {
     const used = new Set();
     const out  = [];
     for (const item of items) {
@@ -2720,22 +2729,31 @@ function matchWOItemsToSkills(woItems, skillGroups) {
       if (fresh.length === 0) continue;
       fresh.forEach(s => used.add(s.skill_type));
       const netQty = getQty(fresh);
+      if (netQty <= 0) continue;
       const rate = parseFloat(item.rate || 0);
-      out.push({ item, skills: fresh, netQty, rate, wage: parseFloat((netQty * rate).toFixed(2)) });
+      out.push({ item, basis, skills: fresh, netQty, rate, wage: parseFloat((netQty * rate).toFixed(2)) });
     }
     return { out, used };
   }
 
   // Day pass: qty = regular hours / 8
-  const dayPass = runPass(dayItems, fresh =>
+  const dayPass = runPass(dayItems, 'regular', fresh =>
     parseFloat((fresh.reduce((s, sk) => s + parseFloat(sk.total_hours || 0), 0) / 8).toFixed(3)));
 
   // Hour pass: qty = overtime hours (separate from day pass, no skill conflict)
-  const hrPass = runPass(hourItems, fresh =>
+  const hrPass = runPass(hourItems, 'overtime', fresh =>
     parseFloat(fresh.reduce((s, sk) => s + parseFloat(sk.total_ot_hours || 0), 0).toFixed(3)));
 
-  const matches = [...dayPass.out, ...hrPass.out];
-  // "unmatched" = skills not used by the day pass (hour-only items don't consume quota)
+  // Incentive pass: paid per hour actually worked, so qty = regular + overtime.
+  // Runs on its own quota set, since the same crew already billed on the day
+  // and overtime lines is exactly who the incentive is owed to.
+  const incPass = runPass(incentiveItems, 'incentive', fresh =>
+    parseFloat(fresh.reduce((s, sk) =>
+      s + parseFloat(sk.total_hours || 0) + parseFloat(sk.total_ot_hours || 0), 0).toFixed(3)));
+
+  const matches = [...dayPass.out, ...hrPass.out, ...incPass.out];
+  // "unmatched" = skills not used by the day pass (hour/incentive-only items
+  // don't consume quota, so they never mask a genuinely unpriced trade)
   const unmatched = skillGroups.filter(s => !dayPass.used.has(s.skill_type));
   return { matches, unmatched };
 }
@@ -2766,17 +2784,26 @@ router.post('/nmr', authorize(...PLANNER), async (req, res) => {
     const skillMap = {};
     for (const w of workers.rows) skillMap[w.id] = w.skill_type;
 
-    // Man-days always come from actual hours worked (hour-basis), regardless
-    // of pricing below.
+    // Man-days always come from regular hours worked (hour-basis), regardless
+    // of pricing below. Overtime hours are tracked per skill alongside them —
+    // matchWOItemsToSkills prices the WO's Hours lines off total_ot_hours, so
+    // omitting it here would silently drop the entire overtime value from the
+    // NMR's stored wages.
     let totalMandays = 0;
-    const hoursBySkill = {};
+    const hoursBySkill = {}, otBySkill = {};
     for (const a of attendance.rows) {
       const skill = skillMap[a.worker_id] || 'Unskilled';
-      const hrs = parseFloat(a.hours_worked) || 0;
+      const hrs = parseFloat(a.hours_worked)   || 0;
+      const ot  = parseFloat(a.overtime_hours) || 0;
       totalMandays += hrs / 8;
       hoursBySkill[skill] = (hoursBySkill[skill] || 0) + hrs;
+      otBySkill[skill]    = (otBySkill[skill]    || 0) + ot;
     }
-    const skillGroups = Object.entries(hoursBySkill).map(([skill_type, total_hours]) => ({ skill_type, total_hours }));
+    const skillGroups = Object.keys(hoursBySkill).map(skill_type => ({
+      skill_type,
+      total_hours:    hoursBySkill[skill_type],
+      total_ot_hours: otBySkill[skill_type] || 0,
+    }));
 
     // Wages are priced at the WO's own contracted rate per skill/unit — what
     // BCIM actually owes the subcontractor — not the subcontractor's internal
@@ -3174,19 +3201,20 @@ router.post('/essl/sync', authorize(...ADMIN,...PLANNER), async (req, res) => {
           continue;
         }
 
+        const h = splitDayHours(hours || 8);
         if (existing.rows.length && overwrite) {
           await query(`UPDATE sc_attendance SET status=$1, hours_worked=$2, wage_amount=$3,
-            overtime_hours=0, remarks=$4, marked_by=$5, updated_at=NOW()
+            overtime_hours=$7, remarks=$4, marked_by=$5, updated_at=NOW()
             WHERE id=$6`,
-            [status, Math.min(hours||8, 24), wage,
+            [status, h.regular, wage,
              `ESSL sync: ${punches} punch(es), ${hours}h (schema: ${schema})`,
-             req.user.id, existing.rows[0].id]);
+             req.user.id, existing.rows[0].id, h.overtime]);
           updated++;
         } else {
           await query(`INSERT INTO sc_attendance
             (company_id, project_id, sc_id, wo_id, worker_id, attendance_date,
              status, hours_worked, overtime_hours, wage_amount, remarks, marked_by)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0,$9,$10,$11)`,
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$12,$9,$10,$11)`,
             [CID(req),
              worker.project_id || project_id || null,
              worker.sc_id,
@@ -3194,10 +3222,11 @@ router.post('/essl/sync', authorize(...ADMIN,...PLANNER), async (req, res) => {
              worker.id,
              attDate,
              status,
-             Math.min(parseFloat(hours)||8, 24),
+             h.regular,
              wage,
              `ESSL sync: ${punches} punch(es) [${schema}]`,
-             req.user.id]);
+             req.user.id,
+             h.overtime]);
           created++;
         }
         results.push({ worker_name: worker.worker_name, emp_code: rec.emp_code, date: attDate, status, hours, wage });

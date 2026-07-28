@@ -30,6 +30,13 @@ const NMR_SIGNATORIES = [
   { role: 'Contractor',    name: 'Labour Contractor' },
 ];
 
+// How each WO line item is measured — set by matchWOItemsToSkills on the server.
+const BASIS_LABEL = {
+  regular:   'Regular (1 day = 8 hrs)',
+  overtime:  'Overtime (> 8 hrs/day)',
+  incentive: 'Incentive (all hrs worked)',
+};
+
 // The muster roll lives in a fixed full-screen drawer whose scroll containers
 // and sticky first column would clip the printed sheet — unwind all of that
 // and let the wide date matrix flow across the page instead.
@@ -317,6 +324,12 @@ function NMRDrawer({ nmrId, onClose }) {
   const woSummary = raw?.wo_summary || [];
   const sm      = NMR_STATUS[nmr?.status] || NMR_STATUS.draft;
 
+  // Only WOs that carry an incentive line get the extra column, so the roll
+  // stays narrow for the ones that don't.
+  const hasIncentive = useMemo(
+    () => workers.some(w => Number(w.wo_inc_rate || 0) > 0), [workers]);
+  const tailCols = hasIncentive ? 6 : 5;   // columns after the date matrix
+
   // Split the roll into Skilled / Unskilled sections, each with its own
   // subtotals, so the muster roll reads the same way the WO is priced.
   const sections = useMemo(() => {
@@ -326,6 +339,7 @@ function NMRDrawer({ nmrId, onClose }) {
       otHours:  rows.reduce((s, w) => s + Number(w.overtime_hours || 0), 0),
       dayWages: rows.reduce((s, w) => s + Number(w.day_wages || 0), 0),
       otWages:  rows.reduce((s, w) => s + Number(w.ot_wages || 0), 0),
+      incWages: rows.reduce((s, w) => s + Number(w.inc_wages || 0), 0),
       total:    rows.reduce((s, w) => s + Number(w.total_wages || 0), 0),
     });
     const out = [];
@@ -341,6 +355,7 @@ function NMRDrawer({ nmrId, onClose }) {
     otHours:  sections.reduce((s, g) => s + g.otHours,  0),
     dayWages: sections.reduce((s, g) => s + g.dayWages, 0),
     otWages:  sections.reduce((s, g) => s + g.otWages,  0),
+    incWages: sections.reduce((s, g) => s + g.incWages, 0),
     total:    sections.reduce((s, g) => s + g.total,    0),
   }), [sections]);
 
@@ -365,8 +380,10 @@ function NMRDrawer({ nmrId, onClose }) {
 
     // Sheet 1 — the muster roll matrix, grouped by skill grade
     const head = ['Worker Code', 'Worker Name', 'Trade', 'Day Rate', 'OT Rate',
+      ...(hasIncentive ? ['Inc Rate'] : []),
       ...dates.map(d => dayjs(d).format('DD-MMM')),
-      'Reg Days', 'Day Amount', 'OT Hrs', 'OT Amount', 'Total'];
+      'Reg Days', 'Day Amount', 'OT Hrs', 'OT Amount',
+      ...(hasIncentive ? ['Incentive'] : []), 'Total'];
     const aoa = [
       ['NOMINAL MUSTER ROLL — Contract Labour (R&A) Act 1970'],
       [`NMR No.: ${nmr.nmr_number}`, '', `Contractor: ${nmr.sc_name || ''}`, '', `Project: ${nmr.project_name || ''}`],
@@ -380,24 +397,31 @@ function NMRDrawer({ nmrId, onClose }) {
         aoa.push([
           w.worker_code || '', w.worker_name || '', w.skill_type || '',
           Number(w.wo_day_rate || 0), Number(w.wo_ot_rate || 0),
+          ...(hasIncentive ? [Number(w.wo_inc_rate || 0)] : []),
           ...w.days.map(dayCell),
           Number(w.mandays || 0), Number(w.day_wages || 0),
-          Number(w.overtime_hours || 0), Number(w.ot_wages || 0), Number(w.total_wages || 0),
+          Number(w.overtime_hours || 0), Number(w.ot_wages || 0),
+          ...(hasIncentive ? [Number(w.inc_wages || 0)] : []), Number(w.total_wages || 0),
         ]);
       }
-      aoa.push([`${g.label} Subtotal`, '', '', '', '', ...dates.map(() => ''),
-        g.mandays, g.dayWages, g.otHours, g.otWages, g.total]);
+      aoa.push([`${g.label} Subtotal`, '', '', '', '', ...(hasIncentive ? [''] : []), ...dates.map(() => ''),
+        g.mandays, g.dayWages, g.otHours, g.otWages,
+        ...(hasIncentive ? [g.incWages] : []), g.total]);
     }
-    aoa.push(['GRAND TOTAL', '', '', '', '', ...dates.map(() => ''),
-      grand.mandays, grand.dayWages, grand.otHours, grand.otWages, grand.total]);
+    aoa.push(['GRAND TOTAL', '', '', '', '', ...(hasIncentive ? [''] : []), ...dates.map(() => ''),
+      grand.mandays, grand.dayWages, grand.otHours, grand.otWages,
+      ...(hasIncentive ? [grand.incWages] : []), grand.total]);
     aoa.push([]);
     aoa.push(['Legend: P = Present, A = Absent, H = Half Day. Cell shows "code hours" or "code regular+overtime".']);
     aoa.push(['Regular = hours up to 8/day billed as man-days. Overtime = hours beyond 8/day billed at the WO hourly rate.']);
+    if (hasIncentive) aoa.push(['Incentive = every hour actually worked (regular + overtime) at the WO incentive rate.']);
 
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     ws['!cols'] = [{ wch: 12 }, { wch: 24 }, { wch: 10 }, { wch: 9 }, { wch: 9 },
+      ...(hasIncentive ? [{ wch: 9 }] : []),
       ...dates.map(() => ({ wch: 8 })),
-      { wch: 9 }, { wch: 12 }, { wch: 8 }, { wch: 12 }, { wch: 12 }];
+      { wch: 9 }, { wch: 12 }, { wch: 8 }, { wch: 12 },
+      ...(hasIncentive ? [{ wch: 12 }] : []), { wch: 12 }];
     ws['!freeze'] = { xSplit: 2, ySplit: 5 };
     XLSX.utils.book_append_sheet(wb, ws, 'Muster Roll');
 
@@ -409,8 +433,7 @@ function NMRDrawer({ nmrId, onClose }) {
         [],
         ['#', 'Description', 'Basis', 'Trades', 'Unit', 'Qty', 'Rate', 'Amount'],
         ...woSummary.map((r, i) => [
-          i + 1, r.description,
-          r.basis === 'overtime' ? 'Overtime (>8 hrs/day)' : 'Regular (1 day = 8 hrs)',
+          i + 1, r.description, BASIS_LABEL[r.basis] || r.basis,
           (r.skills || []).join(', '), r.unit,
           Number(r.qty || 0), Number(r.rate || 0), Number(r.amount || 0),
         ]),
@@ -443,7 +466,8 @@ function NMRDrawer({ nmrId, onClose }) {
 
     const head = [['Code', 'Worker Name', 'Trade',
       ...dates.map(d => dayjs(d).format('DD')),
-      'Reg\nDays', 'Day Amt', 'OT\nHrs', 'OT Amt', 'Total']];
+      'Reg\nDays', 'Day Amt', 'OT\nHrs', 'OT Amt',
+      ...(hasIncentive ? ['Incen-\ntive'] : []), 'Total']];
 
     const body = [];
     for (const g of sections) {
@@ -459,6 +483,7 @@ function NMRDrawer({ nmrId, onClose }) {
           Number(w.mandays || 0).toFixed(2), fmt(w.day_wages),
           Number(w.overtime_hours || 0) > 0 ? Number(w.overtime_hours).toFixed(1) : '-',
           Number(w.ot_wages || 0) > 0 ? fmt(w.ot_wages) : '-',
+          ...(hasIncentive ? [Number(w.inc_wages || 0) > 0 ? fmt(w.inc_wages) : '-'] : []),
           fmt(w.total_wages),
         ]);
       }
@@ -468,6 +493,7 @@ function NMRDrawer({ nmrId, onClose }) {
         { content: fmt(g.dayWages),      styles: { fontStyle: 'bold' } },
         { content: g.otHours.toFixed(1), styles: { fontStyle: 'bold' } },
         { content: fmt(g.otWages),       styles: { fontStyle: 'bold' } },
+        ...(hasIncentive ? [{ content: fmt(g.incWages), styles: { fontStyle: 'bold' } }] : []),
         { content: fmt(g.total),         styles: { fontStyle: 'bold' } },
       ]);
     }
@@ -485,7 +511,8 @@ function NMRDrawer({ nmrId, onClose }) {
       foot: [[
         { content: 'GRAND TOTAL', colSpan: 3 + dates.length, styles: { halign: 'right' } },
         grand.mandays.toFixed(2), fmt(grand.dayWages),
-        grand.otHours.toFixed(1), fmt(grand.otWages), fmt(grand.total),
+        grand.otHours.toFixed(1), fmt(grand.otWages),
+        ...(hasIncentive ? [fmt(grand.incWages)] : []), fmt(grand.total),
       ]],
       footStyles: { fillColor: [255, 237, 213], textColor: [124, 45, 18], fontStyle: 'bold', fontSize: 6.5 },
       margin: { left: 8, right: 8 },
@@ -497,8 +524,7 @@ function NMRDrawer({ nmrId, onClose }) {
         startY: doc.lastAutoTable.finalY + 6,
         head: [['#', 'Work Order BOQ Description', 'Basis', 'Trades', 'Unit', 'Qty', 'Rate', 'Amount']],
         body: woSummary.map((r, i) => [
-          i + 1, r.description,
-          r.basis === 'overtime' ? 'Overtime (>8 hrs/day)' : 'Regular (1 day = 8 hrs)',
+          i + 1, r.description, BASIS_LABEL[r.basis] || r.basis,
           (r.skills || []).join(', '), r.unit,
           Number(r.qty || 0).toLocaleString('en-IN'),
           `${Number(r.rate || 0).toFixed(2)}`, fmt(r.amount),
@@ -593,12 +619,13 @@ function NMRDrawer({ nmrId, onClose }) {
               />
 
               {/* Summary cards — regular vs overtime split, priced at WO rates */}
-              <div className="grid grid-cols-5 gap-3 nmr-summary-cards">
+              <div className={clsx('grid gap-3 nmr-summary-cards', hasIncentive ? 'grid-cols-6' : 'grid-cols-5')}>
                 {[
                   { l: 'Total Workers',     v: nmr.total_workers,                          color: 'text-blue-700' },
                   { l: 'Regular Man-days',  v: grand.mandays.toFixed(2),                   color: 'text-indigo-700', sub: '≤ 8 hrs/day' },
                   { l: 'Overtime Hours',    v: grand.otHours.toFixed(1),                   color: 'text-amber-700',  sub: '> 8 hrs/day' },
                   { l: 'Day Wages',         v: fmt(grand.dayWages),                        color: 'text-emerald-700' },
+                  ...(hasIncentive ? [{ l: 'Incentive', v: fmt(grand.incWages), color: 'text-violet-700', sub: `${(grand.mandays * 8 + grand.otHours).toFixed(0)} hrs worked` }] : []),
                   { l: 'Total Wages',       v: fmt(grand.total || nmr.total_wages),        color: 'text-orange-700', big: true, sub: `incl. ${fmt(grand.otWages)} OT` },
                 ].map(({ l, v, color, big, sub }) => (
                   <div key={l} className={clsx('border rounded-xl p-3', big ? 'border-orange-200 bg-orange-50' : 'border-slate-100 bg-white')}>
@@ -632,8 +659,12 @@ function NMRDrawer({ nmrId, onClose }) {
                             <td className="px-3 py-2 font-semibold text-slate-800">{r.description}</td>
                             <td className="px-3 py-2">
                               <span className={clsx('px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide',
-                                r.basis === 'overtime' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700')}>
-                                {r.basis === 'overtime' ? 'Overtime' : 'Regular (1 day = 8 hrs)'}
+                                r.basis === 'overtime'  ? 'bg-amber-100 text-amber-700'
+                                : r.basis === 'incentive' ? 'bg-violet-100 text-violet-700'
+                                : 'bg-indigo-100 text-indigo-700')}>
+                                {r.basis === 'overtime'  ? 'Overtime (> 8 hrs/day)'
+                                 : r.basis === 'incentive' ? 'Incentive (all hrs worked)'
+                                 : 'Regular (1 day = 8 hrs)'}
                               </span>
                             </td>
                             <td className="px-3 py-2 text-slate-500">{(r.skills || []).join(', ')}</td>
@@ -681,6 +712,11 @@ function NMRDrawer({ nmrId, onClose }) {
                             <div>OT Hrs</div><div style={{ fontSize: 8 }}>&gt;8 hrs</div>
                           </th>
                           <th className="px-2 py-2 text-right text-white/80 whitespace-nowrap">OT ₹</th>
+                          {hasIncentive && (
+                            <th className="px-2 py-2 text-right text-white/80 whitespace-nowrap border-l border-white/20">
+                              <div>Incentive</div><div style={{ fontSize: 8 }}>all hrs</div>
+                            </th>
+                          )}
                           <th className="px-3 py-2 text-right text-white/80 whitespace-nowrap border-l border-white/20">Total</th>
                         </tr>
                       </thead>
@@ -695,7 +731,7 @@ function NMRDrawer({ nmrId, onClose }) {
                                 colSpan={2}>
                                 {g.label} · {g.rows.length} worker{g.rows.length !== 1 ? 's' : ''}
                               </td>
-                              <td colSpan={dates.length + 5} />
+                              <td colSpan={dates.length + tailCols} />
                             </tr>
 
                             {g.rows.map((w, i) => (
@@ -737,6 +773,9 @@ function NMRDrawer({ nmrId, onClose }) {
                                 <td className="px-2 py-2 text-right text-slate-700 tabular-nums">{fmt(w.day_wages)}</td>
                                 <td className="px-2 py-2 text-center font-bold text-amber-700 tabular-nums border-l border-slate-200">{w.overtime_hours > 0 ? Number(w.overtime_hours).toFixed(1) : '—'}</td>
                                 <td className="px-2 py-2 text-right text-amber-700 tabular-nums">{w.ot_wages > 0 ? fmt(w.ot_wages) : '—'}</td>
+                                {hasIncentive && (
+                                  <td className="px-2 py-2 text-right text-violet-700 tabular-nums border-l border-slate-200">{w.inc_wages > 0 ? fmt(w.inc_wages) : '—'}</td>
+                                )}
                                 <td className="px-3 py-2 text-right font-bold text-emerald-700 tabular-nums border-l border-slate-200">{fmt(w.total_wages)}</td>
                               </tr>
                             ))}
@@ -754,6 +793,9 @@ function NMRDrawer({ nmrId, onClose }) {
                               <td className="px-2 py-2 text-right text-slate-700 tabular-nums">{fmt(g.dayWages)}</td>
                               <td className="px-2 py-2 text-center text-amber-700 tabular-nums border-l border-slate-200">{g.otHours.toFixed(1)}</td>
                               <td className="px-2 py-2 text-right text-amber-700 tabular-nums">{fmt(g.otWages)}</td>
+                              {hasIncentive && (
+                                <td className="px-2 py-2 text-right text-violet-700 tabular-nums border-l border-slate-200">{fmt(g.incWages)}</td>
+                              )}
                               <td className="px-3 py-2 text-right text-emerald-700 tabular-nums border-l border-slate-200">{fmt(g.total)}</td>
                             </tr>
                           </React.Fragment>
@@ -767,6 +809,9 @@ function NMRDrawer({ nmrId, onClose }) {
                           <td className="px-2 py-2.5 text-right text-slate-800 tabular-nums">{fmt(grand.dayWages)}</td>
                           <td className="px-2 py-2.5 text-center text-amber-700 text-sm tabular-nums border-l border-slate-300">{grand.otHours.toFixed(1)}</td>
                           <td className="px-2 py-2.5 text-right text-amber-700 tabular-nums">{fmt(grand.otWages)}</td>
+                          {hasIncentive && (
+                            <td className="px-2 py-2.5 text-right text-violet-700 tabular-nums border-l border-slate-300">{fmt(grand.incWages)}</td>
+                          )}
                           <td className="px-3 py-2.5 text-right text-orange-700 text-base tabular-nums border-l border-slate-300">{fmt(grand.total)}</td>
                         </tr>
                       </tbody>
@@ -792,6 +837,7 @@ function NMRDrawer({ nmrId, onClose }) {
                 <span className="text-[11px] text-slate-500 print-only">
                   Cell shows attendance code followed by hours worked (regular+overtime).
                   Regular = up to 8 hrs/day billed as man-days; overtime = hours beyond 8/day billed at the WO hourly rate.
+                  {hasIncentive && ' Incentive = every hour actually worked (regular + overtime) at the WO incentive rate.'}
                 </span>
               </div>
 
