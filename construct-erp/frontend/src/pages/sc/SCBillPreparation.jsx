@@ -1575,16 +1575,16 @@ function BillDetailPage({ billId, onClose }) {
             </div>
 
             {/* ── Info cards row ── */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
               {infoCards.map(({ label, value, mono, tint, bg, ic, accent, Icon }) => (
-                <div key={label} className="relative overflow-hidden bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center gap-3 transition-shadow hover:shadow-md">
+                <div key={label} title={value || ''} className="relative overflow-hidden bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center gap-3 transition-shadow hover:shadow-md">
                   <div className={clsx('absolute left-0 top-0 bottom-0 w-1', accent)} />
                   <div className={clsx('w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ml-1', bg)}>
                     <Icon className={clsx('w-5 h-5', ic)} />
                   </div>
                   <div className="min-w-0">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">{label}</p>
-                    <p className={clsx('text-[15px] font-bold truncate', mono && 'font-mono', tint)}>{value || '—'}</p>
+                    <p className={clsx('text-[15px] font-bold leading-tight break-words', mono && 'font-mono', tint)}>{value || '—'}</p>
                   </div>
                 </div>
               ))}
