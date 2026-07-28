@@ -6,7 +6,7 @@ import {
   ClipboardCheck, Plus, X, Search, Download, RefreshCw, Printer,
   Clock, CheckCircle2, Package, ChevronRight, FileText,
   Truck, ClipboardList, AlertTriangle, XCircle, Eye,
-  Building2, Trash2, IndianRupee, ChevronDown, ChevronUp,
+  Building2, Trash2, IndianRupee, ChevronDown, ChevronUp, ArrowLeftRight,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
@@ -682,6 +682,7 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
     qty_as_per_dc: '', qty_inspected: '', qty_rejected: '', remarks: '',
     rate: '', batch_number: '', expiry_date: '', quality_remarks: '',
     use_thumb_rule: false, physical_qty: '', physical_unit: 'Nos', conversion_factor: '',
+    _unit_ratio: '', // local-only: "1 PO unit = ___ received unit" (e.g. 1 Roll = 30 Meter) — not sent to backend
     po_item_id: null,
   });
 
@@ -864,6 +865,28 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
   const updateItem = (idx, k, v) => setItems(p => p.map((it, i) => i === idx ? { ...it, [k]: v } : it));
   const addRow    = () => setItems(p => [...p, emptyItem()]);
   const removeRow = (idx) => { if (items.length > 1) setItems(p => p.filter((_, i) => i !== idx)); };
+
+  // Toggle "received in a different unit than the PO" mode for one row.
+  const toggleThumbRule = (idx, on) => setItems(p => p.map((it, i) => i !== idx ? it : {
+    ...it, use_thumb_rule: on,
+    ...(on ? {} : { physical_qty: '', physical_unit: 'Nos', conversion_factor: '', _unit_ratio: '' }),
+  }));
+
+  // Recompute qty_inspected (in the PO's unit) whenever the received qty or the
+  // "1 PO unit = X received unit" ratio changes. conversion_factor is stored as
+  // physical_qty * conversion_factor = qty_inspected, i.e. conversion_factor = 1/ratio.
+  const updateThumbRuleField = (idx, field, value) => setItems(p => p.map((it, i) => {
+    if (i !== idx) return it;
+    const next = { ...it, [field]: value };
+    const physQty = parseFloat(next.physical_qty);
+    const ratio   = parseFloat(next._unit_ratio);
+    if (physQty > 0 && ratio > 0) {
+      const poQty = physQty / ratio;
+      next.qty_inspected = String(parseFloat(poQty.toFixed(4)));
+      next.conversion_factor = String(parseFloat((1 / ratio).toFixed(6)));
+    }
+    return next;
+  }));
 
   const handleGrsSelect = async (grsId) => {
     setField('grs_id', grsId);
@@ -1172,17 +1195,64 @@ function IGNForm({ onClose, projects, qc, fromGrsId }) {
                         <input type="number" value={it.rate} onChange={e => updateItem(idx, 'rate', e.target.value)} placeholder="0.00" step="0.01"
                           className="w-24 h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-right font-mono outline-none focus:border-blue-500" />
                       </td>
-                      {['qty_as_per_dc','qty_inspected','qty_rejected'].map(k => (
-                        <td key={k} className="px-2 py-2">
-                          <input type="number" value={it[k]} onChange={e => updateItem(idx, k, e.target.value)} placeholder="0"
-                            className={clsx(
-                              'w-20 h-8 rounded-md border px-2 text-xs text-right font-mono outline-none focus:ring-1',
-                              k === 'qty_rejected' && parseFloat(it[k] || 0) > 0
-                                ? 'border-red-300 bg-red-50 text-red-700 focus:border-red-400 focus:ring-red-300'
-                                : 'border-slate-300 bg-white focus:border-blue-500 focus:ring-blue-500/30'
-                            )} />
-                        </td>
-                      ))}
+                      <td className="px-2 py-2">
+                        <input type="number" value={it.qty_as_per_dc} onChange={e => updateItem(idx, 'qty_as_per_dc', e.target.value)} placeholder="0"
+                          className="w-20 h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-right font-mono outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30" />
+                      </td>
+                      <td className="px-2 py-2 min-w-[150px]">
+                        {it.use_thumb_rule ? (
+                          <div className="space-y-1 py-0.5">
+                            <div className="flex items-center gap-1">
+                              <input type="number" value={it.physical_qty} placeholder="Qty"
+                                onChange={e => updateThumbRuleField(idx, 'physical_qty', e.target.value)}
+                                title="Quantity as actually received/measured"
+                                className="w-14 h-7 rounded-md border border-slate-300 bg-white px-1 text-xs text-right font-mono outline-none focus:border-blue-500" />
+                              <select value={it.physical_unit} onChange={e => updateItem(idx, 'physical_unit', e.target.value)}
+                                title="Unit it was actually received in"
+                                className="w-16 h-7 rounded-md border border-slate-300 bg-white px-1 text-xs outline-none focus:border-blue-500">
+                                {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                              </select>
+                            </div>
+                            <div className="flex items-center gap-1 text-[10px] text-slate-400 whitespace-nowrap">
+                              <span>1 {it.unit || 'PO unit'} =</span>
+                              <input type="number" value={it._unit_ratio} placeholder="30"
+                                onChange={e => updateThumbRuleField(idx, '_unit_ratio', e.target.value)}
+                                title={`How many ${it.physical_unit || 'received unit'} make 1 ${it.unit || 'PO unit'}`}
+                                className="w-10 h-6 rounded border border-slate-300 bg-white px-1 text-[10px] text-right font-mono outline-none focus:border-blue-500" />
+                              <span>{it.physical_unit}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="text-[10px] font-semibold text-emerald-600 font-mono">
+                                = {it.qty_inspected || 0} {it.unit || ''}
+                              </span>
+                              <button type="button" onClick={() => toggleThumbRule(idx, false)}
+                                title="Switch back to entering quantity directly in the PO's unit"
+                                className="text-slate-300 hover:text-slate-500">
+                                <ArrowLeftRight size={11} />
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <input type="number" value={it.qty_inspected} onChange={e => updateItem(idx, 'qty_inspected', e.target.value)} placeholder="0"
+                              className="w-20 h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-right font-mono outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30" />
+                            <button type="button" onClick={() => toggleThumbRule(idx, true)}
+                              title="Received in a different unit than the PO? (e.g. PO in Rolls, received in meters)"
+                              className="text-slate-300 hover:text-indigo-500 flex-shrink-0">
+                              <ArrowLeftRight size={12} />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-2 py-2">
+                        <input type="number" value={it.qty_rejected} onChange={e => updateItem(idx, 'qty_rejected', e.target.value)} placeholder="0"
+                          className={clsx(
+                            'w-20 h-8 rounded-md border px-2 text-xs text-right font-mono outline-none focus:ring-1',
+                            parseFloat(it.qty_rejected || 0) > 0
+                              ? 'border-red-300 bg-red-50 text-red-700 focus:border-red-400 focus:ring-red-300'
+                              : 'border-slate-300 bg-white focus:border-blue-500 focus:ring-blue-500/30'
+                          )} />
+                      </td>
                       <td className="px-2 py-2">
                         <input value={it.remarks} onChange={e => updateItem(idx, 'remarks', e.target.value)} placeholder="Notes…"
                           className="w-full h-8 rounded-md border border-slate-300 bg-white px-2 text-xs outline-none focus:border-blue-500" />
