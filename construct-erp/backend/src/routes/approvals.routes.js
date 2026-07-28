@@ -94,13 +94,27 @@ const ROLE = r => String(r.user.role || '').toLowerCase();
 // MRS's own project workflow instead. Shared with routes/mrs.routes.js via
 // constants/mrsApprovalStages — keep both usages pointed at that file.
 const { nextStageForStatus, normalizeStageIds, GLOBAL_ADMIN_ROLES } = require('../constants/mrsApprovalStages');
-const MRS_NON_TERMINAL_STATUSES = ['pending', 'stores_verified', 'verified_tower', 'approved_pm', 'approved_srpm', 'approved_mgmt'];
+// 'approved_md' is included because it is NOT terminal on projects that opted
+// into the client-approval stage — those MRs are still awaiting the client.
+// nextStageForStatus() per project decides whether it actually needs action, so
+// listing it here is safe for projects where MD really is the last stage.
+const MRS_NON_TERMINAL_STATUSES = ['pending', 'stores_verified', 'verified_tower', 'approved_pm', 'approved_srpm', 'approved_mgmt', 'approved_md'];
 
-// Does `role` match one of a stage's allowedRoles (or is it a global admin)?
-function roleMatchesStage(role, stage) {
+// Who may LOG a client's approval — mirrors CLIENT_APPROVAL_LOGGERS in
+// routes/mrs.routes.js, which is the enforcing gate.
+const CLIENT_APPROVAL_LOGGERS = ['bkmanjunath@bcim.in', 'prithivi@bcim.in'];
+
+// Can this user act on `stage`? Most stages are role-based; the client-approval
+// stage has no allowedRoles by design and is gated by an explicit person
+// allowlist instead, so it needs the user's email too.
+function roleMatchesStage(user, stage) {
   if (!stage) return false;
-  const r = (role || '').toLowerCase();
-  return GLOBAL_ADMIN_ROLES.includes(r) || stage.allowedRoles.includes(r);
+  const r = String(user?.role || '').toLowerCase();
+  if (GLOBAL_ADMIN_ROLES.includes(r)) return true;
+  if (stage.id === 'client-approve') {
+    return CLIENT_APPROVAL_LOGGERS.includes(String(user?.email || '').toLowerCase());
+  }
+  return (stage.allowedRoles || []).includes(r);
 }
 
 // Which SC bill stages can this role act on, AND which current_stage values belong to them?
@@ -441,7 +455,7 @@ router.get('/pending', async (req, res) => {
       for (const row of r.rows) {
         const enabledIds = normalizeStageIds(row.mrs_workflow?.stages);
         const stage = nextStageForStatus(enabledIds, row.status);
-        if (!roleMatchesStage(role, stage)) continue;
+        if (!roleMatchesStage({ role, email }, stage)) continue;
         // The project's own workflow decides the real next approver — a 3-stage
         // project (no Project Director) sends 'approved_pm' straight to the MD,
         // so the label must come from this stage lookup, not a static status map.
@@ -646,8 +660,16 @@ router.post('/action', async (req, res) => {
           const enabledIds = normalizeStageIds(mr.mrs_workflow?.stages);
           const stageInfo = nextStageForStatus(enabledIds, mr.status);
           if (!stageInfo) return res.status(400).json({ error: `MRS at status "${mr.status}" cannot be approved from this page` });
-          if (!roleMatchesStage(role, stageInfo)) {
+          if (!roleMatchesStage({ role, email: req.user.email }, stageInfo)) {
             return res.status(403).json({ error: `Only a ${stageInfo.label} can approve this stage. Your role (${req.user.role}) is not authorised.` });
+          }
+          // Client approval needs the client's contact name (and optionally
+          // their reference no.), which this one-click endpoint can't collect —
+          // send them to the MR itself rather than recording a nameless approval.
+          if (stageInfo.id === 'client-approve') {
+            return res.status(400).json({
+              error: 'Open the requisition to record client approval — the client contact name is required.'
+            });
           }
           await query(
             `UPDATE material_requisitions

@@ -40,6 +40,21 @@ const NORM = col => `regexp_replace(lower(trim(${col})), '[^a-z0-9]+', '', 'g')`
 // MRS statuses that mean "in the approval pipeline"
 const PENDING_STATUSES = `'pending','stores_verified','approved_pm','approved_sr_pm','approved_mgmt'`;
 
+// Projects can opt into a final "Client Approval" stage after the MD
+// (projects.mrs_workflow.stages contains 'client-approve'). On those projects
+// 'approved_md' is NOT the end of the chain — the MR is still awaiting the
+// client, so it must not be counted as ready for a PO.
+const USES_CLIENT_APPROVAL = (proj = 'p') =>
+  `COALESCE(${proj}.mrs_workflow->'stages' @> '["client-approve"]'::jsonb, false)`;
+// "This MR has cleared every approval stage its project requires."
+const FULLY_APPROVED = (mr = 'mr', proj = 'p') =>
+  `(${mr}.status = 'client_approved'
+    OR (${mr}.status = 'approved_md' AND NOT ${USES_CLIENT_APPROVAL(proj)}))`;
+// "Still somewhere in the approval pipeline."
+const STILL_PENDING = (mr = 'mr', proj = 'p') =>
+  `(${mr}.status IN (${PENDING_STATUSES})
+    OR (${mr}.status = 'approved_md' AND ${USES_CLIENT_APPROVAL(proj)}))`;
+
 // ──────────────────────────────────────────────────────────────────────────────
 // LATERAL subquery: finds the BEST matching po_items row for a given mrs_item
 // (mi.id, mr.id, mi.material_name are resolved from the outer query context)
@@ -145,6 +160,8 @@ router.get('/dashboard', async (req, res) => {
         SELECT
           mr.id,
           mr.status                                              AS mr_status,
+          ${FULLY_APPROVED('mr', 'p')}                           AS is_fully_approved,
+          ${STILL_PENDING('mr', 'p')}                            AS is_pending_approval,
           bp.po_id,
           bp.po_status,
           bp.delivery_date,
@@ -161,8 +178,8 @@ router.get('/dashboard', async (req, res) => {
       )
       SELECT
         COUNT(DISTINCT id)                                                             AS total_mrs,
-        COUNT(DISTINCT id) FILTER (WHERE mr_status IN (${PENDING_STATUSES}))          AS pending_approvals,
-        COUNT(DISTINCT id) FILTER (WHERE mr_status = 'approved_md' AND po_id IS NULL) AS pending_po,
+        COUNT(DISTINCT id) FILTER (WHERE is_pending_approval)                        AS pending_approvals,
+        COUNT(DISTINCT id) FILTER (WHERE is_fully_approved AND po_id IS NULL)        AS pending_po,
         COUNT(DISTINCT po_id) FILTER (WHERE po_status IN ('pending','approved','sent')) AS open_pos,
         COUNT(DISTINCT id) FILTER (WHERE po_status IN ('sent','approved') AND received_qty = 0) AS in_transit,
         COUNT(DISTINCT id) FILTER (WHERE received_qty > 0 AND received_qty < requested_qty AND mr_status != 'closed') AS partial_delivery,
@@ -226,9 +243,9 @@ router.get('/', async (req, res) => {
       const receivedQty = RECEIVED_QTY_SUB('mr', 'mi');
       const orderedQty  = ORDERED_QTY_SUB('mr', 'mi');
       const statusMap = {
-        'Draft':            `bp.po_id IS NULL AND mr.status NOT IN (${PENDING_STATUSES}) AND mr.status != 'approved_md'`,
-        'Pending Approval': `mr.status IN (${PENDING_STATUSES})`,
-        'PO Pending':       `mr.status = 'approved_md' AND bp.po_id IS NULL`,
+        'Draft':            `bp.po_id IS NULL AND NOT ${STILL_PENDING('mr','p')} AND NOT ${FULLY_APPROVED('mr','p')}`,
+        'Pending Approval': STILL_PENDING('mr', 'p'),
+        'PO Pending':       `${FULLY_APPROVED('mr','p')} AND bp.po_id IS NULL`,
         'PO Created':       `bp.po_status IN ('pending','approved','sent')`,
         'In Transit':       `bp.po_status IN ('sent','approved') AND (${receivedQty}) = 0`,
         'Partial Delivery': `(${receivedQty}) > 0 AND (${receivedQty}) < mi.quantity AND mr.status != 'closed'`,
@@ -296,7 +313,9 @@ router.get('/', async (req, res) => {
             AND (pi2.mrs_item_id = mi.id
                  OR (pi2.mrs_item_id IS NULL
                      AND (po2.mrs_id = mr.id OR mr.id = ANY(COALESCE(po2.mrs_ids, ARRAY[]::uuid[])))))
-        ) AS actual_delivery_date
+        ) AS actual_delivery_date,
+        ${FULLY_APPROVED('mr', 'p')}  AS is_fully_approved,
+        ${STILL_PENDING('mr', 'p')}   AS is_pending_approval
       FROM material_requisitions mr
       JOIN projects p ON p.id = mr.project_id
       LEFT JOIN users u ON u.id = mr.raised_by
@@ -575,10 +594,18 @@ function deriveStatus(r) {
   const mrStatus = String(r.mr_status || '');
   if (mrStatus === 'closed')    return 'Closed';
   if (mrStatus === 'cancelled') return 'Cancelled';
+  // is_pending_approval / is_fully_approved are computed in SQL (see
+  // STILL_PENDING / FULLY_APPROVED) because "fully approved" depends on whether
+  // the project opted into the client-approval stage. Fall back to the plain
+  // status list for any caller that didn't select them.
   const pendingStages = ['pending','stores_verified','approved_pm','approved_sr_pm','approved_mgmt'];
   if (!r.po_id) {
-    if (pendingStages.includes(mrStatus)) return 'Pending Approval';
-    if (mrStatus === 'approved_md')       return 'PO Pending';
+    const pending = r.is_pending_approval != null
+      ? r.is_pending_approval : pendingStages.includes(mrStatus);
+    const approved = r.is_fully_approved != null
+      ? r.is_fully_approved : mrStatus === 'approved_md';
+    if (pending)  return 'Pending Approval';
+    if (approved) return 'PO Pending';
     return 'Draft';
   }
   const ordered  = parseFloat(r.ordered_qty  || 0);

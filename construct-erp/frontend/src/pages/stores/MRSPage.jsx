@@ -102,7 +102,8 @@ const STATUS_CONFIG = {
   approved_srpm:   { label: 'Legacy Sr. PM Approved',short: 'Legacy',     color: 'bg-teal-50 text-teal-700 border-teal-200',         dot: 'bg-teal-500',    icon: CheckCircle2,stage: 3 },
   approved_mgmt:   { label: 'Project Director Approved', short: 'Director', color: 'bg-indigo-50 text-indigo-700 border-indigo-200', dot: 'bg-indigo-500',  icon: Building2,   stage: 4 },
   approved_md:     { label: 'Managing Director Approved', short: 'MD Appvd', color: 'bg-green-50 text-green-700 border-green-200',    dot: 'bg-green-500',   icon: Landmark,    stage: 5 },
-  issued:          { label: 'Items Issued',          short: 'Issued',     color: 'bg-sky-50 text-sky-700 border-sky-200',             dot: 'bg-sky-500',     icon: CheckCircle, stage: 6 },
+  client_approved: { label: 'Client Approved',       short: 'Client OK',  color: 'bg-teal-50 text-teal-700 border-teal-200',          dot: 'bg-teal-500',    icon: CheckCircle2,stage: 6 },
+  issued:          { label: 'Items Issued',          short: 'Issued',     color: 'bg-sky-50 text-sky-700 border-sky-200',             dot: 'bg-sky-500',     icon: CheckCircle, stage: 7 },
   rejected:        { label: 'Rejected',              short: 'Rejected',   color: 'bg-red-50 text-red-700 border-red-200',             dot: 'bg-red-400',     icon: XCircle,     stage: 0 },
 };
 
@@ -161,13 +162,21 @@ const ACTIVE_STAGES = [
   { id: 'approve-pm',     label: 'Project Manager',    short: 'PM',        color: 'bg-emerald-600 hover:bg-emerald-700', btnLabel: 'Approve PM',       status: 'stores_verified', allowedRoles: ['project_manager', 'pm', 'project_head'] },
   { id: 'approve-mgmt',   label: 'Project Director',   short: 'Director',  color: 'bg-indigo-600 hover:bg-indigo-700',   btnLabel: 'Approve Director', status: 'approved_pm',    allowedRoles: ['project_head', 'director', 'project_director', 'management', 'management_director'] },
   { id: 'approve-md',     label: 'Managing Director',  short: 'MD',        color: 'bg-green-700 hover:bg-green-800',     btnLabel: 'Approve MD',       status: 'approved_mgmt',  allowedRoles: ['managing_director', 'md', 'ceo', 'admin', 'super_admin'] },
+  // Client sign-off — opt-in per project. The client has no login here, so this
+  // is LOGGED by one of our own staff (allowlist below, mirrored server-side in
+  // mrs.routes.js CLIENT_APPROVAL_LOGGERS — the backend is the real gate).
+  { id: 'client-approve', label: 'Client Approval',    short: 'Client',    color: 'bg-teal-600 hover:bg-teal-700',       btnLabel: 'Record Client Approval', status: 'approved_md', allowedRoles: [], optIn: true, allowedEmails: ['bkmanjunath@bcim.in', 'prithivi@bcim.in'] },
 ];
+
+// Stages a project gets when it has no explicit workflow saved. Opt-in stages
+// are excluded so enabling one here never changes existing projects.
+const DEFAULT_STAGE_IDS = ACTIVE_STAGES.filter(s => !s.optIn).map(s => s.id);
 
 /* Given enabled stage IDs, compute what status each stage requires as input */
 function buildStageActions(enabledIds) {
   const validIds = new Set(ACTIVE_STAGES.map(s => s.id));
   const normalizedIds = (enabledIds || []).filter(id => validIds.has(id));
-  const ids = normalizedIds.length ? normalizedIds : ACTIVE_STAGES.map(s => s.id);
+  const ids = normalizedIds.length ? normalizedIds : DEFAULT_STAGE_IDS;
   const enabled = ACTIVE_STAGES.filter(s => ids.includes(s.id));
   return enabled.map((s, i) => ({
     ...s,
@@ -181,6 +190,7 @@ const STAGE_NEXT = {
   'approve-srpm':   'approved_srpm',
   'approve-mgmt':   'approved_mgmt',
   'approve-md':     'approved_md',
+  'client-approve': 'client_approved',
 };
 function getNextStatus(stageId) { return STAGE_NEXT[stageId]; }
 
@@ -247,6 +257,8 @@ function WorkflowConfigModal({ onClose }) {
   const PRESETS = [
     { label: 'SM → PM → MD (3-stage)', stages: ['stores-approve', 'approve-pm', 'approve-md'] },
     { label: 'Full (SM → PM → Dir → MD)', stages: ['stores-approve', 'approve-pm', 'approve-mgmt', 'approve-md'] },
+    { label: 'SM → PM → MD → Client', stages: ['stores-approve', 'approve-pm', 'approve-md', 'client-approve'] },
+    { label: 'Full + Client', stages: ['stores-approve', 'approve-pm', 'approve-mgmt', 'approve-md', 'client-approve'] },
   ];
 
   const applyPreset = async (projectId, stages) => {
@@ -338,7 +350,7 @@ function WorkflowConfigModal({ onClose }) {
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {projects.map(p => {
-                  const enabledStages = p.stages || ACTIVE_STAGES.map(s => s.id);
+                  const enabledStages = p.stages || DEFAULT_STAGE_IDS;
                   const isCustom = p.is_custom;
                   return (
                     <tr key={p.id} className="hover:bg-slate-50/60">
@@ -776,7 +788,7 @@ export default function MRSPage() {
   };
 
   // Build stage actions dynamically from the selected MRS's project workflow
-  const projectWorkflowStages = detailedMRS?.mrs_workflow?.stages || ACTIVE_STAGES.map(s => s.id);
+  const projectWorkflowStages = detailedMRS?.mrs_workflow?.stages || DEFAULT_STAGE_IDS;
   const enabledStages = ACTIVE_STAGES.filter(s => projectWorkflowStages.includes(s.id));
   // Compute requiredStatus for each stage based on project chain
   const stageActions = enabledStages.map((s, i) => ({
@@ -794,8 +806,17 @@ export default function MRSPage() {
   // Role gate — only the designated role sees Approve/Reject buttons
   const userRoleLower = (user?.role || '').toLowerCase();
   const isGlobalAdmin = ['admin', 'super_admin'].includes(userRoleLower);
-  const canActOnCurrent = isGlobalAdmin ||
-    (currentAction ? (currentAction.allowedRoles || []).includes(userRoleLower) : false);
+  // Client approval is gated by an explicit person allowlist rather than a role
+  // (its allowedRoles is empty by design), so it needs its own check — otherwise
+  // it would fall through to the role test and never be actionable by anyone.
+  const userEmailLower = (user?.email || '').toLowerCase();
+  const canActOnCurrent = isGlobalAdmin || (
+    currentAction
+      ? (currentAction.allowedEmails
+          ? currentAction.allowedEmails.includes(userEmailLower)
+          : (currentAction.allowedRoles || []).includes(userRoleLower))
+      : false
+  );
 
   const stats = [
     { key: 'pending',     label: 'Pending',     icon: Clock,       color: 'amber'   },
@@ -916,6 +937,8 @@ export default function MRSPage() {
   };
 
   const [showMDModal, setShowMDModal] = useState(false);
+  const [showClientModal, setShowClientModal] = useState(false);
+  const [clientForm, setClientForm] = useState({ contact: '', ref: '', remarks: '' });
   const [showEditModal, setShowEditModal] = useState(false);
 
   // MD/super_admin can edit any MRS; stores staff can edit while still pending/stores stage
@@ -933,8 +956,9 @@ export default function MRSPage() {
     onError: (e) => toast.error(e?.response?.data?.error || 'Update failed'),
   });
 
-  // MD / Procurement may cancel individual items on a fully-approved MR
-  const canCancelItems = liveStatus === 'approved_md' &&
+  // MD / Procurement may cancel individual items on a fully-approved MR.
+  // 'client_approved' is the terminal state on projects using the client stage.
+  const canCancelItems = ['approved_md', 'client_approved'].includes(liveStatus) &&
     ['managing_director', 'md', 'ceo', 'procurement_manager', 'procurement', 'admin', 'super_admin'].includes(userRoleLower);
   const handleCancelItem = (it) => {
     if (!it.id) return;
@@ -1051,7 +1075,7 @@ export default function MRSPage() {
                   <table className="w-full text-sm min-w-[760px]">
                     <thead>
                       <tr className="border-b border-slate-100 bg-white">
-                        {['#', 'Material', 'Unit', 'Requested Qty', liveStatus === 'approved_md' ? 'MD Approved Qty' : null, 'PO Raised', 'Balance', 'Purpose', canCancelItems ? 'Action' : null].filter(Boolean).map(h => (
+                        {['#', 'Material', 'Unit', 'Requested Qty', ['approved_md','client_approved'].includes(liveStatus) ? 'MD Approved Qty' : null, 'PO Raised', 'Balance', 'Purpose', canCancelItems ? 'Action' : null].filter(Boolean).map(h => (
                           <th key={h} className="px-4 py-3 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">{h}</th>
                         ))}
                       </tr>
@@ -1071,7 +1095,7 @@ export default function MRSPage() {
                             </td>
                             <td className="px-4 py-3"><span className="px-2 py-1 rounded bg-slate-100 text-xs font-semibold">{it.unit}</span></td>
                             <td className="px-4 py-3 font-bold text-indigo-700">{it.quantity || it.qty}</td>
-                            {liveStatus === 'approved_md' && (
+                            {['approved_md','client_approved'].includes(liveStatus) && (
                               <td className="px-4 py-3 font-bold text-green-700">
                                 {excluded ? '—' : (it.md_approved_qty ?? it.quantity ?? it.qty)}
                               </td>
@@ -1236,6 +1260,14 @@ export default function MRSPage() {
                           >
                             {!detailedMRS ? 'Loading…' : 'Review & Authorize (MD) →'}
                           </button>
+                        ) : currentAction.id === 'client-approve' ? (
+                          <button
+                            onClick={() => setShowClientModal(true)}
+                            disabled={!detailedMRS || approveMutation.isPending}
+                            className="flex-[2] h-10 rounded-lg text-white text-xs font-semibold transition-colors shadow-sm disabled:opacity-60 bg-teal-600 hover:bg-teal-700"
+                          >
+                            {!detailedMRS ? 'Loading…' : 'Record Client Approval →'}
+                          </button>
                         ) : (
                           <button
                             onClick={() => approveMutation.mutate({ id: selectedMRS.id, stage: currentAction.id, data: {} })}
@@ -1290,6 +1322,87 @@ export default function MRSPage() {
               setShowMDModal(false);
             }}
           />
+        )}
+
+        {/* Client Approval Modal — records a decision the client made offline */}
+        {showClientModal && detailedMRS && (
+          <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
+              <div className="px-5 py-4 bg-teal-600 flex items-center justify-between">
+                <div>
+                  <h3 className="text-white text-sm font-bold">Record Client Approval</h3>
+                  <p className="text-teal-100 text-[11px] mt-0.5">{selectedMRS?.serial_no_formatted || selectedMRS?.mrs_number}</p>
+                </div>
+                <button onClick={() => setShowClientModal(false)} className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="p-5 space-y-4">
+                <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                  The client approves outside this system. Enter their decision here as received by email, WhatsApp, or a signed copy.
+                </p>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Client contact name *</label>
+                  <input
+                    autoFocus
+                    value={clientForm.contact}
+                    onChange={e => setClientForm(f => ({ ...f, contact: e.target.value }))}
+                    placeholder="Who at the client approved this"
+                    className="w-full h-9 rounded-lg border border-slate-300 px-3 text-xs outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Client reference no.</label>
+                  <input
+                    value={clientForm.ref}
+                    onChange={e => setClientForm(f => ({ ...f, ref: e.target.value }))}
+                    placeholder="Their own tracking number, e.g. WRF 134"
+                    className="w-full h-9 rounded-lg border border-slate-300 px-3 text-xs font-mono outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Remarks</label>
+                  <textarea
+                    rows={3}
+                    value={clientForm.remarks}
+                    onChange={e => setClientForm(f => ({ ...f, remarks: e.target.value }))}
+                    placeholder="Any conditions or notes from the client"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  Attach the client's written approval using the Attachments section after saving.
+                </p>
+              </div>
+              <div className="px-5 py-4 border-t border-slate-100 flex gap-3">
+                <button
+                  onClick={() => setShowClientModal(false)}
+                  className="flex-1 h-9 rounded-lg border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={!clientForm.contact.trim() || approveMutation.isPending}
+                  onClick={() => {
+                    approveMutation.mutate({
+                      id: selectedMRS.id,
+                      stage: 'client-approve',
+                      data: {
+                        client_contact_name: clientForm.contact.trim(),
+                        client_reference_no: clientForm.ref.trim() || undefined,
+                        remarks: clientForm.remarks.trim() || undefined,
+                      },
+                    });
+                    setShowClientModal(false);
+                    setClientForm({ contact: '', ref: '', remarks: '' });
+                  }}
+                  className="flex-[2] h-9 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold disabled:opacity-50"
+                >
+                  {approveMutation.isPending ? 'Saving…' : 'Mark client approved'}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* MD Edit Modal */}

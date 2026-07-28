@@ -421,6 +421,27 @@ router.use(loadProjectScope);
   await safe(`ALTER TABLE material_requisitions ADD COLUMN IF NOT EXISTS stores_approved_by UUID REFERENCES users(id)`);
   await safe(`ALTER TABLE material_requisitions ADD COLUMN IF NOT EXISTS stores_approved_at TIMESTAMPTZ`);
   await safe(`ALTER TABLE material_requisitions ADD COLUMN IF NOT EXISTS stores_sig_img TEXT`);
+  // Client approval stage (opt-in per project). The client has no login here —
+  // client_approved_by is the INTERNAL user who logged the approval, while
+  // client_contact_name is the person at the client who actually approved.
+  // client_reference_no holds the client's own tracking number for the same
+  // requisition (e.g. their "WRF 134" / Request Voucher no.), so both sides'
+  // numbering stays cross-checkable.
+  await safe(`ALTER TABLE material_requisitions ADD COLUMN IF NOT EXISTS client_approved_by UUID REFERENCES users(id)`);
+  await safe(`ALTER TABLE material_requisitions ADD COLUMN IF NOT EXISTS client_approved_at TIMESTAMPTZ`);
+  await safe(`ALTER TABLE material_requisitions ADD COLUMN IF NOT EXISTS client_contact_name TEXT`);
+  await safe(`ALTER TABLE material_requisitions ADD COLUMN IF NOT EXISTS client_approval_remarks TEXT`);
+  await safe(`ALTER TABLE material_requisitions ADD COLUMN IF NOT EXISTS client_approval_doc_url TEXT`);
+  await safe(`ALTER TABLE material_requisitions ADD COLUMN IF NOT EXISTS client_reference_no TEXT`);
+  // The status CHECK constraint predates the client-approval stage and would
+  // reject 'client_approved' outright, failing the approval at runtime. Rebuild
+  // it with the new value included (drop first so the table still accepts
+  // writes if the re-add ever fails).
+  await safe(`ALTER TABLE material_requisitions DROP CONSTRAINT IF EXISTS material_requisitions_status_check`);
+  await safe(`ALTER TABLE material_requisitions ADD CONSTRAINT material_requisitions_status_check
+              CHECK (status IN ('draft','pending','stores_verified','verified_tower','approved_pm',
+                                'approved_srpm','approved_mgmt','approved_md','client_approved',
+                                'issued','rejected'))`);
   // Per-project workflow config stored on the projects table
   await safe(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS mrs_workflow JSONB`);
   // Optional per-project starting sequence (e.g. continue legacy paper numbering at 053)
@@ -597,7 +618,7 @@ router.use(loadProjectScope);
    keep both usages pointed at that file so they never drift apart.
 ─────────────────────────────────────────────────────────────────────────── */
 const {
-  ALL_STAGES, GLOBAL_ADMIN_ROLES, DEFAULT_STAGE_IDS,
+  ALL_STAGES, GLOBAL_ADMIN_ROLES, DEFAULT_STAGE_IDS, VALID_STAGE_IDS,
   normalizeStageIds, buildChain, nextStageForStatus,
 } = require('../constants/mrsApprovalStages');
 
@@ -716,7 +737,9 @@ router.get('/:id([0-9a-fA-F-]{36})', async (req, res) => {
               spm.name AS approved_srpm_name, spm.signature_url AS approved_srpm_sig,
               mgmt.name AS approved_mgmt_name, mgmt.signature_url AS approved_mgmt_sig,
               md.name AS approved_md_name, md.signature_url AS approved_md_sig,
-              proc.name AS processed_by_name
+              proc.name AS processed_by_name,
+              -- the internal staff member who LOGGED the client's approval
+              ca.name AS client_approved_by_name
        FROM material_requisitions mr
        JOIN projects p ON mr.project_id = p.id
        JOIN users u ON mr.raised_by = u.id
@@ -727,6 +750,7 @@ router.get('/:id([0-9a-fA-F-]{36})', async (req, res) => {
        LEFT JOIN users mgmt ON mr.approved_mgmt_by = mgmt.id
        LEFT JOIN users md ON mr.approved_md_by = md.id
        LEFT JOIN users proc ON mr.processed_by = proc.id
+       LEFT JOIN users ca ON mr.client_approved_by = ca.id
        WHERE mr.id = $1`,
       [req.params.id]
     );
@@ -962,9 +986,10 @@ router.put('/workflow-config/:project_id', async (req, res) => {
     const { stages } = req.body; // array of stage IDs in order, or null = reset to default
     const cid = req.user.company_id;
 
-    // Validate
+    // Validate against every known stage — opt-in stages (client approval) are
+    // absent from DEFAULT_STAGE_IDS by design, but must still be selectable here.
     if (stages !== null && stages !== undefined) {
-      const valid = DEFAULT_STAGE_IDS;
+      const valid = VALID_STAGE_IDS;
       const invalid = stages.filter(s => !valid.includes(s));
       if (invalid.length) return res.status(400).json({ error: `Unknown stages: ${invalid.join(', ')}` });
       if (normalizeStageIds(stages).length < 1) return res.status(400).json({ error: 'At least one stage required' });
@@ -1116,7 +1141,9 @@ router.patch('/:id/cancel-items', async (req, res) => {
     if (!userCanAccessProject(req, mrs.rows[0].project_id)) {
       return res.status(403).json({ error: 'You do not have access to this project.' });
     }
-    if (mrs.rows[0].status !== 'approved_md') {
+    // 'client_approved' is the terminal state on projects with the client
+    // approval stage enabled, so it counts as fully approved here too.
+    if (!['approved_md', 'client_approved'].includes(mrs.rows[0].status)) {
       return res.status(400).json({ error: 'Items can only be cancelled on a fully-approved MR.' });
     }
     const upd = await query(
@@ -1229,11 +1256,23 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
+// Who may LOG a client's approval on the client's behalf. This stage is not
+// role-gated like the others (the client has no login, and these two hold
+// unrelated roles — procurement_manager / qs_engineer — that we must not widen
+// elsewhere), so it's an explicit person allowlist plus super_admin.
+const CLIENT_APPROVAL_LOGGERS = ['bkmanjunath@bcim.in', 'prithivi@bcim.in'];
+const canLogClientApproval = (user) =>
+  GLOBAL_ADMIN_ROLES.includes(String(user.role || '').toLowerCase()) ||
+  CLIENT_APPROVAL_LOGGERS.includes(String(user.email || '').toLowerCase());
+
 // ── PATCH /:id/:stage  — dynamic stage-based approval ─────────────────────
 router.patch('/:id/:stage', async (req, res) => {
   try {
     const { stage } = req.params;
-    const { remarks, purchase_data, signature_img } = req.body;
+    const {
+      remarks, purchase_data, signature_img,
+      client_contact_name, client_reference_no, client_approval_doc_url,
+    } = req.body;
 
     // Load MRS + project
     const mrs = await query(
@@ -1264,9 +1303,21 @@ router.patch('/:id/:stage', async (req, res) => {
       });
     }
 
-    // Role check — only the designated role can approve each stage
-    // (admin / super_admin bypass for system management)
-    if (!GLOBAL_ADMIN_ROLES.includes(req.user.role)) {
+    // Authorisation. Client approval is gated by an explicit person allowlist
+    // (see CLIENT_APPROVAL_LOGGERS) rather than by role — its allowedRoles is
+    // empty, so it must never fall through to the role check below.
+    if (stage === 'client-approve') {
+      if (!canLogClientApproval(req.user)) {
+        return res.status(403).json({
+          error: 'You are not authorised to record client approval. Contact B.K Manjunath, Prithivi Krishna, or a Super Admin.'
+        });
+      }
+      if (!String(client_contact_name || '').trim()) {
+        return res.status(400).json({
+          error: 'Client contact name is required — record who at the client approved this requisition.'
+        });
+      }
+    } else if (!GLOBAL_ADMIN_ROLES.includes(req.user.role)) {
       const userRole = (req.user.role || '').toLowerCase();
       const allowed  = cfg.allowedRoles || [];
       if (!allowed.includes(userRole)) {
@@ -1280,8 +1331,18 @@ router.patch('/:id/:stage', async (req, res) => {
     let setSql = `status = $1, ${cfg.colBy} = $2, ${cfg.colAt} = NOW(), updated_at = NOW()`;
     const params = [cfg.nextStatus, req.user.id];
 
-    if (remarks)       { setSql += `, remarks = $${params.length + 1}`;      params.push(remarks); }
-    if (signature_img) { setSql += `, ${cfg.sigCol} = $${params.length + 1}`; params.push(signature_img); }
+    // Client approval keeps its notes in its own column so it never overwrites
+    // the requisition's general remarks, and has no signature column (the
+    // client signs on their own paperwork, which is attached instead).
+    if (stage === 'client-approve') {
+      if (remarks) { setSql += `, client_approval_remarks = $${params.length + 1}`; params.push(remarks); }
+      setSql += `, client_contact_name = $${params.length + 1}`; params.push(String(client_contact_name).trim());
+      if (client_reference_no)    { setSql += `, client_reference_no = $${params.length + 1}`;     params.push(String(client_reference_no).trim()); }
+      if (client_approval_doc_url) { setSql += `, client_approval_doc_url = $${params.length + 1}`; params.push(client_approval_doc_url); }
+    } else {
+      if (remarks)                    { setSql += `, remarks = $${params.length + 1}`;       params.push(remarks); }
+      if (signature_img && cfg.sigCol) { setSql += `, ${cfg.sigCol} = $${params.length + 1}`; params.push(signature_img); }
+    }
 
     if (stage === 'approve-md' && purchase_data) {
       const { received_date, po_no_date, expected_delivery } = purchase_data;
@@ -1310,9 +1371,17 @@ router.patch('/:id/:stage', async (req, res) => {
       }
     }
 
+    // Whoever (if anyone) must act next on this project's own chain. Drives
+    // both "is this the final approval" and the WhatsApp ping below — on a
+    // project with client approval enabled, MD approval is NOT the end, so
+    // finality must be derived from the chain rather than hardcoded to
+    // 'approved_md'.
+    const nextStage = nextStageForStatus(enabledIds, cfg.nextStatus);
+    const isFullyApproved = !nextStage;
+
     // Always push to MR raiser when any approval stage is done
     if (mrs.rows[0].raised_by) {
-      const isFinalApproval = cfg.nextStatus === 'approved_md';
+      const isFinalApproval = isFullyApproved;
       sendPushToUser(mrs.rows[0].raised_by, {
         title: isFinalApproval
           ? `MR Fully Approved: ${mrsRef(mrs.rows[0])}`
@@ -1339,8 +1408,9 @@ router.patch('/:id/:stage', async (req, res) => {
     // whatsapp.service.js notifyApprovalNeeded + getPhonesByRole). Resolved
     // from this project's own workflow, so a 3-stage project correctly
     // notifies the MD instead of a "Project Director" nobody holds.
-    const nextStage = nextStageForStatus(enabledIds, cfg.nextStatus);
-    if (nextStage) {
+    // Client approval has no role to notify (it's logged by our own staff from
+    // an allowlist), so it's skipped here — nobody is "awaiting" it by role.
+    if (nextStage && nextStage.allowedRoles?.length) {
       wa.notifyApprovalNeeded({
         companyId: req.user.company_id,
         allowedRoles: nextStage.allowedRoles,
@@ -1351,7 +1421,11 @@ router.patch('/:id/:stage', async (req, res) => {
       }).catch(() => {});
     }
 
-    if (cfg.nextStatus === 'approved_md') {
+    // Tell Procurement to proceed only once the chain is genuinely exhausted.
+    // On a project with client approval enabled that's client_approved, NOT
+    // approved_md — releasing to RFQ/PO before the client has signed off is
+    // exactly what this stage exists to prevent.
+    if (isFullyApproved) {
       const itemCount = await query(
         `SELECT COUNT(*)::int AS item_count FROM mrs_items WHERE mrs_id = $1::uuid`,
         [req.params.id]
@@ -1366,11 +1440,14 @@ router.patch('/:id/:stage', async (req, res) => {
       });
 
       // Also push to procurement + management for final approval
+      const clearedBy = stage === 'client-approve'
+        ? `client-approved (${String(client_contact_name).trim()})`
+        : 'MD-approved';
       const procEmails = parseEmails(process.env.MRS_PROCUREMENT_NOTIFY_EMAILS, DEFAULT_PROCUREMENT_MRS_EMAILS);
       const mgmtEmails = parseEmails(process.env.MRS_MGMT_NOTIFY_EMAILS, DEFAULT_MGMT_NOTIFY_EMAILS);
       sendPushToUsersByEmail(req.user.company_id, [...new Set([...procEmails, ...mgmtEmails])], {
         title: `MR Fully Approved: ${mrsRef(mrs.rows[0])}`,
-        body: `MR for ${mrs.rows[0].project_name || 'a project'} is MD-approved. Proceed with RFQ/PO.`,
+        body: `MR for ${mrs.rows[0].project_name || 'a project'} is ${clearedBy}. Proceed with RFQ/PO.`,
         data: { link: '/stores/mrs', type: 'mr_final_approved', related_id: mrs.rows[0].id },
       }).catch(() => {});
     }
