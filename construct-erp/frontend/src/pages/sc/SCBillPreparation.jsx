@@ -34,6 +34,23 @@ const STATUS_META = {
   paid:         { bg:'bg-teal-100',    text:'text-teal-700',    label:'Paid' },
 };
 
+// How a bill line item is measured, inferred from its unit/description the
+// same way matchWOItemsToSkills groups WO items for billing — so the BOQ
+// table on a labour bill reads as Regular/Overtime/Incentive blocks instead
+// of one flat list, matching the Work Order detail page's design language.
+const BILL_BASIS = {
+  regular:   { label: 'Regular',   badge: 'bg-indigo-50 text-indigo-700 border-indigo-200', head: 'bg-indigo-50/70 text-indigo-800 border-indigo-100' },
+  overtime:  { label: 'Overtime',  badge: 'bg-amber-50  text-amber-700  border-amber-200',  head: 'bg-amber-50/70  text-amber-800  border-amber-100' },
+  incentive: { label: 'Incentive', badge: 'bg-violet-50 text-violet-700 border-violet-200', head: 'bg-violet-50/70 text-violet-800 border-violet-100' },
+};
+const billItemBasis = (item) => {
+  const desc = (item.description || item.wo_item_desc || '').toLowerCase();
+  const unit = (item.unit || '').toLowerCase();
+  if (desc.includes('incentive')) return 'incentive';
+  if (/^hr/.test(unit) || unit.includes('hour')) return 'overtime';
+  return 'regular';
+};
+
 const inp = 'w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition';
 const Field = ({ label, children, required }) => (
   <div>
@@ -1406,6 +1423,21 @@ function BillDetailPage({ billId, onClose }) {
   const items    = b.items || [];
   const approvals = b.approvals || [];
   const payments  = b.payments || [];
+
+  // Group BOQ rows by pricing basis (Regular/Overtime/Incentive) — mirrors
+  // the Work Order detail page so a labour bill's day-rate, hourly and
+  // incentive lines read as three distinct, subtotalled blocks.
+  const billGroups = useMemo(() => {
+    const buckets = { regular: [], overtime: [], incentive: [] };
+    items.forEach((it, idx) => buckets[billItemBasis(it)].push({ ...it, _row: idx + 1 }));
+    return ['regular', 'overtime', 'incentive']
+      .filter(k => buckets[k].length)
+      .map(k => ({
+        key: k, meta: BILL_BASIS[k], items: buckets[k],
+        total: buckets[k].reduce((s, it) => s + num(it.curr_qty ?? it.current_qty ?? 0) * num(it.rate), 0),
+      }));
+  }, [items]);
+  const multiBasis = billGroups.length > 1;
   const printData = useMemo(() => toQSPrintBill(b), [b]);
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -1438,10 +1470,10 @@ function BillDetailPage({ billId, onClose }) {
   const retPct = num(b.retention_pct || b.wo_ret_pct || 5);
 
   const infoCards = [
-    { label: 'WO Number',     value: b.wo_number, Icon: FileText,     mono: true, tint: 'text-indigo-700', bg: 'bg-indigo-50', ic: 'text-indigo-500' },
-    { label: 'Bill Date',     value: b.bill_date ? dayjs(b.bill_date).format('DD MMM YYYY') : '—', Icon: CalendarDays, tint: 'text-slate-800', bg: 'bg-sky-50', ic: 'text-sky-500' },
-    { label: 'Bill Type',     value: (b.bill_type||'ra').toUpperCase(), Icon: Layers, tint: 'text-slate-800', bg: 'bg-violet-50', ic: 'text-violet-500' },
-    { label: 'Subcontractor', value: b.sc_name, Icon: HardHat, tint: 'text-slate-800', bg: 'bg-amber-50', ic: 'text-amber-500' },
+    { label: 'WO Number',     value: b.wo_number, Icon: FileText,     mono: true, tint: 'text-indigo-700', bg: 'bg-indigo-50', ic: 'text-indigo-500', accent: 'bg-indigo-500' },
+    { label: 'Bill Date',     value: b.bill_date ? dayjs(b.bill_date).format('DD MMM YYYY') : '—', Icon: CalendarDays, tint: 'text-slate-800', bg: 'bg-sky-50', ic: 'text-sky-500', accent: 'bg-sky-500' },
+    { label: 'Bill Type',     value: (b.bill_type||'ra').toUpperCase(), Icon: Layers, tint: 'text-slate-800', bg: 'bg-violet-50', ic: 'text-violet-500', accent: 'bg-violet-500' },
+    { label: 'Subcontractor', value: b.sc_name, Icon: HardHat, tint: 'text-slate-800', bg: 'bg-amber-50', ic: 'text-amber-500', accent: 'bg-amber-500' },
   ];
 
   return (
@@ -1509,20 +1541,24 @@ function BillDetailPage({ billId, onClose }) {
           <div className="p-6 max-w-7xl mx-auto space-y-6">
 
             {/* ── Document header banner ── */}
-            <div className="rounded-2xl overflow-hidden shadow-lg"
-              style={{ background: `linear-gradient(120deg, ${Theme.navy} 0%, ${Theme.navyDark || '#152c47'} 100%)` }}>
-              <div className="px-7 py-6 flex items-start justify-between gap-6 flex-wrap">
+            <div className="relative rounded-2xl overflow-hidden shadow-xl"
+              style={{ background: `linear-gradient(135deg, ${Theme.navy} 0%, ${Theme.navyDark || '#152c47'} 100%)` }}>
+              {/* Subtle dot-grid texture — gives the banner a document-plate feel without competing with the numbers */}
+              <div className="absolute inset-0 opacity-[0.07] pointer-events-none"
+                style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '16px 16px' }} />
+              <div className="absolute -right-10 -top-10 w-56 h-56 rounded-full pointer-events-none" style={{ background: 'rgba(255,255,255,0.05)' }} />
+              <div className="relative px-8 py-7 flex items-start justify-between gap-6 flex-wrap">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 text-white/50 text-[11px] font-bold uppercase tracking-[0.2em] mb-2">
+                  <div className="flex items-center gap-1.5 text-white/50 text-[11px] font-bold uppercase tracking-[0.22em] mb-2.5">
                     <Receipt className="w-3.5 h-3.5" /> Subcontractor RA Bill
                   </div>
                   <div className="flex items-center gap-3 flex-wrap">
-                    <h1 className="text-3xl font-black text-white font-mono tracking-tight">{b.bill_number || '…'}</h1>
+                    <h1 className="text-4xl font-black text-white font-mono tracking-tight">{b.bill_number || '…'}</h1>
                     {b.status && (
                       <span className={clsx('text-xs px-3 py-1 rounded-full font-bold', sm.bg, sm.text)}>{sm.label}</span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-white/70 mt-2.5 font-medium flex-wrap">
+                  <div className="flex items-center gap-2 text-sm text-white/70 mt-3 font-medium flex-wrap">
                     <HardHat className="w-4 h-4 text-white/50" />
                     <span className="font-semibold text-white/90">{b.sc_name || '—'}</span>
                     <span className="text-white/30">•</span>
@@ -1530,18 +1566,19 @@ function BillDetailPage({ billId, onClose }) {
                     <span>{b.project_name || '—'}</span>
                   </div>
                 </div>
-                <div className="text-right flex-shrink-0 rounded-xl px-6 py-3" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-white/50 mb-1">Net Payable</p>
-                  <p className="text-3xl font-black text-white font-mono tabular-nums">{fmt2(b.net_payable)}</p>
+                <div className="text-right flex-shrink-0 rounded-xl px-7 py-4 border border-white/10" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50 mb-1.5">Net Payable</p>
+                  <p className="text-4xl font-black text-white font-mono tabular-nums leading-none">{fmt2(b.net_payable)}</p>
                 </div>
               </div>
             </div>
 
             {/* ── Info cards row ── */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {infoCards.map(({ label, value, mono, tint, bg, ic, Icon }) => (
-                <div key={label} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center gap-3">
-                  <div className={clsx('w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0', bg)}>
+              {infoCards.map(({ label, value, mono, tint, bg, ic, accent, Icon }) => (
+                <div key={label} className="relative overflow-hidden bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center gap-3 transition-shadow hover:shadow-md">
+                  <div className={clsx('absolute left-0 top-0 bottom-0 w-1', accent)} />
+                  <div className={clsx('w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ml-1', bg)}>
                     <Icon className={clsx('w-5 h-5', ic)} />
                   </div>
                   <div className="min-w-0">
@@ -1565,39 +1602,64 @@ function BillDetailPage({ billId, onClose }) {
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm border-collapse">
                         <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200">
-                            <th className="text-left px-5 py-3 font-bold text-slate-500 text-[11px] uppercase tracking-wider">Description</th>
-                            <th className="text-center px-3 py-3 font-bold text-slate-500 text-[11px] uppercase tracking-wider whitespace-nowrap">Unit</th>
-                            <th className="text-right px-3 py-3 font-bold text-slate-500 text-[11px] uppercase tracking-wider whitespace-nowrap">Rate</th>
-                            <th className="text-right px-3 py-3 font-bold text-slate-500 text-[11px] uppercase tracking-wider whitespace-nowrap">Prev Qty</th>
-                            <th className="text-right px-3 py-3 font-bold text-slate-500 text-[11px] uppercase tracking-wider whitespace-nowrap">This Bill Qty</th>
-                            <th className="text-right px-5 py-3 font-bold text-slate-500 text-[11px] uppercase tracking-wider whitespace-nowrap">Amount</th>
+                          <tr className="bg-slate-50">
+                            <th className="text-left px-5 py-3 font-bold text-slate-500 text-[11px] uppercase tracking-wider border border-slate-200">{multiBasis ? 'Description' : 'Description'}</th>
+                            {multiBasis && <th className="text-left px-3 py-3 font-bold text-slate-500 text-[11px] uppercase tracking-wider whitespace-nowrap border border-slate-200">Basis</th>}
+                            <th className="text-center px-3 py-3 font-bold text-slate-500 text-[11px] uppercase tracking-wider whitespace-nowrap border border-slate-200">Unit</th>
+                            <th className="text-right px-3 py-3 font-bold text-slate-500 text-[11px] uppercase tracking-wider whitespace-nowrap border border-slate-200">Rate</th>
+                            <th className="text-right px-3 py-3 font-bold text-slate-500 text-[11px] uppercase tracking-wider whitespace-nowrap border border-slate-200">Prev Qty</th>
+                            <th className="text-right px-3 py-3 font-bold text-slate-500 text-[11px] uppercase tracking-wider whitespace-nowrap border border-slate-200">This Bill Qty</th>
+                            <th className="text-right px-5 py-3 font-bold text-slate-500 text-[11px] uppercase tracking-wider whitespace-nowrap border border-slate-200">Amount</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {items.map((it, i) => (
-                            <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60 transition-colors">
-                              <td className="px-5 py-3.5 min-w-[180px]">
-                                <p className="font-semibold text-slate-800 leading-snug">{it.description || it.wo_item_desc}</p>
-                              </td>
-                              <td className="text-center px-3 py-3.5 text-slate-500 font-medium whitespace-nowrap">{it.unit || '—'}</td>
-                              <td className="text-right px-3 py-3.5 font-mono font-semibold text-slate-600 whitespace-nowrap tabular-nums">{fmt2(it.rate)}</td>
-                              <td className="text-right px-3 py-3.5 font-mono text-slate-400 whitespace-nowrap tabular-nums">
-                                {num(it.cum_prev_qty ?? it.prev_qty ?? 0).toFixed(3)}
-                              </td>
-                              <td className="text-right px-3 py-3.5 font-mono font-bold text-indigo-700 whitespace-nowrap tabular-nums">
-                                {num(it.curr_qty ?? it.current_qty ?? 0).toFixed(3)}
-                              </td>
-                              <td className="text-right px-5 py-3.5 font-mono font-bold text-slate-900 whitespace-nowrap tabular-nums">
-                                {fmt2(num(it.curr_qty ?? it.current_qty ?? 0) * num(it.rate))}
-                              </td>
-                            </tr>
+                          {billGroups.map(group => (
+                            <React.Fragment key={group.key}>
+                              {multiBasis && (
+                                <tr className={group.meta.head}>
+                                  <td colSpan={multiBasis ? 7 : 6} className="px-5 py-1.5 font-bold uppercase tracking-widest text-[10px] border border-slate-200">
+                                    {group.meta.label} <span className="font-normal normal-case tracking-normal opacity-70">· {group.items.length} item{group.items.length !== 1 ? 's' : ''}</span>
+                                  </td>
+                                </tr>
+                              )}
+                              {group.items.map(it => (
+                                <tr key={it._row} className="hover:bg-slate-50/60 transition-colors">
+                                  <td className="px-5 py-3.5 min-w-[180px] border border-slate-200">
+                                    <p className="font-semibold text-slate-800 leading-snug">{it.description || it.wo_item_desc}</p>
+                                  </td>
+                                  {multiBasis && (
+                                    <td className="px-3 py-3.5 border border-slate-200">
+                                      <span className={clsx('px-1.5 py-0.5 rounded border font-medium uppercase text-[10px] whitespace-nowrap', group.meta.badge)}>
+                                        {group.meta.label}
+                                      </span>
+                                    </td>
+                                  )}
+                                  <td className="text-center px-3 py-3.5 text-slate-500 font-medium whitespace-nowrap border border-slate-200">{it.unit || '—'}</td>
+                                  <td className="text-right px-3 py-3.5 font-mono font-semibold text-slate-600 whitespace-nowrap tabular-nums border border-slate-200">{fmt2(it.rate)}</td>
+                                  <td className="text-right px-3 py-3.5 font-mono text-slate-400 whitespace-nowrap tabular-nums border border-slate-200">
+                                    {num(it.cum_prev_qty ?? it.prev_qty ?? 0).toFixed(3)}
+                                  </td>
+                                  <td className="text-right px-3 py-3.5 font-mono font-bold text-indigo-700 whitespace-nowrap tabular-nums border border-slate-200">
+                                    {num(it.curr_qty ?? it.current_qty ?? 0).toFixed(3)}
+                                  </td>
+                                  <td className="text-right px-5 py-3.5 font-mono font-bold text-slate-900 whitespace-nowrap tabular-nums border border-slate-200">
+                                    {fmt2(num(it.curr_qty ?? it.current_qty ?? 0) * num(it.rate))}
+                                  </td>
+                                </tr>
+                              ))}
+                              {multiBasis && (
+                                <tr className={clsx(group.meta.head, 'font-bold')}>
+                                  <td colSpan={6} className="px-5 py-1.5 text-right text-[10px] uppercase tracking-wider border border-slate-200">{group.meta.label} Subtotal</td>
+                                  <td className="px-5 py-1.5 text-right font-mono text-xs tabular-nums border border-slate-200">{fmt2(group.total)}</td>
+                                </tr>
+                              )}
+                            </React.Fragment>
                           ))}
                         </tbody>
                         <tfoot>
-                          <tr className="border-t-2 border-slate-200" style={{ background: `${Theme.navy}0d` }}>
-                            <td colSpan={5} className="px-5 py-4 font-bold text-slate-700 whitespace-nowrap">Gross Work Amount</td>
-                            <td className="text-right px-5 py-4 font-black font-mono text-lg whitespace-nowrap tabular-nums" style={{ color: Theme.navy }}>{fmt2(b.gross_amount)}</td>
+                          <tr style={{ background: `${Theme.navy}0d` }}>
+                            <td colSpan={multiBasis ? 6 : 5} className="px-5 py-4 font-bold text-slate-700 whitespace-nowrap border border-slate-200">Gross Work Amount</td>
+                            <td className="text-right px-5 py-4 font-black font-mono text-lg whitespace-nowrap tabular-nums border border-slate-200" style={{ color: Theme.navy }}>{fmt2(b.gross_amount)}</td>
                           </tr>
                         </tfoot>
                       </table>
@@ -1671,47 +1733,81 @@ function BillDetailPage({ billId, onClose }) {
 
               {/* ── Right: Bill Abstract ── */}
               <div>
-                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden sticky top-4">
-                  <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+                <div className="bg-white border border-slate-200 rounded-2xl shadow-md overflow-hidden sticky top-4">
+                  <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2 bg-slate-50/60">
                     <FileText className="w-4 h-4 text-slate-400" />
                     <p className="text-sm font-bold text-slate-700">Bill Abstract</p>
                   </div>
-                  <div className="px-5 py-4 space-y-1">
+
+                  {/* Gross + additions (GST, retention release) */}
+                  <div className="px-5 pt-4 pb-1">
                     {[
                       { l: 'Gross Work Amount', v: b.gross_amount, bold: true, c: 'text-slate-900' },
                       num(b.cgst_amount) > 0
-                        ? { l: `CGST (${(gstPct/2).toFixed(1)}%)`, v: b.cgst_amount, c: 'text-indigo-600' }
+                        ? { l: `CGST (${(gstPct/2).toFixed(1)}%)`, v: b.cgst_amount, c: 'text-emerald-600' }
                         : null,
                       num(b.sgst_amount) > 0
-                        ? { l: `SGST (${(gstPct/2).toFixed(1)}%)`, v: b.sgst_amount, c: 'text-indigo-600' }
+                        ? { l: `SGST (${(gstPct/2).toFixed(1)}%)`, v: b.sgst_amount, c: 'text-emerald-600' }
                         : null,
                       num(b.igst_amount) > 0
-                        ? { l: `IGST (${gstPct}%)`, v: b.igst_amount, c: 'text-indigo-600' }
+                        ? { l: `IGST (${gstPct}%)`, v: b.igst_amount, c: 'text-emerald-600' }
                         : null,
                       (!num(b.cgst_amount) && !num(b.igst_amount))
-                        && { l: `GST (${gstPct}%)`, v: b.gst_amount, c: 'text-indigo-600' },
+                        && { l: `GST (${gstPct}%)`, v: b.gst_amount, c: 'text-emerald-600' },
                       num(b.retention_release_amount) > 0
                         && { l: 'Retention Release', v: b.retention_release_amount, c: 'text-emerald-600' },
-                      { l: `TDS (${tdsPct}%)`,       v: -b.tds_amount,       c: 'text-red-500' },
-                      { l: `Retention (${retPct}%)`, v: -b.retention_amount, c: 'text-orange-500' },
-                      num(b.labour_cess_amount) > 0 && { l: 'Labour Cess', v: -b.labour_cess_amount, c: 'text-amber-600' },
-                      num(b.advance_recovery)   > 0 && { l: 'Advance Recovery', v: -b.advance_recovery, c: 'text-red-500' },
-                      num(b.material_recovery)  > 0 && { l: 'Material Recovery', v: -b.material_recovery, c: 'text-red-500' },
-                      num(b.penalty_amount)     > 0 && { l: 'Penalty', v: -b.penalty_amount, c: 'text-red-500' },
-                      num(b.other_deductions)   > 0 && { l: 'Other Deductions', v: -b.other_deductions, c: 'text-red-500' },
                     ].filter(Boolean).map(({ l, v, c, bold }, idx) => (
                       <div key={l} className={clsx('flex justify-between items-center py-2.5', idx > 0 && 'border-t border-slate-50')}>
-                        <span className={clsx('text-sm', bold ? 'font-bold text-slate-800' : 'text-slate-500')}>{l}</span>
+                        <span className={clsx('text-sm', bold ? 'font-bold text-slate-800' : 'text-slate-500 flex items-center gap-1')}>
+                          {!bold && <span className="text-emerald-400 font-mono text-xs">+</span>}{l}
+                        </span>
                         <span className={clsx('font-bold tabular-nums font-mono whitespace-nowrap', c, bold ? 'text-base' : 'text-sm')}>
-                          {num(v) < 0 ? `(${fmt2(Math.abs(num(v)))})` : fmt2(Math.abs(num(v)))}
+                          {fmt2(Math.abs(num(v)))}
                         </span>
                       </div>
                     ))}
                   </div>
-                  <div className="flex justify-between items-center px-5 py-5 text-white"
-                    style={{ background: `linear-gradient(120deg, ${Theme.navy} 0%, ${Theme.navyDark || '#152c47'} 100%)` }}>
-                    <span className="font-bold text-sm uppercase tracking-wider text-white/80">Net Payable</span>
-                    <span className="text-2xl font-black font-mono tabular-nums">{fmt2(b.net_payable)}</span>
+
+                  {/* Deductions — visually separated so what's being held back reads at a glance */}
+                  {(() => {
+                    const deductions = [
+                      { l: `TDS (${tdsPct}%)`,       v: b.tds_amount },
+                      { l: `Retention (${retPct}%)`, v: b.retention_amount },
+                      num(b.labour_cess_amount) > 0 && { l: 'Labour Cess', v: b.labour_cess_amount },
+                      num(b.advance_recovery)   > 0 && { l: 'Advance Recovery', v: b.advance_recovery },
+                      num(b.material_recovery)  > 0 && { l: 'Material Recovery', v: b.material_recovery },
+                      num(b.penalty_amount)     > 0 && { l: 'Penalty', v: b.penalty_amount },
+                      num(b.other_deductions)   > 0 && { l: 'Other Deductions', v: b.other_deductions },
+                    ].filter(Boolean);
+                    const totalDed = deductions.reduce((s, d) => s + Math.abs(num(d.v)), 0);
+                    return (
+                      <div className="mx-5 mt-2 mb-4 rounded-xl bg-red-50/50 border border-red-100 overflow-hidden">
+                        <div className="px-4 py-2 flex items-center justify-between border-b border-red-100/70">
+                          <span className="text-[10px] font-bold text-red-500 uppercase tracking-widest">Deductions</span>
+                          <span className="text-[11px] font-bold font-mono text-red-500 tabular-nums">− {fmt2(totalDed)}</span>
+                        </div>
+                        <div className="px-4 py-1.5">
+                          {deductions.map(({ l, v }, idx) => (
+                            <div key={l} className={clsx('flex justify-between items-center py-1.5', idx > 0 && 'border-t border-red-100/50')}>
+                              <span className="text-[13px] text-slate-600 flex items-center gap-1">
+                                <span className="text-red-400 font-mono text-xs">−</span>{l}
+                              </span>
+                              <span className="font-semibold tabular-nums font-mono whitespace-nowrap text-[13px] text-red-500">
+                                {fmt2(Math.abs(num(v)))}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  <div className="relative flex justify-between items-center px-5 py-5 text-white overflow-hidden"
+                    style={{ background: `linear-gradient(135deg, ${Theme.navy} 0%, ${Theme.navyDark || '#152c47'} 100%)` }}>
+                    <div className="absolute inset-0 opacity-[0.06] pointer-events-none"
+                      style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '14px 14px' }} />
+                    <span className="relative font-bold text-sm uppercase tracking-wider text-white/80">Net Payable</span>
+                    <span className="relative text-2xl font-black font-mono tabular-nums">{fmt2(b.net_payable)}</span>
                   </div>
                 </div>
               </div>
