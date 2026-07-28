@@ -1419,20 +1419,29 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
             ) : lineItems.length === 0 ? (
               <div className="p-8 text-center text-sm text-slate-400">No BOQ items added for this work order.</div>
             ) : (
-              <table className="w-full text-xs">
+              <table className="w-full text-xs border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-100">
-                    {['#', 'Description', multiBasis ? 'Basis' : 'Unit', 'WO Qty', 'Billed', 'Balance', 'Rate', 'Amount'].map(h => (
-                      <th key={h} className="px-3 py-2 text-left font-medium text-slate-900 uppercase tracking-wider bg-slate-50 whitespace-nowrap">{h}</th>
+                  <tr>
+                    {[
+                      { h: '#',       align: 'text-left'  },
+                      { h: 'Description', align: 'text-left' },
+                      { h: multiBasis ? 'Basis' : 'Unit', align: 'text-left' },
+                      { h: 'WO Qty',  align: 'text-right' },
+                      { h: 'Billed',  align: 'text-right' },
+                      { h: 'Balance', align: 'text-right' },
+                      { h: 'Rate',    align: 'text-right' },
+                      { h: 'Amount',  align: 'text-right' },
+                    ].map(({ h, align }) => (
+                      <th key={h} className={clsx('px-3 py-2 font-medium text-slate-900 uppercase tracking-wider bg-slate-50 whitespace-nowrap border border-slate-200', align)}>{h}</th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50">
+                <tbody>
                   {boqGroups.map(group => (
                     <React.Fragment key={group.key}>
                       {multiBasis && (
-                        <tr className={clsx('border-t', group.meta.head)}>
-                          <td colSpan={8} className="px-3 py-1.5 font-bold uppercase tracking-widest text-[10px] flex items-center gap-1.5">
+                        <tr className={group.meta.head}>
+                          <td colSpan={8} className="px-3 py-1.5 font-bold uppercase tracking-widest text-[10px] border border-slate-200">
                             {group.meta.label} <span className="font-normal normal-case tracking-normal opacity-70">· {group.items.length} item{group.items.length !== 1 ? 's' : ''}</span>
                           </td>
                         </tr>
@@ -1446,12 +1455,12 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
                         const billedPct = qty > 0 ? Math.min(100, Math.round((billedQty / qty) * 100)) : 0;
                         return (
                           <tr key={item.id || item._row} className="hover:bg-slate-50 transition-colors">
-                            <td className="px-3 py-2.5 text-slate-900 font-medium font-mono">{item._row}</td>
-                            <td className="px-3 py-2.5 font-medium text-slate-800 max-w-[280px]">
+                            <td className="px-3 py-2.5 text-slate-900 font-medium font-mono border border-slate-200">{item._row}</td>
+                            <td className="px-3 py-2.5 font-medium text-slate-800 max-w-[280px] border border-slate-200">
                               {item.description || `Item ${item._row}`}
                               {item.remarks && <div className="text-[11px] text-slate-500 mt-0.5 font-normal">{item.remarks}</div>}
                             </td>
-                            <td className="px-3 py-2.5">
+                            <td className="px-3 py-2.5 border border-slate-200">
                               {multiBasis ? (
                                 <span className={clsx('px-1.5 py-0.5 rounded border font-medium uppercase text-[10px] whitespace-nowrap', group.meta.badge)}>
                                   {item.unit || 'LS'}
@@ -1460,41 +1469,34 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
                                 <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-900 border border-slate-200 font-medium uppercase">{item.unit || 'LS'}</span>
                               )}
                             </td>
-                            <td className="px-3 py-2.5 font-mono text-right text-slate-700">{qty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}</td>
-                            <td className="px-3 py-2.5">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <span className="font-mono font-semibold text-emerald-700">{billedQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}</span>
-                                {billedPct > 0 && <span className="text-[9px] text-emerald-500">({billedPct}%)</span>}
-                              </div>
-                              {qty > 0 && (
-                                <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden mt-1">
-                                  <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${billedPct}%` }} />
-                                </div>
-                              )}
+                            <td className="px-3 py-2.5 font-mono text-right text-slate-700 border border-slate-200">{qty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}</td>
+                            <td className="px-3 py-2.5 font-mono text-right border border-slate-200">
+                              <span className="font-semibold text-emerald-700">{billedQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}</span>
+                              {billedPct > 0 && <span className="text-[9px] text-emerald-500 ml-1">({billedPct}%)</span>}
                             </td>
-                            <td className="px-3 py-2.5 font-mono text-right">
+                            <td className="px-3 py-2.5 font-mono text-right border border-slate-200">
                               <span className={clsx('font-semibold', remQty > 0 ? 'text-amber-600' : 'text-slate-400')}>
                                 {remQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}
                               </span>
                             </td>
-                            <td className="px-3 py-2.5 font-mono text-right text-slate-600">{inr(rate)}</td>
-                            <td className="px-3 py-2.5 font-mono text-right font-semibold text-slate-800">{inr(amount)}</td>
+                            <td className="px-3 py-2.5 font-mono text-right text-slate-600 border border-slate-200">{inr(rate)}</td>
+                            <td className="px-3 py-2.5 font-mono text-right font-semibold text-slate-800 border border-slate-200">{inr(amount)}</td>
                           </tr>
                         );
                       })}
                       {multiBasis && (
-                        <tr className={clsx('border-t', group.meta.head, 'font-bold')}>
-                          <td colSpan={7} className="px-3 py-1.5 text-right text-[10px] uppercase tracking-wider">{group.meta.label} Subtotal</td>
-                          <td className="px-3 py-1.5 text-right font-mono text-xs tabular-nums">{inr(group.total)}</td>
+                        <tr className={clsx(group.meta.head, 'font-bold')}>
+                          <td colSpan={7} className="px-3 py-1.5 text-right text-[10px] uppercase tracking-wider border border-slate-200">{group.meta.label} Subtotal</td>
+                          <td className="px-3 py-1.5 text-right font-mono text-xs tabular-nums border border-slate-200">{inr(group.total)}</td>
                         </tr>
                       )}
                     </React.Fragment>
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t-2 border-slate-200 bg-slate-50">
-                    <td colSpan={7} className="px-3 py-2.5 text-right text-xs font-medium text-slate-700 uppercase tracking-wider">Total</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-sm font-bold text-indigo-700">{inr(itemsTotal)}</td>
+                  <tr className="bg-slate-50">
+                    <td colSpan={7} className="px-3 py-2.5 text-right text-xs font-medium text-slate-700 uppercase tracking-wider border border-slate-200">Total</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-sm font-bold text-indigo-700 border border-slate-200">{inr(itemsTotal)}</td>
                   </tr>
                 </tfoot>
               </table>
