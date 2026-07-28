@@ -20,9 +20,13 @@ dayjs.extend(relativeTime);
 // ─── helpers ──────────────────────────────────────────────────────────────────
 const fmt = (n) => n > 0 ? `₹${Number(n).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—';
 
-// Items that specifically require MD-level authorization
+// Items that specifically require MD-level authorization.
+// MRS stage chains are per-project (a project with no Project Director appointed
+// skips straight from PM to MD), so a fixed status like 'approved_mgmt' can't tell
+// us this on its own — the backend already resolves it per-item and tells us via
+// next_stage_label (see routes/approvals.routes.js).
 const isMDStageItem = (item) =>
-  (item.entity_type === 'mrs'        && item.status === 'approved_mgmt') ||
+  (item.entity_type === 'mrs'        && item.next_stage_label === 'Awaiting Managing Director') ||
   (item.entity_type === 'po'         && ['verified_audit', 'released_mgmt'].includes(item.status)) ||
   (item.entity_type === 'work_order' && ['submitted', 'active'].includes(item.status));
 const daysAgo = (d) => {
@@ -323,7 +327,7 @@ function ApprovalCard({ item, onApprove, onReject, onView, onMDReview, mdMode, i
               <span className={clsx('text-[10px] px-2 py-0.5 rounded-full font-semibold capitalize',
                 STATUS_BADGE[item.status] || 'bg-slate-100 text-slate-600')}>
                 {item.doc_type === 'MRS'
-                  ? (MRS_STATUS_LABEL[item.status] || (item.status || '').replace(/_/g,' '))
+                  ? (item.next_stage_label || MRS_STATUS_LABEL[item.status] || (item.status || '').replace(/_/g,' '))
                   : item.doc_type === 'Purchase Order'
                   ? (PO_STATUS_LABEL[item.status] || (item.status || '').replace(/_/g,' '))
                   : item.entity_type === 'work_order'

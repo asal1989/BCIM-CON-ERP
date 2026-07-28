@@ -592,40 +592,13 @@ router.use(loadProjectScope);
 /* ── Master stage definitions (ALL possible stages, in order) ─────────────
    Each project's mrs_workflow.stages[] picks a SUBSET of these IDs.
    If a project has no workflow config → ALL stages apply (standard).
+   Shared with routes/approvals.routes.js via constants/mrsApprovalStages —
+   keep both usages pointed at that file so they never drift apart.
 ─────────────────────────────────────────────────────────────────────────── */
-const ALL_STAGES = [
-  { id: 'stores-approve', nextStatus: 'stores_verified', colBy: 'stores_approved_by', colAt: 'stores_approved_at', sigCol: 'stores_sig_img', label: 'Store Manager',      allowedRoles: ['stores_manager', 'store_keeper'] },
-  { id: 'approve-pm',     nextStatus: 'approved_pm',     colBy: 'approved_pm_by',     colAt: 'approved_pm_at',     sigCol: 'pm_sig_img',     label: 'Project Manager',    allowedRoles: ['project_manager', 'pm', 'project_head'], legacyPrev: ['verified_tower'] },
-  { id: 'approve-mgmt',   nextStatus: 'approved_mgmt',   colBy: 'approved_mgmt_by',   colAt: 'approved_mgmt_at',   sigCol: 'mgmt_sig_img',   label: 'Project Director',   allowedRoles: ['project_head', 'director', 'project_director', 'management', 'management_director'], legacyPrev: ['approved_srpm'] },
-  { id: 'approve-md',     nextStatus: 'approved_md',     colBy: 'approved_md_by',     colAt: 'approved_md_at',     sigCol: 'md_sig_img',     label: 'Managing Director',  allowedRoles: ['managing_director', 'md', 'ceo'] },
-];
-
-// Roles that can bypass stage role restrictions (system admins)
-const GLOBAL_ADMIN_ROLES = ['admin', 'super_admin'];
-const DEFAULT_STAGE_IDS = ALL_STAGES.map(s => s.id);
-
-/* Build a dynamic chain for a given list of enabled stage IDs.
-   Returns an object keyed by stageId → { nextStatus, requiredPrev, colBy, colAt, sigCol }
-*/
-function buildChain(enabledStageIds) {
-  const normalizedIds = normalizeStageIds(enabledStageIds);
-  const enabled = ALL_STAGES.filter(s => normalizedIds.includes(s.id));
-  const chain = {};
-  enabled.forEach((stage, i) => {
-    chain[stage.id] = {
-      ...stage,
-      requiredPrev: i === 0 ? 'pending' : enabled[i - 1].nextStatus,
-    };
-  });
-  return chain;
-}
-
-function normalizeStageIds(stageIds) {
-  if (!Array.isArray(stageIds) || !stageIds.length) return DEFAULT_STAGE_IDS;
-  const valid = new Set(DEFAULT_STAGE_IDS);
-  const normalized = stageIds.filter(id => valid.has(id));
-  return normalized.length ? normalized : DEFAULT_STAGE_IDS;
-}
+const {
+  ALL_STAGES, GLOBAL_ADMIN_ROLES, DEFAULT_STAGE_IDS,
+  normalizeStageIds, buildChain,
+} = require('../constants/mrsApprovalStages');
 
 /* Load project workflow from DB — returns array of stage IDs (or default = all) */
 async function getProjectWorkflow(projectId) {

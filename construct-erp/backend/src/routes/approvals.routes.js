@@ -84,31 +84,24 @@ const ROLE = r => String(r.user.role || '').toLowerCase();
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-// Which MRS statuses need action from this role?
-function mrsStatusesForRole(role) {
-  const r = (role || '').toLowerCase();
-  if (['admin', 'super_admin'].includes(r))
-    return ['pending', 'stores_verified', 'verified_tower', 'approved_pm', 'approved_srpm', 'approved_mgmt'];
-  if (['stores_manager', 'store_keeper'].includes(r))
-    return ['pending'];
-  if (['project_manager', 'pm', 'project_head'].includes(r))
-    return ['stores_verified', 'verified_tower'];
-  if (['director', 'project_director', 'management', 'management_director'].includes(r))
-    return ['approved_pm', 'approved_srpm'];
-  if (['managing_director', 'md', 'ceo'].includes(r))
-    return ['approved_mgmt'];
-  return [];
-}
+// MRS stage chain is PER-PROJECT (projects.mrs_workflow.stages picks a subset of
+// the 4 possible stages — e.g. a project with no Project Director appointed skips
+// straight from Project Manager to Managing Director). A role-only status list
+// like the old mrsStatusesForRole()/MRS_STAGE_MAP hardcoded the 4-stage default,
+// which silently stranded MRS items on 3-stage projects at a status (approved_mgmt)
+// that stage no longer exists for, and no user's role could ever act on. Both the
+// listing feed and the approve action below must resolve the next stage from each
+// MRS's own project workflow instead. Shared with routes/mrs.routes.js via
+// constants/mrsApprovalStages — keep both usages pointed at that file.
+const { nextStageForStatus, normalizeStageIds, GLOBAL_ADMIN_ROLES } = require('../constants/mrsApprovalStages');
+const MRS_NON_TERMINAL_STATUSES = ['pending', 'stores_verified', 'verified_tower', 'approved_pm', 'approved_srpm', 'approved_mgmt'];
 
-// Status → next approval step
-const MRS_STAGE_MAP = {
-  'pending':         { nextStatus: 'stores_verified', colBy: 'stores_approved_by', colAt: 'stores_approved_at', label: 'Store Manager' },
-  'stores_verified': { nextStatus: 'approved_pm',     colBy: 'approved_pm_by',     colAt: 'approved_pm_at',     label: 'Project Manager' },
-  'verified_tower':  { nextStatus: 'approved_pm',     colBy: 'approved_pm_by',     colAt: 'approved_pm_at',     label: 'Project Manager' },
-  'approved_pm':     { nextStatus: 'approved_mgmt',   colBy: 'approved_mgmt_by',   colAt: 'approved_mgmt_at',   label: 'Project Director' },
-  'approved_srpm':   { nextStatus: 'approved_mgmt',   colBy: 'approved_mgmt_by',   colAt: 'approved_mgmt_at',   label: 'Project Director' },
-  'approved_mgmt':   { nextStatus: 'approved_md',     colBy: 'approved_md_by',     colAt: 'approved_md_at',     label: 'Managing Director' },
-};
+// Does `role` match one of a stage's allowedRoles (or is it a global admin)?
+function roleMatchesStage(role, stage) {
+  if (!stage) return false;
+  const r = (role || '').toLowerCase();
+  return GLOBAL_ADMIN_ROLES.includes(r) || stage.allowedRoles.includes(r);
+}
 
 // Which SC bill stages can this role act on, AND which current_stage values belong to them?
 // stageNames: the sc_bills.current_stage label(s) this role owns.
@@ -414,33 +407,47 @@ router.get('/pending', async (req, res) => {
     } catch (woErr) { console.error('[approvals WO feed]:', woErr.message); }
 
     // ── 8. MRS — Material Requisitions pending each role's approval ─────────────
+    // Fetches every non-terminal MRS (any status short of fully-approved/rejected)
+    // along with its project's mrs_workflow, then resolves per-item which stage
+    // (and role) is next via nextStageForStatus() — NOT a static role→status map —
+    // so a 3-stage project (skips Project Director) correctly routes an
+    // 'approved_pm' item straight to the MD instead of stranding it.
     try {
-      const mrsStatuses = mrsStatusesForRole(role);
-      if (mrsStatuses.length) {
-        const ph = mrsStatuses.map((_, i) => `$${i + 2}`).join(',');
-        const r = await query(`
-          SELECT mr.id,
-                 COALESCE(mr.serial_no_formatted, mr.mrs_number) AS ref_no,
-                 mr.created_at AS doc_date,
-                 0 AS amount,
-                 mr.status,
-                 mr.created_at,
-                 mr.status AS current_stage,
-                 p.name AS project_name,
-                 p.name AS party_name,
-                 u.name AS submitted_by,
-                 CONCAT(
-                   (SELECT COUNT(*)::text FROM mrs_items mi WHERE mi.mrs_id = mr.id),
-                   ' items • ', UPPER(COALESCE(mr.priority, 'normal'))
-                 ) AS extra_info,
-                 'MRS' AS doc_type, 'mrs' AS entity_type,
-                 '/stores/mrs?view=' || mr.id::text AS action_url
-          FROM material_requisitions mr
-          JOIN projects p ON p.id = mr.project_id
-          LEFT JOIN users u ON u.id = mr.raised_by
-          WHERE p.company_id = $1 AND mr.status IN (${ph})
-          ORDER BY mr.created_at ASC`, [cid, ...mrsStatuses]);
-        items.push(...r.rows);
+      const ph = MRS_NON_TERMINAL_STATUSES.map((_, i) => `$${i + 2}`).join(',');
+      const r = await query(`
+        SELECT mr.id,
+               COALESCE(mr.serial_no_formatted, mr.mrs_number) AS ref_no,
+               mr.created_at AS doc_date,
+               0 AS amount,
+               mr.status,
+               mr.created_at,
+               mr.status AS current_stage,
+               p.name AS project_name,
+               p.name AS party_name,
+               p.mrs_workflow,
+               u.name AS submitted_by,
+               CONCAT(
+                 (SELECT COUNT(*)::text FROM mrs_items mi WHERE mi.mrs_id = mr.id),
+                 ' items • ', UPPER(COALESCE(mr.priority, 'normal'))
+               ) AS extra_info,
+               'MRS' AS doc_type, 'mrs' AS entity_type,
+               '/stores/mrs?view=' || mr.id::text AS action_url
+        FROM material_requisitions mr
+        JOIN projects p ON p.id = mr.project_id
+        LEFT JOIN users u ON u.id = mr.raised_by
+        WHERE p.company_id = $1 AND mr.status IN (${ph})
+        ORDER BY mr.created_at ASC`, [cid, ...MRS_NON_TERMINAL_STATUSES]);
+
+      for (const row of r.rows) {
+        const enabledIds = normalizeStageIds(row.mrs_workflow?.stages);
+        const stage = nextStageForStatus(enabledIds, row.status);
+        if (!roleMatchesStage(role, stage)) continue;
+        // The project's own workflow decides the real next approver — a 3-stage
+        // project (no Project Director) sends 'approved_pm' straight to the MD,
+        // so the label must come from this stage lookup, not a static status map.
+        row.next_stage_label = `Awaiting ${stage.label}`;
+        delete row.mrs_workflow;
+        items.push(row);
       }
     } catch (e) { console.error('[approvals/pending] MRS feed failed:', e.message); }
 
@@ -498,6 +505,7 @@ router.post('/action', async (req, res) => {
     const uid   = UID(req);
     const uname = req.user.name;
     const now   = new Date().toISOString();
+    const role  = ROLE(req);
 
     switch (entity_type) {
 
@@ -623,9 +631,9 @@ router.post('/action', async (req, res) => {
       }
 
       case 'mrs': {
-        // Fetch MRS (join projects for company_id check)
+        // Fetch MRS (join projects for company_id check + its own mrs_workflow)
         const mrRes = await query(
-          `SELECT mr.*, p.company_id AS proj_company_id, p.name AS project_name
+          `SELECT mr.*, p.company_id AS proj_company_id, p.name AS project_name, p.mrs_workflow
            FROM material_requisitions mr
            JOIN projects p ON p.id = mr.project_id
            WHERE mr.id = $1`,
@@ -635,8 +643,12 @@ router.post('/action', async (req, res) => {
         const mr = mrRes.rows[0];
 
         if (action === 'approve') {
-          const stageInfo = MRS_STAGE_MAP[mr.status];
+          const enabledIds = normalizeStageIds(mr.mrs_workflow?.stages);
+          const stageInfo = nextStageForStatus(enabledIds, mr.status);
           if (!stageInfo) return res.status(400).json({ error: `MRS at status "${mr.status}" cannot be approved from this page` });
+          if (!roleMatchesStage(role, stageInfo)) {
+            return res.status(403).json({ error: `Only a ${stageInfo.label} can approve this stage. Your role (${req.user.role}) is not authorised.` });
+          }
           await query(
             `UPDATE material_requisitions
              SET status = $1, ${stageInfo.colBy} = $2, ${stageInfo.colAt} = NOW(),
