@@ -2590,28 +2590,98 @@ router.get('/nmr/:id/preview', async (req, res) => {
       attMap[key] = a;
     }
 
-    // Build matrix — man-days and wages come from each attendance row's own
-    // hours_worked/wage_amount (already correct for both daily-rate workers,
-    // where hours_worked defaults to 8, and hour-basis workers with variable
-    // shift lengths), NOT re-derived from daily_rate x "was present that day".
-    // A flat day-count silently mis-costs anyone not on an exact 8hr shift.
+    // --- Build the WO contracted-rate lookup, per skill type ---------------
+    // The muster roll must read the same way the bill does: regular hours
+    // (capped at 8/day) billed as man-days against the WO's DAY line item,
+    // and hours beyond 8 billed as overtime against the WO's HOURS line item.
+    // Pricing here uses the WO's contracted rate, not sc_workers.daily_rate
+    // (the subcontractor's own payroll rate), which is informational only.
+    const woItemsR = await query(
+      `SELECT * FROM sc_wo_items WHERE wo_id=$1 ORDER BY sequence_no`, [n.wo_id]);
+
+    // Skill-wise regular/OT hour totals, same shape matchWOItemsToSkills expects
+    const skillTotals = {};
+    const workerSkill = {};
+    for (const w of workers.rows) workerSkill[w.id] = w.skill_type;
+    for (const a of attendance.rows) {
+      const s = workerSkill[a.worker_id];
+      if (!s) continue;
+      if (!skillTotals[s]) skillTotals[s] = { skill_type: s, total_hours: 0, total_ot_hours: 0, total_wages: 0 };
+      skillTotals[s].total_hours    += parseFloat(a.hours_worked)     || 0;
+      skillTotals[s].total_ot_hours += parseFloat(a.overtime_hours)   || 0;
+      skillTotals[s].total_wages    += (parseFloat(a.wage_amount)||0) + (parseFloat(a.overtime_amount)||0);
+    }
+    const skillGroups = Object.values(skillTotals);
+
+    // skill_type → { day_rate, day_item, ot_rate, ot_item }
+    const rateBySkill = {};
+    const woSummary   = [];
+    if (woItemsR.rows.length && skillGroups.length) {
+      const isHourUnit = u => /^hr/i.test(u || '') || /hour/i.test(u || '');
+      const { matches } = matchWOItemsToSkills(woItemsR.rows, skillGroups);
+      for (const m of matches) {
+        const hourly = isHourUnit(m.item.unit);
+        for (const s of m.skills) {
+          if (!rateBySkill[s.skill_type]) rateBySkill[s.skill_type] = {};
+          if (hourly) {
+            rateBySkill[s.skill_type].ot_rate = m.rate;
+            rateBySkill[s.skill_type].ot_item = m.item.description;
+          } else {
+            rateBySkill[s.skill_type].day_rate = m.rate;
+            rateBySkill[s.skill_type].day_item = m.item.description;
+          }
+        }
+        woSummary.push({
+          description: m.item.description,
+          unit:        m.item.unit,
+          basis:       hourly ? 'overtime' : 'regular',
+          skills:      m.skills.map(s => s.skill_type),
+          qty:         m.netQty,
+          rate:        m.rate,
+          amount:      m.wage,
+        });
+      }
+    }
+
+    // --- Build matrix -------------------------------------------------------
+    // Regular man-days come from hours_worked/8 (hours_worked is the ≤8hr
+    // portion); overtime is tracked and priced separately.
     const matrix = workers.rows.map(w => {
-      let mandays = 0, overtimeHours = 0, wages = 0;
+      let regHours = 0, overtimeHours = 0;
       const days = dates.map(date => {
-        const key = `${w.id}_${date}`;
-        const att = attMap[key];
+        const att = attMap[`${w.id}_${date}`];
         const status = att ? att.status : null; // null = no record
         if (att) {
-          mandays += (parseFloat(att.hours_worked) || 0) / 8;
-          wages += (parseFloat(att.wage_amount) || 0) + (parseFloat(att.overtime_amount) || 0);
-          if (att.overtime_hours > 0) overtimeHours += parseFloat(att.overtime_hours);
+          regHours      += parseFloat(att.hours_worked)   || 0;
+          overtimeHours += parseFloat(att.overtime_hours) || 0;
         }
         return { date, status, hours: att?.hours_worked||null, ot: att?.overtime_hours||null };
       });
-      return { ...w, days, mandays: parseFloat(mandays.toFixed(2)), overtime_hours: overtimeHours, total_wages: parseFloat(wages.toFixed(2)) };
+
+      const r        = rateBySkill[w.skill_type] || {};
+      const mandays  = parseFloat((regHours / 8).toFixed(3));
+      const dayRate  = parseFloat(r.day_rate || 0);
+      const otRate   = parseFloat(r.ot_rate  || 0);
+      const dayWages = parseFloat((mandays       * dayRate).toFixed(2));
+      const otWages  = parseFloat((overtimeHours * otRate ).toFixed(2));
+
+      return {
+        ...w, days,
+        is_skilled:     NMR_SKILLED_TRADES.includes(w.skill_type),
+        regular_hours:  parseFloat(regHours.toFixed(2)),
+        mandays,
+        overtime_hours: parseFloat(overtimeHours.toFixed(2)),
+        wo_day_rate:    dayRate,
+        wo_ot_rate:     otRate,
+        wo_day_item:    r.day_item || null,
+        wo_ot_item:     r.ot_item  || null,
+        day_wages:      dayWages,
+        ot_wages:       otWages,
+        total_wages:    parseFloat((dayWages + otWages).toFixed(2)),
+      };
     });
 
-    res.json({ data: { nmr: n, dates, workers: matrix } });
+    res.json({ data: { nmr: n, dates, workers: matrix, wo_summary: woSummary } });
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 

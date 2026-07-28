@@ -245,7 +245,35 @@ function NMRDrawer({ nmrId, onClose }) {
   const nmr     = raw?.nmr;
   const dates   = raw?.dates || [];
   const workers = raw?.workers || [];
+  const woSummary = raw?.wo_summary || [];
   const sm      = NMR_STATUS[nmr?.status] || NMR_STATUS.draft;
+
+  // Split the roll into Skilled / Unskilled sections, each with its own
+  // subtotals, so the muster roll reads the same way the WO is priced.
+  const sections = useMemo(() => {
+    const mk = (label, rows, accent) => ({
+      label, rows, accent,
+      mandays:  rows.reduce((s, w) => s + Number(w.mandays || 0), 0),
+      otHours:  rows.reduce((s, w) => s + Number(w.overtime_hours || 0), 0),
+      dayWages: rows.reduce((s, w) => s + Number(w.day_wages || 0), 0),
+      otWages:  rows.reduce((s, w) => s + Number(w.ot_wages || 0), 0),
+      total:    rows.reduce((s, w) => s + Number(w.total_wages || 0), 0),
+    });
+    const out = [];
+    const skilled   = workers.filter(w => w.is_skilled);
+    const unskilled = workers.filter(w => !w.is_skilled);
+    if (skilled.length)   out.push(mk('Skilled',   skilled,   'emerald'));
+    if (unskilled.length) out.push(mk('Unskilled', unskilled, 'blue'));
+    return out;
+  }, [workers]);
+
+  const grand = useMemo(() => ({
+    mandays:  sections.reduce((s, g) => s + g.mandays,  0),
+    otHours:  sections.reduce((s, g) => s + g.otHours,  0),
+    dayWages: sections.reduce((s, g) => s + g.dayWages, 0),
+    otWages:  sections.reduce((s, g) => s + g.otWages,  0),
+    total:    sections.reduce((s, g) => s + g.total,    0),
+  }), [sections]);
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -274,20 +302,68 @@ function NMRDrawer({ nmrId, onClose }) {
             <div className="space-y-3">{[1,2,3].map(n => <div key={n} className="h-16 bg-slate-100 rounded-xl animate-pulse" />)}</div>
           ) : nmr && (
             <>
-              {/* Summary cards */}
-              <div className="grid grid-cols-4 gap-3">
+              {/* Summary cards — regular vs overtime split, priced at WO rates */}
+              <div className="grid grid-cols-5 gap-3">
                 {[
-                  { l: 'Total Workers',  v: nmr.total_workers, color: 'text-blue-700' },
-                  { l: 'Total Man-days', v: nmr.total_mandays, color: 'text-indigo-700' },
-                  { l: 'Skilled Wages',  v: fmt(nmr.skilled_wages),   color: 'text-emerald-700' },
-                  { l: 'Total Wages',    v: fmt(nmr.total_wages),     color: 'text-orange-700', big: true },
-                ].map(({ l, v, color, big }) => (
+                  { l: 'Total Workers',     v: nmr.total_workers,                          color: 'text-blue-700' },
+                  { l: 'Regular Man-days',  v: grand.mandays.toFixed(2),                   color: 'text-indigo-700', sub: '≤ 8 hrs/day' },
+                  { l: 'Overtime Hours',    v: grand.otHours.toFixed(1),                   color: 'text-amber-700',  sub: '> 8 hrs/day' },
+                  { l: 'Day Wages',         v: fmt(grand.dayWages),                        color: 'text-emerald-700' },
+                  { l: 'Total Wages',       v: fmt(grand.total || nmr.total_wages),        color: 'text-orange-700', big: true, sub: `incl. ${fmt(grand.otWages)} OT` },
+                ].map(({ l, v, color, big, sub }) => (
                   <div key={l} className={clsx('border rounded-xl p-3', big ? 'border-orange-200 bg-orange-50' : 'border-slate-100 bg-white')}>
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{l}</p>
                     <p className={clsx('font-bold', big ? 'text-xl' : 'text-lg', color)}>{v}</p>
+                    {sub && <p className="text-[9px] text-slate-400 mt-0.5">{sub}</p>}
                   </div>
                 ))}
               </div>
+
+              {/* WO line items this NMR bills against */}
+              {woSummary.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                    Billing Against Work Order BOQ
+                  </p>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          {['#','Description','Basis','Trades','Unit','Qty','Rate','Amount'].map((h,i) => (
+                            <th key={h} className={clsx('px-3 py-2 font-bold text-slate-500 uppercase tracking-wider text-[9px]',
+                              i >= 5 ? 'text-right' : 'text-left')}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {woSummary.map((r, i) => (
+                          <tr key={i} className={clsx('border-t border-slate-100', i % 2 ? 'bg-slate-50/40' : 'bg-white')}>
+                            <td className="px-3 py-2 text-slate-400">{i+1}</td>
+                            <td className="px-3 py-2 font-semibold text-slate-800">{r.description}</td>
+                            <td className="px-3 py-2">
+                              <span className={clsx('px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide',
+                                r.basis === 'overtime' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700')}>
+                                {r.basis === 'overtime' ? 'Overtime' : 'Regular (1 day = 8 hrs)'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-slate-500">{(r.skills || []).join(', ')}</td>
+                            <td className="px-3 py-2 text-slate-500 uppercase text-[10px]">{r.unit}</td>
+                            <td className="px-3 py-2 text-right font-bold text-slate-700 tabular-nums">{Number(r.qty).toLocaleString('en-IN')}</td>
+                            <td className="px-3 py-2 text-right text-slate-600 tabular-nums">₹{Number(r.rate).toFixed(2)}</td>
+                            <td className="px-3 py-2 text-right font-bold text-emerald-700 tabular-nums">{fmt(r.amount)}</td>
+                          </tr>
+                        ))}
+                        <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
+                          <td className="px-3 py-2.5 text-slate-700" colSpan={7}>GROSS</td>
+                          <td className="px-3 py-2.5 text-right text-orange-700 text-sm tabular-nums">
+                            {fmt(woSummary.reduce((s,r) => s + Number(r.amount||0), 0))}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {/* Worker-Day Matrix — the actual muster roll */}
               <div>
@@ -307,45 +383,96 @@ function NMRDrawer({ nmrId, onClose }) {
                               <div style={{ fontSize: 9 }}>{dayjs(d).format('D')}</div>
                             </th>
                           ))}
-                          <th className="px-2 py-2 text-center text-white/80 whitespace-nowrap">Days</th>
-                          <th className="px-2 py-2 text-center text-white/80 whitespace-nowrap">OT hrs</th>
-                          <th className="px-3 py-2 text-right text-white/80 whitespace-nowrap">Total Wages</th>
+                          <th className="px-2 py-2 text-center text-white/80 whitespace-nowrap border-l border-white/20">
+                            <div>Reg Days</div><div style={{ fontSize: 8 }}>≤8 hrs</div>
+                          </th>
+                          <th className="px-2 py-2 text-right text-white/80 whitespace-nowrap">Day ₹</th>
+                          <th className="px-2 py-2 text-center text-white/80 whitespace-nowrap border-l border-white/20">
+                            <div>OT Hrs</div><div style={{ fontSize: 8 }}>&gt;8 hrs</div>
+                          </th>
+                          <th className="px-2 py-2 text-right text-white/80 whitespace-nowrap">OT ₹</th>
+                          <th className="px-3 py-2 text-right text-white/80 whitespace-nowrap border-l border-white/20">Total</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {workers.map((w, i) => (
-                          <tr key={w.worker_id || i} className={clsx('border-t border-slate-100', i % 2 === 0 ? 'bg-white' : 'bg-slate-50/30')}>
-                            <td className="px-3 py-2 sticky left-0 z-10 bg-inherit">
-                              <p className="font-semibold text-slate-800 whitespace-nowrap">{w.worker_name}</p>
-                              <p className="text-[10px] font-mono text-slate-400">{w.worker_code}</p>
-                            </td>
-                            <td className="px-2 py-2 whitespace-nowrap">
-                              <p className="text-slate-600">{w.skill_type}</p>
-                              <p className="text-[10px] font-bold text-blue-600">₹{Number(w.daily_rate).toLocaleString()}/day</p>
-                            </td>
-                            {w.days.map(day => {
-                              const st = day.status;
-                              const bg = st ? ATT_CELL_BG[st] : 'text-slate-400';
-                              return (
-                                <td key={day.date} className="px-1 py-2 text-center">
-                                  <span className={clsx('inline-block w-7 h-6 rounded text-[10px] font-bold flex items-center justify-center', bg || 'text-slate-400')}>
-                                    {st ? ATT_CELL[st] : '–'}
-                                  </span>
+                        {sections.map(g => (
+                          <React.Fragment key={g.label}>
+                            {/* Section header — Skilled / Unskilled */}
+                            <tr className={clsx('border-t-2', g.accent === 'emerald'
+                              ? 'bg-emerald-50 border-emerald-300' : 'bg-blue-50 border-blue-300')}>
+                              <td className={clsx('px-3 py-1.5 sticky left-0 z-10 font-bold uppercase tracking-widest text-[10px]',
+                                g.accent === 'emerald' ? 'bg-emerald-50 text-emerald-800' : 'bg-blue-50 text-blue-800')}
+                                colSpan={2}>
+                                {g.label} · {g.rows.length} worker{g.rows.length !== 1 ? 's' : ''}
+                              </td>
+                              <td colSpan={dates.length + 5} />
+                            </tr>
+
+                            {g.rows.map((w, i) => (
+                              <tr key={w.id || w.worker_id || i} className={clsx('border-t border-slate-100', i % 2 === 0 ? 'bg-white' : 'bg-slate-50/30')}>
+                                <td className="px-3 py-2 sticky left-0 z-10 bg-inherit">
+                                  <p className="font-semibold text-slate-800 whitespace-nowrap">{w.worker_name}</p>
+                                  <p className="text-[10px] font-mono text-slate-400">{w.worker_code}</p>
                                 </td>
-                              );
-                            })}
-                            <td className="px-2 py-2 text-center font-bold text-indigo-700">{w.mandays}</td>
-                            <td className="px-2 py-2 text-center text-slate-600">{w.overtime_hours > 0 ? w.overtime_hours : '—'}</td>
-                            <td className="px-3 py-2 text-right font-bold text-emerald-700">{fmt(w.total_wages)}</td>
-                          </tr>
+                                <td className="px-2 py-2 whitespace-nowrap">
+                                  <p className="text-slate-600">{w.skill_type}</p>
+                                  <p className="text-[10px] font-bold text-indigo-600">
+                                    ₹{Number(w.wo_day_rate || 0).toFixed(0)}/day
+                                    {w.wo_ot_rate > 0 && (
+                                      <span className="text-amber-600"> · ₹{Number(w.wo_ot_rate).toFixed(2)}/hr</span>
+                                    )}
+                                  </p>
+                                </td>
+                                {w.days.map(day => {
+                                  const st = day.status;
+                                  const bg = st ? ATT_CELL_BG[st] : 'text-slate-400';
+                                  const otDay = Number(day.ot || 0) > 0;
+                                  return (
+                                    <td key={day.date} className="px-1 py-2 text-center">
+                                      <span
+                                        title={st ? `${day.hours || 0} hrs${otDay ? ` + ${day.ot} OT` : ''}` : 'No record'}
+                                        className={clsx('inline-block w-7 h-6 rounded text-[10px] font-bold flex items-center justify-center',
+                                          bg || 'text-slate-400', otDay && 'ring-1 ring-amber-400')}>
+                                        {st ? ATT_CELL[st] : '–'}
+                                      </span>
+                                    </td>
+                                  );
+                                })}
+                                <td className="px-2 py-2 text-center font-bold text-indigo-700 tabular-nums border-l border-slate-200">{Number(w.mandays).toFixed(2)}</td>
+                                <td className="px-2 py-2 text-right text-slate-700 tabular-nums">{fmt(w.day_wages)}</td>
+                                <td className="px-2 py-2 text-center font-bold text-amber-700 tabular-nums border-l border-slate-200">{w.overtime_hours > 0 ? Number(w.overtime_hours).toFixed(1) : '—'}</td>
+                                <td className="px-2 py-2 text-right text-amber-700 tabular-nums">{w.ot_wages > 0 ? fmt(w.ot_wages) : '—'}</td>
+                                <td className="px-3 py-2 text-right font-bold text-emerald-700 tabular-nums border-l border-slate-200">{fmt(w.total_wages)}</td>
+                              </tr>
+                            ))}
+
+                            {/* Section subtotal */}
+                            <tr className={clsx('border-t font-bold',
+                              g.accent === 'emerald' ? 'bg-emerald-50/60 border-emerald-200' : 'bg-blue-50/60 border-blue-200')}>
+                              <td className={clsx('px-3 py-2 sticky left-0 z-10 text-[11px]',
+                                g.accent === 'emerald' ? 'bg-emerald-50 text-emerald-800' : 'bg-blue-50 text-blue-800')}
+                                colSpan={2}>
+                                {g.label} Subtotal
+                              </td>
+                              {dates.map(d => <td key={d} />)}
+                              <td className="px-2 py-2 text-center text-indigo-700 tabular-nums border-l border-slate-200">{g.mandays.toFixed(2)}</td>
+                              <td className="px-2 py-2 text-right text-slate-700 tabular-nums">{fmt(g.dayWages)}</td>
+                              <td className="px-2 py-2 text-center text-amber-700 tabular-nums border-l border-slate-200">{g.otHours.toFixed(1)}</td>
+                              <td className="px-2 py-2 text-right text-amber-700 tabular-nums">{fmt(g.otWages)}</td>
+                              <td className="px-3 py-2 text-right text-emerald-700 tabular-nums border-l border-slate-200">{fmt(g.total)}</td>
+                            </tr>
+                          </React.Fragment>
                         ))}
-                        {/* Total row */}
-                        <tr className="border-t-2 border-slate-400 bg-slate-50 font-bold">
-                          <td className="px-3 py-2.5 sticky left-0 bg-slate-50" colSpan={2}>TOTAL</td>
+
+                        {/* Grand total row */}
+                        <tr className="border-t-2 border-slate-400 bg-slate-100 font-bold">
+                          <td className="px-3 py-2.5 sticky left-0 bg-slate-100" colSpan={2}>GRAND TOTAL</td>
                           {dates.map(d => <td key={d} />)}
-                          <td className="px-2 py-2.5 text-center text-indigo-700 text-sm">{nmr.total_mandays}</td>
-                          <td />
-                          <td className="px-3 py-2.5 text-right text-orange-700 text-base">{fmt(nmr.total_wages)}</td>
+                          <td className="px-2 py-2.5 text-center text-indigo-700 text-sm tabular-nums border-l border-slate-300">{grand.mandays.toFixed(2)}</td>
+                          <td className="px-2 py-2.5 text-right text-slate-800 tabular-nums">{fmt(grand.dayWages)}</td>
+                          <td className="px-2 py-2.5 text-center text-amber-700 text-sm tabular-nums border-l border-slate-300">{grand.otHours.toFixed(1)}</td>
+                          <td className="px-2 py-2.5 text-right text-amber-700 tabular-nums">{fmt(grand.otWages)}</td>
+                          <td className="px-3 py-2.5 text-right text-orange-700 text-base tabular-nums border-l border-slate-300">{fmt(grand.total)}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -362,6 +489,11 @@ function NMRDrawer({ nmrId, onClose }) {
                     <span className="text-[11px] text-slate-500">{label}</span>
                   </div>
                 ))}
+                <div className="flex items-center gap-1">
+                  <span className="inline-flex w-6 h-5 rounded text-[10px] font-bold items-center justify-center bg-emerald-100 text-emerald-800 ring-1 ring-amber-400">P</span>
+                  <span className="text-[11px] text-slate-500">Worked &gt; 8 hrs (has OT)</span>
+                </div>
+                <span className="text-[11px] text-slate-400 italic">Hover any cell for hours worked</span>
               </div>
 
               {/* Approval actions */}
