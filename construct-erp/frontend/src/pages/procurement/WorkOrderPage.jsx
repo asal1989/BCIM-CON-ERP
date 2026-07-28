@@ -1968,12 +1968,12 @@ export default function WorkOrderPage() {
         {/* ── KPI Cards ── */}
         {(() => {
           const kpiStats = [
-            { key: '',           label: 'Work Orders',     count: allWOs.length,            icon: FileText,    iconBg: 'bg-indigo-50', iconText: 'text-indigo-600' },
-            { key: '__value__',  label: 'Contract Value',  value: `₹${(totalValue/100000).toFixed(1)}L`, icon: IndianRupee, iconBg: 'bg-blue-50',    iconText: 'text-blue-600' },
-            { key: 'active',     label: 'Active',          count: activeWOs.length,         icon: Activity,    iconBg: 'bg-teal-50',   iconText: 'text-teal-600'   },
-            { key: '__pending__',label: 'Pending Approval',count: pendingApproval.length,   icon: Clock,       iconBg: 'bg-amber-50',  iconText: 'text-amber-600'  },
-            { key: '__expire__', label: 'Expiring Soon',   count: expiringSoon.length,      icon: AlertCircle, iconBg: 'bg-orange-50', iconText: 'text-orange-500' },
-            { key: 'completed',  label: overdueWOs.length > 0 ? 'Overdue' : 'Completed', count: overdueWOs.length > 0 ? overdueWOs.length : completedWOs.length, icon: overdueWOs.length > 0 ? XCircle : CheckCircle2, iconBg: overdueWOs.length > 0 ? 'bg-red-50' : 'bg-emerald-50', iconText: overdueWOs.length > 0 ? 'text-red-500' : 'text-emerald-600' },
+            { key: '',           label: 'Work Orders',     count: allWOs.length,            icon: FileText,    accent: 'bg-indigo-500', iconBg: 'bg-indigo-50', iconText: 'text-indigo-600' },
+            { key: '__value__',  label: 'Contract Value',  value: `₹${(totalValue/100000).toFixed(1)}L`, icon: IndianRupee, accent: 'bg-blue-500', iconBg: 'bg-blue-50',    iconText: 'text-blue-600' },
+            { key: 'active',     label: 'Active',          count: activeWOs.length,         icon: Activity,    accent: 'bg-teal-500', iconBg: 'bg-teal-50',   iconText: 'text-teal-600'   },
+            { key: '__pending__',label: 'Pending Approval',count: pendingApproval.length,   icon: Clock,       accent: 'bg-amber-500', iconBg: 'bg-amber-50',  iconText: 'text-amber-600'  },
+            { key: '__expire__', label: 'Expiring Soon',   count: expiringSoon.length,      icon: AlertCircle, accent: 'bg-orange-500', iconBg: 'bg-orange-50', iconText: 'text-orange-500' },
+            { key: 'completed',  label: overdueWOs.length > 0 ? 'Overdue' : 'Completed', count: overdueWOs.length > 0 ? overdueWOs.length : completedWOs.length, icon: overdueWOs.length > 0 ? XCircle : CheckCircle2, accent: overdueWOs.length > 0 ? 'bg-red-500' : 'bg-emerald-500', iconBg: overdueWOs.length > 0 ? 'bg-red-50' : 'bg-emerald-50', iconText: overdueWOs.length > 0 ? 'text-red-500' : 'text-emerald-600' },
           ];
           const isClickable = s => s.key !== '__value__' && s.key !== '__expire__';
           const isActive = s => filterStatus === s.key || (s.key === '' && !filterStatus) || (s.key === '__pending__' && filterStatus === 'pending');
@@ -1988,57 +1988,58 @@ export default function WorkOrderPage() {
               {kpiStats.map(s => (
                 <button key={s.key} onClick={() => handleKpiClick(s)}
                   className={clsx(
-                    'bg-white border rounded-xl p-4 shadow-sm text-left transition-colors',
-                    isClickable(s) ? 'cursor-pointer' : 'cursor-default',
+                    'relative overflow-hidden bg-white border rounded-xl pl-5 pr-4 py-4 shadow-sm text-left transition-all',
+                    isClickable(s) ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5' : 'cursor-default',
                     isActive(s) ? 'border-indigo-400 ring-1 ring-indigo-100' : 'border-slate-200 hover:border-slate-300'
                   )}>
+                  <div className={clsx('absolute left-0 top-0 bottom-0 w-1', s.accent)} />
                   <div className="flex items-center justify-between mb-3">
-                    <div className={clsx('w-8 h-8 rounded-md flex items-center justify-center', s.iconBg)}>
+                    <div className={clsx('w-9 h-9 rounded-lg flex items-center justify-center', s.iconBg)}>
                       <s.icon className={clsx('w-4 h-4', s.iconText)} />
                     </div>
+                    {isActive(s) && isClickable(s) && <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />}
                   </div>
-                  <div className="text-2xl font-semibold text-slate-800">{s.value ?? s.count}</div>
-                  <div className="text-xs text-slate-400 mt-0.5">{s.label}</div>
+                  <div className="text-2xl font-bold text-slate-800 tabular-nums">{s.value ?? s.count}</div>
+                  <div className="text-xs text-slate-400 mt-0.5 font-medium">{s.label}</div>
                 </button>
               ))}
             </div>
           );
         })()}
 
-        {/* ── Series Filter Pills ── */}
-        <div className="flex items-center gap-1.5">
-          {[['', 'All Series'], ['WOTQS', 'WOTQS — TQS'], ['WODQS', 'WODQS — DQS']].map(([val, lbl]) => (
-            <button key={val} onClick={() => setFilterSeries(val)}
-              className={clsx(
-                'px-3 h-7 rounded-full text-[11px] font-semibold whitespace-nowrap transition-all border',
-                filterSeries === val
-                  ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                  : 'bg-white text-slate-500 border-slate-200 hover:border-amber-400 hover:text-amber-600'
-              )}>
-              {lbl}
-            </button>
-          ))}
-        </div>
-
-        {/* ── Status Tabs ── */}
-        <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
-          {STATUS_TABS.map(tab => (
-            <button key={tab.key} onClick={() => setFilterStatus(tab.key)}
-              className={clsx(
-                'flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-semibold whitespace-nowrap transition-all border',
-                filterStatus === tab.key
-                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                  : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
-              )}>
-              {tab.label}
-              <span className={clsx(
-                'text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center',
-                filterStatus === tab.key ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
-              )}>{tab.count}</span>
-            </button>
-          ))}
-          <div className="flex-1" />
-          <button onClick={refresh} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all" title="Refresh">
+        {/* ── Filter Toolbar — series + status in one consistent strip ── */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-1 pr-3 border-r border-slate-200">
+            {[['', 'All Series'], ['WOTQS', 'WOTQS'], ['WODQS', 'WODQS']].map(([val, lbl]) => (
+              <button key={val} onClick={() => setFilterSeries(val)}
+                className={clsx(
+                  'px-2.5 h-8 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all border',
+                  filterSeries === val
+                    ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                    : 'bg-white text-slate-500 border-slate-200 hover:border-amber-400 hover:text-amber-600'
+                )}>
+                {lbl}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1 overflow-x-auto flex-1">
+            {STATUS_TABS.map(tab => (
+              <button key={tab.key} onClick={() => setFilterStatus(tab.key)}
+                className={clsx(
+                  'flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-semibold whitespace-nowrap transition-all border',
+                  filterStatus === tab.key
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
+                )}>
+                {tab.label}
+                <span className={clsx(
+                  'text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center',
+                  filterStatus === tab.key ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+                )}>{tab.count}</span>
+              </button>
+            ))}
+          </div>
+          <button onClick={refresh} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all flex-shrink-0" title="Refresh">
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -2125,7 +2126,7 @@ export default function WorkOrderPage() {
                     { label: 'Project',       key: 'project_name', w: 'w-[140px]' },
                     { label: 'Category',      key: 'category',     w: 'w-[110px]' },
                     { label: 'Period',        key: 'date',         w: 'w-[150px]' },
-                    { label: 'Contract Value',key: 'value',        w: 'w-[130px]' },
+                    { label: 'Value & Billed',key: 'value',        w: 'w-[140px]' },
                     { label: 'Status',        key: 'status',       w: 'w-[140px]' },
                     { label: '',              key: null,           w: 'w-[80px]' },
                   ].map(h => (
@@ -2174,7 +2175,15 @@ export default function WorkOrderPage() {
                                   <Hammer className={clsx('w-3 h-3', isOverdue ? 'text-red-500' : 'text-indigo-500')} />
                                 </div>
                                 <div>
-                                  <span className="font-bold font-mono text-indigo-700 text-[11px] group-hover:underline">{wo.wo_number}</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-bold font-mono text-indigo-700 text-[11px] group-hover:underline">{wo.wo_number}</span>
+                                    {Number(wo.amendment_count || 0) > 0 && (
+                                      <span title={`${wo.amendment_count} amendment${wo.amendment_count !== 1 ? 's' : ''}`}
+                                        className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 border border-violet-200 text-[9px] font-bold">
+                                        <GitBranch className="w-2 h-2" />{wo.amendment_count}
+                                      </span>
+                                    )}
+                                  </div>
                                   {wo.wo_date && <div className="text-[10px] text-slate-400 font-mono">{dayjs(wo.wo_date).format('DD-MM-YY')}</div>}
                                 </div>
                               </div>
@@ -2218,10 +2227,25 @@ export default function WorkOrderPage() {
                                 </div>
                               )}
                             </td>
-                            {/* Value */}
+                            {/* Value & Utilization */}
                             <td className="px-5 py-3.5 whitespace-nowrap">
                               <span className="font-bold font-mono text-slate-800 text-xs">₹{inr(wo.total_value)}</span>
-                              {wo.cost_head && <div className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[120px]">{wo.cost_head}</div>}
+                              {(() => {
+                                const val    = Number(wo.total_value || 0);
+                                const billed = Number(wo.total_billed || 0);
+                                if (val <= 0) return wo.cost_head
+                                  ? <div className="text-[10px] text-slate-400 mt-0.5 truncate max-w-[120px]">{wo.cost_head}</div>
+                                  : null;
+                                const pct = Math.min(100, (billed / val) * 100);
+                                return (
+                                  <>
+                                    <div className="w-full max-w-[110px] h-1 bg-slate-100 rounded-full overflow-hidden mt-1.5">
+                                      <div className={clsx('h-full rounded-full', billed > val ? 'bg-red-500' : 'bg-indigo-400')} style={{ width: `${pct}%` }} />
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 mt-0.5">₹{inr(billed)} billed <span className="text-slate-300">·</span> {pct.toFixed(0)}%</div>
+                                  </>
+                                );
+                              })()}
                             </td>
                             {/* Status */}
                             <td className="px-5 py-3.5 whitespace-nowrap">
