@@ -6,6 +6,7 @@ const { query, withTransaction } = require('../config/database');
 const { sendMail } = require('../services/mail.service');
 const { createNotification } = require('../controllers/notification.controller');
 const { sendPushToUsersByEmail, sendPushToUser } = require('../services/fcm.service');
+const wa = require('../services/whatsapp.service');
 const router = express.Router();
 
 const DEFAULT_STORES_MRS_EMAILS = 'vijayan@bcim.in';
@@ -597,7 +598,7 @@ router.use(loadProjectScope);
 ─────────────────────────────────────────────────────────────────────────── */
 const {
   ALL_STAGES, GLOBAL_ADMIN_ROLES, DEFAULT_STAGE_IDS,
-  normalizeStageIds, buildChain,
+  normalizeStageIds, buildChain, nextStageForStatus,
 } = require('../constants/mrsApprovalStages');
 
 /* Load project workflow from DB — returns array of stage IDs (or default = all) */
@@ -1331,6 +1332,23 @@ router.patch('/:id/:stage', async (req, res) => {
       cfg.nextStatus === 'approved_pm' && !enabledIds.includes('approve-mgmt');
     if (cfg.nextStatus === 'approved_mgmt' || pmApprovedAndMDIsNext) {
       notifyAfterProjectHeadApproval({ mrs: { ...mrs.rows[0], status: cfg.nextStatus } });
+    }
+
+    // WhatsApp: ping whoever holds the NEXT stage's role — not one hardcoded
+    // number, but everyone with that role at this company (see
+    // whatsapp.service.js notifyApprovalNeeded + getPhonesByRole). Resolved
+    // from this project's own workflow, so a 3-stage project correctly
+    // notifies the MD instead of a "Project Director" nobody holds.
+    const nextStage = nextStageForStatus(enabledIds, cfg.nextStatus);
+    if (nextStage) {
+      wa.notifyApprovalNeeded({
+        companyId: req.user.company_id,
+        allowedRoles: nextStage.allowedRoles,
+        docType: 'Material Requisition',
+        refNo: mrsRef(mrs.rows[0]),
+        projectName: mrs.rows[0].project_name,
+        extra: `Awaiting: ${nextStage.label}`,
+      }).catch(() => {});
     }
 
     if (cfg.nextStatus === 'approved_md') {

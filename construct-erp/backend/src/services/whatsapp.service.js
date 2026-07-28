@@ -84,6 +84,25 @@ const getUserPhone = async (userId) => {
   }
 };
 
+// ── Helper: look up phone numbers for everyone holding any of the given
+// roles (case-insensitive) at this company. Used to notify "whoever is next
+// in an approval chain" without hardcoding a person — add/remove someone
+// from that role and notifications follow automatically.
+const getPhonesByRole = async (companyId, roles) => {
+  if (!companyId || !roles?.length) return [];
+  try {
+    const { rows } = await query(
+      `SELECT phone FROM users
+       WHERE company_id = $1 AND phone IS NOT NULL
+         AND LOWER(role) = ANY($2::text[])`,
+      [companyId, roles.map(r => String(r).toLowerCase())]
+    );
+    return rows.map(r => formatPhone(r.phone)).filter(Boolean);
+  } catch {
+    return [];
+  }
+};
+
 // ── Helper: format INR ─────────────────────────────────────────────────────
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
@@ -186,6 +205,26 @@ const notifyAdvanceCreated = async ({
   await sendToMany([...getAdminNumbers(), userPhone], lines.join('\n'));
 };
 
+/**
+ * Generic "your approval is needed" ping — notifies EVERYONE holding any of
+ * the given roles at this company, not one hardcoded person. Used by any
+ * multi-stage approval chain (MRS, SC bills, etc.) right after an item
+ * advances to a new stage, so whoever is next finds out immediately.
+ */
+const notifyApprovalNeeded = async ({
+  companyId, allowedRoles, docType, refNo, projectName, extra,
+}) => {
+  const lines = [
+    `📋 *${docType} needs your approval*`,
+    `Ref: *${refNo}*`,
+    `Project: ${projectName || 'N/A'}`,
+  ];
+  if (extra) lines.push(extra);
+
+  const phones = await getPhonesByRole(companyId, allowedRoles);
+  await sendToMany([...getAdminNumbers(), ...phones], lines.join('\n'));
+};
+
 module.exports = {
   isConfigured,
   sendWhatsApp,
@@ -193,4 +232,5 @@ module.exports = {
   notifyPaymentReceived,
   notifyPOCreated,
   notifyAdvanceCreated,
+  notifyApprovalNeeded,
 };
