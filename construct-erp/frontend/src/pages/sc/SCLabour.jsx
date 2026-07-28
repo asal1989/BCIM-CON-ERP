@@ -9,10 +9,79 @@ import {
   Plus, Search, RefreshCw, HardHat, Users, CheckCircle, X,
   FileText, ChevronRight, ThumbsUp, ThumbsDown, IndianRupee,
   Clock, Send, Receipt, Eye, AlertTriangle, CheckCircle2, Trash2,
+  Printer, Download, FileSpreadsheet,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
+import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import {
+  REPORT_PRINT_CSS_LANDSCAPE, ReportPrintHeader, ReportPrintSignature,
+} from '../../components/reports/ReportPrintKit';
+
+// Signatories for the Nominal Muster Roll — a statutory record under the
+// Contract Labour (R&A) Act 1970, so it carries the site/contractor chain.
+const NMR_SIGNATORIES = [
+  { role: 'Prepared By',   name: 'Site Engineer' },
+  { role: 'Checked By',    name: 'QS / Billing Engineer' },
+  { role: 'Site Incharge', name: 'Project Manager' },
+  { role: 'Contractor',    name: 'Labour Contractor' },
+];
+
+// The muster roll lives in a fixed full-screen drawer whose scroll containers
+// and sticky first column would clip the printed sheet — unwind all of that
+// and let the wide date matrix flow across the page instead.
+const NMR_PRINT_CSS = `
+@media print {
+  .nmr-drawer-root {
+    position: static !important; inset: auto !important; display: block !important;
+    z-index: auto !important; overflow: visible !important;
+  }
+  .nmr-drawer-panel {
+    position: static !important; display: block !important; width: 100% !important;
+    box-shadow: none !important; overflow: visible !important;
+  }
+  #report-print-root, #report-print-root * { overflow: visible !important; }
+  #report-print-root .overflow-x-auto,
+  #report-print-root .overflow-y-auto,
+  #report-print-root .overflow-hidden { overflow: visible !important; max-height: none !important; }
+  #report-print-root [class*="sticky"] {
+    position: static !important; left: auto !important; z-index: auto !important;
+  }
+  .nmr-matrix-table {
+    width: 100% !important; border-collapse: collapse !important;
+    font-size: 5.5pt !important; table-layout: auto !important;
+  }
+  .nmr-matrix-table thead { display: table-header-group !important; }
+  .nmr-matrix-table th {
+    background: #1B3A6B !important; color: #fff !important;
+    border: 0.5px solid #1B3A6B !important; padding: 2px 1px !important;
+    font-size: 5pt !important; font-weight: 700 !important;
+  }
+  .nmr-matrix-table td {
+    border: 0.5px solid #bbb !important; padding: 1.5px 2px !important;
+    font-size: 5.5pt !important;
+  }
+  .nmr-matrix-table tr { page-break-inside: avoid !important; }
+  .nmr-matrix-table span {
+    width: auto !important; height: auto !important; display: inline !important;
+    border-radius: 0 !important; background: transparent !important;
+  }
+  /* Hours live in a hover tooltip on screen — surface them in print, where
+     there is nothing to hover. */
+  .nmr-print-hrs { display: inline !important; color: #444 !important; }
+}
+@media screen {
+  .nmr-print-hrs { display: none !important; }
+  .nmr-boq-table { width: 100% !important; border-collapse: collapse !important; font-size: 7pt !important; }
+  .nmr-boq-table th { background: #1B3A6B !important; color: #fff !important; border: 0.5px solid #1B3A6B !important; padding: 3px 4px !important; font-size: 6.5pt !important; }
+  .nmr-boq-table td { border: 0.5px solid #bbb !important; padding: 2.5px 4px !important; }
+  .nmr-summary-cards { page-break-inside: avoid !important; }
+  .nmr-summary-cards > div { border: 0.5px solid #999 !important; padding: 4px !important; }
+}
+`;
 
 const SKILL_TYPES = ['Mason','Carpenter','Barbender','Scaffolder','Plumber','Electrician','Painter','Helper','Unskilled','Supervisor','Engineer','Other'];
 const ATT_STATUS  = { present:'bg-emerald-100 text-emerald-700', absent:'bg-red-100 text-red-700', half_day:'bg-amber-100 text-amber-700', holiday:'bg-blue-100 text-blue-700' };
@@ -275,11 +344,204 @@ function NMRDrawer({ nmrId, onClose }) {
     total:    sections.reduce((s, g) => s + g.total,    0),
   }), [sections]);
 
+  // ── Export helpers ─────────────────────────────────────────────────────────
+  const fileBase   = nmr ? `${nmr.nmr_number}-Muster-Roll` : 'Muster-Roll';
+  const periodText = nmr ? `${dayjs(nmr.period_from).format('DD MMM YYYY')} – ${dayjs(nmr.period_to).format('DD MMM YYYY')}` : '';
+  const subtitle   = nmr ? `${nmr.sc_name} · ${nmr.project_name} · ${periodText}` : '';
+
+  // Attendance code per day, with hours in the cell so the printed/exported
+  // sheet stands on its own without the on-screen hover tooltip.
+  const dayCell = (d) => {
+    if (!d.status) return '';
+    const code = ATT_CELL[d.status] || '';
+    if (d.status !== 'present' && d.status !== 'half_day') return code;
+    const h = Number(d.hours || 0), ot = Number(d.ot || 0);
+    return ot > 0 ? `${code} ${h}+${ot}` : `${code} ${h}`;
+  };
+
+  const exportExcel = () => {
+    if (!workers.length) return toast.error('Nothing to export');
+    const wb = XLSX.utils.book_new();
+
+    // Sheet 1 — the muster roll matrix, grouped by skill grade
+    const head = ['Worker Code', 'Worker Name', 'Trade', 'Day Rate', 'OT Rate',
+      ...dates.map(d => dayjs(d).format('DD-MMM')),
+      'Reg Days', 'Day Amount', 'OT Hrs', 'OT Amount', 'Total'];
+    const aoa = [
+      ['NOMINAL MUSTER ROLL — Contract Labour (R&A) Act 1970'],
+      [`NMR No.: ${nmr.nmr_number}`, '', `Contractor: ${nmr.sc_name || ''}`, '', `Project: ${nmr.project_name || ''}`],
+      [`Period: ${periodText}`, '', `Status: ${sm.label}`, '', `Generated: ${dayjs().format('DD MMM YYYY HH:mm')}`],
+      [],
+      head,
+    ];
+    for (const g of sections) {
+      aoa.push([`${g.label.toUpperCase()} — ${g.rows.length} worker(s)`]);
+      for (const w of g.rows) {
+        aoa.push([
+          w.worker_code || '', w.worker_name || '', w.skill_type || '',
+          Number(w.wo_day_rate || 0), Number(w.wo_ot_rate || 0),
+          ...w.days.map(dayCell),
+          Number(w.mandays || 0), Number(w.day_wages || 0),
+          Number(w.overtime_hours || 0), Number(w.ot_wages || 0), Number(w.total_wages || 0),
+        ]);
+      }
+      aoa.push([`${g.label} Subtotal`, '', '', '', '', ...dates.map(() => ''),
+        g.mandays, g.dayWages, g.otHours, g.otWages, g.total]);
+    }
+    aoa.push(['GRAND TOTAL', '', '', '', '', ...dates.map(() => ''),
+      grand.mandays, grand.dayWages, grand.otHours, grand.otWages, grand.total]);
+    aoa.push([]);
+    aoa.push(['Legend: P = Present, A = Absent, H = Half Day. Cell shows "code hours" or "code regular+overtime".']);
+    aoa.push(['Regular = hours up to 8/day billed as man-days. Overtime = hours beyond 8/day billed at the WO hourly rate.']);
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch: 12 }, { wch: 24 }, { wch: 10 }, { wch: 9 }, { wch: 9 },
+      ...dates.map(() => ({ wch: 8 })),
+      { wch: 9 }, { wch: 12 }, { wch: 8 }, { wch: 12 }, { wch: 12 }];
+    ws['!freeze'] = { xSplit: 2, ySplit: 5 };
+    XLSX.utils.book_append_sheet(wb, ws, 'Muster Roll');
+
+    // Sheet 2 — how it maps onto the work order's BOQ lines
+    if (woSummary.length) {
+      const boq = [
+        ['BILLING AGAINST WORK ORDER BOQ'],
+        [`NMR No.: ${nmr.nmr_number}`, '', `Period: ${periodText}`],
+        [],
+        ['#', 'Description', 'Basis', 'Trades', 'Unit', 'Qty', 'Rate', 'Amount'],
+        ...woSummary.map((r, i) => [
+          i + 1, r.description,
+          r.basis === 'overtime' ? 'Overtime (>8 hrs/day)' : 'Regular (1 day = 8 hrs)',
+          (r.skills || []).join(', '), r.unit,
+          Number(r.qty || 0), Number(r.rate || 0), Number(r.amount || 0),
+        ]),
+        ['', 'GROSS', '', '', '', '', '', woSummary.reduce((s, r) => s + Number(r.amount || 0), 0)],
+      ];
+      const ws2 = XLSX.utils.aoa_to_sheet(boq);
+      ws2['!cols'] = [{ wch: 5 }, { wch: 28 }, { wch: 24 }, { wch: 18 }, { wch: 8 },
+        { wch: 12 }, { wch: 10 }, { wch: 14 }];
+      XLSX.utils.book_append_sheet(wb, ws2, 'WO BOQ Summary');
+    }
+
+    XLSX.writeFile(wb, `${fileBase}.xlsx`);
+    toast.success('Excel exported');
+  };
+
+  const exportPDF = () => {
+    if (!workers.length) return toast.error('Nothing to export');
+    // Wide date matrix — landscape, and A3 once the period runs long enough
+    // that A4 columns would collapse to unreadable slivers.
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: dates.length > 20 ? 'a3' : 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+
+    doc.setFontSize(13); doc.setTextColor(27, 58, 107); doc.setFont(undefined, 'bold');
+    doc.text('NOMINAL MUSTER ROLL', pageW / 2, 12, { align: 'center' });
+    doc.setFontSize(8); doc.setFont(undefined, 'normal'); doc.setTextColor(90);
+    doc.text('Contract Labour (Regulation & Abolition) Act, 1970', pageW / 2, 17, { align: 'center' });
+    doc.setFontSize(8.5); doc.setTextColor(40);
+    doc.text(`NMR No.: ${nmr.nmr_number}   |   ${nmr.sc_name || ''}   |   ${nmr.project_name || ''}`, 10, 24);
+    doc.text(`Period: ${periodText}   |   Status: ${sm.label}   |   Generated: ${dayjs().format('DD MMM YYYY HH:mm')}`, 10, 28.5);
+
+    const head = [['Code', 'Worker Name', 'Trade',
+      ...dates.map(d => dayjs(d).format('DD')),
+      'Reg\nDays', 'Day Amt', 'OT\nHrs', 'OT Amt', 'Total']];
+
+    const body = [];
+    for (const g of sections) {
+      body.push([{
+        content: `${g.label.toUpperCase()}  —  ${g.rows.length} worker${g.rows.length !== 1 ? 's' : ''}`,
+        colSpan: head[0].length,
+        styles: { fontStyle: 'bold', fillColor: g.accent === 'emerald' ? [209, 250, 229] : [219, 234, 254], textColor: [15, 60, 45] },
+      }]);
+      for (const w of g.rows) {
+        body.push([
+          w.worker_code || '', w.worker_name || '', w.skill_type || '',
+          ...w.days.map(dayCell),
+          Number(w.mandays || 0).toFixed(2), fmt(w.day_wages),
+          Number(w.overtime_hours || 0) > 0 ? Number(w.overtime_hours).toFixed(1) : '-',
+          Number(w.ot_wages || 0) > 0 ? fmt(w.ot_wages) : '-',
+          fmt(w.total_wages),
+        ]);
+      }
+      body.push([
+        { content: `${g.label} Subtotal`, colSpan: 3 + dates.length, styles: { fontStyle: 'bold', halign: 'right' } },
+        { content: g.mandays.toFixed(2), styles: { fontStyle: 'bold' } },
+        { content: fmt(g.dayWages),      styles: { fontStyle: 'bold' } },
+        { content: g.otHours.toFixed(1), styles: { fontStyle: 'bold' } },
+        { content: fmt(g.otWages),       styles: { fontStyle: 'bold' } },
+        { content: fmt(g.total),         styles: { fontStyle: 'bold' } },
+      ]);
+    }
+
+    autoTable(doc, {
+      startY: 32,
+      head, body,
+      theme: 'grid',
+      headStyles: { fillColor: [27, 58, 107], textColor: 255, fontSize: 6, fontStyle: 'bold', halign: 'center', valign: 'middle' },
+      bodyStyles: { fontSize: 6, cellPadding: 1 },
+      columnStyles: {
+        0: { cellWidth: 14 }, 1: { cellWidth: 30 }, 2: { cellWidth: 14 },
+        ...Object.fromEntries(dates.map((_, i) => [3 + i, { halign: 'center', cellWidth: 'auto' }])),
+      },
+      foot: [[
+        { content: 'GRAND TOTAL', colSpan: 3 + dates.length, styles: { halign: 'right' } },
+        grand.mandays.toFixed(2), fmt(grand.dayWages),
+        grand.otHours.toFixed(1), fmt(grand.otWages), fmt(grand.total),
+      ]],
+      footStyles: { fillColor: [255, 237, 213], textColor: [124, 45, 18], fontStyle: 'bold', fontSize: 6.5 },
+      margin: { left: 8, right: 8 },
+    });
+
+    // WO BOQ mapping
+    if (woSummary.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [['#', 'Work Order BOQ Description', 'Basis', 'Trades', 'Unit', 'Qty', 'Rate', 'Amount']],
+        body: woSummary.map((r, i) => [
+          i + 1, r.description,
+          r.basis === 'overtime' ? 'Overtime (>8 hrs/day)' : 'Regular (1 day = 8 hrs)',
+          (r.skills || []).join(', '), r.unit,
+          Number(r.qty || 0).toLocaleString('en-IN'),
+          `${Number(r.rate || 0).toFixed(2)}`, fmt(r.amount),
+        ]),
+        foot: [[{ content: 'GROSS', colSpan: 7, styles: { halign: 'right' } },
+          fmt(woSummary.reduce((s, r) => s + Number(r.amount || 0), 0))]],
+        theme: 'grid',
+        headStyles: { fillColor: [27, 58, 107], textColor: 255, fontSize: 7, fontStyle: 'bold' },
+        bodyStyles: { fontSize: 7 },
+        footStyles: { fillColor: [255, 237, 213], textColor: [124, 45, 18], fontStyle: 'bold', fontSize: 7.5 },
+        columnStyles: { 5: { halign: 'right' }, 6: { halign: 'right' }, 7: { halign: 'right' } },
+        margin: { left: 8, right: 8 },
+      });
+    }
+
+    // Legend + signatures
+    let y = doc.lastAutoTable.finalY + 6;
+    doc.setFontSize(6.5); doc.setTextColor(110);
+    doc.text('Legend: P = Present, A = Absent, H = Half Day. Cell shows "code hours" or "code regular+overtime".', 8, y);
+    doc.text('Regular = hours up to 8/day billed as man-days. Overtime = hours beyond 8/day billed at the WO hourly rate.', 8, y + 3.5);
+
+    y += 16;
+    const colW = (pageW - 16) / NMR_SIGNATORIES.length;
+    doc.setDrawColor(60);
+    NMR_SIGNATORIES.forEach((sig, i) => {
+      const x = 8 + i * colW;
+      doc.line(x + 4, y, x + colW - 8, y);
+      doc.setFontSize(7); doc.setTextColor(27, 58, 107); doc.setFont(undefined, 'bold');
+      doc.text(sig.role, x + colW / 2, y + 4, { align: 'center' });
+      doc.setFontSize(6.5); doc.setTextColor(110); doc.setFont(undefined, 'normal');
+      doc.text(sig.name, x + colW / 2, y + 7.5, { align: 'center' });
+    });
+
+    doc.save(`${fileBase}.pdf`);
+    toast.success('PDF downloaded');
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex">
-      <div className="w-full bg-white shadow-2xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex nmr-drawer-root">
+      <style>{REPORT_PRINT_CSS_LANDSCAPE}{NMR_PRINT_CSS}</style>
+      <div className="w-full bg-white shadow-2xl flex flex-col overflow-hidden nmr-drawer-panel">
         {/* Header */}
-        <div className="flex-shrink-0 flex items-center justify-between px-5 py-4"
+        <div className="flex-shrink-0 flex items-center justify-between px-5 py-4 no-print"
           style={{ background: `linear-gradient(135deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)` }}>
           <div>
             <div className="flex items-center gap-2">
@@ -292,18 +554,46 @@ function NMRDrawer({ nmrId, onClose }) {
               &nbsp;· {nmr?.total_workers || 0} workers · {nmr?.total_mandays || 0} man-days
             </p>
           </div>
-          <button onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center text-white" style={{ background: 'rgba(255,255,255,0.10)' }}>
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            {nmr && workers.length > 0 && (
+              <>
+                <button onClick={() => window.print()} title="Print muster roll (A4 landscape)"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-xs font-bold hover:bg-white/20 transition"
+                  style={{ background: 'rgba(255,255,255,0.12)' }}>
+                  <Printer className="w-3.5 h-3.5" /> Print
+                </button>
+                <button onClick={exportPDF} title="Download as PDF"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-xs font-bold hover:bg-white/20 transition"
+                  style={{ background: 'rgba(255,255,255,0.12)' }}>
+                  <Download className="w-3.5 h-3.5" /> PDF
+                </button>
+                <button onClick={exportExcel} title="Export to Excel"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white text-xs font-bold hover:bg-white/20 transition"
+                  style={{ background: 'rgba(255,255,255,0.12)' }}>
+                  <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
+                </button>
+                <div className="w-px h-6 mx-1" style={{ background: 'rgba(255,255,255,0.2)' }} />
+              </>
+            )}
+            <button onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center text-white" style={{ background: 'rgba(255,255,255,0.10)' }}>
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div id="report-print-root" className="flex-1 overflow-y-auto p-4 space-y-4">
           {isLoading ? (
             <div className="space-y-3">{[1,2,3].map(n => <div key={n} className="h-16 bg-slate-100 rounded-xl animate-pulse" />)}</div>
           ) : nmr && (
             <>
+              {/* Statutory header — print only */}
+              <ReportPrintHeader
+                reportTitle="NOMINAL MUSTER ROLL"
+                subtitle={`Contract Labour (Regulation & Abolition) Act, 1970  ·  ${nmr.nmr_number}  ·  ${subtitle}  ·  Status: ${sm.label}`}
+              />
+
               {/* Summary cards — regular vs overtime split, priced at WO rates */}
-              <div className="grid grid-cols-5 gap-3">
+              <div className="grid grid-cols-5 gap-3 nmr-summary-cards">
                 {[
                   { l: 'Total Workers',     v: nmr.total_workers,                          color: 'text-blue-700' },
                   { l: 'Regular Man-days',  v: grand.mandays.toFixed(2),                   color: 'text-indigo-700', sub: '≤ 8 hrs/day' },
@@ -326,7 +616,7 @@ function NMRDrawer({ nmrId, onClose }) {
                     Billing Against Work Order BOQ
                   </p>
                   <div className="border border-slate-200 rounded-xl overflow-hidden">
-                    <table className="w-full text-xs">
+                    <table className="w-full text-xs nmr-boq-table">
                       <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>
                           {['#','Description','Basis','Trades','Unit','Qty','Rate','Amount'].map((h,i) => (
@@ -372,7 +662,7 @@ function NMRDrawer({ nmrId, onClose }) {
                 </p>
                 <div className="border border-slate-200 rounded-xl overflow-hidden">
                   <div className="overflow-x-auto">
-                    <table className="text-xs">
+                    <table className="text-xs nmr-matrix-table">
                       <thead style={{ background: `linear-gradient(90deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)` }}>
                         <tr>
                           <th className="px-3 py-2 text-left text-white/80 whitespace-nowrap sticky left-0 z-10" style={{ background: Theme.navyDark, minWidth: 140 }}>Worker</th>
@@ -435,6 +725,11 @@ function NMRDrawer({ nmrId, onClose }) {
                                           bg || 'text-slate-400', otDay && 'ring-1 ring-amber-400')}>
                                         {st ? ATT_CELL[st] : '–'}
                                       </span>
+                                      {st && (day.hours || day.ot) ? (
+                                        <span className="nmr-print-hrs">
+                                          &nbsp;{Number(day.hours || 0)}{otDay ? `+${Number(day.ot)}` : ''}
+                                        </span>
+                                      ) : null}
                                     </td>
                                   );
                                 })}
@@ -493,12 +788,19 @@ function NMRDrawer({ nmrId, onClose }) {
                   <span className="inline-flex w-6 h-5 rounded text-[10px] font-bold items-center justify-center bg-emerald-100 text-emerald-800 ring-1 ring-amber-400">P</span>
                   <span className="text-[11px] text-slate-500">Worked &gt; 8 hrs (has OT)</span>
                 </div>
-                <span className="text-[11px] text-slate-400 italic">Hover any cell for hours worked</span>
+                <span className="text-[11px] text-slate-400 italic no-print">Hover any cell for hours worked</span>
+                <span className="text-[11px] text-slate-500 print-only">
+                  Cell shows attendance code followed by hours worked (regular+overtime).
+                  Regular = up to 8 hrs/day billed as man-days; overtime = hours beyond 8/day billed at the WO hourly rate.
+                </span>
               </div>
+
+              {/* Statutory signatures — print only */}
+              <ReportPrintSignature signatories={NMR_SIGNATORIES} />
 
               {/* Approval actions */}
               {['draft','submitted','checked'].includes(nmr.status) && (
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 no-print">
                   <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Remarks</label>
                     <textarea value={comment} onChange={e => setComment(e.target.value)} rows={2} className={inp + ' resize-none'} placeholder="Add remarks…" />
@@ -528,7 +830,7 @@ function NMRDrawer({ nmrId, onClose }) {
 
               {/* Raise Bill (approved NMR only) */}
               {nmr.status === 'approved' && !nmr.bill_id && (
-                <div className="bg-emerald-50 border-2 border-emerald-300 rounded-xl p-4 flex items-center justify-between">
+                <div className="bg-emerald-50 border-2 border-emerald-300 rounded-xl p-4 flex items-center justify-between no-print">
                   <div>
                     <p className="text-sm font-bold text-emerald-800">NMR Approved — Ready to raise bill</p>
                     <p className="text-xs text-emerald-700 mt-0.5">
@@ -544,7 +846,7 @@ function NMRDrawer({ nmrId, onClose }) {
 
               {/* Already billed */}
               {nmr.bill_id && (
-                <div className="bg-purple-50 border border-purple-200 rounded-xl px-4 py-3 flex items-center gap-2 text-sm text-purple-800">
+                <div className="bg-purple-50 border border-purple-200 rounded-xl px-4 py-3 flex items-center gap-2 text-sm text-purple-800 no-print">
                   <Receipt className="w-4 h-4 flex-shrink-0 text-purple-600" />
                   Bill raised from this NMR. View in <strong>Bill Preparation</strong> to track approval &amp; payment.
                 </div>
