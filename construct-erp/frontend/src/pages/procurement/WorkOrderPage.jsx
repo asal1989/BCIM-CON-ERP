@@ -99,6 +99,23 @@ const inp = `w-full h-10 px-3 rounded-lg text-sm font-medium text-slate-900 outl
 
 const WORK_CATEGORIES = ['Civil', 'Structural', 'Waterproofing', 'Electrical', 'Plumbing', 'Painting', 'Carpentry', 'Tiles', 'Aluminium', 'Demolition', 'Earth Work', 'Fabrication', 'Interior', 'Landscaping', 'General'];
 
+// How a BOQ line item is measured, inferred client-side from its description
+// and unit so the table reads the same way labour bills are priced: Day-rate
+// lines are Regular, Hours-rate lines are Overtime, and anything mentioning
+// "incentive" gets its own group regardless of unit.
+const BOQ_BASIS = {
+  regular:   { label: 'Regular',   badge: 'bg-indigo-50 text-indigo-700 border-indigo-200', head: 'bg-indigo-50/70 text-indigo-800 border-indigo-100' },
+  overtime:  { label: 'Overtime',  badge: 'bg-amber-50  text-amber-700  border-amber-200',  head: 'bg-amber-50/70  text-amber-800  border-amber-100' },
+  incentive: { label: 'Incentive', badge: 'bg-violet-50 text-violet-700 border-violet-200', head: 'bg-violet-50/70 text-violet-800 border-violet-100' },
+};
+const boqItemBasis = (item) => {
+  const desc = (item.description || '').toLowerCase();
+  const unit = (item.unit || '').toLowerCase();
+  if (desc.includes('incentive')) return 'incentive';
+  if (/^hr/.test(unit) || unit.includes('hour')) return 'overtime';
+  return 'regular';
+};
+
 const DEFAULT_WO_TERMS = `1. This Work Order is issued subject to the terms of the registered agreement / quotation, if any.
 2. All work shall be carried out as per approved drawings, specifications and instructions of the Site Engineer / Project Manager.
 3. Measurement of completed work shall be jointly recorded in the Measurement Book (MB) and certified before billing.
@@ -1247,6 +1264,22 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
   const itemsTotal = lineItems.reduce((s, it) => s + Number(it.amount || (Number(it.quantity||0)*Number(it.rate||0))), 0);
   const utilPct    = val > 0 ? Math.min(100, (billed / val) * 100) : 0;
 
+  // Group BOQ rows by pricing basis (Regular/Overtime/Incentive) so a labour
+  // WO's day-rate, hourly and incentive lines read as three distinct blocks
+  // instead of one flat list — mirrors how the NMR muster roll bills them.
+  // Row numbers stay in original BOQ sequence, not reset per group.
+  const boqGroups = (() => {
+    const buckets = { regular: [], overtime: [], incentive: [] };
+    lineItems.forEach((it, idx) => buckets[boqItemBasis(it)].push({ ...it, _row: idx + 1 }));
+    return ['regular', 'overtime', 'incentive']
+      .filter(k => buckets[k].length)
+      .map(k => ({
+        key: k, meta: BOQ_BASIS[k], items: buckets[k],
+        total: buckets[k].reduce((s, it) => s + Number(it.amount || (Number(it.quantity || 0) * Number(it.rate || 0))), 0),
+      }));
+  })();
+  const multiBasis = boqGroups.length > 1;
+
   return (
     <>
     {/* Full-window detail — same layout as Purchase Orders */}
@@ -1308,27 +1341,66 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
           {/* LEFT — WO details + line items */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4 border-r border-slate-200">
 
-          {/* Info grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {[
-              ['Vendor / Sub-Con', (displayWO.vendor_name || '—').toUpperCase()],
-              ['Project',          (displayWO.project_name || '—').toUpperCase()],
-              ['Start Date',       displayWO.start_date ? dayjs(displayWO.start_date).format('DD-MM-YYYY') : '—'],
-              ['End Date',         displayWO.end_date   ? dayjs(displayWO.end_date).format('DD-MM-YYYY')   : '—'],
-              ['Contract Amount',  `₹ ${inr(displayWO.contract_amount || val)}`],
-              ['Work Category',    displayWO.work_category || '—'],
-              ['Cost Head',        displayWO.cost_head || '—'],
-              ['Tower / Block',    displayWO.tower_block || '—'],
-              ['Vendor Type',      displayWO.vendor_type || '—'],
-              ['Vendor GSTIN',     displayWO.vendor_gstin || '—'],
-              ['Manager',          displayWO.manager_name || '—'],
-              ['Created',          displayWO.created_at ? dayjs(displayWO.created_at).format('DD-MM-YYYY') : '—'],
-            ].map(([label, value]) => (
-              <div key={label} className="bg-white border border-slate-200 rounded-lg p-3">
-                <p className="text-xs text-slate-900 font-medium uppercase tracking-wider mb-1">{label}</p>
-                <p className="text-sm font-medium text-slate-800 break-words">{value}</p>
+          {/* Vendor identity — the one thing everyone reads first */}
+          <div className="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center flex-shrink-0">
+              <Building2 className="w-5 h-5 text-indigo-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-base font-bold text-slate-900 truncate">{(displayWO.vendor_name || '—').toUpperCase()}</p>
+                {displayWO.vendor_type && (
+                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-semibold uppercase tracking-wide border border-slate-200 whitespace-nowrap">
+                    {displayWO.vendor_type.replace(/_/g, ' ')}
+                  </span>
+                )}
               </div>
-            ))}
+              <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 flex-wrap">
+                {displayWO.vendor_gstin && <span className="font-mono">{displayWO.vendor_gstin}</span>}
+                {displayWO.manager_name && (
+                  <span className="flex items-center gap-1"><User className="w-3 h-3" />{displayWO.manager_name}</span>
+                )}
+              </div>
+            </div>
+            <div className="text-right flex-shrink-0 pl-4 border-l border-slate-100">
+              <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Contract Amount</p>
+              <p className="text-lg font-bold text-slate-800 tabular-nums">₹{inr(displayWO.contract_amount || val)}</p>
+            </div>
+          </div>
+
+          {/* Project scope + schedule — grouped so related facts sit together */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-white border border-slate-200 rounded-xl p-3.5 space-y-2">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mb-2.5">
+                <MapPin className="w-3 h-3" /> Project &amp; Scope
+              </p>
+              {[
+                ['Project',       (displayWO.project_name || '—').toUpperCase()],
+                ['Work Category', displayWO.work_category || '—'],
+                ['Cost Head',     displayWO.cost_head || '—'],
+                ['Tower / Block', displayWO.tower_block || '—'],
+              ].map(([label, value]) => (
+                <div key={label} className="flex items-center justify-between gap-3 text-xs">
+                  <span className="text-slate-400">{label}</span>
+                  <span className="font-semibold text-slate-700 text-right truncate max-w-[60%]">{value}</span>
+                </div>
+              ))}
+            </div>
+            <div className="bg-white border border-slate-200 rounded-xl p-3.5 space-y-2">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mb-2.5">
+                <Clock className="w-3 h-3" /> Schedule
+              </p>
+              {[
+                ['Start Date', displayWO.start_date ? dayjs(displayWO.start_date).format('DD MMM YYYY') : '—'],
+                ['End Date',   displayWO.end_date   ? dayjs(displayWO.end_date).format('DD MMM YYYY')   : '—'],
+                ['Created',    displayWO.created_at ? dayjs(displayWO.created_at).format('DD MMM YYYY') : '—'],
+              ].map(([label, value]) => (
+                <div key={label} className="flex items-center justify-between gap-3 text-xs">
+                  <span className="text-slate-400">{label}</span>
+                  <span className="font-semibold text-slate-700">{value}</span>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Line items */}
@@ -1350,44 +1422,74 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-slate-100">
-                    {['#', 'Description', 'Unit', 'WO Qty', 'Billed', 'Balance', 'Rate', 'Amount'].map(h => (
+                    {['#', 'Description', multiBasis ? 'Basis' : 'Unit', 'WO Qty', 'Billed', 'Balance', 'Rate', 'Amount'].map(h => (
                       <th key={h} className="px-3 py-2 text-left font-medium text-slate-900 uppercase tracking-wider bg-slate-50 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {lineItems.map((item, idx) => {
-                    const qty       = Number(item.quantity   || 0);
-                    const billedQty = Number(item.billed_qty || 0);
-                    const remQty    = Number(item.remaining_qty ?? Math.max(qty - billedQty, 0));
-                    const rate      = Number(item.rate   || 0);
-                    const amount    = Number(item.amount || qty * rate);
-                    const billedPct = qty > 0 ? Math.round((billedQty / qty) * 100) : 0;
-                    return (
-                      <tr key={item.id || idx} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-3 py-2.5 text-slate-900 font-medium font-mono">{idx + 1}</td>
-                        <td className="px-3 py-2.5 font-medium text-slate-800 max-w-[280px]">
-                          {item.description || `Item ${idx + 1}`}
-                          {item.remarks && <div className="text-[11px] text-slate-500 mt-0.5 font-normal">{item.remarks}</div>}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-900 border border-slate-200 font-medium uppercase">{item.unit || 'LS'}</span>
-                        </td>
-                        <td className="px-3 py-2.5 font-mono text-right text-slate-700">{qty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}</td>
-                        <td className="px-3 py-2.5 font-mono text-right">
-                          <span className="font-semibold text-emerald-700">{billedQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}</span>
-                          {billedPct > 0 && <span className="text-[9px] text-emerald-500 ml-1">({billedPct}%)</span>}
-                        </td>
-                        <td className="px-3 py-2.5 font-mono text-right">
-                          <span className={clsx('font-semibold', remQty > 0 ? 'text-amber-600' : 'text-slate-400')}>
-                            {remQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5 font-mono text-right text-slate-600">{inr(rate)}</td>
-                        <td className="px-3 py-2.5 font-mono text-right font-semibold text-slate-800">{inr(amount)}</td>
-                      </tr>
-                    );
-                  })}
+                  {boqGroups.map(group => (
+                    <React.Fragment key={group.key}>
+                      {multiBasis && (
+                        <tr className={clsx('border-t', group.meta.head)}>
+                          <td colSpan={8} className="px-3 py-1.5 font-bold uppercase tracking-widest text-[10px] flex items-center gap-1.5">
+                            {group.meta.label} <span className="font-normal normal-case tracking-normal opacity-70">· {group.items.length} item{group.items.length !== 1 ? 's' : ''}</span>
+                          </td>
+                        </tr>
+                      )}
+                      {group.items.map(item => {
+                        const qty       = Number(item.quantity   || 0);
+                        const billedQty = Number(item.billed_qty || 0);
+                        const remQty    = Number(item.remaining_qty ?? Math.max(qty - billedQty, 0));
+                        const rate      = Number(item.rate   || 0);
+                        const amount    = Number(item.amount || qty * rate);
+                        const billedPct = qty > 0 ? Math.min(100, Math.round((billedQty / qty) * 100)) : 0;
+                        return (
+                          <tr key={item.id || item._row} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-3 py-2.5 text-slate-900 font-medium font-mono">{item._row}</td>
+                            <td className="px-3 py-2.5 font-medium text-slate-800 max-w-[280px]">
+                              {item.description || `Item ${item._row}`}
+                              {item.remarks && <div className="text-[11px] text-slate-500 mt-0.5 font-normal">{item.remarks}</div>}
+                            </td>
+                            <td className="px-3 py-2.5">
+                              {multiBasis ? (
+                                <span className={clsx('px-1.5 py-0.5 rounded border font-medium uppercase text-[10px] whitespace-nowrap', group.meta.badge)}>
+                                  {item.unit || 'LS'}
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-900 border border-slate-200 font-medium uppercase">{item.unit || 'LS'}</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5 font-mono text-right text-slate-700">{qty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}</td>
+                            <td className="px-3 py-2.5">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <span className="font-mono font-semibold text-emerald-700">{billedQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}</span>
+                                {billedPct > 0 && <span className="text-[9px] text-emerald-500">({billedPct}%)</span>}
+                              </div>
+                              {qty > 0 && (
+                                <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden mt-1">
+                                  <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${billedPct}%` }} />
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5 font-mono text-right">
+                              <span className={clsx('font-semibold', remQty > 0 ? 'text-amber-600' : 'text-slate-400')}>
+                                {remQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 font-mono text-right text-slate-600">{inr(rate)}</td>
+                            <td className="px-3 py-2.5 font-mono text-right font-semibold text-slate-800">{inr(amount)}</td>
+                          </tr>
+                        );
+                      })}
+                      {multiBasis && (
+                        <tr className={clsx('border-t', group.meta.head, 'font-bold')}>
+                          <td colSpan={7} className="px-3 py-1.5 text-right text-[10px] uppercase tracking-wider">{group.meta.label} Subtotal</td>
+                          <td className="px-3 py-1.5 text-right font-mono text-xs tabular-nums">{inr(group.total)}</td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-slate-200 bg-slate-50">
@@ -1401,9 +1503,12 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
 
           {/* Scope of Work */}
           {(displayWO.scope_of_work || displayWO.work_description) && (
-            <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <p className="text-xs font-medium text-slate-900 uppercase tracking-wider mb-2">Scope of Work</p>
-              <p className="text-sm text-slate-600 whitespace-pre-line leading-relaxed">
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+              <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
+                <FileText className="w-3.5 h-3.5 text-slate-400" />
+                <span className="text-xs font-medium text-slate-900 uppercase tracking-wider">Scope of Work</span>
+              </div>
+              <p className="p-4 text-sm text-slate-600 whitespace-pre-line leading-relaxed">
                 {displayWO.scope_of_work || displayWO.work_description}
               </p>
             </div>
@@ -1411,9 +1516,12 @@ function WODetailPanel({ wo, onClose, onEdit, onApprove, onMDApprove, onReject, 
 
           {/* Terms & Conditions */}
           {wo.terms_conditions && (
-            <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <p className="text-xs font-medium text-slate-900 uppercase tracking-wider mb-2">Terms &amp; Conditions</p>
-              <p className="text-sm text-slate-600 whitespace-pre-line leading-relaxed">{wo.terms_conditions}</p>
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+              <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
+                <FileText className="w-3.5 h-3.5 text-slate-400" />
+                <span className="text-xs font-medium text-slate-900 uppercase tracking-wider">Terms &amp; Conditions</span>
+              </div>
+              <p className="p-4 text-sm text-slate-600 whitespace-pre-line leading-relaxed">{wo.terms_conditions}</p>
             </div>
           )}
 
