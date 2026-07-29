@@ -1968,6 +1968,14 @@ export const hrAttendanceAPI = {
   upsert:  (data)   => api.post('/hr-admin/attendance', data),
   update:  (id, d)  => api.put(`/hr-admin/attendance/${id}`, d),
   timesheetReport: (params) => api.get('/hr-admin/attendance/timesheet-report', { params }),
+  timesheetReportTestEmail: (date, project_id, project_name, category) => api.post('/hr-admin/attendance/timesheet-report/test-email', { date, project_id, project_name, category }),
+  timesheetReportConfigs: {
+    list:    ()       => api.get('/hr-admin/attendance/timesheet-report/configs'),
+    create:  (data)   => api.post('/hr-admin/attendance/timesheet-report/configs', data),
+    update:  (id, d)  => api.put(`/hr-admin/attendance/timesheet-report/configs/${id}`, d),
+    delete:  (id)     => api.delete(`/hr-admin/attendance/timesheet-report/configs/${id}`),
+    sendNow: (id, date) => api.post(`/hr-admin/attendance/timesheet-report/configs/${id}/send-now`, { date }),
+  },
   manpowerReport:  (params) => api.get('/hr-admin/attendance/manpower-report', { params }),
   manpowerReportTestEmail: (date, project_id, project_name) => api.post('/hr-admin/attendance/manpower-report/test-email', { date, project_id, project_name }),
   manpowerReportConfigs: {

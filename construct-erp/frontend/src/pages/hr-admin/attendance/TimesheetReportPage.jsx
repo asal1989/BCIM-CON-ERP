@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hrAttendanceAPI, projectAPI } from '../../../api/client';
-import { Printer, Download, RefreshCw, Filter, ChevronRight, Search, X } from 'lucide-react';
+import { Printer, Download, RefreshCw, Filter, ChevronRight, Search, X, Mail, Settings, Send, Plus, Trash2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -203,6 +204,8 @@ export default function TimesheetReportPage() {
   const [search, setSearch]         = useState('');
   const [statusFilter, setStatusF]  = useState('all');
   const [companyFilter, setCompany] = useState('');
+  const [sendingTest, setSendingTest]     = useState(false);
+  const [showConfigModal, setShowConfigModal] = useState(false);
 
   // Drag-to-scroll (both axes) on the table wrapper
   const tableWrapRef = useRef(null);
@@ -377,6 +380,17 @@ export default function TimesheetReportPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  const handleSendTestEmail = async () => {
+    setSendingTest(true);
+    try {
+      const res = await hrAttendanceAPI.timesheetReportTestEmail(date, undefined, undefined, category).then(r => r.data);
+      if (!res.ok) toast.error(res.reason || 'Could not send test email');
+      else toast.success(`Test email sent to ${res.recipients?.join(', ') || 'your inbox'}`);
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to send test email');
+    } finally { setSendingTest(false); }
+  };
+
   const handleExport = () => {
     const headers = ['S.No','EMP ID','Name','Designation','Department','Trade','Company','Project','P/A',
       'In Time','Out Time','Late Min','Hrs Worked','Overtime Hrs','Shift','Location',
@@ -507,6 +521,25 @@ export default function TimesheetReportPage() {
             borderRadius:8, padding:'7px 14px', fontSize:13, cursor:'pointer', fontWeight:600,
           }}>
             <Download size={13}/> Export CSV
+          </button>
+          <button onClick={handleSendTestEmail} disabled={sendingTest}
+            title="Sends today's report to your own email — preview of the automated daily send"
+            style={{
+              display:'flex', alignItems:'center', gap:5,
+              background:'rgba(255,255,255,0.12)', color:'#fff', border:'1px solid rgba(255,255,255,0.22)',
+              borderRadius:8, padding:'7px 14px', fontSize:13, fontWeight:600,
+              cursor: sendingTest ? 'wait' : 'pointer', opacity: sendingTest ? 0.6 : 1,
+            }}>
+            <Mail size={13}/> {sendingTest ? 'Sending…' : 'Send Test Email'}
+          </button>
+          <button onClick={() => setShowConfigModal(true)}
+            title="Manage which projects get an automated daily timesheet email, and who receives each one"
+            style={{
+              display:'flex', alignItems:'center', gap:5,
+              background:'rgba(255,255,255,0.12)', color:'#fff', border:'1px solid rgba(255,255,255,0.22)',
+              borderRadius:8, padding:'7px 14px', fontSize:13, cursor:'pointer', fontWeight:600,
+            }}>
+            <Settings size={13}/> Email Recipients
           </button>
           <button onClick={() => window.print()} style={{
             display:'flex', alignItems:'center', gap:5,
@@ -1056,6 +1089,170 @@ export default function TimesheetReportPage() {
         .ts-scroll::-webkit-scrollbar-corner { background: #F1F5F9; }
         .ts-scroll { scrollbar-width: auto; scrollbar-color: #94A3B8 #F1F5F9; }
       `}</style>
+
+      {showConfigModal && (
+        <TimesheetConfigModal onClose={() => setShowConfigModal(false)} projects={projects} date={date} />
+      )}
+    </div>
+  );
+}
+
+// ── Manage per-project automated-email recipients ─────────────────────────────
+function TimesheetConfigModal({ onClose, projects, date }) {
+  const [saving, setSaving] = useState(false);
+  const [testingId, setTestingId] = useState(null);
+  const [sendingNowId, setSendingNowId] = useState(null);
+  const [newProjectId, setNewProjectId] = useState('');
+  const [newCategory, setNewCategory] = useState('staff');
+  const [newRecipients, setNewRecipients] = useState('');
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['timesheet-report-configs'],
+    queryFn: () => hrAttendanceAPI.timesheetReportConfigs.list().then(r => r.data),
+  });
+  const configs = data?.data || [];
+
+  const projectLabel = (projectId) => {
+    if (!projectId) return 'All Projects (combined)';
+    if (projectId === 'HEAD_OFFICE') return 'Head Office';
+    return projects.find(p => p.id === projectId)?.name || projectId;
+  };
+  const categoryLabel = (c) => c === 'labour' ? 'SC / Labour' : c === 'all' ? 'All Employees' : 'BCIM Staff';
+
+  const handleAdd = async () => {
+    if (!newRecipients.trim()) { toast.error('Enter at least one recipient email'); return; }
+    setSaving(true);
+    try {
+      await hrAttendanceAPI.timesheetReportConfigs.create({
+        project_id: newProjectId || null,
+        project_name: projectLabel(newProjectId || null),
+        category: newCategory,
+        recipients: newRecipients.trim(),
+      });
+      setNewProjectId(''); setNewCategory('staff'); setNewRecipients('');
+      refetch();
+      toast.success('Project added to daily timesheet email list');
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to add project');
+    } finally { setSaving(false); }
+  };
+
+  const handleToggle = async (cfg) => {
+    try {
+      await hrAttendanceAPI.timesheetReportConfigs.update(cfg.id, { enabled: !cfg.enabled });
+      refetch();
+    } catch (e) { toast.error('Failed to update'); }
+  };
+
+  const handleDelete = async (cfg) => {
+    if (!window.confirm(`Remove "${cfg.project_name}" from the daily email list?`)) return;
+    try {
+      await hrAttendanceAPI.timesheetReportConfigs.delete(cfg.id);
+      refetch();
+      toast.success('Removed');
+    } catch (e) { toast.error('Failed to remove'); }
+  };
+
+  const handleTestSend = async (cfg) => {
+    setTestingId(cfg.id);
+    try {
+      const res = await hrAttendanceAPI.timesheetReportTestEmail(date, cfg.project_id, cfg.project_name, cfg.category).then(r => r.data);
+      if (!res.ok) toast.error(res.reason || 'Could not send test email');
+      else toast.success(`Test email sent to ${res.recipients?.join(', ') || 'your inbox'}`);
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to send test email');
+    } finally { setTestingId(null); }
+  };
+
+  const handleSendNow = async (cfg) => {
+    if (!window.confirm(`Send today's report to the REAL recipients now?\n\n${cfg.recipients}\n\nThis goes out immediately, not as a test.`)) return;
+    setSendingNowId(cfg.id);
+    try {
+      const res = await hrAttendanceAPI.timesheetReportConfigs.sendNow(cfg.id, date).then(r => r.data);
+      if (!res.ok) toast.error(res.reason || 'Could not send email');
+      else toast.success(`Sent to ${res.recipients?.join(', ') || 'recipients'}`);
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to send email');
+    } finally { setSendingNowId(null); }
+  };
+
+  const inputCls = { border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 11px', fontSize: 12.5, fontWeight: 600, color: '#1E293B', outline: 'none', width: '100%' };
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 680, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(15,23,42,0.35)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: '1px solid #EEF2F7' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0F172A' }}>Daily Timesheet Email — Recipients</h2>
+            <p style={{ margin: '3px 0 0', fontSize: 12, color: '#64748B' }}>Each project/category below gets its own automated email daily, sent only to its own list.</p>
+          </div>
+          <button onClick={onClose} style={{ border: 'none', background: '#F1F5F9', borderRadius: 8, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#475569' }}>
+            <X size={15} />
+          </button>
+        </div>
+
+        <div style={{ padding: '16px 22px', overflowY: 'auto', flex: 1 }}>
+          {isLoading ? (
+            <p style={{ fontSize: 13, color: '#94A3B8' }}>Loading…</p>
+          ) : configs.length === 0 ? (
+            <p style={{ fontSize: 13, color: '#94A3B8', textAlign: 'center', padding: '24px 0' }}>No projects configured yet — add one below.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {configs.map(cfg => (
+                <div key={cfg.id} style={{ border: '1px solid #EEF2F7', borderRadius: 12, padding: '11px 14px', display: 'flex', alignItems: 'center', gap: 12, opacity: cfg.enabled ? 1 : 0.55 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0F172A' }}>
+                      {cfg.project_name}
+                      <span style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 700, color: '#6366F1', background: '#EEF2FF', borderRadius: 999, padding: '1px 8px' }}>
+                        {categoryLabel(cfg.category)}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cfg.recipients}</div>
+                  </div>
+                  <button onClick={() => handleTestSend(cfg)} disabled={testingId === cfg.id}
+                    title="Send a test copy to your own email"
+                    style={{ border: '1px solid #E2E8F0', background: '#fff', borderRadius: 8, padding: '6px 10px', fontSize: 11.5, fontWeight: 700, color: '#334155', cursor: testingId === cfg.id ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <Send size={12} /> {testingId === cfg.id ? '…' : 'Test'}
+                  </button>
+                  <button onClick={() => handleSendNow(cfg)} disabled={sendingNowId === cfg.id}
+                    title="Send today's report to the real recipients right now"
+                    style={{ border: '1px solid #BFDBFE', background: '#EFF6FF', borderRadius: 8, padding: '6px 10px', fontSize: 11.5, fontWeight: 700, color: '#1D4ED8', cursor: sendingNowId === cfg.id ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <Mail size={12} /> {sendingNowId === cfg.id ? '…' : 'Send Now'}
+                  </button>
+                  <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={cfg.enabled} onChange={() => handleToggle(cfg)} style={{ width: 15, height: 15, cursor: 'pointer' }} />
+                  </label>
+                  <button onClick={() => handleDelete(cfg)} style={{ border: 'none', background: 'transparent', color: '#DC2626', cursor: 'pointer', padding: 4, display: 'flex' }}>
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding: '16px 22px', borderTop: '1px solid #EEF2F7', background: '#F8FAFC', borderRadius: '0 0 16px 16px' }}>
+          <div style={{ fontSize: 10.5, fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Add Project</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <select value={newProjectId} onChange={e => setNewProjectId(e.target.value)} style={{ ...inputCls, width: 170, cursor: 'pointer' }}>
+              <option value="">All Projects (combined)</option>
+              <option value="HEAD_OFFICE">Head Office</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <select value={newCategory} onChange={e => setNewCategory(e.target.value)} style={{ ...inputCls, width: 140, cursor: 'pointer' }}>
+              <option value="staff">BCIM Staff</option>
+              <option value="labour">SC / Labour</option>
+              <option value="all">All Employees</option>
+            </select>
+            <input value={newRecipients} onChange={e => setNewRecipients(e.target.value)}
+              placeholder="client@example.com, pm@example.com" style={{ ...inputCls, flex: 1, minWidth: 200 }} />
+            <button onClick={handleAdd} disabled={saving}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#1A56DB', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 12.5, fontWeight: 700, cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.6 : 1 }}>
+              <Plus size={14} /> Add
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

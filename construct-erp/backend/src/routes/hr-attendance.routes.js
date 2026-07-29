@@ -709,6 +709,107 @@ router.get('/timesheet-report', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// POST /timesheet-report/test-email — sends today's timesheet PDF+summary to
+// the LOGGED-IN USER's own email only, never to the real recipient list,
+// purely to preview what the automated send will look like.
+router.post('/timesheet-report/test-email', async (req, res) => {
+  try {
+    if (!req.user.email) return res.status(400).json({ error: 'Your account has no email address on file.' });
+    const { runTimesheetReport } = require('../utils/timesheet-report.service');
+    const result = await runTimesheetReport({
+      date: req.body.date,
+      manual: true,
+      recipients: [req.user.email],
+      company_id: req.user.company_id,
+      project_id: req.body.project_id,
+      project_name: req.body.project_name,
+      category: req.body.category || 'staff',
+    });
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// Timesheet report project configs — one row per (project, category) that
+// should get its own daily automated email + recipient list.
+// ═══════════════════════════════════════════════════════════
+router.get('/timesheet-report/configs', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT * FROM timesheet_report_configs WHERE company_id=$1 ORDER BY project_name`,
+      [req.user.company_id]
+    );
+    res.json({ data: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/timesheet-report/configs', async (req, res) => {
+  try {
+    const { project_id, project_name, category = 'staff', recipients, enabled = true } = req.body;
+    if (!project_name || !recipients) return res.status(400).json({ error: 'project_name and recipients are required' });
+    const { rows } = await query(
+      `INSERT INTO timesheet_report_configs (company_id, project_id, project_name, category, recipients, enabled, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [req.user.company_id, project_id || null, project_name, category, recipients, enabled, req.user.id]
+    );
+    res.status(201).json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/timesheet-report/configs/:id', async (req, res) => {
+  try {
+    const { project_id, project_name, category, recipients, enabled } = req.body;
+    const { rows } = await query(
+      `UPDATE timesheet_report_configs
+       SET project_id=COALESCE($1,project_id), project_name=COALESCE($2,project_name),
+           category=COALESCE($3,category), recipients=COALESCE($4,recipients),
+           enabled=COALESCE($5,enabled), updated_at=NOW()
+       WHERE id=$6 AND company_id=$7 RETURNING *`,
+      [project_id, project_name, category, recipients, enabled, req.params.id, req.user.company_id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Config not found' });
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /timesheet-report/configs/:id/send-now — sends today's report to the
+// config's REAL recipients immediately, rather than waiting for the
+// scheduled automated send. Distinct from /test-email, which always
+// redirects to the caller's own inbox.
+router.post('/timesheet-report/configs/:id/send-now', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT * FROM timesheet_report_configs WHERE id=$1 AND company_id=$2`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Config not found' });
+    const cfg = rows[0];
+
+    const { runTimesheetReport } = require('../utils/timesheet-report.service');
+    const result = await runTimesheetReport({
+      date: req.body.date,
+      manual: true,
+      company_id: cfg.company_id,
+      project_id: cfg.project_id,
+      project_name: cfg.project_name,
+      category: cfg.category,
+      recipients: cfg.recipients,
+    });
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/timesheet-report/configs/:id', async (req, res) => {
+  try {
+    const { rowCount } = await query(
+      `DELETE FROM timesheet_report_configs WHERE id=$1 AND company_id=$2`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!rowCount) return res.status(404).json({ error: 'Config not found' });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ═══════════════════════════════════════════════════════════
 // GET /manpower-report  ?date=YYYY-MM-DD&project_id=
 // Overall Daily Manpower Report — pivot of Company × Designation

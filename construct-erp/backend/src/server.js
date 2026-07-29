@@ -1237,6 +1237,9 @@ if (require.main === module) {
 
     const { initManpowerClientReport } = require('./utils/manpower-client-report.service');
     initManpowerClientReport();
+
+    const { initTimesheetReport } = require('./utils/timesheet-report.service');
+    initTimesheetReport();
   });
   }); // end .finally()
 }
