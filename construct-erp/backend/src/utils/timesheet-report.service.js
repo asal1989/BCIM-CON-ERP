@@ -91,9 +91,13 @@ async function fetchTimesheetReport({ companyId, date, category = 'staff', proje
       u.name,
       COALESCE(des.name, u.designation, '—')             AS designation,
       COALESCE(dep.name, u.department, '—')              AS department,
-      COALESCE(ep.contractor_name,
-        CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
-             THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END) AS company,
+      CASE
+          WHEN ep.contractor_name IS NOT NULL AND TRIM(ep.contractor_name) <> ''
+               AND UPPER(TRIM(ep.contractor_name)) <> 'BCIM'
+            THEN ep.contractor_name
+          WHEN COALESCE(ep.employee_category,'staff') = 'workman' THEN 'BCIM WORKERS'
+          ELSE 'BCIM STAFF'
+        END AS company,
       ep.trade                            AS trade,
       COALESCE(proj.name, 'Head Office')  AS project_name,
       COALESCE(a.status, '${noRecordStatus}') AS attendance_status,

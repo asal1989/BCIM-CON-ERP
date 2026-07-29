@@ -592,9 +592,13 @@ router.get('/timesheet-report', async (req, res) => {
         u.name,
         COALESCE(des.name, u.designation, '—')             AS designation,
         COALESCE(dep.name, u.department, '—')              AS department,
-        COALESCE(ep.contractor_name,
-          CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
-               THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END) AS company,
+        CASE
+          WHEN ep.contractor_name IS NOT NULL AND TRIM(ep.contractor_name) <> ''
+               AND UPPER(TRIM(ep.contractor_name)) <> 'BCIM'
+            THEN ep.contractor_name
+          WHEN COALESCE(ep.employee_category,'staff') = 'workman' THEN 'BCIM WORKERS'
+          ELSE 'BCIM STAFF'
+        END AS company,
         ep.trade                            AS trade,
         COALESCE(proj.name, 'Head Office')  AS project_name,
         COALESCE(proj.id::text, 'HEAD_OFFICE') AS project_id,
@@ -850,9 +854,13 @@ router.get('/manpower-report', async (req, res) => {
 
     const staffRes = await query(`
       SELECT
-        UPPER(TRIM(COALESCE(ep.contractor_name,
-          CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
-               THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END))) AS company,
+        UPPER(TRIM(CASE
+          WHEN ep.contractor_name IS NOT NULL AND TRIM(ep.contractor_name) <> ''
+               AND UPPER(TRIM(ep.contractor_name)) <> 'BCIM'
+            THEN ep.contractor_name
+          WHEN COALESCE(ep.employee_category,'staff') = 'workman' THEN 'BCIM WORKERS'
+          ELSE 'BCIM STAFF'
+        END)) AS company,
         COALESCE(des.name, u.designation, '—')       AS designation,
         COALESCE(a.site, '')                              AS site,
         COALESCE(a.shift, 'DAY')                          AS shift,
@@ -864,9 +872,13 @@ router.get('/manpower-report', async (req, res) => {
       WHERE a.company_id = $1 AND a.attendance_date = $2 AND a.status = 'present'
         ${staffProjectFilter}
       GROUP BY
-        UPPER(TRIM(COALESCE(ep.contractor_name,
-          CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
-               THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END))),
+        UPPER(TRIM(CASE
+          WHEN ep.contractor_name IS NOT NULL AND TRIM(ep.contractor_name) <> ''
+               AND UPPER(TRIM(ep.contractor_name)) <> 'BCIM'
+            THEN ep.contractor_name
+          WHEN COALESCE(ep.employee_category,'staff') = 'workman' THEN 'BCIM WORKERS'
+          ELSE 'BCIM STAFF'
+        END)),
         COALESCE(des.name, u.designation, '—'),
         a.site, a.shift
     `, staffParams);
@@ -1049,9 +1061,13 @@ router.get('/monthly-report', async (req, res) => {
         COALESCE(dep.name, u.department,
           CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
                THEN 'BCIM Workers' ELSE '—' END)  AS department,
-        COALESCE(ep.contractor_name,
-          CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
-               THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END) AS company,
+        CASE
+          WHEN ep.contractor_name IS NOT NULL AND TRIM(ep.contractor_name) <> ''
+               AND UPPER(TRIM(ep.contractor_name)) <> 'BCIM'
+            THEN ep.contractor_name
+          WHEN COALESCE(ep.employee_category,'staff') = 'workman' THEN 'BCIM WORKERS'
+          ELSE 'BCIM STAFF'
+        END AS company,
         a.attendance_date::text                AS attendance_date,
         COALESCE(a.status, 'absent')           AS attendance_status,
         TO_CHAR(a.in_time,  'HH12:MI AM')     AS in_time,

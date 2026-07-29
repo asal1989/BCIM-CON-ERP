@@ -100,9 +100,13 @@ async function fetchManpowerData(companyId, projectId, targetDate) {
 
   const { rows } = await query(`
     SELECT
-      COALESCE(ep.contractor_name,
-        CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
-             THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END) AS company,
+      CASE
+          WHEN ep.contractor_name IS NOT NULL AND TRIM(ep.contractor_name) <> ''
+               AND UPPER(TRIM(ep.contractor_name)) <> 'BCIM'
+            THEN ep.contractor_name
+          WHEN COALESCE(ep.employee_category,'staff') = 'workman' THEN 'BCIM WORKERS'
+          ELSE 'BCIM STAFF'
+        END AS company,
       COALESCE(des.name, u.designation, '—')       AS designation,
       COALESCE(a.site, '')                              AS site,
       COALESCE(a.shift, 'DAY')                          AS shift,
@@ -114,9 +118,13 @@ async function fetchManpowerData(companyId, projectId, targetDate) {
     WHERE a.company_id = $1 AND a.attendance_date = $2 AND a.status = 'present'
       ${projectFilter}
     GROUP BY
-      COALESCE(ep.contractor_name,
-        CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
-             THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END),
+      CASE
+          WHEN ep.contractor_name IS NOT NULL AND TRIM(ep.contractor_name) <> ''
+               AND UPPER(TRIM(ep.contractor_name)) <> 'BCIM'
+            THEN ep.contractor_name
+          WHEN COALESCE(ep.employee_category,'staff') = 'workman' THEN 'BCIM WORKERS'
+          ELSE 'BCIM STAFF'
+        END,
       COALESCE(des.name, u.designation, '—'),
       a.site, a.shift
   `, params);
@@ -146,9 +154,13 @@ async function fetchAllProjectsManpowerData(companyId, targetDate) {
   const { rows: rawRows } = await query(`
     SELECT
       COALESCE(pr.name, 'Head Office')                  AS project,
-      COALESCE(ep.contractor_name,
-        CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
-             THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END) AS company,
+      CASE
+          WHEN ep.contractor_name IS NOT NULL AND TRIM(ep.contractor_name) <> ''
+               AND UPPER(TRIM(ep.contractor_name)) <> 'BCIM'
+            THEN ep.contractor_name
+          WHEN COALESCE(ep.employee_category,'staff') = 'workman' THEN 'BCIM WORKERS'
+          ELSE 'BCIM STAFF'
+        END AS company,
       COALESCE(des.name, u.designation, '—')       AS designation,
       COALESCE(a.site, '')                              AS site,
       COALESCE(a.shift, 'DAY')                          AS shift,
@@ -161,9 +173,13 @@ async function fetchAllProjectsManpowerData(companyId, targetDate) {
     WHERE a.company_id = $1 AND a.attendance_date = $2 AND a.status = 'present'
     GROUP BY
       COALESCE(pr.name, 'Head Office'),
-      COALESCE(ep.contractor_name,
-        CASE WHEN COALESCE(ep.employee_category,'staff') = 'workman'
-             THEN 'BCIM WORKERS' ELSE 'BCIM STAFF' END),
+      CASE
+          WHEN ep.contractor_name IS NOT NULL AND TRIM(ep.contractor_name) <> ''
+               AND UPPER(TRIM(ep.contractor_name)) <> 'BCIM'
+            THEN ep.contractor_name
+          WHEN COALESCE(ep.employee_category,'staff') = 'workman' THEN 'BCIM WORKERS'
+          ELSE 'BCIM STAFF'
+        END,
       COALESCE(des.name, u.designation, '—'),
       a.site, a.shift
   `, [companyId, targetDate]);
