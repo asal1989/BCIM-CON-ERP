@@ -277,12 +277,12 @@ const navGroups = [
     { to: '/hr-admin/reports/department-summary', icon: Building2,       label: 'Department Summary' },
     { to: '/hr-admin/reports/log-records',        icon: ScrollText,      label: 'Log Records' },
     { to: '/hr-admin/reports/random-check',       icon: Shuffle,         label: 'Random Check Report' },
+    { to: '/hr-admin/import',                     icon: Upload,          label: 'Import Data' },
   ]},
   { label: 'Setup & Tools', superAdminOnly: true, items: [
     { to: '/hr-admin/essl-sync',          icon: Fingerprint,     label: 'ESSL Biometric' },
     { to: '/hr-admin/essl-sync/health',   icon: Activity,        label: 'ESSL Sync Health' },
     { to: '/hr-admin/attendance/recalculate', icon: RefreshCw,   label: 'Re-calculate Attendance' },
-    { to: '/hr-admin/import',             icon: Upload,          label: 'Import Data' },
     { to: '/hr-admin/documents',          icon: FolderSearch,    label: 'Documents' },
     { to: '/hr-admin/compliance',         icon: ShieldCheck,     label: 'Compliance' },
     { to: '/hr-admin/compliance-tracker', icon: ShieldCheck,     label: 'Compliance Tracker' },
