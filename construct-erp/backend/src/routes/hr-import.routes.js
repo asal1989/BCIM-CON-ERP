@@ -10,7 +10,10 @@ const { authenticate, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(authenticate);
-router.use(authorize('super_admin', 'admin', 'hr_admin'));
+// 'hr' included alongside 'hr_admin' — hr-attendance.routes.js's
+// FULL_HR_ROLES already treats them as equivalent; this route had fallen out
+// of sync, so a role='hr' account with Import Data on its menu got a 403.
+router.use(authorize('super_admin', 'admin', 'hr', 'hr_admin'));
 
 // ─── multer: memory storage, accept CSV + XLSX ───────────────────────────────
 const upload = multer({
