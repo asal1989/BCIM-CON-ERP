@@ -642,7 +642,7 @@ router.get('/', async (req, res) => {
   try {
     const { project_id, status } = req.query;
     let sql = `
-      SELECT mr.*, p.name AS project_name,
+      SELECT mr.*, p.name AS project_name, p.mrs_workflow,
              u.name AS raised_by_name, a.name AS approved_by_name
       FROM material_requisitions mr
       JOIN projects p ON mr.project_id = p.id

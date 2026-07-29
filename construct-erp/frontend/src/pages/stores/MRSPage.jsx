@@ -695,7 +695,13 @@ export default function MRSPage() {
     approved_pm: ['approved_pm', 'approved_srpm'],
   };
 
+  // Only projects that opted into the Client Approval stage make 'approved_md'
+  // a non-final status — everywhere else it's already "done."
+  const mrsUsesClientApproval = (m) => (m.mrs_workflow?.stages || []).includes('client-approve');
+  const isAwaitingClient = (m) => m.status === 'approved_md' && mrsUsesClientApproval(m);
+
   const filtered = allMRS.filter(m => {
+    if (statusFilter === 'awaiting_client') return isAwaitingClient(m);
     if (statusFilter !== 'all') {
       const allowed = statusGroups[statusFilter] || [statusFilter];
       if (!allowed.includes(m.status)) return false;
@@ -832,6 +838,8 @@ export default function MRSPage() {
     ['approved_pm',     'Project Manager', allMRS.filter(m => ['approved_pm', 'approved_srpm'].includes(m.status)).length],
     ['approved_mgmt',   'Project Director', allMRS.filter(m => m.status === 'approved_mgmt').length],
     ['approved_md',     'Managing Director', allMRS.filter(m => m.status === 'approved_md').length],
+    ['awaiting_client', 'Awaiting Client', allMRS.filter(m => isAwaitingClient(m)).length],
+    ['client_approved', 'Client Approved', allMRS.filter(m => m.status === 'client_approved').length],
     ['issued',          'Issued',      allMRS.filter(m => m.status === 'issued').length],
     ['rejected',        'Rejected',    allMRS.filter(m => m.status === 'rejected').length],
   ];
@@ -848,6 +856,7 @@ export default function MRSPage() {
   const storesManagerCount = allMRS.filter(m => ['stores_verified', 'verified_tower'].includes(m.status)).length;
   const approvedPmCount    = allMRS.filter(m => ['approved_pm', 'approved_srpm'].includes(m.status)).length;
   const approvedMgmtCount  = allMRS.filter(m => m.status === 'approved_mgmt').length;
+  const awaitingClientCount = allMRS.filter(m => isAwaitingClient(m)).length;
 
   const resetForm = () => {
     setShowForm(false);
@@ -1019,6 +1028,11 @@ export default function MRSPage() {
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <StatusBadge status={liveStatus} />
+            {isAwaitingClient({ status: liveStatus, mrs_workflow: detailedMRS?.mrs_workflow }) && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border bg-teal-50 text-teal-700 border-teal-200">
+                <UserCheck className="w-3.5 h-3.5" /> Awaiting Client Approval
+              </span>
+            )}
             {canEditMRS && (
               <button
                 onClick={() => setShowEditModal(true)}
@@ -1212,6 +1226,43 @@ export default function MRSPage() {
                     })}
                   </div>
                 </div>
+
+                {liveStatus === 'client_approved' && detailedMRS && (
+                  <div className="rounded-xl p-4 shadow-sm border bg-teal-50 border-teal-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CheckCircle2 className="w-4 h-4 text-teal-600" />
+                      <p className="text-sm font-bold text-teal-800">Client Approved</p>
+                    </div>
+                    <dl className="text-xs space-y-1.5">
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-teal-600">Client contact</dt>
+                        <dd className="font-semibold text-teal-900 text-right">{detailedMRS.client_contact_name || '—'}</dd>
+                      </div>
+                      {detailedMRS.client_reference_no && (
+                        <div className="flex justify-between gap-3">
+                          <dt className="text-teal-600">Client reference no.</dt>
+                          <dd className="font-mono font-semibold text-teal-900 text-right">{detailedMRS.client_reference_no}</dd>
+                        </div>
+                      )}
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-teal-600">Approved on</dt>
+                        <dd className="font-semibold text-teal-900 text-right">
+                          {detailedMRS.client_approved_at ? dayjs(detailedMRS.client_approved_at).format('DD MMM YYYY, h:mm A') : '—'}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-teal-600">Logged by</dt>
+                        <dd className="font-semibold text-teal-900 text-right">{detailedMRS.client_approved_by_name || '—'}</dd>
+                      </div>
+                      {detailedMRS.client_approval_remarks && (
+                        <div className="pt-1.5 mt-1.5 border-t border-teal-200">
+                          <dt className="text-teal-600 mb-0.5">Remarks</dt>
+                          <dd className="text-teal-900">{detailedMRS.client_approval_remarks}</dd>
+                        </div>
+                      )}
+                    </dl>
+                  </div>
+                )}
 
                 {currentAction && (
                   <div className={`rounded-xl p-4 space-y-3 shadow-sm border ${
@@ -1492,7 +1543,7 @@ export default function MRSPage() {
 
 
       {/* ── KPI Row ── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3 mb-5">
         <StatCard icon={ClipboardList} label="Total MRS"         value={allMRS.length}       sub="All requisitions"   color="slate"
           onClick={() => setStatusFilter('all')}         active={statusFilter === 'all'} />
         <StatCard icon={CalendarDays}  label="This Month"        value={mrsThisMonth.length} sub={now.format('MMMM YYYY')} color="indigo" />
@@ -1501,6 +1552,8 @@ export default function MRSPage() {
         <StatCard icon={Activity}      label="In Pipeline"       value={inPipelineCount}     sub="Mid-approval"       color="blue" />
         <StatCard icon={Send}          label="Ready for Issue"   value={authorizedCount}     sub="MD authorized"      color="emerald"
           onClick={() => setStatusFilter('approved_md')} active={statusFilter === 'approved_md'} />
+        <StatCard icon={UserCheck}     label="Awaiting Client"   value={awaitingClientCount} sub="MD done, client pending" color="teal"
+          onClick={() => setStatusFilter('awaiting_client')} active={statusFilter === 'awaiting_client'} />
         <StatCard icon={AlertCircle}   label="Urgent / Critical" value={urgentCount}         sub="High priority"      color="red" />
       </div>
 
@@ -1655,6 +1708,11 @@ export default function MRSPage() {
                       <td className="px-4 py-4 whitespace-nowrap align-top">
                         <div className="flex flex-col gap-1.5 items-start">
                           <StatusBadge status={mrs.status} />
+                          {isAwaitingClient(mrs) && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border bg-teal-50 text-teal-700 border-teal-200">
+                              <UserCheck size={10} strokeWidth={2.5} /> Awaiting Client
+                            </span>
+                          )}
                           {mrs.has_po && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border bg-purple-50 text-purple-700 border-purple-200">
                               <ShoppingCart size={10} strokeWidth={2.5} /> PO Raised
@@ -2630,6 +2688,7 @@ function StatCard({ icon: Icon, label, value, sub, color = 'slate', onClick, act
     amber:   { chip: 'bg-amber-50 text-amber-600',      bar: 'bg-amber-500',   ring: 'ring-amber-300' },
     blue:    { chip: 'bg-blue-50 text-blue-600',        bar: 'bg-blue-500',    ring: 'ring-blue-300' },
     emerald: { chip: 'bg-emerald-50 text-emerald-600',  bar: 'bg-emerald-500', ring: 'ring-emerald-300' },
+    teal:    { chip: 'bg-teal-50 text-teal-600',        bar: 'bg-teal-500',    ring: 'ring-teal-300' },
     red:     { chip: 'bg-rose-50 text-rose-600',        bar: 'bg-rose-500',    ring: 'ring-rose-300' },
   }[color] || {};
   return (
