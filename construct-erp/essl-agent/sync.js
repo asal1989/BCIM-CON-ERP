@@ -229,33 +229,48 @@ async function logAvailableTables(conn) {
   }
 }
 
-// ── Detect which direction column the ESSL DB uses ───────────────────────────
+// ── Detect which direction column the ESSL DB uses (DIAGNOSTIC ONLY) ─────────
 // ESSL etimetracklite versions differ: some use "Direction", some "IoType".
-// Values: 0 = Entry/IN, 1 = Exit/OUT.
-// IMPORTANT: a column can EXIST but never actually be populated (confirmed on
-// this install — Direction is always '' and AttDirection always NULL across
-// 10k+ live rows). SQL Server implicitly converts '' to 0 in numeric
-// comparisons, so `Direction = 0` silently matched EVERY row, mapping every
-// swipe — in or out — to 'in'. So existence alone isn't enough: check for at
-// least one row with real (non-null, non-blank) data before trusting a column.
+// Values: 0 = Entry/IN, 1 = Exit/OUT — in theory.
+//
+// CONFIRMED TWICE on this install (2026-07-15 and again 2026-07-29) that these
+// columns cannot be trusted: Direction/AttDirection sit blank/NULL for the
+// overwhelming majority of real device punches, and a single stray populated
+// row (e.g. a manually-entered record) is enough to make the previous
+// "at least 1 non-blank row" check wrongly trust the column. SQL Server then
+// implicitly converts '' to 0 in the `= 0`/`= 1` comparison, so EVERY blank
+// row silently becomes 'in' — that's why staff who genuinely punched OUT
+// (confirmed on the ESSL device's own log viewer) showed up with no out_time
+// at all: attendance.groupSwipes() below never received a single 'out'.
+//
+// This function is now diagnostic-only (reported via heartbeat so the real
+// column population can be inspected remotely) — its result is NOT used to
+// classify punches. See groupSwipes(): direction is derived purely
+// chronologically (first punch of the day = in, last = out), which doesn't
+// depend on any device column being populated at all.
 async function detectDirectionExpr(conn, table) {
   for (const col of ['Direction', 'IoType', 'InOutMode']) {
     try {
-      const r = await conn.request().query(
-        `SELECT TOP 1 1 AS x FROM [${table}] WHERE [${col}] IS NOT NULL AND LTRIM(RTRIM(CAST([${col}] AS VARCHAR(50)))) <> ''`
-      );
-      if (!r.recordset.length) {
-        console.log(`[ESSL Agent] Column [${col}] exists but has no populated data — skipping.`);
+      // Require BOTH a 0 and a 1 value to actually appear across a real sample —
+      // not just one non-blank row — before even reporting a column as a candidate.
+      const r = await conn.request().query(`
+        SELECT
+          SUM(CASE WHEN [${col}] = 0 THEN 1 ELSE 0 END) AS zeros,
+          SUM(CASE WHEN [${col}] = 1 THEN 1 ELSE 0 END) AS ones,
+          COUNT(*) AS total
+        FROM (SELECT TOP 500 [${col}] FROM [${table}] ORDER BY LogDate DESC) x
+      `);
+      const { zeros, ones, total } = r.recordset[0] || {};
+      if (!total || !zeros || !ones) {
+        console.log(`[ESSL Agent] Column [${col}] not reliably populated (0s=${zeros||0}, 1s=${ones||0} of ${total||0} sampled) — not using for direction.`);
         continue;
       }
       directionSource = col;
-      return `CASE WHEN d.[${col}] = 0 THEN 'in' WHEN d.[${col}] = 1 THEN 'out' ELSE NULL END`;
+      console.log(`[ESSL Agent] Column [${col}] looks populated (0s=${zeros}, 1s=${ones} of ${total}) — reported via heartbeat for reference only, still not used for classification.`);
+      return;
     } catch (_) {}
   }
-  // Fallback — hour-based approximation (inaccurate for shift workers)
-  directionSource = 'hour_fallback';
-  console.warn('[ESSL Agent] Warning: no populated Direction/IoType/InOutMode column found; using hour-based approximation.');
-  return `CASE WHEN DATEPART(HOUR, d.LogDate) < 12 THEN 'in' ELSE 'out' END`;
+  directionSource = 'none_populated';
 }
 
 // ── Pull device online/offline status from the ESSL "Devices" master table ───
@@ -291,17 +306,19 @@ async function pullDeviceStatus(conn) {
 }
 
 // ── Pull swipe data from ESSL ─────────────────────────────────────────────────
+// direction is NOT used for classification (see detectDirectionExpr above) —
+// C1 is still selected and exported on raw swipes purely for audit/reference.
 async function pullSwipes(conn, tables, fromDT, toDT) {
   if (!tables.length) return [];
 
-  // Detect direction column once using the first available table
-  const dirExpr = await detectDirectionExpr(conn, tables[0]);
+  // Diagnostic only — populates `directionSource` for the heartbeat, doesn't affect grouping.
+  await detectDirectionExpr(conn, tables[0]);
 
   const unionSQL = tables.map(t => `
     SELECT
-      e.EmployeeCode                       AS emp_code,
-      CONVERT(VARCHAR(23), d.LogDate, 121) AS swipe_time,
-      ${dirExpr}                           AS direction
+      e.EmployeeCode                          AS emp_code,
+      CONVERT(VARCHAR(23), d.LogDate, 121)    AS swipe_time,
+      LOWER(LTRIM(RTRIM(COALESCE(d.C1, '')))) AS direction
     FROM [${t}] d
     JOIN Employees e ON e.NumericCode = d.UserId
     WHERE d.LogDate BETWEEN @from AND @to
@@ -316,6 +333,9 @@ async function pullSwipes(conn, tables, fromDT, toDT) {
 }
 
 // ── Group swipes into daily attendance records ────────────────────────────────
+// Direction flags from ESSL are unreliable on this install (confirmed twice —
+// see detectDirectionExpr) — in/out is derived purely chronologically:
+// first punch of the day = in_time, last punch = out_time (if more than one).
 function groupSwipes(rows) {
   const grouped = {};
   for (const row of rows) {
@@ -325,16 +345,15 @@ function groupSwipes(rows) {
     const date = toDateStr(dt);
     const time = dt.toTimeString().slice(0, 8);
     const key  = `${code}|${date}`;
-    if (!grouped[key]) grouped[key] = { emp_code: code, date, ins: [], outs: [] };
-    if (row.direction === 'in') grouped[key].ins.push(time);
-    else grouped[key].outs.push(time);
+    if (!grouped[key]) grouped[key] = { emp_code: code, date, all: [] };
+    grouped[key].all.push(time);
   }
 
   return Object.values(grouped).map(g => {
-    g.ins.sort(); g.outs.sort();
-    const in_time     = g.ins[0] || null;
-    const out_time    = g.outs[g.outs.length - 1] || null;
-    const punch_count = g.ins.length + g.outs.length;
+    g.all.sort();
+    const punch_count = g.all.length;
+    const in_time      = g.all[0] || null;
+    const out_time     = punch_count > 1 ? g.all[punch_count - 1] : null;
     return { emp_code: g.emp_code, date: g.date, in_time, out_time, punch_count };
   });
 }
