@@ -66,6 +66,21 @@ runSchemaInit('hire_daily_log_table', async () => {
     )
   `);
   await query(`CREATE INDEX IF NOT EXISTS idx_hire_daily_log_wo ON wo_hire_daily_log(wo_id, work_date)`);
+
+  // Site log-sheet fields (mirrors the manual DG/JCB daily log sheets) — all optional,
+  // only filled in where the equipment actually tracks them (e.g. no odometer for a crane).
+  await query(`ALTER TABLE wo_hire_daily_log ADD COLUMN IF NOT EXISTS start_time VARCHAR(20)`);
+  await query(`ALTER TABLE wo_hire_daily_log ADD COLUMN IF NOT EXISTS end_time VARCHAR(20)`);
+  await query(`ALTER TABLE wo_hire_daily_log ADD COLUMN IF NOT EXISTS hours_meter_start NUMERIC(10,2)`);
+  await query(`ALTER TABLE wo_hire_daily_log ADD COLUMN IF NOT EXISTS hours_meter_end NUMERIC(10,2)`);
+  await query(`ALTER TABLE wo_hire_daily_log ADD COLUMN IF NOT EXISTS break_hours NUMERIC(10,2)`);
+  await query(`ALTER TABLE wo_hire_daily_log ADD COLUMN IF NOT EXISTS km_start NUMERIC(10,2)`);
+  await query(`ALTER TABLE wo_hire_daily_log ADD COLUMN IF NOT EXISTS km_end NUMERIC(10,2)`);
+  await query(`ALTER TABLE wo_hire_daily_log ADD COLUMN IF NOT EXISTS diesel_opening NUMERIC(10,2)`);
+  await query(`ALTER TABLE wo_hire_daily_log ADD COLUMN IF NOT EXISTS diesel_issued NUMERIC(10,2)`);
+  await query(`ALTER TABLE wo_hire_daily_log ADD COLUMN IF NOT EXISTS diesel_closing NUMERIC(10,2)`);
+  await query(`ALTER TABLE wo_hire_daily_log ADD COLUMN IF NOT EXISTS work_description TEXT`);
+  await query(`ALTER TABLE wo_hire_daily_log ADD COLUMN IF NOT EXISTS requested_by VARCHAR(150)`);
 });
 
 runSchemaInit('hire_log_tables', async () => {
@@ -312,15 +327,35 @@ router.get('/:woId/daily', async (req, res) => {
 // POST /:woId/daily — add a daily log entry
 router.post('/:woId/daily', authorize(...PLANNER), async (req, res) => {
   try {
-    const { work_date, wo_item_id, qty, notes } = req.body;
+    const {
+      work_date, wo_item_id, notes,
+      start_time, end_time, hours_meter_start, hours_meter_end, break_hours,
+      km_start, km_end, diesel_opening, diesel_issued, diesel_closing,
+      work_description, requested_by,
+    } = req.body;
+    let { qty } = req.body;
+    // Auto-derive qty (billable hours) from the hours-meter reading when both ends are given,
+    // same as the manual log sheet's "Hours Meter - Total" column, minus break hours if logged.
+    const hmStart = hours_meter_start != null && hours_meter_start !== '' ? parseFloat(hours_meter_start) : null;
+    const hmEnd   = hours_meter_end   != null && hours_meter_end   !== '' ? parseFloat(hours_meter_end)   : null;
+    if ((qty == null || qty === '') && hmStart != null && hmEnd != null) {
+      qty = Math.max(0, hmEnd - hmStart - (parseFloat(break_hours) || 0));
+    }
     if (!work_date || !wo_item_id || qty == null)
-      return res.status(400).json({ error: 'work_date, wo_item_id and qty are required' });
+      return res.status(400).json({ error: 'work_date, wo_item_id and qty (or hours meter start/end) are required' });
     const check = await query(`SELECT id FROM sc_wo_items WHERE id=$1 AND wo_id=$2`, [wo_item_id, req.params.woId]);
     if (!check.rows.length) return res.status(400).json({ error: 'Item not found on this WO' });
     const r = await query(
-      `INSERT INTO wo_hire_daily_log (company_id, wo_id, work_date, wo_item_id, qty, notes, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [CID(req), req.params.woId, work_date, wo_item_id, qty, notes || null, req.user.id]
+      `INSERT INTO wo_hire_daily_log (
+         company_id, wo_id, work_date, wo_item_id, qty, notes,
+         start_time, end_time, hours_meter_start, hours_meter_end, break_hours,
+         km_start, km_end, diesel_opening, diesel_issued, diesel_closing,
+         work_description, requested_by, created_by
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`,
+      [CID(req), req.params.woId, work_date, wo_item_id, qty, notes || null,
+       start_time || null, end_time || null, hmStart, hmEnd, break_hours || null,
+       km_start || null, km_end || null, diesel_opening || null, diesel_issued || null, diesel_closing || null,
+       work_description || null, requested_by || null, req.user.id]
     );
     res.status(201).json({ data: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }

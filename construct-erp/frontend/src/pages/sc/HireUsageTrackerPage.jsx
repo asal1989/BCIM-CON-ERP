@@ -459,21 +459,67 @@ function GroupTable({ wo, group, entries, totals, onRaiseBill, raisingId, onEdit
   );
 }
 
+// Non-italic strip of DG/JCB-style log sheet readings under a daily row's Notes cell
+function LogSheetDetails({ r }) {
+  const bits = [];
+  if (r.start_time || r.end_time) bits.push(`${r.start_time || '?'} – ${r.end_time || '?'}`);
+  if (r.hours_meter_start != null && r.hours_meter_end != null)
+    bits.push(`HM ${num(r.hours_meter_start).toFixed(1)}→${num(r.hours_meter_end).toFixed(1)}`);
+  if (r.break_hours) bits.push(`Break ${num(r.break_hours).toFixed(1)}h`);
+  if (r.km_start != null && r.km_end != null)
+    bits.push(`${num(r.km_end - r.km_start).toFixed(0)} km`);
+  if (r.diesel_opening != null || r.diesel_issued != null || r.diesel_closing != null) {
+    const total = num(r.diesel_opening) + num(r.diesel_issued);
+    const consumed = r.diesel_closing != null ? Math.max(0, total - num(r.diesel_closing)) : null;
+    bits.push(`Diesel ${consumed != null ? consumed.toFixed(1) + 'L used' : total.toFixed(1) + 'L'}`);
+  }
+  if (r.requested_by) bits.push(`Req: ${r.requested_by}`);
+  if (!bits.length && !r.work_description) return null;
+  return (
+    <div className="text-[10px] text-slate-400 not-italic mt-0.5">
+      {r.work_description && <span className="text-slate-500">{r.work_description}</span>}
+      {bits.length > 0 && <span>{r.work_description ? ' · ' : ''}{bits.join(' · ')}</span>}
+    </div>
+  );
+}
+
 // ─── Daily Log Section ───────────────────────────────────────────────────────
 function DailyLogSection({ wo, equipmentGroups, onCreateBill }) {
   const qc = useQueryClient();
   const allCats = equipmentGroups.flatMap(g => g.categories);
 
   const [showAddRow, setShowAddRow] = useState(false);
+  const [showLogSheet, setShowLogSheet] = useState(false); // DG/JCB-style log sheet fields
   const [newDate,    setNewDate]    = useState(dayjs().format('YYYY-MM-DD'));
   const [newItemId,  setNewItemId]  = useState('');
   const [newQty,     setNewQty]     = useState('');
   const [newNotes,   setNewNotes]   = useState('');
+  // Log sheet fields — mirror the manual DG/JCB Daily Log Sheet columns
+  const [startTime,      setStartTime]      = useState('');
+  const [endTime,        setEndTime]        = useState('');
+  const [hmStart,        setHmStart]        = useState('');
+  const [hmEnd,          setHmEnd]          = useState('');
+  const [breakHours,     setBreakHours]     = useState('');
+  const [kmStart,        setKmStart]        = useState('');
+  const [kmEnd,          setKmEnd]          = useState('');
+  const [dieselOpening,  setDieselOpening]  = useState('');
+  const [dieselIssued,   setDieselIssued]   = useState('');
+  const [dieselClosing,  setDieselClosing]  = useState('');
+  const [workDesc,       setWorkDesc]       = useState('');
+  const [requestedBy,    setRequestedBy]    = useState('');
 
   const selectedCat = allCats.find(c => c.id === newItemId);
   const qtyUnit = selectedCat?.unit || 'Qty';
   const isMonthlyUnit = /month/i.test(qtyUnit);
   const qtyLabel = isMonthlyUnit ? 'Days Worked' : qtyUnit;
+
+  // Hours-meter total (Start/End − Break), same formula as the log-sheet's "Hours Meter - Total" column
+  const hmTotal = (hmStart !== '' && hmEnd !== '')
+    ? Math.max(0, num(hmEnd) - num(hmStart) - num(breakHours))
+    : null;
+  const kmTotal = (kmStart !== '' && kmEnd !== '') ? Math.max(0, num(kmEnd) - num(kmStart)) : null;
+  const dieselTotal = (dieselOpening !== '' || dieselIssued !== '') ? num(dieselOpening) + num(dieselIssued) : null;
+  const dieselConsumption = (dieselTotal != null && dieselClosing !== '') ? Math.max(0, dieselTotal - num(dieselClosing)) : null;
 
   // Hide "Create Bill from Log" if all WO categories are monthly-rated (bill raised manually)
   const allMonthly = allCats.length > 0 && allCats.every(c => /month/i.test(c.unit || ''));
@@ -491,6 +537,9 @@ function DailyLogSection({ wo, equipmentGroups, onCreateBill }) {
       qc.invalidateQueries({ queryKey: ['hire-daily-log', wo.id] });
       setShowAddRow(false);
       setNewQty(''); setNewNotes('');
+      setStartTime(''); setEndTime(''); setHmStart(''); setHmEnd(''); setBreakHours('');
+      setKmStart(''); setKmEnd(''); setDieselOpening(''); setDieselIssued(''); setDieselClosing('');
+      setWorkDesc(''); setRequestedBy('');
     },
     onError: e => toast.error(e?.response?.data?.error || 'Failed'),
   });
@@ -502,8 +551,17 @@ function DailyLogSection({ wo, equipmentGroups, onCreateBill }) {
   });
 
   const handleAdd = () => {
-    if (!newDate || !newItemId || !newQty) return toast.error('Date, equipment and qty are required');
-    addMut.mutate({ work_date: newDate, wo_item_id: newItemId, qty: parseFloat(newQty), notes: newNotes });
+    if (!newDate || !newItemId) return toast.error('Date and equipment are required');
+    if (!newQty && hmTotal == null) return toast.error('Enter Qty, or Hours Meter Start & End');
+    addMut.mutate({
+      work_date: newDate, wo_item_id: newItemId,
+      qty: newQty ? parseFloat(newQty) : undefined, notes: newNotes,
+      start_time: startTime, end_time: endTime,
+      hours_meter_start: hmStart, hours_meter_end: hmEnd, break_hours: breakHours,
+      km_start: kmStart, km_end: kmEnd,
+      diesel_opening: dieselOpening, diesel_issued: dieselIssued, diesel_closing: dieselClosing,
+      work_description: workDesc, requested_by: requestedBy,
+    });
   };
 
   // Totals per item_id
@@ -558,46 +616,128 @@ function DailyLogSection({ wo, equipmentGroups, onCreateBill }) {
 
       {/* Add Row form */}
       {showAddRow && (
-        <div className="px-4 py-3 bg-indigo-50/60 border-b border-indigo-100 flex flex-wrap gap-3 items-end">
-          <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Date *</label>
-            <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)}
-              className={inp} style={{ minWidth: 130 }} />
+        <div className="px-4 py-3 bg-indigo-50/60 border-b border-indigo-100">
+          <div className="flex flex-wrap gap-3 items-end">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Date *</label>
+              <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)}
+                className={inp} style={{ minWidth: 130 }} />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Equipment / Category *</label>
+              <select value={newItemId} onChange={e => setNewItemId(e.target.value)}
+                className={inp} style={{ minWidth: 220 }}>
+                <option value="">— select —</option>
+                {equipmentGroups.map(g => (
+                  <optgroup key={g.equipment_group} label={g.equipment_group}>
+                    {g.categories.map(c => (
+                      <option key={c.id} value={c.id}>{c.usage_category} ({c.unit})</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+                {qtyLabel} {hmTotal == null && '*'}
+              </label>
+              <input type="number" step="0.5" min="0" value={hmTotal != null ? hmTotal.toFixed(2) : newQty}
+                onChange={e => setNewQty(e.target.value)} disabled={hmTotal != null}
+                className={inp} style={{ width: 90 }} placeholder={isMonthlyUnit ? '1' : qtyUnit === 'Day' ? '1' : 'e.g. 5.5'} />
+              {hmTotal != null && <p className="text-[9px] text-indigo-500 mt-0.5">from hours meter</p>}
+            </div>
+            <div className="flex-1" style={{ minWidth: 140 }}>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Notes / Remarks</label>
+              <input type="text" value={newNotes} onChange={e => setNewNotes(e.target.value)}
+                className={inp} placeholder="e.g. Debris removal" />
+            </div>
+            <div className="flex gap-2 pb-0.5">
+              <button onClick={handleAdd} disabled={addMut.isPending}
+                className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition">
+                {addMut.isPending ? 'Saving…' : 'Save'}
+              </button>
+              <button onClick={() => setShowAddRow(false)}
+                className="px-3 py-1.5 text-xs font-bold border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition">
+                Cancel
+              </button>
+            </div>
           </div>
-          <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Equipment / Category *</label>
-            <select value={newItemId} onChange={e => setNewItemId(e.target.value)}
-              className={inp} style={{ minWidth: 220 }}>
-              <option value="">— select —</option>
-              {equipmentGroups.map(g => (
-                <optgroup key={g.equipment_group} label={g.equipment_group}>
-                  {g.categories.map(c => (
-                    <option key={c.id} value={c.id}>{c.usage_category} ({c.unit})</option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">{qtyLabel} *</label>
-            <input type="number" step="0.5" min="0" value={newQty} onChange={e => setNewQty(e.target.value)}
-              className={inp} style={{ width: 80 }} placeholder={isMonthlyUnit ? '1' : qtyUnit === 'Day' ? '1' : 'e.g. 5.5'} />
-          </div>
-          <div className="flex-1" style={{ minWidth: 140 }}>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Notes</label>
-            <input type="text" value={newNotes} onChange={e => setNewNotes(e.target.value)}
-              className={inp} placeholder="e.g. Debris removal" />
-          </div>
-          <div className="flex gap-2 pb-0.5">
-            <button onClick={handleAdd} disabled={addMut.isPending}
-              className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition">
-              {addMut.isPending ? 'Saving…' : 'Save'}
-            </button>
-            <button onClick={() => setShowAddRow(false)}
-              className="px-3 py-1.5 text-xs font-bold border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition">
-              Cancel
-            </button>
-          </div>
+
+          <button onClick={() => setShowLogSheet(v => !v)}
+            className="mt-2 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 transition">
+            {showLogSheet ? '− Hide' : '+ Add'} DG / JCB Log Sheet Details (time, hours meter, diesel, km)
+          </button>
+
+          {showLogSheet && (
+            <div className="mt-2 p-3 bg-white border border-indigo-100 rounded-lg space-y-3">
+              <div className="flex flex-wrap gap-3 items-end">
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Start Time</label>
+                  <input type="text" value={startTime} onChange={e => setStartTime(e.target.value)}
+                    className={inp} style={{ width: 90 }} placeholder="8:00 AM" />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">End Time</label>
+                  <input type="text" value={endTime} onChange={e => setEndTime(e.target.value)}
+                    className={inp} style={{ width: 90 }} placeholder="8:00 PM" />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Break Hrs</label>
+                  <input type="number" step="0.5" min="0" value={breakHours} onChange={e => setBreakHours(e.target.value)}
+                    className={inp} style={{ width: 70 }} />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Hours Meter — Start</label>
+                  <input type="number" step="0.1" min="0" value={hmStart} onChange={e => setHmStart(e.target.value)}
+                    className={inp} style={{ width: 90 }} />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Hours Meter — End</label>
+                  <input type="number" step="0.1" min="0" value={hmEnd} onChange={e => setHmEnd(e.target.value)}
+                    className={inp} style={{ width: 90 }} />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Km — Start</label>
+                  <input type="number" step="1" min="0" value={kmStart} onChange={e => setKmStart(e.target.value)}
+                    className={inp} style={{ width: 80 }} />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Km — End</label>
+                  <input type="number" step="1" min="0" value={kmEnd} onChange={e => setKmEnd(e.target.value)}
+                    className={inp} style={{ width: 80 }} />
+                  {kmTotal != null && <p className="text-[9px] text-indigo-500 mt-0.5">{kmTotal.toFixed(0)} km run</p>}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-3 items-end">
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Diesel Opening Stock</label>
+                  <input type="number" step="0.1" min="0" value={dieselOpening} onChange={e => setDieselOpening(e.target.value)}
+                    className={inp} style={{ width: 100 }} placeholder="Litres" />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Diesel Issued</label>
+                  <input type="number" step="0.1" min="0" value={dieselIssued} onChange={e => setDieselIssued(e.target.value)}
+                    className={inp} style={{ width: 100 }} placeholder="Litres" />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Diesel Closing Stock</label>
+                  <input type="number" step="0.1" min="0" value={dieselClosing} onChange={e => setDieselClosing(e.target.value)}
+                    className={inp} style={{ width: 100 }} placeholder="Litres" />
+                  {dieselConsumption != null && <p className="text-[9px] text-indigo-500 mt-0.5">{dieselConsumption.toFixed(1)} L consumed</p>}
+                </div>
+                <div className="flex-1" style={{ minWidth: 160 }}>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Work Description</label>
+                  <input type="text" value={workDesc} onChange={e => setWorkDesc(e.target.value)}
+                    className={inp} placeholder="e.g. Concreting for raft slab" />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Requested By</label>
+                  <input type="text" value={requestedBy} onChange={e => setRequestedBy(e.target.value)}
+                    className={inp} style={{ width: 130 }} placeholder="Site engineer" />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -636,7 +776,10 @@ function DailyLogSection({ wo, equipmentGroups, onCreateBill }) {
                       <td className="px-3 py-2 text-right font-mono font-bold text-indigo-700">
                         {num(r.qty).toFixed(2)} <span className="text-slate-400 font-normal">{r.item_unit}</span>
                       </td>
-                      <td className="px-3 py-2 text-slate-400 italic">{r.notes || '—'}</td>
+                      <td className="px-3 py-2 text-slate-400 italic">
+                        {r.notes || '—'}
+                        <LogSheetDetails r={r} />
+                      </td>
                       <td className="px-2 py-2 text-center">
                         <button
                           onClick={() => { if (window.confirm('Delete this record?')) delMut.mutate(r.id); }}
