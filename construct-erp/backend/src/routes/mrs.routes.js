@@ -643,11 +643,17 @@ router.get('/', async (req, res) => {
     const { project_id, status } = req.query;
     let sql = `
       SELECT mr.*, p.name AS project_name, p.mrs_workflow,
-             u.name AS raised_by_name, a.name AS approved_by_name
+             u.name AS raised_by_name, a.name AS approved_by_name,
+             -- the internal staff member who LOGGED the client's approval;
+             -- the MR Register lists and exports this alongside the client's
+             -- own reference number, so it has to come back from the list
+             -- endpoint too, not only from GET /:id
+             ca.name AS client_approved_by_name
       FROM material_requisitions mr
       JOIN projects p ON mr.project_id = p.id
       JOIN users u ON mr.raised_by = u.id
       LEFT JOIN users a ON mr.approved_by = a.id
+      LEFT JOIN users ca ON mr.client_approved_by = ca.id
       WHERE p.company_id = $1`;
     let params = [req.user.company_id];
     let i = 2;

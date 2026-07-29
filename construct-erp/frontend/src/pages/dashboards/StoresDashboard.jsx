@@ -5,11 +5,12 @@ import { Link } from 'react-router-dom';
 import {
   Truck, ClipboardList, AlertTriangle, PackageCheck, Clock, Plus,
   ArrowUpRight, Boxes, FileText, ChevronRight, RefreshCw,
-  TrendingUp, CheckCircle2, Building2, IndianRupee, BarChart2,
+  TrendingUp, CheckCircle2, Building2, IndianRupee, BarChart2, UserCheck,
 } from 'lucide-react';
 import { ignAPI, mrsAPI, minAPI, inventoryAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
 import { PageHeader, Theme } from '../../theme';
+import { displayStatus, isAwaitingClient, isFullyApproved, usesClientApproval } from '../../constants/mrStatus';
 import dayjs from 'dayjs';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -37,6 +38,10 @@ const MRS_CFG = {
   approved_srpm:   { label: 'Sr PM Approved', color: '#6366f1', bg: '#eef2ff' },
   approved_mgmt:   { label: 'Mgmt Approved',  color: '#8b5cf6', bg: '#f5f3ff' },
   approved_md:     { label: 'MD Approved',    color: '#10b981', bg: '#f0fdf4' },
+  // Derived display key — MD-approved on a project that also requires client
+  // sign-off. Kept distinct so it never reads as fully approved.
+  awaiting_client: { label: 'Awaiting Client', color: '#0891b2', bg: '#ecfeff' },
+  client_approved: { label: 'Client Approved', color: '#0d9488', bg: '#f0fdfa' },
   issued:          { label: 'Issued',          color: '#14b8a6', bg: '#f0fdfa' },
   rejected:        { label: 'Rejected',        color: '#ef4444', bg: '#fff1f2' },
   draft:           { label: 'Draft',           color: '#94a3b8', bg: '#f8fafc' },
@@ -178,16 +183,25 @@ export default function StoresDashboard() {
 
   /* ── MRS derived ──────────────────────────────────────────── */
   const MRS_CLOSED      = ['issued','rejected','draft'];
-  const MRS_IN_APPROVAL = ['stores_verified','verified_tower','approved_pm','approved_srpm','approved_mgmt','approved_md'];
+  const MRS_IN_APPROVAL = ['stores_verified','verified_tower','approved_pm','approved_srpm','approved_mgmt','approved_md','client_approved'];
   const openMRS    = mrs.filter(m => !MRS_CLOSED.includes(m.status));
   const pendingMRS = mrs.filter(m => m.status === 'pending');
   const inApproval = mrs.filter(m => MRS_IN_APPROVAL.includes(m.status));
   const issuedMRS  = mrs.filter(m => m.status === 'issued');
   const recentMRS  = [...mrs].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 8);
 
+  /* Client sign-off stage — opt-in per project, so an MD-approved MR on such a
+     project is still blocked and must not be counted as ready for a PO. */
+  const awaitingClientMRS = useMemo(() => mrs.filter(isAwaitingClient), [mrs]);
+  const clientApprovedMRS = useMemo(() => mrs.filter(m => m.status === 'client_approved'), [mrs]);
+  const readyForPO        = useMemo(() => mrs.filter(m => isFullyApproved(m) && !MRS_CLOSED.includes(m.status)), [mrs]);
+  const clientProjectMRS  = useMemo(() => mrs.filter(usesClientApproval), [mrs]);
+
+  // Bucket on the DISPLAY status so 'approved_md' splits into MD Approved vs
+  // Awaiting Client instead of collapsing into one misleading row.
   const mrsStatusBuckets = useMemo(() => {
     const b = {};
-    for (const m of mrs) { const s = m.status || 'pending'; b[s] = (b[s] || 0) + 1; }
+    for (const m of mrs) { const s = displayStatus(m) || 'pending'; b[s] = (b[s] || 0) + 1; }
     return b;
   }, [mrs]);
 
@@ -299,15 +313,26 @@ export default function StoresDashboard() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14 }}>
           <KpiSparkCard icon={ClipboardList} label="Open MRS"          value={isLoading ? '—' : openMRS.length}          color="#6366f1" accentBg="#eef2ff" sparkData={sparkMRS} sub={`${mrs.length} total · ${issuedMRS.length} issued`} />
           <KpiSparkCard icon={Clock}         label="In Approval"       value={isLoading ? '—' : inApproval.length}       color="#f59e0b" accentBg="#fffbeb" sparkData={sparkMRS} sub={`${pendingMRS.length} pending sign-off`} />
-          <KpiSparkCard icon={Truck}         label="IGN Pending"       value={isLoading ? '—' : awaitingGRNs.length}     color="#0891b2" accentBg="#e0f2fe" sparkData={sparkIGN} sub={`${grns.length} total · ${approvedGRNs.length} approved`} />
+          <KpiSparkCard icon={UserCheck}     label="Awaiting Client"   value={isLoading ? '—' : awaitingClientMRS.length} color="#0891b2" accentBg="#ecfeff" sparkData={sparkMRS}
+            sub={clientProjectMRS.length ? `${clientApprovedMRS.length} signed · ${readyForPO.length} ready for PO` : 'No client-approval projects'} />
+          <KpiSparkCard icon={Truck}         label="IGN Pending"       value={isLoading ? '—' : awaitingGRNs.length}     color="#0e7490" accentBg="#e0f2fe" sparkData={sparkIGN} sub={`${grns.length} total · ${approvedGRNs.length} approved`} />
           <KpiSparkCard icon={IndianRupee}   label="Stock Value"       value={isLoading || loadVal ? '—' : inrCr(totalStockValue)} color="#22c55e" accentBg="#dcfce7" sparkData={sparkVal} sub={`${totalItems} materials`} />
           <KpiSparkCard icon={ArrowUpRight}  label="Received (Month)"  value={isLoading || loadMonth ? '—' : thisMonthReceivedCount} color="#14b8a6" accentBg="#f0fdfa" sparkData={sparkIGN} sub={`${thisMonthIGNs.length} IGNs this month`} />
           <KpiSparkCard icon={AlertTriangle} label="Low Stock"         value={isLoading || loadLS ? '—' : lowStockItems.length}  color="#ef4444" accentBg="#fee2e2" sparkData={sparkIss} sub={`${outOfStock.length} out of stock`} />
         </div>
 
         {/* Alerts */}
-        {(lowStockItems.length > 0 || awaitingGRNs.length > 0) && (
+        {(lowStockItems.length > 0 || awaitingGRNs.length > 0 || awaitingClientMRS.length > 0) && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {awaitingClientMRS.length > 0 && (
+              <div style={{ background: '#ecfeff', border: '1px solid #a5f3fc', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <UserCheck size={14} style={{ color: '#0891b2', flexShrink: 0 }} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#155e75' }}>
+                  {awaitingClientMRS.length} requisition{awaitingClientMRS.length > 1 ? 's' : ''} MD-approved and awaiting client sign-off — procurement is blocked until signed
+                </span>
+                <Link to="/stores/mr-register" style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#0891b2', textDecoration: 'none' }}>Open Register →</Link>
+              </div>
+            )}
             {lowStockItems.length > 0 && (
               <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <AlertTriangle size={14} style={{ color: '#d97706', flexShrink: 0 }} />
@@ -357,11 +382,12 @@ export default function StoresDashboard() {
               <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>MRS Pipeline</h3>
               <Link to="/stores/mrs" style={{ fontSize: 11, fontWeight: 700, color: '#6366f1', textDecoration: 'none' }}>View All</Link>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 14 }}>
               {[
-                { label: 'Pending',     count: pendingMRS.length,  color: '#f59e0b', bg: '#fffbeb' },
-                { label: 'In Approval', count: inApproval.length,  color: '#6366f1', bg: '#eef2ff' },
-                { label: 'Issued',      count: issuedMRS.length,   color: '#22c55e', bg: '#dcfce7' },
+                { label: 'Pending',        count: pendingMRS.length,         color: '#f59e0b', bg: '#fffbeb' },
+                { label: 'In Approval',    count: inApproval.length,         color: '#6366f1', bg: '#eef2ff' },
+                { label: 'Awaiting Client',count: awaitingClientMRS.length,  color: '#0891b2', bg: '#ecfeff' },
+                { label: 'Ready for PO',   count: readyForPO.length,         color: '#22c55e', bg: '#dcfce7' },
               ].map(({ label, count, color, bg }) => (
                 <div key={label} style={{ background: bg, borderRadius: 10, padding: '10px 8px', textAlign: 'center' }}>
                   <div style={{ fontSize: 20, fontWeight: 900, color }}>{count}</div>
@@ -369,6 +395,15 @@ export default function StoresDashboard() {
                 </div>
               ))}
             </div>
+            {clientProjectMRS.length > 0 && (
+              <div style={{ background: '#ecfeff', border: '1px solid #cffafe', borderRadius: 10, padding: '8px 10px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <UserCheck size={12} style={{ color: '#0891b2', flexShrink: 0 }} />
+                <span style={{ fontSize: 11, color: '#155e75' }}>
+                  <strong>{clientProjectMRS.length}</strong> requisition{clientProjectMRS.length > 1 ? 's are' : ' is'} on a project requiring client sign-off
+                  {clientApprovedMRS.length > 0 && <> · <strong>{clientApprovedMRS.length}</strong> signed</>}
+                </span>
+              </div>
+            )}
             {Object.keys(mrsStatusBuckets).length === 0
               ? <div style={{ textAlign: 'center', padding: '20px 0', color: '#94a3b8', fontSize: 13 }}>No requisitions</div>
               : Object.entries(mrsStatusBuckets).sort((a, b) => b[1] - a[1]).map(([status, count]) => (
@@ -490,16 +525,18 @@ export default function StoresDashboard() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                      {['MRS No.','Project','Requested By','Items','Created','Status',''].map(h => (
+                      {['MRS No.','Project','Requested By','Items','Created','Client Sign-off','Status',''].map(h => (
                         <th key={h} style={{ padding: '10px 16px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#94a3b8', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {pageMRS.map(m => {
-                      const cfg = MRS_CFG[m.status] || { label: m.status, color: '#94a3b8', bg: '#f8fafc' };
+                      const dStatus = displayStatus(m);
+                      const cfg = MRS_CFG[dStatus] || { label: dStatus, color: '#94a3b8', bg: '#f8fafc' };
+                      const awaiting = isAwaitingClient(m);
                       return (
-                        <tr key={m.id} style={{ borderBottom: '1px solid #f8fafc' }}>
+                        <tr key={m.id} style={{ borderBottom: '1px solid #f8fafc', background: awaiting ? '#ecfeff66' : undefined }}>
                           <td style={{ padding: '11px 16px' }}>
                             <Link to="/stores/mrs" style={{ fontSize: 13, fontWeight: 700, color: '#6366f1', textDecoration: 'none', fontFamily: 'monospace' }}>
                               {m.serial_no_formatted || m.mrs_number || m.id?.slice(0, 8)}
@@ -509,6 +546,20 @@ export default function StoresDashboard() {
                           <td style={{ padding: '11px 16px', fontSize: 12, color: '#64748b' }}>{m.requested_by || m.created_by || '—'}</td>
                           <td style={{ padding: '11px 16px', fontSize: 12, color: '#64748b' }}>{m.items?.length || 0} item{(m.items?.length || 0) !== 1 ? 's' : ''}</td>
                           <td style={{ padding: '11px 16px', fontSize: 12, color: '#94a3b8' }}>{dayjs(m.created_at).format('DD MMM YYYY')}</td>
+                          <td style={{ padding: '11px 16px', fontSize: 11 }}>
+                            {m.status === 'client_approved' ? (
+                              <span style={{ color: '#0d9488', fontWeight: 700 }}>
+                                Signed
+                                {m.client_reference_no && <span style={{ color: '#94a3b8', fontWeight: 500, fontFamily: 'monospace' }}> · {m.client_reference_no}</span>}
+                              </span>
+                            ) : awaiting ? (
+                              <span style={{ color: '#0891b2', fontWeight: 700 }}>Awaiting</span>
+                            ) : usesClientApproval(m) ? (
+                              <span style={{ color: '#cbd5e1' }}>Not yet due</span>
+                            ) : (
+                              <span style={{ color: '#e2e8f0' }}>—</span>
+                            )}
+                          </td>
                           <td style={{ padding: '11px 16px' }}>
                             <span style={{ padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}22` }}>
                               {cfg.label}
@@ -523,7 +574,7 @@ export default function StoresDashboard() {
                       );
                     })}
                     {recentMRS.length === 0 && (
-                      <tr><td colSpan={7} style={{ padding: '40px 16px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+                      <tr><td colSpan={8} style={{ padding: '40px 16px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
                         No requisitions — <Link to="/stores/mrs" style={{ color: '#6366f1', fontWeight: 700, textDecoration: 'none' }}>create one</Link>
                       </td></tr>
                     )}

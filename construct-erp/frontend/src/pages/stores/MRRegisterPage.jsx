@@ -3,10 +3,14 @@ import { useQuery } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
 import {
   Download, ClipboardList, Building2, AlertCircle, Search,
-  Package, ShoppingCart, CheckCircle2, Clock,
+  Package, ShoppingCart, CheckCircle2, Clock, UserCheck, IndianRupee,
 } from 'lucide-react';
 import { mrsAPI, projectAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
+import {
+  displayStatus, isAwaitingClient, isFullyApproved, usesClientApproval,
+  MR_CHAIN, chainProgress,
+} from '../../constants/mrStatus';
 import toast from 'react-hot-toast';
 
 /* ── MR status pills (mirrors MRSPage STATUS_CONFIG, condensed) ── */
@@ -18,9 +22,42 @@ const MR_STATUS = {
   approved_srpm:   { label: 'PM ✓',        bg: 'bg-emerald-100', text: 'text-emerald-800' },
   approved_mgmt:   { label: 'Director ✓',  bg: 'bg-indigo-100',  text: 'text-indigo-800'  },
   approved_md:     { label: 'MD ✓',        bg: 'bg-green-100',   text: 'text-green-800'   },
+  // On projects that opted into client sign-off, an MD-approved MR is still
+  // waiting on the client — shown as its own pill so it never reads as done.
+  awaiting_client: { label: 'Awaiting Client', bg: 'bg-cyan-100',   text: 'text-cyan-800'   },
+  client_approved: { label: 'Client ✓',        bg: 'bg-teal-100',   text: 'text-teal-800'   },
   issued:          { label: 'Issued',      bg: 'bg-sky-100',     text: 'text-sky-800'     },
   rejected:        { label: 'Rejected',    bg: 'bg-red-100',     text: 'text-red-800'     },
 };
+
+/* Compact approval-chain stepper — shows how far an MR has travelled and
+   whether client sign-off is part of its project's chain at all. */
+function ChainStepper({ mr }) {
+  const idx = chainProgress(mr);
+  if (idx < 0) return <span className="text-[10px] text-slate-300">—</span>;
+  const wantsClient = usesClientApproval(mr);
+  const stages = MR_CHAIN.filter(c => !c.optIn || wantsClient);
+  return (
+    <div className="flex items-center gap-0.5" title={stages.map((s, i) => `${s.label}: ${i <= idx ? '✓' : '—'}`).join('  ·  ')}>
+      {stages.map((s, i) => {
+        const done = i <= idx;
+        const isClient = s.optIn;
+        return (
+          <React.Fragment key={s.key}>
+            {i > 0 && <span className={`h-px w-1.5 ${done ? 'bg-emerald-400' : 'bg-slate-200'}`} />}
+            <span className={`w-5 h-4 rounded flex items-center justify-center text-[7px] font-bold border ${
+              done
+                ? (isClient ? 'bg-teal-500 text-white border-teal-500' : 'bg-emerald-500 text-white border-emerald-500')
+                : (isClient ? 'bg-cyan-50 text-cyan-500 border-cyan-300 border-dashed' : 'bg-white text-slate-300 border-slate-200')
+            }`}>
+              {s.short}
+            </span>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
 
 /* ── PO-coverage state per line item ── */
 const ORDER_CFG = {
@@ -74,6 +111,7 @@ export default function MRRegisterPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [coverage, setCoverage] = useState('all');   // all | none | partial | full
   const [search, setSearch] = useState('');
+  const [awaitingOnly, setAwaitingOnly] = useState(false);
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -92,6 +130,7 @@ export default function MRRegisterPage() {
     const needle = search.trim().toLowerCase();
     return mrData.filter(m => {
       if (statusFilter !== 'all' && m.status !== statusFilter) return false;
+      if (awaitingOnly && !isAwaitingClient(m)) return false;
       const d = new Date(m.request_date || m.created_at).getTime();
       if (f && d < f) return false;
       if (t && d >= t) return false;
@@ -102,7 +141,7 @@ export default function MRRegisterPage() {
       }
       return true;
     });
-  }, [mrData, statusFilter, from, to, search]);
+  }, [mrData, statusFilter, from, to, search, awaitingOnly]);
 
   /* ── flat line items (with PO tracking) ── */
   const lineItems = useMemo(() => {
@@ -117,6 +156,9 @@ export default function MRRegisterPage() {
           project_name: m.project_name,
           department: m.department,
           mr_status: m.status,
+          // 'approved_md' on a client-approval project is NOT terminal — resolve
+          // it to a distinct 'awaiting_client' key so the pill can't read as done
+          mr_display_status: displayStatus(m),
           material: it.material_name,
           item_code: it.item_code,
           unit: it.unit,
@@ -140,6 +182,9 @@ export default function MRRegisterPage() {
       itemCount: items.length,
       reqTotal: req, effTotal: eff, orderedTotal: ord,
       balanceTotal: Math.max(eff - ord, 0),
+      estValue: items.reduce((s, it) => s + lineVal(it), 0),
+      awaitingClient: isAwaitingClient(m),
+      fullyApproved: isFullyApproved(m),
     };
   }), [mrs]);
 
@@ -174,20 +219,48 @@ export default function MRRegisterPage() {
     return { total: none + partial + full + excluded, none, partial, full, excluded };
   }, [mrs]);
 
+  /* ── approval-chain roll-up, incl. the opt-in client stage ── */
+  const approvalStats = useMemo(() => {
+    let awaitingClient = 0, clientApproved = 0, fullyApproved = 0, inApproval = 0,
+        estValue = 0, awaitingClientValue = 0, clientProjects = 0;
+    for (const m of mrs) {
+      const val = (m.items || []).reduce((s, it) => s + lineVal(it), 0);
+      estValue += val;
+      if (usesClientApproval(m)) clientProjects++;
+      if (isAwaitingClient(m))   { awaitingClient++; awaitingClientValue += val; }
+      if (m.status === 'client_approved') clientApproved++;
+      if (isFullyApproved(m))    fullyApproved++;
+      else if (!['issued', 'rejected', 'draft'].includes(m.status)) inApproval++;
+    }
+    return { awaitingClient, clientApproved, fullyApproved, inApproval,
+      estValue, awaitingClientValue, clientProjects };
+  }, [mrs]);
+
   const handleExport = () => {
     if (!lineItems.length && !mrSummary.length) return toast.error('Nothing to export');
     const wb = XLSX.utils.book_new();
     const sumSheet = XLSX.utils.json_to_sheet(mrSummary.map(m => ({
       'MR No': m.mr_no, 'Date': fmtDate(m.mr_date), 'Project': m.project_name, 'Department': m.department,
       'Items': m.itemCount, 'Req Qty': m.reqTotal, 'Approved Qty': m.effTotal,
-      'Ordered (PO)': m.orderedTotal, 'Balance': m.balanceTotal,
-      'Priority': m.priority, 'Status': (MR_STATUS[m.status] || {}).label || m.status, 'Has PO': m.has_po ? 'Yes' : 'No',
+      'Ordered (PO)': m.orderedTotal, 'Balance': m.balanceTotal, 'Est. Value': m.estValue,
+      'Priority': m.priority,
+      'Status': (MR_STATUS[displayStatus(m)] || {}).label || m.status,
+      'Client Approval Required': usesClientApproval(m) ? 'Yes' : 'No',
+      'Client Sign-off': m.status === 'client_approved' ? 'Signed' : m.awaitingClient ? 'Awaiting' : '',
+      'Client Ref No': m.client_reference_no || '',
+      'Client Contact': m.client_contact_name || '',
+      'Client Approved By': m.client_approved_by_name || '',
+      'Client Approved On': m.client_approved_at ? fmtDate(m.client_approved_at) : '',
+      'Client Remarks': m.client_approval_remarks || '',
+      'Has PO': m.has_po ? 'Yes' : 'No',
     })));
     const itemSheet = XLSX.utils.json_to_sheet(lineItems.map(r => ({
       'MR No': r.mr_no, 'Date': fmtDate(r.mr_date), 'Project': r.project_name,
       'Item Code': r.item_code || '', 'Material': r.material, 'UOM': r.unit,
       'Req Qty': r.req, 'Approved Qty': r.eff, 'Ordered (PO)': r.ordered, 'Balance': r.balance,
-      'PO Coverage': (ORDER_CFG[r.order_state] || {}).label, 'MR Status': (MR_STATUS[r.mr_status] || {}).label || r.mr_status,
+      'Est. Value': r.value,
+      'PO Coverage': (ORDER_CFG[r.order_state] || {}).label,
+      'MR Status': (MR_STATUS[r.mr_display_status] || {}).label || r.mr_status,
     })));
     XLSX.utils.book_append_sheet(wb, sumSheet, 'MR Summary');
     XLSX.utils.book_append_sheet(wb, itemSheet, 'Line Item Tracking');
@@ -198,12 +271,14 @@ export default function MRRegisterPage() {
 
   const selectedProject = projects.find(p => p.id === projectId);
 
-  const KPI = ({ icon: Icon, label, value, color }) => (
-    <div className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl px-4 py-2.5 shadow-sm">
-      <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${color}`}><Icon className="w-4 h-4" /></div>
-      <div>
+  const KPI = ({ icon: Icon, label, value, color, accent, sub }) => (
+    <div className="relative overflow-hidden flex items-center gap-3 bg-white border border-slate-200 rounded-xl pl-4 pr-3 py-2.5 shadow-sm transition-shadow hover:shadow-md">
+      <span className={`absolute left-0 top-0 bottom-0 w-1 ${accent || 'bg-slate-300'}`} />
+      <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ml-0.5 ${color}`}><Icon className="w-4 h-4" /></div>
+      <div className="min-w-0">
         <p className="text-lg font-bold text-slate-900 leading-none tabular-nums">{value}</p>
-        <p className="text-[11px] text-slate-500 mt-0.5">{label}</p>
+        <p className="text-[11px] text-slate-500 mt-0.5 truncate">{label}</p>
+        {sub && <p className="text-[10px] text-slate-400 truncate">{sub}</p>}
       </div>
     </div>
   );
@@ -262,7 +337,9 @@ export default function MRRegisterPage() {
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
             className="h-8 pl-2 pr-7 text-xs border border-slate-200 rounded-lg bg-white outline-none focus:border-indigo-400">
             <option value="all">All MR statuses</option>
-            {Object.entries(MR_STATUS).filter(([k]) => !['verified_tower', 'approved_srpm'].includes(k)).map(([k, v]) => (
+            {/* awaiting_client is a derived display key, not a stored status —
+                it's filtered via the dedicated toggle below, not this list */}
+            {Object.entries(MR_STATUS).filter(([k]) => !['verified_tower', 'approved_srpm', 'awaiting_client'].includes(k)).map(([k, v]) => (
               <option key={k} value={k}>{v.label}</option>
             ))}
           </select>
@@ -274,6 +351,17 @@ export default function MRRegisterPage() {
               </button>
             ))}
           </div>
+          <button onClick={() => setAwaitingOnly(v => !v)}
+            title="Show only MRs that are MD-approved but still awaiting client sign-off"
+            className={`h-8 px-2.5 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1.5 ${
+              awaitingOnly ? 'bg-cyan-600 text-white border-cyan-600' : 'bg-white text-cyan-700 border-cyan-200 hover:border-cyan-400'}`}>
+            <UserCheck className="w-3.5 h-3.5" /> Awaiting Client
+            {approvalStats.awaitingClient > 0 && (
+              <span className={`px-1.5 rounded-full text-[10px] font-bold ${awaitingOnly ? 'bg-white/25' : 'bg-cyan-100'}`}>
+                {approvalStats.awaitingClient}
+              </span>
+            )}
+          </button>
           {selectedProject && (
             <span className="ml-auto flex items-center gap-1.5 text-xs text-slate-500">
               <Building2 className="w-3.5 h-3.5" />
@@ -284,13 +372,31 @@ export default function MRRegisterPage() {
         </div>
 
         {/* KPI strip */}
-        <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-2.5">
-          <KPI icon={ClipboardList} label="Requisitions"   value={mrs.length}        color="bg-indigo-50 text-indigo-600" />
-          <KPI icon={Package}       label="Line Items"     value={allLines.total}    color="bg-slate-100 text-slate-600" />
-          <KPI icon={Clock}         label="Not Ordered"    value={allLines.none}     color="bg-amber-50 text-amber-600" />
-          <KPI icon={ShoppingCart}  label="Partially PO'd" value={allLines.partial}  color="bg-orange-50 text-orange-600" />
-          <KPI icon={CheckCircle2}  label="Fully Ordered"  value={allLines.full}     color="bg-emerald-50 text-emerald-600" />
+        <div className="mt-3 grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-2.5">
+          <KPI icon={ClipboardList} label="Requisitions"   value={mrs.length}        accent="bg-indigo-500"  color="bg-indigo-50 text-indigo-600"
+            sub={`${approvalStats.inApproval} in approval`} />
+          <KPI icon={Package}       label="Line Items"     value={allLines.total}    accent="bg-slate-400"   color="bg-slate-100 text-slate-600" />
+          <KPI icon={IndianRupee}   label="Est. Value"     value={`₹${Math.round(approvalStats.estValue).toLocaleString('en-IN')}`}
+            accent="bg-violet-500" color="bg-violet-50 text-violet-600" />
+          <KPI icon={UserCheck}     label="Awaiting Client" value={approvalStats.awaitingClient} accent="bg-cyan-500" color="bg-cyan-50 text-cyan-600"
+            sub={approvalStats.awaitingClientValue > 0 ? `₹${Math.round(approvalStats.awaitingClientValue).toLocaleString('en-IN')} held` : 'None pending'} />
+          <KPI icon={Clock}         label="Not Ordered"    value={allLines.none}     accent="bg-amber-500"   color="bg-amber-50 text-amber-600" />
+          <KPI icon={ShoppingCart}  label="Partially PO'd" value={allLines.partial}  accent="bg-orange-500"  color="bg-orange-50 text-orange-600" />
+          <KPI icon={CheckCircle2}  label="Fully Ordered"  value={allLines.full}     accent="bg-emerald-500" color="bg-emerald-50 text-emerald-600" />
         </div>
+
+        {/* Client sign-off callout — only on projects that opted into the stage */}
+        {approvalStats.awaitingClient > 0 && (
+          <div className="mt-3 flex items-center gap-2.5 bg-cyan-50 border border-cyan-200 rounded-xl px-4 py-2.5">
+            <UserCheck className="w-4 h-4 text-cyan-600 flex-shrink-0" />
+            <span className="text-[13px] font-semibold text-cyan-900">
+              {approvalStats.awaitingClient} requisition{approvalStats.awaitingClient > 1 ? 's' : ''} MD-approved and awaiting client sign-off
+            </span>
+            <span className="text-xs text-cyan-700">
+              — ₹{Math.round(approvalStats.awaitingClientValue).toLocaleString('en-IN')} of procurement is blocked until the client signs
+            </span>
+          </div>
+        )}
       </div>
 
       {/* ── Tabs ── */}
@@ -324,12 +430,12 @@ export default function MRRegisterPage() {
 
               {/* ── Line Item Tracking ── */}
               {tab === 'items' && (
-                <table className="w-full text-left border-collapse min-w-[1080px]">
+                <table className="w-full text-left border-collapse min-w-[1180px]">
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
                       <TH>MR No</TH><TH>Date</TH><TH>Material</TH><TH>UOM</TH>
                       <TH right>Req Qty</TH><TH right>Approved</TH><TH right>Ordered (PO)</TH><TH right>Balance</TH>
-                      <TH>PO Coverage</TH><TH>MR Status</TH>
+                      <TH right>Est. Value</TH><TH>PO Coverage</TH><TH>MR Status</TH>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -346,12 +452,13 @@ export default function MRRegisterPage() {
                         <TD right className="text-slate-600">{fmtQty(r.eff)}</TD>
                         <TD right className="text-purple-700 font-semibold">{r.ordered > 0 ? fmtQty(r.ordered) : '—'}</TD>
                         <TD right className={r.balance > 0 ? 'text-orange-600 font-semibold' : 'text-emerald-600 font-semibold'}>{fmtQty(r.balance)}</TD>
+                        <TD right className="text-slate-600">{r.value > 0 ? `₹${fmtMoney(r.value)}` : '—'}</TD>
                         <TD><Pill cfg={ORDER_CFG[r.order_state]} /></TD>
-                        <TD><Pill cfg={MR_STATUS[r.mr_status] || MR_STATUS.pending} /></TD>
+                        <TD><Pill cfg={MR_STATUS[r.mr_display_status] || MR_STATUS.pending} /></TD>
                       </tr>
                     ))}
                     {lineItems.length === 0 && (
-                      <tr><td colSpan={10} className="py-12 text-center text-sm text-slate-400">No line items match the current filters</td></tr>
+                      <tr><td colSpan={11} className="py-12 text-center text-sm text-slate-400">No line items match the current filters</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -359,17 +466,19 @@ export default function MRRegisterPage() {
 
               {/* ── MR Summary ── */}
               {tab === 'summary' && (
-                <table className="w-full text-left border-collapse min-w-[1000px]">
+                <table className="w-full text-left border-collapse min-w-[1360px]">
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
                       <TH>MR No</TH><TH>Date</TH><TH>Project / Dept</TH><TH right>Items</TH>
                       <TH right>Req Qty</TH><TH right>Approved</TH><TH right>Ordered (PO)</TH><TH right>Balance</TH>
-                      <TH>Status</TH><TH>PO</TH>
+                      <TH right>Est. Value</TH><TH>Approval Chain</TH><TH>Client Sign-off</TH><TH>Status</TH><TH>PO</TH>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {mrSummary.map((m, idx) => (
-                      <tr key={m.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                      <tr key={m.id} className={
+                        m.awaitingClient ? 'bg-cyan-50/50' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'
+                      }>
                         <TD mono bold>{m.mr_no}</TD>
                         <TD>{fmtDate(m.mr_date)}</TD>
                         <TD>
@@ -381,7 +490,35 @@ export default function MRRegisterPage() {
                         <TD right className="text-slate-600">{fmtQty(m.effTotal)}</TD>
                         <TD right className="text-purple-700 font-semibold">{m.orderedTotal > 0 ? fmtQty(m.orderedTotal) : '—'}</TD>
                         <TD right className={m.balanceTotal > 0 ? 'text-orange-600 font-semibold' : 'text-emerald-600 font-semibold'}>{fmtQty(m.balanceTotal)}</TD>
-                        <TD><Pill cfg={MR_STATUS[m.status] || MR_STATUS.pending} /></TD>
+                        <TD right className="text-slate-600">{m.estValue > 0 ? `₹${fmtMoney(m.estValue)}` : '—'}</TD>
+                        <TD><ChainStepper mr={m} /></TD>
+                        <TD>
+                          {m.status === 'client_approved' ? (
+                            <div className="text-[11px]">
+                              <span className="inline-flex items-center gap-1 font-semibold text-teal-700">
+                                <UserCheck className="w-3 h-3" /> Signed
+                              </span>
+                              {m.client_reference_no && (
+                                <span className="block font-mono text-[10px] text-slate-500">Ref {m.client_reference_no}</span>
+                              )}
+                              {m.client_approved_at && (
+                                <span className="block text-[10px] text-slate-400">{fmtDate(m.client_approved_at)}</span>
+                              )}
+                              {m.client_contact_name && (
+                                <span className="block text-[10px] text-slate-400 truncate max-w-[130px]">{m.client_contact_name}</span>
+                              )}
+                            </div>
+                          ) : m.awaitingClient ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-cyan-700 bg-cyan-100 px-1.5 py-0.5 rounded">
+                              <Clock className="w-3 h-3" /> Awaiting
+                            </span>
+                          ) : usesClientApproval(m) ? (
+                            <span className="text-[10px] text-slate-400">Not yet due</span>
+                          ) : (
+                            <span className="text-[10px] text-slate-300">Not required</span>
+                          )}
+                        </TD>
+                        <TD><Pill cfg={MR_STATUS[displayStatus(m)] || MR_STATUS.pending} /></TD>
                         <TD>{m.has_po
                           ? <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-700"><ShoppingCart className="w-3 h-3" /> Yes</span>
                           : <span className="text-[10px] text-slate-400">—</span>}</TD>
