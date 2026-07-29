@@ -50,10 +50,14 @@ const USES_CLIENT_APPROVAL = (proj = 'p') =>
 const FULLY_APPROVED = (mr = 'mr', proj = 'p') =>
   `(${mr}.status = 'client_approved'
     OR (${mr}.status = 'approved_md' AND NOT ${USES_CLIENT_APPROVAL(proj)}))`;
-// "Still somewhere in the approval pipeline."
+// MD approved, but the project's own workflow says client sign-off is still
+// needed — distinct from STILL_PENDING's internal stages so the UI can label
+// it "Awaiting Client" instead of a generic "Pending Approval".
+const IS_AWAITING_CLIENT = (mr = 'mr', proj = 'p') =>
+  `(${mr}.status = 'approved_md' AND ${USES_CLIENT_APPROVAL(proj)})`;
+// "Still somewhere in the approval pipeline" (internal stages OR awaiting client).
 const STILL_PENDING = (mr = 'mr', proj = 'p') =>
-  `(${mr}.status IN (${PENDING_STATUSES})
-    OR (${mr}.status = 'approved_md' AND ${USES_CLIENT_APPROVAL(proj)}))`;
+  `(${mr}.status IN (${PENDING_STATUSES}) OR ${IS_AWAITING_CLIENT(mr, proj)})`;
 
 // ──────────────────────────────────────────────────────────────────────────────
 // LATERAL subquery: finds the BEST matching po_items row for a given mrs_item
@@ -162,6 +166,7 @@ router.get('/dashboard', async (req, res) => {
           mr.status                                              AS mr_status,
           ${FULLY_APPROVED('mr', 'p')}                           AS is_fully_approved,
           ${STILL_PENDING('mr', 'p')}                            AS is_pending_approval,
+          ${IS_AWAITING_CLIENT('mr', 'p')}                       AS is_awaiting_client,
           bp.po_id,
           bp.po_status,
           bp.delivery_date,
@@ -178,7 +183,8 @@ router.get('/dashboard', async (req, res) => {
       )
       SELECT
         COUNT(DISTINCT id)                                                             AS total_mrs,
-        COUNT(DISTINCT id) FILTER (WHERE is_pending_approval)                        AS pending_approvals,
+        COUNT(DISTINCT id) FILTER (WHERE is_pending_approval AND NOT is_awaiting_client) AS pending_approvals,
+        COUNT(DISTINCT id) FILTER (WHERE is_awaiting_client)                         AS awaiting_client,
         COUNT(DISTINCT id) FILTER (WHERE is_fully_approved AND po_id IS NULL)        AS pending_po,
         COUNT(DISTINCT po_id) FILTER (WHERE po_status IN ('pending','approved','sent')) AS open_pos,
         COUNT(DISTINCT id) FILTER (WHERE po_status IN ('sent','approved') AND received_qty = 0) AS in_transit,
@@ -244,7 +250,11 @@ router.get('/', async (req, res) => {
       const orderedQty  = ORDERED_QTY_SUB('mr', 'mi');
       const statusMap = {
         'Draft':            `bp.po_id IS NULL AND NOT ${STILL_PENDING('mr','p')} AND NOT ${FULLY_APPROVED('mr','p')}`,
-        'Pending Approval': STILL_PENDING('mr', 'p'),
+        // MD has already approved, only the client's own sign-off remains —
+        // kept out of 'Pending Approval' so it isn't lumped in with items
+        // still stuck at Store Manager / PM / Project Director.
+        'Awaiting Client':  IS_AWAITING_CLIENT('mr', 'p'),
+        'Pending Approval': `${STILL_PENDING('mr','p')} AND NOT ${IS_AWAITING_CLIENT('mr','p')}`,
         'PO Pending':       `${FULLY_APPROVED('mr','p')} AND bp.po_id IS NULL`,
         'PO Created':       `bp.po_status IN ('pending','approved','sent')`,
         'In Transit':       `bp.po_status IN ('sent','approved') AND (${receivedQty}) = 0`,
@@ -314,8 +324,9 @@ router.get('/', async (req, res) => {
                  OR (pi2.mrs_item_id IS NULL
                      AND (po2.mrs_id = mr.id OR mr.id = ANY(COALESCE(po2.mrs_ids, ARRAY[]::uuid[])))))
         ) AS actual_delivery_date,
-        ${FULLY_APPROVED('mr', 'p')}  AS is_fully_approved,
-        ${STILL_PENDING('mr', 'p')}   AS is_pending_approval
+        ${FULLY_APPROVED('mr', 'p')}     AS is_fully_approved,
+        ${STILL_PENDING('mr', 'p')}      AS is_pending_approval,
+        ${IS_AWAITING_CLIENT('mr', 'p')} AS is_awaiting_client
       FROM material_requisitions mr
       JOIN projects p ON p.id = mr.project_id
       LEFT JOIN users u ON u.id = mr.raised_by
@@ -604,6 +615,11 @@ function deriveStatus(r) {
       ? r.is_pending_approval : pendingStages.includes(mrStatus);
     const approved = r.is_fully_approved != null
       ? r.is_fully_approved : mrStatus === 'approved_md';
+    const awaitingClient = r.is_awaiting_client != null
+      ? r.is_awaiting_client : false;
+    // Distinct from the generic "Pending Approval" bucket — MD has already
+    // signed off, only the client's own sign-off is outstanding.
+    if (awaitingClient) return 'Awaiting Client';
     if (pending)  return 'Pending Approval';
     if (approved) return 'PO Pending';
     return 'Draft';

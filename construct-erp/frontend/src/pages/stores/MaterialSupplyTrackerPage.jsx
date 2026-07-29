@@ -8,7 +8,7 @@ import {
   FileText, BarChart3, Search, X, ChevronDown, ChevronRight,
   RefreshCw, Download, Filter, TrendingUp, IndianRupee,
   ArrowRight, Circle, CheckCircle, Layers, ShoppingCart,
-  ClipboardList, Warehouse, Zap, Printer,
+  ClipboardList, Warehouse, Zap, Printer, UserCheck,
 } from 'lucide-react';
 import { supplyTrackerAPI, projectAPI } from '../../api/client';
 import { PageHeader, Theme } from '../../theme';
@@ -159,6 +159,7 @@ const inr = (v) => Math.round(Number(v || 0)).toLocaleString('en-IN');
 const STATUS_CFG = {
   'Draft':            { bg: 'bg-slate-100',   text: 'text-slate-600',   dot: 'bg-slate-400'   },
   'Pending Approval': { bg: 'bg-amber-100',   text: 'text-amber-700',   dot: 'bg-amber-500'   },
+  'Awaiting Client':  { bg: 'bg-cyan-100',    text: 'text-cyan-700',    dot: 'bg-cyan-500'    },
   'PO Pending':       { bg: 'bg-orange-100',  text: 'text-orange-700',  dot: 'bg-orange-500'  },
   'PO Created':       { bg: 'bg-blue-100',    text: 'text-blue-700',    dot: 'bg-blue-500'    },
   'In Transit':       { bg: 'bg-indigo-100',  text: 'text-indigo-700',  dot: 'bg-indigo-500'  },
@@ -211,6 +212,7 @@ function KpiCard({ icon: Icon, label, value, color, sub, onClick, active }) {
     orange:  { bg: 'bg-orange-50',  icon: 'text-orange-600',  val: 'text-orange-800'  },
     blue:    { bg: 'bg-blue-50',    icon: 'text-blue-600',    val: 'text-blue-800'    },
     indigo:  { bg: 'bg-indigo-50',  icon: 'text-indigo-600',  val: 'text-indigo-800'  },
+    cyan:    { bg: 'bg-cyan-50',    icon: 'text-cyan-600',    val: 'text-cyan-800'    },
     yellow:  { bg: 'bg-yellow-50',  icon: 'text-yellow-600',  val: 'text-yellow-800'  },
     red:     { bg: 'bg-red-50',     icon: 'text-red-600',     val: 'text-red-800'     },
     emerald: { bg: 'bg-emerald-50', icon: 'text-emerald-600', val: 'text-emerald-800' },
@@ -494,7 +496,7 @@ function FiltersPanel({ filters, setFilters, projects, onReset }) {
   const inp = 'w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-blue-300 focus:border-blue-400 outline-none bg-white';
 
   const STATUS_OPTIONS = [
-    'Draft','Pending Approval','PO Pending','PO Created','In Transit',
+    'Draft','Pending Approval','Awaiting Client','PO Pending','PO Created','In Transit',
     'Partial Delivery','GRN Completed','Issued to Site','Closed','Cancelled',
   ];
 
@@ -910,6 +912,7 @@ export default function MaterialSupplyTrackerPage() {
   const KPIS = [
     { key: 'total_mrs',       label: 'Total MRs',       icon: ClipboardList,  color: 'slate',   filter: null },
     { key: 'pending_approvals', label: 'Pending Approval', icon: Clock,        color: 'amber',   filter: 'Pending Approval' },
+    { key: 'awaiting_client', label: 'Awaiting Client', icon: UserCheck,      color: 'cyan',    filter: 'Awaiting Client' },
     { key: 'pending_po',      label: 'PO Pending',      icon: ShoppingCart,   color: 'orange',  filter: 'PO Pending' },
     { key: 'open_pos',        label: 'Open POs',        icon: FileText,       color: 'blue',    filter: 'PO Created' },
     { key: 'in_transit',      label: 'In Transit',      icon: Truck,          color: 'indigo',  filter: 'In Transit' },
