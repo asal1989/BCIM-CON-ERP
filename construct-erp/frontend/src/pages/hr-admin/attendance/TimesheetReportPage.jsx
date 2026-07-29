@@ -17,8 +17,17 @@ const STATUS_COLOR = {
   leave:    { bg: '#FEF3C7', color: '#92400E' },
   half_day: { bg: '#DBEAFE', color: '#1E40AF' },
   holiday:  { bg: '#EDE9FE', color: '#5B21B6' },
+  // The API synthesises week_off for anyone with no punch on a Sunday. Without
+  // its own entry it fell through to the ABSENT style, painting a normal
+  // weekend red and making a rest day look like mass absenteeism.
+  week_off: { bg: '#F1F5F9', color: '#475569' },
 };
-const STATUS_LABEL = { present:'P', sp:'SP', absent:'A', leave:'L', half_day:'HD', holiday:'H' };
+const STATUS_LABEL = { present:'P', sp:'SP', absent:'A', leave:'L', half_day:'HD', holiday:'H', week_off:'WO' };
+
+// Statuses where the employee was never expected in — they must be excluded
+// from the attendance-rate denominator, otherwise every Sunday and public
+// holiday reports a collapse in attendance.
+const NON_WORKING = ['week_off', 'holiday'];
 
 function Pill({ status, out_time }) {
   const s = (status || 'absent').toLowerCase();
@@ -92,6 +101,7 @@ const COL_KEYS = {
   'Department':  'department',
   'Trade':       'trade',
   'Company':     'company',
+  'Project':     'project_name',
   'P/A':         'attendance_status',
   'In Time':     'in_time',
   'Out Time':    'out_time',
@@ -185,7 +195,7 @@ export default function TimesheetReportPage() {
   const [projectFilter, setProject] = useState('');
   const [rows, setRows]             = useState([]);
   const [summary, setSummary]       = useState({ total:0, present:0, half:0, absent:0, leave:0 });
-  const [meta, setMeta]             = useState({ companyName:'BCIM', projectName:'', projectCode:'' });
+  const [meta, setMeta]             = useState({ companyName:'BCIM', projectName:'', projectCode:'', holidayName:null, isSunday:false });
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState(null);
   const [sortKey, setSortKey]       = useState(null);
@@ -268,6 +278,8 @@ export default function TimesheetReportPage() {
     }
     if (statusFilter === 'sp') {
       r = r.filter(row => (row.attendance_status || '').toLowerCase() === 'present' && !row.out_time);
+    } else if (statusFilter === 'late') {
+      r = r.filter(row => Number(row.late_minutes) > 0);
     } else if (statusFilter !== 'all') {
       r = r.filter(row => (row.attendance_status || '').toLowerCase() === statusFilter);
     }
@@ -290,10 +302,48 @@ export default function TimesheetReportPage() {
       .sort((a, b) => b.total - a.total);
   }, [rows]);
 
-  const lateCount     = useMemo(() => rows.filter(r => Number(r.late_minutes) > 0).length, [rows]);
-  const attendancePct = summary.total > 0
-    ? Math.round(((summary.present + (summary.half||0) * 0.5) / summary.total) * 100)
+  const lateCount = useMemo(() => rows.filter(r => Number(r.late_minutes) > 0).length, [rows]);
+  const spCount   = useMemo(() => rows.filter(r => (r.attendance_status || '').toLowerCase() === 'present' && !r.out_time).length, [rows]);
+
+  // Attendance rate is measured against EXPECTED strength (total minus anyone
+  // on a week-off or public holiday), not headcount — dividing by headcount
+  // made every Sunday read as a ~70% collapse.
+  const expectedStrength = Math.max(0, (summary.total || 0) - (summary.week_off || 0) - (summary.holiday || 0));
+  const attendancePct = expectedStrength > 0
+    ? Math.round(((summary.present + (summary.half || 0) * 0.5) / expectedStrength) * 100)
     : 0;
+
+  /* Manpower hours — the API returns hours_worked / overtime_hours per row but
+     the page never aggregated them, so there was no view of actual effort. */
+  const hoursStats = useMemo(() => {
+    let worked = 0, ot = 0, withHours = 0;
+    for (const r of rows) {
+      const h = Number(r.hours_worked) || 0;
+      const o = Number(r.overtime_hours) || 0;
+      worked += h; ot += o;
+      if (h > 0) withHours++;
+    }
+    return { worked, ot, withHours, avg: withHours > 0 ? worked / withHours : 0 };
+  }, [rows]);
+
+  /* Totals for the CURRENT filter — the footer previously showed unfiltered
+     summary counts next to a filtered record count, which never reconciled. */
+  const filteredTotals = useMemo(() => {
+    const t = { present: 0, half: 0, absent: 0, leave: 0, week_off: 0, holiday: 0, late: 0, hours: 0, ot: 0 };
+    for (const r of filteredRows) {
+      const s = (r.attendance_status || '').toLowerCase();
+      if (s === 'present') t.present++;
+      else if (s === 'half_day') t.half++;
+      else if (s === 'absent') t.absent++;
+      else if (s === 'leave') t.leave++;
+      else if (s === 'week_off') t.week_off++;
+      else if (s === 'holiday') t.holiday++;
+      if (Number(r.late_minutes) > 0) t.late++;
+      t.hours += Number(r.hours_worked) || 0;
+      t.ot    += Number(r.overtime_hours) || 0;
+    }
+    return t;
+  }, [filteredRows]);
 
   const { data: projectsData } = useQuery({
     queryKey: ['projects-active-ts'],
@@ -315,6 +365,10 @@ export default function TimesheetReportPage() {
         companyName: d.companyName || 'BCIM',
         projectName: d.projectName || '',
         projectCode: d.projectCode || '',
+        // The API has always returned these; the page just never used them,
+        // so a public holiday looked identical to a day of mass absence.
+        holidayName: d.holidayName || null,
+        isSunday:    !!d.isSunday,
       });
     } catch (e) {
       setError(e?.response?.data?.error || 'Failed to load timesheet');
@@ -324,12 +378,12 @@ export default function TimesheetReportPage() {
   useEffect(() => { load(); }, [load]);
 
   const handleExport = () => {
-    const headers = ['S.No','EMP ID','Name','Designation','Department','Trade','Company','P/A',
+    const headers = ['S.No','EMP ID','Name','Designation','Department','Trade','Company','Project','P/A',
       'In Time','Out Time','Late Min','Hrs Worked','Overtime Hrs','Shift','Location',
       'Eng/FM/Ch/CM','Incharge Name','Tower Incharge','Emp Status','Reason'];
     const csvRows = filteredRows.map((r, i) => [
       i+1, r.emp_id||'', r.name, r.designation, r.department, r.trade||'',
-      r.company, r.attendance_status, r.in_time||'', r.out_time||'',
+      r.company, r.project_name||'', r.attendance_status, r.in_time||'', r.out_time||'',
       r.late_minutes||0, r.hours_worked||'', r.overtime_hours||'',
       r.shift, r.location, r.eng_fm_ch_cm||'', r.incharge_name||'', r.tower_incharge||'',
       r.status, r.reason||'',
@@ -342,33 +396,46 @@ export default function TimesheetReportPage() {
     URL.revokeObjectURL(a.href);
   };
 
-  // Group rows by department for print
+  // Group rows by department for print.
+  // Built from filteredRows, not sortedRows: the print header already states
+  // the active Company/status filter, so printing the unfiltered set produced
+  // a document whose contents contradicted its own header.
   const deptGroupedRows = useMemo(() => {
     const groups = {};
-    sortedRows.forEach(r => {
+    filteredRows.forEach(r => {
       const d = r.department || 'Unknown';
       if (!groups[d]) groups[d] = [];
       groups[d].push(r);
     });
     return groups;
-  }, [sortedRows]);
+  }, [filteredRows]);
 
+  // Week-off / holiday cards appear only when they apply, so a normal working
+  // day keeps a tight strip — but on a Sunday the numbers now reconcile to
+  // Total Strength instead of 80 people silently vanishing.
   const kpiCards = [
-    { label:'Total Strength', val:summary.total,   accent:'#3B82F6' },
-    { label:'Present',        val:summary.present, accent:'#10B981' },
+    { label:'Total Strength', val:summary.total,   accent:'#3B82F6', sub:`${expectedStrength} expected in` },
+    { label:'Present',        val:summary.present, accent:'#10B981', sub: spCount > 0 ? `${spCount} single-punch` : null },
     { label:'Half Day',       val:summary.half||0, accent:'#6366F1' },
     { label:'Absent',         val:summary.absent,  accent:'#EF4444' },
     { label:'On Leave',       val:summary.leave,   accent:'#F59E0B' },
+    ...((summary.week_off || 0) > 0 ? [{ label:'Week Off', val:summary.week_off, accent:'#94A3B8' }] : []),
+    ...((summary.holiday  || 0) > 0 ? [{ label:'Holiday',  val:summary.holiday,  accent:'#8B5CF6' }] : []),
     { label:'Late Arrivals',  val:lateCount,        accent:'#F97316' },
+    { label:'Man-Hours',      val:hoursStats.worked.toFixed(0), accent:'#0891B2',
+      sub: hoursStats.ot > 0 ? `+${hoursStats.ot.toFixed(0)} OT` : `avg ${hoursStats.avg.toFixed(1)}h` },
   ];
 
   const qFilters = [
     { key:'all',      label:'All' },
     { key:'present',  label:'Present',  color:'#10B981' },
     { key:'sp',       label:'Single Punch', color:'#F97316' },
+    { key:'late',     label:'Late',     color:'#DC2626' },
     { key:'absent',   label:'Absent',   color:'#EF4444' },
     { key:'half_day', label:'Half Day', color:'#6366F1' },
     { key:'leave',    label:'Leave',    color:'#F59E0B' },
+    ...((summary.week_off || 0) > 0 ? [{ key:'week_off', label:'Week Off', color:'#64748B' }] : []),
+    ...((summary.holiday  || 0) > 0 ? [{ key:'holiday',  label:'Holiday',  color:'#8B5CF6' }] : []),
   ];
 
   const inputStyle = {
@@ -383,46 +450,68 @@ export default function TimesheetReportPage() {
 
       {/* ── TOP HEADER BAR ── */}
       <div className="no-print" style={{
-        background:'#fff', borderBottom:'0.5px solid #E5E7EB',
-        padding:'12px 24px', display:'flex', alignItems:'center',
+        position:'relative', overflow:'hidden',
+        background:'linear-gradient(135deg, #1B3A6B 0%, #0F2544 100%)',
+        padding:'16px 24px', display:'flex', alignItems:'center',
         justifyContent:'space-between', gap:12,
       }}>
-        <div>
-          <div style={{ display:'flex', alignItems:'center', gap:5, marginBottom:3 }}>
-            <span style={{ fontSize:12, color:'#9CA3AF' }}>HR Admin</span>
-            <ChevronRight size={11} color="#9CA3AF"/>
-            <span style={{ fontSize:12, color:'#9CA3AF' }}>Attendance</span>
-            <ChevronRight size={11} color="#9CA3AF"/>
-            <span style={{ fontSize:12, color:'#1A56DB', fontWeight:600 }}>Daily Timesheet</span>
+        <div style={{ position:'absolute', inset:0, opacity:0.07, pointerEvents:'none',
+          backgroundImage:'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize:'16px 16px' }}/>
+        <div style={{ position:'absolute', right:-48, top:-48, width:200, height:200,
+          borderRadius:'50%', background:'rgba(255,255,255,0.05)', pointerEvents:'none' }}/>
+        <div style={{ position:'relative' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:5, marginBottom:4 }}>
+            <span style={{ fontSize:11, color:'rgba(255,255,255,0.45)' }}>HR Admin</span>
+            <ChevronRight size={11} color="rgba(255,255,255,0.35)"/>
+            <span style={{ fontSize:11, color:'rgba(255,255,255,0.45)' }}>Attendance</span>
+            <ChevronRight size={11} color="rgba(255,255,255,0.35)"/>
+            <span style={{ fontSize:11, color:'#93C5FD', fontWeight:600 }}>Daily Timesheet</span>
           </div>
-          <h2 style={{ margin:0, fontSize:18, fontWeight:700, color:'#111827', letterSpacing:-0.3 }}>
+          <h2 style={{ margin:0, fontSize:22, fontWeight:800, color:'#fff', letterSpacing:-0.4 }}>
             Daily Timesheet Report
           </h2>
-          <p style={{ margin:0, fontSize:12, color:'#6B7280', marginTop:2 }}>
-            {fmtDate(date)}
-            {meta.projectName && <> &nbsp;·&nbsp; <strong>{meta.projectName}</strong></>}
-          </p>
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:5, flexWrap:'wrap' }}>
+            <span style={{ fontSize:12, color:'rgba(255,255,255,0.7)' }}>{fmtDate(date)}</span>
+            {meta.projectName && (
+              <>
+                <span style={{ color:'rgba(255,255,255,0.25)' }}>·</span>
+                <span style={{ fontSize:12, color:'#fff', fontWeight:600 }}>{meta.projectName}</span>
+              </>
+            )}
+            {meta.holidayName && (
+              <span style={{ background:'rgba(139,92,246,0.25)', border:'1px solid rgba(196,181,253,0.4)',
+                color:'#DDD6FE', borderRadius:999, padding:'2px 10px', fontSize:11, fontWeight:700 }}>
+                Public Holiday — {meta.holidayName}
+              </span>
+            )}
+            {!meta.holidayName && meta.isSunday && (
+              <span style={{ background:'rgba(148,163,184,0.25)', border:'1px solid rgba(203,213,225,0.4)',
+                color:'#E2E8F0', borderRadius:999, padding:'2px 10px', fontSize:11, fontWeight:700 }}>
+                Sunday — Week Off
+              </span>
+            )}
+          </div>
         </div>
-        <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+        <div style={{ position:'relative', display:'flex', gap:8, flexShrink:0 }}>
           <button onClick={load} disabled={loading} style={{
             display:'flex', alignItems:'center', gap:5,
-            background:'#F9FAFB', color:'#374151', border:'0.5px solid #D1D5DB',
-            borderRadius:7, padding:'6px 14px', fontSize:13, cursor:'pointer', fontWeight:500,
+            background:'rgba(255,255,255,0.12)', color:'#fff', border:'1px solid rgba(255,255,255,0.22)',
+            borderRadius:8, padding:'7px 14px', fontSize:13, cursor:'pointer', fontWeight:600,
             opacity: loading ? 0.6 : 1,
           }}>
             <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }}/> Refresh
           </button>
           <button onClick={handleExport} style={{
             display:'flex', alignItems:'center', gap:5,
-            background:'#F0FDF4', color:'#15803D', border:'0.5px solid #86EFAC',
-            borderRadius:7, padding:'6px 14px', fontSize:13, cursor:'pointer', fontWeight:500,
+            background:'rgba(255,255,255,0.12)', color:'#fff', border:'1px solid rgba(255,255,255,0.22)',
+            borderRadius:8, padding:'7px 14px', fontSize:13, cursor:'pointer', fontWeight:600,
           }}>
             <Download size={13}/> Export CSV
           </button>
           <button onClick={() => window.print()} style={{
             display:'flex', alignItems:'center', gap:5,
-            background:'#1A56DB', color:'#fff', border:'none',
-            borderRadius:7, padding:'6px 14px', fontSize:13, cursor:'pointer', fontWeight:600,
+            background:'#fff', color:'#1B3A6B', border:'none',
+            borderRadius:8, padding:'7px 16px', fontSize:13, cursor:'pointer', fontWeight:800,
           }}>
             <Printer size={13}/> Print / PDF
           </button>
@@ -485,12 +574,16 @@ export default function TimesheetReportPage() {
           <div key={k.label} style={{
             background:'#fff', border:'0.5px solid #E5E7EB',
             borderLeft:`3px solid ${k.accent}`, borderRadius:10,
-            padding:'12px 18px', minWidth:115, flex:'0 0 auto',
+            padding:'12px 18px', minWidth:118, flex:'0 0 auto',
+            boxShadow:'0 1px 3px rgba(0,0,0,0.04)',
           }}>
             <div style={{ fontSize:11, color:'#6B7280', fontWeight:500, marginBottom:4 }}>{k.label}</div>
-            <div style={{ fontSize:26, fontWeight:800, color:'#111827', lineHeight:1 }}>
+            <div style={{ fontSize:26, fontWeight:800, color:'#111827', lineHeight:1, fontVariantNumeric:'tabular-nums' }}>
               {loading ? <span style={{ fontSize:16, color:'#E5E7EB' }}>—</span> : k.val}
             </div>
+            {!loading && k.sub && (
+              <div style={{ fontSize:10, color:'#9CA3AF', marginTop:4 }}>{k.sub}</div>
+            )}
           </div>
         ))}
 
@@ -502,7 +595,13 @@ export default function TimesheetReportPage() {
           }}>
             <MiniDonut pct={attendancePct}/>
             <div>
-              <div style={{ fontSize:11, color:'#6B7280', fontWeight:500, marginBottom:4 }}>Attendance Rate</div>
+              <div style={{ fontSize:11, color:'#6B7280', fontWeight:500, marginBottom:2 }}>Attendance Rate</div>
+              <div style={{ fontSize:10, color:'#9CA3AF', marginBottom:5 }}>
+                of {expectedStrength} expected
+                {(summary.week_off || summary.holiday) > 0 && (
+                  <span> · {(summary.week_off||0) + (summary.holiday||0)} off-duty excluded</span>
+                )}
+              </div>
               <AttBar
                 present={summary.present} absent={summary.absent}
                 half={summary.half||0} leave={summary.leave}
@@ -631,12 +730,15 @@ export default function TimesheetReportPage() {
             <table style={{ border:'1px solid #1B3A6B', borderCollapse:'collapse', fontSize:8, flexShrink:0 }}>
               <tbody>
                 {[
-                  ['Total Strength', summary.total],
-                  ['Present (P)',    summary.present],
-                  ['Half Day (HD)',  summary.half||0],
-                  ['Absent (A)',     summary.absent],
-                  ['On Leave (L)',   summary.leave],
-                  ['Late Arrivals',  lateCount],
+                  ['Total Strength', filteredRows.length],
+                  ['Present (P)',    filteredTotals.present],
+                  ['Half Day (HD)',  filteredTotals.half],
+                  ['Absent (A)',     filteredTotals.absent],
+                  ['On Leave (L)',   filteredTotals.leave],
+                  ...(filteredTotals.week_off > 0 ? [['Week Off (WO)', filteredTotals.week_off]] : []),
+                  ...(filteredTotals.holiday  > 0 ? [['Holiday (H)',   filteredTotals.holiday]]  : []),
+                  ['Late Arrivals',  filteredTotals.late],
+                  ['Man-Hours',      filteredTotals.hours.toFixed(1)],
                   ['Attendance %',   `${attendancePct}%`],
                 ].map(([l,v]) => (
                   <tr key={l}>
@@ -694,7 +796,7 @@ export default function TimesheetReportPage() {
                   position:'sticky', top:0, zIndex:2,
                   boxShadow:'0 1px 0 #E5E7EB',
                 }}>
-                  {['#','EMP ID','Name','Designation','Department','Trade','Company',
+                  {['#','EMP ID','Name','Designation','Department','Trade','Company','Project',
                     'P/A','In Time','Out Time','Late Min','Hrs','OT','Shift','Location',
                     'Eng/FM/Ch/CM','Incharge','Tower Incharge','Emp Status','Reason',
                   ].map(h => {
@@ -725,7 +827,7 @@ export default function TimesheetReportPage() {
               <tbody>
                 {filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={20} style={{ textAlign:'center', padding:56, color:'#9CA3AF', fontSize:13 }}>
+                    <td colSpan={21} style={{ textAlign:'center', padding:56, color:'#9CA3AF', fontSize:13 }}>
                       {rows.length === 0 ? `No records found for ${date}` : 'No records match your filter'}
                     </td>
                   </tr>
@@ -762,6 +864,10 @@ export default function TimesheetReportPage() {
                         }}>
                           {r.company}
                         </span>
+                      </td>
+                      <td style={{ ...td, color:'#6B7280', fontSize:11, maxWidth:150, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}
+                        title={r.project_name}>
+                        {r.project_name || <span style={{ color:'#D1D5DB' }}>—</span>}
                       </td>
                       <td style={{ ...td, textAlign:'center' }}><Pill status={r.attendance_status} out_time={r.out_time}/></td>
                       <td style={{ ...td, color:'#374151', fontVariantNumeric:'tabular-nums', whiteSpace:'nowrap' }}>
@@ -810,20 +916,33 @@ export default function TimesheetReportPage() {
               </tbody>
               {rows.length > 0 && (
                 <tfoot>
+                  {/* Totals track the CURRENT filter, so the breakdown always
+                      reconciles with the record count shown beside it. */}
                   <tr style={{ background:'#F0F7FF', borderTop:'1.5px solid #BFDBFE' }}>
-                    <td colSpan={6} style={{ ...td, textAlign:'right', color:'#1E40AF', fontWeight:700 }}>
-                      Grand Total ({filteredRows.length} records)
+                    <td colSpan={8} style={{ ...td, textAlign:'right', color:'#1E40AF', fontWeight:700 }}>
+                      {filteredRows.length === rows.length ? 'Grand Total' : 'Filtered Total'} ({filteredRows.length} records)
                     </td>
-                    <td style={{ ...td, textAlign:'center' }}>
-                      <span style={{ color:'#15803D', fontWeight:800 }}>{summary.present}P</span>
+                    <td style={{ ...td, textAlign:'center', whiteSpace:'nowrap' }}>
+                      <span style={{ color:'#15803D', fontWeight:800 }}>{filteredTotals.present}P</span>
                       {' / '}
-                      <span style={{ color:'#6366F1', fontWeight:800 }}>{summary.half||0}HD</span>
+                      <span style={{ color:'#6366F1', fontWeight:800 }}>{filteredTotals.half}HD</span>
                       {' / '}
-                      <span style={{ color:'#B91C1C', fontWeight:800 }}>{summary.absent}A</span>
+                      <span style={{ color:'#B91C1C', fontWeight:800 }}>{filteredTotals.absent}A</span>
                       {' / '}
-                      <span style={{ color:'#B45309', fontWeight:800 }}>{summary.leave}L</span>
+                      <span style={{ color:'#B45309', fontWeight:800 }}>{filteredTotals.leave}L</span>
+                      {filteredTotals.week_off > 0 && <>{' / '}<span style={{ color:'#475569', fontWeight:800 }}>{filteredTotals.week_off}WO</span></>}
                     </td>
-                    <td colSpan={13} style={td}/>
+                    <td colSpan={2} style={td}/>
+                    <td style={{ ...td, textAlign:'center', color:'#DC2626', fontWeight:800 }}>
+                      {filteredTotals.late > 0 ? `${filteredTotals.late} late` : '—'}
+                    </td>
+                    <td style={{ ...td, textAlign:'center', color:'#0F766E', fontWeight:800, fontVariantNumeric:'tabular-nums' }}>
+                      {filteredTotals.hours > 0 ? filteredTotals.hours.toFixed(1) : '—'}
+                    </td>
+                    <td style={{ ...td, textAlign:'center', color:'#92400E', fontWeight:800, fontVariantNumeric:'tabular-nums' }}>
+                      {filteredTotals.ot > 0 ? `+${filteredTotals.ot.toFixed(1)}` : '—'}
+                    </td>
+                    <td colSpan={7} style={td}/>
                   </tr>
                 </tfoot>
               )}
@@ -889,7 +1008,8 @@ export default function TimesheetReportPage() {
                     Grand Total
                   </td>
                   <td style={{ textAlign:'center', fontWeight:700, padding:'4px 6px', borderTop:'2px solid #1B3A6B' }}>
-                    {summary.present}P / {summary.absent}A / {summary.half||0}HD / {summary.leave}L
+                    {filteredTotals.present}P / {filteredTotals.absent}A / {filteredTotals.half}HD / {filteredTotals.leave}L
+                    {filteredTotals.week_off > 0 ? ` / ${filteredTotals.week_off}WO` : ''}
                   </td>
                   <td colSpan={13} style={{ borderTop:'2px solid #1B3A6B' }}/>
                 </tr>
