@@ -8,7 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { hireLogAPI, scAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
 import { PageHeader, Theme } from '../../theme';
-import { Plus, X, Receipt, Trash2, CheckCircle2, Clock, Truck, Settings, Pencil, Paperclip, Upload, ExternalLink } from 'lucide-react';
+import { Plus, X, Receipt, Trash2, CheckCircle2, Clock, Truck, Settings, Pencil, Paperclip, Upload, ExternalLink, ClipboardList } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
@@ -459,67 +459,280 @@ function GroupTable({ wo, group, entries, totals, onRaiseBill, raisingId, onEdit
   );
 }
 
-// Non-italic strip of DG/JCB-style log sheet readings under a daily row's Notes cell
-function LogSheetDetails({ r }) {
-  const bits = [];
-  if (r.start_time || r.end_time) bits.push(`${r.start_time || '?'} – ${r.end_time || '?'}`);
-  if (r.hours_meter_start != null && r.hours_meter_end != null)
-    bits.push(`HM ${num(r.hours_meter_start).toFixed(1)}→${num(r.hours_meter_end).toFixed(1)}`);
-  if (r.break_hours) bits.push(`Break ${num(r.break_hours).toFixed(1)}h`);
-  if (r.km_start != null && r.km_end != null)
-    bits.push(`${num(r.km_end - r.km_start).toFixed(0)} km`);
-  if (r.diesel_opening != null || r.diesel_issued != null || r.diesel_closing != null) {
-    const total = num(r.diesel_opening) + num(r.diesel_issued);
-    const consumed = r.diesel_closing != null ? Math.max(0, total - num(r.diesel_closing)) : null;
-    bits.push(`Diesel ${consumed != null ? consumed.toFixed(1) + 'L used' : total.toFixed(1) + 'L'}`);
-  }
-  if (r.requested_by) bits.push(`Req: ${r.requested_by}`);
-  if (!bits.length && !r.work_description) return null;
+// ─── Derived log-sheet readings for one daily record ─────────────────────────
+function logSheetStats(r) {
+  const hmStart = r.hours_meter_start != null ? num(r.hours_meter_start) : null;
+  const hmEnd   = r.hours_meter_end   != null ? num(r.hours_meter_end)   : null;
+  const hmTotal = (hmStart != null && hmEnd != null) ? Math.max(0, hmEnd - hmStart - num(r.break_hours)) : null;
+  const kmTotal = (r.km_start != null && r.km_end != null) ? Math.max(0, num(r.km_end) - num(r.km_start)) : null;
+  const hasDiesel = r.diesel_opening != null || r.diesel_issued != null || r.diesel_closing != null;
+  const dieselTotal = hasDiesel ? num(r.diesel_opening) + num(r.diesel_issued) : null;
+  const dieselUsed = (dieselTotal != null && r.diesel_closing != null)
+    ? Math.max(0, dieselTotal - num(r.diesel_closing)) : null;
+  return { hmStart, hmEnd, hmTotal, kmTotal, dieselTotal, dieselUsed };
+}
+
+// ─── Premium day-log entry modal — mirrors the manual DG/JCB log sheet ────────
+function DayLogModal({ wo, equipmentGroups, onClose }) {
+  const qc = useQueryClient();
+  const allCats = equipmentGroups.flatMap(g => g.categories);
+
+  const [date,       setDate]       = useState(dayjs().format('YYYY-MM-DD'));
+  const [itemId,     setItemId]     = useState(allCats.length === 1 ? allCats[0].id : '');
+  const [qty,        setQty]        = useState('');
+  const [notes,      setNotes]      = useState('');
+  const [startTime,  setStartTime]  = useState('');
+  const [endTime,    setEndTime]    = useState('');
+  const [hmStart,    setHmStart]    = useState('');
+  const [hmEnd,      setHmEnd]      = useState('');
+  const [breakHours, setBreakHours] = useState('');
+  const [kmStart,    setKmStart]    = useState('');
+  const [kmEnd,      setKmEnd]      = useState('');
+  const [dOpening,   setDOpening]   = useState('');
+  const [dIssued,    setDIssued]    = useState('');
+  const [dClosing,   setDClosing]   = useState('');
+  const [workDesc,   setWorkDesc]   = useState('');
+  const [reqBy,      setReqBy]      = useState('');
+
+  const selectedCat = allCats.find(c => c.id === itemId);
+  const qtyUnit = selectedCat?.unit || 'Qty';
+  const isMonthly = /month/i.test(qtyUnit);
+  const qtyLabel = isMonthly ? 'Days Worked' : qtyUnit;
+
+  // Live-derived values, same formulas as the paper log sheet's total columns
+  const hmTotal = (hmStart !== '' && hmEnd !== '')
+    ? Math.max(0, num(hmEnd) - num(hmStart) - num(breakHours)) : null;
+  const kmTotal = (kmStart !== '' && kmEnd !== '') ? Math.max(0, num(kmEnd) - num(kmStart)) : null;
+  const dieselTotal = (dOpening !== '' || dIssued !== '') ? num(dOpening) + num(dIssued) : null;
+  const dieselUsed  = (dieselTotal != null && dClosing !== '') ? Math.max(0, dieselTotal - num(dClosing)) : null;
+  const effectiveQty = hmTotal != null ? hmTotal : (qty !== '' ? num(qty) : null);
+  const billValue = (effectiveQty != null && selectedCat?.rate) ? effectiveQty * num(selectedCat.rate) : null;
+  const litresPerHour = (dieselUsed != null && hmTotal && hmTotal > 0) ? dieselUsed / hmTotal : null;
+
+  const saveMut = useMutation({
+    mutationFn: () => hireLogAPI.addDailyEntry(wo.id, {
+      work_date: date, wo_item_id: itemId,
+      qty: qty !== '' ? parseFloat(qty) : undefined, notes,
+      start_time: startTime, end_time: endTime,
+      hours_meter_start: hmStart, hours_meter_end: hmEnd, break_hours: breakHours,
+      km_start: kmStart, km_end: kmEnd,
+      diesel_opening: dOpening, diesel_issued: dIssued, diesel_closing: dClosing,
+      work_description: workDesc, requested_by: reqBy,
+    }),
+    onSuccess: () => {
+      toast.success('Day recorded');
+      qc.invalidateQueries({ queryKey: ['hire-daily-log', wo.id] });
+      onClose();
+    },
+    onError: e => toast.error(e?.response?.data?.error || 'Failed to save'),
+  });
+
+  const handleSave = () => {
+    if (!date || !itemId) return toast.error('Date and equipment are required');
+    if (qty === '' && hmTotal == null) return toast.error('Enter Qty, or Hours Meter Start & End');
+    saveMut.mutate();
+  };
+
+  const lbl = 'block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5';
+  const sectionHead = 'text-[10px] font-bold uppercase tracking-[0.14em] mb-3 flex items-center gap-2';
+
   return (
-    <div className="text-[10px] text-slate-400 not-italic mt-0.5">
-      {r.work_description && <span className="text-slate-500">{r.work_description}</span>}
-      {bits.length > 0 && <span>{r.work_description ? ' · ' : ''}{bits.join(' · ')}</span>}
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-4 flex items-center justify-between flex-shrink-0"
+          style={{ background: `linear-gradient(135deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)` }}>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+              style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)' }}>
+              <ClipboardList className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h2 className="font-bold text-white text-base leading-tight">Daily Log Sheet Entry</h2>
+              <p className="text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                {wo.wo_number} · {wo.sc_name}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-white hover:bg-white/10 transition"
+            style={{ background: 'rgba(255,255,255,0.12)' }}>
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5" style={{ background: Theme.pageBg }}>
+          {/* Section 1 — What & when */}
+          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+            <p className={sectionHead} style={{ color: Theme.navy }}>
+              <span className="w-1 h-3.5 rounded-full" style={{ background: Theme.accent }} /> Record
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className={lbl}>Date *</label>
+                <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inp} />
+              </div>
+              <div className="md:col-span-2">
+                <label className={lbl}>Equipment / Category *</label>
+                <select value={itemId} onChange={e => setItemId(e.target.value)} className={inp}>
+                  <option value="">— select equipment —</option>
+                  {equipmentGroups.map(g => (
+                    <optgroup key={g.equipment_group} label={g.equipment_group}>
+                      {g.categories.map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.usage_category} ({c.unit}) — ₹{num(c.rate).toLocaleString('en-IN')}/{c.unit}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2 — Running time */}
+          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+            <p className={sectionHead} style={{ color: Theme.navy }}>
+              <span className="w-1 h-3.5 rounded-full" style={{ background: '#3b82f6' }} /> Running Time
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+              <div>
+                <label className={lbl}>Start Time</label>
+                <input type="text" value={startTime} onChange={e => setStartTime(e.target.value)} className={inp} placeholder="8:00 AM" />
+              </div>
+              <div>
+                <label className={lbl}>End Time</label>
+                <input type="text" value={endTime} onChange={e => setEndTime(e.target.value)} className={inp} placeholder="8:00 PM" />
+              </div>
+              <div>
+                <label className={lbl}>Break Hrs</label>
+                <input type="number" step="0.5" min="0" value={breakHours} onChange={e => setBreakHours(e.target.value)} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Hr Meter Start</label>
+                <input type="number" step="0.1" min="0" value={hmStart} onChange={e => setHmStart(e.target.value)} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Hr Meter End</label>
+                <input type="number" step="0.1" min="0" value={hmEnd} onChange={e => setHmEnd(e.target.value)} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>{qtyLabel} {hmTotal == null && '*'}</label>
+                <input type="number" step="0.5" min="0" disabled={hmTotal != null}
+                  value={hmTotal != null ? hmTotal.toFixed(2) : qty}
+                  onChange={e => setQty(e.target.value)}
+                  className={clsx(inp, hmTotal != null && 'bg-indigo-50 font-bold text-indigo-700')}
+                  placeholder={isMonthly ? '1' : 'e.g. 5.5'} />
+                {hmTotal != null && <p className="text-[9px] text-indigo-500 mt-1 font-semibold">auto from meter</p>}
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3 — Diesel & distance */}
+          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+            <p className={sectionHead} style={{ color: Theme.navy }}>
+              <span className="w-1 h-3.5 rounded-full" style={{ background: '#f59e0b' }} /> Diesel &amp; Distance
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div>
+                <label className={lbl}>Opening Stock</label>
+                <input type="number" step="0.1" min="0" value={dOpening} onChange={e => setDOpening(e.target.value)} className={inp} placeholder="Litres" />
+              </div>
+              <div>
+                <label className={lbl}>Diesel Issued</label>
+                <input type="number" step="0.1" min="0" value={dIssued} onChange={e => setDIssued(e.target.value)} className={inp} placeholder="Litres" />
+              </div>
+              <div>
+                <label className={lbl}>Closing Stock</label>
+                <input type="number" step="0.1" min="0" value={dClosing} onChange={e => setDClosing(e.target.value)} className={inp} placeholder="Litres" />
+              </div>
+              <div>
+                <label className={lbl}>Km — Start</label>
+                <input type="number" step="1" min="0" value={kmStart} onChange={e => setKmStart(e.target.value)} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Km — End</label>
+                <input type="number" step="1" min="0" value={kmEnd} onChange={e => setKmEnd(e.target.value)} className={inp} />
+              </div>
+            </div>
+          </div>
+
+          {/* Section 4 — Work done */}
+          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+            <p className={sectionHead} style={{ color: Theme.navy }}>
+              <span className="w-1 h-3.5 rounded-full" style={{ background: '#10b981' }} /> Work Done
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="md:col-span-2">
+                <label className={lbl}>Work Description</label>
+                <input type="text" value={workDesc} onChange={e => setWorkDesc(e.target.value)} className={inp}
+                  placeholder="e.g. Concreting for raft slab" />
+              </div>
+              <div>
+                <label className={lbl}>Requested By</label>
+                <input type="text" value={reqBy} onChange={e => setReqBy(e.target.value)} className={inp} placeholder="Site engineer" />
+              </div>
+              <div className="md:col-span-3">
+                <label className={lbl}>Remarks</label>
+                <input type="text" value={notes} onChange={e => setNotes(e.target.value)} className={inp}
+                  placeholder="e.g. Idle 2 hrs — waiting for material" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Live summary strip + actions */}
+        <div className="flex-shrink-0 border-t border-slate-200 bg-white">
+          {(hmTotal != null || kmTotal != null || dieselUsed != null || billValue != null) && (
+            <div className="px-6 py-2.5 flex flex-wrap gap-x-6 gap-y-1.5 border-b border-slate-100 bg-slate-50/70">
+              {hmTotal != null && (
+                <span className="text-[11px] font-semibold text-slate-500">
+                  Run Hours <span className="text-indigo-700 font-bold ml-1">{hmTotal.toFixed(2)}</span>
+                </span>
+              )}
+              {kmTotal != null && (
+                <span className="text-[11px] font-semibold text-slate-500">
+                  Distance <span className="text-slate-800 font-bold ml-1">{kmTotal.toFixed(0)} km</span>
+                </span>
+              )}
+              {dieselUsed != null && (
+                <span className="text-[11px] font-semibold text-slate-500">
+                  Diesel Used <span className="text-amber-700 font-bold ml-1">{dieselUsed.toFixed(1)} L</span>
+                </span>
+              )}
+              {litresPerHour != null && (
+                <span className="text-[11px] font-semibold text-slate-500">
+                  Consumption <span className="text-amber-700 font-bold ml-1">{litresPerHour.toFixed(2)} L/hr</span>
+                </span>
+              )}
+              {billValue != null && (
+                <span className="text-[11px] font-semibold text-slate-500 ml-auto">
+                  Day Value <span className="text-emerald-700 font-bold ml-1">{fmt(billValue)}</span>
+                </span>
+              )}
+            </div>
+          )}
+          <div className="px-6 py-3.5 flex justify-end gap-3">
+            <button onClick={onClose} className="px-4 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">
+              Cancel
+            </button>
+            <button onClick={handleSave} disabled={saveMut.isPending}
+              className="px-6 py-2 text-white text-sm font-bold rounded-lg disabled:opacity-50 shadow-sm transition"
+              style={{ background: `linear-gradient(135deg, ${Theme.navyLight} 0%, ${Theme.navyDark} 100%)` }}>
+              {saveMut.isPending ? 'Saving…' : 'Save Day Entry'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-// ─── Daily Log Section ───────────────────────────────────────────────────────
+// ─── Daily Log Section — log-sheet style register ────────────────────────────
 function DailyLogSection({ wo, equipmentGroups, onCreateBill }) {
   const qc = useQueryClient();
   const allCats = equipmentGroups.flatMap(g => g.categories);
-
-  const [showAddRow, setShowAddRow] = useState(false);
-  const [showLogSheet, setShowLogSheet] = useState(false); // DG/JCB-style log sheet fields
-  const [newDate,    setNewDate]    = useState(dayjs().format('YYYY-MM-DD'));
-  const [newItemId,  setNewItemId]  = useState('');
-  const [newQty,     setNewQty]     = useState('');
-  const [newNotes,   setNewNotes]   = useState('');
-  // Log sheet fields — mirror the manual DG/JCB Daily Log Sheet columns
-  const [startTime,      setStartTime]      = useState('');
-  const [endTime,        setEndTime]        = useState('');
-  const [hmStart,        setHmStart]        = useState('');
-  const [hmEnd,          setHmEnd]          = useState('');
-  const [breakHours,     setBreakHours]     = useState('');
-  const [kmStart,        setKmStart]        = useState('');
-  const [kmEnd,          setKmEnd]          = useState('');
-  const [dieselOpening,  setDieselOpening]  = useState('');
-  const [dieselIssued,   setDieselIssued]   = useState('');
-  const [dieselClosing,  setDieselClosing]  = useState('');
-  const [workDesc,       setWorkDesc]       = useState('');
-  const [requestedBy,    setRequestedBy]    = useState('');
-
-  const selectedCat = allCats.find(c => c.id === newItemId);
-  const qtyUnit = selectedCat?.unit || 'Qty';
-  const isMonthlyUnit = /month/i.test(qtyUnit);
-  const qtyLabel = isMonthlyUnit ? 'Days Worked' : qtyUnit;
-
-  // Hours-meter total (Start/End − Break), same formula as the log-sheet's "Hours Meter - Total" column
-  const hmTotal = (hmStart !== '' && hmEnd !== '')
-    ? Math.max(0, num(hmEnd) - num(hmStart) - num(breakHours))
-    : null;
-  const kmTotal = (kmStart !== '' && kmEnd !== '') ? Math.max(0, num(kmEnd) - num(kmStart)) : null;
-  const dieselTotal = (dieselOpening !== '' || dieselIssued !== '') ? num(dieselOpening) + num(dieselIssued) : null;
-  const dieselConsumption = (dieselTotal != null && dieselClosing !== '') ? Math.max(0, dieselTotal - num(dieselClosing)) : null;
+  const [showModal, setShowModal] = useState(false);
 
   // Hide "Create Bill from Log" if all WO categories are monthly-rated (bill raised manually)
   const allMonthly = allCats.length > 0 && allCats.every(c => /month/i.test(c.unit || ''));
@@ -530,45 +743,22 @@ function DailyLogSection({ wo, equipmentGroups, onCreateBill }) {
     staleTime: 0,
   });
 
-  const addMut = useMutation({
-    mutationFn: (d) => hireLogAPI.addDailyEntry(wo.id, d),
-    onSuccess: () => {
-      toast.success('Day recorded');
-      qc.invalidateQueries({ queryKey: ['hire-daily-log', wo.id] });
-      setShowAddRow(false);
-      setNewQty(''); setNewNotes('');
-      setStartTime(''); setEndTime(''); setHmStart(''); setHmEnd(''); setBreakHours('');
-      setKmStart(''); setKmEnd(''); setDieselOpening(''); setDieselIssued(''); setDieselClosing('');
-      setWorkDesc(''); setRequestedBy('');
-    },
-    onError: e => toast.error(e?.response?.data?.error || 'Failed'),
-  });
-
   const delMut = useMutation({
     mutationFn: (id) => hireLogAPI.deleteDailyEntry(wo.id, id),
     onSuccess: () => { toast.success('Deleted'); qc.invalidateQueries({ queryKey: ['hire-daily-log', wo.id] }); },
     onError: () => toast.error('Failed to delete'),
   });
 
-  const handleAdd = () => {
-    if (!newDate || !newItemId) return toast.error('Date and equipment are required');
-    if (!newQty && hmTotal == null) return toast.error('Enter Qty, or Hours Meter Start & End');
-    addMut.mutate({
-      work_date: newDate, wo_item_id: newItemId,
-      qty: newQty ? parseFloat(newQty) : undefined, notes: newNotes,
-      start_time: startTime, end_time: endTime,
-      hours_meter_start: hmStart, hours_meter_end: hmEnd, break_hours: breakHours,
-      km_start: kmStart, km_end: kmEnd,
-      diesel_opening: dieselOpening, diesel_issued: dieselIssued, diesel_closing: dieselClosing,
-      work_description: workDesc, requested_by: requestedBy,
-    });
-  };
-
-  // Totals per item_id
+  // Totals per item_id + roll-ups for the KPI strip
   const totalsPerItem = {};
+  let totalDieselUsed = 0, totalKm = 0, totalCertValue = 0;
   raw.forEach(r => {
-    totalsPerItem[r.wo_item_id] = (totalsPerItem[r.wo_item_id] || 0) + parseFloat(r.qty || 0);
+    totalsPerItem[r.wo_item_id] = (totalsPerItem[r.wo_item_id] || 0) + num(r.qty);
+    const s = logSheetStats(r);
+    if (s.dieselUsed != null) totalDieselUsed += s.dieselUsed;
+    if (s.kmTotal != null)    totalKm += s.kmTotal;
   });
+  allCats.forEach(c => { totalCertValue += num(totalsPerItem[c.id]) * num(c.rate); });
 
   const handleCreateBill = () => {
     const pf = {};
@@ -585,223 +775,169 @@ function DailyLogSection({ wo, equipmentGroups, onCreateBill }) {
     if (!grouped[d]) grouped[d] = [];
     grouped[d].push(r);
   });
-  const dates = Object.keys(grouped).sort();
+  const dates = Object.keys(grouped).sort().reverse(); // newest day first
   const totalDays = dates.length;
 
+  const th = 'px-2.5 py-2 text-[9px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap';
+
   return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
-        <div className="flex items-center gap-2">
-          <span className="font-bold text-sm text-slate-700">Daily Usage Log</span>
-          {raw.length > 0 && (
-            <span className="text-xs bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full">
-              {raw.length} records · {totalDays} day{totalDays !== 1 ? 's' : ''}
-            </span>
-          )}
-        </div>
-        <div className="flex gap-2">
-          {Object.keys(totalsPerItem).length > 0 && !allMonthly && (
-            <button onClick={handleCreateBill}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition">
-              <Receipt className="w-3.5 h-3.5" /> Create Bill from Log
-            </button>
-          )}
-          <button onClick={() => setShowAddRow(v => !v)}
-            className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold border border-slate-200 bg-white text-slate-700 rounded-lg hover:bg-slate-50 transition">
-            <Plus className="w-3.5 h-3.5" /> Add Day
-          </button>
-        </div>
-      </div>
-
-      {/* Add Row form */}
-      {showAddRow && (
-        <div className="px-4 py-3 bg-indigo-50/60 border-b border-indigo-100">
-          <div className="flex flex-wrap gap-3 items-end">
-            <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Date *</label>
-              <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)}
-                className={inp} style={{ minWidth: 130 }} />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Equipment / Category *</label>
-              <select value={newItemId} onChange={e => setNewItemId(e.target.value)}
-                className={inp} style={{ minWidth: 220 }}>
-                <option value="">— select —</option>
-                {equipmentGroups.map(g => (
-                  <optgroup key={g.equipment_group} label={g.equipment_group}>
-                    {g.categories.map(c => (
-                      <option key={c.id} value={c.id}>{c.usage_category} ({c.unit})</option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
-                {qtyLabel} {hmTotal == null && '*'}
-              </label>
-              <input type="number" step="0.5" min="0" value={hmTotal != null ? hmTotal.toFixed(2) : newQty}
-                onChange={e => setNewQty(e.target.value)} disabled={hmTotal != null}
-                className={inp} style={{ width: 90 }} placeholder={isMonthlyUnit ? '1' : qtyUnit === 'Day' ? '1' : 'e.g. 5.5'} />
-              {hmTotal != null && <p className="text-[9px] text-indigo-500 mt-0.5">from hours meter</p>}
-            </div>
-            <div className="flex-1" style={{ minWidth: 140 }}>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Notes / Remarks</label>
-              <input type="text" value={newNotes} onChange={e => setNewNotes(e.target.value)}
-                className={inp} placeholder="e.g. Debris removal" />
-            </div>
-            <div className="flex gap-2 pb-0.5">
-              <button onClick={handleAdd} disabled={addMut.isPending}
-                className="px-3 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition">
-                {addMut.isPending ? 'Saving…' : 'Save'}
-              </button>
-              <button onClick={() => setShowAddRow(false)}
-                className="px-3 py-1.5 text-xs font-bold border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition">
-                Cancel
-              </button>
-            </div>
+    <>
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        {/* Header band */}
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100"
+          style={{ background: `linear-gradient(90deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)` }}>
+          <div className="flex items-center gap-2.5">
+            <div className="w-1 h-4 rounded-full" style={{ background: Theme.gold }} />
+            <ClipboardList className="w-4 h-4 text-white/80" />
+            <span className="font-bold text-sm text-white">Daily Usage Log</span>
+            {raw.length > 0 && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                style={{ background: 'rgba(255,255,255,0.18)', color: '#fff' }}>
+                {raw.length} record{raw.length !== 1 ? 's' : ''} · {totalDays} day{totalDays !== 1 ? 's' : ''}
+              </span>
+            )}
           </div>
+          <div className="flex gap-2">
+            {Object.keys(totalsPerItem).length > 0 && !allMonthly && (
+              <button onClick={handleCreateBill}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg transition shadow-sm"
+                style={{ background: '#10b981', color: '#fff' }}>
+                <Receipt className="w-3.5 h-3.5" /> Create Bill from Log
+              </button>
+            )}
+            <button onClick={() => setShowModal(true)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg transition shadow-sm"
+              style={{ background: '#fff', color: Theme.navyDark }}>
+              <Plus className="w-3.5 h-3.5" /> Add Day
+            </button>
+          </div>
+        </div>
 
-          <button onClick={() => setShowLogSheet(v => !v)}
-            className="mt-2 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 transition">
-            {showLogSheet ? '− Hide' : '+ Add'} DG / JCB Log Sheet Details (time, hours meter, diesel, km)
-          </button>
+        {/* KPI strip */}
+        {raw.length > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-slate-100 border-b border-slate-100 bg-slate-50/50">
+            {[
+              { label: 'Days Logged',   value: String(totalDays),                       tone: '#1a3a6b' },
+              { label: 'Diesel Used',   value: `${totalDieselUsed.toFixed(1)} L`,       tone: '#b45309' },
+              { label: 'Distance Run',  value: `${totalKm.toFixed(0)} km`,              tone: '#334155' },
+              { label: 'Log Value',     value: fmt(totalCertValue),                     tone: '#047857' },
+            ].map(k => (
+              <div key={k.label} className="px-4 py-3">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.14em]">{k.label}</p>
+                <p className="text-lg font-bold mt-0.5 tabular-nums" style={{ color: k.tone }}>{k.value}</p>
+              </div>
+            ))}
+          </div>
+        )}
 
-          {showLogSheet && (
-            <div className="mt-2 p-3 bg-white border border-indigo-100 rounded-lg space-y-3">
-              <div className="flex flex-wrap gap-3 items-end">
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Start Time</label>
-                  <input type="text" value={startTime} onChange={e => setStartTime(e.target.value)}
-                    className={inp} style={{ width: 90 }} placeholder="8:00 AM" />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">End Time</label>
-                  <input type="text" value={endTime} onChange={e => setEndTime(e.target.value)}
-                    className={inp} style={{ width: 90 }} placeholder="8:00 PM" />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Break Hrs</label>
-                  <input type="number" step="0.5" min="0" value={breakHours} onChange={e => setBreakHours(e.target.value)}
-                    className={inp} style={{ width: 70 }} />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Hours Meter — Start</label>
-                  <input type="number" step="0.1" min="0" value={hmStart} onChange={e => setHmStart(e.target.value)}
-                    className={inp} style={{ width: 90 }} />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Hours Meter — End</label>
-                  <input type="number" step="0.1" min="0" value={hmEnd} onChange={e => setHmEnd(e.target.value)}
-                    className={inp} style={{ width: 90 }} />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Km — Start</label>
-                  <input type="number" step="1" min="0" value={kmStart} onChange={e => setKmStart(e.target.value)}
-                    className={inp} style={{ width: 80 }} />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Km — End</label>
-                  <input type="number" step="1" min="0" value={kmEnd} onChange={e => setKmEnd(e.target.value)}
-                    className={inp} style={{ width: 80 }} />
-                  {kmTotal != null && <p className="text-[9px] text-indigo-500 mt-0.5">{kmTotal.toFixed(0)} km run</p>}
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-3 items-end">
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Diesel Opening Stock</label>
-                  <input type="number" step="0.1" min="0" value={dieselOpening} onChange={e => setDieselOpening(e.target.value)}
-                    className={inp} style={{ width: 100 }} placeholder="Litres" />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Diesel Issued</label>
-                  <input type="number" step="0.1" min="0" value={dieselIssued} onChange={e => setDieselIssued(e.target.value)}
-                    className={inp} style={{ width: 100 }} placeholder="Litres" />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Diesel Closing Stock</label>
-                  <input type="number" step="0.1" min="0" value={dieselClosing} onChange={e => setDieselClosing(e.target.value)}
-                    className={inp} style={{ width: 100 }} placeholder="Litres" />
-                  {dieselConsumption != null && <p className="text-[9px] text-indigo-500 mt-0.5">{dieselConsumption.toFixed(1)} L consumed</p>}
-                </div>
-                <div className="flex-1" style={{ minWidth: 160 }}>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Work Description</label>
-                  <input type="text" value={workDesc} onChange={e => setWorkDesc(e.target.value)}
-                    className={inp} placeholder="e.g. Concreting for raft slab" />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Requested By</label>
-                  <input type="text" value={requestedBy} onChange={e => setRequestedBy(e.target.value)}
-                    className={inp} style={{ width: 130 }} placeholder="Site engineer" />
-                </div>
-              </div>
+        {/* Log table */}
+        {raw.length === 0 ? (
+          <div className="px-6 py-14 text-center">
+            <div className="w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center bg-slate-100">
+              <ClipboardList className="w-5 h-5 text-slate-400" />
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Log table */}
-      {raw.length === 0 ? (
-        <div className="p-8 text-center text-slate-400 text-sm">
-          No daily records yet — click <b>Add Day</b> to record usage date by date like a log sheet.
-        </div>
-      ) : (
-        <>
+            <p className="text-sm font-semibold text-slate-600">No daily records yet</p>
+            <p className="text-xs text-slate-400 mt-1 mb-4">
+              Record usage day by day, exactly like the paper DG / JCB log sheet.
+            </p>
+            <button onClick={() => setShowModal(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg text-white shadow-sm"
+              style={{ background: `linear-gradient(135deg, ${Theme.navyLight} 0%, ${Theme.navyDark} 100%)` }}>
+              <Plus className="w-3.5 h-3.5" /> Add First Day
+            </button>
+          </div>
+        ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="w-full text-xs" style={{ minWidth: 1100 }}>
               <thead>
-                <tr className="border-b border-slate-100 bg-white">
-                  <th className="text-left px-3 py-2 font-semibold text-slate-400 uppercase tracking-wider w-32">Date</th>
-                  <th className="text-left px-3 py-2 font-semibold text-slate-400 uppercase tracking-wider">Equipment Group</th>
-                  <th className="text-left px-3 py-2 font-semibold text-slate-400 uppercase tracking-wider">Category</th>
-                  <th className="text-right px-3 py-2 font-semibold text-slate-400 uppercase tracking-wider w-24">Hours</th>
-                  <th className="text-left px-3 py-2 font-semibold text-slate-400 uppercase tracking-wider">Notes</th>
-                  <th className="w-8 px-2 py-2" />
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th rowSpan={2} className={clsx(th, 'text-left border-r border-slate-200')}>Date</th>
+                  <th rowSpan={2} className={clsx(th, 'text-left border-r border-slate-200')}>Equipment / Category</th>
+                  <th colSpan={2} className={clsx(th, 'text-center border-r border-b border-slate-200 bg-blue-50/60')}>Time</th>
+                  <th colSpan={3} className={clsx(th, 'text-center border-r border-b border-slate-200 bg-indigo-50/60')}>Hours Meter</th>
+                  <th colSpan={3} className={clsx(th, 'text-center border-r border-b border-slate-200 bg-amber-50/60')}>Diesel (L)</th>
+                  <th rowSpan={2} className={clsx(th, 'text-right border-r border-slate-200')}>Km</th>
+                  <th rowSpan={2} className={clsx(th, 'text-left border-r border-slate-200')}>Work / Remarks</th>
+                  <th rowSpan={2} className={clsx(th, 'text-center w-10')} />
+                </tr>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className={clsx(th, 'text-center bg-blue-50/30')}>Start</th>
+                  <th className={clsx(th, 'text-center border-r border-slate-200 bg-blue-50/30')}>End</th>
+                  <th className={clsx(th, 'text-right bg-indigo-50/30')}>Start</th>
+                  <th className={clsx(th, 'text-right bg-indigo-50/30')}>End</th>
+                  <th className={clsx(th, 'text-right border-r border-slate-200 bg-indigo-50/30')}>Total</th>
+                  <th className={clsx(th, 'text-right bg-amber-50/30')}>Issued</th>
+                  <th className={clsx(th, 'text-right bg-amber-50/30')}>Closing</th>
+                  <th className={clsx(th, 'text-right border-r border-slate-200 bg-amber-50/30')}>Used</th>
                 </tr>
               </thead>
               <tbody>
                 {dates.map(d => (
-                  grouped[d].map((r, i) => (
-                    <tr key={r.id} className={clsx('border-b border-slate-50', i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40')}>
-                      {i === 0 && (
-                        <td rowSpan={grouped[d].length}
-                          className="px-3 py-2 font-bold text-slate-800 border-r border-slate-100 align-top whitespace-nowrap">
-                          {dayjs(d).format('DD MMM YYYY')}
-                          <div className="text-[10px] font-normal text-slate-400">{dayjs(d).format('dddd')}</div>
+                  grouped[d].map((r, i) => {
+                    const s = logSheetStats(r);
+                    return (
+                      <tr key={r.id} className={clsx('border-b border-slate-50 hover:bg-indigo-50/30 transition',
+                        i % 2 === 0 ? 'bg-white' : 'bg-slate-50/40')}>
+                        {i === 0 && (
+                          <td rowSpan={grouped[d].length}
+                            className="px-2.5 py-2 font-bold text-slate-800 border-r border-slate-100 align-top whitespace-nowrap">
+                            {dayjs(d).format('DD MMM YY')}
+                            <div className="text-[9px] font-normal text-slate-400">{dayjs(d).format('dddd')}</div>
+                          </td>
+                        )}
+                        <td className="px-2.5 py-2 border-r border-slate-100">
+                          <div className="font-semibold text-slate-700 leading-tight">{r.equipment_group}</div>
+                          <div className="text-[10px] text-slate-400">
+                            {r.usage_category}
+                            <span className="font-bold text-indigo-600 ml-1.5 tabular-nums">
+                              {num(r.qty).toFixed(2)} {r.item_unit}
+                            </span>
+                          </div>
                         </td>
-                      )}
-                      <td className="px-3 py-2 text-slate-700 font-medium">{r.equipment_group}</td>
-                      <td className="px-3 py-2 text-slate-500">{r.usage_category}</td>
-                      <td className="px-3 py-2 text-right font-mono font-bold text-indigo-700">
-                        {num(r.qty).toFixed(2)} <span className="text-slate-400 font-normal">{r.item_unit}</span>
-                      </td>
-                      <td className="px-3 py-2 text-slate-400 italic">
-                        {r.notes || '—'}
-                        <LogSheetDetails r={r} />
-                      </td>
-                      <td className="px-2 py-2 text-center">
-                        <button
-                          onClick={() => { if (window.confirm('Delete this record?')) delMut.mutate(r.id); }}
-                          className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition">
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                        <td className="px-2.5 py-2 text-center text-slate-500 whitespace-nowrap">{r.start_time || '—'}</td>
+                        <td className="px-2.5 py-2 text-center text-slate-500 border-r border-slate-100 whitespace-nowrap">{r.end_time || '—'}</td>
+                        <td className="px-2.5 py-2 text-right text-slate-500 tabular-nums">{s.hmStart != null ? s.hmStart.toFixed(1) : '—'}</td>
+                        <td className="px-2.5 py-2 text-right text-slate-500 tabular-nums">{s.hmEnd != null ? s.hmEnd.toFixed(1) : '—'}</td>
+                        <td className="px-2.5 py-2 text-right font-bold text-indigo-700 border-r border-slate-100 tabular-nums">
+                          {s.hmTotal != null ? s.hmTotal.toFixed(2) : '—'}
+                        </td>
+                        <td className="px-2.5 py-2 text-right text-slate-500 tabular-nums">{r.diesel_issued != null ? num(r.diesel_issued).toFixed(1) : '—'}</td>
+                        <td className="px-2.5 py-2 text-right text-slate-500 tabular-nums">{r.diesel_closing != null ? num(r.diesel_closing).toFixed(1) : '—'}</td>
+                        <td className="px-2.5 py-2 text-right font-bold text-amber-700 border-r border-slate-100 tabular-nums">
+                          {s.dieselUsed != null ? s.dieselUsed.toFixed(1) : '—'}
+                        </td>
+                        <td className="px-2.5 py-2 text-right text-slate-600 border-r border-slate-100 tabular-nums">
+                          {s.kmTotal != null ? s.kmTotal.toFixed(0) : '—'}
+                        </td>
+                        <td className="px-2.5 py-2 border-r border-slate-100 max-w-[220px]">
+                          {r.work_description && <div className="text-slate-600 truncate">{r.work_description}</div>}
+                          {r.notes && <div className="text-[10px] text-slate-400 italic truncate">{r.notes}</div>}
+                          {r.requested_by && <div className="text-[9px] text-slate-400">Req: {r.requested_by}</div>}
+                          {!r.work_description && !r.notes && !r.requested_by && <span className="text-slate-300">—</span>}
+                        </td>
+                        <td className="px-1 py-2 text-center">
+                          <button
+                            onClick={() => { if (window.confirm('Delete this record?')) delMut.mutate(r.id); }}
+                            className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 ))}
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-slate-300 bg-slate-50">
-                  <td colSpan={3} className="px-3 py-2 text-right text-slate-500 text-[10px] font-bold uppercase tracking-wider">
-                    Totals ({totalDays} days)
-                  </td>
-                  <td colSpan={3} className="px-3 py-2">
-                    <div className="flex flex-wrap gap-4">
+                  <td colSpan={13} className="px-4 py-2.5">
+                    <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        Totals · {totalDays} day{totalDays !== 1 ? 's' : ''}
+                      </span>
                       {allCats.filter(c => totalsPerItem[c.id]).map(c => (
-                        <span key={c.id} className="text-xs font-bold text-indigo-700">
-                          {c.equipment_group} — {c.usage_category}:&nbsp;
-                          {num(totalsPerItem[c.id]).toFixed(2)} {c.unit}
+                        <span key={c.id} className="text-[11px] font-bold text-slate-600">
+                          {c.usage_category}:&nbsp;
+                          <span className="text-indigo-700 tabular-nums">{num(totalsPerItem[c.id]).toFixed(2)} {c.unit}</span>
                           {c.rate ? <span className="text-emerald-700"> → {fmt(num(totalsPerItem[c.id]) * num(c.rate))}</span> : ''}
                         </span>
                       ))}
@@ -811,9 +947,13 @@ function DailyLogSection({ wo, equipmentGroups, onCreateBill }) {
               </tfoot>
             </table>
           </div>
-        </>
+        )}
+      </div>
+
+      {showModal && (
+        <DayLogModal wo={wo} equipmentGroups={equipmentGroups} onClose={() => setShowModal(false)} />
       )}
-    </div>
+    </>
   );
 }
 
@@ -1138,13 +1278,44 @@ export default function HireUsageTrackerPage() {
       <div className="p-5 md:p-6 max-w-[1400px] mx-auto space-y-5">
         <div className="bg-white border border-slate-200 rounded-xl px-5 py-4 shadow-sm">
           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Work Order</label>
-          <select value={woId} onChange={e => setWoId(e.target.value)}
-            className="w-full max-w-xl border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300">
-            <option value="">— Select a hire/rental work order —</option>
-            {wos.map(w => (
-              <option key={w.id} value={w.id}>{w.wo_number} · {w.sc_name} · {w.project_name}</option>
-            ))}
-          </select>
+          <div className="flex flex-wrap items-center gap-4">
+            <select value={woId} onChange={e => setWoId(e.target.value)}
+              className="flex-1 min-w-[280px] max-w-xl border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300">
+              <option value="">— Select a hire/rental work order —</option>
+              {wos.map(w => (
+                <option key={w.id} value={w.id}>{w.wo_number} · {w.sc_name} · {w.project_name}</option>
+              ))}
+            </select>
+            {wo && (
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+                <div>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.14em]">Vendor</p>
+                  <p className="text-xs font-bold text-slate-700">{wo.sc_name}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.14em]">Project</p>
+                  <p className="text-xs font-bold text-slate-700">{wo.project_name}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.14em]">Equipment</p>
+                  <p className="text-xs font-bold text-slate-700">
+                    {equipmentGroups.length} group{equipmentGroups.length !== 1 ? 's' : ''}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.14em]">Bill Entries</p>
+                  <p className="text-xs font-bold text-slate-700">
+                    {entries.length}
+                    {entries.some(e => e.status !== 'billed') && (
+                      <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                        {entries.filter(e => e.status !== 'billed').length} unbilled
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
           {wos.length === 0 && (
             <div className="mt-2 flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
               <p className="text-xs text-amber-700 flex-1">
@@ -1158,7 +1329,19 @@ export default function HireUsageTrackerPage() {
           )}
         </div>
 
-        {!woId ? null : isLoading ? (
+        {!woId ? (
+          <div className="bg-white border border-slate-200 rounded-xl px-6 py-16 text-center shadow-sm">
+            <div className="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center"
+              style={{ background: `linear-gradient(135deg, ${Theme.navyLight} 0%, ${Theme.navyDark} 100%)` }}>
+              <Truck className="w-6 h-6 text-white" />
+            </div>
+            <p className="text-base font-bold text-slate-700">Select a work order to begin</p>
+            <p className="text-xs text-slate-400 mt-1.5 max-w-md mx-auto">
+              Record day-by-day equipment usage on the log sheet, then roll those hours into
+              invoiced vs certified bill entries and raise the subcontractor bill.
+            </p>
+          </div>
+        ) : isLoading ? (
           <div className="space-y-3">{[1, 2].map(n => <div key={n} className="h-40 bg-slate-100 rounded-xl animate-pulse" />)}</div>
         ) : equipmentGroups.length === 0 ? (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-sm text-amber-700">
