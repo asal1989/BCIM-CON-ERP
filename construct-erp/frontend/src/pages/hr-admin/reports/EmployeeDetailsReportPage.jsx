@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { hrEmployeesAPI } from '../../../api/client';
+import { hrEmployeesAPI, projectAPI } from '../../../api/client';
 import { Download, Users, Printer } from 'lucide-react';
 import { REPORT_PRINT_CSS, ReportPrintHeader, ReportPrintSignature } from '../../../components/reports/ReportPrintKit';
 
@@ -8,21 +8,34 @@ export default function EmployeeDetailsReportPage() {
   const [dept, setDept] = useState('');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('active');
+  const [project, setProject] = useState('');
+
+  const { data: projectsData } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => projectAPI.list().then(r => r.data?.data || r.data || []),
+  });
+  const projects = projectsData || [];
 
   const { data, isLoading } = useQuery({
-    queryKey: ['employees-report', dept, status],
-    queryFn: () => hrEmployeesAPI.list({ limit:500, department: dept||undefined, status: status||undefined }).then(r => r.data?.data || r.data?.employees || r.data || []),
+    // project_id in the queryKey too — this endpoint filters server-side
+    // (unlike dept/search, which stay client-side below), so a stale cache
+    // hit would otherwise show the previous project's rows briefly.
+    queryKey: ['employees-report', dept, status, project],
+    queryFn: () => hrEmployeesAPI.list({ limit:500, department: dept||undefined, status: status||undefined, project_id: project||undefined }).then(r => r.data?.data || r.data?.employees || r.data || []),
   });
 
   const rows = (Array.isArray(data) ? data : []).filter(r =>
     !search || r.name?.toLowerCase().includes(search.toLowerCase()) || r.employee_code?.includes(search) || r.email?.toLowerCase().includes(search.toLowerCase())
   );
 
+  const selectedProjectName = project === 'unassigned' ? 'Unassigned' : (projects.find(p => p.id === project)?.name || '');
+
   const exportCSV = () => {
-    const header = ['Emp Code','Name','Email','Phone','Department','Designation','Date of Joining','Employment Type','Category','Status'];
-    const csvRows = rows.map(r=>[r.employee_code||'',r.name||'',r.email||'',r.phone||'',r.department||'',r.designation||'',r.date_of_joining||r.doj||'',r.employment_type||'',r.employee_category||'',r.is_active?'Active':'Inactive']);
+    const header = ['Emp Code','Name','Email','Phone','Project','Department','Designation','Date of Joining','Employment Type','Category','Status'];
+    const csvRows = rows.map(r=>[r.employee_code||'',r.name||'',r.email||'',r.phone||'',r.project_name||'Unassigned',r.department||'',r.designation||'',r.date_of_joining||r.doj||'',r.employment_type||'',r.employee_category||'',r.is_active?'Active':'Inactive']);
     const csv=[header,...csvRows].map(r=>r.map(v=>`"${v}"`).join(',')).join('\n');
-    const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.download='employee-details.csv'; a.click();
+    const fname = 'employee-details' + (selectedProjectName ? `-${selectedProjectName.replace(/\s+/g,'-')}` : '') + '.csv';
+    const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.download=fname; a.click();
   };
 
   return (
@@ -46,6 +59,11 @@ export default function EmployeeDetailsReportPage() {
 
       <div className="no-print" style={{ display:'flex', gap:10, flexWrap:'wrap', marginBottom:14 }}>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name / code / email..." style={{ border:'1px solid #CBD5E1', borderRadius:6, padding:'5px 10px', fontSize:13, minWidth:220 }} />
+        <select value={project} onChange={e=>setProject(e.target.value)} style={{ border:'1px solid #CBD5E1', borderRadius:6, padding:'5px 10px', fontSize:13, minWidth:170 }}>
+          <option value="">All Projects</option>
+          <option value="unassigned">Unassigned</option>
+          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
         <input value={dept} onChange={e=>setDept(e.target.value)} placeholder="Filter by department..." style={{ border:'1px solid #CBD5E1', borderRadius:6, padding:'5px 10px', fontSize:13 }} />
         <select value={status} onChange={e=>setStatus(e.target.value)} style={{ border:'1px solid #CBD5E1', borderRadius:6, padding:'5px 10px', fontSize:13 }}>
           <option value="active">Active</option>
@@ -55,7 +73,7 @@ export default function EmployeeDetailsReportPage() {
       </div>
 
       <div id="report-print-root">
-        <ReportPrintHeader reportTitle="Employee Details Report" subtitle={`${rows.length} employees${status ? ' — ' + status.charAt(0).toUpperCase()+status.slice(1) : ''}`} />
+        <ReportPrintHeader reportTitle="Employee Details Report" subtitle={`${rows.length} employees${selectedProjectName ? ' — ' + selectedProjectName : ''}${status ? ' — ' + status.charAt(0).toUpperCase()+status.slice(1) : ''}`} />
         <div style={{ overflowX:'auto', background:'#fff', borderRadius:8, border:'1px solid #E2E8F0' }}>
         {isLoading ? (
           <div className="no-print" style={{ textAlign:'center', padding:'40px', color:'#94A3B8' }}>Loading...</div>
@@ -65,7 +83,7 @@ export default function EmployeeDetailsReportPage() {
           <table className="report-print-table" style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
             <thead>
               <tr style={{ background:'#F8FAFC', borderBottom:'2px solid #E2E8F0' }}>
-                {['Code','Name','Email','Phone','Department','Designation','DOJ','Type','Category','Status'].map(h=>(
+                {['Code','Name','Email','Phone','Project','Department','Designation','DOJ','Type','Category','Status'].map(h=>(
                   <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontWeight:700, color:'#475569', whiteSpace:'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -77,6 +95,7 @@ export default function EmployeeDetailsReportPage() {
                   <td style={{ padding:'7px 12px', fontWeight:600, color:'#1E293B', whiteSpace:'nowrap' }}>{r.name||'-'}</td>
                   <td style={{ padding:'7px 12px', color:'#64748B' }}>{r.email||'-'}</td>
                   <td style={{ padding:'7px 12px', color:'#64748B' }}>{r.phone||'-'}</td>
+                  <td style={{ padding:'7px 12px', color:'#64748B', whiteSpace:'nowrap' }}>{r.project_name||'Unassigned'}</td>
                   <td style={{ padding:'7px 12px', color:'#64748B' }}>{r.department||'-'}</td>
                   <td style={{ padding:'7px 12px', color:'#64748B', whiteSpace:'nowrap' }}>{r.designation||'-'}</td>
                   <td style={{ padding:'7px 12px', color:'#64748B', whiteSpace:'nowrap' }}>{r.date_of_joining||r.doj||'-'}</td>
