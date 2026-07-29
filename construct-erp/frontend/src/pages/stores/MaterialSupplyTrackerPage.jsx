@@ -204,35 +204,104 @@ function SupplyBar({ pct: p, overdue }) {
   );
 }
 
+function PriorityBadge({ priority }) {
+  if (!priority) return null;
+  const cls = PRIORITY_CFG[String(priority).toLowerCase()] || PRIORITY_CFG.low;
+  return (
+    <span className={clsx('inline-block px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide leading-none', cls)}>
+      {priority}
+    </span>
+  );
+}
+
+// Ordered and received shown against the same requested-qty baseline, so the
+// gap between "on order" and "actually on site" is visible at a glance —
+// a single blended % hides which of the two stages is lagging.
+function DualSupplyBar({ requested, ordered, received, overdue }) {
+  const req  = parseFloat(requested || 0);
+  const ord  = parseFloat(ordered   || 0);
+  const recv = parseFloat(received  || 0);
+  const ordPct  = req > 0 ? Math.min(100, (ord  / req) * 100) : 0;
+  const recvPct = req > 0 ? Math.min(100, (recv / req) * 100) : 0;
+  return (
+    <div className="w-full min-w-[92px]">
+      <div className="flex justify-between items-center text-[9px] mb-1">
+        <span className="text-blue-500 font-semibold tabular-nums">{Math.round(ordPct)}% ord</span>
+        <span className={clsx('font-bold tabular-nums', recvPct >= 100 ? 'text-emerald-600' : recvPct > 0 ? 'text-emerald-500' : 'text-slate-300')}>
+          {Math.round(recvPct)}% recd
+        </span>
+      </div>
+      <div className="relative h-2 bg-slate-200 rounded-full overflow-hidden">
+        <div className="absolute inset-y-0 left-0 bg-blue-300 rounded-full" style={{ width: `${ordPct}%` }} />
+        <div className={clsx('absolute inset-y-0 left-0 rounded-full', overdue ? 'bg-red-500' : 'bg-emerald-500')}
+          style={{ width: `${recvPct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+// Compact MR → PO → Delivery → GRN pipeline. Reading the lifecycle stage off
+// four dots is faster than parsing the status text, and it makes a stalled
+// row (PO raised weeks ago, nothing received) obvious in a dense grid.
+function LifecycleStepper({ row }) {
+  const recv = parseFloat(row.received_qty || 0);
+  const req  = parseFloat(row.requested_qty || 0);
+  const stages = [
+    { k: 'MR', done: true,                     label: 'Requested' },
+    { k: 'AP', done: !!row.is_fully_approved,  label: 'Approved'  },
+    { k: 'PO', done: !!row.po_number,          label: 'Ordered'   },
+    { k: 'RC', done: recv > 0,  partial: recv > 0 && recv < req, label: 'Received' },
+  ];
+  return (
+    <div className="flex items-center gap-0.5" title={stages.map(s => `${s.label}: ${s.done ? '✓' : '—'}`).join('  ·  ')}>
+      {stages.map((s, i) => (
+        <React.Fragment key={s.k}>
+          {i > 0 && <span className={clsx('h-px w-1.5', s.done ? 'bg-emerald-400' : 'bg-slate-200')} />}
+          <span className={clsx(
+            'w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-bold border',
+            s.partial ? 'bg-amber-100 text-amber-700 border-amber-400'
+              : s.done ? 'bg-emerald-500 text-white border-emerald-500'
+              : 'bg-white text-slate-300 border-slate-200',
+          )}>
+            {s.done && !s.partial ? '✓' : s.k}
+          </span>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
 // ── KPI Card ─────────────────────────────────────────────────────────────────
 function KpiCard({ icon: Icon, label, value, color, sub, onClick, active }) {
   const colors = {
-    slate:   { bg: 'bg-slate-50',   icon: 'text-slate-500',   val: 'text-slate-800'   },
-    amber:   { bg: 'bg-amber-50',   icon: 'text-amber-600',   val: 'text-amber-800'   },
-    orange:  { bg: 'bg-orange-50',  icon: 'text-orange-600',  val: 'text-orange-800'  },
-    blue:    { bg: 'bg-blue-50',    icon: 'text-blue-600',    val: 'text-blue-800'    },
-    indigo:  { bg: 'bg-indigo-50',  icon: 'text-indigo-600',  val: 'text-indigo-800'  },
-    cyan:    { bg: 'bg-cyan-50',    icon: 'text-cyan-600',    val: 'text-cyan-800'    },
-    yellow:  { bg: 'bg-yellow-50',  icon: 'text-yellow-600',  val: 'text-yellow-800'  },
-    red:     { bg: 'bg-red-50',     icon: 'text-red-600',     val: 'text-red-800'     },
-    emerald: { bg: 'bg-emerald-50', icon: 'text-emerald-600', val: 'text-emerald-800' },
-    green:   { bg: 'bg-green-50',   icon: 'text-green-600',   val: 'text-green-800'   },
+    slate:   { bg: 'bg-slate-50',   icon: 'text-slate-500',   val: 'text-slate-800',   accent: 'bg-slate-400'   },
+    amber:   { bg: 'bg-amber-50',   icon: 'text-amber-600',   val: 'text-amber-800',   accent: 'bg-amber-500'   },
+    orange:  { bg: 'bg-orange-50',  icon: 'text-orange-600',  val: 'text-orange-800',  accent: 'bg-orange-500'  },
+    blue:    { bg: 'bg-blue-50',    icon: 'text-blue-600',    val: 'text-blue-800',    accent: 'bg-blue-500'    },
+    indigo:  { bg: 'bg-indigo-50',  icon: 'text-indigo-600',  val: 'text-indigo-800',  accent: 'bg-indigo-500'  },
+    cyan:    { bg: 'bg-cyan-50',    icon: 'text-cyan-600',    val: 'text-cyan-800',    accent: 'bg-cyan-500'    },
+    yellow:  { bg: 'bg-yellow-50',  icon: 'text-yellow-600',  val: 'text-yellow-800',  accent: 'bg-yellow-500'  },
+    red:     { bg: 'bg-red-50',     icon: 'text-red-600',     val: 'text-red-800',     accent: 'bg-red-500'     },
+    emerald: { bg: 'bg-emerald-50', icon: 'text-emerald-600', val: 'text-emerald-800', accent: 'bg-emerald-500' },
+    green:   { bg: 'bg-green-50',   icon: 'text-green-600',   val: 'text-green-800',   accent: 'bg-green-500'   },
   };
   const c = colors[color] || colors.slate;
   return (
     <button
       onClick={onClick}
       className={clsx(
-        'flex flex-col gap-1.5 p-4 rounded-xl border text-left transition-all hover:shadow-md',
+        'relative overflow-hidden flex flex-col gap-1 pl-4 pr-3 py-3.5 rounded-xl border text-left transition-all',
+        onClick ? 'hover:shadow-md hover:-translate-y-0.5' : 'cursor-default',
         active ? 'border-blue-400 shadow-md ring-2 ring-blue-200' : 'border-slate-200 shadow-sm',
         c.bg
       )}
     >
+      <span className={clsx('absolute left-0 top-0 bottom-0 w-1', c.accent)} />
       <div className="flex items-center justify-between">
         <Icon className={clsx('w-4 h-4', c.icon)} />
         {active && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
       </div>
-      <div className={clsx('text-2xl font-bold', c.val)}>{value}</div>
+      <div className={clsx('text-2xl font-bold tabular-nums leading-none mt-0.5', c.val)}>{value}</div>
       <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider leading-tight">{label}</div>
       {sub && <div className="text-[10px] text-slate-400">{sub}</div>}
     </button>
@@ -603,22 +672,28 @@ function TrackerTable({ rows, isLoading, onRowClick }) {
         className="overflow-auto select-none supply-scroll"
         style={{ maxHeight: 'calc(100vh - 340px)', minHeight: 300, scrollbarWidth: 'auto', scrollbarColor: '#f43f5e #ffe4e6' }}
       >
-        <table className="text-xs" style={{ minWidth: 1000, width: '100%' }}>
+        <table className="text-xs border-collapse" style={{ minWidth: 1240, width: '100%' }}>
           <thead className="sticky top-0 z-10">
             <tr className="bg-slate-800 text-white">
-              <th className="w-7 px-2 py-2" />
-              <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">MR Number</th>
-              <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider">Material</th>
-              <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">UOM</th>
-              <th className="px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">Req Qty</th>
-              <th className="px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">Ordered</th>
-              <th className="px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">Received</th>
-              <th className="px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">Balance</th>
-              <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">Supply %</th>
-              <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">Status</th>
-              <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">PO / Vendor</th>
-              <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">Exp. Delivery</th>
-              <th className="px-2 py-2 w-16" />
+              {[
+                { h: '',              cls: 'w-7' },
+                { h: 'MR / Priority', cls: 'text-left whitespace-nowrap' },
+                { h: 'Material',      cls: 'text-left' },
+                { h: 'Lifecycle',     cls: 'text-left whitespace-nowrap' },
+                { h: 'UOM',           cls: 'text-left whitespace-nowrap' },
+                { h: 'Req Qty',       cls: 'text-right whitespace-nowrap' },
+                { h: 'Ordered',       cls: 'text-right whitespace-nowrap' },
+                { h: 'Received',      cls: 'text-right whitespace-nowrap' },
+                { h: 'Balance',       cls: 'text-right whitespace-nowrap' },
+                { h: 'Order Value',   cls: 'text-right whitespace-nowrap' },
+                { h: 'Progress',      cls: 'text-left whitespace-nowrap' },
+                { h: 'Status',        cls: 'text-left whitespace-nowrap' },
+                { h: 'PO / Vendor',   cls: 'text-left whitespace-nowrap' },
+                { h: 'Exp. Delivery', cls: 'text-left whitespace-nowrap' },
+                { h: '',              cls: 'w-16' },
+              ].map(({ h, cls }, hi) => (
+                <th key={h || `sp${hi}`} className={clsx('px-2 py-2.5 text-[10px] font-bold uppercase tracking-wider border border-slate-700', cls)}>{h}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -626,52 +701,79 @@ function TrackerTable({ rows, isLoading, onRowClick }) {
               const isExp = expanded === (row.item_id || idx);
               const overdue = row.is_overdue;
               const uid = row.item_id || idx;
+              const orderValue = parseFloat(row.ordered_qty || 0) * parseFloat(row.unit_rate || 0);
+              // Days until (or past) the promised delivery date — surfaces a
+              // slipping row before it formally trips the overdue flag.
+              const dDays = row.expected_delivery_date && parseFloat(row.received_qty || 0) < parseFloat(row.ordered_qty || 0)
+                ? dayjs(row.expected_delivery_date).startOf('day').diff(dayjs().startOf('day'), 'day')
+                : null;
               return (
                 <React.Fragment key={uid}>
                   <tr
                     className={clsx(
-                      'border-b border-slate-100 cursor-pointer transition-colors',
-                      overdue ? 'bg-red-50/50 hover:bg-red-50' : idx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/40 hover:bg-slate-50',
-                      isExp && '!bg-blue-50/40',
+                      'cursor-pointer transition-colors',
+                      overdue ? 'bg-red-50/50 hover:bg-red-50' : idx % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/40 hover:bg-blue-50/40',
+                      isExp && '!bg-blue-50/60',
                     )}
                     onClick={() => toggle(uid)}
                   >
-                    <td className="px-2 py-2 text-center">
+                    <td className="px-2 py-2 text-center border border-slate-200">
                       <ChevronRight className={clsx('w-3 h-3 text-slate-400 transition-transform', isExp && 'rotate-90')} />
                     </td>
-                    <td className="px-2 py-2">
+                    <td className="px-2 py-2 border border-slate-200">
                       <div className="font-mono font-bold text-blue-700 text-[11px] whitespace-nowrap">{row.mr_number}</div>
-                      <div className="text-[9px] text-slate-400">{fmtDate(row.mr_date)}</div>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span className="text-[9px] text-slate-400">{fmtDate(row.mr_date)}</span>
+                        <PriorityBadge priority={row.priority} />
+                      </div>
                     </td>
-                    <td className="px-2 py-2 max-w-[180px]">
+                    <td className="px-2 py-2 max-w-[200px] border border-slate-200">
                       <div className="font-medium text-slate-800 text-[11px] truncate" title={row.material_name}>
                         {overdue && <AlertTriangle className="w-2.5 h-2.5 text-red-500 inline mr-0.5" />}
                         {row.material_name}
                       </div>
-                      <div className="text-[9px] text-slate-400 truncate">{row.project_name}</div>
+                      <div className="text-[9px] text-slate-400 truncate">
+                        {row.item_code && <span className="font-mono text-slate-500">{row.item_code} · </span>}
+                        {row.project_name}
+                      </div>
                     </td>
-                    <td className="px-2 py-2 text-slate-500 text-[11px]">{row.unit}</td>
-                    <td className="px-2 py-2 text-right font-medium text-slate-700 text-[11px]">{n(row.requested_qty)}</td>
-                    <td className="px-2 py-2 text-right font-medium text-blue-700 text-[11px]">{row.ordered_qty ? n(row.ordered_qty) : <span className="text-slate-300">—</span>}</td>
-                    <td className="px-2 py-2 text-right font-medium text-emerald-700 text-[11px]">{n(row.received_qty)}</td>
-                    <td className={clsx('px-2 py-2 text-right font-bold text-[11px]', row.balance_qty > 0 ? 'text-red-600' : 'text-emerald-600')}>
+                    <td className="px-2 py-2 border border-slate-200"><LifecycleStepper row={row} /></td>
+                    <td className="px-2 py-2 text-slate-500 text-[11px] border border-slate-200">{row.unit}</td>
+                    <td className="px-2 py-2 text-right font-medium text-slate-700 text-[11px] tabular-nums border border-slate-200">{n(row.requested_qty)}</td>
+                    <td className="px-2 py-2 text-right font-medium text-blue-700 text-[11px] tabular-nums border border-slate-200">{row.ordered_qty ? n(row.ordered_qty) : <span className="text-slate-300">—</span>}</td>
+                    <td className="px-2 py-2 text-right font-medium text-emerald-700 text-[11px] tabular-nums border border-slate-200">{n(row.received_qty)}</td>
+                    <td className={clsx('px-2 py-2 text-right font-bold text-[11px] tabular-nums border border-slate-200', row.balance_qty > 0 ? 'text-red-600' : 'text-emerald-600')}>
                       {n(row.balance_qty)}
                     </td>
-                    <td className="px-2 py-2 w-20">
-                      <SupplyBar pct={row.supply_pct} overdue={overdue} />
+                    <td className="px-2 py-2 text-right border border-slate-200">
+                      {orderValue > 0 ? (
+                        <>
+                          <div className="font-bold text-slate-800 text-[11px] tabular-nums whitespace-nowrap">₹{inr(orderValue)}</div>
+                          <div className="text-[9px] text-slate-400 tabular-nums whitespace-nowrap">@ ₹{inr(row.unit_rate)}</div>
+                        </>
+                      ) : <span className="text-slate-300 text-[10px]">—</span>}
                     </td>
-                    <td className="px-2 py-2"><StatusBadge status={row.overall_status} /></td>
-                    <td className="px-2 py-2 max-w-[130px]">
+                    <td className="px-2 py-2 border border-slate-200">
+                      <DualSupplyBar requested={row.requested_qty} ordered={row.ordered_qty} received={row.received_qty} overdue={overdue} />
+                    </td>
+                    <td className="px-2 py-2 border border-slate-200"><StatusBadge status={row.overall_status} /></td>
+                    <td className="px-2 py-2 max-w-[140px] border border-slate-200">
                       {row.po_number
-                        ? <div className="font-mono text-[10px] text-slate-700 truncate">{row.po_number}</div>
+                        ? <div className="font-mono text-[10px] text-slate-700 truncate font-semibold">{row.po_number}</div>
                         : <span className="text-slate-300 text-[10px]">No PO</span>
                       }
                       {row.vendor_name && <div className="text-[9px] text-slate-400 truncate">{row.vendor_name}</div>}
                     </td>
-                    <td className={clsx('px-2 py-2 text-[11px] whitespace-nowrap', overdue ? 'text-red-600 font-bold' : 'text-slate-500')}>
+                    <td className={clsx('px-2 py-2 text-[11px] whitespace-nowrap border border-slate-200', overdue ? 'text-red-600 font-bold' : 'text-slate-500')}>
                       {fmtDate(row.expected_delivery_date)}
+                      {dDays !== null && (
+                        <div className={clsx('text-[9px] font-bold mt-0.5',
+                          dDays < 0 ? 'text-red-500' : dDays <= 3 ? 'text-amber-600' : 'text-slate-400')}>
+                          {dDays < 0 ? `${Math.abs(dDays)}d overdue` : dDays === 0 ? 'Due today' : `${dDays}d left`}
+                        </div>
+                      )}
                     </td>
-                    <td className="px-2 py-2">
+                    <td className="px-2 py-2 border border-slate-200">
                       <button
                         onClick={e => { e.stopPropagation(); onRowClick(row); }}
                         className="px-1.5 py-1 text-[10px] font-bold text-blue-600 hover:bg-blue-100 rounded transition-colors whitespace-nowrap"
@@ -683,22 +785,26 @@ function TrackerTable({ rows, isLoading, onRowClick }) {
 
                   {/* Expanded inline row */}
                   {isExp && (
-                    <tr className="border-b border-blue-100 bg-blue-50/30">
-                      <td colSpan={13} className="px-4 py-3">
-                        <div className="grid grid-cols-4 md:grid-cols-8 gap-3 text-[11px]">
+                    <tr className="bg-blue-50/30">
+                      <td colSpan={15} className="px-4 py-3 border border-slate-200">
+                        <div className="grid grid-cols-4 md:grid-cols-6 xl:grid-cols-8 gap-3 text-[11px]">
                           {[
                             ['MR Date', fmtDate(row.mr_date)],
                             ['Required By', fmtDate(row.required_date)],
                             ['Raised By', row.raised_by || '—'],
                             ['Department', row.department || '—'],
+                            ['Cost Centre', row.cost_center || '—'],
                             ['Category', row.material_category || '—'],
+                            ['Approved Qty', row.approved_qty ? `${n(row.approved_qty)} ${row.unit}` : '—'],
+                            ['PO Status', row.po_status || '—'],
                             ['GRN Count', row.grn_count || '0'],
                             ['Actual Delivery', fmtDate(row.actual_delivery_date)],
                             ['Unit Rate', row.unit_rate ? `₹${inr(row.unit_rate)}` : '—'],
+                            ['Vendor Phone', row.vendor_phone || '—'],
                           ].map(([k, v]) => (
                             <div key={k}>
                               <div className="text-[9px] text-slate-400 uppercase tracking-wider mb-0.5">{k}</div>
-                              <div className="font-medium text-slate-700">{v}</div>
+                              <div className="font-medium text-slate-700 break-words">{v}</div>
                             </div>
                           ))}
                         </div>
@@ -715,16 +821,19 @@ function TrackerTable({ rows, isLoading, onRowClick }) {
             })}
           </tbody>
           {rows.length > 0 && (
-            <tfoot>
+            <tfoot className="sticky bottom-0">
               <tr className="bg-slate-800 text-white font-bold text-[11px]">
-                <td colSpan={4} className="px-2 py-2 text-slate-300 text-[10px] uppercase">
+                <td colSpan={5} className="px-2 py-2.5 text-slate-300 text-[10px] uppercase border border-slate-700">
                   {rows.length} items total
                 </td>
-                <td className="px-2 py-2 text-right">{n(rows.reduce((s, r) => s + parseFloat(r.requested_qty || 0), 0))}</td>
-                <td className="px-2 py-2 text-right text-blue-300">{n(rows.reduce((s, r) => s + parseFloat(r.ordered_qty || 0), 0))}</td>
-                <td className="px-2 py-2 text-right text-emerald-300">{n(rows.reduce((s, r) => s + parseFloat(r.received_qty || 0), 0))}</td>
-                <td className="px-2 py-2 text-right text-red-300">{n(rows.reduce((s, r) => s + parseFloat(r.balance_qty || 0), 0))}</td>
-                <td colSpan={5} />
+                <td className="px-2 py-2.5 text-right tabular-nums border border-slate-700">{n(rows.reduce((s, r) => s + parseFloat(r.requested_qty || 0), 0))}</td>
+                <td className="px-2 py-2.5 text-right text-blue-300 tabular-nums border border-slate-700">{n(rows.reduce((s, r) => s + parseFloat(r.ordered_qty || 0), 0))}</td>
+                <td className="px-2 py-2.5 text-right text-emerald-300 tabular-nums border border-slate-700">{n(rows.reduce((s, r) => s + parseFloat(r.received_qty || 0), 0))}</td>
+                <td className="px-2 py-2.5 text-right text-red-300 tabular-nums border border-slate-700">{n(rows.reduce((s, r) => s + parseFloat(r.balance_qty || 0), 0))}</td>
+                <td className="px-2 py-2.5 text-right text-amber-300 tabular-nums whitespace-nowrap border border-slate-700">
+                  ₹{inr(rows.reduce((s, r) => s + parseFloat(r.ordered_qty || 0) * parseFloat(r.unit_rate || 0), 0))}
+                </td>
+                <td colSpan={5} className="border border-slate-700" />
               </tr>
             </tfoot>
           )}
@@ -877,6 +986,26 @@ export default function MaterialSupplyTrackerPage() {
   const totalCount = trackerResp?.total ?? null;
   const isTruncated = totalCount !== null && totalCount > rows.length;
 
+  // Procurement value roll-up. The tracker query is paginated, so this covers
+  // the rows actually loaded — surfaced with a "current view" caveat rather
+  // than presented as a company-wide total it isn't.
+  const valueStats = useMemo(() => {
+    let ordered = 0, received = 0, pending = 0, overdueVal = 0, overdueCount = 0;
+    for (const r of rows) {
+      const rate = parseFloat(r.unit_rate || 0);
+      if (!rate) continue;
+      const ordQty  = parseFloat(r.ordered_qty  || 0);
+      const recvQty = parseFloat(r.received_qty || 0);
+      ordered  += ordQty * rate;
+      received += recvQty * rate;
+      const pend = Math.max(0, ordQty - recvQty) * rate;
+      pending += pend;
+      if (r.is_overdue) { overdueVal += pend; overdueCount++; }
+    }
+    return { ordered, received, pending, overdueVal, overdueCount,
+      recvPct: ordered > 0 ? Math.round((received / ordered) * 100) : 0 };
+  }, [rows]);
+
   const trackerPrintRef = useRef();
   const handlePrintTracker = useReactToPrint({
     contentRef: trackerPrintRef,
@@ -888,13 +1017,20 @@ export default function MaterialSupplyTrackerPage() {
   });
 
   const exportTrackerCSV = () => {
-    const headers = ['MR Number', 'Date', 'Material', 'Project', 'Unit', 'Req Qty', 'Ordered', 'Received', 'Balance', 'Supply %', 'Status', 'PO Number', 'Vendor', 'Exp. Delivery', 'Priority'];
+    const headers = ['MR Number', 'Date', 'Priority', 'Item Code', 'Material', 'Category', 'Project',
+      'Unit', 'Req Qty', 'Approved Qty', 'Ordered', 'Received', 'Balance', 'Unit Rate', 'Order Value',
+      'Supply %', 'Status', 'PO Number', 'PO Status', 'Vendor', 'Vendor Phone',
+      'Exp. Delivery', 'Actual Delivery', 'GRN Count', 'Department', 'Cost Centre', 'Raised By'];
     const csvRows = rows.map(r => [
-      r.mr_number, fmtDate(r.mr_date), r.material_name, r.project_name, r.unit,
-      n(r.requested_qty), n(r.ordered_qty || 0), n(r.received_qty), n(r.balance_qty),
+      r.mr_number, fmtDate(r.mr_date), r.priority || '', r.item_code || '',
+      r.material_name, r.material_category || '', r.project_name,
+      r.unit, n(r.requested_qty), n(r.approved_qty || 0), n(r.ordered_qty || 0),
+      n(r.received_qty), n(r.balance_qty),
+      r.unit_rate || '', (parseFloat(r.ordered_qty || 0) * parseFloat(r.unit_rate || 0)).toFixed(2),
       r.supply_pct + '%', r.overall_status,
-      r.po_number || '', r.vendor_name || '',
-      fmtDate(r.expected_delivery_date), r.priority || '',
+      r.po_number || '', r.po_status || '', r.vendor_name || '', r.vendor_phone || '',
+      fmtDate(r.expected_delivery_date), fmtDate(r.actual_delivery_date), r.grn_count || 0,
+      r.department || '', r.cost_center || '', r.raised_by || '',
     ]);
     exportCSV(`Supply_Tracker_${dayjs().format('YYYY-MM-DD')}.csv`, headers, csvRows);
   };
@@ -952,6 +1088,52 @@ export default function MaterialSupplyTrackerPage() {
 
       <div className="p-4 md:p-6 max-w-[1600px] mx-auto space-y-5">
 
+        {/* Procurement value band — headline money view of the loaded rows */}
+        {tab === 'tracker' && valueStats.ordered > 0 && (
+          <div className="relative rounded-2xl overflow-hidden shadow-lg"
+            style={{ background: `linear-gradient(135deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)` }}>
+            <div className="absolute inset-0 opacity-[0.07] pointer-events-none"
+              style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '16px 16px' }} />
+            <div className="absolute -right-12 -top-12 w-56 h-56 rounded-full pointer-events-none" style={{ background: 'rgba(255,255,255,0.05)' }} />
+            <div className="relative px-6 py-5">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <div className="flex items-center gap-2 text-white/50 text-[10px] font-bold uppercase tracking-[0.2em]">
+                  <IndianRupee className="w-3.5 h-3.5" /> Procurement Value
+                  <span className="text-white/30 normal-case tracking-normal font-medium">
+                    · {rows.length} item{rows.length !== 1 ? 's' : ''} in current view{isTruncated ? ` (of ${totalCount})` : ''}
+                  </span>
+                </div>
+                {valueStats.overdueCount > 0 && (
+                  <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/20 border border-red-400/30 text-red-200 text-[11px] font-bold">
+                    <AlertTriangle className="w-3 h-3" />
+                    ₹{inr(valueStats.overdueVal)} overdue across {valueStats.overdueCount} item{valueStats.overdueCount !== 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { l: 'Ordered Value',   v: valueStats.ordered,  c: 'text-white',        s: 'Total placed on POs' },
+                  { l: 'Received Value',  v: valueStats.received, c: 'text-emerald-300',  s: `${valueStats.recvPct}% of ordered` },
+                  { l: 'Pending Value',   v: valueStats.pending,  c: 'text-amber-300',    s: 'Ordered but not received' },
+                  { l: 'Overdue Value',   v: valueStats.overdueVal, c: valueStats.overdueVal > 0 ? 'text-red-300' : 'text-white/40', s: 'Past promised date' },
+                ].map(({ l, v, c, s }) => (
+                  <div key={l} className="rounded-xl px-4 py-3 border border-white/10" style={{ background: 'rgba(255,255,255,0.07)' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-white/45 mb-1">{l}</p>
+                    <p className={clsx('text-2xl font-black font-mono tabular-nums leading-none', c)}>₹{inr(v)}</p>
+                    <p className="text-[10px] text-white/40 mt-1.5">{s}</p>
+                  </div>
+                ))}
+              </div>
+              {/* Ordered → received fill */}
+              <div className="mt-4">
+                <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                  <div className="h-full bg-emerald-400 rounded-full transition-all" style={{ width: `${valueStats.recvPct}%` }} />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* KPI Cards */}
         <div className="grid grid-cols-3 sm:grid-cols-5 xl:grid-cols-9 gap-3">
           {KPIS.map(k => (
@@ -962,7 +1144,7 @@ export default function MaterialSupplyTrackerPage() {
               value={kpis[k.key] ?? 0}
               color={k.color}
               active={kpiFilter === k.filter && k.filter !== null}
-              onClick={() => k.filter && handleKpiClick(k.filter)}
+              onClick={k.filter ? () => handleKpiClick(k.filter) : undefined}
             />
           ))}
         </div>
