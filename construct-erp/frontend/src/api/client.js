@@ -1967,25 +1967,40 @@ export const hrAttendanceAPI = {
   baseline:(data)   => api.post('/hr-admin/attendance/month-baseline', data),
   upsert:  (data)   => api.post('/hr-admin/attendance', data),
   update:  (id, d)  => api.put(`/hr-admin/attendance/${id}`, d),
-  timesheetReport: (params) => api.get('/hr-admin/attendance/timesheet-report', { params }),
-  timesheetReportTestEmail: (date, project_id, project_name, category) => api.post('/hr-admin/attendance/timesheet-report/test-email', { date, project_id, project_name, category }),
+  // skipProjectInject: this page owns its own project dropdown, including an
+  // explicit "All Projects" option (project_id left undefined on purpose).
+  // Without the flag, the global project-scope interceptor treats that
+  // undefined the same as "not set" and silently substitutes the top-navbar's
+  // selected project — so choosing "All Projects" here still only returned
+  // that one project's staff (e.g. 16 instead of 104 company-wide).
+  timesheetReport: (params) => api.get('/hr-admin/attendance/timesheet-report', { params, skipProjectInject: true }),
+  // skipProjectInject on all of the below too: project_id is deliberately
+  // `null` for an "All Projects (combined)" config, and the interceptor's
+  // `== null` check can't tell that apart from "not set" — without the flag
+  // it would silently replace the intentional null with the navbar's
+  // currently-selected project on every send.
+  timesheetReportTestEmail: (date, project_id, project_name, category) => api.post('/hr-admin/attendance/timesheet-report/test-email', { date, project_id, project_name, category }, { skipProjectInject: true }),
   timesheetReportConfigs: {
     list:    ()       => api.get('/hr-admin/attendance/timesheet-report/configs'),
-    create:  (data)   => api.post('/hr-admin/attendance/timesheet-report/configs', data),
-    update:  (id, d)  => api.put(`/hr-admin/attendance/timesheet-report/configs/${id}`, d),
+    create:  (data)   => api.post('/hr-admin/attendance/timesheet-report/configs', data, { skipProjectInject: true }),
+    update:  (id, d)  => api.put(`/hr-admin/attendance/timesheet-report/configs/${id}`, d, { skipProjectInject: true }),
     delete:  (id)     => api.delete(`/hr-admin/attendance/timesheet-report/configs/${id}`),
-    sendNow: (id, date) => api.post(`/hr-admin/attendance/timesheet-report/configs/${id}/send-now`, { date }),
+    sendNow: (id, date) => api.post(`/hr-admin/attendance/timesheet-report/configs/${id}/send-now`, { date }, { skipProjectInject: true }),
   },
-  manpowerReport:  (params) => api.get('/hr-admin/attendance/manpower-report', { params }),
-  manpowerReportTestEmail: (date, project_id, project_name) => api.post('/hr-admin/attendance/manpower-report/test-email', { date, project_id, project_name }),
+  // skipProjectInject: same reason as timesheetReport above — this page's own
+  // "All Projects" option must not be silently overridden by the navbar's
+  // globally-selected project.
+  manpowerReport:  (params) => api.get('/hr-admin/attendance/manpower-report', { params, skipProjectInject: true }),
+  manpowerReportTestEmail: (date, project_id, project_name) => api.post('/hr-admin/attendance/manpower-report/test-email', { date, project_id, project_name }, { skipProjectInject: true }),
   manpowerReportConfigs: {
     list:    ()       => api.get('/hr-admin/attendance/manpower-report/configs'),
-    create:  (data)   => api.post('/hr-admin/attendance/manpower-report/configs', data),
-    update:  (id, d)  => api.put(`/hr-admin/attendance/manpower-report/configs/${id}`, d),
+    create:  (data)   => api.post('/hr-admin/attendance/manpower-report/configs', data, { skipProjectInject: true }),
+    update:  (id, d)  => api.put(`/hr-admin/attendance/manpower-report/configs/${id}`, d, { skipProjectInject: true }),
     delete:  (id)     => api.delete(`/hr-admin/attendance/manpower-report/configs/${id}`),
-    sendNow: (id, date) => api.post(`/hr-admin/attendance/manpower-report/configs/${id}/send-now`, { date }),
+    sendNow: (id, date) => api.post(`/hr-admin/attendance/manpower-report/configs/${id}/send-now`, { date }, { skipProjectInject: true }),
   },
-  monthlyReport:  (params) => api.get('/hr-admin/attendance/monthly-report', { params }),
+  // skipProjectInject: same reason as timesheetReport above.
+  monthlyReport:  (params) => api.get('/hr-admin/attendance/monthly-report', { params, skipProjectInject: true }),
   yearlySummary:  (params) => api.get('/hr-admin/attendance/yearly-summary', { params }),
   runLateAlerts:  (data)   => api.post('/hr-admin/attendance/late-alerts/run', data || {}),
   testLateAlert:  ()       => api.post('/hr-admin/attendance/late-alerts/test', {}),
