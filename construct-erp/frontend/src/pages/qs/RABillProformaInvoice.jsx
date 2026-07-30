@@ -173,21 +173,33 @@ const RABillProformaInvoice = forwardRef(({ data: b, proformaNo, proformaDate },
 
       {/* ── LINE ITEMS TABLE ── */}
       <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', borderLeft: B2, borderRight: B2, borderBottom: B }}>
+        <colgroup>
+          <col style={{ width: '4%' }} />
+          <col style={{ width: '22%' }} />
+          <col style={{ width: '8%' }} />
+          <col style={{ width: '4%' }} />
+          <col style={{ width: '7%' }} />
+          <col style={{ width: '9%' }} />
+          <col style={{ width: '6%' }} />
+          <col style={{ width: '13%' }} />
+          <col style={{ width: '13.5%' }} />
+          <col style={{ width: '13.5%' }} />
+        </colgroup>
         <thead>
           <tr>
-            <th style={{ ...hcell(), width: '5%' }} rowSpan={2}>S.No</th>
-            <th style={{ ...hcell(), width: '26%' }} rowSpan={2}>Description of Goods / Services</th>
-            <th style={{ ...hcell(), width: '8%' }} rowSpan={2}>HSN Code</th>
-            <th style={{ ...hcell(), width: '5%' }} rowSpan={2}>Qty</th>
-            <th style={{ ...hcell(), width: '8%' }} rowSpan={2}>Rate</th>
-            <th style={{ ...hcell(), width: '9%' }} rowSpan={2}>Total</th>
-            <th style={{ ...hcell(), width: '8%' }} rowSpan={2}>Discount</th>
-            <th style={{ ...hcell(), width: '11%' }} rowSpan={2}>Taxable Value</th>
-            <th style={{ ...hcell(), width: '10%' }} colSpan={2}>GST</th>
+            <th style={{ ...hcell() }} rowSpan={2}>S.No</th>
+            <th style={{ ...hcell() }} rowSpan={2}>Description of Goods / Services</th>
+            <th style={{ ...hcell() }} rowSpan={2}>HSN Code</th>
+            <th style={{ ...hcell() }} rowSpan={2}>Qty</th>
+            <th style={{ ...hcell() }} rowSpan={2}>Rate</th>
+            <th style={{ ...hcell() }} rowSpan={2}>Total</th>
+            <th style={{ ...hcell() }} rowSpan={2}>Disc.</th>
+            <th style={{ ...hcell() }} rowSpan={2}>Taxable Value</th>
+            <th style={{ ...hcell() }} colSpan={2}>GST</th>
           </tr>
           <tr>
-            <th style={{ ...hcell(), width: '5%' }}>CGST<br />{gstRate / 2}%</th>
-            <th style={{ ...hcell(), width: '5%' }}>SGST<br />{gstRate / 2}%</th>
+            <th style={{ ...hcell() }}>CGST<br />{gstRate / 2}%</th>
+            <th style={{ ...hcell() }}>SGST<br />{gstRate / 2}%</th>
           </tr>
         </thead>
         <tbody>
@@ -203,11 +215,11 @@ const RABillProformaInvoice = forwardRef(({ data: b, proformaNo, proformaDate },
             <td style={{ ...cell(), textAlign: 'center' }}>995411</td>
             <td style={{ ...cell(), textAlign: 'center' }}>—</td>
             <td style={{ ...cell(), textAlign: 'center' }}>—</td>
-            <td style={{ ...cell(), textAlign: 'right' }}>{fmt0(taxable)}</td>
+            <td style={{ ...cell(), textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt0(taxable)}</td>
             <td style={{ ...cell(), textAlign: 'center' }}>—</td>
-            <td style={{ ...cell(), textAlign: 'right' }}>{fmt0(taxable)}</td>
-            <td style={{ ...cell(), textAlign: 'right' }}>{fmt(cgst)}</td>
-            <td style={{ ...cell(), textAlign: 'right' }}>{fmt(sgst)}</td>
+            <td style={{ ...cell(), textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt0(taxable)}</td>
+            <td style={{ ...cell(), textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt(cgst)}</td>
+            <td style={{ ...cell(), textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt(sgst)}</td>
           </tr>
           {/* Blank filler rows */}
           {[...Array(5)].map((_, i) => (
@@ -220,9 +232,9 @@ const RABillProformaInvoice = forwardRef(({ data: b, proformaNo, proformaDate },
           {/* Totals row */}
           <tr>
             <td colSpan={7} style={{ ...hcell(), textAlign: 'right', borderTop: B2 }}>Total</td>
-            <td style={{ ...hcell(), textAlign: 'right', borderTop: B2 }}>{fmt0(taxable)}</td>
-            <td style={{ ...hcell(), textAlign: 'right', borderTop: B2 }}>{fmt(cgst)}</td>
-            <td style={{ ...hcell(), textAlign: 'right', borderTop: B2 }}>{fmt(sgst)}</td>
+            <td style={{ ...hcell(), textAlign: 'right', borderTop: B2, whiteSpace: 'nowrap' }}>{fmt0(taxable)}</td>
+            <td style={{ ...hcell(), textAlign: 'right', borderTop: B2, whiteSpace: 'nowrap' }}>{fmt(cgst)}</td>
+            <td style={{ ...hcell(), textAlign: 'right', borderTop: B2, whiteSpace: 'nowrap' }}>{fmt(sgst)}</td>
           </tr>
         </tbody>
       </table>
