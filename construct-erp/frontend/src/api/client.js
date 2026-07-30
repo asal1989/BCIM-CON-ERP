@@ -277,6 +277,7 @@ export const boqBudgetAPI = {
   raPlan:              (projectId)            => api.get(`/boq-budget/${projectId}/ra-plan`),
   setRaPlanCell:       (projectId, payload)    => api.put(`/boq-budget/${projectId}/ra-plan`, payload),
   raActuals:           (projectId)             => api.get(`/boq-budget/${projectId}/ra-actuals`),
+  setRaActualCell:     (projectId, payload)    => api.put(`/boq-budget/${projectId}/ra-actual`, payload),
 };
 
 export const boqMappingAPI = {

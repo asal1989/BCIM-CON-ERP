@@ -244,12 +244,14 @@ function ChapterBudgetCell({ value, onSave, saving }) {
   );
 }
 
-// ─── Editable plan cell (RA Bills Comparison — Plan RA bills grid) ───────────
-function RaPlanCell({ value, onSave, saving }) {
+// ─── Editable plan/actual cell (RA Bills Comparison grids) ───────────────────
+// Shared by both the Plan RA bills grid (amber) and the Actual Value grid
+// (emerald) — same click-to-edit behaviour, different accent + optional lock.
+function RaPlanCell({ value, onSave, saving, hoverClass = 'hover:bg-amber-100', locked = false, lockedTitle }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState('');
 
-  const open = () => { setVal(value > 0 ? String(Math.round(value)) : ''); setEditing(true); };
+  const open = () => { if (locked) return; setVal(value > 0 ? String(Math.round(value)) : ''); setEditing(true); };
   const commit = () => {
     const n = parseFloat(val);
     setEditing(false);
@@ -269,8 +271,9 @@ function RaPlanCell({ value, onSave, saving }) {
   );
 
   return (
-    <button onClick={open} disabled={saving}
-      className="w-full h-8 text-right text-xs px-1.5 rounded hover:bg-amber-100 transition-colors disabled:opacity-50">
+    <button onClick={open} disabled={saving || locked} title={locked ? lockedTitle : undefined}
+      className={clsx('w-full h-8 text-right text-xs px-1.5 rounded transition-colors disabled:opacity-50',
+        locked ? 'cursor-default' : hoverClass)}>
       {value > 0 ? Math.round(value).toLocaleString('en-IN') : <span className="text-slate-300 italic">—</span>}
     </button>
   );
@@ -281,7 +284,7 @@ function RaPlanCell({ value, onSave, saving }) {
 // fixed: RA1-RA9 mapped to July-March. Plan values are hand-entered per cell;
 // Actual values are computed server-side from real RA bills, assigned to
 // RA1..RA9 by chronological submission order (1st bill ever raised = RA1).
-function RaBillsComparisonTab({ chapterRows, months, planMap, actualMap, bills, onSaveCell, saving }) {
+function RaBillsComparisonTab({ chapterRows, months, planMap, actualMap, actualSourceMap = {}, bills, onSaveCell, saving, onSaveActualCell, savingActual }) {
   const inr0 = (v) => Math.round(v || 0).toLocaleString('en-IN');
 
   const planColTotals = months.map((_, i) =>
@@ -356,9 +359,17 @@ function RaBillsComparisonTab({ chapterRows, months, planMap, actualMap, bills, 
                   const raIdx = mi + 1;
                   if (isActual) {
                     const v = actualMap[`${c.key}::${raIdx}`] || 0;
+                    const fromBill = actualSourceMap[`${c.key}::${raIdx}`] === 'bill';
                     return (
-                      <td key={mi} className="px-2 py-1.5 text-right border border-slate-200 text-slate-600">
-                        {v > 0 ? inr0(v) : <span className="text-slate-300">—</span>}
+                      <td key={mi} className="p-0 border border-slate-200">
+                        <RaPlanCell
+                          value={v}
+                          saving={savingActual}
+                          hoverClass="hover:bg-emerald-100"
+                          locked={fromBill}
+                          lockedTitle={fromBill ? `From ${billByIndex[raIdx]?.bill_number || 'a submitted RA bill'} — edit the bill to change this` : undefined}
+                          onSave={(n) => onSaveActualCell(c.key, raIdx, n)}
+                        />
                       </td>
                     );
                   }
@@ -442,7 +453,7 @@ function RaBillsComparisonTab({ chapterRows, months, planMap, actualMap, bills, 
       })}
       {renderTable({
         title: 'Actual Value',
-        subtitle: 'Auto-computed from real RA bills, assigned to RA1-RA9 in the order they were submitted',
+        subtitle: 'Auto-filled from real RA bills where one exists (locked, greyed on hover) — click any other cell to enter the actual amount manually',
         headClass: 'bg-emerald-50',
         isActual: true,
       })}
@@ -2513,15 +2524,31 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
     onError: (e) => toast.error(e?.response?.data?.error || 'Failed to save plan value'),
   });
 
+  const raActualCellMutation = useMutation({
+    mutationFn: ({ chapter_key, ra_index, actual_amount }) =>
+      boqBudgetAPI.setRaActualCell(projectId, { chapter_key, ra_index, actual_amount }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ra-actuals', projectId] }),
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to save actual value'),
+  });
+
   const raPlanMap = useMemo(() => {
     const m = {};
     raPlanRows.forEach(r => { m[`${r.chapter_key}::${r.ra_index}`] = parseFloat(r.planned_amount) || 0; });
     return m;
   }, [raPlanRows]);
 
+  // source: 'bill' cells are computed from a real RA bill and locked —
+  // editing them here would be silently overwritten the next time the bill
+  // data reloads. 'manual' cells (or missing) are freely editable.
   const raActualMap = useMemo(() => {
     const m = {};
     (raActualsData?.actuals || []).forEach(r => { m[`${r.chapter_key}::${r.ra_index}`] = parseFloat(r.amount) || 0; });
+    return m;
+  }, [raActualsData]);
+
+  const raActualSourceMap = useMemo(() => {
+    const m = {};
+    (raActualsData?.actuals || []).forEach(r => { m[`${r.chapter_key}::${r.ra_index}`] = r.source || 'manual'; });
     return m;
   }, [raActualsData]);
 
@@ -2683,9 +2710,12 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
                 months={RA_MONTHS}
                 planMap={raPlanMap}
                 actualMap={raActualMap}
+                actualSourceMap={raActualSourceMap}
                 bills={raActualsData?.bills || []}
                 onSaveCell={(chapter_key, ra_index, planned_amount) => raPlanCellMutation.mutate({ chapter_key, ra_index, planned_amount })}
                 saving={raPlanCellMutation.isPending}
+                onSaveActualCell={(chapter_key, ra_index, actual_amount) => raActualCellMutation.mutate({ chapter_key, ra_index, actual_amount })}
+                savingActual={raActualCellMutation.isPending}
               />
             )}
 

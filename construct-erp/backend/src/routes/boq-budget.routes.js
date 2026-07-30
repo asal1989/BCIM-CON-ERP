@@ -43,6 +43,28 @@ runSchemaInit('ra_bill_chapter_plans', async () => {
   `);
 });
 
+// Actual Value cells are normally auto-computed from real ra_bills — but a
+// bill may not exist yet (progress billed informally, or the bill hasn't
+// been raised in the ERP), so a manual override lets QS enter the real
+// actual and have it stick even though no ra_bills row backs it. Where a
+// real bill DOES cover a cell, the bill-derived total still wins (see
+// GET /ra-actuals below) — manual entry only fills genuine gaps.
+runSchemaInit('ra_bill_chapter_actuals', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS ra_bill_chapter_actuals (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      chapter_key TEXT NOT NULL,
+      ra_index SMALLINT NOT NULL CHECK (ra_index BETWEEN 1 AND 9),
+      actual_amount NUMERIC(16,2) DEFAULT 0,
+      created_by UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (project_id, chapter_key, ra_index)
+    )
+  `);
+});
+
 runSchemaInit('project_costhead_budgets', async () => {
   await query(`
     CREATE TABLE IF NOT EXISTS project_costhead_budgets (
@@ -2120,12 +2142,49 @@ router.get('/:project_id/ra-actuals', async (req, res) => {
       });
     }
 
+    // Every key present here at this point came from a real ra_bills row —
+    // tag it before overlaying manual overrides, so the frontend can lock
+    // those cells (a real bill always wins; manual entry only fills gaps).
+    const billCoveredKeys = new Set(Object.keys(actualsMap));
+
+    const overridesRes = await query(
+      `SELECT chapter_key, ra_index, actual_amount::text FROM ra_bill_chapter_actuals WHERE project_id = $1`,
+      [project_id]
+    );
+    overridesRes.rows.forEach(o => {
+      const mapKey = `${o.chapter_key}::${o.ra_index}`;
+      if (actualsMap[mapKey] === undefined) {
+        actualsMap[mapKey] = parseFloat(o.actual_amount) || 0;
+      }
+    });
+
     const actuals = Object.entries(actualsMap).map(([k, amount]) => {
       const [chapter_key, ra_index] = k.split('::');
-      return { chapter_key, ra_index: parseInt(ra_index, 10), amount };
+      return { chapter_key, ra_index: parseInt(ra_index, 10), amount, source: billCoveredKeys.has(k) ? 'bill' : 'manual' };
     });
 
     res.json({ data: { bills, actuals } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /:project_id/ra-actual — upsert a manual override for one cell
+// { chapter_key, ra_index, actual_amount }. Only takes effect where no real
+// RA bill already covers that chapter/period (see GET /ra-actuals above).
+router.put('/:project_id/ra-actual', authorize(...BUDGET_WRITERS), async (req, res) => {
+  try {
+    const { project_id } = req.params;
+    const { chapter_key, ra_index, actual_amount } = req.body;
+    if (!chapter_key || !(ra_index >= 1 && ra_index <= 9)) {
+      return res.status(400).json({ error: 'chapter_key and ra_index (1-9) are required' });
+    }
+    await query(
+      `INSERT INTO ra_bill_chapter_actuals (project_id, chapter_key, ra_index, actual_amount, created_by)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (project_id, chapter_key, ra_index)
+       DO UPDATE SET actual_amount = EXCLUDED.actual_amount, updated_at = NOW()`,
+      [project_id, chapter_key, ra_index, parseFloat(actual_amount) || 0, req.user.id]
+    );
+    res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
