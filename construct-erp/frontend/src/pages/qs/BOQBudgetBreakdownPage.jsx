@@ -10,7 +10,7 @@ import {
   Bell, TrendingUp, TrendingDown, Activity, Building2,
 } from 'lucide-react';
 import {
-  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  AreaChart, Area, BarChart, Bar, ComposedChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
@@ -298,6 +298,24 @@ function RaBillsComparisonTab({ chapterRows, months, planMap, actualMap, bills, 
   const billByIndex = {};
   bills.forEach(b => { billByIndex[b.ra_index] = b; });
 
+  // Chart data — per-period Planned vs Actual, plus a cumulative S-curve
+  // against the total BOQ value so progress vs plan reads at a glance.
+  let planCum = 0, actualCum = 0;
+  const chartData = months.map((m, i) => {
+    planCum += planColTotals[i];
+    actualCum += actualColTotals[i];
+    return {
+      period: `RA${i + 1}`,
+      month: m,
+      planned: planColTotals[i],
+      actual: actualColTotals[i],
+      plannedCum: planCum,
+      actualCum: actualCum,
+    };
+  });
+  const lakh = (v) => `₹${(v / 100000).toFixed(v >= 1000000 ? 0 : 1)}L`;
+  const chartTooltip = (value, name) => [inr(value), name];
+
   const renderTable = ({ title, subtitle, cellClass, headClass, isActual }) => (
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
       <div className={clsx('px-5 py-3 border-b border-slate-200', headClass)}>
@@ -379,6 +397,43 @@ function RaBillsComparisonTab({ chapterRows, months, planMap, actualMap, bills, 
 
   return (
     <div className="space-y-5">
+      {/* ── Planned vs Actual chart — grouped bars per RA period + cumulative S-curve ── */}
+      {planBoqTotal > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm font-bold text-slate-800">RA Bills — Planned vs Actual</p>
+              <p className="text-xs text-slate-400">Bars: billed per RA period · Line: cumulative progress against BOQ value</p>
+            </div>
+            <div className="flex items-center gap-4 text-xs">
+              {[['Planned', '#F59E0B'], ['Actual', '#10B981'], ['Cumulative Planned', '#D97706'], ['Cumulative Actual', '#059669']].map(([l, c]) => (
+                <div key={l} className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-sm" style={{ background: c }} />
+                  <span className="text-slate-500">{l}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={320}>
+            <ComposedChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+              <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={lakh} />
+              <Tooltip
+                formatter={chartTooltip}
+                labelFormatter={(label, payload) => payload?.[0]?.payload ? `${label} — ${payload[0].payload.month}` : label}
+              />
+              <ReferenceLine y={planBoqTotal} stroke="#94A3B8" strokeDasharray="4 4"
+                label={{ value: `BOQ Value ${lakh(planBoqTotal)}`, position: 'insideTopRight', fontSize: 10, fill: '#94A3B8' }} />
+              <Bar dataKey="planned" name="Planned" fill="#F59E0B" radius={[3, 3, 0, 0]} barSize={22} />
+              <Bar dataKey="actual" name="Actual" fill="#10B981" radius={[3, 3, 0, 0]} barSize={22} />
+              <Line type="monotone" dataKey="plannedCum" name="Cumulative Planned" stroke="#D97706" strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="actualCum" name="Cumulative Actual" stroke="#059669" strokeWidth={2} dot={{ r: 3 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       {renderTable({
         title: 'RA Bills Comparison (Planned vs Actual)',
         subtitle: 'Click any month cell to enter the planned billing amount for that chapter — saved per project',
