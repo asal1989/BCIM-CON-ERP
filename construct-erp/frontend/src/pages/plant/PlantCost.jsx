@@ -8,6 +8,13 @@ import { PageShell, Table, Modal, inputCls, inr } from './_shared';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+/* Must stay at module scope — see the note in PlantEquipmentLog.jsx. Defined
+   inside the form component this remounts every input on each keystroke, so
+   only one character can be typed per click. */
+function Field({ label, children }) {
+  return <div className="space-y-1"><label className="block text-xs font-medium text-gray-500">{label}</label>{children}</div>;
+}
+
 function CostForm({ onClose }) {
   const qc = useQueryClient();
   const { data: equipment = [] } = useQuery({ queryKey: ['pm-equipment'], queryFn: () => plantAPI.listEquipment().then((r) => r.data?.data || []).catch(() => []) });
@@ -21,7 +28,6 @@ function CostForm({ onClose }) {
     onSuccess: () => { toast.success('Cost booked'); qc.invalidateQueries({ queryKey: ['pm-cost'] }); onClose(); },
     onError: (e) => toast.error(e?.response?.data?.error || 'Save failed'),
   });
-  const Field = ({ label, children }) => (<div className="space-y-1"><label className="block text-xs font-medium text-gray-500">{label}</label>{children}</div>);
   return (
     <Modal title="Book Equipment Cost to Project" onClose={onClose} maxW="max-w-2xl"
       footer={<><button onClick={onClose} className="rounded border border-gray-200 px-4 py-1.5 text-xs text-slate-600 hover:bg-gray-50">Cancel</button><button form="cost-form" type="submit" className="rounded bg-teal-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-teal-700">Save</button></>}>
