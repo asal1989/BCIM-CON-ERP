@@ -15,6 +15,10 @@ import dayjs from 'dayjs';
 
 const fmt = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 const num = (v) => parseFloat(v || 0);
+// Formats a 24-hr "HH:MM" (from <input type="time">) as "h:mm AM/PM"; leaves
+// older free-text values (e.g. "8:00 AM") entered before the time-picker
+// switch untouched, since those don't match the HH:MM pattern.
+const fmtTime = (t) => (t && /^\d{1,2}:\d{2}$/.test(t)) ? dayjs(`2000-01-01T${t}`).format('h:mm A') : (t || '—');
 const inp = 'w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition';
 
 // Detect if a group has the standard 3-tier crane structure (Shift / Hourly / Day)
@@ -459,21 +463,50 @@ function GroupTable({ wo, group, entries, totals, onRaiseBill, raisingId, onEdit
   );
 }
 
-// ─── Derived log-sheet readings for one daily record ─────────────────────────
+// ─── Derived log-sheet readings for one daily record (hours/km only — diesel
+// is a running ledger across entries, see computeDieselLedger below) ──────────
 function logSheetStats(r) {
   const hmStart = r.hours_meter_start != null ? num(r.hours_meter_start) : null;
   const hmEnd   = r.hours_meter_end   != null ? num(r.hours_meter_end)   : null;
   const hmTotal = (hmStart != null && hmEnd != null) ? Math.max(0, hmEnd - hmStart - num(r.break_hours)) : null;
   const kmTotal = (r.km_start != null && r.km_end != null) ? Math.max(0, num(r.km_end) - num(r.km_start)) : null;
-  const hasDiesel = r.diesel_opening != null || r.diesel_issued != null || r.diesel_closing != null;
-  const dieselTotal = hasDiesel ? num(r.diesel_opening) + num(r.diesel_issued) : null;
-  const dieselUsed = (dieselTotal != null && r.diesel_closing != null)
-    ? Math.max(0, dieselTotal - num(r.diesel_closing)) : null;
-  return { hmStart, hmEnd, hmTotal, kmTotal, dieselTotal, dieselUsed };
+  return { hmStart, hmEnd, hmTotal, kmTotal };
+}
+
+// ─── Diesel running-stock ledger, matching the real paper/Excel DG log sheet ──
+// The physical process is a MONTHLY cumulative stock ledger, not a per-day
+// open→close reading: opening stock is set once, diesel_issued tops up a
+// running balance on the (sparse) days fuel is actually delivered, and
+// diesel_closing is only entered occasionally when someone takes a physical
+// dip-stick reading — at which point consumption since the LAST reading is
+// "running balance − this closing reading" (same formula as the paper
+// sheet's monthly SUMMARY: Total − Closing Stock = Diesel Consumption).
+// Walking entries chronologically per equipment item reproduces that, instead
+// of requiring (wrongly) that every single day carry its own open+close pair.
+function computeDieselLedger(entries) {
+  const byItem = {};
+  entries.forEach(r => { (byItem[r.wo_item_id] ||= []).push(r); });
+  const statsById = {};
+  Object.values(byItem).forEach(list => {
+    const sorted = [...list].sort((a, b) =>
+      (a.work_date || '').localeCompare(b.work_date || '') || String(a.id).localeCompare(String(b.id)));
+    let runningStock = null;
+    sorted.forEach(r => {
+      if (r.diesel_opening != null) runningStock = num(r.diesel_opening); // explicit reading (re)starts the ledger
+      if (r.diesel_issued != null) runningStock = (runningStock ?? 0) + num(r.diesel_issued);
+      let used = null;
+      if (r.diesel_closing != null && runningStock != null) {
+        used = Math.max(0, runningStock - num(r.diesel_closing));
+        runningStock = num(r.diesel_closing); // ground-truth dip reading becomes the new balance
+      }
+      statsById[r.id] = { runningStock, used };
+    });
+  });
+  return statsById;
 }
 
 // ─── Premium day-log entry modal — mirrors the manual DG/JCB log sheet ────────
-function DayLogModal({ wo, equipmentGroups, onClose }) {
+function DayLogModal({ wo, equipmentGroups, onClose, latestStockByItem = {} }) {
   const qc = useQueryClient();
   const allCats = equipmentGroups.flatMap(g => g.categories);
 
@@ -503,7 +536,14 @@ function DayLogModal({ wo, equipmentGroups, onClose }) {
   const hmTotal = (hmStart !== '' && hmEnd !== '')
     ? Math.max(0, num(hmEnd) - num(hmStart) - num(breakHours)) : null;
   const kmTotal = (kmStart !== '' && kmEnd !== '') ? Math.max(0, num(kmEnd) - num(kmStart)) : null;
-  const dieselTotal = (dOpening !== '' || dIssued !== '') ? num(dOpening) + num(dIssued) : null;
+  // Diesel is a carried-forward running balance (see computeDieselLedger) — the
+  // starting point is the last known stock for this equipment, NOT zero each
+  // day, unless the user explicitly enters an Opening reading to (re)start
+  // the ledger (e.g. the very first entry, or a fresh tank/meter).
+  const priorStock = latestStockByItem[itemId] ?? null;
+  const dieselBase = dOpening !== '' ? num(dOpening) : priorStock;
+  const dieselTotal = (dieselBase != null || dIssued !== '')
+    ? (dieselBase ?? 0) + num(dIssued) : null;
   const dieselUsed  = (dieselTotal != null && dClosing !== '') ? Math.max(0, dieselTotal - num(dClosing)) : null;
   const effectiveQty = hmTotal != null ? hmTotal : (qty !== '' ? num(qty) : null);
   const billValue = (effectiveQty != null && selectedCat?.rate) ? effectiveQty * num(selectedCat.rate) : null;
@@ -598,11 +638,11 @@ function DayLogModal({ wo, equipmentGroups, onClose }) {
             <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
               <div>
                 <label className={lbl}>Start Time</label>
-                <input type="text" value={startTime} onChange={e => setStartTime(e.target.value)} className={inp} placeholder="8:00 AM" />
+                <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className={inp} />
               </div>
               <div>
                 <label className={lbl}>End Time</label>
-                <input type="text" value={endTime} onChange={e => setEndTime(e.target.value)} className={inp} placeholder="8:00 PM" />
+                <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className={inp} />
               </div>
               <div>
                 <label className={lbl}>Break Hrs</label>
@@ -636,7 +676,13 @@ function DayLogModal({ wo, equipmentGroups, onClose }) {
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <div>
                 <label className={lbl}>Opening Stock</label>
-                <input type="number" step="0.1" min="0" value={dOpening} onChange={e => setDOpening(e.target.value)} className={inp} placeholder="Litres" />
+                <input type="number" step="0.1" min="0" value={dOpening} onChange={e => setDOpening(e.target.value)}
+                  className={inp} placeholder={priorStock != null ? `Carried forward: ${priorStock.toFixed(1)} L` : 'Litres'} />
+                <p className="text-[9px] text-slate-400 mt-1">
+                  {priorStock != null
+                    ? `Leave blank to carry forward ${priorStock.toFixed(1)} L from the last reading. Only fill in to reset the ledger.`
+                    : 'First entry for this equipment — set the starting stock.'}
+                </p>
               </div>
               <div>
                 <label className={lbl}>Diesel Issued</label>
@@ -644,7 +690,8 @@ function DayLogModal({ wo, equipmentGroups, onClose }) {
               </div>
               <div>
                 <label className={lbl}>Closing Stock</label>
-                <input type="number" step="0.1" min="0" value={dClosing} onChange={e => setDClosing(e.target.value)} className={inp} placeholder="Litres" />
+                <input type="number" step="0.1" min="0" value={dClosing} onChange={e => setDClosing(e.target.value)} className={inp} placeholder="Litres (dip reading)" />
+                <p className="text-[9px] text-slate-400 mt-1">Only fill this when you take an actual dip-stick reading — not required every day.</p>
               </div>
               <div>
                 <label className={lbl}>Km — Start</label>
@@ -749,16 +796,34 @@ function DailyLogSection({ wo, equipmentGroups, onCreateBill }) {
     onError: () => toast.error('Failed to delete'),
   });
 
+  // Diesel is a running stock ledger across entries (per equipment item), not
+  // a per-day open→close reading — see computeDieselLedger.
+  const dieselLedger = computeDieselLedger(raw);
+
   // Totals per item_id + roll-ups for the KPI strip
   const totalsPerItem = {};
   let totalDieselUsed = 0, totalKm = 0, totalCertValue = 0;
   raw.forEach(r => {
     totalsPerItem[r.wo_item_id] = (totalsPerItem[r.wo_item_id] || 0) + num(r.qty);
     const s = logSheetStats(r);
-    if (s.dieselUsed != null) totalDieselUsed += s.dieselUsed;
-    if (s.kmTotal != null)    totalKm += s.kmTotal;
+    const used = dieselLedger[r.id]?.used;
+    if (used != null) totalDieselUsed += used;
+    if (s.kmTotal != null) totalKm += s.kmTotal;
   });
   allCats.forEach(c => { totalCertValue += num(totalsPerItem[c.id]) * num(c.rate); });
+
+  // Latest known running stock per equipment item — passed to the entry modal
+  // so its live preview reflects the real carried-forward balance instead of
+  // assuming today starts from zero. Sorted chronologically so the last write
+  // per item is genuinely the most recent reading, not just the last row
+  // returned by the API.
+  const latestStockByItem = {};
+  [...raw]
+    .sort((a, b) => (a.work_date || '').localeCompare(b.work_date || '') || String(a.id).localeCompare(String(b.id)))
+    .forEach(r => {
+      const st = dieselLedger[r.id];
+      if (st && st.runningStock != null) latestStockByItem[r.wo_item_id] = st.runningStock;
+    });
 
   const handleCreateBill = () => {
     const pf = {};
@@ -894,8 +959,8 @@ function DailyLogSection({ wo, equipmentGroups, onCreateBill }) {
                             </span>
                           </div>
                         </td>
-                        <td className="px-2.5 py-2 text-center text-slate-500 whitespace-nowrap">{r.start_time || '—'}</td>
-                        <td className="px-2.5 py-2 text-center text-slate-500 border-r border-slate-100 whitespace-nowrap">{r.end_time || '—'}</td>
+                        <td className="px-2.5 py-2 text-center text-slate-500 whitespace-nowrap">{fmtTime(r.start_time)}</td>
+                        <td className="px-2.5 py-2 text-center text-slate-500 border-r border-slate-100 whitespace-nowrap">{fmtTime(r.end_time)}</td>
                         <td className="px-2.5 py-2 text-right text-slate-500 tabular-nums">{s.hmStart != null ? s.hmStart.toFixed(1) : '—'}</td>
                         <td className="px-2.5 py-2 text-right text-slate-500 tabular-nums">{s.hmEnd != null ? s.hmEnd.toFixed(1) : '—'}</td>
                         <td className="px-2.5 py-2 text-right font-bold text-indigo-700 border-r border-slate-100 tabular-nums">
@@ -904,7 +969,7 @@ function DailyLogSection({ wo, equipmentGroups, onCreateBill }) {
                         <td className="px-2.5 py-2 text-right text-slate-500 tabular-nums">{r.diesel_issued != null ? num(r.diesel_issued).toFixed(1) : '—'}</td>
                         <td className="px-2.5 py-2 text-right text-slate-500 tabular-nums">{r.diesel_closing != null ? num(r.diesel_closing).toFixed(1) : '—'}</td>
                         <td className="px-2.5 py-2 text-right font-bold text-amber-700 border-r border-slate-100 tabular-nums">
-                          {s.dieselUsed != null ? s.dieselUsed.toFixed(1) : '—'}
+                          {dieselLedger[r.id]?.used != null ? dieselLedger[r.id].used.toFixed(1) : '—'}
                         </td>
                         <td className="px-2.5 py-2 text-right text-slate-600 border-r border-slate-100 tabular-nums">
                           {s.kmTotal != null ? s.kmTotal.toFixed(0) : '—'}
@@ -951,7 +1016,7 @@ function DailyLogSection({ wo, equipmentGroups, onCreateBill }) {
       </div>
 
       {showModal && (
-        <DayLogModal wo={wo} equipmentGroups={equipmentGroups} onClose={() => setShowModal(false)} />
+        <DayLogModal wo={wo} equipmentGroups={equipmentGroups} onClose={() => setShowModal(false)} latestStockByItem={latestStockByItem} />
       )}
     </>
   );
