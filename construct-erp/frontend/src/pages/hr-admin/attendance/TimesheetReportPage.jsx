@@ -959,7 +959,7 @@ export default function TimesheetReportPage() {
 
         {/* ── TABLE ── */}
         {!error && (
-          <div style={{
+          <div className="no-print" style={{
             background:T.surface, borderRadius:14, border:`1px solid ${T.hair}`,
             boxShadow:'0 1px 3px rgba(15,37,68,0.06)', overflow:'hidden',
           }}>
