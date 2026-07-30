@@ -339,17 +339,23 @@ router.post('/:woId/daily', authorize(...PLANNER), async (req, res) => {
       work_description, requested_by,
     } = req.body;
     let { qty } = req.body;
+    const check = await query(`SELECT id, unit FROM sc_wo_items WHERE id=$1 AND wo_id=$2`, [wo_item_id, req.params.woId]);
+    if (!check.rows.length) return res.status(400).json({ error: 'Item not found on this WO' });
+    const isMonthly = /month/i.test(check.rows[0].unit || '');
+
     // Auto-derive qty (billable hours) from the hours-meter reading when both ends are given,
     // same as the manual log sheet's "Hours Meter - Total" column, minus break hours if logged.
+    // NOT for monthly-rated items — the meter delta is hours, not a day count, and billing
+    // "days worked" as if it were the raw meter reading would wildly overbill (e.g. a 200-hour
+    // meter delta billed as 200 days at the monthly rate). Monthly items log the meter for
+    // maintenance reference only; qty (Days Worked) must be entered explicitly.
     const hmStart = hours_meter_start != null && hours_meter_start !== '' ? parseFloat(hours_meter_start) : null;
     const hmEnd   = hours_meter_end   != null && hours_meter_end   !== '' ? parseFloat(hours_meter_end)   : null;
-    if ((qty == null || qty === '') && hmStart != null && hmEnd != null) {
+    if (!isMonthly && (qty == null || qty === '') && hmStart != null && hmEnd != null) {
       qty = Math.max(0, hmEnd - hmStart - (parseFloat(break_hours) || 0));
     }
     if (!work_date || !wo_item_id || qty == null)
       return res.status(400).json({ error: 'work_date, wo_item_id and qty (or hours meter start/end) are required' });
-    const check = await query(`SELECT id FROM sc_wo_items WHERE id=$1 AND wo_id=$2`, [wo_item_id, req.params.woId]);
-    if (!check.rows.length) return res.status(400).json({ error: 'Item not found on this WO' });
     const r = await query(
       `INSERT INTO wo_hire_daily_log (
          company_id, wo_id, work_date, wo_item_id, qty, notes,
