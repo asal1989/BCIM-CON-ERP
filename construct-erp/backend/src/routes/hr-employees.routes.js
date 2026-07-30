@@ -444,6 +444,25 @@ router.post('/', async (req, res) => {
     // Generate employee code if not provided
     const code = employee_code || await generateEmpCode(req.user.company_id);
 
+    // Guard against re-creating the exact bug that caused 80 subcontractor
+    // labourers to be double-counted on every timesheet: someone entering the
+    // same worker into BOTH the HR employee master AND the SC Workers module
+    // under the same code. If this code already belongs to an active SC
+    // worker, this person almost certainly belongs in SC Workers, not here.
+    const scClash = await client.query(
+      `SELECT worker_name, sc.name AS contractor_name FROM sc_workers w
+       LEFT JOIN sc_subcontractors sc ON sc.id = w.sc_id
+       WHERE w.worker_code = $1 AND w.company_id = $2 AND w.status = 'active'`,
+      [code, req.user.company_id]
+    );
+    if (scClash.rows.length) {
+      await client.query('ROLLBACK');
+      const c = scClash.rows[0];
+      return res.status(409).json({
+        error: `Code '${code}' already belongs to subcontractor labour "${c.worker_name}"${c.contractor_name ? ` (${c.contractor_name})` : ''} in SC Workers. If this is the same person, add them there instead of HR — entering them in both places double-counts them on every timesheet.`
+      });
+    }
+
     // Create user with a temporary password (emp code as password, they should change)
     const bcrypt = require('bcryptjs');
     const tempPassword = await bcrypt.hash(code, 10);
@@ -566,15 +585,30 @@ router.put('/:id', async (req, res) => {
     // Only update employee_code if a non-empty value was submitted and it's not already taken
     let effectiveCode = null;
     if (employee_code && String(employee_code).trim()) {
+      const trimmedCode = employee_code.trim();
       const codeCheck = await client.query(
         `SELECT id FROM users WHERE employee_code=$1 AND company_id=$2 AND id<>$3`,
-        [employee_code.trim(), req.user.company_id, req.params.id]
+        [trimmedCode, req.user.company_id, req.params.id]
       );
       if (codeCheck.rows.length > 0) {
         await client.query('ROLLBACK');
         return res.status(409).json({ error: `Employee code '${employee_code}' is already in use by another employee.` });
       }
-      effectiveCode = employee_code.trim();
+      // Same cross-table guard as employee creation — see the comment there.
+      const scClash = await client.query(
+        `SELECT worker_name, sc.name AS contractor_name FROM sc_workers w
+         LEFT JOIN sc_subcontractors sc ON sc.id = w.sc_id
+         WHERE w.worker_code = $1 AND w.company_id = $2 AND w.status = 'active'`,
+        [trimmedCode, req.user.company_id]
+      );
+      if (scClash.rows.length) {
+        await client.query('ROLLBACK');
+        const c = scClash.rows[0];
+        return res.status(409).json({
+          error: `Code '${trimmedCode}' already belongs to subcontractor labour "${c.worker_name}"${c.contractor_name ? ` (${c.contractor_name})` : ''} in SC Workers. Entering the same person in both places double-counts them on every timesheet.`
+        });
+      }
+      effectiveCode = trimmedCode;
     }
 
     await client.query(

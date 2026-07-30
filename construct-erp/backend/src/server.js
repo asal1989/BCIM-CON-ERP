@@ -1060,6 +1060,14 @@ async function runAutoMigrations() {
         END IF;
       END $$`);
     // 043 Bulk-seed DQS Tower workers for Habibur Rahman and MD Faruk
+    // NOTE: the codes below were copy-pasted from the HR employee_code bulk
+    // import for these same people, which is exactly how 80 subcontractor
+    // labourers ended up double-counted on every timesheet (they existed as
+    // BOTH a 'workman'-category HR employee AND an SC worker under the same
+    // code — see hr-employees.routes.js POST/PUT, which now blocks this at
+    // the source). This migration is a one-time historical seed guarded by
+    // NOT EXISTS below, so it's inert now — do NOT copy this
+    // hardcode-worker-codes-from-another-system pattern into a new migration.
     await client.query(`
       DO $$
       DECLARE
