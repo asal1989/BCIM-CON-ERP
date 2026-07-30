@@ -545,7 +545,12 @@ function DayLogModal({ wo, equipmentGroups, onClose, latestStockByItem = {} }) {
   const dieselTotal = (dieselBase != null || dIssued !== '')
     ? (dieselBase ?? 0) + num(dIssued) : null;
   const dieselUsed  = (dieselTotal != null && dClosing !== '') ? Math.max(0, dieselTotal - num(dClosing)) : null;
-  const effectiveQty = hmTotal != null ? hmTotal : (qty !== '' ? num(qty) : null);
+  // Hour meter only drives billable qty for hourly/shift-rated equipment.
+  // Monthly-rated equipment (e.g. a DG billed ₹/Month) still logs the meter
+  // for maintenance reference, but "Days Worked" must be entered manually —
+  // the raw meter delta is hours, not a day count, and must never be billed
+  // as if it were one.
+  const effectiveQty = (!isMonthly && hmTotal != null) ? hmTotal : (qty !== '' ? num(qty) : null);
   const billValue = (effectiveQty != null && selectedCat?.rate) ? effectiveQty * num(selectedCat.rate) : null;
   const litresPerHour = (dieselUsed != null && hmTotal && hmTotal > 0) ? dieselUsed / hmTotal : null;
 
@@ -657,13 +662,14 @@ function DayLogModal({ wo, equipmentGroups, onClose, latestStockByItem = {} }) {
                 <input type="number" step="0.1" min="0" value={hmEnd} onChange={e => setHmEnd(e.target.value)} className={inp} />
               </div>
               <div>
-                <label className={lbl}>{qtyLabel} {hmTotal == null && '*'}</label>
-                <input type="number" step="0.5" min="0" disabled={hmTotal != null}
-                  value={hmTotal != null ? hmTotal.toFixed(2) : qty}
+                <label className={lbl}>{qtyLabel} {(isMonthly || hmTotal == null) && '*'}</label>
+                <input type="number" step="0.5" min="0" disabled={!isMonthly && hmTotal != null}
+                  value={(!isMonthly && hmTotal != null) ? hmTotal.toFixed(2) : qty}
                   onChange={e => setQty(e.target.value)}
-                  className={clsx(inp, hmTotal != null && 'bg-indigo-50 font-bold text-indigo-700')}
+                  className={clsx(inp, !isMonthly && hmTotal != null && 'bg-indigo-50 font-bold text-indigo-700')}
                   placeholder={isMonthly ? '1' : 'e.g. 5.5'} />
-                {hmTotal != null && <p className="text-[9px] text-indigo-500 mt-1 font-semibold">auto from meter</p>}
+                {!isMonthly && hmTotal != null && <p className="text-[9px] text-indigo-500 mt-1 font-semibold">auto from meter</p>}
+                {isMonthly && hmTotal != null && <p className="text-[9px] text-slate-400 mt-1">Hour meter logged for reference only — enter Days Worked manually.</p>}
               </div>
             </div>
           </div>
