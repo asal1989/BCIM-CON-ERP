@@ -1133,15 +1133,39 @@ export default function SCLabour() {
     staleTime:0, enabled: tab==='nmr',
   });
 
+  // The server refuses duplicate labour outright (same code / ESSL id /
+  // Aadhaar), since one person in both HR Employees and SC Workers gets
+  // counted twice on every timesheet. A repeated NAME comes back as
+  // requires_confirmation instead of a flat refusal, because two different
+  // people genuinely can share a name under one contractor — so ask, then
+  // re-send with the confirmation flag rather than silently allowing it.
   const addWorkerMut = useMutation({
     mutationFn: d=>scAPI.createWorker(d),
-    onSuccess:()=>{ toast.success('Worker added'); qc.invalidateQueries({queryKey:['sc-workers']}); setShowWorkerForm(false); setWorkerForm({project_id:'',sc_id:'',wo_id:'',worker_name:'',skill_type:'Unskilled',daily_rate:0,mobile:''}); },
-    onError:e=>toast.error(e?.response?.data?.error||'Failed'),
+    onSuccess:()=>{ toast.success('Worker added'); qc.invalidateQueries({queryKey:['sc-workers']}); setShowWorkerForm(false); setWorkerForm({project_id:'',sc_id:'',wo_id:'',worker_name:'',skill_type:'Unskilled',daily_rate:0,mobile:'',essl_emp_code:''}); },
+    onError:(e,vars)=>{
+      const d = e?.response?.data;
+      if (d?.requires_confirmation && !vars?.confirm_duplicate_name) {
+        if (window.confirm(`${d.error}\n\nAdd as a separate worker anyway?`)) {
+          addWorkerMut.mutate({ ...vars, confirm_duplicate_name:true });
+        }
+        return;
+      }
+      toast.error(d?.error||'Failed');
+    },
   });
   const updateWorkerMut = useMutation({
     mutationFn: ({id,...d})=>scAPI.updateWorker(id,d),
     onSuccess:()=>{ toast.success('ESSL code saved'); qc.invalidateQueries({queryKey:['sc-workers']}); },
-    onError:e=>toast.error(e?.response?.data?.error||'Failed'),
+    onError:(e,vars)=>{
+      const d = e?.response?.data;
+      if (d?.requires_confirmation && !vars?.confirm_duplicate_name) {
+        if (window.confirm(`${d.error}\n\nSave anyway?`)) {
+          updateWorkerMut.mutate({ ...vars, confirm_duplicate_name:true });
+        }
+        return;
+      }
+      toast.error(d?.error||'Failed');
+    },
   });
   const deleteNmrMut = useMutation({
     mutationFn: (id) => scAPI.deleteNMR(id),
