@@ -655,6 +655,11 @@ router.put('/:id', async (req, res) => {
        date_of_leaving || null, leaving_reason || null, employment_status || 'active']
     );
 
+    await syncExitToWorkerRoster(
+      (sql, params) => client.query(sql, params),
+      req.params.id, req.user.company_id, employment_status
+    );
+
     await addTimeline(
       client,
       req.user.company_id,
@@ -676,6 +681,34 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// Site workers exist twice: once in users/employee_profiles and again in
+// sc_workers (subcontractor roster). Marking someone resigned in HR only
+// touched the first, so the sc_workers copy kept status='active' and kept
+// showing up in the daily timesheet and every other attendance report.
+// Mirror any non-active employment_status onto both sc_workers and
+// users.is_active so one HR action fully retires the person.
+async function syncExitToWorkerRoster(runner, userId, companyId, employmentStatus) {
+  const isExited = employmentStatus && employmentStatus !== 'active';
+  if (!isExited) return;
+
+  const { rows } = await runner(
+    `SELECT employee_code FROM users WHERE id=$1 AND company_id=$2`,
+    [userId, companyId]
+  );
+  const code = rows[0]?.employee_code;
+  if (code) {
+    await runner(
+      `UPDATE sc_workers SET status='inactive'
+       WHERE company_id=$1 AND worker_code=$2 AND status='active'`,
+      [companyId, code]
+    );
+  }
+  await runner(
+    `UPDATE users SET is_active=FALSE WHERE id=$1 AND company_id=$2`,
+    [userId, companyId]
+  );
+}
+
 // ═══════════════════════════════════════════════════════════
 // UPDATE STATUS (exit / terminate etc)
 // ═══════════════════════════════════════════════════════════
@@ -692,6 +725,7 @@ router.patch('/:id/status', async (req, res) => {
       await query(`UPDATE users SET is_active=$1 WHERE id=$2 AND company_id=$3`,
         [is_active, req.params.id, req.user.company_id]);
     }
+    await syncExitToWorkerRoster(query, req.params.id, req.user.company_id, employment_status);
     await query(
       `INSERT INTO employee_timeline
        (user_id, company_id, event_type, title, description, event_date, created_by)
