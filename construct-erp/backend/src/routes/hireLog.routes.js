@@ -30,7 +30,12 @@ const hireLogUpload = multer({ storage: hireLogStorage, limits: { fileSize: 20 *
 
 router.use(authenticate);
 const CID = req => req.user.company_id;
-const PLANNER = ['super_admin', 'admin', 'project_manager', 'site_engineer', 'qs_engineer', 'procurement_manager'];
+// 'manager' covers the P&M / plant managers who actually keep the hire logs —
+// they were blocked here even with the Subcontractors and Hire & Rental modules
+// granted, because this route gate is independent of accessible_modules.
+// Module access still applies on top: a manager without Subcontractors never
+// reaches the tracker in the first place.
+const PLANNER = ['super_admin', 'admin', 'project_manager', 'site_engineer', 'qs_engineer', 'procurement_manager', 'manager'];
 
 runSchemaInit('hire_log_files_table', async () => {
   await query(`
