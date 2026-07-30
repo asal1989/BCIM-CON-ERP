@@ -72,6 +72,7 @@ export default function EmployeeFormPage() {
     employee_category:'staff',
     department_id:'', designation_id:'', employment_type:'permanent',
     date_of_joining:'', probation_end_date:'', notice_period_days:30,
+    employment_status:'active', date_of_leaving:'', leaving_reason:'',
     reporting_manager_id:'', work_location:'', project_id:'',
     date_of_birth:'', gender:'', father_name:'', mother_name:'',
     marital_status:'', blood_group:'', nationality:'Indian',
@@ -107,6 +108,9 @@ export default function EmployeeFormPage() {
         employment_type:e.employment_type||'permanent', reporting_manager_id:e.reporting_manager_id||'',
         work_location:e.work_location||'', project_id:e.project_id||'', date_of_joining:e.date_of_joining?.split('T')[0]||'',
         probation_end_date:e.probation_end_date?.split('T')[0]||'', notice_period_days:e.notice_period_days||30,
+        employment_status:e.employment_status||'active',
+        date_of_leaving:e.date_of_leaving?.split('T')[0]||'',
+        leaving_reason:e.leaving_reason||'',
         date_of_birth:e.date_of_birth?.split('T')[0]||'', gender:e.gender||'',
         father_name:e.father_name||'', mother_name:e.mother_name||'', marital_status:e.marital_status||'',
         blood_group:e.blood_group||'', nationality:e.nationality||'Indian',
@@ -345,6 +349,29 @@ export default function EmployeeFormPage() {
               <Field label="Date of Joining"><input className={inp} type="date" value={form.date_of_joining} onChange={e=>set('date_of_joining',e.target.value)}/></Field>
               <Field label="Probation End Date"><input className={inp} type="date" value={form.probation_end_date} onChange={e=>set('probation_end_date',e.target.value)}/></Field>
               <Field label="Notice Period (Days)"><input className={inp} type="number" value={form.notice_period_days} onChange={e=>set('notice_period_days',e.target.value)}/></Field>
+              <Field label="Employment Status">
+                <select className={inp} value={form.employment_status} onChange={e=>{
+                  set('employment_status',e.target.value);
+                  if(e.target.value==='active'){ set('date_of_leaving',''); set('leaving_reason',''); }
+                }}>
+                  <option value="active">Active</option>
+                  <option value="resigned">Resigned</option>
+                  <option value="terminated">Terminated</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </Field>
+              {form.employment_status !== 'active' && (
+                <>
+                  <Field label="Date of Resignation / Leaving">
+                    <input className={inp} type="date" value={form.date_of_leaving} onChange={e=>set('date_of_leaving',e.target.value)}/>
+                  </Field>
+                  <div className="col-span-2">
+                    <Field label="Leaving Reason">
+                      <input className={inp} value={form.leaving_reason} onChange={e=>set('leaving_reason',e.target.value)} placeholder="e.g. Personal reason, Better opportunity…"/>
+                    </Field>
+                  </div>
+                </>
+              )}
             </div>
           </motion.div>
         )}

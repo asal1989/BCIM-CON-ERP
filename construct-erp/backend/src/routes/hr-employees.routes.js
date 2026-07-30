@@ -551,6 +551,7 @@ router.put('/:id', async (req, res) => {
       bank_name, bank_account_number, bank_ifsc, permanent_address, current_address,
       emergency_contact_name, emergency_contact_phone, employment_type, employee_category,
       probation_end_date, notice_period_days, reporting_manager_id, work_location, project_id,
+      date_of_leaving, leaving_reason, employment_status,
     } = req.body;
 
     let deptName = '', desigName = '';
@@ -627,8 +628,9 @@ router.put('/:id', async (req, res) => {
         pan_number, aadhaar_number, uan_number, pf_account_number, esi_number,
         bank_name, bank_account_number, bank_ifsc, permanent_address, current_address,
         emergency_contact_name, emergency_contact_phone, employment_type, employee_category,
-        reporting_manager_id, work_location, project_id, probation_end_date, notice_period_days, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,NOW())
+        reporting_manager_id, work_location, project_id, probation_end_date, notice_period_days,
+        date_of_leaving, leaving_reason, employment_status, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,NOW())
        ON CONFLICT (user_id) DO UPDATE SET
          department_id=$3, designation_id=$4, date_of_joining=$5, date_of_birth=$6,
          gender=$7, father_name=$8, mother_name=$9, marital_status=$10, blood_group=$11,
@@ -637,7 +639,8 @@ router.put('/:id', async (req, res) => {
          bank_ifsc=$20, permanent_address=$21, current_address=$22,
          emergency_contact_name=$23, emergency_contact_phone=$24, employment_type=$25,
          employee_category=$26, reporting_manager_id=$27, work_location=$28,
-         project_id=$29, probation_end_date=$30, notice_period_days=$31, updated_at=NOW()`,
+         project_id=$29, probation_end_date=$30, notice_period_days=$31,
+         date_of_leaving=$32, leaving_reason=$33, employment_status=$34, updated_at=NOW()`,
       [req.params.id, req.user.company_id, department_id || null, designation_id || null,
        date_of_joining || null, date_of_birth || null, gender || null,
        father_name || null, mother_name || null, marital_status || null,
@@ -648,7 +651,8 @@ router.put('/:id', async (req, res) => {
        emergency_contact_name || null, emergency_contact_phone || null,
        employment_type || 'permanent', employee_category || 'staff',
        reporting_manager_id || null, work_location || null,
-       project_id || null, probation_end_date || null, notice_period_days || 30]
+       project_id || null, probation_end_date || null, notice_period_days || 30,
+       date_of_leaving || null, leaving_reason || null, employment_status || 'active']
     );
 
     await addTimeline(
