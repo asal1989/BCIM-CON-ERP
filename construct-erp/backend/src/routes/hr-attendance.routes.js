@@ -146,7 +146,7 @@ router.get('/summary', async (req, res) => {
                                       AND EXTRACT(YEAR  FROM a.attendance_date) = $3
         WHERE u.company_id = $1
           AND u.is_active = TRUE
-          AND COALESCE(ep.employment_status, 'active') = 'active'
+          AND COALESCE(ep.employment_status, 'active') NOT IN ('resigned','terminated','absconded')
           ${deptFilter}
           ${projFilter}
         GROUP BY u.id, u.name, u.employee_code, ep.department_id, dep.name, u.department
@@ -181,7 +181,8 @@ router.get('/summary', async (req, res) => {
         LEFT JOIN employee_profiles ep ON ep.user_id = u.id
         LEFT JOIN hr_departments dep   ON dep.id = ep.department_id
         WHERE a.company_id=$1 AND a.attendance_date BETWEEN $2 AND $3
-          AND COALESCE(ep.employment_status, 'active') = 'active'
+          AND COALESCE(ep.employment_status, 'active') NOT IN ('resigned','terminated','absconded')
+          AND NOT EXISTS (SELECT 1 FROM sc_workers w WHERE w.company_id = u.company_id AND w.worker_code = u.employee_code)
         ${staffProjFilter}
         GROUP BY dep.name ORDER BY dep.name
       `, staffParams),
@@ -339,7 +340,8 @@ router.get('/department-summary', async (req, res) => {
         LEFT JOIN employee_profiles ep ON ep.user_id = u.id
         LEFT JOIN hr_departments dep   ON dep.id = ep.department_id
         WHERE a.company_id=$1 AND a.attendance_date BETWEEN $2 AND $3
-          AND COALESCE(ep.employment_status, 'active') = 'active'
+          AND COALESCE(ep.employment_status, 'active') NOT IN ('resigned','terminated','absconded')
+          AND NOT EXISTS (SELECT 1 FROM sc_workers w WHERE w.company_id = u.company_id AND w.worker_code = u.employee_code)
         ${staffProjFilter}
         GROUP BY dep.name ORDER BY dep.name
       `, staffParams),
@@ -405,7 +407,7 @@ router.post('/month-baseline', async (req, res) => {
       FROM users u
       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
       WHERE u.company_id = $1 AND u.is_active = TRUE
-        AND COALESCE(ep.employment_status, 'active') = 'active'`;
+        AND COALESCE(ep.employment_status, 'active') NOT IN ('resigned','terminated','absconded')`;
     const employeeParams = [req.user.company_id];
 
     if (department_id) {
@@ -637,7 +639,16 @@ router.get('/timesheet-report', async (req, res) => {
                                      AND a.company_id = $1
       WHERE u.company_id = $1
         AND u.is_active = TRUE
-        AND COALESCE(ep.employment_status, 'active') = 'active'
+        AND COALESCE(ep.employment_status, 'active') NOT IN ('resigned','terminated','absconded')
+        -- This report unions staff with sc_workers below. ~80 site labourers
+        -- exist in BOTH tables, so without this they print twice and inflate
+        -- headcount and man-hours. When someone is on the SC roster, the SC
+        -- query owns them; drop them here rather than relying on their HR
+        -- status happening to be non-active.
+        AND NOT EXISTS (
+          SELECT 1 FROM sc_workers w
+          WHERE w.company_id = u.company_id AND w.worker_code = u.employee_code
+        )
         ${roleFilter}
         ${categoryFilter}
         ${deptFilter}
@@ -1090,7 +1101,12 @@ router.get('/monthly-report', async (req, res) => {
        AND a.attendance_date BETWEEN $2 AND $3
       WHERE u.company_id = $1
         AND u.is_active = TRUE
-        AND COALESCE(ep.employment_status, 'active') = 'active'
+        AND COALESCE(ep.employment_status, 'active') NOT IN ('resigned','terminated','absconded')
+        -- unioned with sc_attendance below; drop the SC-roster duplicates
+        AND NOT EXISTS (
+          SELECT 1 FROM sc_workers w
+          WHERE w.company_id = u.company_id AND w.worker_code = u.employee_code
+        )
         ${categoryFilter}
         ${deptFilter}
         ${projFilter}

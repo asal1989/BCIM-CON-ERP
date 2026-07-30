@@ -687,9 +687,16 @@ router.put('/:id', async (req, res) => {
 // showing up in the daily timesheet and every other attendance report.
 // Mirror any non-active employment_status onto both sc_workers and
 // users.is_active so one HR action fully retires the person.
+// 'inactive' is deliberately NOT an exit here. In this database it is an
+// import artifact, not a status anyone set on purpose: all 41 people carrying
+// it worked in the last 7 days, and none has a date_of_leaving. Treating it as
+// an exit silently deactivated 41 working labourers across Bahulaya Buildcast,
+// Habibur Rahaman and MD Faruk, emptying those contractors from the timesheet.
+// Only the statuses that actually mean "gone" propagate.
+const EXIT_STATUSES = ['resigned', 'terminated', 'absconded'];
+
 async function syncExitToWorkerRoster(runner, userId, companyId, employmentStatus) {
-  const isExited = employmentStatus && employmentStatus !== 'active';
-  if (!isExited) return;
+  if (!EXIT_STATUSES.includes(employmentStatus)) return;
 
   const { rows } = await runner(
     `SELECT employee_code FROM users WHERE id=$1 AND company_id=$2`,
