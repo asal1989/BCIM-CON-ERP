@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { hrAttendanceAPI, projectAPI } from '../../../api/client';
-import { Printer, Download, RefreshCw, Filter, ChevronRight, Search, X, Mail, Settings, Send, Plus, Trash2 } from 'lucide-react';
+import {
+  Printer, Download, RefreshCw, Filter, ChevronRight, Search, X, Mail, Settings, Send, Plus, Trash2,
+  Users, Clock, AlertTriangle, Timer, CalendarDays, Building2, LayoutList, Rows3,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -11,108 +14,231 @@ const fmtDate = (d) =>
     weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
   });
 
+// ── Design tokens ───────────────────────────────────────────────────────────
+const T = {
+  navy:      '#0F2544',
+  navyMid:   '#1B3A6B',
+  navyLift:  '#27508C',
+  ink:       '#0B1524',
+  body:      '#334155',
+  muted:     '#64748B',
+  faint:     '#94A3B8',
+  hair:      '#E8EDF5',
+  hairSoft:  '#F1F5F9',
+  surface:   '#FFFFFF',
+  canvas:    '#F5F7FB',
+  // semantic — separate from the navy brand accent
+  present:   '#059669',
+  absent:    '#DC2626',
+  leave:     '#D97706',
+  half:      '#4F46E5',
+  single:    '#EA580C',
+  off:       '#64748B',
+  holiday:   '#7C3AED',
+  hours:     '#0891B2',
+};
+
 const STATUS_COLOR = {
-  present:  { bg: '#D1FAE5', color: '#065F46' },
-  sp:       { bg: '#FFF7ED', color: '#C2410C' }, // single punch — present but missing out-punch
-  absent:   { bg: '#FEE2E2', color: '#991B1B' },
-  leave:    { bg: '#FEF3C7', color: '#92400E' },
-  half_day: { bg: '#DBEAFE', color: '#1E40AF' },
-  holiday:  { bg: '#EDE9FE', color: '#5B21B6' },
+  present:  { bg: '#ECFDF5', color: '#065F46', dot: T.present },
+  sp:       { bg: '#FFF7ED', color: '#9A3412', dot: T.single },  // single punch — no out-punch
+  absent:   { bg: '#FEF2F2', color: '#991B1B', dot: T.absent },
+  leave:    { bg: '#FFFBEB', color: '#92400E', dot: T.leave },
+  half_day: { bg: '#EEF2FF', color: '#3730A3', dot: T.half },
+  holiday:  { bg: '#F5F3FF', color: '#5B21B6', dot: T.holiday },
   // The API synthesises week_off for anyone with no punch on a Sunday. Without
   // its own entry it fell through to the ABSENT style, painting a normal
   // weekend red and making a rest day look like mass absenteeism.
-  week_off: { bg: '#F1F5F9', color: '#475569' },
+  week_off: { bg: '#F1F5F9', color: '#475569', dot: T.off },
 };
 const STATUS_LABEL = { present:'P', sp:'SP', absent:'A', leave:'L', half_day:'HD', holiday:'H', week_off:'WO' };
+const STATUS_FULL  = {
+  present:'Present', sp:'Single Punch', absent:'Absent', leave:'On Leave',
+  half_day:'Half Day', holiday:'Holiday', week_off:'Week Off',
+};
 
-// Statuses where the employee was never expected in — they must be excluded
-// from the attendance-rate denominator, otherwise every Sunday and public
-// holiday reports a collapse in attendance.
-const NON_WORKING = ['week_off', 'holiday'];
+const statusKey = (r) => {
+  const s = (r.attendance_status || 'absent').toLowerCase();
+  return (s === 'present' && !r.out_time) ? 'sp' : s;
+};
 
 function Pill({ status, out_time }) {
-  const s = (status || 'absent').toLowerCase();
-  // SP = present but missing out-punch (forgot to punch out)
-  const key = (s === 'present' && !out_time) ? 'sp' : s;
-  const { bg, color } = STATUS_COLOR[key] || STATUS_COLOR.absent;
+  const key = statusKey({ attendance_status: status, out_time });
+  const { bg, color, dot } = STATUS_COLOR[key] || STATUS_COLOR.absent;
   return (
-    <span style={{
-      background: bg, color, border: `1px solid ${color}33`,
-      borderRadius: 3, padding: '2px 8px', fontWeight: 700,
-      fontSize: 10, letterSpacing: 0.5, display: 'inline-block',
+    <span title={STATUS_FULL[key] || key} style={{
+      background: bg, color, border: `1px solid ${dot}2E`,
+      borderRadius: 999, padding: '3px 9px 3px 7px', fontWeight: 800,
+      fontSize: 10, letterSpacing: 0.4, display: 'inline-flex', alignItems: 'center', gap: 5,
+      whiteSpace: 'nowrap',
     }}>
+      <span style={{ width: 5, height: 5, borderRadius: '50%', background: dot, flexShrink: 0 }}/>
       {STATUS_LABEL[key] || key.toUpperCase()}
     </span>
   );
 }
 
-function Avatar({ name }) {
-  const initials = (name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  const colors = ['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#06B6D4','#0EA5E9'];
-  const idx = (name || '').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % colors.length;
+function Avatar({ name, size = 32 }) {
+  const initials = (name || '?').split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const palette = ['#2563EB','#0891B2','#059669','#CA8A04','#DC2626','#7C3AED','#DB2777','#0D9488'];
+  const idx = (name || '').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % palette.length;
+  const c = palette[idx];
   return (
     <span style={{
       display:'inline-flex', alignItems:'center', justifyContent:'center',
-      width:30, height:30, borderRadius:'50%', background:colors[idx],
-      color:'#fff', fontSize:11, fontWeight:700, flexShrink:0, letterSpacing:0.5,
+      width:size, height:size, borderRadius:9, flexShrink:0,
+      background:`linear-gradient(140deg, ${c} 0%, ${c}C4 100%)`,
+      color:'#fff', fontSize: size * 0.34, fontWeight:800, letterSpacing:0.3,
+      boxShadow:`0 1px 3px ${c}55`,
     }}>{initials}</span>
   );
 }
 
-function MiniDonut({ pct = 0 }) {
-  const r = 28, cx = 32, cy = 32;
+function Donut({ pct = 0, size = 76 }) {
+  const stroke = 8, r = (size - stroke) / 2, c = size / 2;
   const circ = 2 * Math.PI * r;
-  const filled = Math.min((pct / 100) * circ, circ);
+  const filled = Math.min(Math.max(pct, 0) / 100, 1) * circ;
+  const tone = pct >= 85 ? T.present : pct >= 65 ? T.leave : T.absent;
   return (
-    <svg width={64} height={64} viewBox="0 0 64 64" style={{ flexShrink:0 }}>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#F3F4F6" strokeWidth={7}/>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#10B981" strokeWidth={7}
-        strokeDasharray={`${filled} ${circ - filled}`}
-        strokeLinecap="round"
-        transform={`rotate(-90 ${cx} ${cy})`}/>
-      <text x={cx} y={cy+1} textAnchor="middle" dominantBaseline="middle"
-        fontSize={12} fontWeight={800} fill="#111827">{Math.round(pct)}%</text>
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink:0 }}>
+      <circle cx={c} cy={c} r={r} fill="none" stroke={T.hairSoft} strokeWidth={stroke}/>
+      <circle cx={c} cy={c} r={r} fill="none" stroke={tone} strokeWidth={stroke}
+        strokeDasharray={`${filled} ${circ - filled}`} strokeLinecap="round"
+        transform={`rotate(-90 ${c} ${c})`} style={{ transition:'stroke-dasharray .5s ease' }}/>
+      <text x={c} y={c - 2} textAnchor="middle" dominantBaseline="middle"
+        fontSize={17} fontWeight={800} fill={T.ink} style={{ fontVariantNumeric:'tabular-nums' }}>{Math.round(pct)}</text>
+      <text x={c} y={c + 13} textAnchor="middle" dominantBaseline="middle"
+        fontSize={8} fontWeight={700} fill={T.faint} letterSpacing={0.6}>PERCENT</text>
     </svg>
   );
 }
 
-function AttBar({ present=0, absent=0, half=0, leave=0 }) {
+function AttBar({ present=0, absent=0, half=0, leave=0, height=7 }) {
   const total = (present + absent + half + leave) || 1;
   const segs = [
-    { val: present, color: '#10B981' },
-    { val: absent,  color: '#EF4444' },
-    { val: half,    color: '#6366F1' },
-    { val: leave,   color: '#F59E0B' },
+    { val: present, color: T.present, label: 'Present' },
+    { val: half,    color: T.half,    label: 'Half Day' },
+    { val: leave,   color: T.leave,   label: 'Leave' },
+    { val: absent,  color: T.absent,  label: 'Absent' },
   ];
   return (
-    <div style={{ display:'flex', height:6, borderRadius:4, overflow:'hidden', width:'100%', gap:1 }}>
+    <div style={{ display:'flex', height, borderRadius:99, overflow:'hidden', width:'100%',
+      gap:1.5, background:T.hairSoft }}>
       {segs.map((s, i) => s.val > 0 && (
-        <div key={i} style={{
-          width: `${(s.val / total) * 100}%`, background: s.color, borderRadius:2,
-        }}/>
+        <div key={i} title={`${s.label}: ${s.val}`}
+          style={{ width:`${(s.val / total) * 100}%`, background:s.color, borderRadius:99 }}/>
       ))}
     </div>
   );
 }
 
+/* Working-window bar — plots the in→out span across a 06:00–22:00 day so a late
+   start or early finish is visible at a glance instead of having to compare two
+   timestamps in adjacent columns. */
+const WINDOW_START = 6 * 60, WINDOW_END = 22 * 60;
+// The API formats punches as 'HH12:MI AM' (e.g. "09:15 AM"), so a naive
+// split(':') yields NaN on the minutes and the bar never renders. Accept both
+// that 12-hour form and a plain 24-hour "HH:MM" in case the format changes.
+const toMin = (t) => {
+  if (!t) return null;
+  const m = String(t).trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+  if (!m) return null;
+  let h = Number(m[1]);
+  const min = Number(m[2]);
+  const mer = m[3] && m[3].toUpperCase();
+  if (mer === 'PM' && h !== 12) h += 12;
+  if (mer === 'AM' && h === 12) h = 0;
+  return h * 60 + min;
+};
+
+function WorkWindow({ in_time, out_time, late_minutes }) {
+  const i = toMin(in_time), o = toMin(out_time);
+  if (i == null) return <span style={{ color:'#CBD5E1' }}>—</span>;
+  const span = WINDOW_END - WINDOW_START;
+  const clamp = (v) => Math.min(100, Math.max(0, v));
+  const left  = clamp(((i - WINDOW_START) / span) * 100);
+  const right = o != null ? clamp(((o - WINDOW_START) / span) * 100) : left;
+  const width = Math.max(o != null ? right - left : 2.5, 2.5);
+  const isLate = Number(late_minutes) > 0;
+  const open   = o == null;                       // still open / missing out-punch
+  const tone   = open ? T.single : isLate ? T.leave : T.present;
+  return (
+    <div title={`${in_time || '—'} → ${out_time || 'no out-punch'}`}
+      style={{ position:'relative', height:16, minWidth:96, display:'flex', alignItems:'center' }}>
+      {/* noon tick */}
+      <div style={{ position:'absolute', left:'37.5%', top:2, bottom:2, width:1, background:T.hair }}/>
+      <div style={{ position:'absolute', inset:'6px 0', borderRadius:99, background:T.hairSoft }}/>
+      <div style={{
+        position:'absolute', left:`${left}%`, width:`${width}%`, top:4, height:8,
+        borderRadius:99, background:open ? `repeating-linear-gradient(90deg, ${tone} 0 4px, ${tone}55 4px 8px)` : tone,
+      }}/>
+      <div style={{ position:'absolute', left:`${left}%`, top:1, width:2, height:14,
+        borderRadius:2, background:isLate ? T.absent : tone, transform:'translateX(-1px)' }}/>
+    </div>
+  );
+}
+
+function StatCard({ icon: Icon, label, value, sub, accent, loading, onClick, active }) {
+  return (
+    <div onClick={onClick} style={{
+      background:T.surface, border:`1px solid ${active ? accent : T.hair}`,
+      borderRadius:14, padding:'13px 16px', minWidth:132, flex:'0 0 auto',
+      boxShadow: active ? `0 0 0 3px ${accent}1A` : '0 1px 2px rgba(15,37,68,0.05)',
+      cursor:onClick ? 'pointer' : 'default', position:'relative', overflow:'hidden',
+      transition:'box-shadow .15s ease, border-color .15s ease',
+    }}>
+      <div style={{ position:'absolute', left:0, top:0, bottom:0, width:3, background:accent }}/>
+      <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:7 }}>
+        {Icon && <Icon size={12} color={accent} strokeWidth={2.6}/>}
+        <span style={{ fontSize:10, color:T.muted, fontWeight:700, letterSpacing:0.5, textTransform:'uppercase' }}>
+          {label}
+        </span>
+      </div>
+      <div style={{ fontSize:27, fontWeight:800, color:T.ink, lineHeight:1, fontVariantNumeric:'tabular-nums',
+        letterSpacing:-0.6 }}>
+        {loading ? <span style={{ fontSize:16, color:T.hair }}>—</span> : value}
+      </div>
+      {!loading && sub && (
+        <div style={{ fontSize:10.5, color:T.faint, marginTop:6, fontWeight:600 }}>{sub}</div>
+      )}
+    </div>
+  );
+}
+
+function SkeletonRows({ cols = 21, rows = 8 }) {
+  return Array.from({ length: rows }).map((_, r) => (
+    <tr key={r}>
+      {Array.from({ length: cols }).map((__, c) => (
+        <td key={c} style={{ padding:'11px 12px', borderBottom:`1px solid ${T.hairSoft}` }}>
+          <div style={{
+            height:9, borderRadius:5, width: c === 1 ? '78%' : c === 0 ? 18 : '58%',
+            background:`linear-gradient(90deg, ${T.hairSoft} 25%, #E9EEF6 50%, ${T.hairSoft} 75%)`,
+            backgroundSize:'200% 100%', animation:'shimmer 1.3s linear infinite',
+          }}/>
+        </td>
+      ))}
+    </tr>
+  ));
+}
+
 const COL_KEYS = {
   'EMP ID':      'emp_id',
-  'Name':        'name',
+  'Employee':    'name',
   'Designation': 'designation',
   'Department':  'department',
   'Trade':       'trade',
   'Company':     'company',
   'Project':     'project_name',
-  'P/A':         'attendance_status',
-  'In Time':     'in_time',
-  'Out Time':    'out_time',
-  'Late Min':    'late_minutes',
+  'Status':      'attendance_status',
+  'In':          'in_time',
+  'Out':         'out_time',
+  'Late':        'late_minutes',
   'Hrs':         'hours_worked',
+  'OT':          'overtime_hours',
   'Shift':       'shift',
   'Location':    'location',
-  'Eng/FM/Ch/CM':    'eng_fm_ch_cm',
-  'Incharge':        'incharge_name',
-  'Tower Incharge':  'tower_incharge',
+  'Eng/FM/Ch/CM':   'eng_fm_ch_cm',
+  'Incharge':       'incharge_name',
+  'Tower Incharge': 'tower_incharge',
   'Emp Status':  'status',
   'Reason':      'reason',
 };
@@ -204,6 +330,7 @@ export default function TimesheetReportPage() {
   const [search, setSearch]         = useState('');
   const [statusFilter, setStatusF]  = useState('all');
   const [companyFilter, setCompany] = useState('');
+  const [density, setDensity]       = useState('comfortable'); // comfortable | compact
   const [sendingTest, setSendingTest]     = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
 
@@ -213,6 +340,7 @@ export default function TimesheetReportPage() {
 
   const onMouseDown = (e) => {
     if (e.button !== 0) return;
+    if (e.target.closest('button, a, input, select')) return;
     const el = tableWrapRef.current;
     if (!el) return;
     dragState.current = {
@@ -250,7 +378,7 @@ export default function TimesheetReportPage() {
     if (!sortKey) return rows;
     return [...rows].sort((a, b) => {
       let av = a[sortKey] ?? '', bv = b[sortKey] ?? '';
-      if (sortKey === 'late_minutes' || sortKey === 'hours_worked') {
+      if (sortKey === 'late_minutes' || sortKey === 'hours_worked' || sortKey === 'overtime_hours') {
         av = Number(av)||0; bv = Number(bv)||0;
       } else { av = String(av).toLowerCase(); bv = String(bv).toLowerCase(); }
       if (av < bv) return sortDir === 'asc' ? -1 : 1;
@@ -327,6 +455,15 @@ export default function TimesheetReportPage() {
       if (h > 0) withHours++;
     }
     return { worked, ot, withHours, avg: withHours > 0 ? worked / withHours : 0 };
+  }, [rows]);
+
+  /* Punctuality — average lateness across only those who actually arrived late,
+     so a handful of very late arrivals isn't diluted by everyone on time. */
+  const lateStats = useMemo(() => {
+    const late = rows.filter(r => Number(r.late_minutes) > 0).map(r => Number(r.late_minutes));
+    const totalMin = late.reduce((s, m) => s + m, 0);
+    return { count: late.length, totalMin, avg: late.length ? totalMin / late.length : 0,
+             worst: late.length ? Math.max(...late) : 0 };
   }, [rows]);
 
   /* Totals for the CURRENT filter — the footer previously showed unfiltered
@@ -428,168 +565,189 @@ export default function TimesheetReportPage() {
   // day keeps a tight strip — but on a Sunday the numbers now reconcile to
   // Total Strength instead of 80 people silently vanishing.
   const kpiCards = [
-    { label:'Total Strength', val:summary.total,   accent:'#3B82F6', sub:`${expectedStrength} expected in` },
-    { label:'Present',        val:summary.present, accent:'#10B981', sub: spCount > 0 ? `${spCount} single-punch` : null },
-    { label:'Half Day',       val:summary.half||0, accent:'#6366F1' },
-    { label:'Absent',         val:summary.absent,  accent:'#EF4444' },
-    { label:'On Leave',       val:summary.leave,   accent:'#F59E0B' },
-    ...((summary.week_off || 0) > 0 ? [{ label:'Week Off', val:summary.week_off, accent:'#94A3B8' }] : []),
-    ...((summary.holiday  || 0) > 0 ? [{ label:'Holiday',  val:summary.holiday,  accent:'#8B5CF6' }] : []),
-    { label:'Late Arrivals',  val:lateCount,        accent:'#F97316' },
-    { label:'Man-Hours',      val:hoursStats.worked.toFixed(0), accent:'#0891B2',
-      sub: hoursStats.ot > 0 ? `+${hoursStats.ot.toFixed(0)} OT` : `avg ${hoursStats.avg.toFixed(1)}h` },
+    { key:'all',      icon:Users,         label:'Total Strength', val:summary.total,   accent:T.navyLift, sub:`${expectedStrength} expected in` },
+    { key:'present',  icon:Clock,         label:'Present',        val:summary.present, accent:T.present,  sub: spCount > 0 ? `${spCount} single-punch` : 'full punch pairs' },
+    { key:'half_day', icon:Timer,         label:'Half Day',       val:summary.half||0, accent:T.half },
+    { key:'absent',   icon:AlertTriangle, label:'Absent',         val:summary.absent,  accent:T.absent },
+    { key:'leave',    icon:CalendarDays,  label:'On Leave',       val:summary.leave,   accent:T.leave },
+    ...((summary.week_off || 0) > 0 ? [{ key:'week_off', icon:CalendarDays, label:'Week Off', val:summary.week_off, accent:T.off }] : []),
+    ...((summary.holiday  || 0) > 0 ? [{ key:'holiday',  icon:CalendarDays, label:'Holiday',  val:summary.holiday,  accent:T.holiday }] : []),
+    { key:'late',     icon:AlertTriangle, label:'Late Arrivals',  val:lateCount,       accent:T.single,
+      sub: lateStats.count > 0 ? `avg ${Math.round(lateStats.avg)}m · max ${lateStats.worst}m` : 'all on time' },
+    { key:null,       icon:Timer,         label:'Man-Hours',      val:hoursStats.worked.toFixed(0), accent:T.hours,
+      sub: hoursStats.ot > 0 ? `+${hoursStats.ot.toFixed(0)} OT · avg ${hoursStats.avg.toFixed(1)}h` : `avg ${hoursStats.avg.toFixed(1)}h` },
   ];
 
   const qFilters = [
     { key:'all',      label:'All' },
-    { key:'present',  label:'Present',  color:'#10B981' },
-    { key:'sp',       label:'Single Punch', color:'#F97316' },
-    { key:'late',     label:'Late',     color:'#DC2626' },
-    { key:'absent',   label:'Absent',   color:'#EF4444' },
-    { key:'half_day', label:'Half Day', color:'#6366F1' },
-    { key:'leave',    label:'Leave',    color:'#F59E0B' },
-    ...((summary.week_off || 0) > 0 ? [{ key:'week_off', label:'Week Off', color:'#64748B' }] : []),
-    ...((summary.holiday  || 0) > 0 ? [{ key:'holiday',  label:'Holiday',  color:'#8B5CF6' }] : []),
+    { key:'present',  label:'Present',  color:T.present },
+    { key:'sp',       label:'Single Punch', color:T.single },
+    { key:'late',     label:'Late',     color:T.absent },
+    { key:'absent',   label:'Absent',   color:T.absent },
+    { key:'half_day', label:'Half Day', color:T.half },
+    { key:'leave',    label:'Leave',    color:T.leave },
+    ...((summary.week_off || 0) > 0 ? [{ key:'week_off', label:'Week Off', color:T.off }] : []),
+    ...((summary.holiday  || 0) > 0 ? [{ key:'holiday',  label:'Holiday',  color:T.holiday }] : []),
   ];
 
   const inputStyle = {
-    border:'0.5px solid #D1D5DB', borderRadius:6,
-    padding:'5px 10px', fontSize:13, color:'#374151',
-    background:'#F9FAFB', outline:'none',
+    border:`1px solid ${T.hair}`, borderRadius:9,
+    padding:'7px 11px', fontSize:12.5, color:T.body, fontWeight:600,
+    background:T.surface, outline:'none',
+  };
+  const ghostBtn = {
+    display:'flex', alignItems:'center', gap:6,
+    background:'rgba(255,255,255,0.10)', color:'#fff',
+    border:'1px solid rgba(255,255,255,0.20)',
+    borderRadius:9, padding:'8px 14px', fontSize:12.5, cursor:'pointer', fontWeight:700,
+    backdropFilter:'blur(6px)', whiteSpace:'nowrap',
   };
 
+  const pad = density === 'compact' ? '6px 12px' : '11px 12px';
+  const td = {
+    padding: pad, borderBottom:`1px solid ${T.hairSoft}`,
+    color:T.ink, fontSize:12, verticalAlign:'middle',
+  };
+  const dash = <span style={{ color:'#CBD5E1' }}>—</span>;
+
+  // Column groups — a 21-column sheet is unreadable as one flat band, so the
+  // header is tiered: identity / role / org / attendance / deployment / record.
+  const GROUPS = [
+    { label:'',            span:2, cols:['#','Employee'] },
+    { label:'Role',        span:3, cols:['Designation','Department','Trade'] },
+    { label:'Organisation',span:2, cols:['Company','Project'] },
+    { label:'Attendance',  span:7, cols:['Status','In','Out','Working Window','Late','Hrs','OT'], tint:'#F0F7FF' },
+    { label:'Deployment',  span:5, cols:['Shift','Location','Eng/FM/Ch/CM','Incharge','Tower Incharge'] },
+    { label:'Record',      span:2, cols:['Emp Status','Reason'] },
+  ];
+  const FLAT_COLS = GROUPS.flatMap(g => g.cols);
+
   return (
-    <div style={{ background:'#F8FAFC', minHeight:'100vh' }}>
+    <div style={{ background:T.canvas, minHeight:'100vh' }}>
       <style>{PRINT_CSS}</style>
 
-      {/* ── TOP HEADER BAR ── */}
+      {/* ── COMMAND BAR ── */}
       <div className="no-print" style={{
         position:'relative', overflow:'hidden',
-        background:'linear-gradient(135deg, #1B3A6B 0%, #0F2544 100%)',
-        padding:'16px 24px', display:'flex', alignItems:'center',
-        justifyContent:'space-between', gap:12,
+        background:`linear-gradient(128deg, ${T.navyMid} 0%, ${T.navy} 62%, #0A1B33 100%)`,
+        padding:'18px 26px 20px',
       }}>
-        <div style={{ position:'absolute', inset:0, opacity:0.07, pointerEvents:'none',
-          backgroundImage:'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize:'16px 16px' }}/>
-        <div style={{ position:'absolute', right:-48, top:-48, width:200, height:200,
-          borderRadius:'50%', background:'rgba(255,255,255,0.05)', pointerEvents:'none' }}/>
-        <div style={{ position:'relative' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:5, marginBottom:4 }}>
-            <span style={{ fontSize:11, color:'rgba(255,255,255,0.45)' }}>HR Admin</span>
-            <ChevronRight size={11} color="rgba(255,255,255,0.35)"/>
-            <span style={{ fontSize:11, color:'rgba(255,255,255,0.45)' }}>Attendance</span>
-            <ChevronRight size={11} color="rgba(255,255,255,0.35)"/>
-            <span style={{ fontSize:11, color:'#93C5FD', fontWeight:600 }}>Daily Timesheet</span>
+        <div style={{ position:'absolute', inset:0, opacity:0.055, pointerEvents:'none',
+          backgroundImage:'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize:'18px 18px' }}/>
+        <div style={{ position:'absolute', right:-70, top:-110, width:280, height:280,
+          borderRadius:'50%', background:'radial-gradient(circle, rgba(96,165,250,0.20) 0%, transparent 68%)',
+          pointerEvents:'none' }}/>
+        <div style={{ position:'absolute', left:0, right:0, bottom:0, height:1,
+          background:'linear-gradient(90deg, transparent, rgba(147,197,253,0.45), transparent)' }}/>
+
+        <div style={{ position:'relative', display:'flex', alignItems:'flex-start',
+          justifyContent:'space-between', gap:16, flexWrap:'wrap' }}>
+          <div>
+            <div style={{ display:'flex', alignItems:'center', gap:5, marginBottom:6 }}>
+              <span style={{ fontSize:10.5, color:'rgba(255,255,255,0.42)', fontWeight:600 }}>HR Admin</span>
+              <ChevronRight size={10} color="rgba(255,255,255,0.3)"/>
+              <span style={{ fontSize:10.5, color:'rgba(255,255,255,0.42)', fontWeight:600 }}>Attendance</span>
+              <ChevronRight size={10} color="rgba(255,255,255,0.3)"/>
+              <span style={{ fontSize:10.5, color:'#93C5FD', fontWeight:700 }}>Daily Timesheet</span>
+            </div>
+            <h2 style={{ margin:0, fontSize:25, fontWeight:800, color:'#fff', letterSpacing:-0.7, lineHeight:1.1 }}>
+              Daily Timesheet Report
+            </h2>
+            <div style={{ display:'flex', alignItems:'center', gap:9, marginTop:8, flexWrap:'wrap' }}>
+              <span style={{ fontSize:12, color:'rgba(255,255,255,0.72)', fontWeight:600 }}>{fmtDate(date)}</span>
+              {meta.projectName && (
+                <>
+                  <span style={{ color:'rgba(255,255,255,0.22)' }}>·</span>
+                  <span style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:12,
+                    color:'#fff', fontWeight:700 }}>
+                    <Building2 size={11} color="rgba(255,255,255,0.6)"/>{meta.projectName}
+                    {meta.projectCode ? <span style={{ color:'rgba(255,255,255,0.45)', fontWeight:600 }}>({meta.projectCode})</span> : null}
+                  </span>
+                </>
+              )}
+              {meta.holidayName && (
+                <span style={{ background:'rgba(139,92,246,0.22)', border:'1px solid rgba(196,181,253,0.38)',
+                  color:'#DDD6FE', borderRadius:999, padding:'3px 11px', fontSize:10.5, fontWeight:800,
+                  letterSpacing:0.3 }}>
+                  PUBLIC HOLIDAY — {meta.holidayName}
+                </span>
+              )}
+              {!meta.holidayName && meta.isSunday && (
+                <span style={{ background:'rgba(148,163,184,0.22)', border:'1px solid rgba(203,213,225,0.38)',
+                  color:'#E2E8F0', borderRadius:999, padding:'3px 11px', fontSize:10.5, fontWeight:800,
+                  letterSpacing:0.3 }}>
+                  SUNDAY — WEEK OFF
+                </span>
+              )}
+            </div>
           </div>
-          <h2 style={{ margin:0, fontSize:22, fontWeight:800, color:'#fff', letterSpacing:-0.4 }}>
-            Daily Timesheet Report
-          </h2>
-          <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:5, flexWrap:'wrap' }}>
-            <span style={{ fontSize:12, color:'rgba(255,255,255,0.7)' }}>{fmtDate(date)}</span>
-            {meta.projectName && (
-              <>
-                <span style={{ color:'rgba(255,255,255,0.25)' }}>·</span>
-                <span style={{ fontSize:12, color:'#fff', fontWeight:600 }}>{meta.projectName}</span>
-              </>
-            )}
-            {meta.holidayName && (
-              <span style={{ background:'rgba(139,92,246,0.25)', border:'1px solid rgba(196,181,253,0.4)',
-                color:'#DDD6FE', borderRadius:999, padding:'2px 10px', fontSize:11, fontWeight:700 }}>
-                Public Holiday — {meta.holidayName}
-              </span>
-            )}
-            {!meta.holidayName && meta.isSunday && (
-              <span style={{ background:'rgba(148,163,184,0.25)', border:'1px solid rgba(203,213,225,0.4)',
-                color:'#E2E8F0', borderRadius:999, padding:'2px 10px', fontSize:11, fontWeight:700 }}>
-                Sunday — Week Off
-              </span>
-            )}
+
+          <div style={{ display:'flex', gap:8, flexShrink:0, flexWrap:'wrap', justifyContent:'flex-end' }}>
+            <button onClick={load} disabled={loading} style={{ ...ghostBtn, opacity: loading ? 0.6 : 1 }}>
+              <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }}/> Refresh
+            </button>
+            <button onClick={handleExport} style={ghostBtn}>
+              <Download size={13}/> Export CSV
+            </button>
+            <button onClick={handleSendTestEmail} disabled={sendingTest}
+              title="Sends today's report to your own email — preview of the automated daily send"
+              style={{ ...ghostBtn, cursor: sendingTest ? 'wait' : 'pointer', opacity: sendingTest ? 0.6 : 1 }}>
+              <Mail size={13}/> {sendingTest ? 'Sending…' : 'Test Email'}
+            </button>
+            <button onClick={() => setShowConfigModal(true)}
+              title="Manage which projects get an automated daily timesheet email, and who receives each one"
+              style={ghostBtn}>
+              <Settings size={13}/> Recipients
+            </button>
+            <button onClick={() => window.print()} style={{
+              display:'flex', alignItems:'center', gap:6,
+              background:'#fff', color:T.navyMid, border:'none',
+              borderRadius:9, padding:'8px 17px', fontSize:12.5, cursor:'pointer', fontWeight:800,
+              boxShadow:'0 2px 10px rgba(0,0,0,0.18)',
+            }}>
+              <Printer size={13}/> Print / PDF
+            </button>
           </div>
-        </div>
-        <div style={{ position:'relative', display:'flex', gap:8, flexShrink:0 }}>
-          <button onClick={load} disabled={loading} style={{
-            display:'flex', alignItems:'center', gap:5,
-            background:'rgba(255,255,255,0.12)', color:'#fff', border:'1px solid rgba(255,255,255,0.22)',
-            borderRadius:8, padding:'7px 14px', fontSize:13, cursor:'pointer', fontWeight:600,
-            opacity: loading ? 0.6 : 1,
-          }}>
-            <RefreshCw size={13} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }}/> Refresh
-          </button>
-          <button onClick={handleExport} style={{
-            display:'flex', alignItems:'center', gap:5,
-            background:'rgba(255,255,255,0.12)', color:'#fff', border:'1px solid rgba(255,255,255,0.22)',
-            borderRadius:8, padding:'7px 14px', fontSize:13, cursor:'pointer', fontWeight:600,
-          }}>
-            <Download size={13}/> Export CSV
-          </button>
-          <button onClick={handleSendTestEmail} disabled={sendingTest}
-            title="Sends today's report to your own email — preview of the automated daily send"
-            style={{
-              display:'flex', alignItems:'center', gap:5,
-              background:'rgba(255,255,255,0.12)', color:'#fff', border:'1px solid rgba(255,255,255,0.22)',
-              borderRadius:8, padding:'7px 14px', fontSize:13, fontWeight:600,
-              cursor: sendingTest ? 'wait' : 'pointer', opacity: sendingTest ? 0.6 : 1,
-            }}>
-            <Mail size={13}/> {sendingTest ? 'Sending…' : 'Send Test Email'}
-          </button>
-          <button onClick={() => setShowConfigModal(true)}
-            title="Manage which projects get an automated daily timesheet email, and who receives each one"
-            style={{
-              display:'flex', alignItems:'center', gap:5,
-              background:'rgba(255,255,255,0.12)', color:'#fff', border:'1px solid rgba(255,255,255,0.22)',
-              borderRadius:8, padding:'7px 14px', fontSize:13, cursor:'pointer', fontWeight:600,
-            }}>
-            <Settings size={13}/> Email Recipients
-          </button>
-          <button onClick={() => window.print()} style={{
-            display:'flex', alignItems:'center', gap:5,
-            background:'#fff', color:'#1B3A6B', border:'none',
-            borderRadius:8, padding:'7px 16px', fontSize:13, cursor:'pointer', fontWeight:800,
-          }}>
-            <Printer size={13}/> Print / PDF
-          </button>
         </div>
       </div>
 
       {/* ── FILTER BAR ── */}
       <div className="no-print" style={{
-        background:'#fff', borderBottom:'0.5px solid #E5E7EB',
-        padding:'10px 24px', display:'flex', alignItems:'center', gap:10, flexWrap:'wrap',
+        background:T.surface, borderBottom:`1px solid ${T.hair}`,
+        padding:'11px 26px', display:'flex', alignItems:'center', gap:9, flexWrap:'wrap',
+        boxShadow:'0 1px 2px rgba(15,37,68,0.03)',
       }}>
-        <Filter size={13} color="#6B7280"/>
-        <span style={{ fontSize:12, color:'#6B7280', fontWeight:500, marginRight:2 }}>Filters:</span>
+        <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:10,
+          color:T.faint, fontWeight:800, letterSpacing:0.7, textTransform:'uppercase', marginRight:2 }}>
+          <Filter size={12}/> Filters
+        </span>
         <input type="date" value={date} onChange={e => setDate(e.target.value)} style={inputStyle}/>
-        <select value={category} onChange={e => { setCategory(e.target.value); setCompany(''); }} style={inputStyle}>
+        <select value={category} onChange={e => { setCategory(e.target.value); setCompany(''); }}
+          style={{ ...inputStyle, cursor:'pointer' }}>
           <option value="staff">BCIM Staff</option>
           <option value="labour">SC / Labour Workers</option>
           <option value="all">All Employees</option>
         </select>
 
-        {/* Company filter — populated from loaded rows */}
-        <select
-          value={companyFilter}
-          onChange={e => setCompany(e.target.value)}
-          style={{ ...inputStyle, minWidth:190, maxWidth:260 }}
-          title="Filter by contractor / company"
-        >
+        <select value={companyFilter} onChange={e => setCompany(e.target.value)}
+          style={{ ...inputStyle, minWidth:180, maxWidth:250, cursor:'pointer' }}
+          title="Filter by contractor / company">
           <option value="">All Companies</option>
-          {availableCompanies.map(c => (
-            <option key={c} value={c}>{c}</option>
-          ))}
+          {availableCompanies.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
 
         {companyFilter && (
           <button onClick={() => setCompany('')} style={{
-            display:'flex', alignItems:'center', gap:3,
-            background:'#FEF2F2', color:'#B91C1C', border:'0.5px solid #FECACA',
-            borderRadius:6, padding:'4px 10px', fontSize:12, cursor:'pointer',
+            display:'flex', alignItems:'center', gap:4,
+            background:'#FEF2F2', color:'#B91C1C', border:'1px solid #FECACA',
+            borderRadius:8, padding:'6px 11px', fontSize:11.5, cursor:'pointer', fontWeight:700,
           }}>
             <X size={11}/> {companyFilter}
           </button>
         )}
 
         <select value={projectFilter} onChange={e => setProject(e.target.value)}
-          style={{ ...inputStyle, minWidth:190 }}>
+          style={{ ...inputStyle, minWidth:190, cursor:'pointer' }}>
           <option value="">All Projects</option>
           <option value="HEAD_OFFICE">Head Office</option>
           {projects.map(p => (
@@ -598,57 +756,69 @@ export default function TimesheetReportPage() {
             </option>
           ))}
         </select>
+
+        {/* Density toggle */}
+        <div style={{ marginLeft:'auto', display:'flex', gap:2, background:T.hairSoft,
+          borderRadius:9, padding:3 }}>
+          {[
+            { k:'comfortable', icon:Rows3,     t:'Comfortable rows' },
+            { k:'compact',     icon:LayoutList, t:'Compact rows' },
+          ].map(d => (
+            <button key={d.k} onClick={() => setDensity(d.k)} title={d.t} style={{
+              display:'flex', alignItems:'center', justifyContent:'center',
+              width:30, height:26, borderRadius:7, cursor:'pointer',
+              border:'none', background: density === d.k ? T.surface : 'transparent',
+              color: density === d.k ? T.navyMid : T.faint,
+              boxShadow: density === d.k ? '0 1px 3px rgba(15,37,68,0.12)' : 'none',
+            }}>
+              <d.icon size={13}/>
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* ── KPI + ANALYTICS ROW ── */}
-      <div className="no-print" style={{ padding:'16px 24px 0', display:'flex', gap:12, flexWrap:'wrap' }}>
-        {/* KPI Cards */}
+      {/* ── KPI RAIL ── */}
+      <div className="no-print" style={{ padding:'18px 26px 0', display:'flex', gap:11,
+        flexWrap:'wrap', alignItems:'stretch' }}>
         {kpiCards.map(k => (
-          <div key={k.label} style={{
-            background:'#fff', border:'0.5px solid #E5E7EB',
-            borderLeft:`3px solid ${k.accent}`, borderRadius:10,
-            padding:'12px 18px', minWidth:118, flex:'0 0 auto',
-            boxShadow:'0 1px 3px rgba(0,0,0,0.04)',
-          }}>
-            <div style={{ fontSize:11, color:'#6B7280', fontWeight:500, marginBottom:4 }}>{k.label}</div>
-            <div style={{ fontSize:26, fontWeight:800, color:'#111827', lineHeight:1, fontVariantNumeric:'tabular-nums' }}>
-              {loading ? <span style={{ fontSize:16, color:'#E5E7EB' }}>—</span> : k.val}
-            </div>
-            {!loading && k.sub && (
-              <div style={{ fontSize:10, color:'#9CA3AF', marginTop:4 }}>{k.sub}</div>
-            )}
-          </div>
+          <StatCard key={k.label} icon={k.icon} label={k.label} value={k.val} sub={k.sub}
+            accent={k.accent} loading={loading}
+            active={k.key && statusFilter === k.key}
+            onClick={k.key ? () => setStatusF(statusFilter === k.key ? 'all' : k.key) : undefined}/>
         ))}
 
-        {/* Attendance % Donut */}
+        {/* Attendance rate panel */}
         {!loading && summary.total > 0 && (
           <div style={{
-            background:'#fff', border:'0.5px solid #E5E7EB', borderRadius:10,
-            padding:'12px 18px', display:'flex', alignItems:'center', gap:14, flex:'0 0 auto',
+            background:T.surface, border:`1px solid ${T.hair}`, borderRadius:14,
+            padding:'13px 18px', display:'flex', alignItems:'center', gap:16, flex:'1 1 300px',
+            minWidth:290, boxShadow:'0 1px 2px rgba(15,37,68,0.05)',
           }}>
-            <MiniDonut pct={attendancePct}/>
-            <div>
-              <div style={{ fontSize:11, color:'#6B7280', fontWeight:500, marginBottom:2 }}>Attendance Rate</div>
-              <div style={{ fontSize:10, color:'#9CA3AF', marginBottom:5 }}>
+            <Donut pct={attendancePct}/>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:10, color:T.muted, fontWeight:800, letterSpacing:0.6,
+                textTransform:'uppercase', marginBottom:3 }}>Attendance Rate</div>
+              <div style={{ fontSize:10.5, color:T.faint, marginBottom:9, fontWeight:600 }}>
                 of {expectedStrength} expected
-                {(summary.week_off || summary.holiday) > 0 && (
+                {((summary.week_off||0) + (summary.holiday||0)) > 0 && (
                   <span> · {(summary.week_off||0) + (summary.holiday||0)} off-duty excluded</span>
                 )}
               </div>
-              <AttBar
-                present={summary.present} absent={summary.absent}
-                half={summary.half||0} leave={summary.leave}
-              />
-              <div style={{ display:'flex', gap:8, marginTop:6 }}>
+              <AttBar present={summary.present} absent={summary.absent}
+                half={summary.half||0} leave={summary.leave}/>
+              <div style={{ display:'flex', gap:11, marginTop:9, flexWrap:'wrap' }}>
                 {[
-                  { label:'P',  color:'#10B981', val:summary.present },
-                  { label:'SP', color:'#F97316', val:rows.filter(r=>r.attendance_status==='present'&&!r.out_time).length },
-                  { label:'A',  color:'#EF4444', val:summary.absent },
-                  { label:'HD', color:'#6366F1', val:summary.half||0 },
-                  { label:'L',  color:'#F59E0B', val:summary.leave },
+                  { label:'Present',  color:T.present, val:summary.present },
+                  { label:'Single',   color:T.single,  val:spCount },
+                  { label:'Half',     color:T.half,    val:summary.half||0 },
+                  { label:'Leave',    color:T.leave,   val:summary.leave },
+                  { label:'Absent',   color:T.absent,  val:summary.absent },
                 ].map(s => (
-                  <span key={s.label} style={{ fontSize:10, color:'#374151' }}>
-                    <span style={{ color:s.color, fontWeight:700 }}>{s.label}</span> {s.val}
+                  <span key={s.label} style={{ display:'inline-flex', alignItems:'center', gap:4,
+                    fontSize:10.5, color:T.body, fontWeight:600 }}>
+                    <span style={{ width:6, height:6, borderRadius:'50%', background:s.color }}/>
+                    {s.label}
+                    <b style={{ color:T.ink, fontVariantNumeric:'tabular-nums' }}>{s.val}</b>
                   </span>
                 ))}
               </div>
@@ -659,73 +829,89 @@ export default function TimesheetReportPage() {
 
       {/* ── DEPARTMENT BREAKDOWN ── */}
       {!loading && deptBreakdown.length > 0 && (
-        <div className="no-print" style={{ padding:'12px 24px 0', display:'flex', gap:10, flexWrap:'wrap' }}>
-          {deptBreakdown.slice(0, 6).map(d => (
-            <div key={d.dept} style={{
-              background:'#fff', border:'0.5px solid #E5E7EB', borderRadius:8,
-              padding:'8px 14px', minWidth:140, flex:'0 0 auto',
-            }}>
-              <div style={{ fontSize:10, color:'#6B7280', fontWeight:600, marginBottom:4,
-                whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:160 }}>
-                {d.dept}
-              </div>
-              <AttBar present={d.present} absent={d.absent} half={d.half} leave={d.leave}/>
-              <div style={{ display:'flex', gap:6, marginTop:5 }}>
-                <span style={{ fontSize:10, color:'#10B981', fontWeight:700 }}>{d.present}P</span>
-                <span style={{ fontSize:10, color:'#EF4444', fontWeight:700 }}>{d.absent}A</span>
-                {d.half > 0 && <span style={{ fontSize:10, color:'#6366F1', fontWeight:700 }}>{d.half}HD</span>}
-                {d.leave > 0 && <span style={{ fontSize:10, color:'#F59E0B', fontWeight:700 }}>{d.leave}L</span>}
-                <span style={{ fontSize:10, color:'#9CA3AF', marginLeft:'auto' }}>{d.total}</span>
-              </div>
-            </div>
-          ))}
+        <div className="no-print" style={{ padding:'14px 26px 0' }}>
+          <div style={{ fontSize:10, color:T.faint, fontWeight:800, letterSpacing:0.7,
+            textTransform:'uppercase', marginBottom:8 }}>
+            Department Breakdown
+          </div>
+          <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+            {deptBreakdown.slice(0, 8).map(d => {
+              const rate = d.total ? Math.round(((d.present + d.half * 0.5) / d.total) * 100) : 0;
+              return (
+                <div key={d.dept} style={{
+                  background:T.surface, border:`1px solid ${T.hair}`, borderRadius:12,
+                  padding:'11px 14px', minWidth:168, flex:'0 0 auto',
+                  boxShadow:'0 1px 2px rgba(15,37,68,0.04)',
+                }}>
+                  <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between',
+                    gap:8, marginBottom:7 }}>
+                    <span style={{ fontSize:11.5, color:T.ink, fontWeight:700,
+                      whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:120 }}
+                      title={d.dept}>{d.dept}</span>
+                    <span style={{ fontSize:11, fontWeight:800, fontVariantNumeric:'tabular-nums',
+                      color: rate >= 85 ? T.present : rate >= 65 ? T.leave : T.absent }}>{rate}%</span>
+                  </div>
+                  <AttBar present={d.present} absent={d.absent} half={d.half} leave={d.leave} height={6}/>
+                  <div style={{ display:'flex', gap:7, marginTop:7, alignItems:'center' }}>
+                    <span style={{ fontSize:10, color:T.present, fontWeight:800 }}>{d.present}P</span>
+                    {d.half  > 0 && <span style={{ fontSize:10, color:T.half,  fontWeight:800 }}>{d.half}HD</span>}
+                    {d.leave > 0 && <span style={{ fontSize:10, color:T.leave, fontWeight:800 }}>{d.leave}L</span>}
+                    <span style={{ fontSize:10, color:T.absent, fontWeight:800 }}>{d.absent}A</span>
+                    <span style={{ fontSize:10, color:T.faint, marginLeft:'auto', fontWeight:600 }}>{d.total}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
       {/* ── SEARCH + QUICK FILTERS ── */}
       <div className="no-print" style={{
-        padding:'12px 24px 8px', display:'flex', alignItems:'center', gap:10, flexWrap:'wrap',
+        padding:'16px 26px 10px', display:'flex', alignItems:'center', gap:10, flexWrap:'wrap',
       }}>
-        {/* Search box */}
         <div style={{ position:'relative', flex:'0 0 auto' }}>
-          <Search size={13} color="#9CA3AF" style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)' }}/>
+          <Search size={13} color={T.faint} style={{ position:'absolute', left:11, top:'50%', transform:'translateY(-50%)' }}/>
           <input
             type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search name, EMP ID, dept…"
+            placeholder="Search name, EMP ID, department…"
             style={{
-              border:'0.5px solid #D1D5DB', borderRadius:6,
-              padding:'6px 30px 6px 28px', fontSize:13, color:'#374151',
-              background:'#fff', outline:'none', width:220,
+              border:`1px solid ${T.hair}`, borderRadius:9,
+              padding:'8px 32px 8px 31px', fontSize:12.5, color:T.body, fontWeight:600,
+              background:T.surface, outline:'none', width:250,
             }}
           />
           {search && (
             <button onClick={() => setSearch('')} style={{
-              position:'absolute', right:7, top:'50%', transform:'translateY(-50%)',
-              background:'none', border:'none', cursor:'pointer', padding:0,
-              display:'flex', alignItems:'center',
+              position:'absolute', right:9, top:'50%', transform:'translateY(-50%)',
+              background:'none', border:'none', cursor:'pointer', padding:0, display:'flex',
             }}>
-              <X size={12} color="#9CA3AF"/>
+              <X size={12} color={T.faint}/>
             </button>
           )}
         </div>
 
-        {/* Status quick filters */}
-        <div style={{ display:'flex', gap:4 }}>
-          {qFilters.map(f => (
-            <button key={f.key} onClick={() => setStatusF(f.key)} style={{
-              border: statusFilter === f.key ? `1.5px solid ${f.color || '#1A56DB'}` : '0.5px solid #E5E7EB',
-              background: statusFilter === f.key ? (f.color ? `${f.color}15` : '#EFF6FF') : '#fff',
-              color: statusFilter === f.key ? (f.color || '#1A56DB') : '#6B7280',
-              borderRadius:6, padding:'4px 12px', fontSize:12, cursor:'pointer',
-              fontWeight: statusFilter === f.key ? 700 : 500,
-            }}>
-              {f.label}
-            </button>
-          ))}
+        <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
+          {qFilters.map(f => {
+            const on = statusFilter === f.key;
+            return (
+              <button key={f.key} onClick={() => setStatusF(f.key)} style={{
+                border: on ? `1px solid ${f.color || T.navyLift}` : `1px solid ${T.hair}`,
+                background: on ? `${f.color || T.navyLift}12` : T.surface,
+                color: on ? (f.color || T.navyLift) : T.muted,
+                borderRadius:8, padding:'6px 13px', fontSize:11.5, cursor:'pointer',
+                fontWeight: on ? 800 : 600, display:'inline-flex', alignItems:'center', gap:6,
+                transition:'all .12s ease',
+              }}>
+                {f.color && <span style={{ width:6, height:6, borderRadius:'50%', background:f.color }}/>}
+                {f.label}
+              </button>
+            );
+          })}
         </div>
 
-        {/* Row count */}
-        <span style={{ fontSize:12, color:'#9CA3AF', marginLeft:'auto' }}>
+        <span style={{ fontSize:11.5, color:T.faint, marginLeft:'auto', fontWeight:600,
+          fontVariantNumeric:'tabular-nums' }}>
           {loading ? 'Loading…' : (
             filteredRows.length === rows.length
               ? `${rows.length} records`
@@ -735,7 +921,7 @@ export default function TimesheetReportPage() {
       </div>
 
       {/* ── PRINTABLE DOCUMENT ── */}
-      <div id="ts-print-root" style={{ padding:'0 24px 32px' }}>
+      <div id="ts-print-root" style={{ padding:'0 26px 36px' }}>
 
         {/* PRINT HEADER */}
         <div className="print-only" style={{
@@ -784,202 +970,285 @@ export default function TimesheetReportPage() {
           </div>
         </div>
 
-        {/* LOADING / ERROR */}
-        {loading && (
-          <div className="no-print" style={{ textAlign:'center', padding:56 }}>
-            <div style={{ display:'inline-flex', flexDirection:'column', alignItems:'center', gap:10 }}>
-              <div style={{
-                width:32, height:32, borderRadius:'50%',
-                border:'3px solid #E5E7EB', borderTopColor:'#1A56DB',
-                animation:'spin 0.8s linear infinite',
-              }}/>
-              <span style={{ fontSize:13, color:'#6B7280' }}>Loading attendance data…</span>
-            </div>
-            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-          </div>
-        )}
+        {/* ERROR */}
         {error && (
           <div style={{
-            background:'#FEF2F2', border:'0.5px solid #FECACA', borderRadius:8,
-            padding:16, color:'#B91C1C', margin:'16px 0',
+            background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:12,
+            padding:'14px 18px', color:'#B91C1C', margin:'16px 0', fontSize:13, fontWeight:600,
+            display:'flex', alignItems:'center', gap:9,
           }}>
-            {error}
+            <AlertTriangle size={16}/> {error}
           </div>
         )}
 
         {/* ── TABLE ── */}
-        {!loading && !error && (
-          <div
-            ref={tableWrapRef}
-            className="ts-table-wrap ts-scroll"
-            onMouseDown={onMouseDown}
-            onMouseMove={onMouseMove}
-            onMouseUp={onMouseUp}
-            onMouseLeave={onMouseUp}
-            style={{ overflowX:'auto', overflowY:'auto', maxHeight:'65vh', marginTop:8, cursor:'grab' }}
-          >
-            <table className="print-table" style={{
-              borderCollapse:'collapse', width:'100%', fontSize:12,
-              background:'#fff', borderRadius:10,
-              boxShadow:'0 1px 6px rgba(0,0,0,0.05)',
-            }}>
-              <thead>
-                <tr style={{
-                  background:'#F9FAFB',
-                  position:'sticky', top:0, zIndex:2,
-                  boxShadow:'0 1px 0 #E5E7EB',
-                }}>
-                  {['#','EMP ID','Name','Designation','Department','Trade','Company','Project',
-                    'P/A','In Time','Out Time','Late Min','Hrs','OT','Shift','Location',
-                    'Eng/FM/Ch/CM','Incharge','Tower Incharge','Emp Status','Reason',
-                  ].map(h => {
-                    const key = COL_KEYS[h];
-                    const active = sortKey === key;
-                    return (
-                      <th key={h} onClick={() => handleSort(h)} style={{
-                        padding:'9px 10px', textAlign:'left',
-                        fontWeight:600, fontSize:11,
-                        color: active ? '#1A56DB' : '#6B7280',
-                        background: active ? '#EFF6FF' : '#F9FAFB',
-                        cursor: key ? 'pointer' : 'default',
-                        userSelect:'none', whiteSpace:'nowrap',
-                      }}>
-                        <span style={{ display:'flex', alignItems:'center', gap:3 }}>
-                          {h}
-                          {key && (
-                            <span style={{ opacity: active ? 1 : 0.3, fontSize:9 }}>
-                              {active ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}
-                            </span>
-                          )}
-                        </span>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRows.length === 0 ? (
+        {!error && (
+          <div style={{
+            background:T.surface, borderRadius:14, border:`1px solid ${T.hair}`,
+            boxShadow:'0 1px 3px rgba(15,37,68,0.06)', overflow:'hidden',
+          }}>
+            <div
+              ref={tableWrapRef}
+              className="ts-table-wrap ts-scroll"
+              onMouseDown={onMouseDown}
+              onMouseMove={onMouseMove}
+              onMouseUp={onMouseUp}
+              onMouseLeave={onMouseUp}
+              style={{ overflowX:'auto', overflowY:'auto', maxHeight:'64vh', cursor:'grab' }}
+            >
+              <table className="print-table" style={{
+                borderCollapse:'separate', borderSpacing:0, width:'100%', fontSize:12,
+              }}>
+                <thead>
+                  {/* Tier 1 — column groups */}
                   <tr>
-                    <td colSpan={21} style={{ textAlign:'center', padding:56, color:'#9CA3AF', fontSize:13 }}>
-                      {rows.length === 0 ? `No records found for ${date}` : 'No records match your filter'}
-                    </td>
+                    {GROUPS.map((g, gi) => (
+                      <th key={gi} colSpan={g.span} style={{
+                        padding: g.label ? '7px 12px' : 0,
+                        background: g.tint || '#FBFCFE',
+                        borderBottom:`1px solid ${T.hair}`,
+                        borderRight: gi < GROUPS.length - 1 ? `1px solid ${T.hair}` : 'none',
+                        position:'sticky', top:0, zIndex:3,
+                        textAlign:'left', fontSize:9, fontWeight:800, letterSpacing:0.8,
+                        color: g.tint ? T.navyLift : T.faint, textTransform:'uppercase',
+                        whiteSpace:'nowrap',
+                      }}>
+                        {g.label}
+                      </th>
+                    ))}
                   </tr>
-                ) : filteredRows.map((r, i) => {
-                  const isLate = Number(r.late_minutes) > 0;
-                  return (
-                    <tr key={r.user_id || i} style={{
-                      background: i % 2 === 0 ? '#fff' : '#FAFAFA',
-                      borderBottom:'0.5px solid #F3F4F6',
-                      borderLeft: isLate ? '3px solid #FCA5A5' : '3px solid transparent',
-                    }}>
-                      <td style={td}><span style={{ color:'#C4C9D4', fontSize:11 }}>{i+1}</span></td>
-                      <td style={{ ...td, fontWeight:600, color:'#1A56DB', fontSize:11, whiteSpace:'nowrap' }}>
-                        {r.emp_id || '—'}
-                      </td>
-                      <td style={{ ...td, whiteSpace:'nowrap' }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:9 }}>
-                          <Avatar name={r.name}/>
-                          <div>
-                            <div style={{ fontWeight:600, color:'#111827', fontSize:12, lineHeight:1.3 }}>{r.name}</div>
-                            <div style={{ fontSize:10, color:'#9CA3AF' }}>{r.designation}</div>
+                  {/* Tier 2 — sortable column names */}
+                  <tr>
+                    {FLAT_COLS.map(h => {
+                      const key = COL_KEYS[h];
+                      const active = sortKey === key;
+                      const inAtt = GROUPS.find(g => g.tint && g.cols.includes(h));
+                      return (
+                        <th key={h} onClick={() => handleSort(h)} style={{
+                          padding:'9px 12px', textAlign:'left',
+                          fontWeight:700, fontSize:10.5,
+                          color: active ? T.navyLift : T.muted,
+                          background: active ? '#EAF2FE' : (inAtt ? '#F7FBFF' : '#FBFCFE'),
+                          borderBottom:`1px solid ${T.hair}`,
+                          cursor: key ? 'pointer' : 'default',
+                          userSelect:'none', whiteSpace:'nowrap',
+                          position:'sticky', top:27, zIndex:2,
+                        }}>
+                          <span style={{ display:'flex', alignItems:'center', gap:4 }}>
+                            {h}
+                            {key && (
+                              <span style={{ opacity: active ? 1 : 0.28, fontSize:8 }}>
+                                {active ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}
+                              </span>
+                            )}
+                          </span>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <SkeletonRows cols={FLAT_COLS.length} rows={9}/>
+                  ) : filteredRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={FLAT_COLS.length} style={{ textAlign:'center', padding:'64px 20px' }}>
+                        <div style={{ display:'inline-flex', flexDirection:'column', alignItems:'center', gap:10 }}>
+                          <div style={{ width:44, height:44, borderRadius:12, background:T.hairSoft,
+                            display:'flex', alignItems:'center', justifyContent:'center' }}>
+                            <Users size={19} color={T.faint}/>
                           </div>
+                          <div style={{ fontSize:13.5, fontWeight:700, color:T.body }}>
+                            {rows.length === 0 ? 'No attendance records' : 'No matching records'}
+                          </div>
+                          <div style={{ fontSize:12, color:T.faint, maxWidth:320 }}>
+                            {rows.length === 0
+                              ? `Nothing was logged for ${fmtDate(date)} in this category.`
+                              : 'Try clearing the search box or switching back to the All filter.'}
+                          </div>
+                          {rows.length > 0 && (
+                            <button onClick={() => { setSearch(''); setStatusF('all'); setCompany(''); }}
+                              style={{ marginTop:4, border:`1px solid ${T.hair}`, background:T.surface,
+                                color:T.navyLift, borderRadius:8, padding:'6px 14px',
+                                fontSize:12, fontWeight:700, cursor:'pointer' }}>
+                              Clear filters
+                            </button>
+                          )}
                         </div>
                       </td>
-                      <td style={{ ...td, color:'#6B7280', fontSize:11 }}>{r.designation}</td>
-                      <td style={{ ...td, color:'#374151' }}>{r.department}</td>
-                      <td style={{ ...td, color:'#6B7280' }}>{r.trade || <span style={{ color:'#D1D5DB' }}>—</span>}</td>
-                      <td style={td}>
-                        <span style={{
-                          fontSize:10, fontWeight:700, letterSpacing:0.3,
-                          background: r.company?.toLowerCase().includes('bcim') ? '#EFF6FF' : '#FFF7ED',
-                          color: r.company?.toLowerCase().includes('bcim') ? '#1D4ED8' : '#C2410C',
-                          borderRadius:3, padding:'1px 6px', display:'inline-block',
-                        }}>
-                          {r.company}
-                        </span>
-                      </td>
-                      <td style={{ ...td, color:'#6B7280', fontSize:11, maxWidth:150, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}
-                        title={r.project_name}>
-                        {r.project_name || <span style={{ color:'#D1D5DB' }}>—</span>}
-                      </td>
-                      <td style={{ ...td, textAlign:'center' }}><Pill status={r.attendance_status} out_time={r.out_time}/></td>
-                      <td style={{ ...td, color:'#374151', fontVariantNumeric:'tabular-nums', whiteSpace:'nowrap' }}>
-                        {r.in_time || <span style={{ color:'#D1D5DB' }}>—</span>}
-                      </td>
-                      <td style={{ ...td, color:'#374151', fontVariantNumeric:'tabular-nums', whiteSpace:'nowrap' }}>
-                        {r.out_time || <span style={{ color:'#D1D5DB' }}>—</span>}
-                      </td>
-                      <td style={{ ...td, textAlign:'center', fontVariantNumeric:'tabular-nums' }}>
-                        {isLate
-                          ? <span style={{
-                              background:'#FEE2E2', color:'#DC2626',
-                              borderRadius:4, padding:'1px 7px', fontWeight:700, fontSize:11,
-                            }}>{r.late_minutes}m</span>
-                          : <span style={{ color:'#D1D5DB' }}>—</span>}
-                      </td>
-                      <td style={{ ...td, textAlign:'center', color:'#475569', fontVariantNumeric:'tabular-nums' }}>
-                        {r.hours_worked > 0 ? r.hours_worked : <span style={{ color:'#D1D5DB' }}>—</span>}
-                      </td>
-                      <td style={{ ...td, textAlign:'center' }}>
-                        {r.overtime_hours > 0
-                          ? <span style={{ background:'#FEF3C7', color:'#92400E', borderRadius:4, padding:'1px 7px', fontSize:10, fontWeight:700 }}>+{r.overtime_hours}h</span>
-                          : <span style={{ color:'#D1D5DB' }}>—</span>}
-                      </td>
-                      <td style={{ ...td, color:'#374151' }}>{r.shift}</td>
-                      <td style={{ ...td, color:'#374151' }}>{r.location}</td>
-                      <td style={{ ...td, color:'#6B7280' }}>{r.eng_fm_ch_cm || <span style={{ color:'#D1D5DB' }}>—</span>}</td>
-                      <td style={{ ...td, color:'#6B7280' }}>{r.incharge_name || <span style={{ color:'#D1D5DB' }}>—</span>}</td>
-                      <td style={{ ...td, color:'#6B7280' }}>{r.tower_incharge || <span style={{ color:'#D1D5DB' }}>—</span>}</td>
-                      <td style={td}>
-                        <span style={{
-                          fontSize:10, fontWeight:700,
-                          color: r.status === 'ACTIVE' ? '#15803D' : '#B91C1C',
-                          background: r.status === 'ACTIVE' ? '#F0FDF4' : '#FEF2F2',
-                          borderRadius:3, padding:'1px 7px', display:'inline-block',
-                        }}>
-                          {r.status}
-                        </span>
-                      </td>
-                      <td style={{ ...td, color:'#6B7280', maxWidth:130, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                        {r.reason || <span style={{ color:'#D1D5DB' }}>—</span>}
-                      </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-              {rows.length > 0 && (
-                <tfoot>
-                  {/* Totals track the CURRENT filter, so the breakdown always
-                      reconciles with the record count shown beside it. */}
-                  <tr style={{ background:'#F0F7FF', borderTop:'1.5px solid #BFDBFE' }}>
-                    <td colSpan={8} style={{ ...td, textAlign:'right', color:'#1E40AF', fontWeight:700 }}>
-                      {filteredRows.length === rows.length ? 'Grand Total' : 'Filtered Total'} ({filteredRows.length} records)
-                    </td>
-                    <td style={{ ...td, textAlign:'center', whiteSpace:'nowrap' }}>
-                      <span style={{ color:'#15803D', fontWeight:800 }}>{filteredTotals.present}P</span>
-                      {' / '}
-                      <span style={{ color:'#6366F1', fontWeight:800 }}>{filteredTotals.half}HD</span>
-                      {' / '}
-                      <span style={{ color:'#B91C1C', fontWeight:800 }}>{filteredTotals.absent}A</span>
-                      {' / '}
-                      <span style={{ color:'#B45309', fontWeight:800 }}>{filteredTotals.leave}L</span>
-                      {filteredTotals.week_off > 0 && <>{' / '}<span style={{ color:'#475569', fontWeight:800 }}>{filteredTotals.week_off}WO</span></>}
-                    </td>
-                    <td colSpan={2} style={td}/>
-                    <td style={{ ...td, textAlign:'center', color:'#DC2626', fontWeight:800 }}>
-                      {filteredTotals.late > 0 ? `${filteredTotals.late} late` : '—'}
-                    </td>
-                    <td style={{ ...td, textAlign:'center', color:'#0F766E', fontWeight:800, fontVariantNumeric:'tabular-nums' }}>
-                      {filteredTotals.hours > 0 ? filteredTotals.hours.toFixed(1) : '—'}
-                    </td>
-                    <td style={{ ...td, textAlign:'center', color:'#92400E', fontWeight:800, fontVariantNumeric:'tabular-nums' }}>
-                      {filteredTotals.ot > 0 ? `+${filteredTotals.ot.toFixed(1)}` : '—'}
-                    </td>
-                    <td colSpan={7} style={td}/>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
+                  ) : filteredRows.map((r, i) => {
+                    const isLate = Number(r.late_minutes) > 0;
+                    const sk = statusKey(r);
+                    const accent = (STATUS_COLOR[sk] || STATUS_COLOR.absent).dot;
+                    return (
+                      <tr key={r.user_id || i} className="ts-row" style={{
+                        background: i % 2 === 0 ? T.surface : '#FCFDFF',
+                      }}>
+                        <td style={{ ...td, borderLeft:`3px solid ${accent}`, paddingLeft:9 }}>
+                          <span style={{ color:'#C7CEDB', fontSize:10.5, fontVariantNumeric:'tabular-nums' }}>{i+1}</span>
+                        </td>
+                        <td style={{ ...td, whiteSpace:'nowrap', minWidth:196 }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                            <Avatar name={r.name} size={density === 'compact' ? 26 : 32}/>
+                            <div style={{ minWidth:0 }}>
+                              <div style={{ fontWeight:700, color:T.ink, fontSize:12.5, lineHeight:1.25 }}>{r.name}</div>
+                              <div style={{ fontSize:10, color:T.faint, fontWeight:600,
+                                fontVariantNumeric:'tabular-nums' }}>
+                                {r.emp_id || '—'}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ ...td, color:T.body, fontSize:11.5 }}>{r.designation || dash}</td>
+                        <td style={{ ...td, color:T.body, fontSize:11.5 }}>{r.department || dash}</td>
+                        <td style={{ ...td, color:T.muted, fontSize:11.5 }}>{r.trade || dash}</td>
+                        <td style={td}>
+                          <span style={{
+                            fontSize:9.5, fontWeight:800, letterSpacing:0.3,
+                            background: r.company?.toLowerCase().includes('bcim') ? '#EFF6FF' : '#FFF7ED',
+                            color: r.company?.toLowerCase().includes('bcim') ? '#1D4ED8' : '#9A3412',
+                            border:`1px solid ${r.company?.toLowerCase().includes('bcim') ? '#BFDBFE' : '#FED7AA'}`,
+                            borderRadius:5, padding:'2px 7px', display:'inline-block', whiteSpace:'nowrap',
+                          }}>
+                            {r.company || '—'}
+                          </span>
+                        </td>
+                        <td style={{ ...td, color:T.muted, fontSize:11.5, maxWidth:150,
+                          overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}
+                          title={r.project_name}>
+                          {r.project_name || dash}
+                        </td>
+
+                        {/* ── Attendance cluster ── */}
+                        <td style={{ ...td, textAlign:'center', background:'#F9FCFF' }}>
+                          <Pill status={r.attendance_status} out_time={r.out_time}/>
+                        </td>
+                        <td style={{ ...td, background:'#F9FCFF', fontVariantNumeric:'tabular-nums',
+                          whiteSpace:'nowrap', fontWeight:700,
+                          color: isLate ? T.absent : T.ink }}>
+                          {r.in_time || dash}
+                        </td>
+                        <td style={{ ...td, background:'#F9FCFF', fontVariantNumeric:'tabular-nums',
+                          whiteSpace:'nowrap', fontWeight:700,
+                          color: (r.in_time && !r.out_time) ? T.single : T.ink }}>
+                          {r.out_time || dash}
+                        </td>
+                        <td style={{ ...td, background:'#F9FCFF', minWidth:110 }}>
+                          <WorkWindow in_time={r.in_time} out_time={r.out_time} late_minutes={r.late_minutes}/>
+                        </td>
+                        <td style={{ ...td, textAlign:'center', background:'#F9FCFF', fontVariantNumeric:'tabular-nums' }}>
+                          {isLate
+                            ? <span style={{
+                                background:'#FEF2F2', color:'#B91C1C', border:'1px solid #FECACA',
+                                borderRadius:5, padding:'2px 7px', fontWeight:800, fontSize:10.5,
+                                whiteSpace:'nowrap',
+                              }}>{r.late_minutes}m</span>
+                            : dash}
+                        </td>
+                        <td style={{ ...td, textAlign:'center', background:'#F9FCFF',
+                          color:T.body, fontWeight:700, fontVariantNumeric:'tabular-nums' }}>
+                          {Number(r.hours_worked) > 0 ? Number(r.hours_worked).toFixed(1) : dash}
+                        </td>
+                        <td style={{ ...td, textAlign:'center', background:'#F9FCFF' }}>
+                          {Number(r.overtime_hours) > 0
+                            ? <span style={{ background:'#FFFBEB', color:'#92400E', border:'1px solid #FDE68A',
+                                borderRadius:5, padding:'2px 7px', fontSize:10, fontWeight:800,
+                                whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums' }}>
+                                +{Number(r.overtime_hours).toFixed(1)}h
+                              </span>
+                            : dash}
+                        </td>
+
+                        <td style={{ ...td, color:T.body, fontSize:11.5, whiteSpace:'nowrap' }}>{r.shift || dash}</td>
+                        <td style={{ ...td, color:T.body, fontSize:11.5, whiteSpace:'nowrap' }}>{r.location || dash}</td>
+                        <td style={{ ...td, color:T.muted, fontSize:11.5 }}>{r.eng_fm_ch_cm || dash}</td>
+                        <td style={{ ...td, color:T.muted, fontSize:11.5 }}>{r.incharge_name || dash}</td>
+                        <td style={{ ...td, color:T.muted, fontSize:11.5 }}>{r.tower_incharge || dash}</td>
+                        <td style={td}>
+                          <span style={{
+                            fontSize:9.5, fontWeight:800, letterSpacing:0.3,
+                            color: r.status === 'ACTIVE' ? '#15803D' : '#B91C1C',
+                            background: r.status === 'ACTIVE' ? '#F0FDF4' : '#FEF2F2',
+                            border:`1px solid ${r.status === 'ACTIVE' ? '#BBF7D0' : '#FECACA'}`,
+                            borderRadius:5, padding:'2px 7px', display:'inline-block',
+                          }}>
+                            {r.status || '—'}
+                          </span>
+                        </td>
+                        <td style={{ ...td, color:T.muted, fontSize:11.5, maxWidth:140,
+                          overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}
+                          title={r.reason}>
+                          {r.reason || dash}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                {!loading && rows.length > 0 && (
+                  <tfoot>
+                    {/* Totals track the CURRENT filter, so the breakdown always
+                        reconciles with the record count shown beside it. */}
+                    <tr style={{ background:'#F0F6FF' }}>
+                      <td colSpan={7} style={{ ...td, textAlign:'right', color:T.navyMid, fontWeight:800,
+                        borderTop:`2px solid #BFDBFE`, borderBottom:'none', fontSize:11.5 }}>
+                        {filteredRows.length === rows.length ? 'Grand Total' : 'Filtered Total'}
+                        <span style={{ color:T.faint, fontWeight:600 }}> · {filteredRows.length} records</span>
+                      </td>
+                      <td style={{ ...td, textAlign:'center', whiteSpace:'nowrap',
+                        borderTop:`2px solid #BFDBFE`, borderBottom:'none' }}>
+                        <span style={{ display:'inline-flex', gap:7, fontSize:10.5, fontWeight:800 }}>
+                          <span style={{ color:T.present }}>{filteredTotals.present}P</span>
+                          <span style={{ color:T.half }}>{filteredTotals.half}HD</span>
+                          <span style={{ color:T.absent }}>{filteredTotals.absent}A</span>
+                          <span style={{ color:T.leave }}>{filteredTotals.leave}L</span>
+                          {filteredTotals.week_off > 0 && <span style={{ color:T.off }}>{filteredTotals.week_off}WO</span>}
+                        </span>
+                      </td>
+                      <td colSpan={2} style={{ ...td, borderTop:`2px solid #BFDBFE`, borderBottom:'none' }}/>
+                      <td style={{ ...td, borderTop:`2px solid #BFDBFE`, borderBottom:'none' }}/>
+                      <td style={{ ...td, textAlign:'center', color:T.absent, fontWeight:800,
+                        borderTop:`2px solid #BFDBFE`, borderBottom:'none', fontSize:11 }}>
+                        {filteredTotals.late > 0 ? `${filteredTotals.late} late` : '—'}
+                      </td>
+                      <td style={{ ...td, textAlign:'center', color:T.hours, fontWeight:800,
+                        fontVariantNumeric:'tabular-nums', borderTop:`2px solid #BFDBFE`,
+                        borderBottom:'none', fontSize:11.5 }}>
+                        {filteredTotals.hours > 0 ? filteredTotals.hours.toFixed(1) : '—'}
+                      </td>
+                      <td style={{ ...td, textAlign:'center', color:'#92400E', fontWeight:800,
+                        fontVariantNumeric:'tabular-nums', borderTop:`2px solid #BFDBFE`,
+                        borderBottom:'none', fontSize:11 }}>
+                        {filteredTotals.ot > 0 ? `+${filteredTotals.ot.toFixed(1)}` : '—'}
+                      </td>
+                      <td colSpan={7} style={{ ...td, borderTop:`2px solid #BFDBFE`, borderBottom:'none' }}/>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+
+            {/* Legend */}
+            {!loading && filteredRows.length > 0 && (
+              <div className="no-print" style={{
+                display:'flex', alignItems:'center', gap:14, flexWrap:'wrap',
+                padding:'10px 16px', borderTop:`1px solid ${T.hair}`, background:'#FCFDFF',
+              }}>
+                <span style={{ fontSize:9.5, color:T.faint, fontWeight:800, letterSpacing:0.7,
+                  textTransform:'uppercase' }}>Legend</span>
+                {Object.entries(STATUS_FULL).map(([k, label]) => (
+                  <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:5,
+                    fontSize:10.5, color:T.muted, fontWeight:600 }}>
+                    <span style={{ width:7, height:7, borderRadius:'50%',
+                      background:(STATUS_COLOR[k] || STATUS_COLOR.absent).dot }}/>
+                    <b style={{ color:T.body }}>{STATUS_LABEL[k]}</b> {label}
+                  </span>
+                ))}
+                <span style={{ fontSize:10.5, color:T.faint, marginLeft:'auto', fontWeight:600 }}>
+                  Working Window plots 06:00 → 22:00 · striped bar = no out-punch
+                </span>
+              </div>
+            )}
           </div>
         )}
 
@@ -1015,7 +1284,7 @@ export default function TimesheetReportPage() {
                         <td>{r.department}</td>
                         <td>{r.trade || '—'}</td>
                         <td>{r.company}</td>
-                        <td style={{ textAlign:'center' }}><Pill status={r.attendance_status}/></td>
+                        <td style={{ textAlign:'center' }}><Pill status={r.attendance_status} out_time={r.out_time}/></td>
                         <td>{r.in_time || '—'}</td>
                         <td>{r.out_time || '—'}</td>
                         <td style={{ textAlign:'center', color: Number(r.late_minutes)>0 ? '#DC2626' : 'inherit', fontWeight: Number(r.late_minutes)>0 ? 700 : 400 }}>
@@ -1079,15 +1348,20 @@ export default function TimesheetReportPage() {
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
-        .ts-scroll::-webkit-scrollbar { height: 10px; width: 10px; }
-        .ts-scroll::-webkit-scrollbar-track { background: #F1F5F9; border-radius: 8px; }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .ts-row:hover td { background: #F2F7FE !important; }
+        .ts-scroll::-webkit-scrollbar { height: 11px; width: 11px; }
+        .ts-scroll::-webkit-scrollbar-track { background: ${T.hairSoft}; }
         .ts-scroll::-webkit-scrollbar-thumb {
-          background: #94A3B8; border-radius: 8px;
-          border: 2px solid #F1F5F9;
+          background: #A9B6C9; border-radius: 8px;
+          border: 3px solid ${T.hairSoft};
         }
-        .ts-scroll::-webkit-scrollbar-thumb:hover { background: #475569; }
-        .ts-scroll::-webkit-scrollbar-corner { background: #F1F5F9; }
-        .ts-scroll { scrollbar-width: auto; scrollbar-color: #94A3B8 #F1F5F9; }
+        .ts-scroll::-webkit-scrollbar-thumb:hover { background: #7B8CA5; }
+        .ts-scroll::-webkit-scrollbar-corner { background: ${T.hairSoft}; }
+        .ts-scroll { scrollbar-width: thin; scrollbar-color: #A9B6C9 ${T.hairSoft}; }
+        @media (prefers-reduced-motion: reduce) {
+          * { animation: none !important; transition: none !important; }
+        }
       `}</style>
 
       {showConfigModal && (
@@ -1256,11 +1530,3 @@ function TimesheetConfigModal({ onClose, projects, date }) {
     </div>
   );
 }
-
-const td = {
-  padding:'8px 10px',
-  borderBottom:'0.5px solid #F3F4F6',
-  color:'#111827',
-  fontSize:12,
-  verticalAlign:'middle',
-};
