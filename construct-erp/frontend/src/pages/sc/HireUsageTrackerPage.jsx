@@ -15,6 +15,10 @@ import dayjs from 'dayjs';
 
 const fmt = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 const num = (v) => parseFloat(v || 0);
+// Formats a 24-hr "HH:MM" (from <input type="time">) as "h:mm AM/PM"; leaves
+// older free-text values (e.g. "8:00 AM") entered before the time-picker
+// switch untouched, since those don't match the HH:MM pattern.
+const fmtTime = (t) => (t && /^\d{1,2}:\d{2}$/.test(t)) ? dayjs(`2000-01-01T${t}`).format('h:mm A') : (t || '—');
 const inp = 'w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition';
 
 // Detect if a group has the standard 3-tier crane structure (Shift / Hourly / Day)
@@ -634,11 +638,11 @@ function DayLogModal({ wo, equipmentGroups, onClose, latestStockByItem = {} }) {
             <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
               <div>
                 <label className={lbl}>Start Time</label>
-                <input type="text" value={startTime} onChange={e => setStartTime(e.target.value)} className={inp} placeholder="8:00 AM" />
+                <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className={inp} />
               </div>
               <div>
                 <label className={lbl}>End Time</label>
-                <input type="text" value={endTime} onChange={e => setEndTime(e.target.value)} className={inp} placeholder="8:00 PM" />
+                <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className={inp} />
               </div>
               <div>
                 <label className={lbl}>Break Hrs</label>
@@ -955,8 +959,8 @@ function DailyLogSection({ wo, equipmentGroups, onCreateBill }) {
                             </span>
                           </div>
                         </td>
-                        <td className="px-2.5 py-2 text-center text-slate-500 whitespace-nowrap">{r.start_time || '—'}</td>
-                        <td className="px-2.5 py-2 text-center text-slate-500 border-r border-slate-100 whitespace-nowrap">{r.end_time || '—'}</td>
+                        <td className="px-2.5 py-2 text-center text-slate-500 whitespace-nowrap">{fmtTime(r.start_time)}</td>
+                        <td className="px-2.5 py-2 text-center text-slate-500 border-r border-slate-100 whitespace-nowrap">{fmtTime(r.end_time)}</td>
                         <td className="px-2.5 py-2 text-right text-slate-500 tabular-nums">{s.hmStart != null ? s.hmStart.toFixed(1) : '—'}</td>
                         <td className="px-2.5 py-2 text-right text-slate-500 tabular-nums">{s.hmEnd != null ? s.hmEnd.toFixed(1) : '—'}</td>
                         <td className="px-2.5 py-2 text-right font-bold text-indigo-700 border-r border-slate-100 tabular-nums">
