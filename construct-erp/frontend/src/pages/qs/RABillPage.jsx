@@ -176,6 +176,13 @@ export default function RABillPage() {
         actions={
           <>
             <button
+              onClick={() => navigate('/qs/ra-bills/summary')}
+              className="h-9 px-3 flex items-center gap-1.5 rounded-xl text-[11px] font-medium transition-colors"
+              style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.20)', color: '#fff' }}
+            >
+              <BarChart3 className="w-3.5 h-3.5" /> Summary
+            </button>
+            <button
               onClick={handleDownloadCSV}
               className="h-9 px-3 flex items-center gap-1.5 rounded-xl text-[11px] font-medium transition-colors"
               style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.20)', color: '#fff' }}

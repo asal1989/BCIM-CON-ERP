@@ -4,7 +4,7 @@ const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
-const { loadProjectScope, appendProjectScope } = require('../middleware/projectScope');
+const { loadProjectScope, appendProjectScope, applyProjectScope } = require('../middleware/projectScope');
 const { logAudit } = require('../utils/auditLog');
 const { BOQ_COST_HEADS } = require('../constants/boqCostHeads');
 const { postAutoJournalStandalone } = require('../services/journalAutoPost');
@@ -183,6 +183,127 @@ router.get('/previous-stats', async (req, res) => {
       [project_id, boq_item_id, req.user.company_id]
     );
     res.json({ data: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /ra-bills/summary — portfolio-wide billing summary: Contract Value vs
+// Billed vs Certified vs Balance to Complete, per project + aggregated.
+router.get('/summary', async (req, res) => {
+  try {
+    const { project_id } = req.query;
+
+    const conditions = ['p.company_id = $1'];
+    const params = [req.user.company_id];
+    try {
+      applyProjectScope(req, conditions, params, 'p', project_id);
+    } catch (scopeErr) {
+      return res.status(scopeErr.statusCode || 500).json({ error: scopeErr.message });
+    }
+
+    const projectsRes = await query(
+      `SELECT p.id, p.name, p.project_code, COALESCE(p.contract_value,0) AS contract_value
+         FROM projects p WHERE ${conditions.join(' AND ')}
+         ORDER BY p.name`,
+      params
+    );
+    const projectMeta = projectsRes.rows;
+    const projectIds = projectMeta.map(p => p.id);
+
+    const empty = {
+      kpis: {
+        total_bills: 0, gross_valuation: 0, net_payable_certified: 0,
+        pending_certification_value: 0, pending_certification_count: 0,
+        rejected_value: 0, rejected_count: 0,
+        total_contract_value: 0, billed_to_date: 0, certified_to_date: 0, balance_to_complete: 0,
+      },
+      projects: [], statusBreakdown: [], deductions: [], trend: [],
+    };
+    if (!projectIds.length) return res.json({ data: empty });
+
+    const billsRes = await query(
+      `SELECT project_id, status, gross_amount, net_payable,
+              retention_amount, tds_amount, mobilization_advance_recovery,
+              adhoc_advance_recovery, material_recovery_steel, material_recovery_cement,
+              other_deductions, bill_date, certified_date
+         FROM ra_bills
+        WHERE project_id = ANY($1::uuid[])`,
+      [projectIds]
+    );
+    const bills = billsRes.rows;
+    const num = v => parseFloat(v || 0);
+
+    // ── Per-project rollup ──
+    const byProject = {};
+    projectMeta.forEach(p => {
+      byProject[p.id] = { id: p.id, name: p.name, project_code: p.project_code, contract_value: num(p.contract_value), billed: 0, certified: 0 };
+    });
+    bills.forEach(b => {
+      const row = byProject[b.project_id];
+      if (!row) return;
+      if (!['draft', 'rejected'].includes(b.status)) row.billed += num(b.gross_amount);
+      if (['certified', 'paid'].includes(b.status)) row.certified += num(b.gross_amount);
+    });
+    const projectsOut = Object.values(byProject).map(r => ({
+      ...r,
+      balance_to_complete: r.contract_value - r.certified,
+      pct_complete: r.contract_value > 0 ? Math.round((r.certified / r.contract_value) * 1000) / 10 : null,
+    }));
+
+    // ── Status breakdown ──
+    const statusCounts = {};
+    bills.forEach(b => { statusCounts[b.status] = (statusCounts[b.status] || 0) + 1; });
+    const statusBreakdown = Object.entries(statusCounts).map(([status, count]) => ({ status, count }));
+
+    // ── Deductions aggregate (bills that have actually gone through, i.e. not draft/rejected) ──
+    const ded = { retention: 0, tds: 0, advance_recovery: 0, material_recovery: 0, other: 0 };
+    bills.filter(b => !['draft', 'rejected'].includes(b.status)).forEach(b => {
+      ded.retention         += num(b.retention_amount);
+      ded.tds               += num(b.tds_amount);
+      ded.advance_recovery  += num(b.mobilization_advance_recovery) + num(b.adhoc_advance_recovery);
+      ded.material_recovery += num(b.material_recovery_steel) + num(b.material_recovery_cement);
+      ded.other             += num(b.other_deductions);
+    });
+    const deductions = [
+      { key: 'retention',         label: 'Retention',        amount: ded.retention },
+      { key: 'tds',               label: 'TDS',               amount: ded.tds },
+      { key: 'advance_recovery',  label: 'Advance Recovery',  amount: ded.advance_recovery },
+      { key: 'material_recovery', label: 'Material Recovery', amount: ded.material_recovery },
+      { key: 'other',             label: 'Other Deductions',  amount: ded.other },
+    ].filter(d => d.amount > 0);
+
+    // ── Monthly trend of certified value (last 12 months, by certified_date/bill_date) ──
+    const monthKey = d => { const dt = new Date(d); return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`; };
+    const trendMap = {};
+    bills.filter(b => ['certified', 'paid'].includes(b.status)).forEach(b => {
+      const k = monthKey(b.certified_date || b.bill_date);
+      trendMap[k] = (trendMap[k] || 0) + num(b.gross_amount);
+    });
+    const now = new Date();
+    const trend = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      trend.push({ month: k, value: trendMap[k] || 0 });
+    }
+
+    // ── Portfolio KPIs ──
+    const kpis = {
+      total_bills: bills.length,
+      gross_valuation: bills.filter(b => b.status !== 'rejected').reduce((a, b) => a + num(b.gross_amount), 0),
+      net_payable_certified: bills.filter(b => ['certified', 'paid'].includes(b.status)).reduce((a, b) => a + num(b.net_payable), 0),
+      pending_certification_value: bills.filter(b => b.status === 'verified').reduce((a, b) => a + num(b.net_payable), 0),
+      pending_certification_count: bills.filter(b => b.status === 'verified').length,
+      rejected_value: bills.filter(b => b.status === 'rejected').reduce((a, b) => a + num(b.gross_amount), 0),
+      rejected_count: bills.filter(b => b.status === 'rejected').length,
+      total_contract_value: projectsOut.reduce((a, p) => a + p.contract_value, 0),
+      billed_to_date: projectsOut.reduce((a, p) => a + p.billed, 0),
+      certified_to_date: projectsOut.reduce((a, p) => a + p.certified, 0),
+      balance_to_complete: projectsOut.reduce((a, p) => a + p.balance_to_complete, 0),
+    };
+
+    res.json({ data: { kpis, projects: projectsOut, statusBreakdown, deductions, trend } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

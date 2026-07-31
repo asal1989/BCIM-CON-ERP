@@ -310,6 +310,7 @@ export const measurementAPI = {
 
 export const raBillAPI = {
   list:          (params, config = {}) => api.get('/ra-bills', { ...config, params }),
+  summary:       (params) => api.get('/ra-bills/summary', { params }),
   get:           (id)     => api.get(`/ra-bills/${id}`),
   create:        (data)   => api.post('/ra-bills', data),
   update:        (id, d)  => api.put(`/ra-bills/${id}`, d),
