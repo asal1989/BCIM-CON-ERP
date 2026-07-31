@@ -123,11 +123,14 @@ function EmpCard({ emp, onClick }) {
             )}
           </div>
         )}
-        <div className="flex items-center gap-1 text-xs text-gray-400">
+        <div className={`flex items-center gap-1 text-xs ${emp.employment_status !== 'active' && emp.date_of_leaving ? 'text-amber-600 font-medium' : 'text-gray-400'}`}
+          title={emp.employment_status !== 'active' && emp.date_of_leaving ? 'Last Working Date' : 'Date Joined'}>
           <Calendar className="w-3 h-3" />
-          {emp.date_of_joining
-            ? new Date(emp.date_of_joining).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
-            : '—'}
+          {emp.employment_status !== 'active' && emp.date_of_leaving
+            ? new Date(emp.date_of_leaving).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+            : emp.date_of_joining
+              ? new Date(emp.date_of_joining).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
+              : '—'}
         </div>
       </div>
 
@@ -474,7 +477,7 @@ export default function EmployeeListPage() {
             <div className="col-span-2">Department</div>
             <div className="col-span-2">Designation</div>
             <div className="col-span-2">Type</div>
-            <div className="col-span-2">Joined</div>
+            <div className="col-span-2">{['resigned', 'terminated', 'absconded'].includes(statusFilter) ? 'Last Working Day' : 'Joined'}</div>
             <div className="col-span-1">Status</div>
           </div>
 
@@ -513,8 +516,17 @@ export default function EmployeeListPage() {
                   <div className="col-span-2">
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${type.bg} ${type.text}`}>{type.label}</span>
                   </div>
-                  <div className="col-span-2 text-sm text-gray-500">
-                    {emp.date_of_joining ? new Date(emp.date_of_joining).toLocaleDateString('en-IN') : '—'}
+                  <div className="col-span-2 text-sm">
+                    {emp.employment_status !== 'active' && emp.date_of_leaving ? (
+                      <div title="Last Working Date">
+                        <span className="text-amber-600 font-medium">{new Date(emp.date_of_leaving).toLocaleDateString('en-IN')}</span>
+                        <div className="text-[10px] text-gray-400">Last working day</div>
+                      </div>
+                    ) : (
+                      <span className="text-gray-500">
+                        {emp.date_of_joining ? new Date(emp.date_of_joining).toLocaleDateString('en-IN') : '—'}
+                      </span>
+                    )}
                   </div>
                   <div className="col-span-1">
                     <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${status.bg} ${status.text}`}>
