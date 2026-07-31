@@ -234,7 +234,7 @@ function buildLateEmail({ employeeName, employeeCode, date, checkInTime, lateMin
 }
 
 // ── Core function: send late alerts for a given date ─────────────────────────
-async function sendLateArrivalAlerts({ date, companyId, minLateMinutes = 5, overrideRecipients, dryRun = false } = {}) {
+async function sendLateArrivalAlerts({ date, companyId, minLateMinutes = 1, overrideRecipients, dryRun = false } = {}) {
   const targetDate = date || new Date().toISOString().slice(0, 10);
 
   // Auto-recalculate late_minutes for the target date before querying,
@@ -295,6 +295,8 @@ async function sendLateArrivalAlerts({ date, companyId, minLateMinutes = 5, over
         AND a.status IN ('present', 'half_day')
         AND u.is_active = TRUE
         AND u.email IS NOT NULL
+        -- Staff only — direct-hire workmen (labour) don't get this alert.
+        AND COALESCE(ep.employee_category, 'staff') = 'staff'
       ORDER BY a.late_minutes DESC
     `, [company.id, targetDate, minLateMinutes]);
 
@@ -340,7 +342,7 @@ function initLateArrivalAlert() {
     return;
   }
   const schedule = process.env.HR_LATE_ALERT_CRON || DEFAULT_CRON;
-  const minLateMinutes = parseInt(process.env.HR_LATE_ALERT_MIN_MINUTES, 10) || 5;
+  const minLateMinutes = parseInt(process.env.HR_LATE_ALERT_MIN_MINUTES, 10) || 1;
 
   cron.schedule(schedule, () => {
     logger.info('Scheduled late-arrival alert triggered');

@@ -1257,7 +1257,7 @@ router.post('/late-alerts/run', async (req, res) => {
     const result = await sendLateArrivalAlerts({
       date,
       companyId: req.user.company_id,
-      minLateMinutes: minLateMinutes ?? 5,
+      minLateMinutes: minLateMinutes ?? 1,
       dryRun: dryRun ?? false,
     });
     res.json(result);

@@ -343,7 +343,7 @@ export default function AttendancePage() {
     onError:e=>toast.error(e.response?.data?.error||'Failed'),
   });
   const runAlertsMut = useMutation({
-    mutationFn:()=>hrAttendanceAPI.runLateAlerts({ date:new Date().toISOString().slice(0,10), minLateMinutes:5 }),
+    mutationFn:()=>hrAttendanceAPI.runLateAlerts({ date:new Date().toISOString().slice(0,10), minLateMinutes:1 }),
     onSuccess:(res)=>{ const d=res.data||{}; const total=(d.results||[]).reduce((s,x)=>s+(x.sent||0),0); const names=(d.results||[]).flatMap(x=>(x.employees||[]).map(e=>e.employee)); setAlertResult({ total, names, date:d.date }); toast.success(`Late alerts sent to ${total} employee(s)`, { duration:6000 }); },
     onError:e=>toast.error(e.response?.data?.error||'Failed'),
   });
