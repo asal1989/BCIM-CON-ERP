@@ -1,7 +1,7 @@
 // src/pages/procurement/POPage.jsx
 import RecordAttachments from '../../components/shared/RecordAttachments';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import useAuthStore from '../../store/authStore';
 import {
@@ -2242,6 +2242,7 @@ export default function POPage() {
   const { user, selectedProjectId } = useAuthStore();
   const qc = useQueryClient();
   const location = useLocation();
+  const navigate = useNavigate();
   const [filterSeries, setFilterSeries] = useState('');
   const [showForm, setShowForm]       = useState(false);
   const [showImport, setShowImport]   = useState(false);
@@ -2253,6 +2254,19 @@ export default function POPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [projectFilter, setProjectFilter] = useState(selectedProjectId || 'all');
   const [sortConfig, setSortConfig]   = useState({ key: 'po_date', dir: 'desc' });
+
+  // True while the currently-open PO was reached via the "My Approvals" deep
+  // link, so closing it (approve/reject/terminate) can return the user to
+  // their inbox instead of stranding them on the PO list. Consumed once so a
+  // PO opened afterward by clicking a row directly doesn't also redirect away.
+  const [fromApprovalsFeed, setFromApprovalsFeed] = useState(false);
+  const closeSelectedPO = () => {
+    setSelectedPO(null);
+    if (fromApprovalsFeed) {
+      setFromApprovalsFeed(false);
+      navigate('/approvals');
+    }
+  };
 
   useEffect(() => {
     if (location.state?.fromCS) {
@@ -2310,6 +2324,7 @@ export default function POPage() {
     const found = poData.find(p => p.id === viewId);
     if (found) {
       setSelectedPO(found);
+      setFromApprovalsFeed(true);
       window.history.replaceState({}, '');
     }
   }, [location.state, poData]);
@@ -2337,7 +2352,7 @@ export default function POPage() {
       // final stage was never closing the modal either, leaving the reviewer
       // stuck on a fully-authorized PO instead of returning to the list (or
       // the Approvals screen, when opened via its "Review & Authorize" link).
-      if (vars.stage === 'md-approve') setSelectedPO(null);
+      if (vars.stage === 'md-approve') closeSelectedPO();
       qc.invalidateQueries({ queryKey: ['purchase-orders'] });
       qc.invalidateQueries({ queryKey: ['purchase-orders', selectedPO?.id] });
     },
@@ -2348,7 +2363,7 @@ export default function POPage() {
     mutationFn: ({ id, reason }) => poAPI.approve(id, 'reject', { reason }),
     onSuccess: () => {
       toast.success('PO rejected');
-      setSelectedPO(null);
+      closeSelectedPO();
       qc.invalidateQueries({ queryKey: ['purchase-orders'] });
     },
     onError: e => toast.error(e?.response?.data?.error || 'Reject failed'),
@@ -2358,7 +2373,7 @@ export default function POPage() {
     mutationFn: ({ id, reason }) => poAPI.terminate(id, reason),
     onSuccess: () => {
       toast.success('Purchase Order terminated — linked MR items are available again');
-      setSelectedPO(null);
+      closeSelectedPO();
       qc.invalidateQueries({ queryKey: ['purchase-orders'] });
     },
     onError: e => toast.error(e?.response?.data?.error || 'Termination failed'),
@@ -2752,7 +2767,7 @@ export default function POPage() {
           po={selectedPO}
           detailedPO={detailedPO}
           company={companyData}
-          onClose={() => setSelectedPO(null)}
+          onClose={closeSelectedPO}
           onEdit={(po) => setEditingPO(po)}
           onApprove={(stage) => {
             approveMutation.mutate({ id: selectedPO.id, stage });
