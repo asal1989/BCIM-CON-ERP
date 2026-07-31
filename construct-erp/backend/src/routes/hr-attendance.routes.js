@@ -14,6 +14,14 @@ router.use(authorize('super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager', 'ma
 const FULL_HR_ROLES = new Set(['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager',
   'managing_director', 'director', 'ceo', 'cfo', 'md']);
 
+// These two (MD + Head Office management) don't punch a biometric device, so
+// on any day with no hr_attendance row for them the daily register would
+// otherwise default them to "absent". Always show them as present instead.
+const ALWAYS_PRESENT_USER_IDS = [
+  '042f1671-14c9-40a3-b40c-d213a30ec258', // A.STEPHEN, Managing Director
+  '4b7b60a8-2cae-49bd-937d-86a55bfb1601', // Sam S Nathan, Head Office Management
+];
+
 async function getProjectScope(req) {
   const role = String(req.user?.role || '').toLowerCase();
   if (FULL_HR_ROLES.has(role)) return null; // no restriction
@@ -591,7 +599,8 @@ router.get('/timesheet-report', async (req, res) => {
     const noRecordStatus = holidayName ? 'holiday' : (isSunday ? 'week_off' : 'absent');
 
     // ── Staff query ─────────────────────────────────────────────────────────────
-    const staffParams = [...params];
+    const staffParams = [...params, ALWAYS_PRESENT_USER_IDS];
+    const alwaysPresentIdx = staffParams.length;
     const staffRows = (await query(`
       SELECT
         u.employee_code                     AS emp_id,
@@ -608,7 +617,11 @@ router.get('/timesheet-report', async (req, res) => {
         ep.trade                            AS trade,
         COALESCE(proj.name, 'Head Office')  AS project_name,
         COALESCE(proj.id::text, 'HEAD_OFFICE') AS project_id,
-        COALESCE(a.status, '${noRecordStatus}') AS attendance_status,
+        CASE
+          WHEN a.status IS NOT NULL THEN a.status
+          WHEN u.id = ANY($${alwaysPresentIdx}::uuid[]) THEN 'present'
+          ELSE '${noRecordStatus}'
+        END AS attendance_status,
         TO_CHAR(a.in_time,  'HH12:MI AM')  AS in_time,
         TO_CHAR(a.out_time, 'HH12:MI AM')  AS out_time,
         a.late_minutes,
