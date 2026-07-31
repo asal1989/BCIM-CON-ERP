@@ -13,6 +13,7 @@ import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { BOQ_COST_HEADS } from '../../constants/boqCostHeads';
+import { Theme } from '../../theme';
 
 const inr = v => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const compactInr = v => {
@@ -346,7 +347,7 @@ export default function RABillNewPage() {
           <div className="flex items-center gap-3">
             <div className="hidden md:flex flex-col items-end pr-3 mr-1 border-r border-slate-200">
               <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Net Payable</span>
-              <span className="text-[18px] font-bold text-indigo-600 leading-tight">{inr(netPayable)}</span>
+              <span className="text-[18px] font-bold leading-tight" style={{ color: Theme.navy }}>{inr(netPayable)}</span>
             </div>
             <button
               onClick={() => handleSubmit(false)}
@@ -358,7 +359,8 @@ export default function RABillNewPage() {
             <button
               onClick={() => handleSubmit(true)}
               disabled={createMut.isPending || !formData.project_id}
-              className="h-10 px-5 inline-flex items-center gap-2 rounded-xl text-[13px] font-semibold text-white bg-gradient-to-br from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 disabled:opacity-40 transition-all shadow-sm shadow-indigo-200"
+              className="h-10 px-5 inline-flex items-center gap-2 rounded-xl text-[13px] font-semibold text-white disabled:opacity-40 transition-all shadow-sm"
+              style={{ background: `linear-gradient(135deg, ${Theme.navy}, ${Theme.navyDark})`, boxShadow: `0 2px 10px ${Theme.navy}33` }}
             >
               <Send size={15} /> Submit for Approval
             </button>
@@ -391,7 +393,8 @@ export default function RABillNewPage() {
             sub="Retention, TDS, recoveries"
             tone="rose"
           />
-          <div className="relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br from-indigo-600 to-blue-600 text-white shadow-lg shadow-indigo-200/60">
+          <div className="relative overflow-hidden rounded-2xl p-5 text-white shadow-lg"
+            style={{ background: `linear-gradient(135deg, ${Theme.navy}, ${Theme.navyDark})`, boxShadow: `0 8px 24px ${Theme.navy}40` }}>
             <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-white/10" />
             <div className="absolute -right-2 -bottom-8 w-20 h-20 rounded-full bg-white/5" />
             <div className="relative">
@@ -399,7 +402,7 @@ export default function RABillNewPage() {
                 <Wallet size={16} />
                 <span className="text-[11px] font-semibold uppercase tracking-wider">Net Payable</span>
               </div>
-              <div className="mt-2 text-[26px] font-bold leading-none">{inr(netPayable)}</div>
+              <div className="mt-2 text-[26px] font-bold leading-none" style={{ color: Theme.gold, textShadow: '0 1px 2px rgba(0,0,0,0.30)' }}>{inr(netPayable)}</div>
               <div className="mt-1.5 text-[11px] text-white/70">
                 {parseFloat(formData.price_escalation) !== 0 && `incl. escalation ${inr(formData.price_escalation)}`}
                 {parseFloat(formData.price_escalation) === 0 && 'after all deductions'}

@@ -20,6 +20,7 @@ import RABillTaxInvoice from './RABillTaxInvoice';
 import RABillProformaInvoice from './RABillProformaInvoice';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { Theme } from '../../theme';
 
 const inr = v => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -224,7 +225,8 @@ export default function RABillDetail() {
             <ArrowLeft size={16} />
           </button>
           <div className="h-5 w-px bg-[#e2e6ec]" />
-          <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center shadow">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center shadow"
+            style={{ background: `linear-gradient(135deg, ${Theme.navy}, ${Theme.navyDark})` }}>
             <Receipt className="w-4 h-4 text-white" />
           </div>
           <div>
@@ -373,15 +375,17 @@ export default function RABillDetail() {
                       'w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all',
                       isRej   ? 'bg-red-500 border-red-500 text-white' :
                       passed  ? 'bg-emerald-500 border-emerald-500 text-white' :
-                      active  ? 'bg-indigo-600 border-indigo-600 text-white ring-4 ring-indigo-50' :
                                 'bg-white border-[#d8dce1] text-[#8e94a3]'
-                    )}>
+                    )}
+                    style={active ? { background: `linear-gradient(135deg, ${Theme.navy}, ${Theme.navyDark})`, borderColor: Theme.navy, color: '#fff', boxShadow: `0 0 0 4px ${Theme.navy}1a` } : undefined}
+                    >
                       {passed ? <CheckCircle2 size={16} /> : <SIcon size={15} />}
                     </div>
                     <div className={clsx(
                       'text-[9px] font-medium uppercase tracking-wider mt-2',
-                      isRej ? 'text-red-500' : active ? 'text-indigo-600' : passed ? 'text-emerald-500' : 'text-[#b0b5c3]'
-                    )}>
+                      isRej ? 'text-red-500' : passed ? 'text-emerald-500' : !active ? 'text-[#b0b5c3]' : ''
+                    )}
+                    style={active ? { color: Theme.navy } : undefined}>
                       {s.label}
                     </div>
                     {passed && i === 1 && b.verified_by_name && (
@@ -428,7 +432,7 @@ export default function RABillDetail() {
             {/* Line items table */}
             <div className="bg-white rounded-2xl border border-[#e2e6ec] shadow-sm overflow-hidden">
               <div className="px-5 py-3.5 border-b border-[#e2e6ec] flex items-center gap-2">
-                <Layers size={15} className="text-indigo-600" />
+                <Layers size={15} style={{ color: Theme.navy }} />
                 <h2 className="text-[11px] font-medium text-[#1a1c21] uppercase tracking-wide">Line Item Breakdown</h2>
                 <span className="ml-auto text-[9px] font-medium text-[#8e94a3] bg-[#f4f6f9] px-2 py-0.5 rounded-full">
                   {(b.items || []).length} items
@@ -440,7 +444,7 @@ export default function RABillDetail() {
                     <tr className="bg-[#f8fafc] border-b border-[#e2e6ec]">
                       <th className="px-5 py-2.5 text-left text-[10px] font-medium text-[#8e94a3] uppercase tracking-wider">Specification</th>
                       <th className="px-4 py-2.5 text-right text-[10px] font-medium text-[#8e94a3] uppercase tracking-wider w-28">Previous</th>
-                      <th className="px-4 py-2.5 text-right text-[10px] font-medium text-indigo-500 uppercase tracking-wider w-28 bg-blue-50/50">Current</th>
+                      <th className="px-4 py-2.5 text-right text-[10px] font-medium uppercase tracking-wider w-28" style={{ color: Theme.navy, background: `${Theme.navy}0d` }}>Current</th>
                       <th className="px-5 py-2.5 text-right text-[10px] font-medium text-[#8e94a3] uppercase tracking-wider w-36">Value</th>
                     </tr>
                   </thead>
@@ -462,7 +466,7 @@ export default function RABillDetail() {
                         <td className="px-4 py-3 text-right font-mono text-[11px] text-[#8e94a3]">
                           {(it.prev_certified_qty || 0).toLocaleString()}
                         </td>
-                        <td className="px-4 py-3 text-right font-mono text-[12px] font-medium text-indigo-600 bg-blue-50/20">
+                        <td className="px-4 py-3 text-right font-mono text-[12px] font-medium" style={{ color: Theme.navy, background: `${Theme.navy}08` }}>
                           {(it.current_qty || 0).toLocaleString()}
                         </td>
                         <td className="px-5 py-3 text-right font-mono text-[13px] font-medium text-[#1a1c21]">
@@ -517,11 +521,12 @@ export default function RABillDetail() {
                   />
                 )}
 
-                <div className="border-t-2 border-[#1a1c21] pt-3 mt-2">
-                  <div className="text-[9px] font-medium text-[#8e94a3] uppercase tracking-widest mb-1">
+                <div className="rounded-xl px-4 py-4 mt-3"
+                  style={{ background: `linear-gradient(135deg, ${Theme.navy}, ${Theme.navyDark})` }}>
+                  <div className="text-[9px] font-medium uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
                     Total Certified Disbursement
                   </div>
-                  <div className="text-[28px] font-medium text-emerald-600 font-mono leading-none">
+                  <div className="text-[26px] font-medium font-mono leading-none" style={{ color: Theme.gold, textShadow: '0 1px 2px rgba(0,0,0,0.30)' }}>
                     {inr(b.net_payable)}
                   </div>
                 </div>
