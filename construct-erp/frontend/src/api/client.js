@@ -312,6 +312,7 @@ export const raBillAPI = {
   list:          (params, config = {}) => api.get('/ra-bills', { ...config, params }),
   get:           (id)     => api.get(`/ra-bills/${id}`),
   create:        (data)   => api.post('/ra-bills', data),
+  update:        (id, d)  => api.put(`/ra-bills/${id}`, d),
   verify:        (id)     => api.patch(`/ra-bills/${id}/verify`),
   approve:       (id, d)  => api.patch(`/ra-bills/${id}/approve`, d),
   reject:        (id, d)  => api.patch(`/ra-bills/${id}/reject`, d),

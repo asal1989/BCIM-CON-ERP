@@ -701,6 +701,7 @@ export default function App() {
                 <Route path="qs/client-work-orders" element={<RequireModule module="QS & Billing"><ClientWOPage /></RequireModule>} />
                 <Route path="qs/ra-bills" element={<RequireAnyModule modules={['QS & Billing','Projects']}><RABillPage /></RequireAnyModule>} />
                 <Route path="qs/ra-bills/new" element={<RequireModule module="QS & Billing"><RABillNewPage /></RequireModule>} />
+                <Route path="qs/ra-bills/:id/edit" element={<RequireModule module="QS & Billing"><RABillNewPage /></RequireModule>} />
                 <Route path="qs/ra-bills/:id" element={<RequireModule module="QS & Billing"><RABillDetail /></RequireModule>} />
                 <Route path="qs/po" element={<RequireModule module="QS & Billing"><POPage /></RequireModule>} />
                 <Route path="qs/po-register" element={<RequireModule module="QS & Billing"><PORegisterPage /></RequireModule>} />

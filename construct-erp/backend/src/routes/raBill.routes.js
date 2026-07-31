@@ -343,28 +343,123 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// PUT /ra-bills/:id  — update editable fields (bill_number, bill_date, work_description, amounts, etc.)
+// PUT /ra-bills/:id — full edit of a draft/rejected bill: header fields + line items.
+// Only bills still in 'draft' or 'rejected' status may be edited — once submitted,
+// changes must go through the verify/reject/revert workflow instead.
 router.put('/:id', authorize('super_admin','admin','qs_engineer','project_manager'), async (req, res) => {
   try {
-    const allowed = [
-      'bill_number','bill_date','work_description','bill_period_from','bill_period_to',
-      'gross_amount','gst_rate','gst_amount','retention_percent',
-      'mobilization_advance_recovery','adhoc_advance_recovery',
-      'material_recovery_steel','material_recovery_cement',
-      'price_escalation','other_deductions','tds_rate','remarks',
-      'contractor_name','contractor_gstin','contractor_pan','wo_number','status',
-    ];
-    const fields = Object.keys(req.body).filter(k => allowed.includes(k));
-    if (!fields.length) return res.status(400).json({ error: 'No updatable fields provided' });
-    const sets = fields.map((f, i) => `${f} = $${i + 1}`).join(', ');
-    const vals = fields.map(f => req.body[f]);
-    vals.push(req.params.id);
-    const result = await query(
-      `UPDATE ra_bills SET ${sets}, updated_at = NOW() WHERE id = $${vals.length} RETURNING *`,
-      vals
+    const existing = await query(
+      `SELECT rb.id, rb.status, rb.project_id FROM ra_bills rb
+       JOIN projects p ON rb.project_id = p.id
+       WHERE rb.id = $1 AND p.company_id = $2`,
+      [req.params.id, req.user.company_id]
     );
-    if (!result.rows.length) return res.status(404).json({ error: 'Bill not found' });
-    res.json({ data: result.rows[0] });
+    if (!existing.rows.length) return res.status(404).json({ error: 'Bill not found' });
+    if (!['draft', 'rejected'].includes(existing.rows[0].status)) {
+      return res.status(400).json({ error: 'Only draft or rejected bills can be edited' });
+    }
+    const projectId = existing.rows[0].project_id;
+
+    const {
+      bill_number, bill_date, work_description,
+      bill_period_from, bill_period_to,
+      gross_amount, gst_rate, gst_amount,
+      retention_percent, mobilization_advance_recovery, adhoc_advance_recovery,
+      material_recovery_steel, material_recovery_cement,
+      price_escalation, other_deductions,
+      tds_rate, items, remarks,
+      contractor_name, contractor_gstin, contractor_pan, wo_number,
+    } = req.body;
+    const newStatus = req.body.status === 'submitted' ? 'submitted' : 'draft';
+
+    const result = await withTransaction(async (client) => {
+      const retention_amount = (parseFloat(gross_amount) + parseFloat(price_escalation || 0)) * (parseFloat(retention_percent || 0) / 100);
+      const tds_amount       = parseFloat(gross_amount) * (parseFloat(tds_rate || 0) / 100);
+      const total_deductions =
+        retention_amount +
+        parseFloat(mobilization_advance_recovery || 0) +
+        parseFloat(adhoc_advance_recovery || 0) +
+        parseFloat(material_recovery_steel || 0) +
+        parseFloat(material_recovery_cement || 0) +
+        parseFloat(other_deductions || 0) +
+        tds_amount;
+      const gross_with_gst = parseFloat(gross_amount) + parseFloat(gst_amount || 0);
+      const net_payable     = gross_with_gst - total_deductions + parseFloat(price_escalation || 0);
+
+      const header = await client.query(
+        `UPDATE ra_bills SET
+           bill_number = $1, bill_date = $2, work_description = $3,
+           bill_period_from = $4, bill_period_to = $5,
+           gross_amount = $6, gst_rate = $7, gst_amount = $8, gross_with_gst = $9,
+           retention_pct = $10, retention_amount = $11,
+           mobilization_advance_recovery = $12, adhoc_advance_recovery = $13,
+           material_recovery_steel = $14, material_recovery_cement = $15,
+           price_escalation = $16, other_deductions = $17,
+           tds_rate = $18, tds_amount = $19,
+           total_deductions = $20, net_payable = $21, status = $22, remarks = $23,
+           contractor_name = $24, contractor_gstin = $25, contractor_pan = $26, wo_number = $27,
+           updated_at = NOW()
+         WHERE id = $28
+         RETURNING *`,
+        [
+          bill_number, bill_date, work_description || null,
+          bill_period_from || null, bill_period_to || null,
+          gross_amount, parseFloat(gst_rate || 18), gst_amount, gross_with_gst,
+          retention_percent, retention_amount,
+          mobilization_advance_recovery || 0, adhoc_advance_recovery || 0,
+          material_recovery_steel || 0, material_recovery_cement || 0,
+          price_escalation || 0, other_deductions || 0,
+          tds_rate || 2, tds_amount,
+          total_deductions, net_payable, newStatus, remarks,
+          contractor_name || 'Client', contractor_gstin || null, contractor_pan || null,
+          wo_number || null,
+          req.params.id,
+        ]
+      );
+
+      if (Array.isArray(items)) {
+        await client.query(`DELETE FROM ra_bill_items WHERE ra_bill_id = $1`, [req.params.id]);
+        for (const it of items) {
+          const itemCheck = await client.query(
+            `SELECT COALESCE(b.current_quantity, b.quantity) AS boq_qty
+               FROM boq_items b
+               JOIN projects p ON b.project_id = p.id
+              WHERE b.id = $1 AND b.project_id = $2 AND p.company_id = $3
+              LIMIT 1`,
+            [it.boq_item_id, projectId, req.user.company_id]
+          );
+          if (!itemCheck.rowCount) {
+            throw new Error('Invalid BOQ item for this project');
+          }
+          const boqQty = parseFloat(itemCheck.rows[0].boq_qty || 0);
+          const prevRes = await client.query(
+            `SELECT COALESCE(SUM(current_qty),0) as prev_qty FROM ra_bill_items rbi
+             JOIN ra_bills rb ON rbi.ra_bill_id = rb.id
+             WHERE rb.project_id = $1 AND rbi.boq_item_id = $2 AND rb.status IN ('certified','paid')`,
+            [projectId, it.boq_item_id]
+          );
+          const prevQty    = parseFloat(prevRes.rows[0].prev_qty);
+          const currentQty = parseFloat(it.current_qty);
+          if (boqQty > 0 && prevQty + currentQty > boqQty + 0.001) {
+            throw new Error(
+              `BOQ quantity exceeded for item ${it.boq_item_id}: ` +
+              `BOQ=${boqQty}, already certified=${prevQty}, this bill=${currentQty} ` +
+              `(total ${prevQty + currentQty} > ${boqQty})`
+            );
+          }
+          const costHead = BOQ_COST_HEADS.includes(it.cost_head) ? it.cost_head : null;
+          await client.query(
+            `INSERT INTO ra_bill_items
+               (ra_bill_id, boq_item_id, prev_certified_qty, current_qty, cumulative_qty, rate, cost_head)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [req.params.id, it.boq_item_id, prevQty, currentQty, prevQty + currentQty, it.rate, costHead]
+          );
+        }
+      }
+      return header.rows[0];
+    });
+
+    res.json({ data: result });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

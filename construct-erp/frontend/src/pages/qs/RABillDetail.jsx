@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import {
   Download, CheckCircle2,
   User, Calendar, Banknote, ShieldCheck,
-  Printer, FileText, XCircle,
+  Printer, FileText, XCircle, Pencil,
   CreditCard, Hash, BadgeIndianRupee, TrendingDown, FileSpreadsheet, X,
 } from 'lucide-react';
 import { raBillAPI, variationAPI, materialReconAPI, default as apiClient } from '../../api/client';
@@ -50,6 +50,7 @@ const CAN_VERIFY  = ['qs_engineer', 'admin', 'super_admin'];
 const CAN_CERTIFY = ['project_manager', 'admin', 'super_admin'];
 const CAN_REJECT  = ['qs_engineer', 'project_manager', 'admin', 'super_admin'];
 const CAN_PAY     = ['accountant', 'admin', 'super_admin'];
+const CAN_EDIT    = ['qs_engineer', 'project_manager', 'admin', 'super_admin'];
 
 export default function RABillDetail() {
   const { id } = useParams();
@@ -231,6 +232,14 @@ export default function RABillDetail() {
         ]}
         actions={
           <>
+            {['draft', 'rejected'].includes(b.status) && CAN_EDIT.includes(role) && (
+              <button onClick={() => navigate(`/qs/ra-bills/${id}/edit`)}
+                className="h-9 px-3 flex items-center gap-1.5 rounded-xl text-[11px] font-medium transition-colors"
+                style={glassBtnStyle} onMouseEnter={glassBtnHover} onMouseLeave={glassBtnLeave}
+                title="Edit Bill">
+                <Pencil size={14} /> Edit
+              </button>
+            )}
             <button onClick={() => handleClientBillPrint()}
               className="h-9 px-3 flex items-center gap-1.5 rounded-xl text-[11px] font-medium transition-colors"
               style={{ background: Theme.emerald.to, color: '#fff' }}

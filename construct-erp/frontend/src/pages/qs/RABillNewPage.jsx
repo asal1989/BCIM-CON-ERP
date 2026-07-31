@@ -10,7 +10,7 @@ import { clsx } from 'clsx';
 import { raBillAPI, projectAPI, boqAPI, measurementAPI, vendorAPI, variationAPI, normsAPI, materialReconAPI, priceEscalationAPI } from '../../api/client';
 import SearchableSelect from '../../components/shared/SearchableSelect';
 import toast from 'react-hot-toast';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { BOQ_COST_HEADS } from '../../constants/boqCostHeads';
 import { Theme } from '../../theme';
@@ -25,7 +25,10 @@ const compactInr = v => {
 
 export default function RABillNewPage() {
   const navigate = useNavigate();
+  const { id } = useParams();
+  const isEdit = !!id;
   const qc = useQueryClient();
+  const [editItemsLoaded, setEditItemsLoaded] = useState(false);
 
   const [formData, setFormData] = useState({
     project_id: '',
@@ -56,6 +59,53 @@ export default function RABillNewPage() {
     queryKey: ['projects'],
     queryFn: () => projectAPI.list().then(r => r.data?.data ?? r.data ?? []).catch(() => []),
   });
+
+  // Edit mode: load the existing draft/rejected bill once, then prefill the form
+  const { data: existingBill } = useQuery({
+    queryKey: ['ra-bill', id],
+    queryFn: () => raBillAPI.get(id).then(r => r.data?.data ?? r.data),
+    enabled: isEdit,
+  });
+
+  useEffect(() => {
+    if (!isEdit || !existingBill || editItemsLoaded) return;
+    setFormData(prev => ({
+      ...prev,
+      project_id: existingBill.project_id,
+      wo_number: existingBill.wo_number || '',
+      bill_number: existingBill.bill_number || '',
+      bill_date: existingBill.bill_date ? dayjs(existingBill.bill_date).format('YYYY-MM-DD') : prev.bill_date,
+      contractor_name: existingBill.contractor_name || '',
+      contractor_gstin: existingBill.contractor_gstin || '',
+      contractor_pan: existingBill.contractor_pan || '',
+      work_description: existingBill.work_description || '',
+      bill_period_from: existingBill.bill_period_from ? dayjs(existingBill.bill_period_from).format('YYYY-MM-DD') : prev.bill_period_from,
+      bill_period_to: existingBill.bill_period_to ? dayjs(existingBill.bill_period_to).format('YYYY-MM-DD') : prev.bill_period_to,
+      retention_percent: parseFloat(existingBill.retention_pct ?? existingBill.retention_percent ?? 5),
+      mobilization_advance_recovery: parseFloat(existingBill.mobilization_advance_recovery || 0),
+      adhoc_advance_recovery: parseFloat(existingBill.adhoc_advance_recovery || 0),
+      material_recovery_steel: parseFloat(existingBill.material_recovery_steel || 0),
+      material_recovery_cement: parseFloat(existingBill.material_recovery_cement || 0),
+      price_escalation: parseFloat(existingBill.price_escalation || 0),
+      remarks: existingBill.remarks || '',
+      gst_rate: parseFloat(existingBill.gst_rate ?? 18),
+      tds_rate: parseFloat(existingBill.tds_rate ?? 2),
+      other_deductions: parseFloat(existingBill.other_deductions || 0),
+    }));
+    setItems((existingBill.items || []).map(it => ({
+      boq_item_id: it.boq_item_id,
+      description: it.description || it.short_description,
+      unit: it.unit,
+      rate: parseFloat(it.rate),
+      boq_qty: parseFloat(it.revised_boq_qty ?? it.boq_qty ?? 0),
+      prev_certified_qty: parseFloat(it.prev_certified_qty || 0),
+      current_qty: parseFloat(it.current_qty || 0),
+      amount: parseFloat(it.amount || 0),
+      cost_head: it.cost_head || '',
+      is_variation: !it.boq_item_id,
+    })));
+    setEditItemsLoaded(true);
+  }, [isEdit, existingBill, editItemsLoaded]);
 
   const { data: boqItems } = useQuery({
     queryKey: ['boq-summary', formData.project_id],
@@ -119,6 +169,9 @@ export default function RABillNewPage() {
   });
 
   useEffect(() => {
+    // Edit mode loads its own item snapshot from the existing bill (above) and
+    // must not be overwritten by this auto-claim recompute meant for new bills.
+    if (isEdit) return;
     if (boqItems && Array.isArray(boqItems)) {
       const measurementMap = {};
       if (Array.isArray(approvedMeasurements)) {
@@ -192,7 +245,7 @@ export default function RABillNewPage() {
         return next;
       });
     }
-  }, [boqItems, approvedMeasurements, previousStats, voDetails, activeProjectDetail]);
+  }, [boqItems, approvedMeasurements, previousStats, voDetails, activeProjectDetail, isEdit]);
 
   const handleQtyChange = (idx, qty) => {
     const newItems = [...items];
@@ -296,6 +349,19 @@ export default function RABillNewPage() {
     onError: e => toast.error(e?.response?.data?.error || 'Creation failed'),
   });
 
+  const updateMut = useMutation({
+    mutationFn: d => raBillAPI.update(id, d),
+    onSuccess: () => {
+      toast.success('RA Bill updated successfully');
+      qc.invalidateQueries({ queryKey: ['ra-bills'] });
+      qc.invalidateQueries({ queryKey: ['ra-bill', id] });
+      navigate(`/qs/ra-bills/${id}`);
+    },
+    onError: e => toast.error(e?.response?.data?.error || 'Update failed'),
+  });
+
+  const saveMut = isEdit ? updateMut : createMut;
+
   const handleSubmit = (submitForApproval = false) => {
     const activeItems = items.filter(it => it.current_qty > 0);
     if (!formData.project_id) return toast.error('Select a project site');
@@ -303,16 +369,19 @@ export default function RABillNewPage() {
 
     const project = projects?.find(p => p.id === formData.project_id);
 
-    createMut.mutate({
+    const payload = {
       ...formData,
-      contractor_name: project?.client_name || 'Client',
-      contractor_gstin: project?.client_gstin || '',
-      contractor_pan: project?.client_pan || '',
+      contractor_name: formData.contractor_name || project?.client_name || 'Client',
+      contractor_gstin: formData.contractor_gstin || project?.client_gstin || '',
+      contractor_pan: formData.contractor_pan || project?.client_pan || '',
       gross_amount: grossTotal,
       gst_amount: gstAmount,
       status: submitForApproval ? 'submitted' : 'draft',
       items: activeItems,
-    });
+    };
+
+    if (isEdit) updateMut.mutate(payload);
+    else createMut.mutate(payload);
   };
 
   return (
@@ -333,7 +402,7 @@ export default function RABillNewPage() {
                 <span>QS</span><span className="text-slate-300">/</span><span>Client Billing</span>
               </div>
               <div className="flex items-center gap-2.5">
-                <h1 className="text-[19px] font-semibold text-slate-900 leading-tight truncate">New RA Bill</h1>
+                <h1 className="text-[19px] font-semibold text-slate-900 leading-tight truncate">{isEdit ? 'Edit RA Bill' : 'New RA Bill'}</h1>
                 {selectedProject && (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-600 border border-emerald-100">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -351,14 +420,14 @@ export default function RABillNewPage() {
             </div>
             <button
               onClick={() => handleSubmit(false)}
-              disabled={createMut.isPending || !formData.project_id}
+              disabled={saveMut.isPending || !formData.project_id}
               className="h-10 px-4 inline-flex items-center gap-2 rounded-xl text-[13px] font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition-colors"
             >
-              <Save size={15} /> {createMut.isPending ? 'Saving…' : 'Draft'}
+              <Save size={15} /> {saveMut.isPending ? 'Saving…' : 'Draft'}
             </button>
             <button
               onClick={() => handleSubmit(true)}
-              disabled={createMut.isPending || !formData.project_id}
+              disabled={saveMut.isPending || !formData.project_id}
               className="h-10 px-5 inline-flex items-center gap-2 rounded-xl text-[13px] font-semibold text-white disabled:opacity-40 transition-all shadow-sm"
               style={{ background: `linear-gradient(135deg, ${Theme.navy}, ${Theme.navyDark})`, boxShadow: `0 2px 10px ${Theme.navy}33` }}
             >
@@ -555,13 +624,19 @@ export default function RABillNewPage() {
             {/* Bill Info */}
             <Card icon={<Building2 size={15} />} title="Bill Information">
               <Field label="Project Site *">
-                <SearchableSelect
-                  value={formData.project_id}
-                  onChange={v => set('project_id', v)}
-                  options={(projects || []).map(p => ({ value: p.id, label: p.name }))}
-                  placeholder="— Select project —"
-                  searchPlaceholder="Search projects…"
-                />
+                {isEdit ? (
+                  <div className="field-input flex items-center bg-slate-100 text-slate-500 cursor-not-allowed">
+                    {selectedProject?.name || '—'}
+                  </div>
+                ) : (
+                  <SearchableSelect
+                    value={formData.project_id}
+                    onChange={v => set('project_id', v)}
+                    options={(projects || []).map(p => ({ value: p.id, label: p.name }))}
+                    placeholder="— Select project —"
+                    searchPlaceholder="Search projects…"
+                  />
+                )}
               </Field>
 
               {selectedProject && (
