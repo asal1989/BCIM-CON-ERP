@@ -120,8 +120,9 @@ router.get('/summary', async (req, res) => {
   try {
     const { month, year, from, to, department_id, project_id } = req.query;
     const cid = req.user.company_id;
+    // explicit filter wins; otherwise auto-scope by role — see GET '/' above
     const scopeProject = await getProjectScope(req);
-    const effProject = scopeProject !== null ? scopeProject : (project_id || null);
+    const effProject = project_id || scopeProject;
 
     // ── Per-employee mode (Attendance page sends month/year) ──
     if (month || year) {
@@ -321,8 +322,9 @@ router.get('/department-summary', async (req, res) => {
   try {
     const { from, to, project_id } = req.query;
     const cid = req.user.company_id;
+    // explicit filter wins; otherwise auto-scope by role — see GET '/' above
     const scopeProject = await getProjectScope(req);
-    const effProject = scopeProject !== null ? scopeProject : (project_id || null);
+    const effProject = project_id || scopeProject;
 
     const fromDate = from || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
     const toDate   = to   || new Date().toISOString().slice(0,10);
@@ -558,7 +560,7 @@ router.get('/timesheet-report', async (req, res) => {
 
     // For project-scoped roles use their project; for HR roles use explicit filter if provided
     const scopeProjectId = await getProjectScope(req);
-    const effectiveProjectId = scopeProjectId !== null ? scopeProjectId : (project_id || null);
+    const effectiveProjectId = project_id || scopeProjectId;
 
     let deptFilter = '';
     let projectFilter = '';
@@ -869,7 +871,7 @@ router.get('/manpower-report', async (req, res) => {
     const cid = req.user.company_id;
 
     const scopeProjectId = await getProjectScope(req);
-    const effectiveProjectId = scopeProjectId !== null ? scopeProjectId : (project_id || null);
+    const effectiveProjectId = project_id || scopeProjectId;
 
     // ── ERP users (BCIM staff + direct-hire workmen) ─────────────────────────
     const staffParams = [cid, reportDate];
@@ -1064,7 +1066,7 @@ router.get('/monthly-report', async (req, res) => {
     const to = `${y}-${String(m).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
 
     const scopeProjectId = await getProjectScope(req);
-    const effProject = scopeProjectId !== null ? scopeProjectId : (project_id || null);
+    const effProject = project_id || scopeProjectId;
 
     // BCIM Staff (office/management) vs BCIM Workers (direct-hire labour) are both
     // rows in users/employee_profiles, distinguished only by employee_category.
