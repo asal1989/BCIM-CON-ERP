@@ -4,7 +4,7 @@ const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
-const { loadProjectScope, appendProjectScope, applyProjectScope } = require('../middleware/projectScope');
+const { loadProjectScope, appendProjectScope, userCanAccessProject } = require('../middleware/projectScope');
 const { logAudit } = require('../utils/auditLog');
 const { BOQ_COST_HEADS } = require('../constants/boqCostHeads');
 const { postAutoJournalStandalone } = require('../services/journalAutoPost');
@@ -196,10 +196,23 @@ router.get('/summary', async (req, res) => {
 
     const conditions = ['p.company_id = $1'];
     const params = [req.user.company_id];
-    try {
-      applyProjectScope(req, conditions, params, 'p', project_id);
-    } catch (scopeErr) {
-      return res.status(scopeErr.statusCode || 500).json({ error: scopeErr.message });
+    // Scope on p.id here (we're filtering the `projects` table itself, not a
+    // child table with a project_id FK), so applyProjectScope/appendProjectScope
+    // (which hardcode/parameterize a `project_id` column) don't apply directly.
+    if (project_id && String(project_id).trim()) {
+      if (!userCanAccessProject(req, project_id)) {
+        return res.status(403).json({ error: 'Access denied for this project.' });
+      }
+      params.push(project_id);
+      conditions.push(`p.id = $${params.length}`);
+    } else if (!req.isGlobalRole) {
+      const allowed = req.allowedProjectIds || [];
+      if (allowed.length === 0) {
+        conditions.push('FALSE');
+      } else {
+        params.push(allowed);
+        conditions.push(`p.id = ANY($${params.length}::uuid[])`);
+      }
     }
 
     const projectsRes = await query(
