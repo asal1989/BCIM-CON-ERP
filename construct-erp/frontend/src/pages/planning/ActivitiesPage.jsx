@@ -329,11 +329,11 @@ export default function ActivitiesPage() {
         <>
           {/* KPI Cards */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-5">
-            <KpiCard icon={Calendar} iconBg="bg-blue-50" iconColor="text-blue-600" label="Total Activities" value={total} sub="All Activities" />
-            <KpiCard icon={PlayCircle} iconBg="bg-blue-50" iconColor="text-blue-600" label="In Progress" value={inProgress} sub={pct(inProgress)} barColor="bg-blue-500" barPct={total ? (inProgress / total) * 100 : 0} />
-            <KpiCard icon={CheckCircle2} iconBg="bg-emerald-50" iconColor="text-emerald-600" label="Completed" value={completed} sub={pct(completed)} barColor="bg-emerald-500" barPct={total ? (completed / total) * 100 : 0} />
-            <KpiCard icon={Clock} iconBg="bg-amber-50" iconColor="text-amber-600" label="Pending" value={pending} sub={pct(pending)} barColor="bg-amber-400" barPct={total ? (pending / total) * 100 : 0} />
-            <KpiCard icon={Flag} iconBg="bg-purple-50" iconColor="text-purple-600" label="Milestones" value={milestones.length} sub="Key Milestones" />
+            <KpiCard icon={Calendar} color="indigo" label="Total Activities" value={total} sub="All Activities" />
+            <KpiCard icon={PlayCircle} color="blue" label="In Progress" value={inProgress} sub={pct(inProgress)} barPct={total ? (inProgress / total) * 100 : 0} />
+            <KpiCard icon={CheckCircle2} color="emerald" label="Completed" value={completed} sub={pct(completed)} barPct={total ? (completed / total) * 100 : 0} />
+            <KpiCard icon={Clock} color="amber" label="Pending" value={pending} sub={pct(pending)} barPct={total ? (pending / total) * 100 : 0} />
+            <KpiCard icon={Flag} color="purple" label="Milestones" value={milestones.length} sub="Key Milestones" />
           </div>
 
           {/* Toolbar */}
@@ -459,19 +459,28 @@ export default function ActivitiesPage() {
   );
 }
 
-// ─── KPI Card ─────────────────────────────────────────────────────────────
-function KpiCard({ icon: Icon, iconBg, iconColor, label, value, sub, barColor, barPct }) {
+// ─── KPI Card — solid gradient tint per card, not a plain white box ───────
+const KPI_COLORS = {
+  indigo:  { grad: 'from-indigo-500 to-indigo-600',   iconBg: 'bg-white/20',   text: 'text-white',        sub: 'text-indigo-100',  bar: 'bg-white/30',  barFill: 'bg-white' },
+  blue:    { grad: 'from-blue-500 to-blue-600',       iconBg: 'bg-white/20',   text: 'text-white',        sub: 'text-blue-100',    bar: 'bg-white/30',  barFill: 'bg-white' },
+  emerald: { grad: 'from-emerald-500 to-emerald-600', iconBg: 'bg-white/20',   text: 'text-white',        sub: 'text-emerald-100', bar: 'bg-white/30',  barFill: 'bg-white' },
+  amber:   { grad: 'from-amber-400 to-amber-500',     iconBg: 'bg-white/25',   text: 'text-white',        sub: 'text-amber-50',    bar: 'bg-white/30',  barFill: 'bg-white' },
+  purple:  { grad: 'from-purple-500 to-purple-600',   iconBg: 'bg-white/20',   text: 'text-white',        sub: 'text-purple-100',  bar: 'bg-white/30',  barFill: 'bg-white' },
+};
+
+function KpiCard({ icon: Icon, color = 'indigo', label, value, sub, barPct }) {
+  const c = KPI_COLORS[color] || KPI_COLORS.indigo;
   return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4">
-      <div className={clsx('w-10 h-10 rounded-lg flex items-center justify-center mb-3', iconBg)}>
-        <Icon className={clsx('w-5 h-5', iconColor)} />
+    <div className={clsx('rounded-xl shadow-sm p-4 bg-gradient-to-br', c.grad)}>
+      <div className={clsx('w-10 h-10 rounded-lg flex items-center justify-center mb-3', c.iconBg)}>
+        <Icon className={clsx('w-5 h-5', c.text)} />
       </div>
-      <div className="text-2xl font-bold text-slate-900 leading-tight">{value}</div>
-      <div className="text-xs font-semibold text-slate-700 mt-1">{label}</div>
-      <div className="text-[11px] text-slate-400 mt-0.5">{sub}</div>
-      {barColor && (
-        <div className="h-1 bg-slate-100 rounded-full overflow-hidden mt-2">
-          <div className={clsx('h-full rounded-full', barColor)} style={{ width: `${barPct || 0}%` }} />
+      <div className={clsx('text-2xl font-bold leading-tight', c.text)}>{value}</div>
+      <div className={clsx('text-xs font-semibold mt-1', c.text)}>{label}</div>
+      <div className={clsx('text-[11px] mt-0.5', c.sub)}>{sub}</div>
+      {barPct !== undefined && (
+        <div className={clsx('h-1 rounded-full overflow-hidden mt-2', c.bar)}>
+          <div className={clsx('h-full rounded-full', c.barFill)} style={{ width: `${barPct || 0}%` }} />
         </div>
       )}
     </div>
