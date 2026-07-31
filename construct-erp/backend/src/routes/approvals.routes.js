@@ -20,7 +20,7 @@ const { pushScBillToTracker } = require('../services/scBillToTracker.service');
 // admin/MD) from projects.project_manager_id/site_engineer_id/qs_engineer_id
 // and the project_members table; appendProjectScope turns that into a SQL
 // condition on demand.
-const { loadProjectScope, appendProjectScope } = require('../middleware/projectScope');
+const { loadProjectScope, appendProjectScope, userCanAccessProject } = require('../middleware/projectScope');
 
 // GL mapping for stores petty cash auto-JV (mirrors stores-petty-cash.routes.js)
 const SPC_CATEGORY_GL = {
@@ -544,7 +544,19 @@ router.get('/pending', loadProjectScope, async (req, res) => {
 // POST /api/v1/approvals/action
 // Approve or reject any item by entity_type + id
 // ════════════════════════════════════════════════════════════════════════════
-router.post('/action', async (req, res) => {
+const ACTION_ENTITY_PROJECT_LOOKUP = {
+  sc_bill:          { table: 'sc_bills',                    projectCol: 'project_id' },
+  sc_wo:            { table: 'sc_work_orders',               projectCol: 'project_id' },
+  sc_mb:            { table: 'sc_mb_entries',                 projectCol: 'project_id' },
+  sc_nmr:           { table: 'sc_nmr',                        projectCol: 'project_id' },
+  sc_retention:     { table: 'sc_retention_releases',         projectCol: 'project_id' },
+  mrs:              { table: 'material_requisitions',         projectCol: 'project_id' },
+  po:               { table: 'purchase_orders',                projectCol: 'project_id' },
+  work_order:       { table: 'work_orders',                    projectCol: 'project_id' },
+  petty_cash_entry: { table: 'stores_petty_cash_entries',      projectCol: 'project_id' },
+};
+
+router.post('/action', loadProjectScope, async (req, res) => {
   try {
     const { entity_type, entity_id, action, comments } = req.body;
     if (!entity_type || !entity_id || !['approve','reject','check'].includes(action)) {
@@ -555,6 +567,25 @@ router.post('/action', async (req, res) => {
     const uname = req.user.name;
     const now   = new Date().toISOString();
     const role  = ROLE(req);
+
+    // This endpoint used to trust entity_id blindly — a project-scoped user
+    // (e.g. a Project Manager on one project) who knew/guessed another
+    // project's item ID could approve/reject it directly, bypassing the feed's
+    // filtering entirely. Verify project access up front for every entity
+    // type that carries a project_id, before any mutation runs.
+    const lookup = ACTION_ENTITY_PROJECT_LOOKUP[entity_type];
+    if (lookup && !req.isGlobalRole) {
+      const projRes = await query(
+        `SELECT ${lookup.projectCol} AS project_id FROM ${lookup.table} WHERE id=$1`,
+        [entity_id]
+      );
+      const projectId = projRes.rows[0]?.project_id;
+      // NULL project_id (e.g. a general/site-less petty cash entry) is left
+      // through — it was never project-specific to begin with.
+      if (projectId && !userCanAccessProject(req, projectId)) {
+        return res.status(403).json({ error: 'You do not have access to this project\'s approvals.' });
+      }
+    }
 
     switch (entity_type) {
 
