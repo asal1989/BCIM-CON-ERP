@@ -2180,12 +2180,12 @@ export default function Layout() {
     if (['murugesan@bcim.in'].includes(String(user?.email || '').toLowerCase())) return true;
     return r.includes('procurement') || d.includes('procurement') || d.includes('purchase');
   })();
-  // Bill Tracker AI Copilot pilot — a separate access boundary from isMDNavUser
-  // (which is about nav ordering, not data access). The backend's
+  // AI Copilot (Bill Tracker + HR Admin) — a separate access boundary from
+  // isMDNavUser (which is about nav ordering, not data access). The backend's
   // requireCopilotAccess middleware is the real gate; this only hides the
   // trigger for roles that would get a 403 anyway.
-  const isCopilotUser = ['super_admin', 'managing_director', 'finance_manager', 'accountant', 'procurement_manager']
-    .includes(String(user?.role || '').toLowerCase());
+  const isCopilotUser = ['super_admin', 'managing_director', 'finance_manager', 'accountant', 'procurement_manager',
+    'hr', 'hr_admin', 'hr_manager'].includes(String(user?.role || '').toLowerCase());
   const orderedGroups = isMDNavUser
     ? [
         ...MD_NAV_ORDER.map(lbl => filteredGroups.find(g => g.label === lbl)).filter(Boolean),
@@ -2330,12 +2330,12 @@ export default function Layout() {
           </NavLink>
 
 
-          {/* AI Copilot (Bill Tracker pilot) */}
+          {/* AI Copilot (Bill Tracker + HR Admin) */}
           {isCopilotUser && (
             <div style={{ position: 'relative' }}>
               <button
                 onClick={() => setCopilotOpen(o => !o)}
-                title="Bill Tracker Copilot"
+                title="BCIM Copilot"
                 style={{ position: 'relative', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.90)', cursor: 'pointer' }}
                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
                 onMouseLeave={e => { if (!copilotOpen) e.currentTarget.style.background = 'transparent'; }}

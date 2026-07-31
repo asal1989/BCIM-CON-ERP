@@ -14,22 +14,42 @@ const MAX_TOOL_ITERATIONS = 6;
 const MAX_HISTORY_TURNS = 10;
 const MAX_MESSAGE_LENGTH = 4000;
 
-const SYSTEM_PROMPT = `You are the Bill Tracker AI Copilot for a construction ERP (BCIM Engineering).
-You can only answer questions about vendor bills, cash flow, AP aging, vendor ledgers/liability,
-deductions, and individual bill details — using the tools provided. Data returned by tools is
-already scoped to what this user is allowed to see.
+const SYSTEM_PROMPT = `You are the AI Copilot for a construction ERP (BCIM Engineering), covering two domains:
+1. Bill Tracker — vendor bills, cash flow, AP aging, vendor ledgers/liability, deductions, bill detail.
+2. HR Admin — employee roster/detail, headcount, attendance summaries, leave requests, resignations.
+Use only the tools provided. Data returned by tools is already scoped to what this user is allowed
+to see; some HR tools additionally check the caller's role and may refuse if they lack HR access.
 
 Rules:
 - Always cite concrete numbers returned by your tools. Never estimate, paraphrase, or invent figures.
-- If a question needs data outside these tools (e.g. HR, planning, quality, other modules), reply:
-  "I don't have data for that — I'm scoped to Bill Tracker only."
+- If a question needs data outside these two domains (e.g. planning, quality, procurement beyond
+  bills, projects/BOQ), reply: "I don't have data for that — I'm scoped to Bill Tracker and HR Admin."
+- Never invent or guess personal details (salary, bank, PAN, Aadhaar, phone) — these tools
+  deliberately don't return them; if asked, say that data isn't available through the Copilot.
 - If a tool errors or returns no rows, say so plainly rather than guessing.
+- If an HR tool returns an authorization error, tell the user plainly they don't have HR data access
+  rather than working around it.
 - Use the list_projects tool to resolve a project name to its id before calling other tools with a
   project filter, unless the user is clearly asking about "the current project" (see context below).
 - Keep answers concise and numbers-first.
 - Format every rupee amount in Indian numbering (lakh/crore grouping), never Western thousands
   grouping. E.g. write ₹1,20,29,440 — NOT ₹12,029,440. Grouping rule: the last 3 digits together,
   then every 2 digits after that (12029440 -> 1,20,29,440; 450000 -> 4,50,000; 1234567 -> 12,34,567).`;
+
+// HR data is sensitive enough that even roles allowed into the Copilot at all
+// (see copilot.routes.js ALLOWED_ROLES, which also includes finance/accounts/
+// procurement for Bill Tracker) shouldn't automatically get employee data —
+// kept in sync with FULL_HR_ROLES in hr-attendance.routes.js.
+const HR_ALLOWED_ROLES = ['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager',
+  'managing_director', 'director', 'ceo', 'cfo', 'md'];
+
+function requireHrAccess(req) {
+  const role = String(req.user?.role || '').toLowerCase();
+  if (!HR_ALLOWED_ROLES.includes(role)) {
+    return { error: 'You are not authorized to view HR data through the Copilot. Contact HR/Admin.' };
+  }
+  return null;
+}
 
 // Deterministic safety net: the system prompt tells the model to use Indian
 // numbering, but LLM instruction-following on number formatting isn't
@@ -128,6 +148,81 @@ const TOOLS = [
       type: 'object',
       properties: { bill_id: { type: 'string' } },
       required: ['bill_id'],
+    },
+  },
+  // ── HR Admin tools — require HR_ALLOWED_ROLES; never return bank/PAN/
+  // Aadhaar/UAN/ESI/phone/salary. ──────────────────────────────────────────
+  {
+    name: 'list_employees',
+    description: 'Search/list the employee roster (name, code, department, designation, project, category, status). No personal/financial fields.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        search: { type: 'string', description: 'Matches name, employee code, or email' },
+        department_id: { type: 'string' },
+        project_id: { type: 'string', description: 'Use list_projects to resolve a project name, or "unassigned" for no project' },
+        employment_status: { type: 'string', enum: ['active', 'resigned', 'terminated', 'absconded'] },
+        employee_category: { type: 'string', enum: ['staff', 'workman'] },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_employee_detail',
+    description: 'Full non-financial profile for one employee found by name or employee code.',
+    input_schema: {
+      type: 'object',
+      properties: { search: { type: 'string', description: 'Employee name or employee code' } },
+      required: ['search'],
+    },
+  },
+  {
+    name: 'get_headcount_summary',
+    description: 'Company-wide (or one project\'s) active headcount broken down by category (staff/workman) and department.',
+    input_schema: {
+      type: 'object',
+      properties: { project_id: { type: 'string' } },
+      required: [],
+    },
+  },
+  {
+    name: 'get_attendance_summary',
+    description: 'Present/absent/late/on-leave counts for a date range, optionally for one employee or project.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        from_date: { type: 'string', description: 'YYYY-MM-DD' },
+        to_date: { type: 'string', description: 'YYYY-MM-DD' },
+        project_id: { type: 'string' },
+        employee_search: { type: 'string', description: 'Name or employee code to scope to one employee' },
+      },
+      required: ['from_date', 'to_date'],
+    },
+  },
+  {
+    name: 'list_leave_requests',
+    description: 'Leave requests filtered by status and/or date range and/or employee.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['pending', 'approved', 'rejected'] },
+        from_date: { type: 'string' },
+        to_date: { type: 'string' },
+        employee_search: { type: 'string', description: 'Name or employee code' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'list_resigned_employees',
+    description: 'Employees whose last working date (date_of_leaving) falls in a range — for "who left last month" style questions.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        from_date: { type: 'string' },
+        to_date: { type: 'string' },
+      },
+      required: [],
     },
   },
 ];
@@ -329,6 +424,182 @@ async function toolGetBillDetail(req, input = {}) {
   return { ...bill.rows[0], line_items: items.rows };
 }
 
+// ── HR Admin tools ───────────────────────────────────────────────────────────
+async function toolListEmployees(req, input = {}) {
+  const denied = requireHrAccess(req);
+  if (denied) return denied;
+  const { search, department_id, project_id, employment_status, employee_category } = input;
+  const params = [req.user.company_id];
+  const conds = ['u.company_id = $1', 'u.is_active = TRUE'];
+  let idx = 2;
+  if (search) {
+    conds.push(`(u.name ILIKE $${idx} OR u.employee_code ILIKE $${idx} OR u.email ILIKE $${idx})`);
+    params.push(`%${search}%`); idx++;
+  }
+  if (department_id) { conds.push(`ep.department_id = $${idx++}`); params.push(department_id); }
+  if (project_id === 'unassigned') conds.push('ep.project_id IS NULL');
+  else if (project_id) { conds.push(`ep.project_id = $${idx++}`); params.push(project_id); }
+  if (employment_status) { conds.push(`COALESCE(ep.employment_status,'active') = $${idx++}`); params.push(employment_status); }
+  if (employee_category) { conds.push(`COALESCE(ep.employee_category,'staff') = $${idx++}`); params.push(employee_category); }
+
+  const { rows } = await query(`
+    SELECT u.name, u.employee_code, COALESCE(des.name, u.designation, '—') AS designation,
+           COALESCE(dep.name, u.department, '—') AS department,
+           COALESCE(proj.name, 'Head Office') AS project,
+           COALESCE(ep.employee_category,'staff') AS category,
+           COALESCE(ep.employment_status,'active') AS status,
+           ep.date_of_joining
+    FROM users u
+    LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+    LEFT JOIN hr_departments dep   ON dep.id = ep.department_id
+    LEFT JOIN hr_designations des  ON des.id = ep.designation_id
+    LEFT JOIN projects proj        ON proj.id = ep.project_id
+    WHERE ${conds.join(' AND ')}
+    ORDER BY u.name
+    LIMIT 50
+  `, params);
+  return rows;
+}
+
+async function toolGetEmployeeDetail(req, input = {}) {
+  const denied = requireHrAccess(req);
+  if (denied) return denied;
+  const { search } = input;
+  if (!search) return { error: 'search (name or employee code) is required' };
+
+  const { rows } = await query(`
+    SELECT u.name, u.employee_code, u.email, u.role,
+           COALESCE(des.name, u.designation, '—') AS designation,
+           COALESCE(dep.name, u.department, '—') AS department,
+           COALESCE(proj.name, 'Head Office') AS project,
+           COALESCE(ep.employee_category,'staff') AS category,
+           ep.employment_type, COALESCE(ep.employment_status,'active') AS status,
+           ep.date_of_joining, ep.date_of_leaving, ep.leaving_reason,
+           mgr.name AS reporting_manager, ep.trade, ep.contractor_name
+    FROM users u
+    LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+    LEFT JOIN hr_departments dep   ON dep.id = ep.department_id
+    LEFT JOIN hr_designations des  ON des.id = ep.designation_id
+    LEFT JOIN projects proj        ON proj.id = ep.project_id
+    LEFT JOIN users mgr            ON mgr.id = ep.reporting_manager_id
+    WHERE u.company_id = $1 AND u.is_active = TRUE
+      AND (u.name ILIKE $2 OR u.employee_code = $3)
+    ORDER BY u.name
+    LIMIT 5
+  `, [req.user.company_id, `%${search}%`, search]);
+
+  if (!rows.length) return { error: `No active employee found matching "${search}".` };
+  if (rows.length > 1) return { multiple_matches: rows.map(r => ({ name: r.name, employee_code: r.employee_code, department: r.department })) };
+  return rows[0];
+}
+
+async function toolGetHeadcountSummary(req, input = {}) {
+  const denied = requireHrAccess(req);
+  if (denied) return denied;
+  const { project_id } = input;
+  const params = [req.user.company_id];
+  const conds = ['u.company_id = $1', 'u.is_active = TRUE', "COALESCE(ep.employment_status,'active') = 'active'"];
+  if (project_id === 'unassigned') conds.push('ep.project_id IS NULL');
+  else if (project_id) { conds.push(`ep.project_id = $2`); params.push(project_id); }
+
+  const { rows } = await query(`
+    SELECT COALESCE(dep.name, 'Unassigned') AS department,
+           COALESCE(ep.employee_category,'staff') AS category,
+           COUNT(*)::int AS headcount
+    FROM users u
+    LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+    LEFT JOIN hr_departments dep   ON dep.id = ep.department_id
+    WHERE ${conds.join(' AND ')}
+    GROUP BY dep.name, ep.employee_category
+    ORDER BY dep.name
+  `, params);
+  const total = rows.reduce((s, r) => s + r.headcount, 0);
+  return { total_active_headcount: total, breakdown: rows };
+}
+
+async function toolGetAttendanceSummary(req, input = {}) {
+  const denied = requireHrAccess(req);
+  if (denied) return denied;
+  const { from_date, to_date, project_id, employee_search } = input;
+  if (!from_date || !to_date) return { error: 'from_date and to_date are required' };
+
+  const params = [req.user.company_id, from_date, to_date];
+  const conds = ['a.company_id = $1', 'a.attendance_date BETWEEN $2 AND $3', 'u.is_active = TRUE'];
+  let idx = 4;
+  if (project_id) { conds.push(`ep.project_id = $${idx++}`); params.push(project_id); }
+  if (employee_search) {
+    conds.push(`(u.name ILIKE $${idx} OR u.employee_code = $${idx + 1})`);
+    params.push(`%${employee_search}%`, employee_search); idx += 2;
+  }
+
+  const { rows } = await query(`
+    SELECT
+      COUNT(*) FILTER (WHERE a.status = 'present')   AS present,
+      COUNT(*) FILTER (WHERE a.status = 'absent')    AS absent,
+      COUNT(*) FILTER (WHERE a.status = 'half_day')  AS half_day,
+      COUNT(*) FILTER (WHERE a.status = 'leave')     AS on_leave,
+      COUNT(*) FILTER (WHERE COALESCE(a.late_minutes,0) > 0) AS late_arrivals,
+      COUNT(DISTINCT a.user_id)::int AS distinct_employees
+    FROM hr_attendance a
+    JOIN users u ON u.id = a.user_id
+    LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+    WHERE ${conds.join(' AND ')}
+  `, params);
+  return rows[0];
+}
+
+async function toolListLeaveRequests(req, input = {}) {
+  const denied = requireHrAccess(req);
+  if (denied) return denied;
+  const { status, from_date, to_date, employee_search } = input;
+  const params = [req.user.company_id];
+  const conds = ['lr.company_id = $1'];
+  let idx = 2;
+  if (status)    { conds.push(`lr.status = $${idx++}`); params.push(status); }
+  if (from_date) { conds.push(`lr.from_date >= $${idx++}`); params.push(from_date); }
+  if (to_date)   { conds.push(`lr.to_date <= $${idx++}`); params.push(to_date); }
+  if (employee_search) {
+    conds.push(`(u.name ILIKE $${idx} OR u.employee_code = $${idx + 1})`);
+    params.push(`%${employee_search}%`, employee_search); idx += 2;
+  }
+
+  const { rows } = await query(`
+    SELECT u.name AS employee, u.employee_code, lt.name AS leave_type,
+           lr.from_date, lr.to_date, lr.days, lr.status, lr.reason
+    FROM hr_leave_requests lr
+    JOIN users u ON u.id = lr.user_id
+    LEFT JOIN hr_leave_types lt ON lt.id = lr.leave_type_id
+    WHERE ${conds.join(' AND ')}
+    ORDER BY lr.from_date DESC
+    LIMIT 50
+  `, params);
+  return rows;
+}
+
+async function toolListResignedEmployees(req, input = {}) {
+  const denied = requireHrAccess(req);
+  if (denied) return denied;
+  const { from_date, to_date } = input;
+  const params = [req.user.company_id];
+  const conds = ['u.company_id = $1', 'ep.date_of_leaving IS NOT NULL'];
+  let idx = 2;
+  if (from_date) { conds.push(`ep.date_of_leaving >= $${idx++}`); params.push(from_date); }
+  if (to_date)   { conds.push(`ep.date_of_leaving <= $${idx++}`); params.push(to_date); }
+
+  const { rows } = await query(`
+    SELECT u.name, u.employee_code, COALESCE(dep.name, '—') AS department,
+           COALESCE(ep.employment_status,'resigned') AS status,
+           ep.date_of_leaving AS last_working_date, ep.leaving_reason
+    FROM users u
+    JOIN employee_profiles ep ON ep.user_id = u.id
+    LEFT JOIN hr_departments dep ON dep.id = ep.department_id
+    WHERE ${conds.join(' AND ')}
+    ORDER BY ep.date_of_leaving DESC
+    LIMIT 50
+  `, params);
+  return rows;
+}
+
 const TOOL_IMPL = {
   list_projects: toolListProjects,
   list_bills: toolListBills,
@@ -337,6 +608,12 @@ const TOOL_IMPL = {
   get_vendor_ledger: toolGetVendorLedger,
   get_deduction_register: toolGetDeductionRegister,
   get_bill_detail: toolGetBillDetail,
+  list_employees: toolListEmployees,
+  get_employee_detail: toolGetEmployeeDetail,
+  get_headcount_summary: toolGetHeadcountSummary,
+  get_attendance_summary: toolGetAttendanceSummary,
+  list_leave_requests: toolListLeaveRequests,
+  list_resigned_employees: toolListResignedEmployees,
 };
 
 async function runTool(req, name, input) {
