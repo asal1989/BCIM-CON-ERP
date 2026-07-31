@@ -1981,6 +1981,10 @@ export const hrAttendanceAPI = {
   // it would silently replace the intentional null with the navbar's
   // currently-selected project on every send.
   timesheetReportTestEmail: (date, project_id, project_name, category) => api.post('/hr-admin/attendance/timesheet-report/test-email', { date, project_id, project_name, category }, { skipProjectInject: true }),
+  // super_admin only (enforced server-side too) — sends the report exactly as
+  // currently filtered on screen to a client-supplied recipient list.
+  timesheetReportSendToClient: (date, project_id, project_name, category, recipients) =>
+    api.post('/hr-admin/attendance/timesheet-report/send-to-client', { date, project_id, project_name, category, recipients }, { skipProjectInject: true }),
   timesheetReportConfigs: {
     list:    ()       => api.get('/hr-admin/attendance/timesheet-report/configs'),
     create:  (data)   => api.post('/hr-admin/attendance/timesheet-report/configs', data, { skipProjectInject: true }),

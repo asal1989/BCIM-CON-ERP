@@ -628,7 +628,13 @@ router.get('/timesheet-report', async (req, res) => {
         TO_CHAR(a.out_time, 'HH12:MI AM')  AS out_time,
         a.late_minutes,
         a.remarks                           AS reason,
-        COALESCE(a.site, ep.work_location, '—') AS location,
+        -- ep.work_location is free text set manually alongside project_id and
+        -- goes stale on transfer (10 employees currently show a work_location
+        -- string from a project they were moved off months ago). proj.name is
+        -- always in sync with the current assignment, so prefer it; only fall
+        -- back to the stale text for anyone with no project_id (e.g. Head
+        -- Office staff, where work_location legitimately isn't a project name).
+        COALESCE(a.site, proj.name, ep.work_location, '—') AS location,
         COALESCE(a.shift, 'DAY')            AS shift,
         a.eng_fm_ch_cm                      AS eng_fm_ch_cm,
         a.incharge_name                     AS incharge_name,
@@ -759,6 +765,30 @@ router.post('/timesheet-report/test-email', async (req, res) => {
       project_id: req.body.project_id,
       project_name: req.body.project_name,
       category: req.body.category || 'staff',
+    });
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /timesheet-report/send-to-client — super_admin only. Sends the
+// currently-viewed report (date/project/category as shown on screen) straight
+// to a client-supplied recipient list, on demand — distinct from the
+// scheduled per-project configs, which need to be set up ahead of time.
+router.post('/timesheet-report/send-to-client', authorize('super_admin'), async (req, res) => {
+  try {
+    const { date, project_id, project_name, category, recipients } = req.body;
+    const recipientList = String(recipients || '').split(/[;,]/).map(v => v.trim()).filter(Boolean);
+    if (!recipientList.length) return res.status(400).json({ error: 'At least one recipient email is required' });
+
+    const { runTimesheetReport } = require('../utils/timesheet-report.service');
+    const result = await runTimesheetReport({
+      date,
+      manual: true,
+      recipients: recipientList,
+      company_id: req.user.company_id,
+      project_id,
+      project_name,
+      category: category || 'staff',
     });
     res.json(result);
   } catch (err) { res.status(500).json({ error: err.message }); }

@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import { hrAttendanceAPI, projectAPI } from '../../../api/client';
+import useAuthStore from '../../../store/authStore';
 import {
   Printer, Download, RefreshCw, Filter, ChevronRight, Search, X,
-  Users, Clock, AlertTriangle, Timer, CalendarDays, Building2, LayoutList, Rows3,
+  Users, Clock, AlertTriangle, Timer, CalendarDays, Building2, LayoutList, Rows3, Mail,
 } from 'lucide-react';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -316,10 +318,15 @@ const PRINT_CSS = `
 `;
 
 export default function TimesheetReportPage() {
+  const { user }                    = useAuthStore();
+  const isSuperAdmin                = String(user?.role || '').toLowerCase() === 'super_admin';
   const [date, setDate]             = useState(today());
   const [category, setCategory]     = useState('staff');
   const [projectFilter, setProject] = useState('');
   const [rows, setRows]             = useState([]);
+  const [showMailModal, setShowMail]= useState(false);
+  const [mailTo, setMailTo]         = useState('');
+  const [sending, setSending]       = useState(false);
   const [summary, setSummary]       = useState({ total:0, present:0, half:0, absent:0, leave:0 });
   const [meta, setMeta]             = useState({ companyName:'BCIM', projectName:'', projectCode:'', holidayName:null, isSunday:false });
   const [loading, setLoading]       = useState(false);
@@ -514,6 +521,25 @@ export default function TimesheetReportPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  const handleSendToClient = async () => {
+    if (!mailTo.trim()) return toast.error('Enter at least one recipient email');
+    setSending(true);
+    try {
+      const res = await hrAttendanceAPI.timesheetReportSendToClient(
+        date, projectFilter || undefined, meta.projectName || undefined, category, mailTo.trim()
+      );
+      if (res.data?.ok) {
+        toast.success(`Sent to ${res.data.recipients?.join(', ') || mailTo}`);
+        setShowMail(false);
+        setMailTo('');
+      } else {
+        toast.error(res.data?.reason || 'Send failed');
+      }
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Send failed');
+    } finally { setSending(false); }
+  };
+
   const handleExport = () => {
     const headers = ['S.No','EMP ID','Name','Designation','Department','Trade','Company','Project','P/A',
       'In Time','Out Time','Late Min','Hrs Worked','Overtime Hrs','Shift','Location',
@@ -675,6 +701,11 @@ export default function TimesheetReportPage() {
             <button onClick={handleExport} style={ghostBtn}>
               <Download size={13}/> Export CSV
             </button>
+            {isSuperAdmin && (
+              <button onClick={() => setShowMail(true)} title="Email this report to a client" style={ghostBtn}>
+                <Mail size={13}/> Mail to Client
+              </button>
+            )}
             <button onClick={() => window.print()} style={{
               display:'flex', alignItems:'center', gap:6,
               background:'#fff', color:T.navyMid, border:'none',
@@ -1321,6 +1352,49 @@ export default function TimesheetReportPage() {
         </div>
 
       </div>
+
+      {/* MAIL TO CLIENT MODAL */}
+      {showMailModal && (
+        <div className="no-print" style={{
+          position:'fixed', inset:0, background:'rgba(15,37,68,0.45)', zIndex:50,
+          display:'flex', alignItems:'center', justifyContent:'center', padding:16,
+        }} onClick={() => !sending && setShowMail(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background:T.surface, borderRadius:16, width:'100%', maxWidth:420,
+            padding:'22px 24px', boxShadow:'0 20px 60px rgba(15,37,68,0.35)',
+          }}>
+            <div style={{ display:'flex', alignItems:'center', gap:9, marginBottom:4 }}>
+              <Mail size={17} color={T.navyMid}/>
+              <h3 style={{ margin:0, fontSize:16, fontWeight:800, color:T.ink }}>Email Report to Client</h3>
+            </div>
+            <p style={{ fontSize:12, color:T.muted, margin:'6px 0 16px' }}>
+              Sends the {fmtDate(date)} timesheet ({meta.projectName || 'All Projects'}) as a PDF, right now.
+            </p>
+            <label style={{ fontSize:11, fontWeight:700, color:T.faint, textTransform:'uppercase', letterSpacing:0.5 }}>
+              Recipient email(s)
+            </label>
+            <input
+              type="text" value={mailTo} onChange={e => setMailTo(e.target.value)}
+              placeholder="client@example.com, another@example.com"
+              autoFocus
+              style={{ ...inputStyle, width:'100%', marginTop:6, marginBottom:18, boxSizing:'border-box' }}
+            />
+            <div style={{ display:'flex', gap:9, justifyContent:'flex-end' }}>
+              <button onClick={() => setShowMail(false)} disabled={sending} style={{
+                border:`1px solid ${T.hair}`, background:T.surface, color:T.body,
+                borderRadius:9, padding:'8px 16px', fontSize:12.5, fontWeight:700, cursor:'pointer',
+              }}>Cancel</button>
+              <button onClick={handleSendToClient} disabled={sending} style={{
+                border:'none', background:T.navyMid, color:'#fff',
+                borderRadius:9, padding:'8px 18px', fontSize:12.5, fontWeight:800, cursor:'pointer',
+                opacity: sending ? 0.7 : 1, display:'flex', alignItems:'center', gap:6,
+              }}>
+                <Mail size={13}/> {sending ? 'Sending…' : 'Send Now'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
