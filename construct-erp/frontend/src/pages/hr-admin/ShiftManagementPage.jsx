@@ -15,7 +15,7 @@ const OT_STATUS = { pending:'yellow', approved:'green', rejected:'red', paid:'bl
 
 function ShiftForm({ shift, onClose, onSaved }) {
   const isEdit = !!shift;
-  const [f, setF] = useState(shift || { name:'', code:'', start_time:'09:00', end_time:'18:00', break_minutes:60, is_night_shift:false, grace_minutes:10, ot_after_minutes:0 });
+  const [f, setF] = useState(shift || { name:'', code:'', start_time:'09:00', end_time:'18:00', break_minutes:60, is_night_shift:false, ot_after_minutes:0 });
   const set = (k,v) => setF(p=>({...p,[k]:v}));
   const mut = useMutation({
     mutationFn: d => isEdit ? hrShiftsAPI.updateShift(shift.id, d) : hrShiftsAPI.createShift(d),
@@ -42,14 +42,15 @@ function ShiftForm({ shift, onClose, onSaved }) {
             <div><label className="block text-[11px] text-slate-500 mb-1">End Time *</label>
               <input type="time" value={f.end_time} onChange={e=>set('end_time',e.target.value)} className={INP} /></div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div><label className="block text-[11px] text-slate-500 mb-1">Break (mins)</label>
               <input type="number" value={f.break_minutes} onChange={e=>set('break_minutes',e.target.value)} className={INP} /></div>
-            <div><label className="block text-[11px] text-slate-500 mb-1">Grace (mins)</label>
-              <input type="number" value={f.grace_minutes} onChange={e=>set('grace_minutes',e.target.value)} className={INP} /></div>
             <div><label className="block text-[11px] text-slate-500 mb-1">OT after (mins)</label>
               <input type="number" value={f.ot_after_minutes} onChange={e=>set('ot_after_minutes',e.target.value)} className={INP} /></div>
           </div>
+          <p className="text-[11px] text-slate-400 bg-slate-50 rounded-lg px-3 py-2">
+            No grace period — employees are marked late from the exact shift start time.
+          </p>
           <label className="flex items-center gap-2 text-xs cursor-pointer">
             <input type="checkbox" checked={f.is_night_shift} onChange={e=>set('is_night_shift',e.target.checked)} className="w-4 h-4 rounded" />
             Night Shift
@@ -249,7 +250,7 @@ export default function ShiftManagementPage() {
                   </div>
                   <div>
                     <div className="font-semibold text-sm text-slate-800">{s.name} {s.code && <span className="text-slate-400 font-normal">({s.code})</span>}</div>
-                    <div className="text-xs text-slate-500">{s.start_time} – {s.end_time} · Break {s.break_minutes}m · Grace {s.grace_minutes}m {s.is_night_shift&&'· Night'}</div>
+                    <div className="text-xs text-slate-500">{s.start_time} – {s.end_time} · Break {s.break_minutes}m {s.is_night_shift&&'· Night'}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

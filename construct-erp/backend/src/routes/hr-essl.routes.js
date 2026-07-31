@@ -333,18 +333,18 @@ function resolveStatus(hasIn, hasOut) {
 const DEFAULT_CUTOFF_MINS = 9 * 60 + 30;
 
 // Build { userId: cutoffMinutes } for a company from each employee's currently
-// effective shift assignment. cutoff = shift start_time + grace_minutes, so site
-// and head-office staff are judged late against their OWN configured shift timing
-// (set in Shift Management) instead of a single company-wide 09:30. Employees with
-// no shift assignment fall back to DEFAULT_CUTOFF_MINS.
+// effective shift assignment. cutoff = shift start_time exactly — no grace
+// period, by policy — so site and head-office staff are judged late against
+// their OWN configured shift start time (set in Shift Management) instead of
+// a single company-wide 09:30. Employees with no shift assignment fall back
+// to DEFAULT_CUTOFF_MINS.
 async function buildShiftCutoffMap(companyId) {
   const map = {};
   try {
     const { rows } = await query(`
       SELECT DISTINCT ON (es.employee_id)
              es.employee_id,
-             hs.start_time,
-             COALESCE(hs.grace_minutes, 0) AS grace_minutes
+             hs.start_time
       FROM hr_employee_shifts es
       JOIN hr_shifts hs ON hs.id = es.shift_id
       WHERE es.company_id = $1
@@ -355,7 +355,7 @@ async function buildShiftCutoffMap(companyId) {
     for (const r of rows) {
       if (!r.start_time) continue;
       const [h, m] = String(r.start_time).split(':').map(Number);
-      map[r.employee_id] = h * 60 + m + (parseInt(r.grace_minutes, 10) || 0);
+      map[r.employee_id] = h * 60 + m;
     }
   } catch (_) { /* no shift tables / assignments — everyone uses the default */ }
   return map;

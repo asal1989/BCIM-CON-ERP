@@ -1380,7 +1380,9 @@ router.post('/recalculate', async (req, res) => {
           WHEN ha.in_time IS NOT NULL THEN
             GREATEST(0, EXTRACT(EPOCH FROM (
               ha.in_time::time - COALESCE(
-                (SELECT (hs.start_time + (COALESCE(hs.grace_minutes,0) * INTERVAL '1 minute'))::time
+                -- No grace period, by policy — late_minutes counts from the
+                -- exact shift start time, not start_time + grace_minutes.
+                (SELECT hs.start_time
                  FROM hr_employee_shifts es
                  JOIN hr_shifts hs ON hs.id = es.shift_id
                  WHERE es.employee_id = ha.user_id
