@@ -72,11 +72,13 @@ function buildEmailHtml({ title, message, link, severity }) {
  *   - sendEmail (optional, default false) - also email the resolved recipient(s)
  */
 async function createNotification(opts) {
-  // Skip entirely for users on the global notification blocklist
+  // Skip entirely for users on the global notification blocklist — unless
+  // opts.category matches that address's allowed exception list (e.g. their
+  // own attendance/leave/regularization notifications).
   if (opts.user_id) {
     try {
       const r = await query('SELECT email FROM users WHERE id = $1', [opts.user_id]);
-      if (isBlockedEmail(r.rows[0]?.email)) return;
+      if (isBlockedEmail(r.rows[0]?.email, opts.category)) return;
     } catch (_) {}
   }
 
@@ -124,7 +126,7 @@ async function createNotification(opts) {
       const text = `${opts.title}\n\n${opts.message || ''}\n\n${opts.link ? `${FRONTEND_URL}${opts.link}` : ''}`;
       // Don't await — fire and forget. Mail can take seconds.
       for (const r of recipients) {
-        sendMail({ to: r.email, subject: opts.title, html, text }).catch(err => {
+        sendMail({ to: r.email, subject: opts.title, html, text, category: opts.category }).catch(err => {
           console.error('[notification] email failed for', r.email, ':', err.message);
         });
       }

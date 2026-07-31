@@ -318,7 +318,7 @@ async function sendLateArrivalAlerts({ date, companyId, minLateMinutes = 5, over
           : [emp.employee_email].filter(Boolean);
 
         if (!dryRun && to.length) {
-          await sendMail({ to, ...mail });
+          await sendMail({ to, ...mail, category: 'attendance' });
         }
 
         sent.push({ employee: emp.employee_name, email: emp.employee_email, lateMinutes: emp.late_minutes });
