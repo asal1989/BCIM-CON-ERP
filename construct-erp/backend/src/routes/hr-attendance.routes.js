@@ -798,7 +798,7 @@ router.post('/timesheet-report/send-to-client', authorize('super_admin'), async 
 // Timesheet report project configs — one row per (project, category) that
 // should get its own daily automated email + recipient list.
 // ═══════════════════════════════════════════════════════════
-router.get('/timesheet-report/configs', async (req, res) => {
+router.get('/timesheet-report/configs', authorize('super_admin'), async (req, res) => {
   try {
     const { rows } = await query(
       `SELECT * FROM timesheet_report_configs WHERE company_id=$1 ORDER BY project_name`,
@@ -808,7 +808,7 @@ router.get('/timesheet-report/configs', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/timesheet-report/configs', async (req, res) => {
+router.post('/timesheet-report/configs', authorize('super_admin'), async (req, res) => {
   try {
     const { project_id, project_name, category = 'staff', recipients, enabled = true } = req.body;
     if (!project_name || !recipients) return res.status(400).json({ error: 'project_name and recipients are required' });
@@ -821,7 +821,7 @@ router.post('/timesheet-report/configs', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.put('/timesheet-report/configs/:id', async (req, res) => {
+router.put('/timesheet-report/configs/:id', authorize('super_admin'), async (req, res) => {
   try {
     const { project_id, project_name, category, recipients, enabled } = req.body;
     const { rows } = await query(
@@ -841,7 +841,7 @@ router.put('/timesheet-report/configs/:id', async (req, res) => {
 // config's REAL recipients immediately, rather than waiting for the
 // scheduled automated send. Distinct from /test-email, which always
 // redirects to the caller's own inbox.
-router.post('/timesheet-report/configs/:id/send-now', async (req, res) => {
+router.post('/timesheet-report/configs/:id/send-now', authorize('super_admin'), async (req, res) => {
   try {
     const { rows } = await query(
       `SELECT * FROM timesheet_report_configs WHERE id=$1 AND company_id=$2`,
@@ -864,7 +864,7 @@ router.post('/timesheet-report/configs/:id/send-now', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.delete('/timesheet-report/configs/:id', async (req, res) => {
+router.delete('/timesheet-report/configs/:id', authorize('super_admin'), async (req, res) => {
   try {
     const { rowCount } = await query(
       `DELETE FROM timesheet_report_configs WHERE id=$1 AND company_id=$2`,
