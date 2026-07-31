@@ -22,6 +22,15 @@ const ALWAYS_PRESENT_USER_IDS = [
   '4b7b60a8-2cae-49bd-937d-86a55bfb1601', // Sam S Nathan, Head Office Management
 ];
 
+// System/tenant admin logins — not real employees, so they must never appear
+// in attendance reports. it@bcim.in is tagged employee_category='system' so
+// the staff-category filter already excludes it, but BCIM Admin has no
+// employee_profiles row at all (COALESCE(...,'staff') defaults it to
+// 'staff'), so exclude both explicitly by email at the base query level —
+// this holds regardless of which category tab is selected. Kept in sync
+// with SYSTEM_ACCOUNT_EMAILS in hr-employees.routes.js.
+const SYSTEM_ACCOUNT_EMAILS = ['admin@bcimengineering.onmicrosoft.com', 'it@bcim.in'];
+
 async function getProjectScope(req) {
   const role = String(req.user?.role || '').toLowerCase();
   if (FULL_HR_ROLES.has(role)) return null; // no restriction
@@ -89,9 +98,9 @@ router.get('/', async (req, res) => {
       JOIN users u ON u.id = a.user_id
       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
       LEFT JOIN hr_departments dep ON dep.id = ep.department_id
-      WHERE a.company_id = $1`;
-    const params = [req.user.company_id];
-    let idx = 2;
+      WHERE a.company_id = $1 AND u.email != ALL($2::text[])`;
+    const params = [req.user.company_id, SYSTEM_ACCOUNT_EMAILS];
+    let idx = 3;
 
     if (date) {
       sql += ` AND a.attendance_date = $${idx}`; params.push(date); idx++;
@@ -134,6 +143,8 @@ router.get('/summary', async (req, res) => {
       let idx = 4;
       if (department_id) { deptFilter = ` AND ep.department_id=$${idx++}`; params.push(department_id); }
       if (effProject)    { projFilter = ` AND ep.project_id=$${idx++}`;    params.push(effProject); }
+      params.push(SYSTEM_ACCOUNT_EMAILS);
+      const sysIdx = idx;
 
       const { rows } = await query(`
         SELECT u.id AS user_id,
@@ -155,6 +166,7 @@ router.get('/summary', async (req, res) => {
                                       AND EXTRACT(YEAR  FROM a.attendance_date) = $3
         WHERE u.company_id = $1
           AND u.is_active = TRUE
+          AND u.email != ALL($${sysIdx}::text[])
           AND COALESCE(ep.employment_status, 'active') NOT IN ('resigned','terminated','absconded')
           ${deptFilter}
           ${projFilter}
@@ -171,7 +183,10 @@ router.get('/summary', async (req, res) => {
 
     const staffParams = [cid, fromDate, toDate];
     let staffProjFilter = '';
-    if (effProject) { staffProjFilter = ` AND ep.project_id=$4`; staffParams.push(effProject); }
+    let staffIdx = 4;
+    if (effProject) { staffProjFilter = ` AND ep.project_id=$${staffIdx++}`; staffParams.push(effProject); }
+    staffParams.push(SYSTEM_ACCOUNT_EMAILS);
+    const staffSysIdx = staffIdx;
 
     const scParams = [cid, fromDate, toDate];
     let scProjFilter = '';
@@ -190,6 +205,7 @@ router.get('/summary', async (req, res) => {
         LEFT JOIN employee_profiles ep ON ep.user_id = u.id
         LEFT JOIN hr_departments dep   ON dep.id = ep.department_id
         WHERE a.company_id=$1 AND a.attendance_date BETWEEN $2 AND $3
+          AND u.email != ALL($${staffSysIdx}::text[])
           AND COALESCE(ep.employment_status, 'active') NOT IN ('resigned','terminated','absconded')
           AND NOT EXISTS (SELECT 1 FROM sc_workers w WHERE w.company_id = u.company_id AND w.worker_code = u.employee_code)
         ${staffProjFilter}
@@ -331,7 +347,10 @@ router.get('/department-summary', async (req, res) => {
 
     const staffParams = [cid, fromDate, toDate];
     let staffProjFilter = '';
-    if (effProject) { staffProjFilter = ` AND ep.project_id=$4`; staffParams.push(effProject); }
+    let deptSumIdx = 4;
+    if (effProject) { staffProjFilter = ` AND ep.project_id=$${deptSumIdx++}`; staffParams.push(effProject); }
+    staffParams.push(SYSTEM_ACCOUNT_EMAILS);
+    const deptSumSysIdx = deptSumIdx;
 
     const scParams = [cid, fromDate, toDate];
     let scProjFilter = '';
@@ -350,6 +369,7 @@ router.get('/department-summary', async (req, res) => {
         LEFT JOIN employee_profiles ep ON ep.user_id = u.id
         LEFT JOIN hr_departments dep   ON dep.id = ep.department_id
         WHERE a.company_id=$1 AND a.attendance_date BETWEEN $2 AND $3
+          AND u.email != ALL($${deptSumSysIdx}::text[])
           AND COALESCE(ep.employment_status, 'active') NOT IN ('resigned','terminated','absconded')
           AND NOT EXISTS (SELECT 1 FROM sc_workers w WHERE w.company_id = u.company_id AND w.worker_code = u.employee_code)
         ${staffProjFilter}
@@ -604,8 +624,9 @@ router.get('/timesheet-report', async (req, res) => {
     const noRecordStatus = holidayName ? 'holiday' : (isSunday ? 'week_off' : 'absent');
 
     // ── Staff query ─────────────────────────────────────────────────────────────
-    const staffParams = [...params, ALWAYS_PRESENT_USER_IDS];
-    const alwaysPresentIdx = staffParams.length;
+    const staffParams = [...params, ALWAYS_PRESENT_USER_IDS, SYSTEM_ACCOUNT_EMAILS];
+    const alwaysPresentIdx = staffParams.length - 1;
+    const systemAccountIdx = staffParams.length;
     const staffRows = (await query(`
       SELECT
         u.employee_code                     AS emp_id,
@@ -663,6 +684,7 @@ router.get('/timesheet-report', async (req, res) => {
                                      AND a.company_id = $1
       WHERE u.company_id = $1
         AND u.is_active = TRUE
+        AND u.email != ALL($${systemAccountIdx}::text[])
         AND COALESCE(ep.employment_status, 'active') NOT IN ('resigned','terminated','absconded')
         -- This report unions staff with sc_workers below. ~80 site labourers
         -- exist in BOTH tables, so without this they print twice and inflate
@@ -909,12 +931,15 @@ router.get('/manpower-report', async (req, res) => {
     // ── ERP users (BCIM staff + direct-hire workmen) ─────────────────────────
     const staffParams = [cid, reportDate];
     let staffProjectFilter = '';
+    let mpIdx = 3;
     if (effectiveProjectId === 'HEAD_OFFICE') {
       staffProjectFilter = ' AND ep.project_id IS NULL';
     } else if (effectiveProjectId) {
-      staffProjectFilter = ' AND ep.project_id = $3';
+      staffProjectFilter = ` AND ep.project_id = $${mpIdx++}`;
       staffParams.push(effectiveProjectId);
     }
+    staffParams.push(SYSTEM_ACCOUNT_EMAILS);
+    const mpSysIdx = mpIdx;
 
     const staffRes = await query(`
       SELECT
@@ -934,6 +959,7 @@ router.get('/manpower-report', async (req, res) => {
       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
       LEFT JOIN hr_designations des  ON des.id = ep.designation_id
       WHERE a.company_id = $1 AND a.attendance_date = $2 AND a.status = 'present'
+        AND u.email != ALL($${mpSysIdx}::text[])
         ${staffProjectFilter}
       GROUP BY
         UPPER(TRIM(CASE
@@ -1119,6 +1145,8 @@ router.get('/monthly-report', async (req, res) => {
     let idx = 4;
     if (department_id) { deptFilter = ` AND ep.department_id=$${idx++}`; staffParams.push(department_id); }
     if (effProject)    { projFilter = ` AND ep.project_id=$${idx++}`;    staffParams.push(effProject); }
+    staffParams.push(SYSTEM_ACCOUNT_EMAILS);
+    const monthlySysIdx = idx;
 
     const staffRes = await query(`
       SELECT
@@ -1152,6 +1180,7 @@ router.get('/monthly-report', async (req, res) => {
        AND a.attendance_date BETWEEN $2 AND $3
       WHERE u.company_id = $1
         AND u.is_active = TRUE
+        AND u.email != ALL($${monthlySysIdx}::text[])
         AND COALESCE(ep.employment_status, 'active') NOT IN ('resigned','terminated','absconded')
         -- unioned with sc_attendance below; drop the SC-roster duplicates
         AND NOT EXISTS (
