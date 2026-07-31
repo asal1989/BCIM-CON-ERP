@@ -4,9 +4,14 @@ const { query, withTransaction } = require('../config/database');
 // Roles that can see every project in the company — kept in sync with
 // GLOBAL_ROLES in middleware/projectScope.js (accountant/finance roles need
 // company-wide project visibility for Accounts module pages like Customers).
+// hr/hr_admin/hr_manager added here (but NOT in projectScope.js's copy) —
+// they need the full project list to assign any employee to any project in
+// the Employee Edit form's Project Assignment dropdown, without gaining the
+// broader cross-project visibility that list also grants in approvals/reports.
 const GLOBAL_ROLES = [
   'super_admin', 'admin', 'managing_director', 'director', 'ceo', 'cfo', 'md',
   'accountant', 'accounts_manager', 'finance_manager',
+  'hr', 'hr_admin', 'hr_manager',
 ];
 
 const attachProjectSpend = async (projects) => {
