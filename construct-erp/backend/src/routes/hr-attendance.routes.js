@@ -555,8 +555,11 @@ router.get('/timesheet-report', async (req, res) => {
       categoryFilter = ` AND COALESCE(ep.employee_category, 'staff') = 'staff'`;
     } else if (category === 'labour') {
       categoryFilter = ` AND ep.employee_category = 'workman'`;
+    } else {
+      // 'all' — every real employee_category, but never system/admin
+      // logins (e.g. it@bcim.in) that aren't an actual trackable employee.
+      categoryFilter = ` AND COALESCE(ep.employee_category, 'staff') != 'system'`;
     }
-    // category === 'all' → no filter, every employee_category included
 
     // For project-scoped roles use their project; for HR roles use explicit filter if provided
     const scopeProjectId = await getProjectScope(req);
@@ -1105,8 +1108,11 @@ router.get('/monthly-report', async (req, res) => {
       categoryFilter = ` AND COALESCE(ep.employee_category, 'staff') = 'staff'`;
     } else if (category === 'labour') {
       categoryFilter = ` AND ep.employee_category = 'workman'`;
+    } else {
+      // 'all' — every real employee_category, but never system/admin
+      // logins (e.g. it@bcim.in) that aren't an actual trackable employee.
+      categoryFilter = ` AND COALESCE(ep.employee_category, 'staff') != 'system'`;
     }
-    // category === 'all' → no filter, every employee_category included
 
     const staffParams = [cid, from, to];
     let deptFilter = '', projFilter = '';
