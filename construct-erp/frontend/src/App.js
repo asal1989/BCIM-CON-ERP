@@ -44,7 +44,6 @@ const queryClient = new QueryClient({
 // Only login is truly critical — everything else lazy-loads
 import LoginPage    from './pages/auth/LoginPage';
 const ESSLoginPage = lazy(() => import('./pages/auth/ESSLoginPage'));
-const OAuthAuthorizePage = lazy(() => import('./pages/auth/OAuthAuthorizePage'));
 import RegisterPage from './pages/auth/RegisterPage';
 import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 import SelectProjectPage from './pages/auth/SelectProjectPage';
@@ -647,7 +646,6 @@ export default function App() {
             <Routes>
               {/* Public */}
               <Route path="/login" element={isEssDomain() ? <ESSLoginPage /> : <LoginPage />} />
-              <Route path="/oauth/authorize" element={<OAuthAuthorizePage />} />
               <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
               <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
               <Route path="/select-project" element={
