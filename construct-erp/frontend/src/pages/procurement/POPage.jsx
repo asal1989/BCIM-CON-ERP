@@ -2328,8 +2328,16 @@ export default function POPage() {
 
   const approveMutation = useMutation({
     mutationFn: ({ id, stage }) => poAPI.approve(id, stage, {}),
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       toast.success('Authorized successfully');
+      // Only the final "md-approve" (Review & Authorize) stage closes the
+      // modal — same rule WorkOrderPage's mdApproveMutation follows: after
+      // the first stage (procurement-approve) the PO still needs MD
+      // authorization, so the reviewer stays on the same panel. But that
+      // final stage was never closing the modal either, leaving the reviewer
+      // stuck on a fully-authorized PO instead of returning to the list (or
+      // the Approvals screen, when opened via its "Review & Authorize" link).
+      if (vars.stage === 'md-approve') setSelectedPO(null);
       qc.invalidateQueries({ queryKey: ['purchase-orders'] });
       qc.invalidateQueries({ queryKey: ['purchase-orders', selectedPO?.id] });
     },
