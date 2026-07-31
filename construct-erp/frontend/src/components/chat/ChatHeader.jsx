@@ -34,6 +34,7 @@ export function ChatHeader({
     <div style={{
       display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px',
       background: C.card, borderBottom: `1px solid ${C.border}`,
+      borderTop: `3px solid ${color || C.primary}`,
       flexShrink: 0, boxShadow: C.shadow,
     }}>
       {isMobile && (

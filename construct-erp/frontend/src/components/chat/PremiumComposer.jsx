@@ -11,6 +11,7 @@ export function PremiumComposer({ value, onChange, onKeyDown, onSend, files, onR
   const fileInputRef   = useRef(null);
   const [mentionOpen,  setMentionOpen]  = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
+  const [focused, setFocused] = useState(false);
 
   const mentionList = useMemo(() => {
     if (!mentionQuery && !mentionOpen) return [];
@@ -119,11 +120,10 @@ export function PremiumComposer({ value, onChange, onKeyDown, onSend, files, onR
       <div style={{
         display: 'flex', alignItems: 'flex-end', gap: 8,
         background: C.bg, borderRadius: 14,
-        border: `1.5px solid ${C.border}`, padding: '6px 8px 6px 14px',
-        transition: 'border-color 0.2s',
-      }}
-        onFocus={() => {}} // could add focus ring
-      >
+        border: `1.5px solid ${focused ? C.primary : C.border}`, padding: '6px 8px 6px 14px',
+        boxShadow: focused ? `0 0 0 3px ${C.primary}1f` : 'none',
+        transition: 'border-color 0.2s, box-shadow 0.2s',
+      }}>
         {/* Attach */}
         <button onClick={() => fileInputRef.current?.click()}
           style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, borderRadius: 8, color: C.muted, flexShrink: 0, display: 'flex', alignItems: 'center', transition: 'color 0.15s' }}
@@ -141,6 +141,8 @@ export function PremiumComposer({ value, onChange, onKeyDown, onSend, files, onR
           onChange={handleChange}
           onKeyDown={e => { if (e.key === 'Escape') setMentionOpen(false); onKeyDown(e); }}
           onPaste={handlePaste}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           placeholder={placeholder || 'Type a message… use @ to mention someone'}
           rows={1}
           style={{
@@ -165,10 +167,10 @@ export function PremiumComposer({ value, onChange, onKeyDown, onSend, files, onR
           whileTap={disabled ? {} : { scale: 0.9 }}
           style={{
             width: 34, height: 34, borderRadius: 10, border: 'none',
-            background: disabled ? C.border : `linear-gradient(135deg, ${C.primary}, #1D4ED8)`,
+            background: disabled ? C.border : `linear-gradient(135deg, ${C.primary}, ${C.primaryHover})`,
             cursor: disabled ? 'not-allowed' : 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            boxShadow: disabled ? 'none' : '0 4px 12px rgba(37,99,235,0.3)',
+            boxShadow: disabled ? 'none' : `0 4px 12px ${C.primary}4d`,
             transition: 'background 0.2s',
           }}>
           <Send size={15} color={disabled ? C.subtle : '#fff'} />

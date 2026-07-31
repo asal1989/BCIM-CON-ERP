@@ -43,7 +43,7 @@ function renderMentionText(text) {
   const parts = text.split(/(@[A-Za-z][A-Za-z0-9 _]*)/g);
   return parts.map((p, i) =>
     p.startsWith('@')
-      ? <span key={i} style={{ color: '#60A5FA', fontWeight: 600, background: 'rgba(96,165,250,0.15)', borderRadius: 4, padding: '0 3px' }}>{p}</span>
+      ? <span key={i} style={{ color: C.gold, fontWeight: 700, background: 'rgba(201,162,39,0.16)', borderRadius: 4, padding: '0 3px' }}>{p}</span>
       : p
   );
 }
@@ -81,8 +81,11 @@ function MsgBubble({ msg, isOwn, showAvatar, showName, onReact, onPin, isDm, cur
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, marginLeft: 2 }}>
             <span style={{ fontSize: 12.5, fontWeight: 600, color: C.text }}>{msg.sender_name}</span>
             {msg.sender_role && (
-              <span style={{ fontSize: 11, color: C.subtle, background: C.bg, borderRadius: 4, padding: '1px 5px', border: `1px solid ${C.border}` }}>
-                {msg.sender_role}
+              <span style={{
+                fontSize: 10, fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase',
+                color: C.primary, background: C.primaryLight, borderRadius: 5, padding: '2px 6px',
+              }}>
+                {msg.sender_role.replace(/_/g, ' ')}
               </span>
             )}
           </div>
@@ -91,13 +94,13 @@ function MsgBubble({ msg, isOwn, showAvatar, showName, onReact, onPin, isDm, cur
         {/* Bubble */}
         <div style={{
           background: isOwn
-            ? 'linear-gradient(135deg, #2563EB, #1D4ED8)'
+            ? `linear-gradient(135deg, ${C.primary}, ${C.primaryHover})`
             : C.card,
           color: isOwn ? '#fff' : C.text,
           borderRadius: isOwn ? '18px 4px 18px 18px' : '4px 18px 18px 18px',
           padding: hasFile && !msg.text ? '10px 14px' : '10px 14px',
           boxShadow: isOwn
-            ? '0 4px 12px rgba(37,99,235,0.25)'
+            ? `0 4px 12px ${C.primary}40`
             : C.shadowMd,
           border: isOwn ? 'none' : `1px solid ${C.border}`,
           position: 'relative',
@@ -219,9 +222,11 @@ export function PremiumMessageList({ items, loading, emptyText, userId, onReact,
         </div>
       )}
       {!loading && items.length === 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12, opacity: 0.5 }}>
-          <MessageSquare size={40} color={C.muted} />
-          <p style={{ fontSize: 14, color: C.muted }}>{emptyText}</p>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12 }}>
+          <div style={{ width: 64, height: 64, borderRadius: 18, background: C.primaryLight, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <MessageSquare size={28} color={C.primary} />
+          </div>
+          <p style={{ fontSize: 13.5, color: C.muted, fontWeight: 500 }}>{emptyText}</p>
         </div>
       )}
       {items.map((item, idx) => {

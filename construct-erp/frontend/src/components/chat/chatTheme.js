@@ -1,13 +1,18 @@
 // src/components/chat/chatTheme.js — shared design tokens for the ERPChat page
 // split (ERPChat.jsx used to define these locally; extracted so every split
 // component can import the same values without duplication).
+//
+// Aligned to the app's own "Premium Navy" theme (see src/theme/index.jsx) —
+// navy + gold instead of a generic Tailwind blue — so Team Chat reads as part
+// of the same product as the rest of the ERP, not a bolted-on widget.
 
 export const C = {
-  primary:      '#2563EB',
-  primaryHover: '#1D4ED8',
-  primaryLight: '#EFF6FF',
-  primaryBorder:'#BFDBFE',
-  bg:           '#F8FAFC',
+  primary:      '#1a3a6b',   // Theme.navy
+  primaryHover: '#122d58',   // Theme.navyDark
+  primaryLight: '#EAF0FA',
+  primaryBorder:'#C8D5E8',
+  gold:         '#c9a227',   // Theme.gold — reserved for premium accents (own-message bubble, active states), not overused
+  bg:           '#F4F6FB',
   card:         '#FFFFFF',
   border:       '#E2E8F0',
   borderLight:  '#F1F5F9',
@@ -20,15 +25,27 @@ export const C = {
   red:          '#EF4444',
   shadow:       '0 1px 3px rgba(0,0,0,0.08)',
   shadowMd:     '0 4px 12px rgba(0,0,0,0.08)',
-  shadowLg:     '0 12px 24px rgba(0,0,0,0.1)',
+  shadowLg:     '0 12px 24px rgba(15,23,42,0.14)',
 };
 
-// Channel theme colors for avatars
+// Channel theme colors for avatars, header accent, and sidebar left-border.
+// Previously only 10 of these existed and none matched the 12 real channel
+// ids in ChatContext.jsx's CHANNELS list — every channel except 'general'
+// silently fell through to the generic primary color. Now every real channel
+// has its own color.
 export const CH_COLORS = {
-  general:     '#2563EB', site:       '#059669', finance:    '#7C3AED',
-  procurement: '#DC2626', hr:         '#0891B2', safety:     '#D97706',
-  qa:          '#16A34A', management: '#4F46E5', engineering:'#0284C7',
-  client:      '#BE185D',
+  general:        '#1a3a6b', // navy — company-wide
+  finance:        '#7C3AED',
+  procurement:    '#DC2626',
+  stores:         '#0891B2',
+  'qs-billing':   '#059669',
+  tqs:            '#0D9488',
+  hr:             '#DB2777',
+  planning:       '#4F46E5',
+  quality:        '#16A34A',
+  subcontractors: '#EA580C',
+  tender:         '#9333EA',
+  'it-support':   '#0284C7',
 };
 
 export function chColor(id) { return CH_COLORS[id] || C.primary; }
