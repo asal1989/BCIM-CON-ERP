@@ -10,6 +10,13 @@ const { query } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
 const { uploadToSharePoint, deleteFromOneDrive } = require('../services/azureService');
 
+// System/tenant admin logins that are not real employees — hidden from the
+// general Employee List (they'd otherwise show as "NO HR PROFILE" cards or,
+// for it@bcim.in, a staff card with no actual attendance to track). Kept
+// as an explicit email list rather than a role/category rule so a future
+// legitimate super_admin (e.g. an owner/director) never gets swept in.
+const SYSTEM_ACCOUNT_EMAILS = ['admin@bcimengineering.onmicrosoft.com', 'it@bcim.in'];
+
 const SHAREPOINT_ENABLED = !!(
   process.env.ONEDRIVE_TENANT_ID &&
   process.env.ONEDRIVE_CLIENT_ID &&
@@ -242,6 +249,11 @@ router.get('/', async (req, res) => {
     let sql = `${employeeSelect} WHERE u.company_id = $1`;
     const params = [req.user.company_id];
     let idx = 2;
+
+    if (SYSTEM_ACCOUNT_EMAILS.length) {
+      sql += ` AND u.email != ALL($${idx}::text[])`;
+      params.push(SYSTEM_ACCOUNT_EMAILS); idx++;
+    }
 
     if (no_profile === 'true') {
       sql += ' AND ep.user_id IS NULL';
