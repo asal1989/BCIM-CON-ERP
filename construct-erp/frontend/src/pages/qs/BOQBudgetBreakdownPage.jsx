@@ -1606,10 +1606,10 @@ const CTC_AUTO_NOTES = {
   other_projects_tqs: 'Manual entry — cross-project fund allocation, no ERP source.',
 };
 
-function CtcRow({ label, value, editable, editing, onStartEdit, onCancel, onSave, saving, bold, highlight, note }) {
+function CtcRow({ label, value, editable, editing, onStartEdit, onCancel, onSave, saving, bold, highlight, note, danger }) {
   return (
-    <tr className={clsx('border-b border-slate-100', highlight && 'bg-emerald-50/50')}>
-      <td className={clsx('px-4 py-2 text-right text-slate-600', bold && 'font-bold text-slate-800')}>
+    <tr className={clsx('border-b border-slate-100', highlight && 'bg-emerald-50/50', danger && 'bg-rose-50/60')}>
+      <td className={clsx('px-4 py-2 text-right', danger ? 'font-bold text-rose-700' : 'text-slate-600', bold && !danger && 'font-bold text-slate-800')}>
         <span className="inline-flex items-center gap-1">
           {label}
           {note && (
@@ -1629,7 +1629,10 @@ function CtcRow({ label, value, editable, editing, onStartEdit, onCancel, onSave
           <button onClick={editable ? onStartEdit : undefined}
             disabled={!editable || saving}
             className={clsx('font-semibold tabular-nums',
-              bold ? 'text-slate-900' : editable ? 'text-blue-700 hover:underline underline-offset-2' : 'text-slate-700')}>
+              danger ? 'text-rose-700'
+                : bold ? 'text-slate-900'
+                : editable ? 'text-blue-700 hover:underline underline-offset-2'
+                : 'text-slate-700')}>
             ₹{Math.round(value || 0).toLocaleString('en-IN')}
           </button>
         )}
@@ -1691,7 +1694,15 @@ function CostToCompletionTab({ projectId, projectName, contractValue }) {
   const rows = summaryData?.data || [];
   const totalBudget = rows.filter(r => !r.derived).reduce((s, r) => s + r.budget, 0);
   const totalActual = rows.filter(r => !r.derived).reduce((s, r) => s + r.actual, 0);
-  const budgetedForBalanceWork = Math.max(totalBudget - totalActual, 0);
+  // Budget still available to finish the remaining work. When spend has
+  // already exceeded budget this goes negative — previously it was clamped to
+  // zero with Math.max, which silently swallowed the overrun and made an
+  // over-budget project read as if the remaining work were free. Now the
+  // clamp only governs the outflow contribution (future spend can't be
+  // negative) and the excess is surfaced as its own visible row.
+  const budgetRemaining        = totalBudget - totalActual;
+  const budgetedForBalanceWork = Math.max(budgetRemaining, 0);
+  const costOverrun            = Math.max(-budgetRemaining, 0);
 
   const manual = (key) => contractDetail[key] ?? balanceWork[key] ?? liabilities[key] ?? inflow[key] ?? 0;
   const commit = (key, val) => {
@@ -1746,7 +1757,13 @@ function CostToCompletionTab({ projectId, projectName, contractValue }) {
             <tr><td colSpan={2} className="h-3" /></tr>
             {sectionHeader('B. Liabilities - Payables', 'bg-slate-600')}
             <CtcRow label="Budgeted cost for balance work completion (Execution A)" value={budgetedForBalanceWork}
-              note="Total Budget − Total Actual/Spent, live from Budget vs Actual." />
+              note="Total Budget − Total Actual/Spent, live from Budget vs Actual. Floors at zero once the budget is fully consumed — any excess is shown on the row below." />
+            {costOverrun > 0 && (
+              <CtcRow danger
+                label="⚠ Cost overrun — budget already exceeded"
+                value={costOverrun}
+                note="Spend to date has passed the total budget by this much. Already-incurred money (so it is NOT added to Total Outflow, which would double-count it against Bank/Creditors) — but it means there is no budget left for the balance work, so the Net Position below is optimistic." />
+            )}
             <CtcRow label="Sundry creditors" value={liabilities.sundry_creditors}
               note="Unpaid bills for this project — material/vendor (TQS) plus subcontractor (SC), net of retention." />
             <CtcRow label="Advance to be Recovered" value={liabilities.advance_to_be_recovered}
