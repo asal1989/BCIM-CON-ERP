@@ -117,25 +117,63 @@ const navGroups = [
     { to: '/stores/documents',         icon: FolderSearch,    label: 'Documents' },
   ]},
   { label: 'QS & Billing', items: [
-    { to: '/qs',                      icon: LayoutDashboard, label: 'QS Dashboard' },
-    { to: '/qs/boq',                  icon: FileSpreadsheet, label: 'BOQ & Estimation' },
-    { to: '/qs/boq-mapping',          icon: Layers,          label: 'BOQ SC Mapping' },
-    { to: '/qs/boq-dashboard',        icon: BarChart3,       label: 'BOQ Margin Dashboard' },
-    { to: '/qs/measurements',         icon: Ruler,           label: 'Measurement Book' },
-    { to: '/qs/client-work-orders',   icon: FileSignature,   label: 'Client Work Orders' },
-    { to: '/qs/ra-bills',             icon: Receipt,         label: 'RA Bills' },
-    { to: '/qs/po',                   icon: ShoppingCart,    label: 'Purchase Orders' },
-    { to: '/qs/po-register',          icon: ClipboardList,   label: 'PO Register' },
-    { to: '/qs/work-orders',          icon: Hammer,          label: 'Work Orders' },
-    { to: '/qs/wo-register',          icon: ClipboardList,   label: 'WO Register' },
-    { to: '/qs/price-escalation',     icon: TrendingUp,      label: 'Price Escalation' },
-    { to: '/qs/vendor-certifications',icon: FileSignature,   label: 'Vendor QS Certification' },
-    { to: '/qs/retention-releases',   icon: ShieldCheck,     label: 'Retention Release' },
-    { to: '/qs/variations',           icon: ArrowLeftRight,  label: 'Variation Orders' },
-    { to: '/qs/material-recon',       icon: Activity,        label: 'Material Recon' },
-    { to: '/qs/norms',                icon: FileSpreadsheet, label: 'Consumption Norms' },
-    { to: '/qs/reports',              icon: BarChart3,       label: 'QS Reports' },
-    { to: '/qs/documents',            icon: FolderSearch,    label: 'Documents' },
+    { to: '/qs',                                icon: LayoutDashboard, label: 'Dashboard' },
+
+    // BOQ Management
+    { to: '/qs/boq',                            icon: FileSpreadsheet, label: 'BOQ Master' },
+    { to: '/qs/boq?view=revisions',             icon: History,         label: 'BOQ Revisions' },
+    { to: '/qs/boq-dashboard',                  icon: Calculator,      label: 'Rate Analysis' },
+    { to: '/qs/boq?view=import',                icon: UploadCloud,     label: 'BOQ Import' },
+    { to: '/qs/boq-mapping',                    icon: Layers,          label: 'BOQ SC Mapping' },
+
+    // Quantity Survey
+    { to: '/qs/measurements?view=qto',          icon: GanttChartSquare,label: 'Quantity Take-Off' },
+    { to: '/qs/measurements',                   icon: Ruler,           label: 'Measurement Book' },
+    { to: '/qs/measurements?view=jmr',          icon: FileSignature,   label: 'Joint Measurement' },
+    { to: '/qs/material-recon?view=qty',        icon: Activity,        label: 'Quantity Reconciliation' },
+    { to: '/qs/measurements?view=executed',     icon: ClipboardCheck,  label: 'Executed Quantities' },
+
+    // Client Billing
+    { to: '/qs/ra-bills',                       icon: Receipt,         label: 'RA Bills' },
+    { to: '/qs/ra-bills?type=interim',          icon: FileText,        label: 'Interim Bills' },
+    { to: '/qs/ra-bills?type=final',            icon: ClipboardCheck,  label: 'Final Bills' },
+    { to: '/qs/variations?type=extra',          icon: Layers,          label: 'Extra Items' },
+    { to: '/qs/variations',                     icon: ArrowLeftRight,  label: 'Variations' },
+    { to: '/qs/ra-bills?type=tax-invoice',      icon: FileSignature,   label: 'Tax Invoices' },
+
+    // Subcontract Billing (existing TQS / Bill Tracker pages, cross-linked here)
+    { to: '/qs/work-orders',                    icon: Hammer,          label: 'Work Orders' },
+    { to: '/tqs/bills',                         icon: Receipt,         label: 'RA Bills (Subcontract)' },
+    { to: '/tqs/bills?type=final',              icon: ClipboardCheck,  label: 'Final Bills (Subcontract)' },
+    { to: '/tqs/deduction-register?type=retention',  icon: ShieldCheck, label: 'Retention (Subcontract)' },
+    { to: '/tqs/deduction-register?type=recoveries', icon: Coins,       label: 'Recoveries (Subcontract)' },
+
+    // Cost Control (BOQBudgetBreakdownPage already covers all four views)
+    { to: '/qs/boq-budget-breakdown',                    icon: Target,       label: 'Budget vs Actual' },
+    { to: '/qs/boq-budget-breakdown?view=variance',      icon: TrendingDown, label: 'Cost Variance' },
+    { to: '/qs/boq-budget-breakdown?view=forecast',      icon: TrendingUp,   label: 'Forecast' },
+    { to: '/qs/boq-budget-breakdown?view=profitability', icon: FileBarChart, label: 'Profitability' },
+
+    // Payments
+    { to: '/accounts/sales/customer-payments',  icon: CreditCard,      label: 'Client Payments' },
+    { to: '/qs/ra-bills?type=certificate',      icon: BadgeCheck,      label: 'Payment Certificates' },
+    { to: '/qs?focus=outstanding',              icon: AlertTriangle,   label: 'Outstanding' },
+    { to: '/qs/retention-releases',             icon: ShieldCheck,     label: 'Retention Release' },
+
+    // Standalone top-level items
+    { to: '/qs/material-recon',                 icon: Activity,        label: 'Material Reconciliation' },
+    { to: '/qs/documents',                      icon: FolderSearch,    label: 'Documents' },
+    { to: '/approvals',                         icon: BadgeCheck,      label: 'Approvals' },
+    { to: '/qs/reports',                        icon: BarChart3,       label: 'Reports' },
+
+    // Legacy items kept for continuity — not in the new taxonomy, still real features
+    { to: '/qs/client-work-orders',    icon: FileSignature,   label: 'Client Work Orders' },
+    { to: '/qs/po',                    icon: ShoppingCart,    label: 'Purchase Orders' },
+    { to: '/qs/po-register',           icon: ClipboardList,   label: 'PO Register' },
+    { to: '/qs/wo-register',           icon: ClipboardList,   label: 'WO Register' },
+    { to: '/qs/price-escalation',      icon: TrendingUp,      label: 'Price Escalation' },
+    { to: '/qs/vendor-certifications', icon: FileSignature,   label: 'Vendor QS Certification' },
+    { to: '/qs/norms',                 icon: FileSpreadsheet, label: 'Consumption Norms' },
   ]},
   { label: 'Accounts', items: [
     // ── Overview ─────────────────────────────────────────────────────────────
@@ -508,14 +546,17 @@ const NAV_SECTIONS = {
     { label: 'Documents',  paths: ['/tqs/documents'] },
   ],
   'QS & Billing': [
-    { label: 'Overview',             paths: ['/qs','/qs/boq-dashboard'] },
-    { label: 'Quantity Survey',      paths: ['/qs/boq','/qs/boq-mapping','/qs/measurements','/qs/ra-bills'] },
-    { label: 'Purchase Orders',      paths: ['/qs/po','/qs/po-register'] },
-    { label: 'Work Orders',          paths: ['/qs/work-orders','/qs/wo-register'] },
-    { label: 'Vendor Certification', paths: ['/qs/vendor-certifications','/qs/retention-releases'] },
-    { label: 'Advance Vouchers',     paths: ['/qs/advance-tracker'] },
-    { label: 'Controls',             paths: ['/qs/variations','/qs/material-recon','/qs/norms','/qs/reports'] },
-    { label: 'Documents',            paths: ['/qs/documents'] },
+    { label: null,                  paths: ['/qs'] },
+    { label: 'BOQ Management',      paths: ['/qs/boq','/qs/boq?view=revisions','/qs/boq-dashboard','/qs/boq?view=import','/qs/boq-mapping'] },
+    { label: 'Quantity Survey',     paths: ['/qs/measurements?view=qto','/qs/measurements','/qs/measurements?view=jmr','/qs/material-recon?view=qty','/qs/measurements?view=executed'] },
+    { label: 'Client Billing',      paths: ['/qs/ra-bills','/qs/ra-bills?type=interim','/qs/ra-bills?type=final','/qs/variations?type=extra','/qs/variations','/qs/ra-bills?type=tax-invoice'] },
+    { label: 'Subcontract Billing', paths: ['/qs/work-orders','/tqs/bills','/tqs/bills?type=final','/tqs/deduction-register?type=retention','/tqs/deduction-register?type=recoveries'] },
+    { label: 'Cost Control',        paths: ['/qs/boq-budget-breakdown','/qs/boq-budget-breakdown?view=variance','/qs/boq-budget-breakdown?view=forecast','/qs/boq-budget-breakdown?view=profitability'] },
+    { label: 'Payments',            paths: ['/accounts/sales/customer-payments','/qs/ra-bills?type=certificate','/qs?focus=outstanding','/qs/retention-releases'] },
+    { label: null,                  paths: ['/qs/material-recon'] },
+    { label: null,                  paths: ['/qs/documents'] },
+    { label: null,                  paths: ['/approvals'] },
+    { label: null,                  paths: ['/qs/reports'] },
   ],
   'Quality (QA/QC)': [
     { label: 'Dashboard',    paths: ['/quality'] },
