@@ -2186,16 +2186,19 @@ router.get('/:project_id/cost-to-completion', async (req, res) => {
       `SELECT COALESCE(SUM(gst_amount),0) AS total FROM ra_bills WHERE project_id=$1 AND status <> 'rejected'`,
       [project_id]);
 
-    // Bank balance — live balance on the Bank Accounts control account (1010).
-    // Company-wide (bank accounts aren't held per project), so it is shown as
-    // a treasury figure rather than a project-specific one.
+    // Bank balance — movements on the Bank Accounts control account (1010)
+    // attributable to THIS project. Journal entries carry project_id, so this
+    // is scoped rather than company-wide: an unscoped total let one project's
+    // overdrawn position bleed into another's statement (LANCO was showing
+    // ₹2.87 Cr instead of its own ₹3.40 Cr because a sibling project sat at
+    // −₹53 L), understating net position by that difference.
     const bankR = await query(
       `SELECT COALESCE(SUM(jl.debit) - SUM(jl.credit), 0) AS bal
          FROM journal_entry_lines jl
          JOIN chart_of_accounts coa ON coa.id = jl.account_id
          JOIN journal_entries je ON je.id = jl.journal_entry_id
-        WHERE coa.code = '1010' AND je.company_id = $1`,
-      [req.user.company_id]);
+        WHERE coa.code = '1010' AND je.company_id = $1 AND je.project_id = $2`,
+      [req.user.company_id, project_id]);
 
     // Material stock lying at store, valued at rate. Wrapped defensively —
     // stock schema varies across deployments and a missing column must not

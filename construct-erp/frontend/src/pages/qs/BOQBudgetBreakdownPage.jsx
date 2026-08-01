@@ -1601,7 +1601,7 @@ const CTC_MANUAL_ROWS = {
 const CTC_AUTO_NOTES = {
   retention_money_recovered: 'Live from RA bills — retention held on certified/paid bills.',
   material_stock: 'Live from Stores inventory — closing stock valued at rate.',
-  bank_balance: 'Live from Accounts — balance on the Bank Accounts control account (1010).',
+  bank_balance: 'Live from Accounts — Bank Accounts control account (1010), scoped to this project only.',
   other_projects_p3: 'Manual entry — cross-project fund allocation, no ERP source.',
   other_projects_tqs: 'Manual entry — cross-project fund allocation, no ERP source.',
 };
