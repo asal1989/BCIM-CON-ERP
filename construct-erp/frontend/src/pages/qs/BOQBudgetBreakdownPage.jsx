@@ -1281,10 +1281,11 @@ function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-      <div className="px-5 py-3 bg-slate-100 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
+      <div className="px-5 py-3 flex items-center justify-between flex-wrap gap-2"
+        style={{ background: `linear-gradient(90deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)` }}>
         <div>
-          <h3 className="text-sm font-bold text-slate-700">Monthly Expenditure Analysis</h3>
-          <p className="text-[11px] text-slate-400">Period: {months.length > 0 ? `${fmtMonth(months[0])} – ${fmtMonth(months[months.length - 1])}` : '—'} · Total paid: {fmtAmt(grandTotal)}</p>
+          <h3 className="text-sm font-bold text-white">Monthly Expenditure Analysis</h3>
+          <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.65)' }}>Period: {months.length > 0 ? `${fmtMonth(months[0])} – ${fmtMonth(months[months.length - 1])}` : '—'} · Total paid: {fmtAmt(grandTotal)}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {/* View toggle */}
