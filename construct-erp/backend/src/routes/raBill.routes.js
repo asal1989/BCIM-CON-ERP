@@ -60,16 +60,6 @@ const ensureRaBillCols = async () => {
     `ALTER TABLE ra_bills ADD COLUMN IF NOT EXISTS adhoc_advance_recovery NUMERIC(15,2) DEFAULT 0`,
     `ALTER TABLE ra_bills ADD COLUMN IF NOT EXISTS wo_number VARCHAR(100) DEFAULT ''`,
     `ALTER TABLE ra_bill_items ADD COLUMN IF NOT EXISTS cost_head TEXT`,
-    `CREATE TABLE IF NOT EXISTS ra_billing_plan (
-       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-       project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-       plan_month DATE NOT NULL,
-       planned_value NUMERIC(15,2) NOT NULL DEFAULT 0,
-       created_by UUID,
-       created_at TIMESTAMPTZ DEFAULT NOW(),
-       updated_at TIMESTAMPTZ DEFAULT NOW(),
-       UNIQUE(project_id, plan_month)
-     )`,
   ];
   for (const sql of alters) {
     try { await query(sql); } catch (_) {}
@@ -93,6 +83,24 @@ const ensureRaBillCols = async () => {
   } catch (_) {}
 };
 runSchemaInit('ra_bills', ensureRaBillCols);
+
+// Separate migration name — 'ra_bills' was already marked applied in production
+// before this table existed, and runSchemaInit never re-runs a completed migration.
+const ensureRaBillingPlanTable = async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS ra_billing_plan (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      plan_month DATE NOT NULL,
+      planned_value NUMERIC(15,2) NOT NULL DEFAULT 0,
+      created_by UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(project_id, plan_month)
+    )
+  `);
+};
+runSchemaInit('ra_billing_plan', ensureRaBillingPlanTable);
 
 // GET /ra-bills
 router.get('/', async (req, res) => {
