@@ -1,6 +1,6 @@
 // src/pages/qs/MeasurementPage.jsx
 import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -41,11 +41,35 @@ const StatusBadge = ({ status }) => {
 
 const TABS = [
   { key: 'all',        label: 'All'        },
+  { key: 'draft',      label: 'Draft'      },
   { key: 'submitted',  label: 'Pending QS' },
   { key: 'qs_approved',label: 'Pending PM' },
   { key: 'pm_approved',label: 'Approved'   },
   { key: 'rejected',   label: 'Rejected'   },
 ];
+
+// Each Quantity Survey nav entry (Quantity Take-Off / Joint Measurement /
+// Executed Quantities) lands here with a distinct `?view=` — this maps that
+// to a distinct heading and a distinct default status filter, since they're
+// really different stages of the same measurement-book workflow rather than
+// separate data sets.
+const VIEW_CONFIG = {
+  qto: {
+    title: 'Quantity Take-Off',
+    subtitle: 'Log a new measured quantity from drawings & site',
+    defaultTab: 'draft',
+  },
+  jmr: {
+    title: 'Joint Measurement',
+    subtitle: 'Entries awaiting joint QS + PM sign-off',
+    defaultTab: 'qs_approved',
+  },
+  executed: {
+    title: 'Executed Quantities',
+    subtitle: 'Fully approved — quantities certified as executed on site',
+    defaultTab: 'pm_approved',
+  },
+};
 
 const TEMPLATE_MB = [
   { Sr_No: '1.1', Analytical_Description: 'Excavation for Foundation - Section A', Location: 'Block A - North Grid', Execution_Date: '2026-04-16', Nos: '1', Len: '10.00', Br: '5.00', Ht: '1.50', Ded: '0.00' },
@@ -56,10 +80,13 @@ const TEMPLATE_MB = [
 
 export default function MeasurementPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const viewCfg = VIEW_CONFIG[searchParams.get('view')] || null;
+
   const [projectId,    setProjectId]    = useState('');
   const [showForm,     setShowForm]     = useState(false);
   const [editEntry,    setEditEntry]    = useState(null); // null = add mode, row = edit mode
-  const [activeTab,    setActiveTab]    = useState('all');
+  const [activeTab,    setActiveTab]    = useState(viewCfg?.defaultTab || 'all');
   const [search,       setSearch]       = useState('');
   const [selected,     setSelected]     = useState(null);
   const [rejectRemark, setRejectRemark] = useState('');
@@ -261,9 +288,9 @@ export default function MeasurementPage() {
               <Ruler className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-[15px] font-medium text-[#1a1c21] leading-none">Measurement Book</h1>
+              <h1 className="text-[15px] font-medium text-[#1a1c21] leading-none">{viewCfg?.title || 'Measurement Book'}</h1>
               <p className="text-[10px] text-[#8e94a3] font-medium uppercase tracking-wider mt-0.5">
-                Digital site measurement log &amp; verification
+                {viewCfg?.subtitle || 'Digital site measurement log & verification'}
               </p>
             </div>
           </div>
