@@ -2143,18 +2143,89 @@ router.get('/:project_id/cost-to-completion', async (req, res) => {
       `SELECT COALESCE(SUM(retention_amount),0) AS total FROM sc_bills WHERE project_id=$1 AND status NOT IN ('draft','rejected')`,
       [project_id]);
 
+    // ── Auto-computed figures (previously manual-entry) ─────────────────────
+    // Every value below now comes from live ERP data. Manual entry is kept
+    // ONLY for cross-project treasury figures the ERP genuinely cannot know
+    // (other_projects_p3 / other_projects_tqs).
+
+    // Client mobilization advance actually received — the Client Advance
+    // Requests module tracks this per project (requests → receipt tranches).
+    const advRecvR = await query(
+      `SELECT COALESCE(SUM(r.amount),0) AS total
+         FROM client_advance_receipts r
+         JOIN client_advance_requests car ON car.id = r.advance_id
+        WHERE car.project_id = $1`,
+      [project_id]);
+    const advanceReceived = parseFloat(advRecvR.rows[0].total);
+
+    // Trade-wise balance work = BOQ value per trade MINUS what's already been
+    // billed against those items. Trades are derived from the BOQ chapter
+    // name so this works for any project without extra configuration.
+    const tradeR = await query(`
+      SELECT
+        CASE
+          WHEN b.chapter_name ILIKE '%block%'      THEN 'blockwork_works'
+          WHEN b.chapter_name ILIKE '%plaster%'    THEN 'plastering_works'
+          WHEN b.chapter_name ILIKE '%waterproof%' THEN 'waterproofing_works'
+          ELSE 'misc_works'
+        END AS trade,
+        GREATEST(SUM(b.quantity*b.rate) - COALESCE(SUM(billed.amt),0), 0) AS balance
+      FROM boq_items b
+      LEFT JOIN LATERAL (
+        SELECT SUM(rbi.current_qty*rbi.rate) AS amt
+        FROM ra_bill_items rbi JOIN ra_bills rb ON rb.id = rbi.ra_bill_id
+        WHERE rbi.boq_item_id = b.id AND rb.status <> 'rejected'
+      ) billed ON TRUE
+      WHERE b.project_id = $1 AND b.is_active = true
+      GROUP BY 1`, [project_id]);
+    const trades = { blockwork_works: 0, plastering_works: 0, waterproofing_works: 0, misc_works: 0 };
+    for (const t of tradeR.rows) trades[t.trade] = parseFloat(t.balance || 0);
+
+    // GST payable — GST charged on RA bills raised to the client.
+    const gstR = await query(
+      `SELECT COALESCE(SUM(gst_amount),0) AS total FROM ra_bills WHERE project_id=$1 AND status <> 'rejected'`,
+      [project_id]);
+
+    // Bank balance — live balance on the Bank Accounts control account (1010).
+    // Company-wide (bank accounts aren't held per project), so it is shown as
+    // a treasury figure rather than a project-specific one.
+    const bankR = await query(
+      `SELECT COALESCE(SUM(jl.debit) - SUM(jl.credit), 0) AS bal
+         FROM journal_entry_lines jl
+         JOIN chart_of_accounts coa ON coa.id = jl.account_id
+         JOIN journal_entries je ON je.id = jl.journal_entry_id
+        WHERE coa.code = '1010' AND je.company_id = $1`,
+      [req.user.company_id]);
+
+    // Material stock lying at store, valued at rate. Wrapped defensively —
+    // stock schema varies across deployments and a missing column must not
+    // take down the whole statement.
+    let materialStock = 0;
+    try {
+      const stockR = await query(
+        `SELECT COALESCE(SUM(GREATEST(COALESCE(closing_stock,0),0) * COALESCE(unit_rate,0)),0) AS val
+           FROM inventory WHERE project_id=$1`, [project_id]);
+      materialStock = parseFloat(stockR.rows[0].val || 0);
+    } catch (_) { materialStock = 0; }
+
+    // Retention money recovered back from the client on RA bills.
+    const retRecoveredR = await query(
+      `SELECT COALESCE(SUM(retention_amount),0) AS total
+         FROM ra_bills WHERE project_id=$1 AND status IN ('certified','paid')`,
+      [project_id]);
+
     res.json({
       contract_detail: {
         project_value: projectValue,
-        advance_received: m.advance_received,
+        advance_received: advanceReceived,
         ra_cumulative_amount: raNetPayable,
         ra_bill_count: parseInt(ra.bill_count, 10),
       },
       balance_work: {
-        blockwork_works: m.blockwork_works,
-        plastering_works: m.plastering_works,
-        waterproofing_works: m.waterproofing_works,
-        misc_works: m.misc_works,
+        blockwork_works: trades.blockwork_works,
+        plastering_works: trades.plastering_works,
+        waterproofing_works: trades.waterproofing_works,
+        misc_works: trades.misc_works,
         system_check_total: Math.max(projectValue - raNetPayable, 0),
       },
       liabilities: {
@@ -2163,18 +2234,22 @@ router.get('/:project_id/cost-to-completion', async (req, res) => {
         // just needs the budget total here.
         total_budget: parseFloat(budgetR.rows[0].total),
         sundry_creditors: parseFloat(sundryR.rows[0].outstanding),
-        advance_to_be_recovered: Math.max(m.advance_received - mobRecovered, 0),
+        advance_to_be_recovered: Math.max(advanceReceived - mobRecovered, 0),
         retention_payable_subcontractor: parseFloat(scRetentionR.rows[0].total),
-        gst_payable: m.gst_payable,
+        gst_payable: parseFloat(gstR.rows[0].total),
       },
       inflow: {
         ra_receivable: raReceivable,
-        retention_money_recovered: m.retention_money_recovered,
-        material_stock: m.material_stock,
+        retention_money_recovered: parseFloat(retRecoveredR.rows[0].total),
+        material_stock: materialStock,
+        // No ERP source — cross-project treasury allocations stay manual.
         other_projects_p3: m.other_projects_p3,
         other_projects_tqs: m.other_projects_tqs,
-        bank_balance: m.bank_balance,
+        bank_balance: parseFloat(bankR.rows[0].bal),
       },
+      // Fields still accepting manual entry; everything else is auto-computed
+      // from live ERP data and rendered read-only.
+      manual_fields: ['other_projects_p3', 'other_projects_tqs'],
       updated_at: manual.updated_at || null,
     });
   } catch (err) {

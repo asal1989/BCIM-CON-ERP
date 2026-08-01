@@ -1596,6 +1596,16 @@ const CTC_MANUAL_ROWS = {
   bank_balance: 'Bank Balance',
 };
 
+// Where each auto-computed inflow figure comes from, surfaced as a tooltip so
+// the number is traceable back to its ERP source.
+const CTC_AUTO_NOTES = {
+  retention_money_recovered: 'Live from RA bills — retention held on certified/paid bills.',
+  material_stock: 'Live from Stores inventory — closing stock valued at rate.',
+  bank_balance: 'Live from Accounts — balance on the Bank Accounts control account (1010).',
+  other_projects_p3: 'Manual entry — cross-project fund allocation, no ERP source.',
+  other_projects_tqs: 'Manual entry — cross-project fund allocation, no ERP source.',
+};
+
 function CtcRow({ label, value, editable, editing, onStartEdit, onCancel, onSave, saving, bold, highlight, note }) {
   return (
     <tr className={clsx('border-b border-slate-100', highlight && 'bg-emerald-50/50')}>
@@ -1675,6 +1685,8 @@ function CostToCompletionTab({ projectId, projectName, contractValue }) {
   const balanceWork   = ctc.balance_work   || {};
   const liabilities   = ctc.liabilities    || {};
   const inflow        = ctc.inflow        || {};
+  // Only these still accept typed input; everything else is computed live.
+  const manualFields  = ctc.manual_fields || ['other_projects_p3', 'other_projects_tqs'];
 
   const rows = summaryData?.data || [];
   const totalBudget = rows.filter(r => !r.derived).reduce((s, r) => s + r.budget, 0);
@@ -1707,7 +1719,8 @@ function CostToCompletionTab({ projectId, projectName, contractValue }) {
       <div className="px-5 py-4 bg-gradient-to-r from-slate-800 to-slate-700">
         <p className="text-white font-bold text-sm">{projectName} — Cost to Completion</p>
         <p className="text-slate-300 text-[11px] mt-0.5">
-          Live figures pulled from the ERP; blue-underlined amounts are manual entries — click to edit
+          Auto-computed live from ERP data — hover ⓘ on any row to see its source. Only the two
+          cross-project fund rows (blue, underlined) accept manual entry.
           {ctc.updated_at && ` · last updated ${new Date(ctc.updated_at).toLocaleDateString('en-IN')}`}
         </p>
       </div>
@@ -1716,19 +1729,16 @@ function CostToCompletionTab({ projectId, projectName, contractValue }) {
           <tbody>
             {sectionHeader('Contract detail', 'bg-blue-900')}
             <CtcRow label="Project Value" value={contractDetail.project_value} bold />
-            <CtcRow label={CTC_MANUAL_ROWS.advance_received} value={manual('advance_received')} editable
-              editing={editKey === 'advance_received'} onStartEdit={() => setEditKey('advance_received')}
-              onCancel={() => setEditKey(null)} onSave={(v) => commit('advance_received', v)} saving={saveMutation.isPending}
-              note="Client mobilization advance — not tracked elsewhere in the ERP." />
+            <CtcRow label={CTC_MANUAL_ROWS.advance_received} value={manual('advance_received')}
+              note="Live from Client Advance Requests — total of all receipt tranches recorded against this project." />
             <CtcRow label="Cum running Invoice (RA) amount" value={contractDetail.ra_cumulative_amount}
               note={`Sum of net_payable across ${contractDetail.ra_bill_count || 0} RA bill(s), including drafts.`} />
 
             <tr><td colSpan={2} className="h-3" /></tr>
             {sectionHeader('A. Balance work claim detail', 'bg-amber-600')}
             {['blockwork_works', 'plastering_works', 'waterproofing_works', 'misc_works'].map(k => (
-              <CtcRow key={k} label={CTC_MANUAL_ROWS[k]} value={manual(k)} editable
-                editing={editKey === k} onStartEdit={() => setEditKey(k)}
-                onCancel={() => setEditKey(null)} onSave={(v) => commit(k, v)} saving={saveMutation.isPending} />
+              <CtcRow key={k} label={CTC_MANUAL_ROWS[k]} value={manual(k)}
+                note="Live from BOQ — chapter value for this trade, less what has already been billed against it." />
             ))}
             <CtcRow label="Total Works to Be Done" value={totalWorksToBeDone} bold highlight
               note={`System check (Project Value − RA billed): ₹${Math.round(balanceWork.system_check_total || 0).toLocaleString('en-IN')}`} />
@@ -1743,9 +1753,8 @@ function CostToCompletionTab({ projectId, projectName, contractValue }) {
               note="Mobilization advance minus what's already recovered against RA bills." />
             <CtcRow label="Retention Payable - Subcontractor" value={liabilities.retention_payable_subcontractor}
               note="SC bills' retention_amount not yet released." />
-            <CtcRow label={CTC_MANUAL_ROWS.gst_payable} value={manual('gst_payable')} editable
-              editing={editKey === 'gst_payable'} onStartEdit={() => setEditKey('gst_payable')}
-              onCancel={() => setEditKey(null)} onSave={(v) => commit('gst_payable', v)} saving={saveMutation.isPending} />
+            <CtcRow label={CTC_MANUAL_ROWS.gst_payable} value={manual('gst_payable')}
+              note="Live from RA bills — GST charged to the client across all non-rejected bills." />
             <CtcRow label="Total Outflow" value={totalOutflow} bold highlight />
 
             <tr><td colSpan={2} className="h-3" /></tr>
@@ -1754,11 +1763,19 @@ function CostToCompletionTab({ projectId, projectName, contractValue }) {
               note="Net of TDS and any amount already received against RA bills." />
             <CtcRow label="Work Order Billable to Lanco" value={totalWorksToBeDone}
               note="= Total Works to Be Done (Section A)." />
-            {['retention_money_recovered', 'material_stock', 'other_projects_p3', 'other_projects_tqs', 'bank_balance'].map(k => (
-              <CtcRow key={k} label={CTC_MANUAL_ROWS[k]} value={manual(k)} editable
-                editing={editKey === k} onStartEdit={() => setEditKey(k)}
-                onCancel={() => setEditKey(null)} onSave={(v) => commit(k, v)} saving={saveMutation.isPending} />
-            ))}
+            {['retention_money_recovered', 'material_stock', 'other_projects_p3', 'other_projects_tqs', 'bank_balance'].map(k => {
+              // Everything is auto-computed from live ERP data except the
+              // cross-project treasury allocations, which the ERP has no
+              // source for — the backend tells us which those are.
+              const isManual = manualFields.includes(k);
+              return (
+                <CtcRow key={k} label={CTC_MANUAL_ROWS[k]} value={manual(k)}
+                  editable={isManual}
+                  editing={editKey === k} onStartEdit={() => setEditKey(k)}
+                  onCancel={() => setEditKey(null)} onSave={(v) => commit(k, v)} saving={saveMutation.isPending}
+                  note={CTC_AUTO_NOTES[k]} />
+              );
+            })}
             <CtcRow label="Total inflow (D)" value={totalInflow} bold highlight />
 
             <tr><td colSpan={2} className="h-3" /></tr>
