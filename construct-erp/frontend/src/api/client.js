@@ -259,6 +259,7 @@ export const boqAPI = {
   update:  (id, d)  => api.put(`/boq/${id}`, d),
   delete:  (id)     => api.delete(`/boq/${id}`),
   import:  (data)   => api.post('/boq/import', data, { headers: { 'Content-Type': undefined } }),
+  copy:    (sourceProjectId, targetProjectId) => api.post('/boq/copy', { source_project_id: sourceProjectId, target_project_id: targetProjectId }),
 };
 
 export const boqBudgetAPI = {

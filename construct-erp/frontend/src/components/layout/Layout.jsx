@@ -121,7 +121,7 @@ const navGroups = [
 
     // BOQ Management
     { to: '/qs/boq',                            icon: FileSpreadsheet, label: 'BOQ Master' },
-    { to: '/qs/boq?view=revisions',             icon: History,         label: 'BOQ Revisions' },
+    { to: '/qs/variations?tab=amendments',      icon: History,         label: 'BOQ Revisions' },
     { to: '/qs/boq-dashboard',                  icon: Calculator,      label: 'Rate Analysis' },
     { to: '/qs/boq?view=import',                icon: UploadCloud,     label: 'BOQ Import' },
     { to: '/qs/boq-mapping',                    icon: Layers,          label: 'BOQ SC Mapping' },
@@ -547,7 +547,7 @@ const NAV_SECTIONS = {
   ],
   'QS & Billing': [
     { label: null,                  paths: ['/qs'] },
-    { label: 'BOQ Management',      paths: ['/qs/boq','/qs/boq?view=revisions','/qs/boq-dashboard','/qs/boq?view=import','/qs/boq-mapping'] },
+    { label: 'BOQ Management',      paths: ['/qs/boq','/qs/variations?tab=amendments','/qs/boq-dashboard','/qs/boq?view=import','/qs/boq-mapping'] },
     { label: 'Quantity Survey',     paths: ['/qs/measurements?view=qto','/qs/measurements','/qs/measurements?view=jmr','/qs/material-recon?view=qty','/qs/measurements?view=executed'] },
     { label: 'Client Billing',      paths: ['/qs/ra-bills','/qs/ra-bills?type=interim','/qs/ra-bills?type=final','/qs/variations?type=extra','/qs/variations','/qs/ra-bills?type=tax-invoice'] },
     { label: 'Subcontract Billing', paths: ['/qs/work-orders','/tqs/bills','/tqs/bills?type=final','/tqs/deduction-register?type=retention','/tqs/deduction-register?type=recoveries'] },

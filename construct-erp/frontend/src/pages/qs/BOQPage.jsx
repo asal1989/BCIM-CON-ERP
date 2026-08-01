@@ -123,6 +123,19 @@ export default function BOQPage() {
     onError: (e) => toast.error(e?.response?.data?.error || 'Import failed'),
   });
 
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [copySourceId,  setCopySourceId]  = useState('');
+  const copyMutation = useMutation({
+    mutationFn: () => boqAPI.copy(copySourceId, projectId),
+    onSuccess: (r) => {
+      toast.success(`${r.data?.data?.copied || 0} items copied into this project`);
+      setShowCopyModal(false);
+      setCopySourceId('');
+      qc.invalidateQueries({ queryKey: ['boq', projectId] });
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Copy failed'),
+  });
+
   // ── Derived data ──────────────────────────────────────────────────────────────
   // Use chapter_name grouping only when items have multiple distinct chapter names.
   // If all items share one name (e.g. the project title), fall back to chapter_no.
@@ -369,6 +382,13 @@ export default function BOQPage() {
                   >
                     {importMutation.isPending ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
                     {importMutation.isPending ? 'Importing…' : 'Import'}
+                  </button>
+                  <button
+                    onClick={() => { setCopySourceId(''); setShowCopyModal(true); }}
+                    title="Copy BOQ from another project"
+                    className="flex items-center gap-1.5 px-4 py-2 bg-white border border-slate-200 text-slate-900 text-[10px] font-medium uppercase tracking-widest rounded-xl hover:bg-slate-50 transition-all shadow-sm"
+                  >
+                    <Layers className="w-3.5 h-3.5" /> Copy BOQ
                   </button>
                   <button
                     onClick={() => { setForm(EMPTY_FORM); setShowForm(true); }}
@@ -815,6 +835,54 @@ export default function BOQPage() {
                 <button type="submit" disabled={createMutation.isPending}
                   className="flex-[2] py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-medium uppercase text-[10px] tracking-widest rounded-xl transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50 flex items-center justify-center gap-2">
                   {createMutation.isPending ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Saving…</> : <><Save className="w-3.5 h-3.5" /> Save Item</>}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showCopyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center">
+                  <Layers className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-medium text-slate-900 uppercase tracking-tight">Copy BOQ</h2>
+                  <p className="text-[9px] text-slate-900 font-medium uppercase tracking-widest">Into {selectedProject?.name}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowCopyModal(false)} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-200 text-slate-900 font-medium transition-all">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={(e) => { e.preventDefault(); if (copySourceId) copyMutation.mutate(); }} className="p-6 space-y-5">
+              <FormField label="Copy items from project" required>
+                <select
+                  className={inputCls}
+                  value={copySourceId}
+                  onChange={e => setCopySourceId(e.target.value)}
+                  required
+                >
+                  <option value="">— Select source project —</option>
+                  {projects.filter(p => p.id !== projectId).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </FormField>
+              <p className="text-[10px] text-slate-400">
+                Every active BOQ item from the source project will be added to {selectedProject?.name} as new items — rates and quantities carry over, existing items already in this project are left untouched.
+              </p>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowCopyModal(false)}
+                  className="px-4 py-2 text-[10px] font-medium uppercase tracking-widest text-slate-900 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all">
+                  Cancel
+                </button>
+                <button type="submit" disabled={!copySourceId || copyMutation.isPending}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-medium uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50">
+                  {copyMutation.isPending ? 'Copying…' : 'Copy BOQ'}
                 </button>
               </div>
             </form>
