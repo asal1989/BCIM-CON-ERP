@@ -1742,6 +1742,7 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
   const [editReceivedVal, setEditReceivedVal] = useState('');
   const [editingPaidHead, setEditingPaidHead] = useState(null);
   const [editPaidVal, setEditPaidVal] = useState('');
+  const [splitHead, setSplitHead] = useState(null);
   const [expandedHead, setExpandedHead] = useState(null);
   const [showBulk, setShowBulk] = useState(false);
   const [bulkText, setBulkText] = useState(DEFAULT_BULK_TEXT);
@@ -2085,6 +2086,7 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
             const overCritical = over && !contingencyCoversAll;
             const isContingency = r.cost_head === 'Contingency';
             const hasActual = r.actual > 0;
+            const hasSubitems = !!r.sub_items;
             const pctUsed = r.budget > 0 ? (r.actual / r.budget) * 100 : 0;
             const barStatus = pctUsed > 100 ? (overCovered ? 'amber' : 'rose') : pctUsed >= 85 ? 'amber' : 'emerald';
             return (
@@ -2107,6 +2109,13 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
                         </button>
                       )}
                       <span>{r.cost_head}</span>
+                      {hasSubitems && (
+                        <button onClick={() => setSplitHead(r.cost_head)}
+                          title="Enter/view the split-up for this cost head"
+                          className="ml-1 px-1.5 py-0.5 bg-violet-50 border border-violet-200 text-violet-600 text-[9px] font-bold rounded hover:bg-violet-100 flex-shrink-0">
+                          Split
+                        </button>
+                      )}
                     </div>
                   </td>
                   <td className="px-2 py-3.5">
@@ -2164,6 +2173,13 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
                       <span className="font-semibold text-emerald-700">
                         {r.received > 0 ? `₹${Math.round(r.received).toLocaleString('en-IN')}` : '—'}
                       </span>
+                    ) : hasSubitems ? (
+                      <button onClick={() => setSplitHead(r.cost_head)}
+                        className="font-semibold text-emerald-700 hover:text-violet-600 hover:underline underline-offset-2 transition-colors">
+                        {r.received > 0 ? `₹${Math.round(r.received).toLocaleString('en-IN')}` : (
+                          <span className="px-2 py-0.5 bg-violet-50 border border-violet-200 text-violet-600 text-[10px] font-bold rounded normal-case no-underline">+ Split</span>
+                        )}
+                      </button>
                     ) : r.received > 0 ? (
                       <button onClick={() => toggleExpand(r.cost_head, hasActual)}
                         className={clsx('font-semibold hover:underline underline-offset-2 transition-colors',
@@ -2203,6 +2219,13 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
                       <span className="font-semibold text-indigo-700">
                         {r.paid > 0 ? `₹${Math.round(r.paid).toLocaleString('en-IN')}` : '—'}
                       </span>
+                    ) : hasSubitems ? (
+                      <button onClick={() => setSplitHead(r.cost_head)}
+                        className="font-semibold text-indigo-700 hover:text-violet-600 hover:underline underline-offset-2 transition-colors">
+                        {r.paid > 0 ? `₹${Math.round(r.paid).toLocaleString('en-IN')}` : (
+                          <span className="px-2 py-0.5 bg-violet-50 border border-violet-200 text-violet-600 text-[10px] font-bold rounded normal-case no-underline">+ Split</span>
+                        )}
+                      </button>
                     ) : r.paid > 0 ? (
                       <div className="text-right">
                         <button onClick={() => toggleExpand(r.cost_head, hasActual)}
@@ -2328,6 +2351,115 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
       )}
 
       <ProfitabilityAbstract projectId={projectId} totalSpent={totalActual} />
+
+      {splitHead && (
+        <SubitemSplitModal projectId={projectId} costHead={splitHead} onClose={() => setSplitHead(null)} />
+      )}
+    </div>
+  );
+}
+
+function SubitemSplitModal({ projectId, costHead, onClose }) {
+  const qc = useQueryClient();
+  const [editKey, setEditKey] = useState(null); // `${sub_item}:received` | `${sub_item}:paid`
+  const [editVal, setEditVal] = useState('');
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['costhead-subitems', projectId, costHead],
+    queryFn: () => boqBudgetAPI.costheadSubitems(projectId, costHead).then(r => r.data?.data || []),
+    enabled: !!projectId && !!costHead,
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: (payload) => boqBudgetAPI.setCostheadSubitem(projectId, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['costhead-subitems', projectId, costHead] });
+      qc.invalidateQueries({ queryKey: ['costhead-summary', projectId] });
+      setEditKey(null);
+      toast.success('Saved');
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to save'),
+  });
+
+  const commit = (sub_item, field) => {
+    const n = parseFloat(editVal);
+    if (isNaN(n) || n < 0) { toast.error('Enter a valid amount'); return; }
+    saveMutation.mutate({ cost_head: costHead, sub_item, [field === 'received' ? 'received_amount' : 'paid_amount']: n });
+  };
+
+  const rows = data || [];
+  const totalReceived = rows.reduce((s, r) => s + (r.received_amount || 0), 0);
+  const totalPaid = rows.reduce((s, r) => s + (r.paid_amount || 0), 0);
+
+  const Cell = ({ row, field }) => {
+    const key = `${row.sub_item}:${field}`;
+    const amount = field === 'received' ? row.received_amount : row.paid_amount;
+    if (editKey === key) {
+      return (
+        <div className="flex items-center justify-end gap-1">
+          <input autoFocus type="number" value={editVal}
+            onChange={e => setEditVal(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') commit(row.sub_item, field); if (e.key === 'Escape') setEditKey(null); }}
+            className="w-24 border border-violet-400 rounded-lg px-2 py-1 text-xs text-right focus:outline-none"
+          />
+          <button onClick={() => commit(row.sub_item, field)} disabled={saveMutation.isPending}
+            className="shrink-0 px-2 py-1 bg-violet-600 text-white text-[10px] font-bold rounded-lg hover:bg-violet-500 disabled:opacity-50">Save</button>
+          <button onClick={() => setEditKey(null)}
+            className="shrink-0 px-2 py-1 bg-slate-100 text-slate-600 text-[10px] rounded-lg hover:bg-slate-200">✕</button>
+        </div>
+      );
+    }
+    return (
+      <button onClick={() => { setEditVal(amount ? Math.round(amount).toString() : ''); setEditKey(key); }}
+        className="group/cell inline-flex items-center gap-1.5 font-semibold hover:text-violet-600">
+        {amount > 0 ? `₹${Math.round(amount).toLocaleString('en-IN')}` : <span className="text-slate-300 font-normal italic">Not set</span>}
+        <span className="text-[9px] text-violet-500 opacity-0 group-hover/cell:opacity-100">Edit</span>
+      </button>
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 bg-gradient-to-r from-violet-600 to-indigo-600 flex items-center justify-between">
+          <div>
+            <div className="text-white font-bold text-sm">{costHead} — Split-up</div>
+            <div className="text-violet-100 text-[11px]">Enter Bills Received / Paid for each sub-item</div>
+          </div>
+          <button onClick={onClose} className="text-white/80 hover:text-white text-lg leading-none">✕</button>
+        </div>
+        <div className="p-5">
+          {isLoading ? (
+            <div className="text-center text-sm text-slate-400 py-8">Loading…</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[10px] uppercase tracking-wide text-slate-400 border-b border-slate-200">
+                  <th className="pb-2 font-semibold">Sub-item</th>
+                  <th className="pb-2 font-semibold text-right">Received</th>
+                  <th className="pb-2 font-semibold text-right">Paid</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(row => (
+                  <tr key={row.sub_item} className="border-b border-slate-100">
+                    <td className="py-2.5 text-slate-700 font-medium">{row.sub_item}</td>
+                    <td className="py-2.5 text-right"><Cell row={row} field="received" /></td>
+                    <td className="py-2.5 text-right"><Cell row={row} field="paid" /></td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="font-bold text-slate-800">
+                  <td className="pt-3">Total</td>
+                  <td className="pt-3 text-right text-emerald-700">₹{Math.round(totalReceived).toLocaleString('en-IN')}</td>
+                  <td className="pt-3 text-right text-indigo-700">₹{Math.round(totalPaid).toLocaleString('en-IN')}</td>
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

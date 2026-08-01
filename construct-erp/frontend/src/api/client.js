@@ -270,6 +270,8 @@ export const boqBudgetAPI = {
   costheadSummary:    (projectId)          => api.get(`/boq-budget/${projectId}/costhead-summary`),
   setCostheadBudget:  (projectId, payload) => api.put(`/boq-budget/${projectId}/costhead-budget`, payload),
   setCostheadReceivedPaid: (projectId, payload) => api.put(`/boq-budget/${projectId}/costhead-received-paid`, payload),
+  costheadSubitems:    (projectId, costHead)  => api.get(`/boq-budget/${projectId}/costhead-subitems`, { params: { cost_head: costHead } }),
+  setCostheadSubitem:  (projectId, payload)   => api.put(`/boq-budget/${projectId}/costhead-subitems`, payload),
   bulkCostheadBudget:  (projectId, entries)   => api.post(`/boq-budget/${projectId}/bulk-costhead-budget`, { entries }),
   costheadDrilldown:   (projectId, costHead, boqItemId, opts = {})  => api.get(`/boq-budget/${projectId}/costhead-drilldown`, { params: { cost_head: costHead, boq_item_id: boqItemId || undefined, chapter: opts.chapter || undefined, unlinked: opts.unlinked ? '1' : undefined } }),
   itemsDrilldown:      (projectId, itemIds, chapter) => api.get(`/boq-budget/${projectId}/items-drilldown`, { params: { item_ids: (itemIds || []).join(','), chapter: chapter || undefined } }),

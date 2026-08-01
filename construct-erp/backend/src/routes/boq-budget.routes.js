@@ -101,6 +101,36 @@ runSchemaInit('project_costhead_budgets_received_paid_cols', async () => {
   await query(`ALTER TABLE project_costhead_budgets ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(16,2) DEFAULT 0`);
 });
 
+// Some manually-entered cost heads (payroll-type costs with no natural bill
+// source) need their total broken into named sub-items — e.g. "Supervision &
+// Accommodation" split into Staff Salaries / Workers Salaries / Staff
+// Accommodation / Staff Mess, each entered separately. Where a cost head has
+// sub-items defined here, its Received/Paid figure on Budget Control is the
+// SUM of its sub-item rows instead of the flat project_costhead_budgets
+// received_amount/paid_amount columns (those stay in place for every other
+// manually-entered head).
+const COSTHEAD_SUBITEMS = {
+  'Supervision & Accommodation': ['Staff Salaries', 'Workers Salaries', 'Staff Accommodation', 'Staff Mess'],
+  'EPF, PT & Insurance': ['Staff PF', 'Workers PF', 'Staff PT', 'Labours PT'],
+};
+
+runSchemaInit('project_costhead_subitems', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS project_costhead_subitems (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      cost_head TEXT NOT NULL,
+      sub_item TEXT NOT NULL,
+      received_amount NUMERIC(16,2) DEFAULT 0,
+      paid_amount NUMERIC(16,2) DEFAULT 0,
+      created_by UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (project_id, cost_head, sub_item)
+    )
+  `);
+});
+
 router.use(authenticate);
 router.use(loadProjectScope);
 
@@ -1038,9 +1068,14 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
 
     const budgetMap = {};
     const boqManualMap = {};
+    // Cost heads with sub-items (see COSTHEAD_SUBITEMS) get their Received/Paid
+    // from the sub-item rows instead of the flat manual columns above — skip
+    // the flat received_amount/paid_amount for those heads so they aren't
+    // double-counted alongside the sub-item sum applied below.
     for (const b of budgets.rows) {
       budgetMap[b.cost_head] = parseFloat(b.budget_amount || 0);
       boqManualMap[b.cost_head] = parseFloat(b.boq_amount || 0);
+      if (COSTHEAD_SUBITEMS[b.cost_head]) continue;
       const manualReceived = parseFloat(b.received_amount || 0);
       const manualPaid = parseFloat(b.paid_amount || 0);
       if (manualReceived > 0) {
@@ -1050,6 +1085,39 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
       if (manualPaid > 0) {
         paidMap[b.cost_head] = (paidMap[b.cost_head] || 0) + manualPaid;
         paidInvoiceMap[b.cost_head] = (paidInvoiceMap[b.cost_head] || 0) + manualPaid;
+      }
+    }
+
+    // Sub-item breakdown for configured cost heads (Supervision & Accommodation,
+    // EPF/PT/Insurance) — sum each head's sub-items into its Received/Paid.
+    const subItemHeads = Object.keys(COSTHEAD_SUBITEMS);
+    const subItemsMap = {};
+    if (subItemHeads.length) {
+      const subRows = await query(
+        `SELECT cost_head, sub_item, COALESCE(received_amount,0) AS received_amount, COALESCE(paid_amount,0) AS paid_amount
+         FROM project_costhead_subitems WHERE project_id=$1 AND cost_head = ANY($2::text[])`,
+        [project_id, subItemHeads]
+      );
+      for (const head of subItemHeads) {
+        const items = COSTHEAD_SUBITEMS[head].map(name => {
+          const row = subRows.rows.find(r => r.cost_head === head && r.sub_item === name);
+          return {
+            sub_item: name,
+            received_amount: row ? parseFloat(row.received_amount || 0) : 0,
+            paid_amount: row ? parseFloat(row.paid_amount || 0) : 0,
+          };
+        });
+        subItemsMap[head] = items;
+        const totalReceived = items.reduce((s, i) => s + i.received_amount, 0);
+        const totalPaid = items.reduce((s, i) => s + i.paid_amount, 0);
+        if (totalReceived > 0) {
+          receivedMap[head] = (receivedMap[head] || 0) + totalReceived;
+          actualMap[head] = (actualMap[head] || 0) + totalReceived;
+        }
+        if (totalPaid > 0) {
+          paidMap[head] = (paidMap[head] || 0) + totalPaid;
+          paidInvoiceMap[head] = (paidInvoiceMap[head] || 0) + totalPaid;
+        }
       }
     }
 
@@ -1134,6 +1202,7 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
       balance: (budgetMap[head] || 0) - (actualMap[head] || 0),
       derived: DERIVED_HEADS.has(head),
       monthly_avg: parseFloat(((actualMap[head] || 0) / monthsElapsed).toFixed(2)),
+      sub_items: subItemsMap[head] || null,
     }));
 
     // Sort by BOQ_COST_HEADS order, then extras at end
@@ -1867,6 +1936,72 @@ router.put('/:project_id/costhead-received-paid', authorize(...BUDGET_WRITERS), 
         updated_at      = NOW()
       RETURNING *`,
       [project_id, cost_head, rAmt, pAmt, req.user.id]
+    );
+    res.json({ data: r.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /boq-budget/:project_id/costhead-subitems?cost_head=Supervision+%26+Accommodation
+// Returns the configured sub-items for a cost head with their current amounts
+// (0 for any sub-item that hasn't been entered yet).
+router.get('/:project_id/costhead-subitems', async (req, res) => {
+  try {
+    const { project_id } = req.params;
+    const { cost_head } = req.query;
+    if (!cost_head) return res.status(400).json({ error: 'cost_head is required' });
+    if (!COSTHEAD_SUBITEMS[cost_head]) return res.status(400).json({ error: 'This cost head has no sub-items configured' });
+
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) return res.status(403).json({ error: 'Access denied' });
+
+    const rows = await query(
+      `SELECT sub_item, COALESCE(received_amount,0) AS received_amount, COALESCE(paid_amount,0) AS paid_amount
+       FROM project_costhead_subitems WHERE project_id=$1 AND cost_head=$2`,
+      [project_id, cost_head]
+    );
+    const data = COSTHEAD_SUBITEMS[cost_head].map(name => {
+      const row = rows.rows.find(r => r.sub_item === name);
+      return {
+        sub_item: name,
+        received_amount: row ? parseFloat(row.received_amount || 0) : 0,
+        paid_amount: row ? parseFloat(row.paid_amount || 0) : 0,
+      };
+    });
+    res.json({ data });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /boq-budget/:project_id/costhead-subitems
+// Upsert Received/Paid for a single sub-item of a configured cost head.
+router.put('/:project_id/costhead-subitems', authorize(...BUDGET_WRITERS), async (req, res) => {
+  try {
+    const { project_id } = req.params;
+    const { cost_head, sub_item, received_amount, paid_amount } = req.body;
+    if (!cost_head || !sub_item) return res.status(400).json({ error: 'cost_head and sub_item are required' });
+    if (!COSTHEAD_SUBITEMS[cost_head]?.includes(sub_item)) {
+      return res.status(400).json({ error: 'Unknown sub_item for this cost head' });
+    }
+
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) return res.status(403).json({ error: 'Access denied' });
+
+    const rAmt = received_amount != null ? parseFloat(received_amount) || 0 : null;
+    const pAmt = paid_amount     != null ? parseFloat(paid_amount)     || 0 : null;
+    const r = await query(`
+      INSERT INTO project_costhead_subitems (project_id, cost_head, sub_item, received_amount, paid_amount, created_by)
+      VALUES ($1, $2, $3, COALESCE($4, 0), COALESCE($5, 0), $6)
+      ON CONFLICT (project_id, cost_head, sub_item) DO UPDATE SET
+        received_amount = CASE WHEN $4 IS NOT NULL THEN $4 ELSE project_costhead_subitems.received_amount END,
+        paid_amount     = CASE WHEN $5 IS NOT NULL THEN $5 ELSE project_costhead_subitems.paid_amount     END,
+        updated_at      = NOW()
+      RETURNING *`,
+      [project_id, cost_head, sub_item, rAmt, pAmt, req.user.id]
     );
     res.json({ data: r.rows[0] });
   } catch (err) {
