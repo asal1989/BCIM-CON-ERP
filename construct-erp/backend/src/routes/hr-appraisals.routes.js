@@ -2,11 +2,18 @@
 // Annual performance reviews, KRA scoring, increment management
 const express = require('express');
 const router = express.Router();
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
 
 router.use(authenticate);
+
+// Roles allowed to view/create/edit ANY appraisal in the company. A plain
+// employee may still view/acknowledge their OWN appraisal (checked per-route
+// below) — this file previously had no authorization at all, letting any
+// authenticated employee read or edit anyone else's appraisal.
+const HR_ROLES = ['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager', 'manager', 'department_head', 'project_manager'];
+const isHrRole = (role) => HR_ROLES.includes(role);
 
 const initTable = async () => {
   await query(`
@@ -44,7 +51,7 @@ const initTable = async () => {
 };
 runSchemaInit('hr-appraisals', initTable);
 
-router.get('/', async (req, res) => {
+router.get('/', authorize(...HR_ROLES), async (req, res) => {
   try {
     const { user_id, review_period, status } = req.query;
     let sql = `
@@ -78,11 +85,15 @@ router.get('/:id', async (req, res) => {
       [req.params.id, req.user.company_id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    // An employee may view their own appraisal; anyone else needs an HR role.
+    if (rows[0].user_id !== req.user.id && !isHrRole(req.user.role)) {
+      return res.status(403).json({ error: 'Not authorized to view this appraisal' });
+    }
     res.json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', authorize(...HR_ROLES), async (req, res) => {
   try {
     const {
       user_id, review_period, review_period_type, appraisal_year, review_date, reviewer_id,
@@ -108,7 +119,7 @@ router.post('/', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', authorize(...HR_ROLES), async (req, res) => {
   try {
     const {
       review_date, review_period_type, appraisal_year,

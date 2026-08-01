@@ -15,7 +15,7 @@ const OT_STATUS = { pending:'yellow', approved:'green', rejected:'red', paid:'bl
 
 function ShiftForm({ shift, onClose, onSaved }) {
   const isEdit = !!shift;
-  const [f, setF] = useState(shift || { name:'', code:'', start_time:'09:00', end_time:'18:00', break_minutes:60, is_night_shift:false, ot_after_minutes:0 });
+  const [f, setF] = useState(shift || { name:'', code:'', start_time:'09:00', end_time:'18:00', break_minutes:60, is_night_shift:false, ot_after_minutes:0, weekly_off_day:0 });
   const set = (k,v) => setF(p=>({...p,[k]:v}));
   const mut = useMutation({
     mutationFn: d => isEdit ? hrShiftsAPI.updateShift(shift.id, d) : hrShiftsAPI.createShift(d),
@@ -51,6 +51,13 @@ function ShiftForm({ shift, onClose, onSaved }) {
           <p className="text-[11px] text-slate-400 bg-slate-50 rounded-lg px-3 py-2">
             No grace period — employees are marked late from the exact shift start time.
           </p>
+          <div><label className="block text-[11px] text-slate-500 mb-1">Weekly Off Day</label>
+            <select value={f.weekly_off_day ?? 0} onChange={e=>set('weekly_off_day', parseInt(e.target.value))} className={INP}>
+              {['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map((d,i)=>(
+                <option key={i} value={i}>{d}</option>
+              ))}
+            </select>
+          </div>
           <label className="flex items-center gap-2 text-xs cursor-pointer">
             <input type="checkbox" checked={f.is_night_shift} onChange={e=>set('is_night_shift',e.target.checked)} className="w-4 h-4 rounded" />
             Night Shift

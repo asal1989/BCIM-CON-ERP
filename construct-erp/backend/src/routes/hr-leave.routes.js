@@ -63,15 +63,26 @@ const initTables = async () => {
 runSchemaInit('hr-leave', initTables);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-// Count working days between two dates (excluding Sundays only — basic version)
-function workingDays(fromDate, toDate, halfDay) {
+// Count working days between two dates — excludes Sundays and company holidays,
+// so a leave request spanning a holiday no longer over-counts against balance.
+async function workingDays(fromDate, toDate, halfDay, companyId) {
   if (halfDay) return 0.5;
   const from = new Date(fromDate);
   const to   = new Date(toDate);
-  let count  = 0;
-  const cur  = new Date(from);
+
+  const holidayRes = await query(
+    `SELECT holiday_date::date AS d FROM hr_holidays
+      WHERE company_id = $1 AND holiday_date::date BETWEEN $2::date AND $3::date`,
+    [companyId, fromDate, toDate]
+  );
+  const holidaySet = new Set(holidayRes.rows.map(r => r.d.toISOString().slice(0, 10)));
+
+  let count = 0;
+  const cur = new Date(from);
   while (cur <= to) {
-    if (cur.getDay() !== 0) count++; // exclude Sundays
+    const isSunday = cur.getDay() === 0;
+    const isHoliday = holidaySet.has(cur.toISOString().slice(0, 10));
+    if (!isSunday && !isHoliday) count++;
     cur.setDate(cur.getDate() + 1);
   }
   return count;
@@ -220,7 +231,7 @@ router.post('/requests', async (req, res) => {
   try {
     const { leave_type_id, from_date, to_date, half_day, half_day_session, reason, user_id } = req.body;
     const uid = user_id || req.user.id;
-    const days = workingDays(from_date, to_date, half_day);
+    const days = await workingDays(from_date, to_date, half_day, req.user.company_id);
 
     // Check balance
     const yr = new Date(from_date).getFullYear();
@@ -438,14 +449,18 @@ router.post('/carry-forward/run', async (req, res) => {
         [lt.id, year]
       );
       for (const bal of balances) {
-        const carry = Math.min(parseFloat(bal.balance||0), maxCarry);
-        const lapsed = parseFloat(bal.balance||0) - carry;
+        const carry = Math.min(parseFloat(bal.closing_balance || 0), maxCarry);
+        const lapsed = parseFloat(bal.closing_balance || 0) - carry;
         if (carry > 0) {
+          // hr_leave_balances has no company_id column — scoping happens via
+          // user_id/leave_type_id, both already company-scoped by the caller.
           await query(
-            `INSERT INTO hr_leave_balances(user_id,leave_type_id,year,allocated,balance,company_id)
-             VALUES($1,$2,$3,0,$4,$5)
-             ON CONFLICT(user_id,leave_type_id,year) DO UPDATE SET balance=hr_leave_balances.balance+$4`,
-            [bal.user_id, lt.id, parseInt(year)+1, carry, req.user.company_id]
+            `INSERT INTO hr_leave_balances(user_id, leave_type_id, year, opening_balance, carry_forwarded, closing_balance)
+             VALUES($1,$2,$3,0,$4,$4)
+             ON CONFLICT(user_id,leave_type_id,year) DO UPDATE SET
+               carry_forwarded = hr_leave_balances.carry_forwarded + $4,
+               closing_balance = hr_leave_balances.closing_balance + $4`,
+            [bal.user_id, lt.id, parseInt(year) + 1, carry]
           );
           totalDaysCarried += carry;
         }
