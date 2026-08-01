@@ -7,8 +7,12 @@ import {
   AlertTriangle, ArrowUpRight, CheckCircle2, Clock,
   XCircle, ShieldCheck, ArrowLeftRight, Ruler,
   BarChart3, ChevronRight, Activity, CalendarDays,
-  Target, Layers,
+  Target, Layers, Hourglass, FileClock,
 } from 'lucide-react';
+import {
+  ComposedChart, Bar, Area, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer,
+} from 'recharts';
 import { boqAPI, raBillAPI, retentionAPI, variationAPI, projectAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
 import { PageHeader, KpiCard as ThemeKpiCard, Theme } from '../../theme';
@@ -30,13 +34,16 @@ const crore = (n) => {
 
 const pct = (a, b) => (b ? Math.min(100, Math.round((Number(a) / Number(b)) * 100)) : 0);
 
+// Keys match the real ra_bills.status values (draft/submitted/verified/certified/paid/rejected) —
+// previously used 'pending'/'approved', which never occur, so the Bill Status Breakdown
+// widget silently fell back to gray for submitted + certified bills.
 const STATUS_COLORS = {
-  draft:    { bg: 'bg-slate-100',   text: 'text-slate-600',   bar: '#94A3B8' },
-  pending:  { bg: 'bg-amber-50',    text: 'text-amber-700',   bar: '#F59E0B' },
-  verified: { bg: 'bg-blue-50',     text: 'text-blue-700',    bar: '#3B82F6' },
-  approved: { bg: 'bg-emerald-50',  text: 'text-emerald-700', bar: '#10B981' },
-  paid:     { bg: 'bg-green-100',   text: 'text-green-800',   bar: '#16A34A' },
-  rejected: { bg: 'bg-red-50',      text: 'text-red-600',     bar: '#EF4444' },
+  draft:     { bg: 'bg-slate-100',   text: 'text-slate-600',   bar: '#94A3B8' },
+  submitted: { bg: 'bg-amber-50',    text: 'text-amber-700',   bar: '#F59E0B' },
+  verified:  { bg: 'bg-blue-50',     text: 'text-blue-700',    bar: '#3B82F6' },
+  certified: { bg: 'bg-emerald-50',  text: 'text-emerald-700', bar: '#10B981' },
+  paid:      { bg: 'bg-green-100',   text: 'text-green-800',   bar: '#16A34A' },
+  rejected:  { bg: 'bg-red-50',      text: 'text-red-600',     bar: '#EF4444' },
 };
 
 function SectionTitle({ icon: Icon, title, subtitle, action }) {
@@ -123,6 +130,8 @@ export default function QSDashboardPage() {
   const { data: retentions = [],  isLoading: loadingRetention } = useQuery({ queryKey: ['retentions'],   queryFn: () => retentionAPI.list().then(r => r.data?.data || []) });
   const { data: variations = [],  isLoading: loadingVariations }= useQuery({ queryKey: ['variations'],   queryFn: () => variationAPI.list().then(r => r.data?.data || []) });
   const { data: projects = [] }  = useQuery({ queryKey: ['projects'], queryFn: () => projectAPI.list().then(r => { const d = r.data; return Array.isArray(d) ? d : d?.data || []; }) });
+  // Portfolio-wide contract value / billed / certified / balance-to-complete + monthly certified trend
+  const { data: summary }        = useQuery({ queryKey: ['ra-bill-summary', ''], queryFn: () => raBillAPI.summary().then(r => r.data?.data) });
 
   // ── Derived KPIs ─────────────────────────────────────────────────────────
   const kpi = useMemo(() => {
@@ -177,9 +186,38 @@ export default function QSDashboardPage() {
   // ── This month ──────────────────────────────────────────────────────────
   const billsThisMonth    = raBills.filter(b => dayjs(b.bill_date || b.created_at).isSame(now, 'month'));
   const paidThisMonth     = raBills.filter(b => b.status === 'paid' && dayjs(b.updated_at).isSame(now, 'month'));
-  const pendingApproval   = raBills.filter(b => ['pending', 'verified'].includes(b.status));
+  // Approval funnel: submitted → needs QS verify; verified → needs PM certify
+  const pendingRaBills    = raBills.filter(b => b.status === 'submitted');
+  const pendingApproval   = raBills.filter(b => b.status === 'verified');
   const billedThisMonth   = billsThisMonth.reduce((s, b) => s + Number(b.gross_amount || b.total_amount || 0), 0);
   const receivedThisMonth = billsThisMonth.reduce((s, b) => s + Number(b.amount_received || 0), 0);
+
+  // ── Cash Flow (billed vs received per month, last 12 months) ────────────
+  const cashFlowData = useMemo(() => {
+    const months = Array.from({ length: 12 }, (_, i) => now.subtract(11 - i, 'month'));
+    const billedMap = {}, receivedMap = {};
+    raBills.filter(b => !['draft', 'rejected'].includes(b.status)).forEach(b => {
+      const key = dayjs(b.bill_date || b.created_at).format('YYYY-MM');
+      billedMap[key]   = (billedMap[key]   || 0) + Number(b.gross_amount || b.total_amount || 0);
+      receivedMap[key] = (receivedMap[key] || 0) + Number(b.amount_received || 0);
+    });
+    return months.map(m => {
+      const key = m.format('YYYY-MM');
+      return { label: m.format('MMM YY'), billed: billedMap[key] || 0, received: receivedMap[key] || 0 };
+    });
+  }, [raBills, now]);
+
+  // ── Billing Timeline (certified value per month, from the summary endpoint) ──
+  const billingTimeline = useMemo(() => (summary?.trend || []).map(t => {
+    const [y, m] = t.month.split('-');
+    return { label: dayjs(`${y}-${m}-01`).format('MMM YY'), value: t.value };
+  }), [summary]);
+
+  const contractVal   = summary?.kpis?.total_contract_value ?? 0;
+  const certifiedVal  = summary?.kpis?.certified_to_date ?? 0;
+  const billedToDate  = summary?.kpis?.billed_to_date ?? 0;
+  const balanceToComplete = summary?.kpis?.balance_to_complete ?? 0;
+  const projectProgressPct = contractVal > 0 ? Math.round((certifiedVal / contractVal) * 1000) / 10 : 0;
 
   // ── Recent + sorted data ─────────────────────────────────────────────────
   const recentBills  = useMemo(() =>
@@ -212,14 +250,24 @@ export default function QSDashboardPage() {
 
       <div className="p-5 md:p-6 max-w-[1400px] mx-auto space-y-5">
 
-        {/* ── KPI Row ── */}
+        {/* ── KPI Row 1 — value & collections ── */}
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-          <ThemeKpiCard icon={FileSpreadsheet} label="Contract Value"    value={crore(kpi.contractValue)}      color="blue"    sub={`${boqItems.length} BOQ items`} />
-          <ThemeKpiCard icon={Receipt}         label="Total Billed"      value={crore(kpi.totalBilled)}        color="emerald" sub={`${raBills.length} RA bills`} />
-          <ThemeKpiCard icon={IndianRupee}     label="Amount Received"   value={crore(kpi.totalReceived)}      color="green"   sub={`${kpi.collectionRate}% collected`} />
-          <ThemeKpiCard icon={AlertTriangle}   label="Outstanding"       value={crore(kpi.outstanding)}        color="amber"   sub="Pending collection" />
-          <ThemeKpiCard icon={ShieldCheck}     label="Retention Held"    value={crore(kpi.retentionHeld)}      color="violet"  sub={`${kpi.retentionBillCount} bill${kpi.retentionBillCount !== 1 ? 's' : ''}`} />
-          <ThemeKpiCard icon={ArrowLeftRight}  label="Variations"        value={crore(kpi.variationsApproved)} color="orange"  sub={`${variations.filter(v => v.status === 'approved').length} approved`} />
+          <ThemeKpiCard icon={FileSpreadsheet} label="Contract Value"      value={crore(contractVal)}            color="blue"    sub={`${projects.length} projects`} />
+          <ThemeKpiCard icon={CheckCircle2}    label="Certified Value"     value={crore(certifiedVal)}           color="teal"    sub={`${projectProgressPct}% of contract`} />
+          <ThemeKpiCard icon={Receipt}         label="Total Billed"        value={crore(billedToDate)}           color="emerald" sub={`${raBills.length} RA bills`} />
+          <ThemeKpiCard icon={IndianRupee}     label="Amount Received"     value={crore(kpi.totalReceived)}      color="purple"  sub={`${kpi.collectionRate}% collected`} />
+          <ThemeKpiCard icon={AlertTriangle}   label="Outstanding"         value={crore(kpi.outstanding)}        color="amber"   sub="Pending collection" />
+          <ThemeKpiCard icon={CalendarDays}    label="Current Month Billing" value={crore(billedThisMonth)}      color="indigo"  sub={now.format('MMM YYYY')} />
+        </div>
+
+        {/* ── KPI Row 2 — pipeline & progress ── */}
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+          <ThemeKpiCard icon={FileClock}       label="Pending RA Bills"    value={pendingRaBills.length}          color="amber"   sub="Awaiting QS verification" />
+          <ThemeKpiCard icon={Hourglass}       label="Pending Approvals"   value={pendingApproval.length}         color="blue"    sub="Awaiting PM certification" />
+          <ThemeKpiCard icon={ShieldCheck}     label="Retention Held"      value={crore(kpi.retentionHeld)}       color="purple"  sub={`${kpi.retentionBillCount} bill${kpi.retentionBillCount !== 1 ? 's' : ''}`} />
+          <ThemeKpiCard icon={ArrowLeftRight}  label="Variations"          value={crore(kpi.variationsApproved)}  color="orange"  sub={`${variations.filter(v => v.status === 'approved').length} approved`} />
+          <ThemeKpiCard icon={Target}          label="Project Progress"    value={`${projectProgressPct}%`}       color="emerald" sub="Certified / contract value" />
+          <ThemeKpiCard icon={Layers}          label="Balance to Complete" value={crore(balanceToComplete)}       color="slate"   sub="Contract − certified" />
         </div>
 
         {/* ── Alert banners ── */}
@@ -250,10 +298,10 @@ export default function QSDashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <ProgressPanel
             label="Billing Progress"
-            value={kpi.totalBilled} max={kpi.contractValue}
+            value={billedToDate} max={contractVal}
             color="#10B981"
-            left={`Billed: ${fmt(kpi.totalBilled)}`}
-            right={`Contract: ${fmt(kpi.contractValue)}`}
+            left={`Billed: ${fmt(billedToDate)}`}
+            right={`Contract: ${fmt(contractVal)}`}
           />
           <ProgressPanel
             label="Collection Rate"
@@ -282,6 +330,68 @@ export default function QSDashboardPage() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+
+        {/* ── Budget vs Actual ── */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+          <SectionTitle icon={Target} title="Budget vs. Actual" subtitle="Contract value · Billed · Certified · Balance to complete"
+            action={<Link to="/qs/ra-bills/summary" className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 hover:text-emerald-700">Full Summary <ChevronRight className="w-3 h-3" /></Link>}
+          />
+          <div className="relative h-8 w-full bg-slate-100 rounded-full overflow-hidden">
+            <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${contractVal > 0 ? Math.min(100, (billedToDate / contractVal) * 100) : 0}%`, background: '#BFDBFE' }} />
+            <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${contractVal > 0 ? Math.min(100, (certifiedVal / contractVal) * 100) : 0}%`, background: '#10B981' }} />
+          </div>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-3">
+            <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-300" /><span className="text-[11px] text-slate-500">Contract: <b className="text-slate-800">{fmt(contractVal)}</b></span></div>
+            <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: '#BFDBFE' }} /><span className="text-[11px] text-slate-500">Billed: <b className="text-slate-800">{fmt(billedToDate)}</b></span></div>
+            <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /><span className="text-[11px] text-slate-500">Certified: <b className="text-slate-800">{fmt(certifiedVal)}</b></span></div>
+            <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-400" /><span className="text-[11px] text-slate-500">Balance to Complete: <b className="text-slate-800">{fmt(balanceToComplete)}</b></span></div>
+          </div>
+        </div>
+
+        {/* ── Cash Flow + Billing Timeline ── */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <SectionTitle icon={Activity} title="Cash Flow" subtitle="Billed vs. received, last 12 months" />
+            <div style={{ width: '100%', height: 220 }}>
+              <ResponsiveContainer>
+                <ComposedChart data={cashFlowData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#eef1f6" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={v => `₹${(v / 1e5).toFixed(0)}L`} width={45} />
+                  <Tooltip formatter={(v, n) => [fmt(v), n]} labelStyle={{ fontSize: 11 }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="billed" name="Billed" fill="#93C5FD" radius={[4, 4, 0, 0]} />
+                  <Line type="monotone" dataKey="received" name="Received" stroke="#059669" strokeWidth={2.5} dot={{ r: 3, fill: '#fff', stroke: '#059669', strokeWidth: 2 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <SectionTitle icon={TrendingUp} title="Billing Timeline" subtitle="Certified value, last 12 months" />
+            {billingTimeline.length === 0 ? (
+              <div className="py-16 text-center text-xs text-slate-400">No certified bills yet</div>
+            ) : (
+              <div style={{ width: '100%', height: 220 }}>
+                <ResponsiveContainer>
+                  <ComposedChart data={billingTimeline} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="qsBillingTimelineFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#1a3a6b" stopOpacity={0.28} />
+                        <stop offset="100%" stopColor="#1a3a6b" stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#eef1f6" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={v => `₹${(v / 1e5).toFixed(0)}L`} width={45} />
+                    <Tooltip formatter={v => [fmt(v), 'Certified']} labelStyle={{ fontSize: 11 }} />
+                    <Area type="monotone" dataKey="value" stroke="#1a3a6b" strokeWidth={2.5} fill="url(#qsBillingTimelineFill)" dot={{ r: 3, fill: '#fff', stroke: '#1a3a6b', strokeWidth: 2 }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </div>
         </div>
 
