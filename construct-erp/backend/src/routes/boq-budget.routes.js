@@ -81,14 +81,24 @@ runSchemaInit('project_costhead_budgets', async () => {
   `);
   // Add boq_amount to existing tables (idempotent)
   await query(`ALTER TABLE project_costhead_budgets ADD COLUMN IF NOT EXISTS boq_amount NUMERIC(16,2) DEFAULT 0`).catch(() => {});
+});
+
+// A separately-named migration, not folded into the block above. That block's
+// name ('project_costhead_budgets') was already marked applied in
+// schema_migrations back when it only created the table — runSchemaInit runs
+// each name exactly once, ever, so appending these two ALTER TABLEs to the
+// same task body silently never ran on any database that existed before this
+// commit. Symptom: "column received_amount does not exist" on Budget Control.
+// New name = guaranteed to run once on every environment, however old.
+runSchemaInit('project_costhead_budgets_received_paid_cols', async () => {
   // Manual Bills Received / Bills Paid entry for cost heads with no natural
   // transaction source (e.g. Supervision & Accommodation, EPF/PT/Insurance —
   // internal payroll-type costs, not vendor bills, so nothing in RA/SC/TQS
   // ever tags them). Added on top of whatever real transaction data already
   // exists for a head, so it never conflicts with heads like Sub Con that
   // already derive real received/paid figures from actual bills.
-  await query(`ALTER TABLE project_costhead_budgets ADD COLUMN IF NOT EXISTS received_amount NUMERIC(16,2) DEFAULT 0`).catch(() => {});
-  await query(`ALTER TABLE project_costhead_budgets ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(16,2) DEFAULT 0`).catch(() => {});
+  await query(`ALTER TABLE project_costhead_budgets ADD COLUMN IF NOT EXISTS received_amount NUMERIC(16,2) DEFAULT 0`);
+  await query(`ALTER TABLE project_costhead_budgets ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(16,2) DEFAULT 0`);
 });
 
 router.use(authenticate);
