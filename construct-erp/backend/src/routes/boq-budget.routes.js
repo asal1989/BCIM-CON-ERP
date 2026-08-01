@@ -131,6 +131,31 @@ runSchemaInit('project_costhead_subitems', async () => {
   `);
 });
 
+// Sub-items are recurring monthly costs (salaries, PF — paid every month, not
+// a one-off), so they need a month dimension to show correctly in the
+// Monthly Forecast view. Adds entry_month and widens the uniqueness to
+// (project_id, cost_head, sub_item, entry_month) so each month gets its own
+// row instead of one lifetime total per sub-item.
+runSchemaInit('project_costhead_subitems_entry_month', async () => {
+  await query(`ALTER TABLE project_costhead_subitems ADD COLUMN IF NOT EXISTS entry_month TEXT`);
+  // Rows entered before month-tracking existed were the July 2026 figures,
+  // entered retroactively on Aug 1 — tag them to the month they're FOR, not
+  // the day they happened to be typed in.
+  await query(`UPDATE project_costhead_subitems SET entry_month = '2026-07' WHERE entry_month IS NULL`);
+  await query(`
+    DO $$
+    DECLARE cname text;
+    BEGIN
+      SELECT conname INTO cname FROM pg_constraint
+        WHERE conrelid = 'project_costhead_subitems'::regclass AND contype = 'u';
+      IF cname IS NOT NULL THEN
+        EXECUTE format('ALTER TABLE project_costhead_subitems DROP CONSTRAINT %I', cname);
+      END IF;
+    END $$;
+  `);
+  await query(`ALTER TABLE project_costhead_subitems ADD CONSTRAINT project_costhead_subitems_month_uniq UNIQUE (project_id, cost_head, sub_item, entry_month)`);
+});
+
 router.use(authenticate);
 router.use(loadProjectScope);
 
@@ -1093,9 +1118,13 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
     const subItemHeads = Object.keys(COSTHEAD_SUBITEMS);
     const subItemsMap = {};
     if (subItemHeads.length) {
+      // Summed across every month entered so far — Budget Control shows the
+      // life-to-date total; the Monthly Forecast view (costhead-monthly below)
+      // is what breaks this same data out month by month.
       const subRows = await query(
-        `SELECT cost_head, sub_item, COALESCE(received_amount,0) AS received_amount, COALESCE(paid_amount,0) AS paid_amount
-         FROM project_costhead_subitems WHERE project_id=$1 AND cost_head = ANY($2::text[])`,
+        `SELECT cost_head, sub_item, COALESCE(SUM(received_amount),0) AS received_amount, COALESCE(SUM(paid_amount),0) AS paid_amount
+         FROM project_costhead_subitems WHERE project_id=$1 AND cost_head = ANY($2::text[])
+         GROUP BY cost_head, sub_item`,
         [project_id, subItemHeads]
       );
       for (const head of subItemHeads) {
@@ -1856,9 +1885,17 @@ router.get('/:project_id/costhead-monthly', async (req, res) => {
         GROUP BY 1`, [project_id]);
     } catch (_) {}
 
+    // Manual sub-item entries (Supervision & Accommodation, EPF/PT/Insurance) —
+    // recurring monthly costs, tagged to the month they're actually for.
+    const subM = await query(`
+      SELECT entry_month AS month, cost_head, SUM(received_amount) AS actual
+      FROM project_costhead_subitems
+      WHERE project_id=$1 AND entry_month IS NOT NULL AND received_amount > 0
+      GROUP BY entry_month, cost_head`, [project_id]);
+
     // Merge all sources into { [month]: { [cost_head]: amount } }
     const monthly = {};
-    for (const rows of [raM.rows, scM.rows, scPayM.rows, tqsM.rows, advM.rows, advTrkM.rows, btAdvM.rows, spcM.rows, storePCAdvM.rows]) {
+    for (const rows of [raM.rows, scM.rows, scPayM.rows, tqsM.rows, advM.rows, advTrkM.rows, btAdvM.rows, spcM.rows, storePCAdvM.rows, subM.rows]) {
       for (const r of rows) {
         if (!r.month || !r.cost_head) continue;
         if (!monthly[r.month]) monthly[r.month] = {};
@@ -1943,13 +1980,14 @@ router.put('/:project_id/costhead-received-paid', authorize(...BUDGET_WRITERS), 
   }
 });
 
-// GET /boq-budget/:project_id/costhead-subitems?cost_head=Supervision+%26+Accommodation
-// Returns the configured sub-items for a cost head with their current amounts
-// (0 for any sub-item that hasn't been entered yet).
+// GET /boq-budget/:project_id/costhead-subitems?cost_head=Supervision+%26+Accommodation&month=2026-07
+// Returns the configured sub-items for a cost head for ONE month (0 for any
+// sub-item not entered that month). If month is omitted, defaults to the most
+// recent month that has data for this cost head, or the current month if none.
 router.get('/:project_id/costhead-subitems', async (req, res) => {
   try {
     const { project_id } = req.params;
-    const { cost_head } = req.query;
+    const { cost_head, month } = req.query;
     if (!cost_head) return res.status(400).json({ error: 'cost_head is required' });
     if (!COSTHEAD_SUBITEMS[cost_head]) return res.status(400).json({ error: 'This cost head has no sub-items configured' });
 
@@ -1957,10 +1995,18 @@ router.get('/:project_id/costhead-subitems', async (req, res) => {
     if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
     if (!userCanAccessProject(req, project_id)) return res.status(403).json({ error: 'Access denied' });
 
+    const monthsR = await query(
+      `SELECT DISTINCT entry_month FROM project_costhead_subitems
+       WHERE project_id=$1 AND cost_head=$2 AND entry_month IS NOT NULL ORDER BY entry_month DESC`,
+      [project_id, cost_head]
+    );
+    const availableMonths = monthsR.rows.map(r => r.entry_month);
+    const entryMonth = month || availableMonths[0] || new Date().toISOString().slice(0, 7);
+
     const rows = await query(
       `SELECT sub_item, COALESCE(received_amount,0) AS received_amount, COALESCE(paid_amount,0) AS paid_amount
-       FROM project_costhead_subitems WHERE project_id=$1 AND cost_head=$2`,
-      [project_id, cost_head]
+       FROM project_costhead_subitems WHERE project_id=$1 AND cost_head=$2 AND entry_month=$3`,
+      [project_id, cost_head, entryMonth]
     );
     const data = COSTHEAD_SUBITEMS[cost_head].map(name => {
       const row = rows.rows.find(r => r.sub_item === name);
@@ -1970,18 +2016,19 @@ router.get('/:project_id/costhead-subitems', async (req, res) => {
         paid_amount: row ? parseFloat(row.paid_amount || 0) : 0,
       };
     });
-    res.json({ data });
+    res.json({ data, month: entryMonth, available_months: availableMonths });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // PUT /boq-budget/:project_id/costhead-subitems
-// Upsert Received/Paid for a single sub-item of a configured cost head.
+// Upsert Received/Paid for a single sub-item of a configured cost head, for
+// one specific month (defaults to the current month if not supplied).
 router.put('/:project_id/costhead-subitems', authorize(...BUDGET_WRITERS), async (req, res) => {
   try {
     const { project_id } = req.params;
-    const { cost_head, sub_item, received_amount, paid_amount } = req.body;
+    const { cost_head, sub_item, received_amount, paid_amount, month } = req.body;
     if (!cost_head || !sub_item) return res.status(400).json({ error: 'cost_head and sub_item are required' });
     if (!COSTHEAD_SUBITEMS[cost_head]?.includes(sub_item)) {
       return res.status(400).json({ error: 'Unknown sub_item for this cost head' });
@@ -1991,17 +2038,18 @@ router.put('/:project_id/costhead-subitems', authorize(...BUDGET_WRITERS), async
     if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
     if (!userCanAccessProject(req, project_id)) return res.status(403).json({ error: 'Access denied' });
 
+    const entryMonth = /^\d{4}-\d{2}$/.test(month || '') ? month : new Date().toISOString().slice(0, 7);
     const rAmt = received_amount != null ? parseFloat(received_amount) || 0 : null;
     const pAmt = paid_amount     != null ? parseFloat(paid_amount)     || 0 : null;
     const r = await query(`
-      INSERT INTO project_costhead_subitems (project_id, cost_head, sub_item, received_amount, paid_amount, created_by)
-      VALUES ($1, $2, $3, COALESCE($4, 0), COALESCE($5, 0), $6)
-      ON CONFLICT (project_id, cost_head, sub_item) DO UPDATE SET
-        received_amount = CASE WHEN $4 IS NOT NULL THEN $4 ELSE project_costhead_subitems.received_amount END,
-        paid_amount     = CASE WHEN $5 IS NOT NULL THEN $5 ELSE project_costhead_subitems.paid_amount     END,
+      INSERT INTO project_costhead_subitems (project_id, cost_head, sub_item, entry_month, received_amount, paid_amount, created_by)
+      VALUES ($1, $2, $3, $4, COALESCE($5, 0), COALESCE($6, 0), $7)
+      ON CONFLICT (project_id, cost_head, sub_item, entry_month) DO UPDATE SET
+        received_amount = CASE WHEN $5 IS NOT NULL THEN $5 ELSE project_costhead_subitems.received_amount END,
+        paid_amount     = CASE WHEN $6 IS NOT NULL THEN $6 ELSE project_costhead_subitems.paid_amount     END,
         updated_at      = NOW()
       RETURNING *`,
-      [project_id, cost_head, sub_item, rAmt, pAmt, req.user.id]
+      [project_id, cost_head, sub_item, entryMonth, rAmt, pAmt, req.user.id]
     );
     res.json({ data: r.rows[0] });
   } catch (err) {

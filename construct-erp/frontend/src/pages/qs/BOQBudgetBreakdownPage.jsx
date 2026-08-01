@@ -1536,11 +1536,11 @@ function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName
         <table className="text-xs w-full min-w-max">
           <thead>
             <tr className="bg-[#0B2E59] text-white">
-              <th className="px-4 py-2.5 text-left sticky left-0 bg-[#0B2E59] z-10 min-w-[180px]">Cost Head</th>
+              <th className="px-4 py-2.5 text-left sticky left-0 bg-[#0B2E59] z-10 min-w-[180px] font-bold">Cost Head</th>
               {months.map(m => (
-                <th key={m} className="px-3 py-2.5 text-right min-w-[110px] font-medium">{fmtMonth(m)}</th>
+                <th key={m} className="px-3 py-2.5 text-right min-w-[110px] font-bold text-white">{fmtMonth(m)}</th>
               ))}
-              <th className="px-4 py-2.5 text-right min-w-[120px] font-bold bg-[#0D3870]">Total</th>
+              <th className="px-4 py-2.5 text-right min-w-[120px] font-bold bg-[#0D3870] text-white">Total</th>
             </tr>
           </thead>
           <tbody>
@@ -2359,22 +2359,35 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
   );
 }
 
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtMonthLabel(ym) {
+  if (!ym) return '';
+  const [y, m] = ym.split('-');
+  return `${MONTH_NAMES[parseInt(m, 10) - 1]} ${y}`;
+}
+
 function SubitemSplitModal({ projectId, costHead, onClose }) {
   const qc = useQueryClient();
   const [editKey, setEditKey] = useState(null); // `${sub_item}:received` | `${sub_item}:paid`
   const [editVal, setEditVal] = useState('');
+  const [month, setMonth] = useState(null); // null = let backend pick the latest month with data
 
   const { data, isLoading } = useQuery({
-    queryKey: ['costhead-subitems', projectId, costHead],
-    queryFn: () => boqBudgetAPI.costheadSubitems(projectId, costHead).then(r => r.data?.data || []),
+    queryKey: ['costhead-subitems', projectId, costHead, month],
+    queryFn: () => boqBudgetAPI.costheadSubitems(projectId, costHead, month).then(r => r.data || {}),
     enabled: !!projectId && !!costHead,
   });
+
+  const rows = data?.data || [];
+  const resolvedMonth = month || data?.month || new Date().toISOString().slice(0, 7);
+  const availableMonths = data?.available_months || [];
 
   const saveMutation = useMutation({
     mutationFn: (payload) => boqBudgetAPI.setCostheadSubitem(projectId, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['costhead-subitems', projectId, costHead] });
       qc.invalidateQueries({ queryKey: ['costhead-summary', projectId] });
+      qc.invalidateQueries({ queryKey: ['costhead-monthly', projectId] });
       setEditKey(null);
       toast.success('Saved');
     },
@@ -2384,10 +2397,9 @@ function SubitemSplitModal({ projectId, costHead, onClose }) {
   const commit = (sub_item, field) => {
     const n = parseFloat(editVal);
     if (isNaN(n) || n < 0) { toast.error('Enter a valid amount'); return; }
-    saveMutation.mutate({ cost_head: costHead, sub_item, [field === 'received' ? 'received_amount' : 'paid_amount']: n });
+    saveMutation.mutate({ cost_head: costHead, sub_item, month: resolvedMonth, [field === 'received' ? 'received_amount' : 'paid_amount']: n });
   };
 
-  const rows = data || [];
   const totalReceived = rows.reduce((s, r) => s + (r.received_amount || 0), 0);
   const totalPaid = rows.reduce((s, r) => s + (r.paid_amount || 0), 0);
 
@@ -2428,7 +2440,27 @@ function SubitemSplitModal({ projectId, costHead, onClose }) {
           </div>
           <button onClick={onClose} className="text-white/80 hover:text-white text-lg leading-none">✕</button>
         </div>
-        <div className="p-5">
+        <div className="px-5 pt-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Month</span>
+            <input type="month" value={resolvedMonth}
+              onChange={e => setMonth(e.target.value)}
+              className="border border-slate-300 rounded-lg px-2 py-1 text-xs font-semibold text-slate-700 focus:outline-none focus:border-violet-400" />
+            <span className="text-xs text-slate-400">{fmtMonthLabel(resolvedMonth)}</span>
+          </div>
+          {availableMonths.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap justify-end">
+              {availableMonths.slice(0, 4).map(m => (
+                <button key={m} onClick={() => setMonth(m)}
+                  className={clsx('px-2 py-0.5 rounded text-[10px] font-bold border',
+                    m === resolvedMonth ? 'bg-violet-600 border-violet-600 text-white' : 'bg-violet-50 border-violet-200 text-violet-600 hover:bg-violet-100')}>
+                  {fmtMonthLabel(m)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="p-5 pt-3">
           {isLoading ? (
             <div className="text-center text-sm text-slate-400 py-8">Loading…</div>
           ) : (
