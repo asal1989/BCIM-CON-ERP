@@ -2132,7 +2132,20 @@ router.get('/:project_id/cost-to-completion', async (req, res) => {
     // full multi-source aggregation already computed by costhead-summary.
     const budgetR = await query(`SELECT COALESCE(SUM(budget_amount),0) AS total FROM project_costhead_budgets WHERE project_id=$1`, [project_id]);
 
-    // Sundry creditors — outstanding (unpaid) TQS bills for this project
+    // Sundry creditors — everything received but not yet paid. Covers BOTH
+    // material/vendor bills (TQS) and subcontractor bills (SC): both are work
+    // already received and already counted as "actual spent", so both are
+    // genuine unpaid obligations. SC bills were previously omitted, which
+    // understated the figure (LANCO: ₹9.23 L shown vs ₹12.52 L actually owed).
+    //
+    // net_payable is already net of retention, and retention has its own
+    // "Retention Payable - Subcontractor" row, so this doesn't double-count it.
+    // Status filter matches the sibling SC retention query below.
+    const scSundryR = await query(
+      `SELECT COALESCE(SUM(GREATEST(COALESCE(net_payable,0) - COALESCE(paid_amount,0), 0)),0) AS outstanding
+         FROM sc_bills WHERE project_id=$1 AND status NOT IN ('draft','rejected')`,
+      [project_id]);
+
     const sundryR = await query(`
       SELECT COALESCE(SUM(GREATEST(COALESCE(b.total_amount,0) - COALESCE(u.tds_deduction,0) - COALESCE(u.other_deductions,0) - COALESCE(u.advance_recovered,0) - COALESCE(u.paid_amount,0), 0)),0) AS outstanding
       FROM tqs_bills b LEFT JOIN tqs_bill_updates u ON u.bill_id=b.id
@@ -2236,7 +2249,7 @@ router.get('/:project_id/cost-to-completion', async (req, res) => {
         // client-side (it already fetches costhead-summary); this endpoint
         // just needs the budget total here.
         total_budget: parseFloat(budgetR.rows[0].total),
-        sundry_creditors: parseFloat(sundryR.rows[0].outstanding),
+        sundry_creditors: parseFloat(sundryR.rows[0].outstanding) + parseFloat(scSundryR.rows[0].outstanding),
         advance_to_be_recovered: Math.max(advanceReceived - mobRecovered, 0),
         retention_payable_subcontractor: parseFloat(scRetentionR.rows[0].total),
         gst_payable: parseFloat(gstR.rows[0].total),

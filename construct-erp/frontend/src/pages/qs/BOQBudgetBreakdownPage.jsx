@@ -1748,7 +1748,7 @@ function CostToCompletionTab({ projectId, projectName, contractValue }) {
             <CtcRow label="Budgeted cost for balance work completion (Execution A)" value={budgetedForBalanceWork}
               note="Total Budget − Total Actual/Spent, live from Budget vs Actual." />
             <CtcRow label="Sundry creditors" value={liabilities.sundry_creditors}
-              note="Outstanding (unpaid) TQS bills for this project." />
+              note="Unpaid bills for this project — material/vendor (TQS) plus subcontractor (SC), net of retention." />
             <CtcRow label="Advance to be Recovered" value={liabilities.advance_to_be_recovered}
               note="Mobilization advance minus what's already recovered against RA bills." />
             <CtcRow label="Retention Payable - Subcontractor" value={liabilities.retention_payable_subcontractor}
