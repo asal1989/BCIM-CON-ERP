@@ -1,5 +1,6 @@
 // src/pages/qs/BOQBudgetBreakdownPage.jsx — Master-detail BOQ budget allocation
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useReactToPrint } from 'react-to-print';
 import { clsx } from 'clsx';
@@ -1580,6 +1581,180 @@ function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName
   );
 }
 
+// ─── Cost to Completion ───────────────────────────────────────────────────────
+const CTC_MANUAL_ROWS = {
+  advance_received: 'Advance received (Mobilization Advance, gross)',
+  blockwork_works: 'Blockwork Works',
+  plastering_works: 'Plastering Works',
+  waterproofing_works: 'Waterproofing Works',
+  misc_works: 'Misc',
+  gst_payable: 'GST Payable',
+  retention_money_recovered: 'Retention Money Recovered (RM)',
+  material_stock: 'Material Stock at Store',
+  other_projects_p3: 'Other Projects P3',
+  other_projects_tqs: 'Other Projects TQS',
+  bank_balance: 'Bank Balance',
+};
+
+function CtcRow({ label, value, editable, editing, onStartEdit, onCancel, onSave, saving, bold, highlight, note }) {
+  return (
+    <tr className={clsx('border-b border-slate-100', highlight && 'bg-emerald-50/50')}>
+      <td className={clsx('px-4 py-2 text-right text-slate-600', bold && 'font-bold text-slate-800')}>
+        <span className="inline-flex items-center gap-1">
+          {label}
+          {note && (
+            <span title={note} className="text-slate-300 cursor-help text-[10px]">ⓘ</span>
+          )}
+        </span>
+      </td>
+      <td className="px-4 py-2 text-right w-44">
+        {editing ? (
+          <div className="flex items-center justify-end gap-1">
+            <input autoFocus type="number" defaultValue={value}
+              onKeyDown={e => { if (e.key === 'Enter') onSave(parseFloat(e.target.value)); if (e.key === 'Escape') onCancel(); }}
+              onBlur={e => onSave(parseFloat(e.target.value))}
+              className="w-28 border border-violet-400 rounded-lg px-2 py-1 text-xs text-right focus:outline-none" />
+          </div>
+        ) : (
+          <button onClick={editable ? onStartEdit : undefined}
+            disabled={!editable || saving}
+            className={clsx('font-semibold tabular-nums',
+              bold ? 'text-slate-900' : editable ? 'text-blue-700 hover:underline underline-offset-2' : 'text-slate-700')}>
+            ₹{Math.round(value || 0).toLocaleString('en-IN')}
+          </button>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function CostToCompletionTab({ projectId, projectName, contractValue }) {
+  const qc = useQueryClient();
+  const [editKey, setEditKey] = useState(null);
+
+  const { data: ctc, isLoading } = useQuery({
+    queryKey: ['cost-to-completion', projectId],
+    queryFn: () => boqBudgetAPI.costToCompletion(projectId).then(r => r.data),
+    enabled: !!projectId,
+  });
+
+  const { data: summaryData } = useQuery({
+    queryKey: ['costhead-summary', projectId],
+    queryFn: () => boqBudgetAPI.costheadSummary(projectId).then(r => r.data),
+    enabled: !!projectId,
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: (payload) => boqBudgetAPI.setCostToCompletion(projectId, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cost-to-completion', projectId] });
+      setEditKey(null);
+      toast.success('Saved');
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to save'),
+  });
+
+  if (isLoading || !ctc) return <div className="py-16 text-center text-slate-400 text-sm">Loading…</div>;
+
+  const rows = summaryData?.data || [];
+  const totalBudget = rows.filter(r => !r.derived).reduce((s, r) => s + r.budget, 0);
+  const totalActual = rows.filter(r => !r.derived).reduce((s, r) => s + r.actual, 0);
+  const budgetedForBalanceWork = Math.max(totalBudget - totalActual, 0);
+
+  const manual = (key) => ctc.contract_detail[key] ?? ctc.balance_work[key] ?? ctc.liabilities[key] ?? ctc.inflow[key] ?? 0;
+  const commit = (key, val) => {
+    if (isNaN(val) || val < 0) { toast.error('Enter a valid amount'); return; }
+    saveMutation.mutate({ [key]: val });
+  };
+
+  const totalWorksToBeDone = ['blockwork_works', 'plastering_works', 'waterproofing_works', 'misc_works']
+    .reduce((s, k) => s + (ctc.balance_work[k] || 0), 0);
+
+  const totalOutflow = budgetedForBalanceWork + ctc.liabilities.sundry_creditors + ctc.liabilities.advance_to_be_recovered
+    + ctc.liabilities.retention_payable_subcontractor + ctc.liabilities.gst_payable;
+
+  const totalInflow = ctc.inflow.ra_receivable + totalWorksToBeDone + ctc.inflow.retention_money_recovered
+    + ctc.inflow.material_stock + ctc.inflow.other_projects_p3 + ctc.inflow.other_projects_tqs + ctc.inflow.bank_balance;
+
+  const netPosition = totalInflow - totalOutflow;
+
+  const sectionHeader = (label, className) => (
+    <tr><td colSpan={2} className={clsx('px-4 py-2 font-bold text-white text-sm', className)}>{label}</td></tr>
+  );
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+      <div className="px-5 py-4 bg-gradient-to-r from-slate-800 to-slate-700">
+        <p className="text-white font-bold text-sm">{projectName} — Cost to Completion</p>
+        <p className="text-slate-300 text-[11px] mt-0.5">
+          Live figures pulled from the ERP; blue-underlined amounts are manual entries — click to edit
+          {ctc.updated_at && ` · last updated ${new Date(ctc.updated_at).toLocaleDateString('en-IN')}`}
+        </p>
+      </div>
+      <div className="max-w-2xl mx-auto py-5">
+        <table className="w-full text-sm">
+          <tbody>
+            {sectionHeader('Contract detail', 'bg-blue-900')}
+            <CtcRow label="Project Value" value={ctc.contract_detail.project_value} bold />
+            <CtcRow label={CTC_MANUAL_ROWS.advance_received} value={manual('advance_received')} editable
+              editing={editKey === 'advance_received'} onStartEdit={() => setEditKey('advance_received')}
+              onCancel={() => setEditKey(null)} onSave={(v) => commit('advance_received', v)} saving={saveMutation.isPending}
+              note="Client mobilization advance — not tracked elsewhere in the ERP." />
+            <CtcRow label="Cum running Invoice (RA) amount" value={ctc.contract_detail.ra_cumulative_amount}
+              note={`Sum of net_payable across ${ctc.contract_detail.ra_bill_count} RA bill(s), including drafts.`} />
+
+            <tr><td colSpan={2} className="h-3" /></tr>
+            {sectionHeader('A. Balance work claim detail', 'bg-amber-600')}
+            {['blockwork_works', 'plastering_works', 'waterproofing_works', 'misc_works'].map(k => (
+              <CtcRow key={k} label={CTC_MANUAL_ROWS[k]} value={manual(k)} editable
+                editing={editKey === k} onStartEdit={() => setEditKey(k)}
+                onCancel={() => setEditKey(null)} onSave={(v) => commit(k, v)} saving={saveMutation.isPending} />
+            ))}
+            <CtcRow label="Total Works to Be Done" value={totalWorksToBeDone} bold highlight
+              note={`System check (Project Value − RA billed): ₹${Math.round(ctc.balance_work.system_check_total).toLocaleString('en-IN')}`} />
+
+            <tr><td colSpan={2} className="h-3" /></tr>
+            {sectionHeader('B. Liabilities - Payables', 'bg-slate-600')}
+            <CtcRow label="Budgeted cost for balance work completion (Execution A)" value={budgetedForBalanceWork}
+              note="Total Budget − Total Actual/Spent, live from Budget vs Actual." />
+            <CtcRow label="Sundry creditors" value={ctc.liabilities.sundry_creditors}
+              note="Outstanding (unpaid) TQS bills for this project." />
+            <CtcRow label="Advance to be Recovered" value={ctc.liabilities.advance_to_be_recovered}
+              note="Mobilization advance minus what's already recovered against RA bills." />
+            <CtcRow label="Retention Payable - Subcontractor" value={ctc.liabilities.retention_payable_subcontractor}
+              note="SC bills' retention_amount not yet released." />
+            <CtcRow label={CTC_MANUAL_ROWS.gst_payable} value={manual('gst_payable')} editable
+              editing={editKey === 'gst_payable'} onStartEdit={() => setEditKey('gst_payable')}
+              onCancel={() => setEditKey(null)} onSave={(v) => commit('gst_payable', v)} saving={saveMutation.isPending} />
+            <CtcRow label="Total Outflow" value={totalOutflow} bold highlight />
+
+            <tr><td colSpan={2} className="h-3" /></tr>
+            {sectionHeader('C. Inflow', 'bg-amber-600')}
+            <CtcRow label="RA receivable" value={ctc.inflow.ra_receivable}
+              note="Net of TDS and any amount already received against RA bills." />
+            <CtcRow label="Work Order Billable to Lanco" value={totalWorksToBeDone}
+              note="= Total Works to Be Done (Section A)." />
+            {['retention_money_recovered', 'material_stock', 'other_projects_p3', 'other_projects_tqs', 'bank_balance'].map(k => (
+              <CtcRow key={k} label={CTC_MANUAL_ROWS[k]} value={manual(k)} editable
+                editing={editKey === k} onStartEdit={() => setEditKey(k)}
+                onCancel={() => setEditKey(null)} onSave={(v) => commit(k, v)} saving={saveMutation.isPending} />
+            ))}
+            <CtcRow label="Total inflow (D)" value={totalInflow} bold highlight />
+
+            <tr><td colSpan={2} className="h-3" /></tr>
+            <tr className="bg-emerald-100 border-t-2 border-emerald-300">
+              <td className="px-4 py-3 text-right font-bold text-emerald-900 text-sm">Net Position (Inflow − Outflow)</td>
+              <td className="px-4 py-3 text-right font-bold text-emerald-900 text-base tabular-nums">
+                ₹{Math.round(netPosition).toLocaleString('en-IN')}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── Cost Head Budget Tab ─────────────────────────────────────────────────────
 function ClientBillingSummary({ projectId, contractValue }) {
   const { data: bills = [] } = useQuery({
@@ -1744,7 +1919,18 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
   const [expandedHead, setExpandedHead] = useState(null);
   const [showBulk, setShowBulk] = useState(false);
   const [bulkText, setBulkText] = useState(DEFAULT_BULK_TEXT);
-  const [costheadView, setCostheadView] = useState('summary'); // 'summary' | 'monthly'
+  const [searchParams] = useSearchParams();
+  // ?view= from the sidebar (Cost Control section): 'cost_to_completion' opens
+  // that tab directly; 'variance'/'forecast'/'profitability' all live inside
+  // Monthly Analysis (Cost Variance/Cash Forecast/Profitability Abstract are
+  // sections of that same tab, not separate tabs), so they map there too.
+  const initialCostheadView = (() => {
+    const v = searchParams.get('view');
+    if (v === 'cost_to_completion') return 'cost_to_completion';
+    if (['variance', 'forecast', 'profitability', 'monthly'].includes(v)) return 'monthly';
+    return 'summary';
+  })();
+  const [costheadView, setCostheadView] = useState(initialCostheadView); // 'summary' | 'monthly' | 'cost_to_completion'
   const [chSearch, setChSearch] = useState('');
   const [chFilter, setChFilter] = useState('all'); // all | over | near | nobudget
   const [chSort, setChSort] = useState({ key: null, dir: 'asc' });
@@ -1927,6 +2113,7 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
           {[
             { id: 'summary', label: 'Budget vs Actual' },
             { id: 'monthly', label: 'Monthly Analysis' },
+            { id: 'cost_to_completion', label: 'Cost to Completion' },
           ].map(t => (
             <button key={t.id} onClick={() => setCostheadView(t.id)}
               className={clsx('px-4 py-1.5 text-xs font-bold rounded-lg border transition',
@@ -1943,6 +2130,8 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
       </div>
 
       {costheadView === 'monthly' && <CostHeadMonthlyTab projectId={projectId} projectName={projectName} projectAddress={projectAddress} clientName={clientName} />}
+
+      {costheadView === 'cost_to_completion' && <CostToCompletionTab projectId={projectId} projectName={projectName} contractValue={contractValue} />}
 
       {costheadView === 'summary' && (
     <div className="space-y-3">

@@ -153,6 +153,7 @@ const navGroups = [
     { to: '/qs/boq-budget-breakdown?view=variance',      icon: TrendingDown, label: 'Cost Variance' },
     { to: '/qs/boq-budget-breakdown?view=forecast',      icon: TrendingUp,   label: 'Forecast' },
     { to: '/qs/boq-budget-breakdown?view=profitability', icon: FileBarChart, label: 'Profitability' },
+    { to: '/qs/boq-budget-breakdown?view=cost_to_completion', icon: Calculator, label: 'Cost to Completion' },
 
     // Payments
     { to: '/accounts/sales/customer-payments',  icon: CreditCard,      label: 'Client Payments' },
@@ -551,7 +552,7 @@ const NAV_SECTIONS = {
     { label: 'Quantity Survey',     paths: ['/qs/measurements?view=qto','/qs/measurements','/qs/measurements?view=jmr','/qs/material-recon?view=qty','/qs/measurements?view=executed'] },
     { label: 'Client Billing',      paths: ['/qs/ra-bills','/qs/ra-bills?type=interim','/qs/ra-bills?type=final','/qs/variations?type=extra','/qs/variations','/qs/ra-bills?type=tax-invoice'] },
     { label: 'Subcontract Billing', paths: ['/qs/work-orders','/tqs/bills','/tqs/bills?type=final','/tqs/deduction-register?type=retention','/tqs/deduction-register?type=recoveries'] },
-    { label: 'Cost Control',        paths: ['/qs/boq-budget-breakdown','/qs/boq-budget-breakdown?view=variance','/qs/boq-budget-breakdown?view=forecast','/qs/boq-budget-breakdown?view=profitability'] },
+    { label: 'Cost Control',        paths: ['/qs/boq-budget-breakdown','/qs/boq-budget-breakdown?view=variance','/qs/boq-budget-breakdown?view=forecast','/qs/boq-budget-breakdown?view=profitability','/qs/boq-budget-breakdown?view=cost_to_completion'] },
     { label: 'Payments',            paths: ['/accounts/sales/customer-payments','/qs/ra-bills?type=certificate','/qs?focus=outstanding','/qs/retention-releases'] },
     { label: null,                  paths: ['/qs/material-recon'] },
     { label: null,                  paths: ['/qs/documents'] },
