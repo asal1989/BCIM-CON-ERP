@@ -576,6 +576,12 @@ router.put('/:id', async (req, res) => {
       desigName = dr.rows[0]?.name || '';
     }
 
+    const prevStatusRes = await client.query(
+      `SELECT employment_status FROM employee_profiles WHERE user_id=$1 AND company_id=$2`,
+      [req.params.id, req.user.company_id]
+    );
+    const previousEmploymentStatus = prevStatusRes.rows[0]?.employment_status || null;
+
     // Guard: never let an HR employee-record edit silently downgrade a
     // super_admin. Editing it@bcim.in's (or any super_admin's) profile here
     // used to overwrite users.role with `role || 'viewer'`, stripping their
@@ -669,7 +675,7 @@ router.put('/:id', async (req, res) => {
 
     await syncExitToWorkerRoster(
       (sql, params) => client.query(sql, params),
-      req.params.id, req.user.company_id, employment_status
+      req.params.id, req.user.company_id, employment_status, previousEmploymentStatus
     );
 
     await addTimeline(
@@ -707,8 +713,26 @@ router.put('/:id', async (req, res) => {
 // Only the statuses that actually mean "gone" propagate.
 const EXIT_STATUSES = ['resigned', 'terminated', 'absconded'];
 
-async function syncExitToWorkerRoster(runner, userId, companyId, employmentStatus) {
-  if (!EXIT_STATUSES.includes(employmentStatus)) return;
+async function syncExitToWorkerRoster(runner, userId, companyId, employmentStatus, previousEmploymentStatus) {
+  if (!EXIT_STATUSES.includes(employmentStatus)) {
+    // Only reactivate when this save is specifically undoing a previous exit
+    // (e.g. an accidental "resigned" corrected back to "active"). Without
+    // this, users.is_active stayed FALSE forever after such a correction —
+    // the account was fully retired above, but nothing ever reversed that
+    // half of it, so the person kept showing "active" in the employee list
+    // while being invisible in every attendance query (which all require
+    // users.is_active = TRUE). Gating on the *previous* status (rather than
+    // reactivating any is_active=FALSE account on every save) avoids
+    // silently undoing an unrelated deliberate account disable done via the
+    // separate Users/admin page.
+    if (previousEmploymentStatus && EXIT_STATUSES.includes(previousEmploymentStatus)) {
+      await runner(
+        `UPDATE users SET is_active=TRUE WHERE id=$1 AND company_id=$2 AND is_active=FALSE`,
+        [userId, companyId]
+      );
+    }
+    return;
+  }
 
   const { rows } = await runner(
     `SELECT employee_code FROM users WHERE id=$1 AND company_id=$2`,
@@ -734,6 +758,11 @@ async function syncExitToWorkerRoster(runner, userId, companyId, employmentStatu
 router.patch('/:id/status', async (req, res) => {
   try {
     const { employment_status, date_of_leaving, leaving_reason, is_active } = req.body;
+    const prevStatusRes = await query(
+      `SELECT employment_status FROM employee_profiles WHERE user_id=$1 AND company_id=$2`,
+      [req.params.id, req.user.company_id]
+    );
+    const previousEmploymentStatus = prevStatusRes.rows[0]?.employment_status || null;
     await query(
       `UPDATE employee_profiles SET employment_status=$1, date_of_leaving=$2, leaving_reason=$3, updated_at=NOW()
        WHERE user_id=$4 AND company_id=$5`,
@@ -744,7 +773,7 @@ router.patch('/:id/status', async (req, res) => {
       await query(`UPDATE users SET is_active=$1 WHERE id=$2 AND company_id=$3`,
         [is_active, req.params.id, req.user.company_id]);
     }
-    await syncExitToWorkerRoster(query, req.params.id, req.user.company_id, employment_status);
+    await syncExitToWorkerRoster(query, req.params.id, req.user.company_id, employment_status, previousEmploymentStatus);
     await query(
       `INSERT INTO employee_timeline
        (user_id, company_id, event_type, title, description, event_date, created_by)
