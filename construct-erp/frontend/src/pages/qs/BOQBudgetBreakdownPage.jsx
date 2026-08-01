@@ -1632,16 +1632,27 @@ function CostToCompletionTab({ projectId, projectName, contractValue }) {
   const qc = useQueryClient();
   const [editKey, setEditKey] = useState(null);
 
+  // This report's whole point is to reconcile against whatever's currently
+  // true in the ERP — the app-wide 15-minute staleTime (App.js QueryClient
+  // default) is the wrong tradeoff here, since real transactions entered
+  // elsewhere (a new SC bill, an RA bill certified, a TQS bill paid) would
+  // silently not show up on this tab for up to 15 minutes. Force it fresh.
   const { data: ctc, isLoading } = useQuery({
     queryKey: ['cost-to-completion', projectId],
     queryFn: () => boqBudgetAPI.costToCompletion(projectId).then(r => r.data),
     enabled: !!projectId,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 
   const { data: summaryData } = useQuery({
     queryKey: ['costhead-summary', projectId],
     queryFn: () => boqBudgetAPI.costheadSummary(projectId).then(r => r.data),
     enabled: !!projectId,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 
   const saveMutation = useMutation({
