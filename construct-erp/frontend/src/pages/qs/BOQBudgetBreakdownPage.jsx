@@ -1656,25 +1656,34 @@ function CostToCompletionTab({ projectId, projectName, contractValue }) {
 
   if (isLoading || !ctc) return <div className="py-16 text-center text-slate-400 text-sm">Loading…</div>;
 
+  // Defensive fallbacks — a partial/errored response (e.g. one of the several
+  // sub-queries the backend aggregates failing for a specific project)
+  // previously crashed the whole tab with "Cannot read properties of
+  // undefined" instead of degrading gracefully.
+  const contractDetail = ctc.contract_detail || {};
+  const balanceWork   = ctc.balance_work   || {};
+  const liabilities   = ctc.liabilities    || {};
+  const inflow        = ctc.inflow        || {};
+
   const rows = summaryData?.data || [];
   const totalBudget = rows.filter(r => !r.derived).reduce((s, r) => s + r.budget, 0);
   const totalActual = rows.filter(r => !r.derived).reduce((s, r) => s + r.actual, 0);
   const budgetedForBalanceWork = Math.max(totalBudget - totalActual, 0);
 
-  const manual = (key) => ctc.contract_detail[key] ?? ctc.balance_work[key] ?? ctc.liabilities[key] ?? ctc.inflow[key] ?? 0;
+  const manual = (key) => contractDetail[key] ?? balanceWork[key] ?? liabilities[key] ?? inflow[key] ?? 0;
   const commit = (key, val) => {
     if (isNaN(val) || val < 0) { toast.error('Enter a valid amount'); return; }
     saveMutation.mutate({ [key]: val });
   };
 
   const totalWorksToBeDone = ['blockwork_works', 'plastering_works', 'waterproofing_works', 'misc_works']
-    .reduce((s, k) => s + (ctc.balance_work[k] || 0), 0);
+    .reduce((s, k) => s + (balanceWork[k] || 0), 0);
 
-  const totalOutflow = budgetedForBalanceWork + ctc.liabilities.sundry_creditors + ctc.liabilities.advance_to_be_recovered
-    + ctc.liabilities.retention_payable_subcontractor + ctc.liabilities.gst_payable;
+  const totalOutflow = budgetedForBalanceWork + (liabilities.sundry_creditors || 0) + (liabilities.advance_to_be_recovered || 0)
+    + (liabilities.retention_payable_subcontractor || 0) + (liabilities.gst_payable || 0);
 
-  const totalInflow = ctc.inflow.ra_receivable + totalWorksToBeDone + ctc.inflow.retention_money_recovered
-    + ctc.inflow.material_stock + ctc.inflow.other_projects_p3 + ctc.inflow.other_projects_tqs + ctc.inflow.bank_balance;
+  const totalInflow = (inflow.ra_receivable || 0) + totalWorksToBeDone + (inflow.retention_money_recovered || 0)
+    + (inflow.material_stock || 0) + (inflow.other_projects_p3 || 0) + (inflow.other_projects_tqs || 0) + (inflow.bank_balance || 0);
 
   const netPosition = totalInflow - totalOutflow;
 
@@ -1695,13 +1704,13 @@ function CostToCompletionTab({ projectId, projectName, contractValue }) {
         <table className="w-full text-sm">
           <tbody>
             {sectionHeader('Contract detail', 'bg-blue-900')}
-            <CtcRow label="Project Value" value={ctc.contract_detail.project_value} bold />
+            <CtcRow label="Project Value" value={contractDetail.project_value} bold />
             <CtcRow label={CTC_MANUAL_ROWS.advance_received} value={manual('advance_received')} editable
               editing={editKey === 'advance_received'} onStartEdit={() => setEditKey('advance_received')}
               onCancel={() => setEditKey(null)} onSave={(v) => commit('advance_received', v)} saving={saveMutation.isPending}
               note="Client mobilization advance — not tracked elsewhere in the ERP." />
-            <CtcRow label="Cum running Invoice (RA) amount" value={ctc.contract_detail.ra_cumulative_amount}
-              note={`Sum of net_payable across ${ctc.contract_detail.ra_bill_count} RA bill(s), including drafts.`} />
+            <CtcRow label="Cum running Invoice (RA) amount" value={contractDetail.ra_cumulative_amount}
+              note={`Sum of net_payable across ${contractDetail.ra_bill_count || 0} RA bill(s), including drafts.`} />
 
             <tr><td colSpan={2} className="h-3" /></tr>
             {sectionHeader('A. Balance work claim detail', 'bg-amber-600')}
@@ -1711,17 +1720,17 @@ function CostToCompletionTab({ projectId, projectName, contractValue }) {
                 onCancel={() => setEditKey(null)} onSave={(v) => commit(k, v)} saving={saveMutation.isPending} />
             ))}
             <CtcRow label="Total Works to Be Done" value={totalWorksToBeDone} bold highlight
-              note={`System check (Project Value − RA billed): ₹${Math.round(ctc.balance_work.system_check_total).toLocaleString('en-IN')}`} />
+              note={`System check (Project Value − RA billed): ₹${Math.round(balanceWork.system_check_total || 0).toLocaleString('en-IN')}`} />
 
             <tr><td colSpan={2} className="h-3" /></tr>
             {sectionHeader('B. Liabilities - Payables', 'bg-slate-600')}
             <CtcRow label="Budgeted cost for balance work completion (Execution A)" value={budgetedForBalanceWork}
               note="Total Budget − Total Actual/Spent, live from Budget vs Actual." />
-            <CtcRow label="Sundry creditors" value={ctc.liabilities.sundry_creditors}
+            <CtcRow label="Sundry creditors" value={liabilities.sundry_creditors}
               note="Outstanding (unpaid) TQS bills for this project." />
-            <CtcRow label="Advance to be Recovered" value={ctc.liabilities.advance_to_be_recovered}
+            <CtcRow label="Advance to be Recovered" value={liabilities.advance_to_be_recovered}
               note="Mobilization advance minus what's already recovered against RA bills." />
-            <CtcRow label="Retention Payable - Subcontractor" value={ctc.liabilities.retention_payable_subcontractor}
+            <CtcRow label="Retention Payable - Subcontractor" value={liabilities.retention_payable_subcontractor}
               note="SC bills' retention_amount not yet released." />
             <CtcRow label={CTC_MANUAL_ROWS.gst_payable} value={manual('gst_payable')} editable
               editing={editKey === 'gst_payable'} onStartEdit={() => setEditKey('gst_payable')}
@@ -1730,7 +1739,7 @@ function CostToCompletionTab({ projectId, projectName, contractValue }) {
 
             <tr><td colSpan={2} className="h-3" /></tr>
             {sectionHeader('C. Inflow', 'bg-amber-600')}
-            <CtcRow label="RA receivable" value={ctc.inflow.ra_receivable}
+            <CtcRow label="RA receivable" value={inflow.ra_receivable}
               note="Net of TDS and any amount already received against RA bills." />
             <CtcRow label="Work Order Billable to Lanco" value={totalWorksToBeDone}
               note="= Total Works to Be Done (Section A)." />
