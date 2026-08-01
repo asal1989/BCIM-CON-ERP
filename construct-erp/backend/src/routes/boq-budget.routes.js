@@ -156,6 +156,33 @@ runSchemaInit('project_costhead_subitems_entry_month', async () => {
   await query(`ALTER TABLE project_costhead_subitems ADD CONSTRAINT project_costhead_subitems_month_uniq UNIQUE (project_id, cost_head, sub_item, entry_month)`);
 });
 
+// "Cost to Completion" statement (Contract detail / Balance work claim /
+// Liabilities-Payables / Inflow) — a handful of figures the ERP has no other
+// source for (client mobilization advance, trade-wise balance work split,
+// GST payable, material stock, cross-project fund allocations, bank
+// balance). Everything else on that statement is computed live from
+// existing tables at request time — see GET /:project_id/cost-to-completion.
+runSchemaInit('project_cost_to_completion', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS project_cost_to_completion (
+      project_id UUID PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+      advance_received NUMERIC(16,2) DEFAULT 0,
+      blockwork_works NUMERIC(16,2) DEFAULT 0,
+      plastering_works NUMERIC(16,2) DEFAULT 0,
+      waterproofing_works NUMERIC(16,2) DEFAULT 0,
+      misc_works NUMERIC(16,2) DEFAULT 0,
+      gst_payable NUMERIC(16,2) DEFAULT 0,
+      retention_money_recovered NUMERIC(16,2) DEFAULT 0,
+      material_stock NUMERIC(16,2) DEFAULT 0,
+      other_projects_p3 NUMERIC(16,2) DEFAULT 0,
+      other_projects_tqs NUMERIC(16,2) DEFAULT 0,
+      bank_balance NUMERIC(16,2) DEFAULT 0,
+      updated_by UUID,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+});
+
 router.use(authenticate);
 router.use(loadProjectScope);
 
@@ -2050,6 +2077,137 @@ router.put('/:project_id/costhead-subitems', authorize(...BUDGET_WRITERS), async
         updated_at      = NOW()
       RETURNING *`,
       [project_id, cost_head, sub_item, entryMonth, rAmt, pAmt, req.user.id]
+    );
+    res.json({ data: r.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const CTC_MANUAL_FIELDS = [
+  'advance_received', 'blockwork_works', 'plastering_works', 'waterproofing_works', 'misc_works',
+  'gst_payable', 'retention_money_recovered', 'material_stock', 'other_projects_p3', 'other_projects_tqs', 'bank_balance',
+];
+
+// GET /boq-budget/:project_id/cost-to-completion
+// "Cost to Completion" statement: live-computed figures (project value, RA
+// billing, budgeted-cost-for-balance-work, sundry creditors, SC retention
+// payable, advance-to-be-recovered) plus manually-entered figures the ERP
+// has no other source for (client mobilization advance, trade-wise balance
+// work split, GST payable, material stock, cross-project funds, bank
+// balance) — stored in project_cost_to_completion.
+router.get('/:project_id/cost-to-completion', async (req, res) => {
+  try {
+    const { project_id } = req.params;
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) return res.status(403).json({ error: 'Access denied' });
+
+    const manualR = await query(`SELECT * FROM project_cost_to_completion WHERE project_id=$1`, [project_id]);
+    const manual = manualR.rows[0] || {};
+    const m = {};
+    for (const f of CTC_MANUAL_FIELDS) m[f] = parseFloat(manual[f] || 0);
+
+    // Project Value — total BOQ contract value
+    const boqTotalR = await query(
+      `SELECT COALESCE(SUM(quantity*rate),0) AS total FROM boq_items WHERE project_id=$1 AND is_active=true`,
+      [project_id]);
+    const projectValue = parseFloat(boqTotalR.rows[0].total);
+
+    // Cumulative running invoice (RA) amount — any RA bill not rejected,
+    // including draft, since this is a forward-looking planning statement,
+    // not a strict "already certified" figure.
+    const raR = await query(
+      `SELECT COALESCE(SUM(net_payable),0) AS total, COALESCE(SUM(client_tds_amount),0) AS tds, COALESCE(SUM(amount_received),0) AS received,
+              COALESCE(SUM(mobilization_advance_recovery),0) AS mob_recovery, COUNT(*) AS bill_count
+       FROM ra_bills WHERE project_id=$1 AND status <> 'rejected'`,
+      [project_id]);
+    const ra = raR.rows[0];
+    const raNetPayable = parseFloat(ra.total);
+    const raReceivable = Math.max(raNetPayable - parseFloat(ra.tds) - parseFloat(ra.received), 0);
+    const mobRecovered = parseFloat(ra.mob_recovery);
+
+    // Total Budget — "Budgeted cost for balance work completion" is derived
+    // client-side as (this total - Actual), since Actual requires the same
+    // full multi-source aggregation already computed by costhead-summary.
+    const budgetR = await query(`SELECT COALESCE(SUM(budget_amount),0) AS total FROM project_costhead_budgets WHERE project_id=$1`, [project_id]);
+
+    // Sundry creditors — outstanding (unpaid) TQS bills for this project
+    const sundryR = await query(`
+      SELECT COALESCE(SUM(GREATEST(COALESCE(b.total_amount,0) - COALESCE(u.tds_deduction,0) - COALESCE(u.other_deductions,0) - COALESCE(u.advance_recovered,0) - COALESCE(u.paid_amount,0), 0)),0) AS outstanding
+      FROM tqs_bills b LEFT JOIN tqs_bill_updates u ON u.bill_id=b.id
+      WHERE b.project_id=$1 AND b.is_deleted=FALSE`, [project_id]);
+
+    // Retention Payable - Subcontractor: SC retention held, not yet released
+    const scRetentionR = await query(
+      `SELECT COALESCE(SUM(retention_amount),0) AS total FROM sc_bills WHERE project_id=$1 AND status NOT IN ('draft','rejected')`,
+      [project_id]);
+
+    res.json({
+      contract_detail: {
+        project_value: projectValue,
+        advance_received: m.advance_received,
+        ra_cumulative_amount: raNetPayable,
+        ra_bill_count: parseInt(ra.bill_count, 10),
+      },
+      balance_work: {
+        blockwork_works: m.blockwork_works,
+        plastering_works: m.plastering_works,
+        waterproofing_works: m.waterproofing_works,
+        misc_works: m.misc_works,
+        system_check_total: Math.max(projectValue - raNetPayable, 0),
+      },
+      liabilities: {
+        // Actual re-derived from Budget Control's cost-head totals happens
+        // client-side (it already fetches costhead-summary); this endpoint
+        // just needs the budget total here.
+        total_budget: parseFloat(budgetR.rows[0].total),
+        sundry_creditors: parseFloat(sundryR.rows[0].outstanding),
+        advance_to_be_recovered: Math.max(m.advance_received - mobRecovered, 0),
+        retention_payable_subcontractor: parseFloat(scRetentionR.rows[0].total),
+        gst_payable: m.gst_payable,
+      },
+      inflow: {
+        ra_receivable: raReceivable,
+        retention_money_recovered: m.retention_money_recovered,
+        material_stock: m.material_stock,
+        other_projects_p3: m.other_projects_p3,
+        other_projects_tqs: m.other_projects_tqs,
+        bank_balance: m.bank_balance,
+      },
+      updated_at: manual.updated_at || null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /boq-budget/:project_id/cost-to-completion
+// Upserts any subset of the manual fields on the Cost to Completion statement.
+router.put('/:project_id/cost-to-completion', authorize(...BUDGET_WRITERS), async (req, res) => {
+  try {
+    const { project_id } = req.params;
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) return res.status(403).json({ error: 'Access denied' });
+
+    const updates = {};
+    for (const f of CTC_MANUAL_FIELDS) {
+      if (req.body[f] != null) updates[f] = parseFloat(req.body[f]) || 0;
+    }
+    if (!Object.keys(updates).length) return res.status(400).json({ error: 'No recognized fields provided' });
+
+    const cols = Object.keys(updates);
+    const insertCols = ['project_id', ...cols, 'updated_by'];
+    const insertVals = [project_id, ...cols.map(c => updates[c]), req.user.id];
+    const placeholders = insertVals.map((_, i) => `$${i + 1}`);
+    const updateSet = cols.map(c => `${c} = EXCLUDED.${c}`).join(', ');
+    const r = await query(`
+      INSERT INTO project_cost_to_completion (${insertCols.join(', ')})
+      VALUES (${placeholders.join(', ')})
+      ON CONFLICT (project_id) DO UPDATE SET ${updateSet}, updated_by = EXCLUDED.updated_by, updated_at = NOW()
+      RETURNING *`,
+      insertVals
     );
     res.json({ data: r.rows[0] });
   } catch (err) {
