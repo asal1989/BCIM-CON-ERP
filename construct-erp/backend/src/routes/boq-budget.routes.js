@@ -81,6 +81,14 @@ runSchemaInit('project_costhead_budgets', async () => {
   `);
   // Add boq_amount to existing tables (idempotent)
   await query(`ALTER TABLE project_costhead_budgets ADD COLUMN IF NOT EXISTS boq_amount NUMERIC(16,2) DEFAULT 0`).catch(() => {});
+  // Manual Bills Received / Bills Paid entry for cost heads with no natural
+  // transaction source (e.g. Supervision & Accommodation, EPF/PT/Insurance —
+  // internal payroll-type costs, not vendor bills, so nothing in RA/SC/TQS
+  // ever tags them). Added on top of whatever real transaction data already
+  // exists for a head, so it never conflicts with heads like Sub Con that
+  // already derive real received/paid figures from actual bills.
+  await query(`ALTER TABLE project_costhead_budgets ADD COLUMN IF NOT EXISTS received_amount NUMERIC(16,2) DEFAULT 0`).catch(() => {});
+  await query(`ALTER TABLE project_costhead_budgets ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(16,2) DEFAULT 0`).catch(() => {});
 });
 
 router.use(authenticate);
@@ -727,7 +735,9 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
 
     // Saved budgets and manually-set BOQ allocations
     const budgets = await query(
-      `SELECT cost_head, budget_amount, COALESCE(boq_amount, 0) AS boq_amount FROM project_costhead_budgets WHERE project_id=$1`,
+      `SELECT cost_head, budget_amount, COALESCE(boq_amount, 0) AS boq_amount,
+              COALESCE(received_amount, 0) AS received_amount, COALESCE(paid_amount, 0) AS paid_amount
+       FROM project_costhead_budgets WHERE project_id=$1`,
       [project_id]
     );
 
@@ -1021,6 +1031,16 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
     for (const b of budgets.rows) {
       budgetMap[b.cost_head] = parseFloat(b.budget_amount || 0);
       boqManualMap[b.cost_head] = parseFloat(b.boq_amount || 0);
+      const manualReceived = parseFloat(b.received_amount || 0);
+      const manualPaid = parseFloat(b.paid_amount || 0);
+      if (manualReceived > 0) {
+        receivedMap[b.cost_head] = (receivedMap[b.cost_head] || 0) + manualReceived;
+        actualMap[b.cost_head] = (actualMap[b.cost_head] || 0) + manualReceived;
+      }
+      if (manualPaid > 0) {
+        paidMap[b.cost_head] = (paidMap[b.cost_head] || 0) + manualPaid;
+        paidInvoiceMap[b.cost_head] = (paidInvoiceMap[b.cost_head] || 0) + manualPaid;
+      }
     }
 
     // Total BOQ value (contract value) — used for Contingency calculation
@@ -1811,6 +1831,39 @@ router.put('/:project_id/costhead-budget', authorize(...BUDGET_WRITERS), async (
   }
 });
 
+// PUT /boq-budget/:project_id/costhead-received-paid
+// Manual Bills Received / Bills Paid entry for a cost head — for heads with
+// no natural transaction source (see comment on the received_amount/
+// paid_amount columns above). Added on top of any real transaction-derived
+// figure the cost head might separately have.
+router.put('/:project_id/costhead-received-paid', authorize(...BUDGET_WRITERS), async (req, res) => {
+  try {
+    const { project_id } = req.params;
+    const { cost_head, received_amount, paid_amount } = req.body;
+    if (!cost_head) return res.status(400).json({ error: 'cost_head is required' });
+
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) return res.status(403).json({ error: 'Access denied' });
+
+    const rAmt = received_amount != null ? parseFloat(received_amount) || 0 : null;
+    const pAmt = paid_amount     != null ? parseFloat(paid_amount)     || 0 : null;
+    const r = await query(`
+      INSERT INTO project_costhead_budgets (project_id, cost_head, received_amount, paid_amount, created_by)
+      VALUES ($1, $2, COALESCE($3, 0), COALESCE($4, 0), $5)
+      ON CONFLICT (project_id, cost_head) DO UPDATE SET
+        received_amount = CASE WHEN $3 IS NOT NULL THEN $3 ELSE project_costhead_budgets.received_amount END,
+        paid_amount     = CASE WHEN $4 IS NOT NULL THEN $4 ELSE project_costhead_budgets.paid_amount     END,
+        updated_at      = NOW()
+      RETURNING *`,
+      [project_id, cost_head, rAmt, pAmt, req.user.id]
+    );
+    res.json({ data: r.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /boq-budget/:project_id/bulk-costhead-budget
 // Accepts array of {cost_head, budget_amount} and upserts all at once.
 router.post('/:project_id/bulk-costhead-budget', authorize(...BUDGET_WRITERS), async (req, res) => {
@@ -2073,6 +2126,11 @@ function buildChapterKeyer(allBoqItems) {
 router.get('/:project_id/ra-plan', async (req, res) => {
   try {
     const { project_id } = req.params;
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) {
+      return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
     const r = await query(
       `SELECT chapter_key, ra_index, planned_amount::text FROM ra_bill_chapter_plans WHERE project_id = $1`,
       [project_id]
@@ -2085,6 +2143,11 @@ router.get('/:project_id/ra-plan', async (req, res) => {
 router.put('/:project_id/ra-plan', authorize(...BUDGET_WRITERS), async (req, res) => {
   try {
     const { project_id } = req.params;
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) {
+      return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
     const { chapter_key, ra_index, planned_amount } = req.body;
     if (!chapter_key || !(ra_index >= 1 && ra_index <= 9)) {
       return res.status(400).json({ error: 'chapter_key and ra_index (1-9) are required' });
@@ -2106,6 +2169,11 @@ router.put('/:project_id/ra-plan', authorize(...BUDGET_WRITERS), async (req, res
 router.get('/:project_id/ra-actuals', async (req, res) => {
   try {
     const { project_id } = req.params;
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) {
+      return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
 
     const boqItemsRes = await query(
       `SELECT id, chapter_no, chapter_name FROM boq_items WHERE project_id = $1`,
@@ -2173,6 +2241,11 @@ router.get('/:project_id/ra-actuals', async (req, res) => {
 router.put('/:project_id/ra-actual', authorize(...BUDGET_WRITERS), async (req, res) => {
   try {
     const { project_id } = req.params;
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) {
+      return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
     const { chapter_key, ra_index, actual_amount } = req.body;
     if (!chapter_key || !(ra_index >= 1 && ra_index <= 9)) {
       return res.status(400).json({ error: 'chapter_key and ra_index (1-9) are required' });

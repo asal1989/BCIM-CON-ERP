@@ -1738,6 +1738,10 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
   const [editVal, setEditVal] = useState('');
   const [editingBoqHead, setEditingBoqHead] = useState(null);
   const [editBoqVal, setEditBoqVal] = useState('');
+  const [editingReceivedHead, setEditingReceivedHead] = useState(null);
+  const [editReceivedVal, setEditReceivedVal] = useState('');
+  const [editingPaidHead, setEditingPaidHead] = useState(null);
+  const [editPaidVal, setEditPaidVal] = useState('');
   const [expandedHead, setExpandedHead] = useState(null);
   const [showBulk, setShowBulk] = useState(false);
   const [bulkText, setBulkText] = useState(DEFAULT_BULK_TEXT);
@@ -1807,6 +1811,32 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
     const n = parseFloat(editBoqVal);
     if (isNaN(n) || n < 0) { toast.error('Enter a valid amount'); return; }
     saveMutation.mutate({ cost_head, boq_amount: n });
+  };
+
+  // Manual Bills Received / Bills Paid — for cost heads with no natural
+  // transaction source (Supervision & Accommodation, EPF/PT & Insurance,
+  // etc. are internal payroll-type costs, never tagged on an RA/SC/TQS bill).
+  const saveReceivedPaidMutation = useMutation({
+    mutationFn: (payload) => boqBudgetAPI.setCostheadReceivedPaid(projectId, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['costhead-summary', projectId] });
+      setEditingReceivedHead(null);
+      setEditingPaidHead(null);
+      toast.success('Saved');
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to save'),
+  });
+
+  const commitReceived = (cost_head) => {
+    const n = parseFloat(editReceivedVal);
+    if (isNaN(n) || n < 0) { toast.error('Enter a valid amount'); return; }
+    saveReceivedPaidMutation.mutate({ cost_head, received_amount: n });
+  };
+
+  const commitPaid = (cost_head) => {
+    const n = parseFloat(editPaidVal);
+    if (isNaN(n) || n < 0) { toast.error('Enter a valid amount'); return; }
+    saveReceivedPaidMutation.mutate({ cost_head, paid_amount: n });
   };
 
   const rows = data || [];
@@ -2141,8 +2171,23 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
                         ₹{Math.round(r.received).toLocaleString('en-IN')}
                         <span className="ml-1 text-[10px] opacity-60">{isExpanded ? '▲' : '▼'}</span>
                       </button>
+                    ) : editingReceivedHead === r.cost_head ? (
+                      <div className="flex items-center justify-end gap-1">
+                        <input autoFocus type="number" value={editReceivedVal}
+                          onChange={e => setEditReceivedVal(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') commitReceived(r.cost_head); if (e.key === 'Escape') setEditingReceivedHead(null); }}
+                          className="w-24 border border-indigo-400 rounded-lg px-2 py-1 text-xs text-right focus:outline-none"
+                        />
+                        <button onClick={() => commitReceived(r.cost_head)} disabled={saveReceivedPaidMutation.isPending}
+                          className="shrink-0 px-2 py-1 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-500 disabled:opacity-50">Save</button>
+                        <button onClick={() => setEditingReceivedHead(null)}
+                          className="shrink-0 px-2 py-1 bg-slate-100 text-slate-600 text-[10px] rounded-lg hover:bg-slate-200">✕</button>
+                      </div>
                     ) : (
-                      <span className="text-slate-300">—</span>
+                      <button onClick={() => { setEditReceivedVal(''); setEditingReceivedHead(r.cost_head); }}
+                        className="px-2 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-600 text-[10px] font-bold rounded hover:bg-indigo-100 opacity-0 group-hover:opacity-100 transition-opacity">
+                        + Add
+                      </button>
                     )}
                   </td>
                   <td className="px-4 py-3.5 text-right font-medium">
@@ -2175,8 +2220,23 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
                           <div className="text-[9px] text-amber-500 mt-0.5">Advance only — no bill yet</div>
                         )}
                       </div>
+                    ) : editingPaidHead === r.cost_head ? (
+                      <div className="flex items-center justify-end gap-1">
+                        <input autoFocus type="number" value={editPaidVal}
+                          onChange={e => setEditPaidVal(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') commitPaid(r.cost_head); if (e.key === 'Escape') setEditingPaidHead(null); }}
+                          className="w-24 border border-indigo-400 rounded-lg px-2 py-1 text-xs text-right focus:outline-none"
+                        />
+                        <button onClick={() => commitPaid(r.cost_head)} disabled={saveReceivedPaidMutation.isPending}
+                          className="shrink-0 px-2 py-1 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-500 disabled:opacity-50">Save</button>
+                        <button onClick={() => setEditingPaidHead(null)}
+                          className="shrink-0 px-2 py-1 bg-slate-100 text-slate-600 text-[10px] rounded-lg hover:bg-slate-200">✕</button>
+                      </div>
                     ) : (
-                      <span className="text-slate-300">—</span>
+                      <button onClick={() => { setEditPaidVal(''); setEditingPaidHead(r.cost_head); }}
+                        className="px-2 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-600 text-[10px] font-bold rounded hover:bg-indigo-100 opacity-0 group-hover:opacity-100 transition-opacity">
+                        + Add
+                      </button>
                     )}
                   </td>
                   <td className="px-4 py-3.5 text-right font-medium">
