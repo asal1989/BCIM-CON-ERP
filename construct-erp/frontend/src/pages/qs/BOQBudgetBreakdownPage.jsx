@@ -2918,6 +2918,23 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
     `,
   });
   const [view, setView] = useState(lockedView || 'breakdown'); // 'breakdown' | 'summary' | 'costhead' | 'ra_comparison'
+  const [outerSearchParams] = useSearchParams();
+  // The Cost Control sidebar links (Budget vs Actual/Cost Variance/Forecast/
+  // Profitability/Cost to Completion) all land on this same route with only
+  // ?view=<sub-tab> differing — that value is actually consumed one level
+  // down by CostHeadBudgetTab's own costheadView. This outer `view` state
+  // gates whether that component renders AT ALL (it only shows up when
+  // view==='costhead'), and it defaulted to 'breakdown' with no awareness of
+  // the URL — so every one of those links landed on the unrelated default
+  // Item-wise Breakdown tab instead. Reacts on every change (not just once),
+  // for the same reason costheadView needed a useEffect: React Router doesn't
+  // remount this page for a query-string-only navigation.
+  const COSTHEAD_SUBVIEWS = ['summary', 'monthly', 'variance', 'forecast', 'profitability', 'cost_to_completion', 'costhead'];
+  useEffect(() => {
+    if (lockedView) return;
+    const v = outerSearchParams.get('view');
+    if (v && COSTHEAD_SUBVIEWS.includes(v)) setView('costhead');
+  }, [outerSearchParams, lockedView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── RA Bills Comparison — Plan vs Actual, fixed 9 columns (RA1-RA9 / Jul-Mar) ──
   const RA_MONTHS = ['July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March'];
