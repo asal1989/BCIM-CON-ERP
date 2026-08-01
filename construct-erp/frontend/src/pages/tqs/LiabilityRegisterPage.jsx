@@ -69,6 +69,7 @@ const ENTRY = {
   'Other Deduction':  { label: 'Deduction',    color: C.slate,   bg: C.slateBg,   border: C.slateBorder,   side: 'debit'  },
   'Advance Given':    { label: 'Advance',      color: C.amber,   bg: C.amberBg,   border: C.amberBorder,   side: 'debit'  },
   'Advance Recovery': { label: 'Adv.Recovery', color: C.slate,   bg: C.slateBg,   border: C.slateBorder,   side: 'debit'  },
+  'Retention Held':   { label: 'Retention',    color: C.amber,   bg: C.amberBg,   border: C.amberBorder,   side: 'debit'  },
 };
 
 function TxnBadge({ type }) {
