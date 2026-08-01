@@ -60,6 +60,16 @@ const ensureRaBillCols = async () => {
     `ALTER TABLE ra_bills ADD COLUMN IF NOT EXISTS adhoc_advance_recovery NUMERIC(15,2) DEFAULT 0`,
     `ALTER TABLE ra_bills ADD COLUMN IF NOT EXISTS wo_number VARCHAR(100) DEFAULT ''`,
     `ALTER TABLE ra_bill_items ADD COLUMN IF NOT EXISTS cost_head TEXT`,
+    `CREATE TABLE IF NOT EXISTS ra_billing_plan (
+       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+       project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+       plan_month DATE NOT NULL,
+       planned_value NUMERIC(15,2) NOT NULL DEFAULT 0,
+       created_by UUID,
+       created_at TIMESTAMPTZ DEFAULT NOW(),
+       updated_at TIMESTAMPTZ DEFAULT NOW(),
+       UNIQUE(project_id, plan_month)
+     )`,
   ];
   for (const sql of alters) {
     try { await query(sql); } catch (_) {}
@@ -317,6 +327,171 @@ router.get('/summary', async (req, res) => {
     };
 
     res.json({ data: { kpis, projects: projectsOut, statusBreakdown, deductions, trend } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Billing Plan (planned monthly billing target) ──────────────────────────
+// GET /ra-bills/billing-plan?project_id=X — editable plan rows for one project
+router.get('/billing-plan', async (req, res) => {
+  try {
+    const { project_id } = req.query;
+    if (!project_id) return res.status(400).json({ error: 'project_id required' });
+    if (!userCanAccessProject(req, project_id)) {
+      return res.status(403).json({ error: 'Access denied for this project.' });
+    }
+    const projectCheck = await query(`SELECT 1 FROM projects WHERE id = $1 AND company_id = $2`, [project_id, req.user.company_id]);
+    if (!projectCheck.rowCount) return res.status(404).json({ error: 'Project not found' });
+
+    const result = await query(
+      `SELECT id, project_id, plan_month, planned_value
+         FROM ra_billing_plan WHERE project_id = $1 ORDER BY plan_month`,
+      [project_id]
+    );
+    res.json({ data: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /ra-bills/billing-plan — upsert one month's planned billing value
+router.put('/billing-plan', authorize('super_admin','admin','qs_engineer','project_manager'), async (req, res) => {
+  try {
+    const { project_id, plan_month, planned_value } = req.body;
+    if (!project_id || !plan_month) return res.status(400).json({ error: 'project_id and plan_month are required' });
+    if (!userCanAccessProject(req, project_id)) {
+      return res.status(403).json({ error: 'Access denied for this project.' });
+    }
+    const projectCheck = await query(`SELECT 1 FROM projects WHERE id = $1 AND company_id = $2`, [project_id, req.user.company_id]);
+    if (!projectCheck.rowCount) return res.status(404).json({ error: 'Project not found' });
+
+    // Normalize to the first of the month so UNIQUE(project_id, plan_month) matches consistently
+    const monthStart = new Date(plan_month);
+    const normalized = new Date(monthStart.getFullYear(), monthStart.getMonth(), 1).toISOString().slice(0, 10);
+
+    const result = await query(
+      `INSERT INTO ra_billing_plan (project_id, plan_month, planned_value, created_by)
+       VALUES ($1,$2,$3,$4)
+       ON CONFLICT (project_id, plan_month)
+       DO UPDATE SET planned_value = $3, updated_at = NOW()
+       RETURNING id, project_id, plan_month, planned_value`,
+      [project_id, normalized, planned_value || 0, req.user.id]
+    );
+    res.json({ data: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /ra-bills/billing-plan/:id
+router.delete('/billing-plan/:id', authorize('super_admin','admin','qs_engineer','project_manager'), async (req, res) => {
+  try {
+    const result = await query(
+      `DELETE FROM ra_billing_plan rbp USING projects p
+       WHERE rbp.project_id = p.id AND rbp.id = $1 AND p.company_id = $2
+       RETURNING rbp.id`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Plan entry not found' });
+    res.json({ message: 'Plan entry deleted' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /ra-bills/planned-vs-actual?project_id=optional — monthly + cumulative
+// planned billing target vs actual certified value, portfolio-wide or per project.
+router.get('/planned-vs-actual', async (req, res) => {
+  try {
+    const { project_id } = req.query;
+
+    const projConditions = ['p.company_id = $1'];
+    const projParams = [req.user.company_id];
+    if (project_id && String(project_id).trim()) {
+      if (!userCanAccessProject(req, project_id)) {
+        return res.status(403).json({ error: 'Access denied for this project.' });
+      }
+      projParams.push(project_id);
+      projConditions.push(`p.id = $${projParams.length}`);
+    } else if (!req.isGlobalRole) {
+      const allowed = req.allowedProjectIds || [];
+      if (allowed.length === 0) projConditions.push('FALSE');
+      else { projParams.push(allowed); projConditions.push(`p.id = ANY($${projParams.length}::uuid[])`); }
+    }
+    const projectIdsRes = await query(`SELECT p.id FROM projects p WHERE ${projConditions.join(' AND ')}`, projParams);
+    const projectIds = projectIdsRes.rows.map(r => r.id);
+    if (!projectIds.length) return res.json({ data: { months: [], plan: [] } });
+
+    const [planRes, billsRes] = await Promise.all([
+      query(
+        `SELECT plan_month, SUM(planned_value) AS planned_value
+           FROM ra_billing_plan WHERE project_id = ANY($1::uuid[])
+          GROUP BY plan_month`,
+        [projectIds]
+      ),
+      query(
+        `SELECT bill_date, certified_date, status, gross_amount
+           FROM ra_bills WHERE project_id = ANY($1::uuid[]) AND status IN ('certified','paid')`,
+        [projectIds]
+      ),
+    ]);
+
+    const num = v => parseFloat(v || 0);
+    const monthKey = d => { const dt = new Date(d); return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`; };
+
+    const plannedByMonth = {};
+    planRes.rows.forEach(r => { plannedByMonth[monthKey(r.plan_month)] = num(r.planned_value); });
+
+    const actualByMonth = {};
+    billsRes.rows.forEach(b => {
+      const k = monthKey(b.certified_date || b.bill_date);
+      actualByMonth[k] = (actualByMonth[k] || 0) + num(b.gross_amount);
+    });
+
+    // Span from the earliest of (first plan month, first certified bill) through
+    // the later of (today, last plan month) so the curve covers the full plan.
+    const allKeys = [...Object.keys(plannedByMonth), ...Object.keys(actualByMonth)];
+    const now = new Date();
+    let startKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    let endKey = startKey;
+    if (allKeys.length) {
+      startKey = allKeys.reduce((a, b) => (a < b ? a : b));
+      endKey = allKeys.reduce((a, b) => (a > b ? a : b), startKey);
+      if (endKey < startKey) endKey = startKey;
+    }
+
+    const [sy, sm] = startKey.split('-').map(Number);
+    const [ey, em] = endKey.split('-').map(Number);
+    const months = [];
+    let cy = sy, cm = sm, cumPlanned = 0, cumActual = 0;
+    while (cy < ey || (cy === ey && cm <= em)) {
+      const k = `${cy}-${String(cm).padStart(2, '0')}`;
+      const planned = plannedByMonth[k] || 0;
+      const actual = actualByMonth[k] || 0;
+      cumPlanned += planned;
+      cumActual += actual;
+      months.push({
+        month: k, planned, actual,
+        cumulative_planned: cumPlanned, cumulative_actual: cumActual,
+        variance: cumActual - cumPlanned,
+        variance_pct: cumPlanned > 0 ? Math.round(((cumActual - cumPlanned) / cumPlanned) * 1000) / 10 : null,
+      });
+      cm++; if (cm > 12) { cm = 1; cy++; }
+    }
+
+    // Editable plan rows, only meaningful when scoped to a single project
+    let plan = [];
+    if (project_id && String(project_id).trim()) {
+      const planRows = await query(
+        `SELECT id, project_id, plan_month, planned_value FROM ra_billing_plan
+          WHERE project_id = $1 ORDER BY plan_month`,
+        [project_id]
+      );
+      plan = planRows.rows;
+    }
+
+    res.json({ data: { months, plan } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

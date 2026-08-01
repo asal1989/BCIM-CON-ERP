@@ -311,6 +311,12 @@ export const measurementAPI = {
 export const raBillAPI = {
   list:          (params, config = {}) => api.get('/ra-bills', { ...config, params }),
   summary:       (params) => api.get('/ra-bills/summary', { params }),
+  plannedVsActual: (params) => api.get('/ra-bills/planned-vs-actual', { params }),
+  billingPlan: {
+    list:   (projectId) => api.get('/ra-bills/billing-plan', { params: { project_id: projectId } }),
+    upsert: (d)          => api.put('/ra-bills/billing-plan', d),
+    remove: (id)         => api.delete(`/ra-bills/billing-plan/${id}`),
+  },
   get:           (id)     => api.get(`/ra-bills/${id}`),
   create:        (data)   => api.post('/ra-bills', data),
   update:        (id, d)  => api.put(`/ra-bills/${id}`, d),

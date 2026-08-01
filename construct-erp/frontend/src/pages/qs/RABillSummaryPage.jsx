@@ -1,13 +1,14 @@
 // src/pages/qs/RABillSummaryPage.jsx — Portfolio-wide RA Bill summary:
 // Contract Value vs Billed vs Certified vs Balance to Complete.
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import {
   AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer,
+  Tooltip, ResponsiveContainer, Legend, Line, ComposedChart,
 } from 'recharts';
-import { Receipt, Wallet, CheckCircle2, ShieldCheck, XCircle, Building2 } from 'lucide-react';
+import { Receipt, Wallet, CheckCircle2, ShieldCheck, XCircle, Building2, Plus, Trash2, TrendingUp, TrendingDown } from 'lucide-react';
 import { raBillAPI, projectAPI } from '../../api/client';
 import SearchableSelect from '../../components/shared/SearchableSelect';
 import { Theme, PageHeader, KpiCard, SectionTitle, RichTable } from '../../theme';
@@ -27,7 +28,10 @@ const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct'
 
 export default function RABillSummaryPage() {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [projectId, setProjectId] = useState('');
+  const [newPlanMonth, setNewPlanMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [newPlanValue, setNewPlanValue] = useState('');
 
   const { data: projects } = useQuery({
     queryKey: ['projects'],
@@ -38,6 +42,30 @@ export default function RABillSummaryPage() {
     queryKey: ['ra-bill-summary', projectId],
     queryFn: () => raBillAPI.summary(projectId ? { project_id: projectId } : {}).then(r => r.data?.data),
   });
+
+  const { data: pva, isLoading: pvaLoading } = useQuery({
+    queryKey: ['ra-bill-planned-vs-actual', projectId],
+    queryFn: () => raBillAPI.plannedVsActual(projectId ? { project_id: projectId } : {}).then(r => r.data?.data),
+  });
+
+  const invalidatePva = () => qc.invalidateQueries({ queryKey: ['ra-bill-planned-vs-actual', projectId] });
+
+  const upsertPlanMut = useMutation({
+    mutationFn: d => raBillAPI.billingPlan.upsert(d),
+    onSuccess: () => { toast.success('Billing plan updated'); setNewPlanValue(''); invalidatePva(); },
+    onError: e => toast.error(e?.response?.data?.error || 'Could not save plan entry'),
+  });
+  const deletePlanMut = useMutation({
+    mutationFn: id => raBillAPI.billingPlan.remove(id),
+    onSuccess: () => { toast.success('Plan entry removed'); invalidatePva(); },
+    onError: e => toast.error(e?.response?.data?.error || 'Could not remove plan entry'),
+  });
+
+  const handleAddPlanRow = () => {
+    if (!projectId) return toast.error('Select a single project to edit its billing plan');
+    if (!newPlanMonth) return toast.error('Pick a month');
+    upsertPlanMut.mutate({ project_id: projectId, plan_month: `${newPlanMonth}-01`, planned_value: parseFloat(newPlanValue || 0) });
+  };
 
   const kpis = data?.kpis || {};
   const projectsOut = data?.projects || [];
@@ -58,6 +86,16 @@ export default function RABillSummaryPage() {
     const [y, m] = t.month.split('-');
     return { label: `${MONTH_NAMES[parseInt(m, 10) - 1]} ${y.slice(2)}`, value: t.value };
   });
+
+  const pvaMonths = pva?.months || [];
+  const pvaPlanRows = pva?.plan || [];
+  const pvaData = pvaMonths.map(m => {
+    const [y, mo] = m.month.split('-');
+    return { ...m, label: `${MONTH_NAMES[parseInt(mo, 10) - 1]} ${y.slice(2)}` };
+  });
+  const latestPva = pvaData[pvaData.length - 1];
+  const latestVariancePct = latestPva?.variance_pct;
+  const isAhead = latestVariancePct !== null && latestVariancePct !== undefined && latestVariancePct >= 0;
 
   return (
     <div className="min-h-screen font-sans text-sm" style={{ background: Theme.pageBg }}>
@@ -236,6 +274,102 @@ export default function RABillSummaryPage() {
                     <Area type="monotone" dataKey="value" stroke={Theme.navy} strokeWidth={2.5} fill="url(#raTrendFill)" dot={{ r: 3, fill: '#fff', stroke: Theme.navy, strokeWidth: 2 }} />
                   </AreaChart>
                 </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Planned vs Actual */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              <div className="lg:col-span-2 bg-white rounded-2xl border border-[#e2e6ec] shadow-sm p-5">
+                <div className="flex items-center justify-between mb-1">
+                  <SectionTitle>Planned vs. Actual Billing (Cumulative)</SectionTitle>
+                  {latestVariancePct !== null && latestVariancePct !== undefined && (
+                    <span
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full"
+                      style={{
+                        color: isAhead ? Theme.emerald.to : '#dc2626',
+                        background: isAhead ? '#ecfdf5' : '#fef2f2',
+                      }}
+                    >
+                      {isAhead ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                      {isAhead ? 'Ahead' : 'Behind'} {Math.abs(latestVariancePct)}%
+                    </span>
+                  )}
+                </div>
+                {pvaLoading ? (
+                  <div className="py-10 text-center text-xs text-slate-400">Loading…</div>
+                ) : pvaData.length === 0 ? (
+                  <div className="py-10 text-center text-xs text-slate-400">
+                    No billing plan entered yet{projectId ? '' : ' — select a project to add one'}
+                  </div>
+                ) : (
+                  <div style={{ width: '100%', height: 260 }}>
+                    <ResponsiveContainer>
+                      <ComposedChart data={pvaData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#eef1f6" vertical={false} />
+                        <XAxis dataKey="label" tick={{ fontSize: 10, fill: Theme.textFaint }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 10, fill: Theme.textFaint }} axisLine={false} tickLine={false}
+                          tickFormatter={v => `₹${(v / 1e5).toFixed(0)}L`} width={50} />
+                        <Tooltip formatter={(v, n) => [inr(v), n]} labelStyle={{ fontSize: 11 }} />
+                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                        <Line type="monotone" dataKey="cumulative_planned" name="Planned" stroke={Theme.textFaint} strokeWidth={2} strokeDasharray="5 4" dot={false} />
+                        <Line type="monotone" dataKey="cumulative_actual" name="Actual (Certified)" stroke={Theme.navy} strokeWidth={2.5} dot={{ r: 3, fill: '#fff', stroke: Theme.navy, strokeWidth: 2 }} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+                <p className="text-[10px] text-slate-400 mt-2">
+                  Actual = certified/paid RA bill value by month &nbsp;·&nbsp; Variance = cumulative actual − cumulative planned
+                </p>
+              </div>
+
+              {/* Editable billing plan (single project only) */}
+              <div className="bg-white rounded-2xl border border-[#e2e6ec] shadow-sm p-5">
+                <SectionTitle>Billing Plan</SectionTitle>
+                {!projectId ? (
+                  <div className="py-6 text-center text-xs text-slate-400">Select a single project above to enter its monthly billing plan</div>
+                ) : (
+                  <>
+                    <div className="flex items-end gap-2 mb-3">
+                      <div className="flex-1">
+                        <label className="block text-[10px] font-semibold text-slate-500 mb-1">Month</label>
+                        <input type="month" value={newPlanMonth} onChange={e => setNewPlanMonth(e.target.value)}
+                          className="w-full h-9 border border-slate-200 rounded-lg px-2 text-[12px] outline-none focus:border-indigo-400" />
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-[10px] font-semibold text-slate-500 mb-1">Planned Value (₹)</label>
+                        <input type="number" value={newPlanValue} onChange={e => setNewPlanValue(e.target.value)} placeholder="0"
+                          className="w-full h-9 border border-slate-200 rounded-lg px-2 text-[12px] outline-none focus:border-indigo-400" />
+                      </div>
+                      <button
+                        onClick={handleAddPlanRow}
+                        disabled={upsertPlanMut.isPending}
+                        className="h-9 w-9 flex items-center justify-center rounded-lg text-white disabled:opacity-50"
+                        style={{ background: Theme.navy }}
+                      >
+                        <Plus size={16} />
+                      </button>
+                    </div>
+                    <div className="space-y-1.5 max-h-[220px] overflow-y-auto">
+                      {pvaPlanRows.length === 0 && (
+                        <div className="py-4 text-center text-xs text-slate-400">No plan entries yet</div>
+                      )}
+                      {pvaPlanRows.map(row => {
+                        const [y, m] = row.plan_month.slice(0, 7).split('-');
+                        return (
+                          <div key={row.id} className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-50">
+                            <span className="text-[11px] font-medium text-slate-600">{MONTH_NAMES[parseInt(m, 10) - 1]} {y}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] font-semibold font-mono text-slate-800">{inr(row.planned_value)}</span>
+                              <button onClick={() => deletePlanMut.mutate(row.id)} className="text-slate-400 hover:text-red-500">
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </>
