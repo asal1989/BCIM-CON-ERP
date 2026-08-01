@@ -1920,20 +1920,25 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
   const [showBulk, setShowBulk] = useState(false);
   const [bulkText, setBulkText] = useState(DEFAULT_BULK_TEXT);
   const [searchParams] = useSearchParams();
+  const [costheadView, setCostheadView] = useState('summary'); // 'summary' | 'monthly' | 'cost_to_completion'
+  const [chSearch, setChSearch] = useState('');
+  const [chFilter, setChFilter] = useState('all'); // all | over | near | nobudget
+  const [chSort, setChSort] = useState({ key: null, dir: 'asc' });
+
   // ?view= from the sidebar (Cost Control section): 'cost_to_completion' opens
   // that tab directly; 'variance'/'forecast'/'profitability' all live inside
   // Monthly Analysis (Cost Variance/Cash Forecast/Profitability Abstract are
   // sections of that same tab, not separate tabs), so they map there too.
-  const initialCostheadView = (() => {
+  // Reacts to searchParams (not just the initial mount) — clicking between
+  // Cost Control sidebar links only changes the query string on this same
+  // route, so the component never remounts and a useState-only initial value
+  // would silently stop responding after the first load.
+  useEffect(() => {
     const v = searchParams.get('view');
-    if (v === 'cost_to_completion') return 'cost_to_completion';
-    if (['variance', 'forecast', 'profitability', 'monthly'].includes(v)) return 'monthly';
-    return 'summary';
-  })();
-  const [costheadView, setCostheadView] = useState(initialCostheadView); // 'summary' | 'monthly' | 'cost_to_completion'
-  const [chSearch, setChSearch] = useState('');
-  const [chFilter, setChFilter] = useState('all'); // all | over | near | nobudget
-  const [chSort, setChSort] = useState({ key: null, dir: 'asc' });
+    if (v === 'cost_to_completion') setCostheadView('cost_to_completion');
+    else if (['variance', 'forecast', 'profitability', 'monthly'].includes(v)) setCostheadView('monthly');
+    else if (!highlightCostHead && !initialChFilter) setCostheadView('summary');
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Jump-in from the Overview tab: focus a specific cost head or a filter (over/near/nobudget)
   useEffect(() => {
