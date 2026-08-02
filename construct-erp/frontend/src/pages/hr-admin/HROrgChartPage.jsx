@@ -11,6 +11,7 @@ import {
   Briefcase, BadgeCheck, AlignLeft, ZoomIn, ZoomOut, Maximize, Move
 } from 'lucide-react';
 import { hrAdvancedAPI } from '../../api/client';
+import { Theme, PageHeader } from '../../theme';
 
 // ── Construction Divisions ─────────────────────────────────────────────────────
 const DIVISIONS = [
@@ -18,7 +19,7 @@ const DIVISIONS = [
     key: 'operations',
     label: 'Operations',
     icon: HardHat,
-    color: '#0A1F5C',
+    color: Theme.navy,
     bg: '#EFF6FF',
     desc: 'Project Execution & Site Operations',
     patterns: ['project','site','planning','estimation','tender','contract','execution','civil','construction','survey'],
@@ -98,8 +99,8 @@ function getDivision(deptName = '') {
 
 // ── Level badges ──────────────────────────────────────────────────────────────
 const GRADE_LEVELS = {
-  'L1': { label: 'Top Management',    color: '#0A1F5C', bg: '#DBEAFE' },
-  'L2': { label: 'Senior Management', color: '#1d4ed8', bg: '#DBEAFE' },
+  'L1': { label: 'Top Management',    color: Theme.navy,      bg: '#DBEAFE' },
+  'L2': { label: 'Senior Management', color: Theme.navyLight, bg: '#DBEAFE' },
   'L3': { label: 'Management',        color: '#2563EB', bg: '#EFF6FF' },
   'L4': { label: 'Supervisory',       color: '#0891B2', bg: '#CFFAFE' },
   'L5': { label: 'Senior Staff',      color: '#059669', bg: '#D1FAE5' },
@@ -195,29 +196,34 @@ function Avatar({ name='', photo='', size=40, ring=false }) {
 
 // ── Employee Card ─────────────────────────────────────────────────────────────
 function EmpCard({ emp, onClick, highlight=false, compact=false, divColor }) {
+  const isTop = emp.grade === 'L1'; // Top Management — gold accent takes priority over division color
   return (
     <motion.div
-      whileHover={{y:-2, boxShadow:'0 8px 24px rgba(10,31,92,0.16)'}}
+      whileHover={{y:-2, boxShadow:`0 8px 24px ${Theme.navy}29`}}
       onClick={() => onClick(emp)}
       className={`bg-white rounded-2xl border cursor-pointer transition-all flex flex-col items-center text-center
         ${compact ? 'w-36 p-3 gap-1.5' : 'w-44 p-4 gap-2'}
-        ${highlight ? 'ring-2 ring-yellow-400 ring-offset-1 border-yellow-300' : 'border-gray-100 hover:border-blue-200'}
+        ${highlight ? 'ring-2 ring-offset-1' : 'border-gray-100'}
       `}
-      style={{boxShadow:'0 2px 10px rgba(10,31,92,0.07)',borderTop: divColor ? `3px solid ${divColor}` : undefined}}>
+      style={{
+        boxShadow: isTop ? `0 2px 10px ${Theme.navy}1f, 0 0 0 1px ${Theme.gold}55` : `0 2px 10px ${Theme.navy}12`,
+        borderTop: `3px solid ${isTop ? Theme.gold : (divColor || Theme.navy)}`,
+        ...(highlight ? { '--tw-ring-color': Theme.gold, borderColor: Theme.gold } : {}),
+      }}>
       <Avatar name={emp.name} photo={emp.profile_photo_url} size={compact?34:42} ring/>
       <div className="w-full min-w-0">
-        <p className={`font-bold text-gray-900 leading-tight truncate ${compact?'text-[10px]':'text-[12px]'}`}>{emp.name}</p>
+        <p className={`font-semibold text-slate-900 leading-tight truncate ${compact?'text-[10px]':'text-[12px]'}`}>{emp.name}</p>
         {emp.designation && (
-          <p className={`text-blue-600 font-semibold mt-0.5 truncate ${compact?'text-[9px]':'text-[10px]'}`}>{emp.designation}</p>
+          <p className={`font-semibold mt-0.5 truncate ${compact?'text-[9px]':'text-[10px]'}`} style={{ color: Theme.navy }}>{emp.designation}</p>
         )}
         <div className="flex items-center justify-center gap-1 mt-1">
           {emp.grade && <GradeBadge grade={emp.grade}/>}
           {emp.employee_code && (
-            <span className="text-[8px] text-gray-400 font-mono">{emp.employee_code}</span>
+            <span className="text-[8px] text-slate-400 font-mono">{emp.employee_code}</span>
           )}
         </div>
         {!compact && emp.work_location && (
-          <p className="text-[9px] text-gray-400 mt-0.5 flex items-center justify-center gap-0.5 truncate">
+          <p className="text-[9px] text-slate-400 mt-0.5 flex items-center justify-center gap-0.5 truncate">
             <MapPin size={7}/>{emp.work_location}
           </p>
         )}
@@ -234,7 +240,7 @@ function EmpDetailPopup({ emp, onClose }) {
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{background:'rgba(10,31,92,0.45)'}} onClick={onClose}>
+      style={{background:`${Theme.navyDark}73`}} onClick={onClose}>
       <motion.div initial={{scale:0.9,opacity:0}} animate={{scale:1,opacity:1}} exit={{scale:0.9,opacity:0}}
         className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden"
         onClick={e=>e.stopPropagation()}>
@@ -256,6 +262,7 @@ function EmpDetailPopup({ emp, onClose }) {
         <div className="px-6 py-4 space-y-2">
           {[
             { icon: Building2, label: 'Department', val: emp.department },
+            { icon: HardHat,   label: 'Project',     val: emp.project_name },
             { icon: Briefcase, label: 'Emp Code',   val: emp.employee_code },
             { icon: MapPin,    label: 'Location',   val: emp.work_location },
             { icon: AlignLeft, label: 'Type',       val: (emp.employment_type||'').replace(/_/g,' ') },
@@ -275,7 +282,7 @@ function EmpDetailPopup({ emp, onClose }) {
         <div className="px-6 pb-5 flex gap-2">
           <button onClick={() => navigate(`/hr-admin/employees/${emp.id}`)}
             className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold text-white"
-            style={{background:'linear-gradient(135deg,#0A1F5C,#2563EB)'}}>
+            style={{background: `linear-gradient(135deg, ${Theme.navy}, ${Theme.navyDark})`}}>
             <ExternalLink size={13}/> View Profile
           </button>
           <button onClick={onClose}
@@ -338,14 +345,14 @@ function DivisionView({ employees, onClick, searchQ }) {
       {/* Company Root */}
       <div className="flex flex-col items-center mb-8">
         <motion.div {...fade(0)} className="rounded-2xl px-8 py-5 flex items-center gap-4"
-          style={{background:'linear-gradient(135deg,#0A1F5C,#1d4ed8)',boxShadow:'0 10px 32px rgba(10,31,92,0.28)'}}>
+          style={{background: `linear-gradient(135deg, ${Theme.navy}, ${Theme.navyDark})`, boxShadow: `0 10px 32px ${Theme.navy}47`}}>
           <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
             <Building2 size={24} className="text-white"/>
           </div>
           <div>
             <p className="font-black text-white text-lg">BCIM</p>
             <p className="text-blue-200 text-xs font-semibold">B.C.I.M. Construction Pvt. Ltd.</p>
-            <p className="text-blue-300 text-[10px] mt-0.5">{totalEmp} Employees · {filteredDivMap.length} Divisions</p>
+            <p className="text-[10px] mt-0.5" style={{ color: Theme.gold }}>{totalEmp} Employees · {filteredDivMap.length} Divisions</p>
           </div>
         </motion.div>
       </div>
@@ -494,13 +501,13 @@ function DepartmentView({ employees, onClick, searchQ }) {
     <div className="flex flex-col items-center pb-16">
       <motion.div {...fade(0)} className="flex flex-col items-center mb-6">
         <div className="rounded-2xl px-8 py-4 flex items-center gap-3"
-          style={{background:'linear-gradient(135deg,#0A1F5C,#1d4ed8)',boxShadow:'0 8px 28px rgba(10,31,92,0.25)'}}>
+          style={{background: `linear-gradient(135deg, ${Theme.navy}, ${Theme.navyDark})`, boxShadow: `0 8px 28px ${Theme.navy}40`}}>
           <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
             <Building2 size={20} className="text-white"/>
           </div>
           <div>
             <p className="font-bold text-white text-base">BCIM</p>
-            <p className="text-blue-200 text-[11px]">{employees.length} staff</p>
+            <p className="text-[11px]" style={{ color: Theme.gold }}>{employees.length} staff</p>
           </div>
         </div>
       </motion.div>
@@ -544,6 +551,101 @@ function DepartmentView({ employees, onClick, searchQ }) {
   );
 }
 
+// ── Project View — staff grouped by project assignment ─────────────────────────
+const PROJECT_COLORS = ['#1a3a6b','#0891B2','#059669','#D97706','#7C3AED','#DB2777','#0D9488','#DC2626'];
+const projectColor = (id='') => PROJECT_COLORS[Math.abs([...String(id)].reduce((h,c)=>h+c.charCodeAt(0),0)) % PROJECT_COLORS.length];
+const UNASSIGNED_KEY = '__unassigned__';
+
+function ProjectView({ employees, onClick, searchQ }) {
+  const [collapsed, setCollapsed] = useState({});
+  const toggle = (k) => setCollapsed(c => ({...c,[k]:!c[k]}));
+
+  const grouped = useMemo(() => {
+    const map = {};
+    employees.forEach(e => {
+      const key = e.project_id || UNASSIGNED_KEY;
+      if (!map[key]) map[key] = { id: e.project_id, name: e.project_id ? (e.project_name || 'Unnamed Project') : 'Unassigned / Head Office', code: e.project_code, members: [] };
+      map[key].members.push(e);
+    });
+    Object.values(map).forEach(g => g.members.sort((a,b) => seniority(a) - seniority(b) || a.name.localeCompare(b.name)));
+    const entries = Object.entries(map);
+    entries.sort(([ka,a],[kb,b]) => {
+      if (ka === UNASSIGNED_KEY) return 1;
+      if (kb === UNASSIGNED_KEY) return -1;
+      return a.name.localeCompare(b.name);
+    });
+    return entries;
+  }, [employees]);
+
+  const filtered = useMemo(() => {
+    if (!searchQ) return grouped;
+    return grouped.map(([key, g]) => {
+      const f = g.members.filter(e =>
+        e.name?.toLowerCase().includes(searchQ) ||
+        e.designation?.toLowerCase().includes(searchQ) ||
+        g.name.toLowerCase().includes(searchQ)
+      );
+      return [key, { ...g, members: f }];
+    }).filter(([,g]) => g.members.length > 0);
+  }, [grouped, searchQ]);
+
+  return (
+    <div className="pb-16 px-4">
+      <div className="space-y-6 max-w-5xl mx-auto">
+        {filtered.map(([key, g], gi) => {
+          const isUnassigned = key === UNASSIGNED_KEY;
+          const color = isUnassigned ? Theme.textMuted : projectColor(key);
+          const isOpen = searchQ ? true : !collapsed[key];
+          return (
+            <motion.div key={key} {...fade(gi*0.05)}
+              className="rounded-2xl border overflow-hidden"
+              style={{borderColor:`${color}25`, boxShadow:`0 2px 16px ${color}12`}}>
+              <div className="flex items-center justify-between px-5 py-3 cursor-pointer"
+                style={{background:`${color}0d`, borderBottom: isOpen ? `1px solid ${color}20` : 'none'}}
+                onClick={() => toggle(key)}>
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{background:`${color}18`}}>
+                    <Building2 size={16} style={{color}}/>
+                  </div>
+                  <div>
+                    <p className="font-black text-gray-900 text-sm">{g.name}</p>
+                    {g.code && <p className="text-[10px] text-gray-500 font-mono">{g.code}</p>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{background:`${color}15`,color}}>
+                    {g.members.length} staff
+                  </span>
+                  <div style={{color}}>{isOpen ? <ChevronDown size={16}/> : <ChevronRight size={16}/>}</div>
+                </div>
+              </div>
+              <AnimatePresence>
+                {isOpen && (
+                  <motion.div initial={{opacity:0,height:0}} animate={{opacity:1,height:'auto'}} exit={{opacity:0,height:0}}
+                    className="overflow-hidden bg-white">
+                    <div className="p-4 flex flex-wrap gap-3">
+                      {g.members.map(emp => {
+                        const hl = searchQ && (emp.name?.toLowerCase().includes(searchQ) || emp.designation?.toLowerCase().includes(searchQ));
+                        return <EmpCard key={emp.id} emp={emp} onClick={onClick} highlight={hl} compact={g.members.length > 6} divColor={color}/>;
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          );
+        })}
+      </div>
+      {filtered.length === 0 && (
+        <div className="flex flex-col items-center gap-3 text-gray-400 mt-16">
+          <Users size={40} className="text-gray-200"/>
+          <p className="text-sm">No employees match your search</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Reporting Hierarchy Tree ───────────────────────────────────────────────────
 function OrgTreeNode({ node, allEmps, collapsed, toggle, onClick, searchQ, depth=0 }) {
   const children = allEmps.filter(e => e._parent_id === node.id);
@@ -567,8 +669,8 @@ function OrgTreeNode({ node, allEmps, collapsed, toggle, onClick, searchQ, depth
           ${hl ? 'ring-2 ring-yellow-400 border-yellow-300' : ''}
         `}
         style={{
-          background: isRoot ? 'linear-gradient(135deg,#0A1F5C,#1d4ed8)' : '#fff',
-          boxShadow: isRoot ? '0 10px 32px rgba(10,31,92,0.28)' : '0 2px 12px rgba(10,31,92,0.08)',
+          background: isRoot ? `linear-gradient(135deg, ${Theme.navy}, ${Theme.navyDark})` : '#fff',
+          boxShadow: isRoot ? `0 10px 32px ${Theme.navy}47` : `0 2px 12px ${Theme.navy}14`,
           border: isRoot ? 'none' : hl ? undefined : '1px solid #e5e7eb',
           borderTop: !isRoot && divInfo ? `3px solid ${divInfo.color}` : undefined,
         }}>
@@ -578,7 +680,7 @@ function OrgTreeNode({ node, allEmps, collapsed, toggle, onClick, searchQ, depth
             {node.name}
           </p>
           {node.designation && (
-            <p className={`font-semibold mt-0.5 truncate ${isRoot?'text-blue-200 text-[10px]':'text-blue-600 text-[10px]'}`}>
+            <p className="font-semibold mt-0.5 truncate text-[10px]" style={{ color: isRoot ? Theme.gold : Theme.navy }}>
               {node.designation}
             </p>
           )}
@@ -590,7 +692,8 @@ function OrgTreeNode({ node, allEmps, collapsed, toggle, onClick, searchQ, depth
           )}
         </div>
         {children.length > 0 && (
-          <span className={`mt-2 text-[9px] font-bold px-2 py-0.5 rounded-full ${isRoot?'bg-white/20 text-white':'bg-blue-50 text-blue-600'}`}>
+          <span className={`mt-2 text-[9px] font-bold px-2 py-0.5 rounded-full ${isRoot?'bg-white/20 text-white':''}`}
+            style={!isRoot ? { background: `${Theme.navy}10`, color: Theme.navy } : undefined}>
             {children.length} direct report{children.length!==1?'s':''}
           </span>
         )}
@@ -598,7 +701,8 @@ function OrgTreeNode({ node, allEmps, collapsed, toggle, onClick, searchQ, depth
 
       {children.length > 0 && (
         <button onClick={e=>{e.stopPropagation();toggle(node.id);}}
-          className="mt-1.5 w-6 h-6 rounded-full bg-white border-2 border-blue-300 flex items-center justify-center text-blue-600 shadow-sm hover:bg-blue-50 z-10 flex-shrink-0">
+          className="mt-1.5 w-6 h-6 rounded-full bg-white flex items-center justify-center shadow-sm z-10 flex-shrink-0"
+          style={{ border: `2px solid ${Theme.navy}40`, color: Theme.navy }}>
           {isOpen?<ChevronDown size={11}/>:<ChevronRight size={11}/>}
         </button>
       )}
@@ -842,9 +946,10 @@ function DivisionLegend() {
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 const VIEWS = [
-  { key: 'division',    label: 'Division View',   icon: Layers,   desc: 'Construction sector divisions' },
-  { key: 'department',  label: 'Department View',  icon: Building2,desc: 'By department'                },
-  { key: 'hierarchy',   label: 'Reporting Chart',  icon: Network,  desc: 'Reporting hierarchy tree'    },
+  { key: 'division',    label: 'Division View',   icon: Layers,     desc: 'Construction sector divisions' },
+  { key: 'department',  label: 'Department View', icon: Building2,  desc: 'By department'                 },
+  { key: 'project',     label: 'Project View',     icon: HardHat,    desc: 'Staff grouped by project'      },
+  { key: 'hierarchy',   label: 'Reporting Chart',  icon: Network,    desc: 'Reporting hierarchy tree'      },
 ];
 
 export default function HROrgChartPage() {
@@ -860,48 +965,37 @@ export default function HROrgChartPage() {
   const sq = searchQ.toLowerCase().trim();
 
   return (
-    <div className="min-h-screen" style={{background:'#F8FAFC'}}>
+    <div className="min-h-screen" style={{background: Theme.pageBg}}>
 
-      {/* Header */}
-      <motion.div {...fade(0)} className="relative overflow-hidden"
-        style={{background:'linear-gradient(135deg,#0A1F5C,#1e3a8a)',boxShadow:'0 4px 20px rgba(10,31,92,0.2)'}}>
-        <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-[0.06]"
-          style={{background:'radial-gradient(circle,#fff,transparent 70%)',transform:'translate(25%,-25%)'}}/>
-        <div className="relative z-10 px-7 py-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center">
-                  <Network size={16} className="text-white"/>
-                </div>
-                <span className="text-white/60 text-sm font-semibold">HR & Admin</span>
-              </div>
-              <h1 className="text-2xl font-black text-white">Organisation Chart</h1>
-              <p className="text-white/55 text-sm mt-1">
-                {employees.length} employees · {DIVISIONS.length} construction divisions
-              </p>
-            </div>
-            {/* Search */}
-            <div className="relative flex-shrink-0">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50"/>
-              <input value={searchQ} onChange={e=>setSearchQ(e.target.value)} placeholder="Search name, designation…"
-                className="pl-9 pr-4 py-2.5 bg-white/10 border border-white/20 text-white placeholder-white/40 rounded-xl text-sm focus:outline-none focus:bg-white/20 focus:border-white/40 transition-all w-56"/>
-            </div>
+      <PageHeader
+        title="Organisation Chart"
+        subtitle={`${employees.length} employees · ${DIVISIONS.length} construction divisions`}
+        breadcrumbs={[{ label: 'HR & Admin' }, { label: 'Organisation Chart' }]}
+        pills={[
+          { label: 'Employees', value: employees.length },
+          { label: 'Divisions', value: DIVISIONS.length },
+        ]}
+        actions={
+          <div className="relative flex-shrink-0">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50"/>
+            <input value={searchQ} onChange={e=>setSearchQ(e.target.value)} placeholder="Search name, designation…"
+              className="pl-9 pr-4 py-2.5 bg-white/10 border border-white/20 text-white placeholder-white/40 rounded-xl text-sm focus:outline-none focus:bg-white/20 focus:border-white/40 transition-all w-56"/>
           </div>
+        }
+      />
 
-          {/* View Tabs */}
-          <div className="flex gap-2 mt-4 flex-wrap">
-            {VIEWS.map(v => (
-              <button key={v.key} onClick={()=>setView(v.key)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
-                  view===v.key ? 'bg-white text-blue-700' : 'bg-white/10 text-white/80 hover:bg-white/20'
-                }`}>
-                <v.icon size={13}/>{v.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </motion.div>
+      {/* View Tabs */}
+      <div className="px-7 py-3 flex gap-2 flex-wrap" style={{ background: Theme.navyDark }}>
+        {VIEWS.map(v => (
+          <button key={v.key} onClick={()=>setView(v.key)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all"
+            style={ view===v.key
+              ? { background: '#fff', color: Theme.navy }
+              : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.80)' } }>
+            <v.icon size={13}/>{v.label}
+          </button>
+        ))}
+      </div>
 
       {/* Division Legend (only for division view) */}
       {view === 'division' && <DivisionLegend/>}
@@ -943,6 +1037,7 @@ export default function HROrgChartPage() {
           <>
             {view === 'division'   && <DivisionView   employees={employees} onClick={setSelected} searchQ={sq}/>}
             {view === 'department' && <DepartmentView employees={employees} onClick={setSelected} searchQ={sq}/>}
+            {view === 'project'    && <ProjectView    employees={employees} onClick={setSelected} searchQ={sq}/>}
             {view === 'hierarchy'  && <HierarchyView  employees={employees} onClick={setSelected} searchQ={sq}/>}
           </>
         )}
