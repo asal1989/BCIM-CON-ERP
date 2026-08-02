@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   Users, Search, Building2, MapPin, ChevronDown, ChevronRight,
   HardHat, Wrench, ShieldAlert, Truck, Package, IndianRupee,
@@ -953,7 +953,9 @@ const VIEWS = [
 ];
 
 export default function HROrgChartPage() {
-  const [view,      setView]      = useState('project');
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get('project_id') || '';
+  const [view,      setView]      = useState(projectId ? 'hierarchy' : 'project');
   const [searchQ,   setSearchQ]   = useState('');
   const [selected,  setSelected]  = useState(null);
 
@@ -961,20 +963,28 @@ export default function HROrgChartPage() {
     queryKey: ['hr-org-chart'],
     queryFn:  () => hrAdvancedAPI.orgChart().then(r => r.data?.data ?? []),
   });
-  const employees = data || [];
+  const allEmployees = data || [];
+  const employees = projectId ? allEmployees.filter(e => e.project_id === projectId) : allEmployees;
+  const projectName = projectId ? (employees[0]?.project_name || 'This Project') : '';
   const sq = searchQ.toLowerCase().trim();
 
   return (
     <div className="min-h-screen" style={{background: Theme.pageBg}}>
 
       <PageHeader
-        title="Organisation Chart"
-        subtitle={`${employees.length} employees · ${DIVISIONS.length} construction divisions`}
-        breadcrumbs={[{ label: 'HR & Admin' }, { label: 'Organisation Chart' }]}
-        pills={[
-          { label: 'Employees', value: employees.length },
-          { label: 'Divisions', value: DIVISIONS.length },
-        ]}
+        title={projectId ? `${projectName} — Team Structure` : 'Organisation Chart'}
+        subtitle={projectId
+          ? `${employees.length} staff on this project`
+          : `${employees.length} employees · ${DIVISIONS.length} construction divisions`}
+        breadcrumbs={projectId
+          ? [{ label: 'HR & Admin' }, { label: 'Organisation Chart', href: '/hr-admin/org-chart' }, { label: projectName }]
+          : [{ label: 'HR & Admin' }, { label: 'Organisation Chart' }]}
+        pills={projectId
+          ? [{ label: 'Project Staff', value: employees.length }]
+          : [
+              { label: 'Employees', value: employees.length },
+              { label: 'Divisions', value: DIVISIONS.length },
+            ]}
         actions={
           <div className="relative flex-shrink-0">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50"/>
@@ -984,17 +994,26 @@ export default function HROrgChartPage() {
         }
       />
 
-      {/* View Tabs */}
-      <div className="px-7 py-3 flex gap-2 flex-wrap" style={{ background: Theme.navyDark }}>
-        {VIEWS.map(v => (
-          <button key={v.key} onClick={()=>setView(v.key)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all"
-            style={ view===v.key
-              ? { background: '#fff', color: Theme.navy }
-              : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.80)' } }>
-            <v.icon size={13}/>{v.label}
-          </button>
-        ))}
+      {/* View Tabs — "Project View" is redundant once already scoped to one project */}
+      <div className="px-7 py-3 flex items-center justify-between flex-wrap gap-2" style={{ background: Theme.navyDark }}>
+        <div className="flex gap-2 flex-wrap">
+          {VIEWS.filter(v => !(projectId && v.key === 'project')).map(v => (
+            <button key={v.key} onClick={()=>setView(v.key)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all"
+              style={ view===v.key
+                ? { background: '#fff', color: Theme.navy }
+                : { background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.80)' } }>
+              <v.icon size={13}/>{v.label}
+            </button>
+          ))}
+        </div>
+        {projectId && (
+          <Link to="/hr-admin/org-chart"
+            className="text-xs font-semibold px-3 py-2 rounded-xl transition-all"
+            style={{ background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.80)' }}>
+            ← Company-wide Chart
+          </Link>
+        )}
       </div>
 
       {/* Division Legend (only for division view) */}
@@ -1030,7 +1049,12 @@ export default function HROrgChartPage() {
         {!isLoading && !error && employees.length === 0 && (
           <div className="flex flex-col items-center justify-center h-64 gap-3 text-gray-400">
             <Users size={48} className="text-gray-200"/>
-            <p className="text-sm font-semibold">No employees found</p>
+            <p className="text-sm font-semibold">
+              {projectId ? 'No staff currently assigned to this project' : 'No employees found'}
+            </p>
+            {projectId && (
+              <p className="text-xs text-gray-400">Staff get assigned via HR Admin → Employee Profile → Project</p>
+            )}
           </div>
         )}
         {!isLoading && !error && employees.length > 0 && (
