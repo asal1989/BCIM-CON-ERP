@@ -953,7 +953,7 @@ const VIEWS = [
 ];
 
 export default function HROrgChartPage() {
-  const [view,      setView]      = useState('division');
+  const [view,      setView]      = useState('project');
   const [searchQ,   setSearchQ]   = useState('');
   const [selected,  setSelected]  = useState(null);
 
