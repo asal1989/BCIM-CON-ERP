@@ -148,12 +148,11 @@ const navGroups = [
     { to: '/tqs/deduction-register?type=retention',  icon: ShieldCheck, label: 'Retention (Subcontract)' },
     { to: '/tqs/deduction-register?type=recoveries', icon: Coins,       label: 'Recoveries (Subcontract)' },
 
-    // Cost Control (BOQBudgetBreakdownPage already covers all four views)
-    { to: '/qs/boq-budget-breakdown',                    icon: Target,       label: 'Budget vs Actual' },
-    { to: '/qs/boq-budget-breakdown?view=variance',      icon: TrendingDown, label: 'Cost Variance' },
-    { to: '/qs/boq-budget-breakdown?view=forecast',      icon: TrendingUp,   label: 'Forecast' },
-    { to: '/qs/boq-budget-breakdown?view=profitability', icon: FileBarChart, label: 'Profitability' },
-    { to: '/qs/boq-budget-breakdown?view=cost_to_completion', icon: Calculator, label: 'Cost to Completion' },
+    // Cost Control — one screen; Budget vs Actual / Cost Variance / Forecast /
+    // Profitability / Cost to Completion are all tabs inside it, not separate
+    // pages, so this is a single sidebar entry rather than five that all land
+    // on the same route.
+    { to: '/qs/boq-budget-breakdown', icon: Target, label: 'Cost Control' },
 
     // Payments
     { to: '/accounts/sales/customer-payments',  icon: CreditCard,      label: 'Client Payments' },
