@@ -621,6 +621,14 @@ function ProjectView({ employees, onClick, searchQ }) {
                   <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{background:`${color}15`,color}}>
                     {g.members.length} staff
                   </span>
+                  {!isUnassigned && (
+                    <Link to={`/hr-admin/org-chart?project_id=${key}`} onClick={e => e.stopPropagation()}
+                      title="Open this project's chart full-screen"
+                      className="flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full transition-colors"
+                      style={{background:`${color}15`,color}}>
+                      <Maximize size={11}/> Full Screen
+                    </Link>
+                  )}
                   <div style={{color}}>{isOpen ? <ChevronDown size={16}/> : <ChevronRight size={16}/>}</div>
                 </div>
               </div>
