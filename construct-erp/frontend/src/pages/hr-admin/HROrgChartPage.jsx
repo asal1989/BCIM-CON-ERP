@@ -591,11 +591,16 @@ function ProjectView({ employees, onClick, searchQ }) {
 
   return (
     <div className="pb-16 px-4">
-      <div className="space-y-6 max-w-5xl mx-auto">
+      <div className="space-y-6 max-w-6xl mx-auto">
         {filtered.map(([key, g], gi) => {
           const isUnassigned = key === UNASSIGNED_KEY;
           const color = isUnassigned ? Theme.textMuted : projectColor(key);
           const isOpen = searchQ ? true : !collapsed[key];
+          // Reporting-manager tree, scoped to just this project's staff —
+          // anyone whose manager isn't also on this project becomes a root
+          // within it (their manager is elsewhere, e.g. Head Office).
+          const { employees: treeEmps } = buildHierarchy(g.members);
+          const roots = treeEmps.filter(e => !e._parent_id);
           return (
             <motion.div key={key} {...fade(gi*0.05)}
               className="rounded-2xl border overflow-hidden"
@@ -623,11 +628,13 @@ function ProjectView({ employees, onClick, searchQ }) {
                 {isOpen && (
                   <motion.div initial={{opacity:0,height:0}} animate={{opacity:1,height:'auto'}} exit={{opacity:0,height:0}}
                     className="overflow-hidden bg-white">
-                    <div className="p-4 flex flex-wrap gap-3">
-                      {g.members.map(emp => {
-                        const hl = searchQ && (emp.name?.toLowerCase().includes(searchQ) || emp.designation?.toLowerCase().includes(searchQ));
-                        return <EmpCard key={emp.id} emp={emp} onClick={onClick} highlight={hl} compact={g.members.length > 6} divColor={color}/>;
-                      })}
+                    <div className="p-6 overflow-x-auto">
+                      <div className="flex items-start justify-center gap-8" style={{minWidth:'max-content'}}>
+                        {roots.map(root => (
+                          <OrgTreeNode key={root.id} node={root} allEmps={treeEmps}
+                            collapsed={collapsed} toggle={toggle} onClick={onClick} searchQ={searchQ}/>
+                        ))}
+                      </div>
                     </div>
                   </motion.div>
                 )}
