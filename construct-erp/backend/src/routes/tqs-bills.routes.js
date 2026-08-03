@@ -3281,6 +3281,102 @@ router.patch('/:id/document-control', requireTqsStageAccess('document_control'),
   }
 });
 
+// ── POST /tqs/bills/bulk-stores-update ─────────────────────────────────────
+// Applies the same Stores receipt details to many bills at once and moves
+// them all to Document Controller, instead of updating one bill at a time.
+router.post('/bulk-stores-update', requireTqsStageAccess('stores'), async (req, res) => {
+  try {
+    const { bill_ids, store_recv_date, dc_number, vehicle_number, inspection_status, received_by, sent_to_ho_date, store_remarks } = req.body;
+    if (!Array.isArray(bill_ids) || !bill_ids.length) {
+      return res.status(400).json({ error: 'bill_ids required' });
+    }
+    requireDateFields(req.body, [
+      { key: 'store_recv_date', label: 'Received Date' },
+      { key: 'sent_to_ho_date', label: 'Sent to HO Date' },
+    ]);
+
+    const eligible = await query(`
+      SELECT id FROM tqs_bills
+      WHERE id = ANY($1::uuid[]) AND company_id = $2 AND workflow_status = 'stores' AND is_deleted = FALSE
+    `, [bill_ids, req.user.company_id]);
+    const ids = eligible.rows.map(r => r.id);
+    if (!ids.length) return res.status(400).json({ error: 'None of the selected bills are at the Stores stage.' });
+    for (const id of ids) await getAccessibleBill(req, id);
+
+    await query(`
+      UPDATE tqs_bill_updates SET
+        store_recv_date=$1, dc_number=$2, vehicle_number=$3,
+        inspection_status=$4, received_by=$5, sent_to_ho_date=$6, store_remarks=$7, updated_at=NOW()
+      WHERE bill_id = ANY($8::uuid[])
+    `, [store_recv_date, dc_number, vehicle_number, inspection_status, received_by, sent_to_ho_date, store_remarks, ids]);
+
+    await query(`UPDATE tqs_bills SET workflow_status='document_controller', updated_at=NOW() WHERE id = ANY($1::uuid[])`, [ids]);
+
+    for (const id of ids) {
+      await logHistory(id, 'stores', `Stores receipt updated (bulk)${sent_to_ho_date ? `, sent to HO: ${sent_to_ho_date}` : ''}`, req.user.id);
+      await logHistory(id, 'system', 'Moved to Document Controller', req.user.id);
+    }
+
+    res.json({
+      message: `${ids.length} bill(s) updated and forwarded to Document Controller`,
+      updated: ids.length,
+      skipped: bill_ids.length - ids.length,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+// ── POST /tqs/bills/bulk-document-control-update ───────────────────────────
+// Applies the same Document Controller details to many bills at once and
+// moves them all to QS, instead of updating one bill at a time.
+router.post('/bulk-document-control-update', requireTqsStageAccess('document_control'), async (req, res) => {
+  try {
+    const { bill_ids, ho_received_date, handed_over_qs_date, document_controller_remarks } = req.body;
+    if (!Array.isArray(bill_ids) || !bill_ids.length) {
+      return res.status(400).json({ error: 'bill_ids required' });
+    }
+    requireDateFields(req.body, [
+      { key: 'ho_received_date', label: 'Date Received at HO' },
+      { key: 'handed_over_qs_date', label: 'Date Handed Over to QS' },
+    ]);
+
+    const eligible = await query(`
+      SELECT id FROM tqs_bills
+      WHERE id = ANY($1::uuid[]) AND company_id = $2 AND workflow_status = 'document_controller' AND is_deleted = FALSE
+    `, [bill_ids, req.user.company_id]);
+    const ids = eligible.rows.map(r => r.id);
+    if (!ids.length) return res.status(400).json({ error: 'None of the selected bills are at the Document Controller stage.' });
+    for (const id of ids) await getAccessibleBill(req, id);
+
+    await query(`
+      UPDATE tqs_bill_updates SET
+        ho_received_date=$1,
+        handed_over_qs_date=$2,
+        document_controller_remarks=$3,
+        updated_at=NOW()
+      WHERE bill_id = ANY($4::uuid[])
+    `, [ho_received_date || null, handed_over_qs_date || null, document_controller_remarks || null, ids]);
+
+    await query(`UPDATE tqs_bills SET workflow_status='qs', updated_at=NOW() WHERE id = ANY($1::uuid[])`, [ids]);
+
+    for (const id of ids) {
+      await logHistory(id, 'document_controller', `Document Controller updated (bulk), HO received: ${ho_received_date}, handed over to QS: ${handed_over_qs_date}`, req.user.id);
+      await logHistory(id, 'system', 'Moved to QS for Certification', req.user.id);
+    }
+
+    res.json({
+      message: `${ids.length} bill(s) updated and moved to QS`,
+      updated: ids.length,
+      skipped: bill_ids.length - ids.length,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
 // ── GET /tqs/bills/:id/ra-summary ─────────────────────────────────────────
 // Returns prior certified bills for the same vendor + PO (RA sequence context)
 router.get('/:id/ra-summary', async (req, res) => {

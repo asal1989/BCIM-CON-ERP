@@ -1595,7 +1595,253 @@ function UntaggedItemsModal({ projectId, onClose }) {
   );
 }
 
-// â"€â"€ Import Bills Modal â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+// ── Bulk Stores Update Modal — set receipt details for many bills at once ──
+function BulkStoresUpdateModal({ projectId, onClose }) {
+  const qc = useQueryClient();
+  const [selected, setSelected] = useState({}); // bill id -> boolean
+  const [form, setForm] = useState({
+    store_recv_date: '', dc_number: '', vehicle_number: '',
+    inspection_status: 'ok', received_by: '', sent_to_ho_date: '', store_remarks: '',
+  });
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const { data: bills = [], isLoading } = useQuery({
+    queryKey: ['tqs-bills-bulk-stores', projectId],
+    queryFn: () => tqsBillsAPI.list({ project_id: projectId || undefined, status: 'stores' }).then(r => r.data?.data ?? r.data ?? []),
+  });
+
+  useEffect(() => {
+    setSelected(Object.fromEntries(bills.map(b => [b.id, true])));
+  }, [bills.map(b => b.id).join(',')]);
+
+  const mut = useMutation({
+    mutationFn: (data) => tqsBillsAPI.bulkUpdateStores(data),
+    onSuccess: (res) => {
+      toast.success(res.data?.message || 'Updated');
+      qc.invalidateQueries({ queryKey: ['tqs-bills'] });
+      onClose();
+    },
+    onError: e => toast.error(e?.response?.data?.error || 'Bulk update failed'),
+  });
+
+  const selectedIds = Object.keys(selected).filter(id => selected[id]);
+
+  const handleSubmit = () => {
+    if (!selectedIds.length) { toast.error('Select at least one bill'); return; }
+    if (!form.store_recv_date || !form.sent_to_ho_date) { toast.error('Received Date and Sent to HO Date are required'); return; }
+    mut.mutate({ bill_ids: selectedIds, ...form });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-slate-900 flex items-center gap-2"><Truck className="w-4 h-4 text-indigo-600" /> Bulk Stores Update</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Apply the same receipt details to every selected bill and forward them all to Document Controller.</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-slate-200 rounded-md text-slate-400"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-3">
+          {isLoading ? (
+            <div className="py-16 text-center text-slate-400 text-sm">Loading bills at Stores stage…</div>
+          ) : bills.length === 0 ? (
+            <div className="py-16 text-center text-slate-400 text-sm">No bills are currently at the Stores stage.</div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                {[
+                  { label: 'Received Date *', key: 'store_recv_date', type: 'date' },
+                  { label: 'DC Number', key: 'dc_number' },
+                  { label: 'Vehicle Number', key: 'vehicle_number' },
+                  { label: 'Received By', key: 'received_by' },
+                  { label: 'Sent to HO Date *', key: 'sent_to_ho_date', type: 'date' },
+                ].map(f => (
+                  <div key={f.key}>
+                    <label className="block text-xs text-slate-500 mb-1">{f.label}</label>
+                    <input type={f.type || 'text'} value={form[f.key]} onChange={e => set(f.key, e.target.value)}
+                      className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm outline-none focus:border-indigo-400" />
+                  </div>
+                ))}
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Inspection Status</label>
+                  <select value={form.inspection_status} onChange={e => set('inspection_status', e.target.value)}
+                    className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm outline-none focus:border-indigo-400">
+                    <option value="ok">OK</option>
+                    <option value="pending">Pending</option>
+                    <option value="damaged">Damaged</option>
+                    <option value="short">Short Received</option>
+                  </select>
+                </div>
+              </div>
+              <div className="mb-4">
+                <label className="block text-xs text-slate-500 mb-1">Remarks</label>
+                <textarea rows={2} value={form.store_remarks} onChange={e => set('store_remarks', e.target.value)}
+                  className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm outline-none focus:border-indigo-400" />
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+                    <th className="py-1.5 pr-2 w-8">
+                      <input type="checkbox" checked={selectedIds.length === bills.length}
+                        onChange={e => setSelected(Object.fromEntries(bills.map(b => [b.id, e.target.checked])))} />
+                    </th>
+                    <th className="py-1.5 pr-2">Bill No.</th>
+                    <th className="py-1.5 pr-2">Vendor</th>
+                    <th className="py-1.5 pr-2">Invoice No.</th>
+                    <th className="py-1.5 pr-2 text-right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bills.map(b => (
+                    <tr key={b.id} className="border-b border-slate-50 hover:bg-slate-50">
+                      <td className="py-1.5 pr-2">
+                        <input type="checkbox" checked={!!selected[b.id]}
+                          onChange={e => setSelected(prev => ({ ...prev, [b.id]: e.target.checked }))} />
+                      </td>
+                      <td className="py-1.5 pr-2 text-slate-800 font-mono text-xs">{b.sl_number}</td>
+                      <td className="py-1.5 pr-2 text-slate-700">{b.vendor_name}</td>
+                      <td className="py-1.5 pr-2 text-slate-500">{b.inv_number}</td>
+                      <td className="py-1.5 pr-2 text-right font-medium">₹{Number(b.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </div>
+        <div className="border-t border-slate-100 px-5 py-3 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Close</button>
+          <button
+            onClick={handleSubmit}
+            disabled={mut.isPending || bills.length === 0}
+            className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 shadow-sm"
+          >
+            {mut.isPending ? 'Updating…' : `Update ${selectedIds.length} Bill${selectedIds.length === 1 ? '' : 's'}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Bulk Document Controller Update Modal ──────────────────────────────────
+function BulkDocControlUpdateModal({ projectId, onClose }) {
+  const qc = useQueryClient();
+  const [selected, setSelected] = useState({});
+  const [form, setForm] = useState({
+    ho_received_date: '', handed_over_qs_date: '', document_controller_remarks: '',
+  });
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const { data: bills = [], isLoading } = useQuery({
+    queryKey: ['tqs-bills-bulk-dc', projectId],
+    queryFn: () => tqsBillsAPI.list({ project_id: projectId || undefined, status: 'document_controller' }).then(r => r.data?.data ?? r.data ?? []),
+  });
+
+  useEffect(() => {
+    setSelected(Object.fromEntries(bills.map(b => [b.id, true])));
+  }, [bills.map(b => b.id).join(',')]);
+
+  const mut = useMutation({
+    mutationFn: (data) => tqsBillsAPI.bulkUpdateDocumentControl(data),
+    onSuccess: (res) => {
+      toast.success(res.data?.message || 'Updated');
+      qc.invalidateQueries({ queryKey: ['tqs-bills'] });
+      onClose();
+    },
+    onError: e => toast.error(e?.response?.data?.error || 'Bulk update failed'),
+  });
+
+  const selectedIds = Object.keys(selected).filter(id => selected[id]);
+
+  const handleSubmit = () => {
+    if (!selectedIds.length) { toast.error('Select at least one bill'); return; }
+    if (!form.ho_received_date || !form.handed_over_qs_date) { toast.error('Date Received at HO and Date Handed Over to QS are required'); return; }
+    mut.mutate({ bill_ids: selectedIds, ...form });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-slate-900 flex items-center gap-2"><Building2 className="w-4 h-4 text-indigo-600" /> Bulk Document Controller Update</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Apply the same HO/QS handover dates to every selected bill and move them all to QS for certification.</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-slate-200 rounded-md text-slate-400"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-3">
+          {isLoading ? (
+            <div className="py-16 text-center text-slate-400 text-sm">Loading bills at Document Controller stage…</div>
+          ) : bills.length === 0 ? (
+            <div className="py-16 text-center text-slate-400 text-sm">No bills are currently at the Document Controller stage.</div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                {[
+                  { label: 'Date Received at HO *', key: 'ho_received_date', type: 'date' },
+                  { label: 'Date Handed Over to QS *', key: 'handed_over_qs_date', type: 'date' },
+                ].map(f => (
+                  <div key={f.key}>
+                    <label className="block text-xs text-slate-500 mb-1">{f.label}</label>
+                    <input type={f.type || 'text'} value={form[f.key]} onChange={e => set(f.key, e.target.value)}
+                      className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm outline-none focus:border-indigo-400" />
+                  </div>
+                ))}
+              </div>
+              <div className="mb-4">
+                <label className="block text-xs text-slate-500 mb-1">Remarks</label>
+                <textarea rows={2} value={form.document_controller_remarks} onChange={e => set('document_controller_remarks', e.target.value)}
+                  className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm outline-none focus:border-indigo-400" />
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+                    <th className="py-1.5 pr-2 w-8">
+                      <input type="checkbox" checked={selectedIds.length === bills.length}
+                        onChange={e => setSelected(Object.fromEntries(bills.map(b => [b.id, e.target.checked])))} />
+                    </th>
+                    <th className="py-1.5 pr-2">Bill No.</th>
+                    <th className="py-1.5 pr-2">Vendor</th>
+                    <th className="py-1.5 pr-2">Invoice No.</th>
+                    <th className="py-1.5 pr-2 text-right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bills.map(b => (
+                    <tr key={b.id} className="border-b border-slate-50 hover:bg-slate-50">
+                      <td className="py-1.5 pr-2">
+                        <input type="checkbox" checked={!!selected[b.id]}
+                          onChange={e => setSelected(prev => ({ ...prev, [b.id]: e.target.checked }))} />
+                      </td>
+                      <td className="py-1.5 pr-2 text-slate-800 font-mono text-xs">{b.sl_number}</td>
+                      <td className="py-1.5 pr-2 text-slate-700">{b.vendor_name}</td>
+                      <td className="py-1.5 pr-2 text-slate-500">{b.inv_number}</td>
+                      <td className="py-1.5 pr-2 text-right font-medium">₹{Number(b.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </div>
+        <div className="border-t border-slate-100 px-5 py-3 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Close</button>
+          <button
+            onClick={handleSubmit}
+            disabled={mut.isPending || bills.length === 0}
+            className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 shadow-sm"
+          >
+            {mut.isPending ? 'Updating…' : `Update ${selectedIds.length} Bill${selectedIds.length === 1 ? '' : 's'}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Import Bills Modal ──────────────────────────────────────────────────────
 function ImportBillsModal({ projects, defaultProjectId, onClose, onDone }) {
   const [projectId, setProjectId] = useState(defaultProjectId || '');
   const [file, setFile] = useState(null);
@@ -2853,6 +3099,8 @@ export default function TQSBillsPage() {
   const [showImport, setShowImport] = useState(false);
   const [showAdvance, setShowAdvance] = useState(false);
   const [showUntagged, setShowUntagged] = useState(false);
+  const [showBulkStores, setShowBulkStores] = useState(false);
+  const [showBulkDocControl, setShowBulkDocControl] = useState(false);
   const [search, setSearch] = useState('');
   // Default to the globally-selected project (top nav chip) so the Bill
   // Tracker doesn't show every project's bills under the active project context.
@@ -3181,6 +3429,14 @@ export default function TQSBillsPage() {
             <button onClick={() => setShowUntagged(true)} title="Bulk-tag line items with no cost head"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:bg-white/10 text-white/70 hover:text-white">
               <Package className="w-3.5 h-3.5" /> Untagged Items
+            </button>
+            <button onClick={() => setShowBulkStores(true)} title="Update Stores receipt details for many bills at once"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:bg-white/10 text-white/70 hover:text-white">
+              <Truck className="w-3.5 h-3.5" /> Bulk Stores
+            </button>
+            <button onClick={() => setShowBulkDocControl(true)} title="Update Document Controller details for many bills at once"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:bg-white/10 text-white/70 hover:text-white">
+              <Building2 className="w-3.5 h-3.5" /> Bulk Doc Control
             </button>
             <button onClick={() => setShowAdvance(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
@@ -3695,6 +3951,20 @@ export default function TQSBillsPage() {
         <UntaggedItemsModal
           projectId={projectFilter}
           onClose={() => setShowUntagged(false)}
+        />
+      )}
+
+      {showBulkStores && (
+        <BulkStoresUpdateModal
+          projectId={projectFilter}
+          onClose={() => setShowBulkStores(false)}
+        />
+      )}
+
+      {showBulkDocControl && (
+        <BulkDocControlUpdateModal
+          projectId={projectFilter}
+          onClose={() => setShowBulkDocControl(false)}
         />
       )}
 
