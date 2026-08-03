@@ -7,6 +7,7 @@ import {
   XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { tqsBillsAPI, projectAPI, liabilityRegisterAPI } from '../../api/client';
+import { Theme, PageHeader, KpiCard as ThemeKpiCard } from '../../theme';
 import {
   FileText, Clock, CheckCircle2, AlertTriangle,
   Package, IndianRupee, ClipboardCheck, Warehouse,
@@ -27,14 +28,10 @@ const STATUS_CONFIG = {
   paid:                { label: 'Paid',        color: '#059669', bg: '#ECFDF5', icon: CheckCircle2 },
 };
 
-const KPI_ACCENTS = [
-  { accent: '#2563EB', iconBg: '#EFF6FF', iconColor: '#2563EB' },
-  { accent: '#0891B2', iconBg: '#ECFEFF', iconColor: '#0891B2' },
-  { accent: '#059669', iconBg: '#ECFDF5', iconColor: '#059669' },
-  { accent: '#D97706', iconBg: '#FFFBEB', iconColor: '#D97706' },
-  { accent: '#C2410C', iconBg: '#FFF7ED', iconColor: '#C2410C' },
-  { accent: '#BE123C', iconBg: '#FFF1F2', iconColor: '#BE123C' },
-];
+// Maps to the shared Theme.* color keys (KpiCard from '../../theme') so this
+// dashboard's KPIs render with the same premium-navy palette as RA Bills /
+// Budget Control / Org Chart, instead of a locally-invented color set.
+const KPI_ACCENTS = ['blue', 'teal', 'emerald', 'amber', 'orange', 'purple'];
 
 function useAnimatedCounter(target, duration = 1.2) {
   const [value, setValue] = useState(0);
@@ -54,7 +51,6 @@ function KpiCard({ label, value, numericValue, sub, theme, icon: Icon, delay = 0
   const display = numericValue !== undefined
     ? (value.startsWith('₹') ? `₹${inr(count)}` : String(count))
     : value;
-  const valueSize = display.length > 13 ? 14 : display.length > 10 ? 15 : 18;
   const defaultRoute = {
     'Total Bills': '/tqs/bills',
     'Invoice Value': '/tqs/bills',
@@ -66,56 +62,8 @@ function KpiCard({ label, value, numericValue, sub, theme, icon: Icon, delay = 0
   const handleClick = onClick || (defaultRoute ? () => { window.location.href = defaultRoute; } : null);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.35, ease: 'easeOut' }}
-      role={handleClick ? 'button' : undefined}
-      tabIndex={handleClick ? 0 : undefined}
-      onClick={handleClick}
-      onKeyDown={e => {
-        if (!handleClick) return;
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          handleClick();
-        }
-      }}
-      whileHover={handleClick ? { y: -2 } : undefined}
-      whileTap={handleClick ? { scale: 0.99 } : undefined}
-      style={{
-        background: '#fff',
-        borderRadius: 10,
-        padding: '10px 10px 9px',
-        border: '1px solid #E2E8F0',
-        borderLeft: `4px solid ${theme.accent}`,
-        boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-        minWidth: 0,
-        overflow: 'hidden',
-        cursor: handleClick ? 'pointer' : 'default',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-        <div className="dqs-kpi-icon" style={{
-          width: 30, height: 30, borderRadius: 8,
-          background: theme.iconBg,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0,
-        }}>
-          <Icon size={16} color={theme.iconColor} />
-        </div>
-        <p style={{ fontSize: 9, fontWeight: 800, color: '#64748B', margin: 0, textTransform: 'uppercase', letterSpacing: 0.3, lineHeight: 1.18, overflowWrap: 'anywhere' }}>{label}</p>
-      </div>
-      <div style={{ minWidth: 0 }}>
-        <p style={{ fontSize: valueSize, fontWeight: 850, color: '#0F172A', margin: 0, lineHeight: 1.08, letterSpacing: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'clip' }}>{display}</p>
-        {sub && (
-          <p style={{ fontSize: 9, color: '#94A3B8', marginTop: 5, display: 'flex', alignItems: 'center', gap: 3, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            <ArrowUpRight size={10} /> {sub}
-          </p>
-        )}
-      </div>
+    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay, duration: 0.35, ease: 'easeOut' }}>
+      <ThemeKpiCard label={label} value={display} sub={sub} color={theme} icon={Icon} onClick={handleClick} />
     </motion.div>
   );
 }
@@ -282,7 +230,7 @@ export default function DQSDashboardPage() {
     .slice(-9); // last 9 months
 
   return (
-    <div className="dqs-dashboard" style={{ background: '#F8FAFC', minHeight: '100vh' }}>
+    <div className="dqs-dashboard" style={{ background: Theme.pageBg, minHeight: '100vh' }}>
       <style>{`
         .dqs-dashboard {
           overflow-x: hidden;
@@ -334,34 +282,17 @@ export default function DQSDashboardPage() {
       `}</style>
 
       {/* ── Header ── */}
-      <div style={{
-        background: '#fff',
-        borderBottom: '1px solid #E2E8F0',
-        padding: '18px 28px',
-      }}>
-        <div className="dqs-header-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 9, background: '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <LayoutDashboard size={18} color="#4F46E5" />
-            </div>
-            <div>
-              <h1 style={{ fontSize: 17, fontWeight: 800, color: '#0F172A', margin: 0 }}>Bill Tracker Dashboard</h1>
-              <p style={{ fontSize: 11, color: '#94A3B8', margin: '2px 0 0', fontWeight: 500 }}>Live invoice tracker · All departments</p>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {overdue.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '5px 12px' }}>
-                <AlertTriangle size={12} color="#EF4444" />
-                <span style={{ fontSize: 11, fontWeight: 600, color: '#DC2626' }}>{overdue.length} overdue</span>
-              </div>
-            )}
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#64748B', background: '#F1F5F9', borderRadius: 8, padding: '5px 12px', border: '1px solid #E2E8F0' }}>
-              {totalBills} total bills
-            </div>
-          </div>
-        </div>
+      <PageHeader
+        title="Bill Tracker Dashboard"
+        subtitle="Live invoice tracker · All departments"
+        breadcrumbs={[{ label: 'Bill Tracker' }, { label: 'Dashboard' }]}
+        pills={[
+          ...(overdue.length > 0 ? [{ label: 'Overdue', value: overdue.length, color: '#fca5a5' }] : []),
+          { label: 'Total Bills', value: totalBills },
+        ]}
+      />
 
+      <div style={{ background: '#fff', borderBottom: '1px solid #E2E8F0', padding: '18px 28px' }}>
         {/* KPI Cards */}
         <div className="dqs-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12 }}>
           <KpiCard label="Total Bills"       value={String(totalBills)}             numericValue={totalBills}          sub="All invoices"              theme={KPI_ACCENTS[0]} icon={FileText}       delay={0}    onClick={() => navigate('/tqs/bills')} />

@@ -10,6 +10,17 @@ const RATE_TYPES = ['hourly', 'daily', 'monthly'];
 const HIRE_IN_STATUS = ['requested', 'ordered', 'deployed', 'returned', 'invoiced'];
 const HIRE_OUT_STATUS = ['requested', 'ordered', 'returned', 'invoiced'];
 
+/* Must stay at module scope — see the note in PlantEquipmentLog.jsx. Defined
+   inside the form component this remounts every input on each keystroke, so
+   only one character can be typed per click. */
+function Field({ label, children, span }) {
+  return (
+    <div className={span === 2 ? 'col-span-2 space-y-1' : 'space-y-1'}>
+      <label className="block text-xs font-medium text-gray-500">{label}</label>{children}
+    </div>
+  );
+}
+
 function HireForm({ mode, record, onClose }) {
   const qc = useQueryClient();
   const { data: equipment = [] } = useQuery({ queryKey: ['pm-equipment'], queryFn: () => plantAPI.listEquipment().then((r) => r.data?.data || []).catch(() => []) });
@@ -41,11 +52,6 @@ function HireForm({ mode, record, onClose }) {
     onError: (e) => toast.error(e?.response?.data?.error || 'Save failed'),
   });
 
-  const Field = ({ label, children, span }) => (
-    <div className={span === 2 ? 'col-span-2 space-y-1' : 'space-y-1'}>
-      <label className="block text-xs font-medium text-gray-500">{label}</label>{children}
-    </div>
-  );
 
   return (
     <Modal title={`${record ? 'Edit' : 'New'} Hire-${isIn ? 'In' : 'Out'} Order`} onClose={onClose} maxW="max-w-2xl"

@@ -14,6 +14,23 @@ router.use(authorize('super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager', 'ma
 const FULL_HR_ROLES = new Set(['super_admin', 'admin', 'hr', 'hr_admin', 'hr_manager',
   'managing_director', 'director', 'ceo', 'cfo', 'md']);
 
+// These two (MD + Head Office management) don't punch a biometric device, so
+// on any day with no hr_attendance row for them the daily register would
+// otherwise default them to "absent". Always show them as present instead.
+const ALWAYS_PRESENT_USER_IDS = [
+  '042f1671-14c9-40a3-b40c-d213a30ec258', // A.STEPHEN, Managing Director
+  '4b7b60a8-2cae-49bd-937d-86a55bfb1601', // Sam S Nathan, Head Office Management
+];
+
+// System/tenant admin logins — not real employees, so they must never appear
+// in attendance reports. it@bcim.in is tagged employee_category='system' so
+// the staff-category filter already excludes it, but BCIM Admin has no
+// employee_profiles row at all (COALESCE(...,'staff') defaults it to
+// 'staff'), so exclude both explicitly by email at the base query level —
+// this holds regardless of which category tab is selected. Kept in sync
+// with SYSTEM_ACCOUNT_EMAILS in hr-employees.routes.js.
+const SYSTEM_ACCOUNT_EMAILS = ['admin@bcimengineering.onmicrosoft.com', 'it@bcim.in'];
+
 async function getProjectScope(req) {
   const role = String(req.user?.role || '').toLowerCase();
   if (FULL_HR_ROLES.has(role)) return null; // no restriction
@@ -81,9 +98,9 @@ router.get('/', async (req, res) => {
       JOIN users u ON u.id = a.user_id
       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
       LEFT JOIN hr_departments dep ON dep.id = ep.department_id
-      WHERE a.company_id = $1`;
-    const params = [req.user.company_id];
-    let idx = 2;
+      WHERE a.company_id = $1 AND u.email != ALL($2::text[])`;
+    const params = [req.user.company_id, SYSTEM_ACCOUNT_EMAILS];
+    let idx = 3;
 
     if (date) {
       sql += ` AND a.attendance_date = $${idx}`; params.push(date); idx++;
@@ -112,8 +129,9 @@ router.get('/summary', async (req, res) => {
   try {
     const { month, year, from, to, department_id, project_id } = req.query;
     const cid = req.user.company_id;
+    // explicit filter wins; otherwise auto-scope by role — see GET '/' above
     const scopeProject = await getProjectScope(req);
-    const effProject = scopeProject !== null ? scopeProject : (project_id || null);
+    const effProject = project_id || scopeProject;
 
     // ── Per-employee mode (Attendance page sends month/year) ──
     if (month || year) {
@@ -125,6 +143,8 @@ router.get('/summary', async (req, res) => {
       let idx = 4;
       if (department_id) { deptFilter = ` AND ep.department_id=$${idx++}`; params.push(department_id); }
       if (effProject)    { projFilter = ` AND ep.project_id=$${idx++}`;    params.push(effProject); }
+      params.push(SYSTEM_ACCOUNT_EMAILS);
+      const sysIdx = idx;
 
       const { rows } = await query(`
         SELECT u.id AS user_id,
@@ -146,7 +166,8 @@ router.get('/summary', async (req, res) => {
                                       AND EXTRACT(YEAR  FROM a.attendance_date) = $3
         WHERE u.company_id = $1
           AND u.is_active = TRUE
-          AND COALESCE(ep.employment_status, 'active') = 'active'
+          AND u.email != ALL($${sysIdx}::text[])
+          AND COALESCE(ep.employment_status, 'active') NOT IN ('resigned','terminated','absconded')
           ${deptFilter}
           ${projFilter}
         GROUP BY u.id, u.name, u.employee_code, ep.department_id, dep.name, u.department
@@ -162,7 +183,10 @@ router.get('/summary', async (req, res) => {
 
     const staffParams = [cid, fromDate, toDate];
     let staffProjFilter = '';
-    if (effProject) { staffProjFilter = ` AND ep.project_id=$4`; staffParams.push(effProject); }
+    let staffIdx = 4;
+    if (effProject) { staffProjFilter = ` AND ep.project_id=$${staffIdx++}`; staffParams.push(effProject); }
+    staffParams.push(SYSTEM_ACCOUNT_EMAILS);
+    const staffSysIdx = staffIdx;
 
     const scParams = [cid, fromDate, toDate];
     let scProjFilter = '';
@@ -181,7 +205,9 @@ router.get('/summary', async (req, res) => {
         LEFT JOIN employee_profiles ep ON ep.user_id = u.id
         LEFT JOIN hr_departments dep   ON dep.id = ep.department_id
         WHERE a.company_id=$1 AND a.attendance_date BETWEEN $2 AND $3
-          AND COALESCE(ep.employment_status, 'active') = 'active'
+          AND u.email != ALL($${staffSysIdx}::text[])
+          AND COALESCE(ep.employment_status, 'active') NOT IN ('resigned','terminated','absconded')
+          AND NOT EXISTS (SELECT 1 FROM sc_workers w WHERE w.company_id = u.company_id AND w.worker_code = u.employee_code)
         ${staffProjFilter}
         GROUP BY dep.name ORDER BY dep.name
       `, staffParams),
@@ -312,15 +338,19 @@ router.get('/department-summary', async (req, res) => {
   try {
     const { from, to, project_id } = req.query;
     const cid = req.user.company_id;
+    // explicit filter wins; otherwise auto-scope by role — see GET '/' above
     const scopeProject = await getProjectScope(req);
-    const effProject = scopeProject !== null ? scopeProject : (project_id || null);
+    const effProject = project_id || scopeProject;
 
     const fromDate = from || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
     const toDate   = to   || new Date().toISOString().slice(0,10);
 
     const staffParams = [cid, fromDate, toDate];
     let staffProjFilter = '';
-    if (effProject) { staffProjFilter = ` AND ep.project_id=$4`; staffParams.push(effProject); }
+    let deptSumIdx = 4;
+    if (effProject) { staffProjFilter = ` AND ep.project_id=$${deptSumIdx++}`; staffParams.push(effProject); }
+    staffParams.push(SYSTEM_ACCOUNT_EMAILS);
+    const deptSumSysIdx = deptSumIdx;
 
     const scParams = [cid, fromDate, toDate];
     let scProjFilter = '';
@@ -339,7 +369,9 @@ router.get('/department-summary', async (req, res) => {
         LEFT JOIN employee_profiles ep ON ep.user_id = u.id
         LEFT JOIN hr_departments dep   ON dep.id = ep.department_id
         WHERE a.company_id=$1 AND a.attendance_date BETWEEN $2 AND $3
-          AND COALESCE(ep.employment_status, 'active') = 'active'
+          AND u.email != ALL($${deptSumSysIdx}::text[])
+          AND COALESCE(ep.employment_status, 'active') NOT IN ('resigned','terminated','absconded')
+          AND NOT EXISTS (SELECT 1 FROM sc_workers w WHERE w.company_id = u.company_id AND w.worker_code = u.employee_code)
         ${staffProjFilter}
         GROUP BY dep.name ORDER BY dep.name
       `, staffParams),
@@ -405,7 +437,7 @@ router.post('/month-baseline', async (req, res) => {
       FROM users u
       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
       WHERE u.company_id = $1 AND u.is_active = TRUE
-        AND COALESCE(ep.employment_status, 'active') = 'active'`;
+        AND COALESCE(ep.employment_status, 'active') NOT IN ('resigned','terminated','absconded')`;
     const employeeParams = [req.user.company_id];
 
     if (department_id) {
@@ -543,12 +575,15 @@ router.get('/timesheet-report', async (req, res) => {
       categoryFilter = ` AND COALESCE(ep.employee_category, 'staff') = 'staff'`;
     } else if (category === 'labour') {
       categoryFilter = ` AND ep.employee_category = 'workman'`;
+    } else {
+      // 'all' — every real employee_category, but never system/admin
+      // logins (e.g. it@bcim.in) that aren't an actual trackable employee.
+      categoryFilter = ` AND COALESCE(ep.employee_category, 'staff') != 'system'`;
     }
-    // category === 'all' → no filter, every employee_category included
 
     // For project-scoped roles use their project; for HR roles use explicit filter if provided
     const scopeProjectId = await getProjectScope(req);
-    const effectiveProjectId = scopeProjectId !== null ? scopeProjectId : (project_id || null);
+    const effectiveProjectId = project_id || scopeProjectId;
 
     let deptFilter = '';
     let projectFilter = '';
@@ -589,7 +624,9 @@ router.get('/timesheet-report', async (req, res) => {
     const noRecordStatus = holidayName ? 'holiday' : (isSunday ? 'week_off' : 'absent');
 
     // ── Staff query ─────────────────────────────────────────────────────────────
-    const staffParams = [...params];
+    const staffParams = [...params, ALWAYS_PRESENT_USER_IDS, SYSTEM_ACCOUNT_EMAILS];
+    const alwaysPresentIdx = staffParams.length - 1;
+    const systemAccountIdx = staffParams.length;
     const staffRows = (await query(`
       SELECT
         u.employee_code                     AS emp_id,
@@ -606,12 +643,22 @@ router.get('/timesheet-report', async (req, res) => {
         ep.trade                            AS trade,
         COALESCE(proj.name, 'Head Office')  AS project_name,
         COALESCE(proj.id::text, 'HEAD_OFFICE') AS project_id,
-        COALESCE(a.status, '${noRecordStatus}') AS attendance_status,
+        CASE
+          WHEN a.status IS NOT NULL THEN a.status
+          WHEN u.id = ANY($${alwaysPresentIdx}::uuid[]) THEN 'present'
+          ELSE '${noRecordStatus}'
+        END AS attendance_status,
         TO_CHAR(a.in_time,  'HH12:MI AM')  AS in_time,
         TO_CHAR(a.out_time, 'HH12:MI AM')  AS out_time,
         a.late_minutes,
         a.remarks                           AS reason,
-        COALESCE(a.site, ep.work_location, '—') AS location,
+        -- ep.work_location is free text set manually alongside project_id and
+        -- goes stale on transfer (10 employees currently show a work_location
+        -- string from a project they were moved off months ago). proj.name is
+        -- always in sync with the current assignment, so prefer it; only fall
+        -- back to the stale text for anyone with no project_id (e.g. Head
+        -- Office staff, where work_location legitimately isn't a project name).
+        COALESCE(a.site, proj.name, ep.work_location, '—') AS location,
         COALESCE(a.shift, 'DAY')            AS shift,
         a.eng_fm_ch_cm                      AS eng_fm_ch_cm,
         a.incharge_name                     AS incharge_name,
@@ -637,7 +684,17 @@ router.get('/timesheet-report', async (req, res) => {
                                      AND a.company_id = $1
       WHERE u.company_id = $1
         AND u.is_active = TRUE
-        AND COALESCE(ep.employment_status, 'active') = 'active'
+        AND u.email != ALL($${systemAccountIdx}::text[])
+        AND COALESCE(ep.employment_status, 'active') NOT IN ('resigned','terminated','absconded')
+        -- This report unions staff with sc_workers below. ~80 site labourers
+        -- exist in BOTH tables, so without this they print twice and inflate
+        -- headcount and man-hours. When someone is on the SC roster, the SC
+        -- query owns them; drop them here rather than relying on their HR
+        -- status happening to be non-active.
+        AND NOT EXISTS (
+          SELECT 1 FROM sc_workers w
+          WHERE w.company_id = u.company_id AND w.worker_code = u.employee_code
+        )
         ${roleFilter}
         ${categoryFilter}
         ${deptFilter}
@@ -738,11 +795,35 @@ router.post('/timesheet-report/test-email', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// POST /timesheet-report/send-to-client — super_admin only. Sends the
+// currently-viewed report (date/project/category as shown on screen) straight
+// to a client-supplied recipient list, on demand — distinct from the
+// scheduled per-project configs, which need to be set up ahead of time.
+router.post('/timesheet-report/send-to-client', authorize('super_admin'), async (req, res) => {
+  try {
+    const { date, project_id, project_name, category, recipients } = req.body;
+    const recipientList = String(recipients || '').split(/[;,]/).map(v => v.trim()).filter(Boolean);
+    if (!recipientList.length) return res.status(400).json({ error: 'At least one recipient email is required' });
+
+    const { runTimesheetReport } = require('../utils/timesheet-report.service');
+    const result = await runTimesheetReport({
+      date,
+      manual: true,
+      recipients: recipientList,
+      company_id: req.user.company_id,
+      project_id,
+      project_name,
+      category: category || 'staff',
+    });
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ═══════════════════════════════════════════════════════════
 // Timesheet report project configs — one row per (project, category) that
 // should get its own daily automated email + recipient list.
 // ═══════════════════════════════════════════════════════════
-router.get('/timesheet-report/configs', async (req, res) => {
+router.get('/timesheet-report/configs', authorize('super_admin'), async (req, res) => {
   try {
     const { rows } = await query(
       `SELECT * FROM timesheet_report_configs WHERE company_id=$1 ORDER BY project_name`,
@@ -752,7 +833,7 @@ router.get('/timesheet-report/configs', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/timesheet-report/configs', async (req, res) => {
+router.post('/timesheet-report/configs', authorize('super_admin'), async (req, res) => {
   try {
     const { project_id, project_name, category = 'staff', recipients, enabled = true } = req.body;
     if (!project_name || !recipients) return res.status(400).json({ error: 'project_name and recipients are required' });
@@ -765,7 +846,7 @@ router.post('/timesheet-report/configs', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.put('/timesheet-report/configs/:id', async (req, res) => {
+router.put('/timesheet-report/configs/:id', authorize('super_admin'), async (req, res) => {
   try {
     const { project_id, project_name, category, recipients, enabled } = req.body;
     const { rows } = await query(
@@ -785,7 +866,7 @@ router.put('/timesheet-report/configs/:id', async (req, res) => {
 // config's REAL recipients immediately, rather than waiting for the
 // scheduled automated send. Distinct from /test-email, which always
 // redirects to the caller's own inbox.
-router.post('/timesheet-report/configs/:id/send-now', async (req, res) => {
+router.post('/timesheet-report/configs/:id/send-now', authorize('super_admin'), async (req, res) => {
   try {
     const { rows } = await query(
       `SELECT * FROM timesheet_report_configs WHERE id=$1 AND company_id=$2`,
@@ -808,7 +889,7 @@ router.post('/timesheet-report/configs/:id/send-now', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.delete('/timesheet-report/configs/:id', async (req, res) => {
+router.delete('/timesheet-report/configs/:id', authorize('super_admin'), async (req, res) => {
   try {
     const { rowCount } = await query(
       `DELETE FROM timesheet_report_configs WHERE id=$1 AND company_id=$2`,
@@ -845,17 +926,20 @@ router.get('/manpower-report', async (req, res) => {
     const cid = req.user.company_id;
 
     const scopeProjectId = await getProjectScope(req);
-    const effectiveProjectId = scopeProjectId !== null ? scopeProjectId : (project_id || null);
+    const effectiveProjectId = project_id || scopeProjectId;
 
     // ── ERP users (BCIM staff + direct-hire workmen) ─────────────────────────
     const staffParams = [cid, reportDate];
     let staffProjectFilter = '';
+    let mpIdx = 3;
     if (effectiveProjectId === 'HEAD_OFFICE') {
       staffProjectFilter = ' AND ep.project_id IS NULL';
     } else if (effectiveProjectId) {
-      staffProjectFilter = ' AND ep.project_id = $3';
+      staffProjectFilter = ` AND ep.project_id = $${mpIdx++}`;
       staffParams.push(effectiveProjectId);
     }
+    staffParams.push(SYSTEM_ACCOUNT_EMAILS);
+    const mpSysIdx = mpIdx;
 
     const staffRes = await query(`
       SELECT
@@ -875,6 +959,7 @@ router.get('/manpower-report', async (req, res) => {
       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
       LEFT JOIN hr_designations des  ON des.id = ep.designation_id
       WHERE a.company_id = $1 AND a.attendance_date = $2 AND a.status = 'present'
+        AND u.email != ALL($${mpSysIdx}::text[])
         ${staffProjectFilter}
       GROUP BY
         UPPER(TRIM(CASE
@@ -1040,7 +1125,7 @@ router.get('/monthly-report', async (req, res) => {
     const to = `${y}-${String(m).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
 
     const scopeProjectId = await getProjectScope(req);
-    const effProject = scopeProjectId !== null ? scopeProjectId : (project_id || null);
+    const effProject = project_id || scopeProjectId;
 
     // BCIM Staff (office/management) vs BCIM Workers (direct-hire labour) are both
     // rows in users/employee_profiles, distinguished only by employee_category.
@@ -1049,14 +1134,19 @@ router.get('/monthly-report', async (req, res) => {
       categoryFilter = ` AND COALESCE(ep.employee_category, 'staff') = 'staff'`;
     } else if (category === 'labour') {
       categoryFilter = ` AND ep.employee_category = 'workman'`;
+    } else {
+      // 'all' — every real employee_category, but never system/admin
+      // logins (e.g. it@bcim.in) that aren't an actual trackable employee.
+      categoryFilter = ` AND COALESCE(ep.employee_category, 'staff') != 'system'`;
     }
-    // category === 'all' → no filter, every employee_category included
 
     const staffParams = [cid, from, to];
     let deptFilter = '', projFilter = '';
     let idx = 4;
     if (department_id) { deptFilter = ` AND ep.department_id=$${idx++}`; staffParams.push(department_id); }
     if (effProject)    { projFilter = ` AND ep.project_id=$${idx++}`;    staffParams.push(effProject); }
+    staffParams.push(SYSTEM_ACCOUNT_EMAILS);
+    const monthlySysIdx = idx;
 
     const staffRes = await query(`
       SELECT
@@ -1090,7 +1180,13 @@ router.get('/monthly-report', async (req, res) => {
        AND a.attendance_date BETWEEN $2 AND $3
       WHERE u.company_id = $1
         AND u.is_active = TRUE
-        AND COALESCE(ep.employment_status, 'active') = 'active'
+        AND u.email != ALL($${monthlySysIdx}::text[])
+        AND COALESCE(ep.employment_status, 'active') NOT IN ('resigned','terminated','absconded')
+        -- unioned with sc_attendance below; drop the SC-roster duplicates
+        AND NOT EXISTS (
+          SELECT 1 FROM sc_workers w
+          WHERE w.company_id = u.company_id AND w.worker_code = u.employee_code
+        )
         ${categoryFilter}
         ${deptFilter}
         ${projFilter}
@@ -1196,7 +1292,7 @@ router.post('/late-alerts/run', async (req, res) => {
     const result = await sendLateArrivalAlerts({
       date,
       companyId: req.user.company_id,
-      minLateMinutes: minLateMinutes ?? 5,
+      minLateMinutes: minLateMinutes ?? 1,
       dryRun: dryRun ?? false,
     });
     res.json(result);
@@ -1319,7 +1415,9 @@ router.post('/recalculate', async (req, res) => {
           WHEN ha.in_time IS NOT NULL THEN
             GREATEST(0, EXTRACT(EPOCH FROM (
               ha.in_time::time - COALESCE(
-                (SELECT (hs.start_time + (COALESCE(hs.grace_minutes,0) * INTERVAL '1 minute'))::time
+                -- No grace period, by policy — late_minutes counts from the
+                -- exact shift start time, not start_time + grace_minutes.
+                (SELECT hs.start_time
                  FROM hr_employee_shifts es
                  JOIN hr_shifts hs ON hs.id = es.shift_id
                  WHERE es.employee_id = ha.user_id

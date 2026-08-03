@@ -273,6 +273,8 @@ async function getVendorLiabilitySummary({
         COUNT(DISTINCT sb.id) AS sc_bill_count,
         COALESCE(SUM(COALESCE(sb.net_payable, 0)), 0) AS sc_invoiced,
         COALESCE(SUM(COALESCE(sb.tds_amount, 0)), 0) AS sc_tds,
+        COALESCE(SUM(COALESCE(sb.other_deductions, 0)), 0) AS sc_other_deductions,
+        COALESCE(SUM(COALESCE(sb.retention_amount, 0)), 0) AS sc_retention,
         COALESCE(SUM(COALESCE(sb.paid_amount, 0)), 0) AS sc_paid,
         COALESCE(SUM(${scOutstanding}), 0) AS sc_balance,
         COALESCE(SUM(${scOutstanding}) FILTER (
@@ -306,7 +308,8 @@ async function getVendorLiabilitySummary({
       COALESCE(b.total_invoiced, 0) + COALESCE(s.sc_invoiced, 0) AS total_invoiced,
       COALESCE(b.total_certified, 0) AS total_certified,
       COALESCE(b.total_tds, 0) + COALESCE(s.sc_tds, 0) AS total_tds,
-      COALESCE(b.total_other_deductions, 0) AS total_other_deductions,
+      COALESCE(b.total_other_deductions, 0) + COALESCE(s.sc_other_deductions, 0) AS total_other_deductions,
+      COALESCE(s.sc_retention, 0) AS total_retention,
       COALESCE(b.total_advance_on_bills, 0) AS total_advance_on_bills,
       COALESCE(b.total_paid, 0) + COALESCE(s.sc_paid, 0) AS total_paid,
       COALESCE(a.total_advance_given, 0) AS total_advance_given,

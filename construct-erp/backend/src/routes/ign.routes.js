@@ -1075,14 +1075,22 @@ router.delete('/:id', authorize('super_admin'), async (req, res) => {
         throw Object.assign(new Error(`Cannot delete: GRN ${grnRef.rows[0].grn_number || ''} is linked to this IGN. Delete that GRN first.`), { status: 409 });
       }
 
-      // 2. Linked auto-created bills — block if progressed/paid, else reverse
+      // 2. Linked auto-created bills — block if progressed/paid, else reverse.
+      // Must include already-soft-deleted bills too: is_deleted=TRUE only hides
+      // a bill from the UI, it doesn't clear tqs_bills.ign_id — so a bill
+      // someone soft-deleted earlier still holds a live FK to this IGN. Filtering
+      // those out here (as this used to) let the final DELETE FROM ign below
+      // reach the database and fail with a raw, unhandled FK-violation error
+      // instead of either being handled or (for a bill that's already gone from
+      // the user's perspective) just having its dangling reference cleared.
       const bills = await client.query(
-        `SELECT b.id, b.sl_number, b.workflow_status, COALESCE(u.paid_amount, 0) AS paid_amount
+        `SELECT b.id, b.sl_number, b.workflow_status, b.is_deleted, COALESCE(u.paid_amount, 0) AS paid_amount
          FROM tqs_bills b LEFT JOIN tqs_bill_updates u ON u.bill_id = b.id
-         WHERE b.ign_id = $1 AND b.is_deleted = FALSE`,
+         WHERE b.ign_id = $1`,
         [ign.id]
       );
       for (const b of bills.rows) {
+        if (b.is_deleted) continue; // already gone — just needs its ign_id reference cleared below
         if (String(b.workflow_status || 'pending') !== 'pending' || parseFloat(b.paid_amount) > 0) {
           throw Object.assign(
             new Error(`Cannot delete: linked Bill ${b.sl_number} has been processed/paid. Remove it from the bill workflow first.`),
@@ -1091,6 +1099,12 @@ router.delete('/:id', authorize('super_admin'), async (req, res) => {
         }
       }
       for (const b of bills.rows) {
+        if (b.is_deleted) {
+          // Already soft-deleted — nothing to reverse, just drop the dangling FK
+          // so it can never block a future IGN delete like this one did.
+          await client.query(`UPDATE tqs_bills SET ign_id = NULL WHERE id = $1`, [b.id]);
+          continue;
+        }
         const li = await client.query(`SELECT item_name, quantity FROM tqs_bill_line_items WHERE bill_id = $1`, [b.id]);
         for (const l of li.rows) await subtractStock(l.item_name, l.quantity);
         await client.query(`DELETE FROM stock_transactions WHERE reference_id = $1 AND transaction_type = 'bill_receipt'`, [b.id]);
@@ -1123,7 +1137,8 @@ router.delete('/:id', authorize('super_admin'), async (req, res) => {
 
       // Delete IGN (ign_items cascade)
       await client.query(`DELETE FROM ign WHERE id = $1`, [ign.id]);
-      return { bills_removed: bills.rows.length, stock_reversed: ign.status === 'approved' || bills.rows.length > 0 };
+      const activeBillCount = bills.rows.filter(b => !b.is_deleted).length;
+      return { bills_removed: activeBillCount, stock_reversed: ign.status === 'approved' || activeBillCount > 0 };
     });
     res.json({ message: 'IGN deleted', ...out });
   } catch (err) {

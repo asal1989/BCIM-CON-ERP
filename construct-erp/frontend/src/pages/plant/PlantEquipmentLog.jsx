@@ -42,6 +42,19 @@ function MiniBarChart({ data, valueKey, labelKey, color, label, unit = '' }) {
   );
 }
 
+/* Field MUST stay at module scope. Defined inside EntryForm it would be a new
+   function identity on every render, so React would treat it as a different
+   component type, unmount the whole subtree and mount fresh <input> nodes —
+   killing focus after every keystroke. That let you type exactly one character
+   per click into any field in this form. */
+function Field({ label, span, children }) {
+  return (
+    <div className={span === 2 ? 'col-span-2 space-y-1' : 'space-y-1'}>
+      <label className="block text-xs font-medium text-gray-500">{label}</label>{children}
+    </div>
+  );
+}
+
 /* ── Add / Edit Entry Modal ────────────────────────────────────────────────── */
 function EntryForm({ equipmentId, equipmentName, supportsKm, projects, initial, onClose }) {
   const qc = useQueryClient();
@@ -93,12 +106,6 @@ function EntryForm({ equipmentId, equipmentName, supportsKm, projects, initial, 
     },
     onError: (e) => toast.error(e?.response?.data?.error || 'Save failed'),
   });
-
-  const Field = ({ label, span, children }) => (
-    <div className={span === 2 ? 'col-span-2 space-y-1' : 'space-y-1'}>
-      <label className="block text-xs font-medium text-gray-500">{label}</label>{children}
-    </div>
-  );
 
   const handleSubmit = (e) => {
     e.preventDefault();

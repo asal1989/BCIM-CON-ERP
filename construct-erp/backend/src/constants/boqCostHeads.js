@@ -49,8 +49,10 @@ const ITEM_KW_COST_HEAD = [
   [/debris|demolish|rubble|disposal|waste.?remov/i,                                         'Debris Disposal'],
   // Equipment & rentals (machines, shuttering, scaffolding)
   [/\bdrilling.?machine\b|chipping.?machine|vibrator|shuttering|formwork|scaffolding|pump(?:ing)?\b|mixer\b|crane\b|\bjcb\b|excavat|plywood.*shutt|shutt.*plywood/i, 'Equipment & Rentals'],
-  // Power & water — electrical fittings, lighting, hose pipes
-  [/\bcable\b|socket\b|mcb\b|elcb\b|\bswitch\b|conduit|junction.?box|led\b.*light|tube.?light|flood.?light|\bbulb\b|electrical\b|curing.?hose|water.?pipe|\bhose.?pipe\b|water.?tank/i, 'Power & Water'],
+  // Power & water is reserved for actual utility charges (electricity/water
+  // bills), not electrical fittings or curing supplies — those fall through
+  // to the 'Materials / Consumables' default below instead.
+  [/electricity.?bill|water.?bill|\bdiesel\b.*generator|\bdg\b.?set.?(?:fuel|running)/i, 'Power & Water'],
   // Travel & transport
   [/transport(?:ation)?|freight|\bloading\b|\bunloading\b|cartage|vehicle.?hire|halting.?charge/i, 'Travel & Transport'],
   // Office / camp

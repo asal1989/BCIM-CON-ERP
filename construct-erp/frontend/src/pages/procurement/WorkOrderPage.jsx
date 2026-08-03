@@ -1,7 +1,7 @@
 ﻿// src/pages/procurement/WorkOrderPage.jsx
 import RecordAttachments from '../../components/shared/RecordAttachments';
 import React, { useState, useRef, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import useAuthStore from '../../store/authStore';
 import {
@@ -1800,7 +1800,21 @@ export default function WorkOrderPage() {
   const [sortConfig,      setSortConfig]      = useState({ key: 'date', dir: 'desc' });
   const qc = useQueryClient();
   const location = useLocation();
+  const navigate = useNavigate();
   const [filterSeries, setFilterSeries] = useState('');
+
+  // True while the currently-open WO was reached via the "My Approvals" deep
+  // link, so closing it (approve/reject/terminate) can return the user to
+  // their inbox instead of stranding them on the WO list. Consumed once so a
+  // WO opened afterward by clicking a row directly doesn't also redirect away.
+  const [fromApprovalsFeed, setFromApprovalsFeed] = useState(false);
+  const closeSelectedWO = () => {
+    setSelectedWO(null);
+    if (fromApprovalsFeed) {
+      setFromApprovalsFeed(false);
+      navigate('/approvals');
+    }
+  };
 
   useEffect(() => { setFilterProject(selectedProjectId || ''); }, [selectedProjectId]);
 
@@ -1825,7 +1839,7 @@ export default function WorkOrderPage() {
     const viewId = location.state?.viewId;
     if (!viewId || !woData.length) return;
     const found = woData.find(w => w.id === viewId);
-    if (found) { setSelectedWO(found); window.history.replaceState({}, ''); }
+    if (found) { setSelectedWO(found); setFromApprovalsFeed(true); window.history.replaceState({}, ''); }
   }, [location.state, woData]);
 
   const createMutation = useMutation({
@@ -1840,7 +1854,7 @@ export default function WorkOrderPage() {
   });
   const mdApproveMutation = useMutation({
     mutationFn: id => subcontractorAPI.mdApproveWorkOrder(id),
-    onSuccess: () => { toast.success('Work Order MD authorized'); setSelectedWO(null); qc.invalidateQueries({ queryKey: ['work-orders'] }); },
+    onSuccess: () => { toast.success('Work Order MD authorized'); closeSelectedWO(); qc.invalidateQueries({ queryKey: ['work-orders'] }); },
     onError: e => toast.error(e?.response?.data?.error || 'MD approval failed'),
   });
   const updateMutation = useMutation({
@@ -1854,12 +1868,12 @@ export default function WorkOrderPage() {
   });
   const rejectMutation = useMutation({
     mutationFn: ({ id, reason }) => subcontractorAPI.rejectWorkOrder(id, { reason }),
-    onSuccess: () => { toast.success('Work Order rejected'); setSelectedWO(null); qc.invalidateQueries({ queryKey: ['work-orders'] }); },
+    onSuccess: () => { toast.success('Work Order rejected'); closeSelectedWO(); qc.invalidateQueries({ queryKey: ['work-orders'] }); },
     onError: e => toast.error(e?.response?.data?.error || 'Rejection failed'),
   });
   const terminateMutation = useMutation({
     mutationFn: ({ id, reason }) => subcontractorAPI.terminateWorkOrder(id, { reason }),
-    onSuccess: () => { toast.success('Work Order terminated'); setSelectedWO(null); qc.invalidateQueries({ queryKey: ['work-orders'] }); },
+    onSuccess: () => { toast.success('Work Order terminated'); closeSelectedWO(); qc.invalidateQueries({ queryKey: ['work-orders'] }); },
     onError: e => toast.error(e?.response?.data?.error || 'Termination failed'),
   });
 
@@ -2358,7 +2372,7 @@ export default function WorkOrderPage() {
       )}
       {selectedWO && (
         <WODetailPanel
-          wo={selectedWO} onClose={() => setSelectedWO(null)}
+          wo={selectedWO} onClose={closeSelectedWO}
           onEdit={wo => setEditingWO(wo)}
           onApprove={id => approveMutation.mutate(id)} onMDApprove={id => mdApproveMutation.mutate(id)}
           onReject={(id, reason) => rejectMutation.mutate({ id, reason })}

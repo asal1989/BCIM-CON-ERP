@@ -4,7 +4,7 @@ const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const { query, withTransaction } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
-const { loadProjectScope, appendProjectScope } = require('../middleware/projectScope');
+const { loadProjectScope, appendProjectScope, userCanAccessProject } = require('../middleware/projectScope');
 const { logAudit } = require('../utils/auditLog');
 const { BOQ_COST_HEADS } = require('../constants/boqCostHeads');
 const { postAutoJournalStandalone } = require('../services/journalAutoPost');
@@ -83,6 +83,24 @@ const ensureRaBillCols = async () => {
   } catch (_) {}
 };
 runSchemaInit('ra_bills', ensureRaBillCols);
+
+// Separate migration name — 'ra_bills' was already marked applied in production
+// before this table existed, and runSchemaInit never re-runs a completed migration.
+const ensureRaBillingPlanTable = async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS ra_billing_plan (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      plan_month DATE NOT NULL,
+      planned_value NUMERIC(15,2) NOT NULL DEFAULT 0,
+      created_by UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(project_id, plan_month)
+    )
+  `);
+};
+runSchemaInit('ra_billing_plan', ensureRaBillingPlanTable);
 
 // GET /ra-bills
 router.get('/', async (req, res) => {
@@ -183,6 +201,305 @@ router.get('/previous-stats', async (req, res) => {
       [project_id, boq_item_id, req.user.company_id]
     );
     res.json({ data: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /ra-bills/summary — portfolio-wide billing summary: Contract Value vs
+// Billed vs Certified vs Balance to Complete, per project + aggregated.
+router.get('/summary', async (req, res) => {
+  try {
+    const { project_id } = req.query;
+
+    const conditions = ['p.company_id = $1'];
+    const params = [req.user.company_id];
+    // Scope on p.id here (we're filtering the `projects` table itself, not a
+    // child table with a project_id FK), so applyProjectScope/appendProjectScope
+    // (which hardcode/parameterize a `project_id` column) don't apply directly.
+    if (project_id && String(project_id).trim()) {
+      if (!userCanAccessProject(req, project_id)) {
+        return res.status(403).json({ error: 'Access denied for this project.' });
+      }
+      params.push(project_id);
+      conditions.push(`p.id = $${params.length}`);
+    } else if (!req.isGlobalRole) {
+      const allowed = req.allowedProjectIds || [];
+      if (allowed.length === 0) {
+        conditions.push('FALSE');
+      } else {
+        params.push(allowed);
+        conditions.push(`p.id = ANY($${params.length}::uuid[])`);
+      }
+    }
+
+    const projectsRes = await query(
+      `SELECT p.id, p.name, p.project_code, COALESCE(p.contract_value,0) AS contract_value
+         FROM projects p WHERE ${conditions.join(' AND ')}
+         ORDER BY p.name`,
+      params
+    );
+    const projectMeta = projectsRes.rows;
+    const projectIds = projectMeta.map(p => p.id);
+
+    const empty = {
+      kpis: {
+        total_bills: 0, gross_valuation: 0, net_payable_certified: 0,
+        pending_certification_value: 0, pending_certification_count: 0,
+        rejected_value: 0, rejected_count: 0,
+        total_contract_value: 0, billed_to_date: 0, certified_to_date: 0, balance_to_complete: 0,
+      },
+      projects: [], statusBreakdown: [], deductions: [], trend: [],
+    };
+    if (!projectIds.length) return res.json({ data: empty });
+
+    const billsRes = await query(
+      `SELECT project_id, status, gross_amount, net_payable,
+              retention_amount, tds_amount, mobilization_advance_recovery,
+              adhoc_advance_recovery, material_recovery_steel, material_recovery_cement,
+              other_deductions, bill_date, certified_date
+         FROM ra_bills
+        WHERE project_id = ANY($1::uuid[])`,
+      [projectIds]
+    );
+    const bills = billsRes.rows;
+    const num = v => parseFloat(v || 0);
+
+    // ── Per-project rollup ──
+    const byProject = {};
+    projectMeta.forEach(p => {
+      byProject[p.id] = { id: p.id, name: p.name, project_code: p.project_code, contract_value: num(p.contract_value), billed: 0, certified: 0 };
+    });
+    bills.forEach(b => {
+      const row = byProject[b.project_id];
+      if (!row) return;
+      if (!['draft', 'rejected'].includes(b.status)) row.billed += num(b.gross_amount);
+      if (['certified', 'paid'].includes(b.status)) row.certified += num(b.gross_amount);
+    });
+    const projectsOut = Object.values(byProject).map(r => ({
+      ...r,
+      balance_to_complete: r.contract_value - r.certified,
+      pct_complete: r.contract_value > 0 ? Math.round((r.certified / r.contract_value) * 1000) / 10 : null,
+    }));
+
+    // ── Status breakdown ──
+    const statusCounts = {};
+    bills.forEach(b => { statusCounts[b.status] = (statusCounts[b.status] || 0) + 1; });
+    const statusBreakdown = Object.entries(statusCounts).map(([status, count]) => ({ status, count }));
+
+    // ── Deductions aggregate (bills that have actually gone through, i.e. not draft/rejected) ──
+    const ded = { retention: 0, tds: 0, advance_recovery: 0, material_recovery: 0, other: 0 };
+    bills.filter(b => !['draft', 'rejected'].includes(b.status)).forEach(b => {
+      ded.retention         += num(b.retention_amount);
+      ded.tds               += num(b.tds_amount);
+      ded.advance_recovery  += num(b.mobilization_advance_recovery) + num(b.adhoc_advance_recovery);
+      ded.material_recovery += num(b.material_recovery_steel) + num(b.material_recovery_cement);
+      ded.other             += num(b.other_deductions);
+    });
+    const deductions = [
+      { key: 'retention',         label: 'Retention',        amount: ded.retention },
+      { key: 'tds',               label: 'TDS',               amount: ded.tds },
+      { key: 'advance_recovery',  label: 'Advance Recovery',  amount: ded.advance_recovery },
+      { key: 'material_recovery', label: 'Material Recovery', amount: ded.material_recovery },
+      { key: 'other',             label: 'Other Deductions',  amount: ded.other },
+    ].filter(d => d.amount > 0);
+
+    // ── Monthly trend of certified value (last 12 months, by certified_date/bill_date) ──
+    const monthKey = d => { const dt = new Date(d); return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`; };
+    const trendMap = {};
+    bills.filter(b => ['certified', 'paid'].includes(b.status)).forEach(b => {
+      const k = monthKey(b.certified_date || b.bill_date);
+      trendMap[k] = (trendMap[k] || 0) + num(b.gross_amount);
+    });
+    const now = new Date();
+    const trend = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      trend.push({ month: k, value: trendMap[k] || 0 });
+    }
+
+    // ── Portfolio KPIs ──
+    const kpis = {
+      total_bills: bills.length,
+      gross_valuation: bills.filter(b => b.status !== 'rejected').reduce((a, b) => a + num(b.gross_amount), 0),
+      net_payable_certified: bills.filter(b => ['certified', 'paid'].includes(b.status)).reduce((a, b) => a + num(b.net_payable), 0),
+      pending_certification_value: bills.filter(b => b.status === 'verified').reduce((a, b) => a + num(b.net_payable), 0),
+      pending_certification_count: bills.filter(b => b.status === 'verified').length,
+      rejected_value: bills.filter(b => b.status === 'rejected').reduce((a, b) => a + num(b.gross_amount), 0),
+      rejected_count: bills.filter(b => b.status === 'rejected').length,
+      total_contract_value: projectsOut.reduce((a, p) => a + p.contract_value, 0),
+      billed_to_date: projectsOut.reduce((a, p) => a + p.billed, 0),
+      certified_to_date: projectsOut.reduce((a, p) => a + p.certified, 0),
+      balance_to_complete: projectsOut.reduce((a, p) => a + p.balance_to_complete, 0),
+    };
+
+    res.json({ data: { kpis, projects: projectsOut, statusBreakdown, deductions, trend } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Billing Plan (planned monthly billing target) ──────────────────────────
+// GET /ra-bills/billing-plan?project_id=X — editable plan rows for one project
+router.get('/billing-plan', async (req, res) => {
+  try {
+    const { project_id } = req.query;
+    if (!project_id) return res.status(400).json({ error: 'project_id required' });
+    if (!userCanAccessProject(req, project_id)) {
+      return res.status(403).json({ error: 'Access denied for this project.' });
+    }
+    const projectCheck = await query(`SELECT 1 FROM projects WHERE id = $1 AND company_id = $2`, [project_id, req.user.company_id]);
+    if (!projectCheck.rowCount) return res.status(404).json({ error: 'Project not found' });
+
+    const result = await query(
+      `SELECT id, project_id, plan_month, planned_value
+         FROM ra_billing_plan WHERE project_id = $1 ORDER BY plan_month`,
+      [project_id]
+    );
+    res.json({ data: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /ra-bills/billing-plan — upsert one month's planned billing value
+router.put('/billing-plan', authorize('super_admin','admin','qs_engineer','project_manager'), async (req, res) => {
+  try {
+    const { project_id, plan_month, planned_value } = req.body;
+    if (!project_id || !plan_month) return res.status(400).json({ error: 'project_id and plan_month are required' });
+    if (!userCanAccessProject(req, project_id)) {
+      return res.status(403).json({ error: 'Access denied for this project.' });
+    }
+    const projectCheck = await query(`SELECT 1 FROM projects WHERE id = $1 AND company_id = $2`, [project_id, req.user.company_id]);
+    if (!projectCheck.rowCount) return res.status(404).json({ error: 'Project not found' });
+
+    // Normalize to the first of the month so UNIQUE(project_id, plan_month) matches consistently
+    const monthStart = new Date(plan_month);
+    const normalized = new Date(monthStart.getFullYear(), monthStart.getMonth(), 1).toISOString().slice(0, 10);
+
+    const result = await query(
+      `INSERT INTO ra_billing_plan (project_id, plan_month, planned_value, created_by)
+       VALUES ($1,$2,$3,$4)
+       ON CONFLICT (project_id, plan_month)
+       DO UPDATE SET planned_value = $3, updated_at = NOW()
+       RETURNING id, project_id, plan_month, planned_value`,
+      [project_id, normalized, planned_value || 0, req.user.id]
+    );
+    res.json({ data: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /ra-bills/billing-plan/:id
+router.delete('/billing-plan/:id', authorize('super_admin','admin','qs_engineer','project_manager'), async (req, res) => {
+  try {
+    const result = await query(
+      `DELETE FROM ra_billing_plan rbp USING projects p
+       WHERE rbp.project_id = p.id AND rbp.id = $1 AND p.company_id = $2
+       RETURNING rbp.id`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Plan entry not found' });
+    res.json({ message: 'Plan entry deleted' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /ra-bills/planned-vs-actual?project_id=optional — monthly + cumulative
+// planned billing target vs actual certified value, portfolio-wide or per project.
+router.get('/planned-vs-actual', async (req, res) => {
+  try {
+    const { project_id } = req.query;
+
+    const projConditions = ['p.company_id = $1'];
+    const projParams = [req.user.company_id];
+    if (project_id && String(project_id).trim()) {
+      if (!userCanAccessProject(req, project_id)) {
+        return res.status(403).json({ error: 'Access denied for this project.' });
+      }
+      projParams.push(project_id);
+      projConditions.push(`p.id = $${projParams.length}`);
+    } else if (!req.isGlobalRole) {
+      const allowed = req.allowedProjectIds || [];
+      if (allowed.length === 0) projConditions.push('FALSE');
+      else { projParams.push(allowed); projConditions.push(`p.id = ANY($${projParams.length}::uuid[])`); }
+    }
+    const projectIdsRes = await query(`SELECT p.id FROM projects p WHERE ${projConditions.join(' AND ')}`, projParams);
+    const projectIds = projectIdsRes.rows.map(r => r.id);
+    if (!projectIds.length) return res.json({ data: { months: [], plan: [] } });
+
+    const [planRes, billsRes] = await Promise.all([
+      query(
+        `SELECT plan_month, SUM(planned_value) AS planned_value
+           FROM ra_billing_plan WHERE project_id = ANY($1::uuid[])
+          GROUP BY plan_month`,
+        [projectIds]
+      ),
+      query(
+        `SELECT bill_date, certified_date, status, gross_amount
+           FROM ra_bills WHERE project_id = ANY($1::uuid[]) AND status IN ('certified','paid')`,
+        [projectIds]
+      ),
+    ]);
+
+    const num = v => parseFloat(v || 0);
+    const monthKey = d => { const dt = new Date(d); return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`; };
+
+    const plannedByMonth = {};
+    planRes.rows.forEach(r => { plannedByMonth[monthKey(r.plan_month)] = num(r.planned_value); });
+
+    const actualByMonth = {};
+    billsRes.rows.forEach(b => {
+      const k = monthKey(b.certified_date || b.bill_date);
+      actualByMonth[k] = (actualByMonth[k] || 0) + num(b.gross_amount);
+    });
+
+    // Span from the earliest of (first plan month, first certified bill) through
+    // the later of (today, last plan month) so the curve covers the full plan.
+    const allKeys = [...Object.keys(plannedByMonth), ...Object.keys(actualByMonth)];
+    const now = new Date();
+    let startKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    let endKey = startKey;
+    if (allKeys.length) {
+      startKey = allKeys.reduce((a, b) => (a < b ? a : b));
+      endKey = allKeys.reduce((a, b) => (a > b ? a : b), startKey);
+      if (endKey < startKey) endKey = startKey;
+    }
+
+    const [sy, sm] = startKey.split('-').map(Number);
+    const [ey, em] = endKey.split('-').map(Number);
+    const months = [];
+    let cy = sy, cm = sm, cumPlanned = 0, cumActual = 0;
+    while (cy < ey || (cy === ey && cm <= em)) {
+      const k = `${cy}-${String(cm).padStart(2, '0')}`;
+      const planned = plannedByMonth[k] || 0;
+      const actual = actualByMonth[k] || 0;
+      cumPlanned += planned;
+      cumActual += actual;
+      months.push({
+        month: k, planned, actual,
+        cumulative_planned: cumPlanned, cumulative_actual: cumActual,
+        variance: cumActual - cumPlanned,
+        variance_pct: cumPlanned > 0 ? Math.round(((cumActual - cumPlanned) / cumPlanned) * 1000) / 10 : null,
+      });
+      cm++; if (cm > 12) { cm = 1; cy++; }
+    }
+
+    // Editable plan rows, only meaningful when scoped to a single project
+    let plan = [];
+    if (project_id && String(project_id).trim()) {
+      const planRows = await query(
+        `SELECT id, project_id, plan_month, planned_value FROM ra_billing_plan
+          WHERE project_id = $1 ORDER BY plan_month`,
+        [project_id]
+      );
+      plan = planRows.rows;
+    }
+
+    res.json({ data: { months, plan } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -343,28 +660,123 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// PUT /ra-bills/:id  — update editable fields (bill_number, bill_date, work_description, amounts, etc.)
+// PUT /ra-bills/:id — full edit of a draft/rejected bill: header fields + line items.
+// Only bills still in 'draft' or 'rejected' status may be edited — once submitted,
+// changes must go through the verify/reject/revert workflow instead.
 router.put('/:id', authorize('super_admin','admin','qs_engineer','project_manager'), async (req, res) => {
   try {
-    const allowed = [
-      'bill_number','bill_date','work_description','bill_period_from','bill_period_to',
-      'gross_amount','gst_rate','gst_amount','retention_percent',
-      'mobilization_advance_recovery','adhoc_advance_recovery',
-      'material_recovery_steel','material_recovery_cement',
-      'price_escalation','other_deductions','tds_rate','remarks',
-      'contractor_name','contractor_gstin','contractor_pan','wo_number','status',
-    ];
-    const fields = Object.keys(req.body).filter(k => allowed.includes(k));
-    if (!fields.length) return res.status(400).json({ error: 'No updatable fields provided' });
-    const sets = fields.map((f, i) => `${f} = $${i + 1}`).join(', ');
-    const vals = fields.map(f => req.body[f]);
-    vals.push(req.params.id);
-    const result = await query(
-      `UPDATE ra_bills SET ${sets}, updated_at = NOW() WHERE id = $${vals.length} RETURNING *`,
-      vals
+    const existing = await query(
+      `SELECT rb.id, rb.status, rb.project_id FROM ra_bills rb
+       JOIN projects p ON rb.project_id = p.id
+       WHERE rb.id = $1 AND p.company_id = $2`,
+      [req.params.id, req.user.company_id]
     );
-    if (!result.rows.length) return res.status(404).json({ error: 'Bill not found' });
-    res.json({ data: result.rows[0] });
+    if (!existing.rows.length) return res.status(404).json({ error: 'Bill not found' });
+    if (!['draft', 'rejected'].includes(existing.rows[0].status)) {
+      return res.status(400).json({ error: 'Only draft or rejected bills can be edited' });
+    }
+    const projectId = existing.rows[0].project_id;
+
+    const {
+      bill_number, bill_date, work_description,
+      bill_period_from, bill_period_to,
+      gross_amount, gst_rate, gst_amount,
+      retention_percent, mobilization_advance_recovery, adhoc_advance_recovery,
+      material_recovery_steel, material_recovery_cement,
+      price_escalation, other_deductions,
+      tds_rate, items, remarks,
+      contractor_name, contractor_gstin, contractor_pan, wo_number,
+    } = req.body;
+    const newStatus = req.body.status === 'submitted' ? 'submitted' : 'draft';
+
+    const result = await withTransaction(async (client) => {
+      const retention_amount = (parseFloat(gross_amount) + parseFloat(price_escalation || 0)) * (parseFloat(retention_percent || 0) / 100);
+      const tds_amount       = parseFloat(gross_amount) * (parseFloat(tds_rate || 0) / 100);
+      const total_deductions =
+        retention_amount +
+        parseFloat(mobilization_advance_recovery || 0) +
+        parseFloat(adhoc_advance_recovery || 0) +
+        parseFloat(material_recovery_steel || 0) +
+        parseFloat(material_recovery_cement || 0) +
+        parseFloat(other_deductions || 0) +
+        tds_amount;
+      const gross_with_gst = parseFloat(gross_amount) + parseFloat(gst_amount || 0);
+      const net_payable     = gross_with_gst - total_deductions + parseFloat(price_escalation || 0);
+
+      const header = await client.query(
+        `UPDATE ra_bills SET
+           bill_number = $1, bill_date = $2, work_description = $3,
+           bill_period_from = $4, bill_period_to = $5,
+           gross_amount = $6, gst_rate = $7, gst_amount = $8, gross_with_gst = $9,
+           retention_pct = $10, retention_amount = $11,
+           mobilization_advance_recovery = $12, adhoc_advance_recovery = $13,
+           material_recovery_steel = $14, material_recovery_cement = $15,
+           price_escalation = $16, other_deductions = $17,
+           tds_rate = $18, tds_amount = $19,
+           total_deductions = $20, net_payable = $21, status = $22, remarks = $23,
+           contractor_name = $24, contractor_gstin = $25, contractor_pan = $26, wo_number = $27,
+           updated_at = NOW()
+         WHERE id = $28
+         RETURNING *`,
+        [
+          bill_number, bill_date, work_description || null,
+          bill_period_from || null, bill_period_to || null,
+          gross_amount, parseFloat(gst_rate || 18), gst_amount, gross_with_gst,
+          retention_percent, retention_amount,
+          mobilization_advance_recovery || 0, adhoc_advance_recovery || 0,
+          material_recovery_steel || 0, material_recovery_cement || 0,
+          price_escalation || 0, other_deductions || 0,
+          tds_rate || 2, tds_amount,
+          total_deductions, net_payable, newStatus, remarks,
+          contractor_name || 'Client', contractor_gstin || null, contractor_pan || null,
+          wo_number || null,
+          req.params.id,
+        ]
+      );
+
+      if (Array.isArray(items)) {
+        await client.query(`DELETE FROM ra_bill_items WHERE ra_bill_id = $1`, [req.params.id]);
+        for (const it of items) {
+          const itemCheck = await client.query(
+            `SELECT COALESCE(b.current_quantity, b.quantity) AS boq_qty
+               FROM boq_items b
+               JOIN projects p ON b.project_id = p.id
+              WHERE b.id = $1 AND b.project_id = $2 AND p.company_id = $3
+              LIMIT 1`,
+            [it.boq_item_id, projectId, req.user.company_id]
+          );
+          if (!itemCheck.rowCount) {
+            throw new Error('Invalid BOQ item for this project');
+          }
+          const boqQty = parseFloat(itemCheck.rows[0].boq_qty || 0);
+          const prevRes = await client.query(
+            `SELECT COALESCE(SUM(current_qty),0) as prev_qty FROM ra_bill_items rbi
+             JOIN ra_bills rb ON rbi.ra_bill_id = rb.id
+             WHERE rb.project_id = $1 AND rbi.boq_item_id = $2 AND rb.status IN ('certified','paid')`,
+            [projectId, it.boq_item_id]
+          );
+          const prevQty    = parseFloat(prevRes.rows[0].prev_qty);
+          const currentQty = parseFloat(it.current_qty);
+          if (boqQty > 0 && prevQty + currentQty > boqQty + 0.001) {
+            throw new Error(
+              `BOQ quantity exceeded for item ${it.boq_item_id}: ` +
+              `BOQ=${boqQty}, already certified=${prevQty}, this bill=${currentQty} ` +
+              `(total ${prevQty + currentQty} > ${boqQty})`
+            );
+          }
+          const costHead = BOQ_COST_HEADS.includes(it.cost_head) ? it.cost_head : null;
+          await client.query(
+            `INSERT INTO ra_bill_items
+               (ra_bill_id, boq_item_id, prev_certified_qty, current_qty, cumulative_qty, rate, cost_head)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [req.params.id, it.boq_item_id, prevQty, currentQty, prevQty + currentQty, it.rate, costHead]
+          );
+        }
+      }
+      return header.rows[0];
+    });
+
+    res.json({ data: result });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

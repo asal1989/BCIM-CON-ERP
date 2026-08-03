@@ -15,6 +15,7 @@ import dayjs from 'dayjs';
 import { Link, useNavigate } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { Theme, PageHeader, KpiCard } from '../../theme';
 
 const inr = v => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const inrC = v => {
@@ -166,82 +167,87 @@ export default function RABillPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f4f6f9] font-sans">
+    <div className="min-h-screen font-sans" style={{ background: Theme.pageBg }}>
 
-      {/* ── Sticky header ── */}
-      <div className="sticky top-0 z-30 bg-white border-b border-[#e2e6ec] shadow-sm">
-        <div className="px-6 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center shadow">
-              <Receipt className="w-4.5 h-4.5 text-white w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-[15px] font-medium text-[#1a1c21] leading-none">Client Billing (RA Bills)</h1>
-              <p className="text-[10px] text-[#8e94a3] font-medium uppercase tracking-wider mt-0.5">
-                Running Account Bills · Progress Certification
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
+      <PageHeader
+        title="Client Billing (RA Bills)"
+        subtitle="Running Account Bills · Progress Certification"
+        breadcrumbs={[{ label: 'QS & Billing' }, { label: 'RA Bills' }]}
+        actions={
+          <>
+            <button
+              onClick={() => navigate('/qs/ra-bills/summary')}
+              className="h-9 px-3 flex items-center gap-1.5 rounded-xl text-[11px] font-medium transition-colors"
+              style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.20)', color: '#fff' }}
+            >
+              <BarChart3 className="w-3.5 h-3.5" /> Summary
+            </button>
             <button
               onClick={handleDownloadCSV}
-              className="h-9 px-3 flex items-center gap-1.5 rounded-xl border border-[#e2e6ec] bg-white text-[#6a6f7d] text-[11px] font-medium hover:bg-[#f4f6f9] transition-colors"
+              className="h-9 px-3 flex items-center gap-1.5 rounded-xl text-[11px] font-medium transition-colors"
+              style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.20)', color: '#fff' }}
             >
               <Download className="w-3.5 h-3.5" /> CSV
             </button>
             <button
               onClick={handleDownloadPDF}
-              className="h-9 px-3 flex items-center gap-1.5 rounded-xl border border-[#e2e6ec] bg-white text-[#6a6f7d] text-[11px] font-medium hover:bg-[#f4f6f9] transition-colors"
+              className="h-9 px-3 flex items-center gap-1.5 rounded-xl text-[11px] font-medium transition-colors"
+              style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.20)', color: '#fff' }}
             >
               <Download className="w-3.5 h-3.5" /> PDF
             </button>
             <button
               onClick={() => refetch()}
-              className="h-9 w-9 flex items-center justify-center rounded-xl border border-[#e2e6ec] bg-white text-[#6a6f7d] hover:bg-[#f4f6f9] transition-colors"
+              className="h-9 w-9 flex items-center justify-center rounded-xl transition-colors"
+              style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.20)', color: '#fff' }}
             >
               <RefreshCw className="w-4 h-4" />
             </button>
             <button
               onClick={() => navigate('/qs/ra-bills/new')}
-              className="h-9 px-4 flex items-center gap-2 rounded-xl bg-indigo-600 text-white text-[11px] font-medium uppercase tracking-wide hover:bg-indigo-500 transition-colors shadow-sm shadow-indigo-600/20"
+              className="h-9 px-4 flex items-center gap-2 rounded-xl text-[11px] font-medium uppercase tracking-wide transition-colors"
+              style={{ background: Theme.gold, color: Theme.navyDark }}
             >
               <Plus className="w-4 h-4" /> New RA Bill
             </button>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <div className="px-6 py-5 space-y-5">
 
         {/* ── KPI strip ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KPICard label="Total Billed" value={inrC(kpis.total)} sub="gross contract value" icon={TrendingUp} color="indigo" />
-          <KPICard label="Certified & Paid" value={inrC(kpis.certified)} sub="net payable" icon={CheckCircle2} color="emerald" />
-          <KPICard label="Retention Held" value={inrC(kpis.retention)} sub="cumulative" icon={Wallet2} color="amber" />
-          <KPICard label="Awaiting Action" value={kpis.pending} sub="submitted + verified" icon={AlertCircle} color="red" />
+          <KpiCard label="Total Billed" value={inrC(kpis.total)} sub="gross contract value" icon={TrendingUp} color="indigo" />
+          <KpiCard label="Certified & Paid" value={inrC(kpis.certified)} sub="net payable" icon={CheckCircle2} color="emerald" />
+          <KpiCard label="Retention Held" value={inrC(kpis.retention)} sub="cumulative" icon={Wallet2} color="amber" />
+          <KpiCard label="Awaiting Action" value={kpis.pending} sub="submitted + verified" icon={AlertCircle} color="red" />
         </div>
 
         {/* ── Filters row ── */}
         <div className="flex flex-wrap items-center gap-3 justify-between">
           {/* Status tabs */}
-          <div className="flex gap-1 p-1 bg-white border border-[#e2e6ec] rounded-xl shadow-sm overflow-x-auto">
+          <div className="flex gap-1 p-1 bg-white border rounded-xl shadow-sm overflow-x-auto" style={{ borderColor: Theme.border }}>
             {TABS.map(tab => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
                 className={clsx(
                   'px-3 py-1.5 rounded-lg text-[11px] font-medium whitespace-nowrap transition-all flex items-center gap-1',
-                  activeTab === tab.key
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-[#6a6f7d] hover:bg-[#f4f6f9]'
+                  activeTab !== tab.key && 'hover:bg-slate-50'
                 )}
+                style={activeTab === tab.key
+                  ? { background: `linear-gradient(135deg, ${Theme.navy}, ${Theme.navyDark})`, color: '#fff' }
+                  : { color: Theme.textMuted }}
               >
                 {tab.label}
                 {tabCounts[tab.key] > 0 && (
-                  <span className={clsx(
-                    'text-[9px] font-medium px-1 py-0.5 rounded min-w-[16px] text-center',
-                    activeTab === tab.key ? 'bg-white/20 text-white' : 'bg-[#f4f6f9] text-[#6a6f7d]'
-                  )}>
+                  <span
+                    className="text-[9px] font-medium px-1 py-0.5 rounded min-w-[16px] text-center"
+                    style={activeTab === tab.key
+                      ? { background: 'rgba(255,255,255,0.20)', color: '#fff' }
+                      : { background: Theme.cardAlt, color: Theme.textMuted }}
+                  >
                     {tabCounts[tab.key]}
                   </span>
                 )}
@@ -252,9 +258,10 @@ export default function RABillPage() {
           <div className="flex items-center gap-2">
             {/* Search */}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#8e94a3]" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: Theme.textFaint }} />
               <input
-                className="h-9 pl-8 pr-3 w-52 border border-[#e2e6ec] rounded-xl bg-white text-[12px] text-[#1a1c21] outline-none focus:border-indigo-400 placeholder:text-[#b0b5c3] transition-colors"
+                className="h-9 pl-8 pr-3 w-52 border rounded-xl bg-white text-[12px] outline-none placeholder:text-[#b0b5c3] transition-colors"
+                style={{ borderColor: Theme.border, color: Theme.textDark }}
                 placeholder="Search bills…"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
@@ -262,9 +269,10 @@ export default function RABillPage() {
             </div>
             {/* Project filter */}
             <div className="relative">
-              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#8e94a3]" />
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: Theme.textFaint }} />
               <select
-                className="h-9 pl-8 pr-6 border border-[#e2e6ec] rounded-xl bg-white text-[12px] text-[#1a1c21] outline-none focus:border-indigo-400 transition-colors appearance-none w-52"
+                className="h-9 pl-8 pr-6 border rounded-xl bg-white text-[12px] outline-none transition-colors appearance-none w-52"
+                style={{ borderColor: Theme.border, color: Theme.textDark }}
                 value={filterProject}
                 onChange={e => setFilterProject(e.target.value)}
               >
@@ -276,18 +284,18 @@ export default function RABillPage() {
         </div>
 
         {/* ── Table ── */}
-        <div className="bg-white rounded-2xl border border-[#e2e6ec] overflow-hidden shadow-sm">
+        <div className="bg-white rounded-2xl border overflow-hidden shadow-sm" style={{ borderColor: Theme.border }}>
           <div className="overflow-x-auto">
           <table className="w-full text-left border-separate border-spacing-y-1 min-w-[900px]">
             <thead>
-              <tr className="border-b border-[#e2e6ec] bg-[#f8fafc]">
+              <tr style={{ background: `linear-gradient(90deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)` }}>
                 <SortTh label="Bill / Project" sortKey="bill_number" sort={sort} onSort={toggleSort} />
                 <SortTh label="Period" sortKey="bill_date" sort={sort} onSort={toggleSort} />
                 <SortTh label="Gross Value" sortKey="gross_amount" sort={sort} onSort={toggleSort} right />
                 <SortTh label="Deductions" sortKey="total_deductions" sort={sort} onSort={toggleSort} right />
                 <SortTh label="Net Payable" sortKey="net_payable" sort={sort} onSort={toggleSort} right />
                 <SortTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} center />
-                <th className="px-5 py-3 text-[11px] font-medium text-black uppercase tracking-wider text-right">Actions</th>
+                <th className="px-5 py-3 text-[11px] font-medium text-white uppercase tracking-wider text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -476,14 +484,15 @@ function SortTh({ label, sortKey, sort, onSort, right, center }) {
   return (
     <th
       className={clsx(
-        'px-5 py-3 text-[11px] font-medium text-black uppercase tracking-wider cursor-pointer select-none hover:bg-slate-100 transition',
+        'px-5 py-3 text-[11px] font-medium text-white uppercase tracking-wider cursor-pointer select-none transition',
         right ? 'text-right' : center ? 'text-center' : 'text-left'
       )}
+      style={{ opacity: active ? 1 : 0.85 }}
       onClick={() => onSort(sortKey)}
     >
       <span className={clsx('inline-flex items-center gap-1', right && 'justify-end', center && 'justify-center')}>
         {label}
-        <span className={clsx('text-[9px]', active ? 'opacity-100 text-indigo-600' : 'opacity-25')}>
+        <span className="text-[9px]" style={{ color: Theme.gold, opacity: active ? 1 : 0.35 }}>
           {active && sort.dir === 'desc' ? '▼' : '▲'}
         </span>
       </span>
@@ -491,25 +500,3 @@ function SortTh({ label, sortKey, sort, onSort, right, center }) {
   );
 }
 
-function KPICard({ label, value, sub, icon: Icon, color }) {
-  const colors = {
-    indigo:  { bg: 'bg-indigo-50',  text: 'text-indigo-600',  bar: 'bg-indigo-500',  border: 'border-indigo-100' },
-    emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', bar: 'bg-emerald-500', border: 'border-emerald-100' },
-    amber:   { bg: 'bg-amber-50',   text: 'text-amber-600',   bar: 'bg-amber-500',   border: 'border-amber-100' },
-    red:     { bg: 'bg-red-50',     text: 'text-red-600',     bar: 'bg-red-500',     border: 'border-red-100' },
-  };
-  const c = colors[color] || colors.indigo;
-  return (
-    <div className={clsx('bg-white rounded-2xl border shadow-sm p-5 relative overflow-hidden', c.border)}>
-      <div className={clsx('absolute top-0 left-0 w-1 h-full', c.bar)} />
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-[9px] font-medium text-[#8e94a3] uppercase tracking-widest">{label}</span>
-        <div className={clsx('w-7 h-7 rounded-lg flex items-center justify-center', c.bg)}>
-          <Icon className={clsx('w-3.5 h-3.5', c.text)} />
-        </div>
-      </div>
-      <div className={clsx('text-[22px] font-medium font-mono leading-none', c.text)}>{value}</div>
-      <div className="text-[9px] text-[#b0b5c3] font-medium uppercase tracking-wide mt-1.5">{sub}</div>
-    </div>
-  );
-}

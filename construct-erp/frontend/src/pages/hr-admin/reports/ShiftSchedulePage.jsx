@@ -1,21 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { hrEmployeesAPI } from '../../../api/client';
+import { hrEmployeesAPI, hrShiftsAPI } from '../../../api/client';
 import { Download, Clock, Printer } from 'lucide-react';
 import { REPORT_PRINT_CSS_LANDSCAPE, ReportPrintHeader, ReportPrintSignature } from '../../../components/reports/ReportPrintKit';
 
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+// hr_shifts.weekly_off_day is 0=Sunday..6=Saturday
+const OFF_DAY_LABEL = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
+// Colors keyed by shift NAME as configured in Shift Management (DQS, LANCHO,
+// GODREJ, TECH-P3, HO-SHIFT, ladies staff shifts, Male nurse, etc.) — falls
+// back to a neutral color for any shift name not explicitly listed here.
 const SHIFT_COLORS = {
-  'General':  { bg:'#DBEAFE', color:'#1E40AF' },
-  'Morning':  { bg:'#D1FAE5', color:'#065F46' },
-  'Evening':  { bg:'#FEF3C7', color:'#92400E' },
-  'Night':    { bg:'#EDE9FE', color:'#5B21B6' },
-  'Off':      { bg:'#F1F5F9', color:'#94A3B8' },
+  'Unassigned': { bg:'#FEF2F2', color:'#B91C1C' },
+  'Off':        { bg:'#F1F5F9', color:'#94A3B8' },
 };
+const FALLBACK_SHIFT_COLOR = { bg:'#DBEAFE', color:'#1E40AF' };
 
 function ShiftBadge({ shift }) {
-  const { bg, color } = SHIFT_COLORS[shift] || { bg:'#F1F5F9', color:'#64748B' };
+  const { bg, color } = SHIFT_COLORS[shift] || FALLBACK_SHIFT_COLOR;
   return <span style={{ background:bg, color, borderRadius:4, padding:'2px 8px', fontSize:10, fontWeight:700 }}>{shift||'—'}</span>;
 }
 
@@ -32,13 +35,41 @@ export default function ShiftSchedulePage() {
     queryFn: () => hrEmployeesAPI.list({ limit:500, department:dept||undefined }).then(r => r.data?.data || r.data?.employees || r.data || []),
   });
 
+  // All employee↔shift assignments (current + historical) from Shift
+  // Management — reduced below to each employee's currently-active one.
+  const { data: assignData } = useQuery({
+    queryKey: ['employee-shifts-all'],
+    queryFn: () => hrShiftsAPI.empShifts().then(r => r.data?.data || []),
+  });
+
+  // employee_id -> their assignment active on `weekOf` (effective_from <= weekOf
+  // AND (effective_to IS NULL OR effective_to >= weekOf)), picking the most
+  // recent effective_from when more than one row qualifies.
+  const currentShiftByEmployee = useMemo(() => {
+    const map = {};
+    for (const a of (assignData || [])) {
+      if (a.effective_from > weekOf) continue;
+      if (a.effective_to && a.effective_to < weekOf) continue;
+      const existing = map[a.employee_id];
+      if (!existing || a.effective_from > existing.effective_from) map[a.employee_id] = a;
+    }
+    return map;
+  }, [assignData, weekOf]);
+
   const rows = (Array.isArray(data) ? data : []).filter(r =>
     !search || r.name?.toLowerCase().includes(search.toLowerCase()) || r.employee_code?.includes(search)
-  );
+  ).map(r => {
+    const assignment = currentShiftByEmployee[r.id];
+    return {
+      ...r,
+      shift_name: assignment?.shift_name || 'Unassigned',
+      offDay: OFF_DAY_LABEL[assignment?.weekly_off_day ?? 0],
+    };
+  });
 
   const exportCSV = () => {
     const header = ['Emp Code','Name','Department','Shift',...DAYS];
-    const csvRows = rows.map(r=>[r.employee_code||'',r.name||'',r.department||'',r.shift_name||r.shift||'General',...DAYS.map(()=>r.shift_name||r.shift||'General')]);
+    const csvRows = rows.map(r=>[r.employee_code||'',r.name||'',r.department||'',r.shift_name,...DAYS.map(d=>d===r.offDay?'Off':r.shift_name)]);
     const csv=[header,...csvRows].map(r=>r.join(',')).join('\n');
     const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.download=`shift-schedule-${weekOf}.csv`; a.click();
   };
@@ -92,8 +123,8 @@ export default function ShiftSchedulePage() {
             </thead>
             <tbody>
               {rows.map((r,i)=>{
-                const shift = r.shift_name || r.shift || 'General';
-                const offDay = r.week_off || 'Sun';
+                const shift = r.shift_name;
+                const offDay = r.offDay;
                 return (
                   <tr key={i} style={{ borderBottom:'1px solid #F1F5F9' }}>
                     <td style={{ padding:'7px 12px', color:'#64748B', fontFamily:'monospace' }}>{r.employee_code||'-'}</td>

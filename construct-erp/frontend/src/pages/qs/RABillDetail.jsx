@@ -5,10 +5,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useReactToPrint } from 'react-to-print';
 import toast from 'react-hot-toast';
 import {
-  ArrowLeft, Download, CheckCircle2, Building2,
+  Download, CheckCircle2,
   User, Calendar, Banknote, ShieldCheck,
-  Printer, Layers, FileText, XCircle, Clock,
-  Receipt, ChevronRight, CreditCard, Hash, BadgeIndianRupee, TrendingDown, FileSpreadsheet, X,
+  Printer, FileText, XCircle, Pencil,
+  CreditCard, Hash, BadgeIndianRupee, TrendingDown, FileSpreadsheet, X,
 } from 'lucide-react';
 import { raBillAPI, variationAPI, materialReconAPI, default as apiClient } from '../../api/client';
 import useAuthStore from '../../store/authStore';
@@ -20,17 +20,23 @@ import RABillTaxInvoice from './RABillTaxInvoice';
 import RABillProformaInvoice from './RABillProformaInvoice';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { Theme, PageHeader, SectionTitle, RichTable } from '../../theme';
 
 const inr = v => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const STATUS_MAP = {
-  draft:     { label: 'Draft',     cls: 'bg-slate-100 text-slate-900 font-medium border-slate-200' },
-  submitted: { label: 'Submitted', cls: 'bg-amber-50 text-amber-600 border-amber-200' },
-  verified:  { label: 'Verified',  cls: 'bg-blue-50 text-blue-600 border-blue-200' },
-  certified: { label: 'Certified', cls: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
-  rejected:  { label: 'Rejected',  cls: 'bg-red-50 text-red-500 border-red-200' },
-  paid:      { label: 'Paid',      cls: 'bg-teal-50 text-teal-600 border-teal-200' },
+  draft:     { label: 'Draft',     cls: 'bg-slate-100 text-slate-900 font-medium border-slate-200', dot: '#94a3b8' },
+  submitted: { label: 'Submitted', cls: 'bg-amber-50 text-amber-600 border-amber-200',               dot: '#f59e0b' },
+  verified:  { label: 'Verified',  cls: 'bg-blue-50 text-blue-600 border-blue-200',                  dot: '#3b82f6' },
+  certified: { label: 'Certified', cls: 'bg-emerald-50 text-emerald-600 border-emerald-200',         dot: '#34d399' },
+  rejected:  { label: 'Rejected',  cls: 'bg-red-50 text-red-500 border-red-200',                     dot: '#f87171' },
+  paid:      { label: 'Paid',      cls: 'bg-teal-50 text-teal-600 border-teal-200',                  dot: '#2dd4bf' },
 };
+
+// Glass-style button for neutral header actions on the navy PageHeader band
+const glassBtnStyle = { background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.20)', color: '#fff' };
+const glassBtnHover = e => { e.currentTarget.style.background = 'rgba(255,255,255,0.18)'; };
+const glassBtnLeave = e => { e.currentTarget.style.background = 'rgba(255,255,255,0.10)'; };
 
 const STEPS = [
   { key: 'submitted', label: 'Submitted',  Icon: FileText },
@@ -44,6 +50,7 @@ const CAN_VERIFY  = ['qs_engineer', 'admin', 'super_admin'];
 const CAN_CERTIFY = ['project_manager', 'admin', 'super_admin'];
 const CAN_REJECT  = ['qs_engineer', 'project_manager', 'admin', 'super_admin'];
 const CAN_PAY     = ['accountant', 'admin', 'super_admin'];
+const CAN_EDIT    = ['qs_engineer', 'project_manager', 'admin', 'super_admin'];
 
 export default function RABillDetail() {
   const { id } = useParams();
@@ -212,155 +219,144 @@ export default function RABillDetail() {
   const escalation = parseFloat(b.price_escalation || 0);
 
   return (
-    <div className="min-h-screen bg-[#f4f6f9] font-sans text-sm">
+    <div className="min-h-screen font-sans text-sm" style={{ background: Theme.pageBg }}>
 
-      {/* ── Sticky header ── */}
-      <div className="sticky top-0 z-30 bg-white border-b border-[#e2e6ec] shadow-sm px-6 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate(-1)}
-            className="w-8 h-8 flex items-center justify-center rounded-xl border border-[#e2e6ec] hover:bg-[#f4f6f9] text-[#6a6f7d] transition-colors"
-          >
-            <ArrowLeft size={16} />
-          </button>
-          <div className="h-5 w-px bg-[#e2e6ec]" />
-          <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center shadow">
-            <Receipt className="w-4 h-4 text-white" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-[16px] font-medium text-[#1a1c21] font-mono uppercase tracking-tight">{b.bill_number}</h1>
-              <span className={clsx('inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-medium border', st.cls)}>
-                {st.label}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 mt-0.5 text-[10px] text-[#8e94a3]">
-              <Building2 size={11} /> {b.contractor_name}
-              <ChevronRight size={10} />
-              <Calendar size={11} /> {dayjs(b.bill_date).format('DD MMM YYYY')}
-              {b.project_name && <><ChevronRight size={10} />{b.project_name}</>}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button onClick={() => handleClientBillPrint()}
-            className="h-9 px-3 flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors text-[11px] font-medium"
-            title="Print Client RA Bill (Professional Format)">
-            <FileText size={14} /> Client Bill
-          </button>
-          <button onClick={() => handlePrint()}
-            className="w-9 h-9 flex items-center justify-center rounded-xl border border-[#e2e6ec] bg-white text-[#6a6f7d] hover:text-indigo-600 hover:border-indigo-200 transition-colors"
-            title="Print QS Internal Bill">
-            <Printer size={16} />
-          </button>
-          <button onClick={handleDownloadPDF}
-            className="w-9 h-9 flex items-center justify-center rounded-xl border border-[#e2e6ec] bg-white text-[#6a6f7d] hover:text-indigo-600 hover:border-indigo-200 transition-colors"
-            title="Download PDF">
-            <Download size={16} />
-          </button>
-          {/* Proforma Invoice — before certification */}
-          {['submitted', 'verified'].includes(b?.status) && (
-            <button
-              onClick={() => { setProformaNo(''); setProformaDate(dayjs().format('YYYY-MM-DD')); setShowProformaModal(true); }}
-              className="h-9 px-3 flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors text-[11px] font-medium"
-              title="Generate Proforma Invoice">
-              <FileSpreadsheet size={14} /> Proforma Invoice
+      <PageHeader
+        title={b.bill_number}
+        subtitle={`${b.contractor_name}${b.project_name ? ` · ${b.project_name}` : ''} · ${dayjs(b.bill_date).format('DD MMM YYYY')}`}
+        breadcrumbs={[{ label: 'QS & Billing' }, { label: 'RA Bills', href: '/qs/ra-bills' }, { label: b.bill_number }]}
+        onBack={() => navigate(-1)}
+        pills={[
+          { label: 'Status', value: st.label, color: st.dot },
+          { label: 'Net Payable', value: inr(b.net_payable) },
+        ]}
+        actions={
+          <>
+            {['draft', 'rejected'].includes(b.status) && CAN_EDIT.includes(role) && (
+              <button onClick={() => navigate(`/qs/ra-bills/${id}/edit`)}
+                className="h-9 px-3 flex items-center gap-1.5 rounded-xl text-[11px] font-medium transition-colors"
+                style={glassBtnStyle} onMouseEnter={glassBtnHover} onMouseLeave={glassBtnLeave}
+                title="Edit Bill">
+                <Pencil size={14} /> Edit
+              </button>
+            )}
+            <button onClick={() => handleClientBillPrint()}
+              className="h-9 px-3 flex items-center gap-1.5 rounded-xl text-[11px] font-medium transition-colors"
+              style={{ background: Theme.emerald.to, color: '#fff' }}
+              title="Print Client RA Bill (Professional Format)">
+              <FileText size={14} /> Client Bill
             </button>
-          )}
-
-          {/* Tax Invoice — after client certification */}
-          {['certified', 'paid'].includes(b?.status) && (
-            <button
-              onClick={() => { setInvoiceNo(''); setInvoiceDate(dayjs().format('YYYY-MM-DD')); setShowTaxModal(true); }}
-              className="h-9 px-3 flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors text-[11px] font-medium"
-              title="Generate Tax Invoice">
-              <FileSpreadsheet size={14} /> Tax Invoice
+            <button onClick={() => handlePrint()}
+              className="w-9 h-9 flex items-center justify-center rounded-xl transition-colors"
+              style={glassBtnStyle} onMouseEnter={glassBtnHover} onMouseLeave={glassBtnLeave}
+              title="Print QS Internal Bill">
+              <Printer size={16} />
             </button>
-          )}
+            <button onClick={handleDownloadPDF}
+              className="w-9 h-9 flex items-center justify-center rounded-xl transition-colors"
+              style={glassBtnStyle} onMouseEnter={glassBtnHover} onMouseLeave={glassBtnLeave}
+              title="Download PDF">
+              <Download size={16} />
+            </button>
+            {/* Proforma Invoice — before certification */}
+            {['submitted', 'verified'].includes(b?.status) && (
+              <button
+                onClick={() => { setProformaNo(''); setProformaDate(dayjs().format('YYYY-MM-DD')); setShowProformaModal(true); }}
+                className="h-9 px-3 flex items-center gap-1.5 rounded-xl text-[11px] font-medium transition-colors"
+                style={{ background: Theme.blue.to, color: '#fff' }}
+                title="Generate Proforma Invoice">
+                <FileSpreadsheet size={14} /> Proforma Invoice
+              </button>
+            )}
 
-          {/* Workflow action buttons — role-gated */}
-          {!rejectedOrPaid && (
-            <>
-              {/* Reject — shown to QS on submitted, PM on verified, admin always */}
-              {b.status === 'submitted' && CAN_VERIFY.includes(role) && (
-                <button
-                  onClick={() => rejectMut.mutate()}
-                  disabled={rejectMut.isPending}
-                  className="h-9 px-4 rounded-xl text-[11px] font-medium border border-red-200 bg-red-50 text-red-500 hover:bg-red-100 transition-colors disabled:opacity-50"
-                >
-                  Reject
-                </button>
-              )}
-              {b.status === 'verified' && CAN_CERTIFY.includes(role) && (
-                <button
-                  onClick={() => rejectMut.mutate()}
-                  disabled={rejectMut.isPending}
-                  className="h-9 px-4 rounded-xl text-[11px] font-medium border border-red-200 bg-red-50 text-red-500 hover:bg-red-100 transition-colors disabled:opacity-50"
-                >
-                  Reject
-                </button>
-              )}
+            {/* Tax Invoice — after client certification */}
+            {['certified', 'paid'].includes(b?.status) && (
+              <button
+                onClick={() => { setInvoiceNo(''); setInvoiceDate(dayjs().format('YYYY-MM-DD')); setShowTaxModal(true); }}
+                className="h-9 px-3 flex items-center gap-1.5 rounded-xl text-[11px] font-medium transition-colors"
+                style={{ background: Theme.amber.to, color: '#fff' }}
+                title="Generate Tax Invoice">
+                <FileSpreadsheet size={14} /> Tax Invoice
+              </button>
+            )}
 
-              {/* Verify — QS Engineer only */}
-              {b.status === 'submitted' && CAN_VERIFY.includes(role) && (
-                <button
-                  onClick={() => verifyMut.mutate()}
-                  disabled={verifyMut.isPending}
-                  className="h-9 px-5 rounded-xl text-[11px] font-medium bg-blue-600 text-white hover:bg-blue-500 transition-colors shadow-sm shadow-blue-600/20 disabled:opacity-50 flex items-center gap-2"
-                >
-                  <ShieldCheck size={14} />
-                  {verifyMut.isPending ? 'Verifying…' : 'Verify Bill'}
-                </button>
-              )}
+            {/* Workflow action buttons — role-gated */}
+            {!rejectedOrPaid && (
+              <>
+                {/* Reject — shown to QS on submitted, PM on verified, admin always */}
+                {((b.status === 'submitted' && CAN_VERIFY.includes(role)) ||
+                  (b.status === 'verified' && CAN_CERTIFY.includes(role))) && (
+                  <button
+                    onClick={() => rejectMut.mutate()}
+                    disabled={rejectMut.isPending}
+                    className="h-9 px-4 rounded-xl text-[11px] font-medium transition-colors disabled:opacity-50"
+                    style={{ background: 'rgba(248,113,113,0.16)', border: '1px solid rgba(248,113,113,0.35)', color: '#fecaca' }}
+                  >
+                    Reject
+                  </button>
+                )}
 
-              {/* Certify — Project Manager only */}
-              {b.status === 'verified' && CAN_CERTIFY.includes(role) && (
-                <button
-                  onClick={() => certifyMut.mutate()}
-                  disabled={certifyMut.isPending}
-                  className="h-9 px-5 rounded-xl text-[11px] font-medium bg-emerald-600 text-white hover:bg-emerald-500 transition-colors shadow-sm shadow-emerald-600/20 disabled:opacity-50 flex items-center gap-2"
-                >
-                  <CheckCircle2 size={14} />
-                  {certifyMut.isPending ? 'Certifying…' : 'Certify Bill'}
-                </button>
-              )}
+                {/* Verify — QS Engineer only */}
+                {b.status === 'submitted' && CAN_VERIFY.includes(role) && (
+                  <button
+                    onClick={() => verifyMut.mutate()}
+                    disabled={verifyMut.isPending}
+                    className="h-9 px-5 rounded-xl text-[11px] font-medium bg-blue-600 text-white hover:bg-blue-500 transition-colors shadow-sm shadow-blue-600/20 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    <ShieldCheck size={14} />
+                    {verifyMut.isPending ? 'Verifying…' : 'Verify Bill'}
+                  </button>
+                )}
 
-              {/* Revert to QS — admin/super_admin only, when certified but not paid */}
-              {b.status === 'certified' && ['admin', 'super_admin'].includes(role) && (
-                <button
-                  onClick={() => {
-                    if (!window.confirm('Send this bill back to QS (verified) for editing? The GL journal entry will be reversed.')) return;
-                    revertMut.mutate();
-                  }}
-                  disabled={revertMut.isPending}
-                  className="h-9 px-4 rounded-xl text-[11px] font-medium border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50 flex items-center gap-2"
-                >
-                  <XCircle size={14} />
-                  {revertMut.isPending ? 'Reverting…' : 'Revert to QS'}
-                </button>
-              )}
+                {/* Certify — Project Manager only */}
+                {b.status === 'verified' && CAN_CERTIFY.includes(role) && (
+                  <button
+                    onClick={() => certifyMut.mutate()}
+                    disabled={certifyMut.isPending}
+                    className="h-9 px-5 rounded-xl text-[11px] font-medium bg-emerald-600 text-white hover:bg-emerald-500 transition-colors shadow-sm shadow-emerald-600/20 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    <CheckCircle2 size={14} />
+                    {certifyMut.isPending ? 'Certifying…' : 'Certify Bill'}
+                  </button>
+                )}
 
-              {/* Mark Paid — Accountant only */}
-              {b.status === 'certified' && CAN_PAY.includes(role) && (
-                <button
-                  onClick={() => toast('Use the payments module to record payment')}
-                  className="h-9 px-5 rounded-xl text-[11px] font-medium bg-teal-600 text-white hover:bg-teal-500 transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
-                >
-                  <Banknote size={14} /> Mark Paid
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      </div>
+                {/* Revert to QS — admin/super_admin only, when certified but not paid */}
+                {b.status === 'certified' && ['admin', 'super_admin'].includes(role) && (
+                  <button
+                    onClick={() => {
+                      if (!window.confirm('Send this bill back to QS (verified) for editing? The GL journal entry will be reversed.')) return;
+                      revertMut.mutate();
+                    }}
+                    disabled={revertMut.isPending}
+                    className="h-9 px-4 rounded-xl text-[11px] font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+                    style={{ background: 'rgba(251,191,36,0.16)', border: '1px solid rgba(251,191,36,0.35)', color: '#fde68a' }}
+                  >
+                    <XCircle size={14} />
+                    {revertMut.isPending ? 'Reverting…' : 'Revert to QS'}
+                  </button>
+                )}
+
+                {/* Mark Paid — Accountant only */}
+                {b.status === 'certified' && CAN_PAY.includes(role) && (
+                  <button
+                    onClick={() => toast('Use the payments module to record payment')}
+                    className="h-9 px-5 rounded-xl text-[11px] font-medium bg-teal-600 text-white hover:bg-teal-500 transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
+                  >
+                    <Banknote size={14} /> Mark Paid
+                  </button>
+                )}
+              </>
+            )}
+          </>
+        }
+      />
 
       <div className="px-6 py-5 space-y-5">
 
         {/* ── Lifecycle stepper ── */}
         <div className="bg-white rounded-2xl border border-[#e2e6ec] shadow-sm p-5">
-          <div className="text-[9px] font-medium text-[#8e94a3] uppercase tracking-widest mb-4">Approval Lifecycle</div>
-          <div className="flex items-center">
+          <SectionTitle>Approval Lifecycle</SectionTitle>
+          <div className="flex items-center mt-1">
             {STEPS.map((s, i) => {
               const SIcon = s.Icon;
               const passed = !['rejected'].includes(b.status) && i < currentIdx;
@@ -373,15 +369,17 @@ export default function RABillDetail() {
                       'w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all',
                       isRej   ? 'bg-red-500 border-red-500 text-white' :
                       passed  ? 'bg-emerald-500 border-emerald-500 text-white' :
-                      active  ? 'bg-indigo-600 border-indigo-600 text-white ring-4 ring-indigo-50' :
                                 'bg-white border-[#d8dce1] text-[#8e94a3]'
-                    )}>
+                    )}
+                    style={active ? { background: `linear-gradient(135deg, ${Theme.navy}, ${Theme.navyDark})`, borderColor: Theme.navy, color: '#fff', boxShadow: `0 0 0 4px ${Theme.navy}1a` } : undefined}
+                    >
                       {passed ? <CheckCircle2 size={16} /> : <SIcon size={15} />}
                     </div>
                     <div className={clsx(
                       'text-[9px] font-medium uppercase tracking-wider mt-2',
-                      isRej ? 'text-red-500' : active ? 'text-indigo-600' : passed ? 'text-emerald-500' : 'text-[#b0b5c3]'
-                    )}>
+                      isRej ? 'text-red-500' : passed ? 'text-emerald-500' : !active ? 'text-[#b0b5c3]' : ''
+                    )}
+                    style={active ? { color: Theme.navy } : undefined}>
                       {s.label}
                     </div>
                     {passed && i === 1 && b.verified_by_name && (
@@ -426,65 +424,70 @@ export default function RABillDetail() {
             )}
 
             {/* Line items table */}
-            <div className="bg-white rounded-2xl border border-[#e2e6ec] shadow-sm overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-[#e2e6ec] flex items-center gap-2">
-                <Layers size={15} className="text-indigo-600" />
-                <h2 className="text-[11px] font-medium text-[#1a1c21] uppercase tracking-wide">Line Item Breakdown</h2>
-                <span className="ml-auto text-[9px] font-medium text-[#8e94a3] bg-[#f4f6f9] px-2 py-0.5 rounded-full">
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <SectionTitle>Line Item Breakdown</SectionTitle>
+                <span className="text-[9px] font-medium text-slate-400 bg-white border border-slate-200 px-2 py-0.5 rounded-full ml-auto">
                   {(b.items || []).length} items
                 </span>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-[#f8fafc] border-b border-[#e2e6ec]">
-                      <th className="px-5 py-2.5 text-left text-[10px] font-medium text-[#8e94a3] uppercase tracking-wider">Specification</th>
-                      <th className="px-4 py-2.5 text-right text-[10px] font-medium text-[#8e94a3] uppercase tracking-wider w-28">Previous</th>
-                      <th className="px-4 py-2.5 text-right text-[10px] font-medium text-indigo-500 uppercase tracking-wider w-28 bg-blue-50/50">Current</th>
-                      <th className="px-5 py-2.5 text-right text-[10px] font-medium text-[#8e94a3] uppercase tracking-wider w-36">Value</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#f0f2f5]">
-                    {(b.items || []).length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="py-10 text-center text-xs text-[#8e94a3]">No items found</td>
-                      </tr>
-                    )}
-                    {(b.items || []).map((it, idx) => (
-                      <tr key={idx} className="hover:bg-[#f8fafc] transition-colors">
-                        <td className="px-5 py-3">
-                          <div className="text-[12px] font-medium text-[#1a1c21] leading-snug">{it.description}</div>
-                          <div className="text-[10px] text-[#8e94a3] mt-0.5 flex items-center gap-2">
-                            <span className="border border-[#e2e6ec] px-1.5 py-0.5 rounded text-[9px] uppercase font-medium">{it.unit}</span>
-                            Rate: {inr(it.rate)}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono text-[11px] text-[#8e94a3]">
-                          {(it.prev_certified_qty || 0).toLocaleString()}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono text-[12px] font-medium text-indigo-600 bg-blue-50/20">
-                          {(it.current_qty || 0).toLocaleString()}
-                        </td>
-                        <td className="px-5 py-3 text-right font-mono text-[13px] font-medium text-[#1a1c21]">
-                          {inr(it.amount || (it.current_qty * it.rate))}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  {(b.items || []).length > 0 && (
-                    <tfoot>
-                      <tr className="bg-slate-50 border-t border-[#e2e6ec]">
-                        <td colSpan={3} className="px-5 py-3 text-[10px] font-medium text-[#8e94a3] uppercase tracking-widest">
-                          Gross Valuation
-                        </td>
-                        <td className="px-5 py-3 text-right font-mono text-[14px] font-medium text-[#1a1c21]">
-                          {inr(b.gross_amount)}
-                        </td>
-                      </tr>
-                    </tfoot>
+              <RichTable>
+                <thead>
+                  <RichTable.HeaderRow>
+                    <RichTable.Th className="w-8">#</RichTable.Th>
+                    <RichTable.Th>Specification</RichTable.Th>
+                    <RichTable.Th align="right">Rate</RichTable.Th>
+                    <RichTable.Th align="right">Previous</RichTable.Th>
+                    <RichTable.Th align="right">Current</RichTable.Th>
+                    <RichTable.Th align="right">Amount</RichTable.Th>
+                  </RichTable.HeaderRow>
+                </thead>
+                <tbody>
+                  {(b.items || []).length === 0 && (
+                    <tr><td colSpan={6} className="py-10 text-center text-xs text-slate-400">No items found</td></tr>
                   )}
-                </table>
-              </div>
+                  {(b.items || []).map((it, idx) => {
+                    const value = it.amount || (it.current_qty * it.rate);
+                    return (
+                      <RichTable.Row key={idx}>
+                        <RichTable.Td bold={false} color={Theme.textFaint} className="font-mono text-[11px]">
+                          {String(idx + 1).padStart(2, '0')}
+                        </RichTable.Td>
+                        <RichTable.Td>
+                          <div className="text-[13px] leading-relaxed" style={{ color: Theme.textDark }}>{it.description}</div>
+                          <span
+                            className="inline-block mt-1.5 text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wide"
+                            style={{ color: Theme.navy, background: `${Theme.navy}0f` }}
+                          >
+                            {it.unit}
+                          </span>
+                        </RichTable.Td>
+                        <RichTable.Td mono align="right" color={Theme.textMuted}>{inr(it.rate)}</RichTable.Td>
+                        <RichTable.Td mono align="right" bold={false} color={Theme.textFaint}>
+                          {(it.prev_certified_qty || 0).toLocaleString()}
+                        </RichTable.Td>
+                        <RichTable.Td mono align="right" color={Theme.navy}>
+                          {(it.current_qty || 0).toLocaleString()}
+                        </RichTable.Td>
+                        <RichTable.Td mono align="right" className="text-[13px]">{inr(value)}</RichTable.Td>
+                      </RichTable.Row>
+                    );
+                  })}
+                </tbody>
+                {(b.items || []).length > 0 && (
+                  <tfoot>
+                    <tr style={{ background: `linear-gradient(90deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)` }}>
+                      <td colSpan={5} className="px-4 py-3 text-[10px] font-medium uppercase tracking-widest text-right"
+                        style={{ color: 'rgba(255,255,255,0.65)' }}>
+                        Gross Valuation
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-[16px] font-semibold" style={{ color: Theme.gold }}>
+                        {inr(b.gross_amount)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </RichTable>
             </div>
           </div>
 
@@ -517,11 +520,12 @@ export default function RABillDetail() {
                   />
                 )}
 
-                <div className="border-t-2 border-[#1a1c21] pt-3 mt-2">
-                  <div className="text-[9px] font-medium text-[#8e94a3] uppercase tracking-widest mb-1">
+                <div className="rounded-xl px-4 py-4 mt-3"
+                  style={{ background: `linear-gradient(135deg, ${Theme.navy}, ${Theme.navyDark})` }}>
+                  <div className="text-[9px] font-medium uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
                     Total Certified Disbursement
                   </div>
-                  <div className="text-[28px] font-medium text-emerald-600 font-mono leading-none">
+                  <div className="text-[26px] font-medium font-mono leading-none" style={{ color: Theme.gold, textShadow: '0 1px 2px rgba(0,0,0,0.30)' }}>
                     {inr(b.net_payable)}
                   </div>
                 </div>

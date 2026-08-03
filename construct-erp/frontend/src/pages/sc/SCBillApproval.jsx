@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { scAPI, projectAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
@@ -437,11 +437,18 @@ const STATUS_FILTERS = [
 
 export default function SCBillApproval() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { selectedProjectId } = useAuthStore();
   const [projectFilter, setProject]   = useState(selectedProjectId || '');
   useEffect(() => { setProject(selectedProjectId || ''); }, [selectedProjectId]);
   const [statusFilter,  setStatus]    = useState('submitted');
   const [reviewBillId,  setReviewId]  = useState(null);
+  // True while the currently-open review was reached via the "My Approvals"
+  // deep link, so closing it (whether by approving, rejecting, querying, or
+  // just cancelling) can send the user back to their inbox instead of
+  // stranding them on this SC-specific list. Reset once consumed so a bill
+  // opened afterward by clicking a row directly doesn't also redirect away.
+  const [fromApprovalsFeed, setFromApprovalsFeed] = useState(false);
 
   // Deep link from the "My Approvals" feed (e.g. MD's "Review & Authorise"
   // button) passes { viewId } via navigate state — without this, landing here
@@ -452,8 +459,17 @@ export default function SCBillApproval() {
       setReviewId(location.state.viewId);
       setStatus('');
       setProject('');
+      setFromApprovalsFeed(true);
     }
   }, [location.state]);
+
+  const closeReview = () => {
+    setReviewId(null);
+    if (fromApprovalsFeed) {
+      setFromApprovalsFeed(false);
+      navigate('/approvals');
+    }
+  };
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -545,7 +561,7 @@ export default function SCBillApproval() {
         <BillReviewModal
           billId={reviewBillId}
           stages={stages}
-          onClose={() => setReviewId(null)}
+          onClose={closeReview}
         />
       )}
     </div>

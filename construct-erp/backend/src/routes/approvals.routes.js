@@ -13,6 +13,14 @@ const {
 } = require('../services/notif.helper');
 const { scBillScopeForRole } = require('../constants/scBillApprovalStages');
 const { pushScBillToTracker } = require('../services/scBillToTracker.service');
+// This feed previously had ZERO project-level scoping anywhere — every section
+// filtered only by company_id, so a Project Manager assigned to one project
+// (e.g. DQS Towers) saw pending approvals from every project in the company.
+// loadProjectScope populates req.allowedProjectIds (null for global roles like
+// admin/MD) from projects.project_manager_id/site_engineer_id/qs_engineer_id
+// and the project_members table; appendProjectScope turns that into a SQL
+// condition on demand.
+const { loadProjectScope, appendProjectScope, userCanAccessProject } = require('../middleware/projectScope');
 
 // GL mapping for stores petty cash auto-JV (mirrors stores-petty-cash.routes.js)
 const SPC_CATEGORY_GL = {
@@ -132,7 +140,7 @@ function roleMatchesStage(user, stage) {
 // so that stage filtering works correctly. Do NOT add stephen here.
 const FULL_APPROVALS_EMAILS = ['it@bcim.in'];
 
-router.get('/pending', async (req, res) => {
+router.get('/pending', loadProjectScope, async (req, res) => {
   try {
     const cid  = CID(req);
     const email = (req.user.email || '').toLowerCase();
@@ -193,7 +201,7 @@ router.get('/pending', async (req, res) => {
         stageCond = ` AND b.current_stage IN (${stagePh})`;
         params.push(...scBillScope.stageNames);
       }
-      const r = await query(`
+      let scBillSql = `
         SELECT b.id, b.bill_number AS ref_no, b.bill_date AS doc_date,
                b.net_payable AS amount, b.status, b.created_at, b.current_stage,
                sc.name AS party_name, p.name AS project_name,
@@ -204,14 +212,16 @@ router.get('/pending', async (req, res) => {
         JOIN sc_subcontractors sc ON sc.id=b.sc_id
         JOIN projects p ON p.id=b.project_id
         LEFT JOIN users u ON u.id=b.submitted_by
-        WHERE b.company_id=$1 AND b.status IN (${statusPh})${stageCond}
-        ORDER BY b.created_at ASC`, params);
+        WHERE b.company_id=$1 AND b.status IN (${statusPh})${stageCond}`;
+      let scBillParams = params;
+      ({ sql: scBillSql, params: scBillParams } = appendProjectScope(req, scBillSql, scBillParams, 'p', 'id'));
+      const r = await query(`${scBillSql} ORDER BY b.created_at ASC`, scBillParams);
       items.push(...r.rows);
     }
 
     // ── 2. SC Work Orders (submitted, need approval) ─────────────────────────
     if (['project_manager','admin','super_admin','qs_engineer'].includes(role)) {
-      const r = await query(`
+      let scWoSql = `
         SELECT wo.id, wo.wo_number AS ref_no, wo.created_at AS doc_date,
                wo.contract_amount AS amount, wo.status, wo.created_at,
                wo.status AS current_stage,
@@ -223,8 +233,10 @@ router.get('/pending', async (req, res) => {
         JOIN sc_subcontractors sc ON sc.id=wo.sc_id
         JOIN projects p ON p.id=wo.project_id
         LEFT JOIN users u ON u.id=wo.created_by
-        WHERE wo.company_id=$1 AND wo.status='submitted'
-        ORDER BY wo.created_at ASC`, [cid]);
+        WHERE wo.company_id=$1 AND wo.status='submitted'`;
+      let scWoParams = [cid];
+      ({ sql: scWoSql, params: scWoParams } = appendProjectScope(req, scWoSql, scWoParams, 'p', 'id'));
+      const r = await query(`${scWoSql} ORDER BY wo.created_at ASC`, scWoParams);
       items.push(...r.rows);
     }
 
@@ -232,7 +244,7 @@ router.get('/pending', async (req, res) => {
     if (['site_engineer','qs_engineer','project_manager','admin','super_admin'].includes(role)) {
       const mbStatuses = role === 'site_engineer' ? ['submitted'] : ['submitted','checked'];
       const ph = mbStatuses.map((_,i)=>`$${i+2}`).join(',');
-      const r = await query(`
+      let mbSql = `
         SELECT m.id, m.mb_number AS ref_no, m.mb_date AS doc_date,
                m.executed_qty AS amount, m.status, m.created_at,
                m.status AS current_stage,
@@ -245,8 +257,10 @@ router.get('/pending', async (req, res) => {
         JOIN sc_subcontractors sc ON sc.id=m.sc_id
         JOIN projects p ON p.id=m.project_id
         LEFT JOIN users u ON u.id=m.created_by
-        WHERE m.company_id=$1 AND m.status IN (${ph})
-        ORDER BY m.created_at ASC`, [cid, ...mbStatuses]);
+        WHERE m.company_id=$1 AND m.status IN (${ph})`;
+      let mbParams = [cid, ...mbStatuses];
+      ({ sql: mbSql, params: mbParams } = appendProjectScope(req, mbSql, mbParams, 'p', 'id'));
+      const r = await query(`${mbSql} ORDER BY m.created_at ASC`, mbParams);
       items.push(...r.rows);
     }
 
@@ -254,7 +268,7 @@ router.get('/pending', async (req, res) => {
     if (['site_engineer','qs_engineer','project_manager','admin','super_admin'].includes(role)) {
       const nmrStatuses = role === 'site_engineer' ? ['submitted'] : ['submitted','checked'];
       const ph = nmrStatuses.map((_,i)=>`$${i+2}`).join(',');
-      const r = await query(`
+      let nmrSql = `
         SELECT n.id, n.nmr_number AS ref_no, n.period_from AS doc_date,
                n.total_wages AS amount, n.status, n.created_at,
                n.status AS current_stage,
@@ -267,14 +281,16 @@ router.get('/pending', async (req, res) => {
         JOIN sc_subcontractors sc ON sc.id=n.sc_id
         JOIN projects p ON p.id=n.project_id
         LEFT JOIN users u ON u.id=n.created_by
-        WHERE n.company_id=$1 AND n.status IN (${ph})
-        ORDER BY n.created_at ASC`, [cid, ...nmrStatuses]);
+        WHERE n.company_id=$1 AND n.status IN (${ph})`;
+      let nmrParams = [cid, ...nmrStatuses];
+      ({ sql: nmrSql, params: nmrParams } = appendProjectScope(req, nmrSql, nmrParams, 'p', 'id'));
+      const r = await query(`${nmrSql} ORDER BY n.created_at ASC`, nmrParams);
       items.push(...r.rows);
     }
 
     // ── 4. SC Retention Releases ─────────────────────────────────────────────
     if (['accounts','project_manager','admin','super_admin'].includes(role)) {
-      const r = await query(`
+      let rrSql = `
         SELECT rr.id, rr.release_number AS ref_no, rr.release_date AS doc_date,
                rr.release_amount AS amount, rr.status, rr.created_at,
                'pending' AS current_stage,
@@ -286,15 +302,17 @@ router.get('/pending', async (req, res) => {
         JOIN sc_subcontractors sc ON sc.id=rr.sc_id
         JOIN projects p ON p.id=rr.project_id
         LEFT JOIN users u ON u.id=rr.created_by
-        WHERE rr.company_id=$1 AND rr.status='pending'
-        ORDER BY rr.created_at ASC`, [cid]);
+        WHERE rr.company_id=$1 AND rr.status='pending'`;
+      let rrParams = [cid];
+      ({ sql: rrSql, params: rrParams } = appendProjectScope(req, rrSql, rrParams, 'p', 'id'));
+      const r = await query(`${rrSql} ORDER BY rr.created_at ASC`, rrParams);
       items.push(...r.rows);
     }
 
     // ── 5. Quality NCRs (open) ────────────────────────────────────────────────
     if (['qa_qc_engineer','hse_officer','project_manager','admin','super_admin'].includes(role)) {
       try {
-        const r = await query(`
+        let ncrSql = `
           SELECT n.id, n.ncr_number AS ref_no, n.issued_date AS doc_date,
                  0 AS amount, n.status, n.created_at,
                  n.status AS current_stage,
@@ -307,8 +325,10 @@ router.get('/pending', async (req, res) => {
           JOIN projects p ON p.id=n.project_id
           LEFT JOIN users u ON u.id=n.raised_by
           WHERE n.project_id IN (SELECT id FROM projects WHERE company_id=$1)
-            AND n.status IN ('open','in_progress')
-          ORDER BY n.created_at ASC`, [cid]);
+            AND n.status IN ('open','in_progress')`;
+        let ncrParams = [cid];
+        ({ sql: ncrSql, params: ncrParams } = appendProjectScope(req, ncrSql, ncrParams, 'p', 'id'));
+        const r = await query(`${ncrSql} ORDER BY n.created_at ASC`, ncrParams);
         items.push(...r.rows);
       } catch (e) { console.error('[approvals/pending] NCR feed failed:', e.message); }
     }
@@ -316,7 +336,7 @@ router.get('/pending', async (req, res) => {
     // ── 6. Quality Submittals (pending review) ────────────────────────────────
     if (['qs_engineer','project_manager','admin','super_admin'].includes(role)) {
       try {
-        const r = await query(`
+        let subSql = `
           SELECT s.id, s.submittal_number AS ref_no, s.submission_date AS doc_date,
                  0 AS amount, s.status, s.created_at,
                  s.status AS current_stage,
@@ -330,8 +350,10 @@ router.get('/pending', async (req, res) => {
           JOIN projects p ON p.id=s.project_id
           LEFT JOIN users u ON u.id=s.created_by
           WHERE s.project_id IN (SELECT id FROM projects WHERE company_id=$1)
-            AND s.status='pending'
-          ORDER BY s.created_at ASC`, [cid]);
+            AND s.status='pending'`;
+        let subParams = [cid];
+        ({ sql: subSql, params: subParams } = appendProjectScope(req, subSql, subParams, 'p', 'id'));
+        const r = await query(`${subSql} ORDER BY s.created_at ASC`, subParams);
         items.push(...r.rows);
       } catch (e) { console.error('[approvals/pending] submittals feed failed:', e.message); }
     }
@@ -348,7 +370,7 @@ router.get('/pending', async (req, res) => {
       console.log(`[approvals/pending] user=${req.user.email} role=${role} cid=${cid} poStatuses=${JSON.stringify(poStatuses)}`);
       if (poStatuses.length) {
         const ph = poStatuses.map((_, i) => `$${i + 2}`).join(',');
-        const r = await query(`
+        let poSql = `
           SELECT po.id,
                  COALESCE(po.po_number, po.id::text) AS ref_no,
                  po.po_date AS doc_date,
@@ -369,9 +391,10 @@ router.get('/pending', async (req, res) => {
           JOIN projects p ON p.id = po.project_id
           LEFT JOIN vendors v ON v.id = po.vendor_id
           LEFT JOIN users u ON u.id = po.created_by
-          WHERE p.company_id = $1 AND po.status IN (${ph})
-          ORDER BY po.created_at ASC
-          LIMIT 50`, [cid, ...poStatuses]);
+          WHERE p.company_id = $1 AND po.status IN (${ph})`;
+        let poParams = [cid, ...poStatuses];
+        ({ sql: poSql, params: poParams } = appendProjectScope(req, poSql, poParams, 'p', 'id'));
+        const r = await query(`${poSql} ORDER BY po.created_at ASC LIMIT 50`, poParams);
         console.log(`[approvals/pending] PO query returned ${r.rows.length} rows`);
         items.push(...r.rows);
       }
@@ -391,7 +414,7 @@ router.get('/pending', async (req, res) => {
       woStatuses = [...new Set(woStatuses)];
       if (woStatuses.length) {
         const ph = woStatuses.map((_, i) => `$${i + 2}`).join(',');
-        const r = await query(`
+        let procWoSql = `
           SELECT wo.id,
                  COALESCE(wo.wo_number, wo.id::text) AS ref_no,
                  wo.created_at AS doc_date,
@@ -413,9 +436,10 @@ router.get('/pending', async (req, res) => {
           JOIN projects p ON p.id = wo.project_id
           LEFT JOIN vendors v ON v.id = wo.vendor_id
           LEFT JOIN users u ON u.id = wo.created_by
-          WHERE p.company_id = $1 AND wo.status IN (${ph})
-          ORDER BY wo.created_at ASC
-          LIMIT 50`, [cid, ...woStatuses]);
+          WHERE p.company_id = $1 AND wo.status IN (${ph})`;
+        let procWoParams = [cid, ...woStatuses];
+        ({ sql: procWoSql, params: procWoParams } = appendProjectScope(req, procWoSql, procWoParams, 'p', 'id'));
+        const r = await query(`${procWoSql} ORDER BY wo.created_at ASC LIMIT 50`, procWoParams);
         items.push(...r.rows);
       }
     } catch (woErr) { console.error('[approvals WO feed]:', woErr.message); }
@@ -428,7 +452,7 @@ router.get('/pending', async (req, res) => {
     // 'approved_pm' item straight to the MD instead of stranding it.
     try {
       const ph = MRS_NON_TERMINAL_STATUSES.map((_, i) => `$${i + 2}`).join(',');
-      const r = await query(`
+      let mrsSql = `
         SELECT mr.id,
                COALESCE(mr.serial_no_formatted, mr.mrs_number) AS ref_no,
                mr.created_at AS doc_date,
@@ -449,8 +473,10 @@ router.get('/pending', async (req, res) => {
         FROM material_requisitions mr
         JOIN projects p ON p.id = mr.project_id
         LEFT JOIN users u ON u.id = mr.raised_by
-        WHERE p.company_id = $1 AND mr.status IN (${ph})
-        ORDER BY mr.created_at ASC`, [cid, ...MRS_NON_TERMINAL_STATUSES]);
+        WHERE p.company_id = $1 AND mr.status IN (${ph})`;
+      let mrsParams = [cid, ...MRS_NON_TERMINAL_STATUSES];
+      ({ sql: mrsSql, params: mrsParams } = appendProjectScope(req, mrsSql, mrsParams, 'p', 'id'));
+      const r = await query(`${mrsSql} ORDER BY mr.created_at ASC`, mrsParams);
 
       for (const row of r.rows) {
         const enabledIds = normalizeStageIds(row.mrs_workflow?.stages);
@@ -468,7 +494,11 @@ router.get('/pending', async (req, res) => {
     // ── 9. Stores Petty Cash entries pending project head approval ───────────────
     if (['project_head','project_manager','pm','admin','super_admin'].includes(role)) {
       try {
-        const r = await query(`
+        // LEFT JOIN (project_id is nullable for general/site-level entries), so
+        // scoping must explicitly let NULL-project rows through — appendProjectScope's
+        // plain `p.id = ANY(...)` would otherwise silently hide them for a
+        // project-scoped user, when they were never project-specific to begin with.
+        let pcSql = `
           SELECT e.id,
                  CONCAT('SL-', e.sl_no) AS ref_no,
                  e.entry_date AS doc_date,
@@ -485,9 +515,14 @@ router.get('/pending', async (req, res) => {
           FROM stores_petty_cash_entries e
           LEFT JOIN projects p ON p.id = e.project_id
           LEFT JOIN users   u ON u.id = e.created_by
-          WHERE e.company_id = $1 AND e.status = 'Pending'
-          ORDER BY e.created_at ASC
-          LIMIT 100`, [cid]);
+          WHERE e.company_id = $1 AND e.status = 'Pending'`;
+        let pcParams = [cid];
+        if (!req.isGlobalRole) {
+          const ids = req.allowedProjectIds || [];
+          pcParams.push(ids);
+          pcSql += ` AND (e.project_id IS NULL OR e.project_id = ANY($${pcParams.length}::uuid[]))`;
+        }
+        const r = await query(`${pcSql} ORDER BY e.created_at ASC LIMIT 100`, pcParams);
         items.push(...r.rows);
       } catch (e) { console.error('[approvals/pending] petty cash feed failed:', e.message); }
     }
@@ -509,7 +544,19 @@ router.get('/pending', async (req, res) => {
 // POST /api/v1/approvals/action
 // Approve or reject any item by entity_type + id
 // ════════════════════════════════════════════════════════════════════════════
-router.post('/action', async (req, res) => {
+const ACTION_ENTITY_PROJECT_LOOKUP = {
+  sc_bill:          { table: 'sc_bills',                    projectCol: 'project_id' },
+  sc_wo:            { table: 'sc_work_orders',               projectCol: 'project_id' },
+  sc_mb:            { table: 'sc_mb_entries',                 projectCol: 'project_id' },
+  sc_nmr:           { table: 'sc_nmr',                        projectCol: 'project_id' },
+  sc_retention:     { table: 'sc_retention_releases',         projectCol: 'project_id' },
+  mrs:              { table: 'material_requisitions',         projectCol: 'project_id' },
+  po:               { table: 'purchase_orders',                projectCol: 'project_id' },
+  work_order:       { table: 'work_orders',                    projectCol: 'project_id' },
+  petty_cash_entry: { table: 'stores_petty_cash_entries',      projectCol: 'project_id' },
+};
+
+router.post('/action', loadProjectScope, async (req, res) => {
   try {
     const { entity_type, entity_id, action, comments } = req.body;
     if (!entity_type || !entity_id || !['approve','reject','check'].includes(action)) {
@@ -520,6 +567,25 @@ router.post('/action', async (req, res) => {
     const uname = req.user.name;
     const now   = new Date().toISOString();
     const role  = ROLE(req);
+
+    // This endpoint used to trust entity_id blindly — a project-scoped user
+    // (e.g. a Project Manager on one project) who knew/guessed another
+    // project's item ID could approve/reject it directly, bypassing the feed's
+    // filtering entirely. Verify project access up front for every entity
+    // type that carries a project_id, before any mutation runs.
+    const lookup = ACTION_ENTITY_PROJECT_LOOKUP[entity_type];
+    if (lookup && !req.isGlobalRole) {
+      const projRes = await query(
+        `SELECT ${lookup.projectCol} AS project_id FROM ${lookup.table} WHERE id=$1`,
+        [entity_id]
+      );
+      const projectId = projRes.rows[0]?.project_id;
+      // NULL project_id (e.g. a general/site-less petty cash entry) is left
+      // through — it was never project-specific to begin with.
+      if (projectId && !userCanAccessProject(req, projectId)) {
+        return res.status(403).json({ error: 'You do not have access to this project\'s approvals.' });
+      }
+    }
 
     switch (entity_type) {
 

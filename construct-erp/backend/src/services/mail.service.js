@@ -140,11 +140,11 @@ const getTransport = () =>
     },
   });
 
-const sendMail = async ({ to, cc, subject, html, text, attachments = [] }) => {
+const sendMail = async ({ to, cc, subject, html, text, attachments = [], category }) => {
   let recipients = filterAlertRecipients({ recipients: normalizeRecipients(to), subject });
   let ccRecipients = filterAlertRecipients({ recipients: normalizeRecipients(cc), subject });
-  recipients = recipients.filter(email => !isBlockedEmail(email));
-  ccRecipients = ccRecipients.filter(email => !isBlockedEmail(email));
+  recipients = recipients.filter(email => !isBlockedEmail(email, category));
+  ccRecipients = ccRecipients.filter(email => !isBlockedEmail(email, category));
   if (!recipients.length) return { sent: false, reason: 'No recipients' };
 
   const results = [];

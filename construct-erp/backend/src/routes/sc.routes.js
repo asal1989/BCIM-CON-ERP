@@ -949,21 +949,128 @@ router.get('/workers', async (req, res) => {
   } catch(e){ res.status(500).json({ error: e.message }); }
 });
 
+// Site labour is enterable from two different screens — HR Employees and SC
+// Workers — and the Timesheet report merges both tables, so one person landing
+// in both (or twice in one) prints twice and inflates every headcount and
+// man-hour total. 80 labourers were double-counted exactly this way. These
+// checks reject the collision at the source rather than cleaning up after.
+//
+// Identifier collisions (worker_code / essl_emp_code / aadhaar) are never
+// legitimate and are refused outright. A repeated NAME is refused too, but
+// with requires_confirmation so the caller can re-send with
+// confirm_duplicate_name — two genuinely different people can share a name
+// under one contractor (e.g. the two Bijay Bhuiyans, Steel Fitter vs Helper).
+async function findWorkerDuplicate(cid, f) {
+  const selfExcluded = ` AND ($2::uuid IS NULL OR id <> $2)`;
+  const norm = (v) => (v == null ? '' : String(v).trim());
+
+  const code = norm(f.worker_code);
+  if (code) {
+    const r = await query(
+      `SELECT worker_name, status FROM sc_workers
+       WHERE company_id=$1 AND worker_code=$3${selfExcluded}`,
+      [cid, f.id || null, code]);
+    if (r.rows.length) return { error: `Worker code '${code}' is already used by "${r.rows[0].worker_name}" (${r.rows[0].status}). Codes must be unique.` };
+  }
+
+  const essl = norm(f.essl_emp_code);
+  if (essl) {
+    const r = await query(
+      `SELECT worker_name, status FROM sc_workers
+       WHERE company_id=$1 AND essl_emp_code=$3${selfExcluded}`,
+      [cid, f.id || null, essl]);
+    if (r.rows.length) return { error: `ESSL code '${essl}' is already mapped to "${r.rows[0].worker_name}" (${r.rows[0].status}). A shared ESSL code makes biometric punches land on the wrong person.` };
+  }
+
+  // Cross-table: the same code/ESSL id already belongs to an HR employee who
+  // has not exited. Adding them here as well is the double-count bug.
+  for (const [val, label] of [[code, 'Worker code'], [essl, 'ESSL code']]) {
+    if (!val) continue;
+    const r = await query(
+      `SELECT u.name, COALESCE(ep.employment_status,'active') AS st
+       FROM users u LEFT JOIN employee_profiles ep ON ep.user_id = u.id
+       WHERE u.company_id=$1 AND u.employee_code=$2
+         AND COALESCE(ep.employment_status,'active') = 'active'`,
+      [cid, val]);
+    if (r.rows.length) return { error: `${label} '${val}' already belongs to HR employee "${r.rows[0].name}". Entering the same person in both HR Employees and SC Workers double-counts them on every timesheet — use one or the other.` };
+  }
+
+  const aadhaar = norm(f.aadhar_number);
+  if (aadhaar) {
+    const r = await query(
+      `SELECT worker_name FROM sc_workers
+       WHERE company_id=$1 AND aadhar_number=$3${selfExcluded}`,
+      [cid, f.id || null, aadhaar]);
+    if (r.rows.length) return { error: `Aadhaar ${aadhaar} is already registered to "${r.rows[0].worker_name}".` };
+  }
+
+  const name = norm(f.worker_name);
+  if (name && !f.confirm_duplicate_name) {
+    const r = await query(
+      `SELECT w.worker_code, w.skill_type, w.status, sc.name AS sc_name
+       FROM sc_workers w LEFT JOIN sc_subcontractors sc ON sc.id = w.sc_id
+       WHERE w.company_id=$1 AND LOWER(TRIM(w.worker_name)) = LOWER($3)
+         AND ($4::uuid IS NULL OR w.sc_id = $4)
+         AND ($2::uuid IS NULL OR w.id <> $2)`,
+      [cid, f.id || null, name, f.sc_id || null]);
+    if (r.rows.length) {
+      const d = r.rows[0];
+      return {
+        requires_confirmation: true,
+        error: `"${name}" already exists under ${d.sc_name || 'this contractor'} as ${d.worker_code} (${d.skill_type}, ${d.status}). If this is the same person, edit that record${d.status !== 'active' ? ' and reactivate it' : ''} instead of adding a second one. If it is genuinely a different person with the same name, confirm to continue.`,
+      };
+    }
+  }
+
+  return null;
+}
+
+// COUNT(*)+1 collided as soon as any worker was deleted; derive from the
+// highest existing WKR- number and retry on the unique index instead.
+async function nextWorkerCode(cid) {
+  const r = await query(
+    `SELECT COALESCE(MAX(NULLIF(regexp_replace(worker_code,'\\D','','g'),'')::bigint),0) AS mx
+     FROM sc_workers WHERE company_id=$1 AND worker_code LIKE 'WKR-%'`, [cid]);
+  return `WKR-${String(Number(r.rows[0].mx) + 1).padStart(4,'0')}`;
+}
+
 router.post('/workers', authorize(...PLANNER), async (req, res) => {
   try {
-    const { project_id, sc_id, wo_id, worker_name, skill_type, daily_rate, mobile, aadhar_number, essl_emp_code, joined_date } = req.body;
-    if (!worker_name) return res.status(400).json({ error: 'worker_name required' });
-    const cnt = (await query(`SELECT COUNT(*) FROM sc_workers WHERE company_id=$1`, [CID(req)])).rows[0].count;
-    const worker_code = `WKR-${String(parseInt(cnt)+1).padStart(4,'0')}`;
+    const { project_id, sc_id, wo_id, worker_name, skill_type, daily_rate, mobile, aadhar_number, essl_emp_code, joined_date, confirm_duplicate_name } = req.body;
+    if (!worker_name || !String(worker_name).trim()) return res.status(400).json({ error: 'worker_name required' });
+
+    const worker_code = String(req.body.worker_code || '').trim() || await nextWorkerCode(CID(req));
+
+    const dup = await findWorkerDuplicate(CID(req), {
+      worker_code, essl_emp_code, aadhar_number, worker_name, sc_id, confirm_duplicate_name,
+    });
+    if (dup) return res.status(409).json(dup);
+
     const r = await query(`INSERT INTO sc_workers (company_id,project_id,sc_id,wo_id,worker_code,worker_name,skill_type,daily_rate,mobile,aadhar_number,essl_emp_code,joined_date,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-      [CID(req),project_id||null,sc_id||null,wo_id||null,worker_code,worker_name,skill_type||'Unskilled',daily_rate||0,mobile||null,aadhar_number||null,essl_emp_code||null,joined_date||null,req.user.id]);
+      [CID(req),project_id||null,sc_id||null,wo_id||null,worker_code,String(worker_name).trim(),skill_type||'Unskilled',daily_rate||0,mobile||null,aadhar_number||null,essl_emp_code||null,joined_date||null,req.user.id]);
     res.status(201).json({ data: r.rows[0] });
-  } catch(e){ res.status(500).json({ error: e.message }); }
+  } catch(e){
+    if (e.code === '23505') return res.status(409).json({ error: 'That worker code or ESSL code is already in use.' });
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.put('/workers/:id', authorize(...PLANNER), async (req, res) => {
   try {
-    const { project_id, sc_id, wo_id, worker_name, skill_type, daily_rate, mobile, aadhar_number, essl_emp_code, status, joined_date } = req.body;
+    const { project_id, sc_id, wo_id, worker_name, skill_type, daily_rate, mobile, aadhar_number, essl_emp_code, status, joined_date, confirm_duplicate_name } = req.body;
+
+    // Same duplicate rules as create, excluding this row from the comparison.
+    // Only fields actually being changed are checked, so a partial edit (the
+    // inline ESSL-code cell, for instance) is not blocked by its own values.
+    const dup = await findWorkerDuplicate(CID(req), {
+      id: req.params.id,
+      essl_emp_code, aadhar_number,
+      worker_name: worker_name || null,
+      sc_id: sc_id || null,
+      confirm_duplicate_name,
+    });
+    if (dup) return res.status(409).json(dup);
+
     const r = await query(
       `UPDATE sc_workers SET
          project_id=COALESCE($1,project_id), sc_id=COALESCE($2,sc_id), wo_id=COALESCE($3,wo_id),
@@ -978,7 +1085,10 @@ router.put('/workers/:id', authorize(...PLANNER), async (req, res) => {
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Worker not found' });
     res.json({ data: r.rows[0] });
-  } catch(e){ res.status(500).json({ error: e.message }); }
+  } catch(e){
+    if (e.code === '23505') return res.status(409).json({ error: 'That worker code or ESSL code is already in use.' });
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // DELETE /sc/workers/:id — remove a worker not tied to any NMR or attendance history

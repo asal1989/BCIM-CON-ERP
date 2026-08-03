@@ -13,7 +13,7 @@ function ConvCard({ name, sub, avatar, photo, isActive, badge, isOnline, isGroup
   return (
     <motion.button
       onClick={onClick}
-      whileHover={{ backgroundColor: isActive ? '#EFF6FF' : '#F8FAFC' }}
+      whileHover={{ backgroundColor: isActive ? C.primaryLight : C.bg }}
       style={{
         width: '100%', display: 'flex', alignItems: 'center', gap: 12,
         padding: '10px 16px', border: 'none', cursor: 'pointer', textAlign: 'left',
@@ -128,14 +128,17 @@ export function ConvListPanel({
     }}>
 
       {/* ── Sidebar header (always visible) ── */}
-      <div style={{ padding: '12px 14px 10px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: mainView === 'chat' ? 8 : 0 }}>
+      <div style={{
+        padding: '14px 14px 10px', flexShrink: 0,
+        background: `linear-gradient(135deg, ${C.primary}, ${C.primaryHover})`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: mainView === 'chat' ? 10 : 2 }}>
           <div>
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: C.text, letterSpacing: '-0.02em' }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#fff', letterSpacing: '-0.02em' }}>
               {mainView === 'calls' ? 'Call Logs' : mainView === 'meetings' ? 'Teams Meetings' : 'Team Chat'}
             </h2>
-            <p style={{ fontSize: 11, color: C.muted, marginTop: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: connected ? C.green : C.subtle, display: 'inline-block' }} />
+            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)', marginTop: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: connected ? '#4ADE80' : 'rgba(255,255,255,0.4)', display: 'inline-block' }} />
               {connected ? 'Connected' : 'Connecting…'}
             </p>
           </div>
@@ -143,9 +146,9 @@ export function ConvListPanel({
             title="Schedule Teams Meeting"
             style={{
               display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px',
-              borderRadius: 9, border: 'none', background: '#5058E5', cursor: 'pointer',
-              fontSize: 11.5, fontWeight: 600, color: '#fff',
-              boxShadow: '0 2px 8px rgba(80,88,229,0.3)',
+              borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${C.gold}, #9c7c1a)`, cursor: 'pointer',
+              fontSize: 11.5, fontWeight: 700, color: '#241D07',
+              boxShadow: `0 2px 8px ${C.gold}4d`,
             }}>
             <CalendarDays size={12} /> Meeting
           </motion.button>
@@ -153,14 +156,17 @@ export function ConvListPanel({
 
         {/* Search bar — chat view only */}
         {mainView === 'chat' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: C.bg, borderRadius: 10, padding: '7px 12px', border: `1px solid ${C.border}` }}>
-            <Search size={14} color={C.subtle} />
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, borderRadius: 10, padding: '7px 12px',
+            background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.18)',
+          }}>
+            <Search size={14} color="rgba(255,255,255,0.65)" />
             <input value={sidebarQ} onChange={e => setSidebarQ(e.target.value)}
               placeholder="Search conversations…"
-              style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13.5, color: C.text }} />
+              style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 13.5, color: '#fff' }} />
             {sidebarQ && (
               <button onClick={() => setSidebarQ('')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0 }}>
-                <X size={13} color={C.subtle} />
+                <X size={13} color="rgba(255,255,255,0.65)" />
               </button>
             )}
           </div>

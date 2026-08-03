@@ -1,5 +1,6 @@
 ﻿// src/pages/qs/VariationPage.jsx
 import React, { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeftRight, Plus, X, CheckCircle2, XCircle, Search,
@@ -50,7 +51,9 @@ export default function VariationPage() {
   const { user } = useAuthStore();
   const canApprove = ['super_admin', 'admin', 'project_manager'].includes(user?.role);
 
-  const [outerTab,  setOuterTab]  = useState('orders');   // 'orders' | 'statements' | 'amendments'
+  const [searchParams] = useSearchParams();
+  const initialTab = ['orders', 'statements', 'amendments'].includes(searchParams.get('tab')) ? searchParams.get('tab') : 'orders';
+  const [outerTab,  setOuterTab]  = useState(initialTab);   // 'orders' | 'statements' | 'amendments'
   const [projectId, setProjectId] = useState('');
   const [activeTab, setActiveTab] = useState('all');
   const [search,    setSearch]    = useState('');

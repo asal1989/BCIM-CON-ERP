@@ -1191,7 +1191,23 @@ async function runAutoMigrations() {
         ADD COLUMN IF NOT EXISTS in_time  TIME,
         ADD COLUMN IF NOT EXISTS out_time TIME
     `);
-    logger.info('✅ Auto-migrations complete (003–044)');
+    // Migration 045 — make duplicate site labour impossible at the storage
+    // layer. The application checks in sc.routes.js are the friendly first
+    // line of defence; these indexes are the one that cannot be bypassed by
+    // a concurrent request, a bulk import, or a future code path that forgets
+    // to call them. Partial so blank/NULL codes (legitimately many) don't
+    // collide with each other.
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uniq_sc_workers_company_code
+        ON sc_workers (company_id, worker_code)
+        WHERE worker_code IS NOT NULL AND TRIM(worker_code) <> ''
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uniq_sc_workers_company_essl
+        ON sc_workers (company_id, essl_emp_code)
+        WHERE essl_emp_code IS NOT NULL AND TRIM(essl_emp_code) <> ''
+    `);
+    logger.info('✅ Auto-migrations complete (003–045)');
   } catch (err) {
     logger.warn('⚠️  Auto-migration warning:', err.message);
   } finally {

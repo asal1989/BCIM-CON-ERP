@@ -126,6 +126,39 @@ router.delete('/:id', authorize('super_admin','admin'), async (req, res) => {
   res.json({ message: 'BOQ item deleted.' });
 });
 
+// POST /boq/copy — duplicate every active BOQ item from one project into another
+// (fresh copy: no current_rate/current_quantity/amendment_ref carried over).
+router.post('/copy', authorize('super_admin','admin','qs_engineer','project_manager'), async (req, res) => {
+  const { source_project_id, target_project_id } = req.body;
+  if (!source_project_id || !target_project_id) {
+    return res.status(400).json({ error: 'source_project_id and target_project_id are required' });
+  }
+  if (source_project_id === target_project_id) {
+    return res.status(400).json({ error: 'Source and target project must be different' });
+  }
+  const projCheck = await query(
+    `SELECT id FROM projects WHERE id = ANY($1::uuid[]) AND company_id = $2`,
+    [[source_project_id, target_project_id], req.user.company_id]
+  );
+  if (projCheck.rowCount !== 2) return res.status(404).json({ error: 'Source or target project not found' });
+
+  const result = await withTransaction(async (client) => {
+    const inserted = await client.query(
+      `INSERT INTO boq_items
+         (project_id, chapter_no, chapter_name, item_no, sr_no, description, short_description,
+          unit, quantity, rate, hsn_code, remarks, created_by)
+       SELECT $1, chapter_no, chapter_name, item_no, sr_no, description, short_description,
+              unit, quantity, rate, hsn_code, remarks, $2
+         FROM boq_items
+        WHERE project_id = $3 AND is_active = true
+       RETURNING id`,
+      [target_project_id, req.user.id, source_project_id]
+    );
+    return inserted.rowCount;
+  });
+  res.status(201).json({ data: { copied: result } });
+});
+
 // GET BOQ summary with executed quantities — company scoped
 router.get('/summary/:project_id', async (req, res) => {
   // Verify the project belongs to the requesting user's company

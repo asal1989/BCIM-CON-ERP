@@ -125,6 +125,11 @@ export default function LoginPage() {
   const navigate             = useNavigate();
   const [searchParams]       = useSearchParams();
   const redirectReason       = searchParams.get('reason');
+  // ?next=/oauth/authorize?... — set by the OIDC bridge page when it needs the
+  // user to log in first, so they land back there to finish the SSO handshake
+  // instead of at the ERP homepage. Only ever a same-origin relative path.
+  const nextParam             = searchParams.get('next');
+  const postLoginPath = () => (nextParam && nextParam.startsWith('/')) ? nextParam : '/';
 
   const { register, handleSubmit, formState: { errors } } = useForm({ resolver: zodResolver(schema) });
 
@@ -159,7 +164,7 @@ export default function LoginPage() {
     // normally, same as on the main ERP domain.
     if (ess && !isEssFullAccessRole(currentUser?.role)) {
       clearSelectedProject();
-      navigate('/', { replace: true });
+      navigate(postLoginPath(), { replace: true });
       return;
     }
     setPendingUser(currentUser);
@@ -177,7 +182,7 @@ export default function LoginPage() {
       if (isGlobalRole(currentUser?.role)) {
         clearSelectedProject();
         toast.success('Welcome back!');
-        navigate('/', { replace: true });
+        navigate(postLoginPath(), { replace: true });
       } else {
         setProjectError(message);
       }
@@ -189,7 +194,7 @@ export default function LoginPage() {
   useEffect(() => {
     if (!user) return;
     if (selectedProjectId) {
-      navigate('/', { replace: true });
+      navigate(postLoginPath(), { replace: true });
       return;
     }
     if (loginStep === 'credentials') {
@@ -212,13 +217,13 @@ export default function LoginPage() {
     setPickingId(project.id);
     setSelectedProject(project);
     toast.success(`Project selected: ${project.name}`);
-    setTimeout(() => navigate('/', { replace: true }), 80);
+    setTimeout(() => navigate(postLoginPath(), { replace: true }), 80);
   };
 
   const openAllProjects = () => {
     clearSelectedProject();
     toast.success('All projects view selected');
-    navigate('/', { replace: true });
+    navigate(postLoginPath(), { replace: true });
   };
 
   const backToCredentials = async () => {

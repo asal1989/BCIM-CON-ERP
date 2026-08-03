@@ -3,7 +3,7 @@ import RecordAttachments from '../../components/shared/RecordAttachments';
 import MaterialCombobox from '../../components/shared/MaterialCombobox';
 import SearchableSelect from '../../components/shared/SearchableSelect';
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import useAuthStore from '../../store/authStore';
 import {
@@ -439,12 +439,27 @@ export default function MRSPage() {
   const printRef   = useRef(null);
   const handlePrint = useReactToPrint({ contentRef: printRef });
   const location = useLocation();
+  const navigate = useNavigate();
   const [showForm, setShowForm] = useState(false);
   const [hasDraft, setHasDraft] = useState(() => {
     try { return !!localStorage.getItem(MRS_DRAFT_KEY); } catch { return false; }
   });
   const [selectedMRS, setSelectedMRS] = useState(null);
   const [search, setSearch] = useState('');
+
+  // True while the currently-open MRS was reached via the "My Approvals" deep
+  // link, so closing it (reject, or manually navigating back once done working
+  // through its multi-stage approval chain) returns the user to their inbox
+  // instead of stranding them on the MRS list. Consumed once so an MRS opened
+  // afterward by clicking a row directly doesn't also redirect away.
+  const [fromApprovalsFeed, setFromApprovalsFeed] = useState(false);
+  const closeSelectedMRS = () => {
+    setSelectedMRS(null);
+    if (fromApprovalsFeed) {
+      setFromApprovalsFeed(false);
+      navigate('/approvals');
+    }
+  };
   const [statusFilter, setStatusFilter] = useState('all');
   const [showWorkflowConfig, setShowWorkflowConfig] = useState(false);
   const [projectFilter, setProjectFilter] = useState(selectedProjectId || 'all');
@@ -501,6 +516,7 @@ export default function MRSPage() {
     const found = mrsData.find(m => m.id === viewId);
     if (found) {
       setSelectedMRS(found);
+      setFromApprovalsFeed(true);
       window.history.replaceState({}, '');
     }
   }, [location.state, mrsData]);
@@ -570,7 +586,7 @@ export default function MRSPage() {
     mutationFn: ({ id, remarks }) => mrsAPI.reject(id, { remarks }),
     onSuccess: () => {
       toast.success('MRS rejected');
-      setSelectedMRS(null);
+      closeSelectedMRS();
       qc.invalidateQueries({ queryKey: ['mrs', user?.id] });
     },
     onError: (e) => toast.error(e?.response?.data?.error || 'Action failed'),
@@ -1004,7 +1020,7 @@ export default function MRSPage() {
         <div className="mrs-screen-ui bg-white border-b border-slate-200 px-5 md:px-8 py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setSelectedMRS(null)}
+              onClick={closeSelectedMRS}
               className="h-9 px-3 rounded-lg border border-slate-200 flex items-center gap-2 text-xs font-semibold text-slate-700 hover:text-indigo-700 hover:border-indigo-300 transition-all"
             >
               <ChevronRight className="w-4 h-4 rotate-180" />
@@ -1050,7 +1066,7 @@ export default function MRSPage() {
               <Printer className="w-3.5 h-3.5" /> {!detailedMRS ? 'Loading' : 'Print'}
             </button>
             <button
-              onClick={() => setSelectedMRS(null)}
+              onClick={closeSelectedMRS}
               className="w-9 h-9 rounded-lg border border-slate-200 flex items-center justify-center text-slate-700 hover:text-red-600 hover:border-red-200 transition-all"
             >
               <X className="w-4 h-4" />

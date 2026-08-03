@@ -9,7 +9,7 @@ import {
   TrendingUp, Wallet, Receipt, ShieldCheck, History,
   MapPin, CalendarDays, Hash, Coins, Check, X as XIcon, Pencil,
   HardHat, AlertTriangle, BarChart3, BookOpen, Package, ClipboardList,
-  ShoppingCart, Users, Activity, ExternalLink, Download,
+  ShoppingCart, Users, Activity, ExternalLink, Download, Network,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
@@ -295,6 +295,7 @@ export default function ProjectDetail() {
                 { label: 'Stock Verify',     icon: Package,       to: `/stores/stock-verification`,           color: 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100' },
                 { label: 'HSE / Safety',     icon: Activity,      to: `/hse?project_id=${id}`,                color: 'bg-red-50 text-red-700 border-red-100 hover:bg-red-100' },
                 { label: 'HR Workforce',     icon: Users,         to: `/hr/workers`,                          color: 'bg-purple-50 text-purple-700 border-purple-100 hover:bg-purple-100' },
+                { label: 'Org Chart',        icon: Network,       to: `/hr-admin/org-chart?project_id=${id}`, color: 'bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100' },
                 { label: 'Project 360°',     icon: BarChart3,     to: `/reports/360`,                         color: 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100' },
               ].map(({ label, icon: Icon, to, color }) => (
                 <Link key={label} to={to} className={clsx('flex items-center gap-2 rounded-lg border px-3 py-2.5 text-xs font-medium transition-all', color)}>

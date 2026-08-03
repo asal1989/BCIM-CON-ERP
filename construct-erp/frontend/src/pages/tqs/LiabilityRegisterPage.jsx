@@ -69,6 +69,7 @@ const ENTRY = {
   'Other Deduction':  { label: 'Deduction',    color: C.slate,   bg: C.slateBg,   border: C.slateBorder,   side: 'debit'  },
   'Advance Given':    { label: 'Advance',      color: C.amber,   bg: C.amberBg,   border: C.amberBorder,   side: 'debit'  },
   'Advance Recovery': { label: 'Adv.Recovery', color: C.slate,   bg: C.slateBg,   border: C.slateBorder,   side: 'debit'  },
+  'Retention Held':   { label: 'Retention',    color: C.amber,   bg: C.amberBg,   border: C.amberBorder,   side: 'debit'  },
 };
 
 function TxnBadge({ type }) {
@@ -147,6 +148,7 @@ function buildPrint({ vendorName, fromDate, toDate, ledger, totals, selRow, proj
       { l: 'Total Invoiced', v: selRow.total_invoiced, c: '#2563eb' },
       { l: 'Payments Made',  v: selRow.total_paid,     c: '#2563eb' },
       { l: 'TDS Deducted',   v: selRow.total_tds,      c: '#0f172a' },
+      ...(parseFloat(selRow.total_retention || 0) > 0 ? [{ l: 'Retention Held', v: selRow.total_retention, c: '#0f172a' }] : []),
       { l: 'Advance Given',  v: selRow.total_advance_given, c: '#2563eb' },
       { l: 'Net Payable',    v: cb, c: cb > 0 ? '#2563eb' : '#0f172a' },
       { l: 'Transactions',   v: null, c: '#0f172a', count: ledger.length },
@@ -858,6 +860,9 @@ export default function LiabilityRegisterPage() {
                     { label: 'Invoiced', val: selRow.total_invoiced,      color: C.blue, bg: C.blueBg, border: C.blueBorder },
                     { label: 'Paid',     val: selRow.total_paid,          color: C.blue, bg: C.blueBg, border: C.blueBorder },
                     { label: 'TDS',      val: selRow.total_tds,           color: C.slate, bg: C.slateBg, border: C.slateBorder },
+                    ...(parseFloat(selRow.total_retention || 0) > 0
+                      ? [{ label: 'Retention', val: selRow.total_retention, color: C.amber, bg: C.amberBg, border: C.amberBorder }]
+                      : []),
                     { label: 'Advance Open', val: selRow.total_advance_open || selRow.total_advance_given, color: C.amber, bg: C.amberBg, border: C.amberBorder },
                     { label: '90+ Due',  val: selRow.payable_90_plus,     color: C.red, bg: C.redBg, border: C.redBorder },
                   ].map(s => (

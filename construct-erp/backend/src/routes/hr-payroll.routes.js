@@ -116,25 +116,21 @@ function calcESI(gross, applicable) {
   };
 }
 
-// Professional Tax — uses company's hr_pt_slabs table; falls back to Maharashtra
-// Maharashtra schedule: Mar=₹0, Feb=₹300, Apr–Jan ₹175/₹200 by slab
+// Professional Tax — uses the company's own hr_pt_slabs table. PT varies by
+// state, so a company with no slabs configured gets ZERO PT deducted (not a
+// silently-applied Maharashtra default) — the /run response surfaces a
+// pt_warning telling the preparer to configure slabs under HR Masters.
 function calcPT(gross, month, applicable, ptSlabs) {
   if (!applicable) return 0;
-  if (month === 3) return 0; // March exempt (Maharashtra annual cap ₹2,500 = 10×200 + 300)
+  if (!ptSlabs || !ptSlabs.length) return 0;
   const g = parseFloat(gross);
-  if (ptSlabs && ptSlabs.length) {
-    // slabs are [{min_salary, max_salary, pt_amount, feb_amount}] ordered by min_salary ASC
-    const slab = ptSlabs.find(s =>
-      g > parseFloat(s.min_salary) &&
-      (s.max_salary === null || g <= parseFloat(s.max_salary))
-    );
-    if (!slab) return 0;
-    return month === 2 ? parseFloat(slab.feb_amount || slab.pt_amount) : parseFloat(slab.pt_amount);
-  }
-  // Maharashtra default
-  if (g <= 7500)  return 0;
-  if (g <= 10000) return month === 2 ? 300 : 175;
-  return month === 2 ? 300 : 200;
+  // slabs are [{min_salary, max_salary, pt_amount, feb_amount}] ordered by min_salary ASC
+  const slab = ptSlabs.find(s =>
+    g > parseFloat(s.min_salary) &&
+    (s.max_salary === null || g <= parseFloat(s.max_salary))
+  );
+  if (!slab) return 0;
+  return month === 2 ? parseFloat(slab.feb_amount || slab.pt_amount) : parseFloat(slab.pt_amount);
 }
 
 // Working days in a month (Mon–Sat)
@@ -258,12 +254,19 @@ router.post('/run', async (req, res) => {
          LIMIT 1
        ) es ON TRUE
        LEFT JOIN employee_profiles ep ON ep.user_id = u.id
-       WHERE u.company_id = $2 AND u.is_active = TRUE`;
+       WHERE u.company_id = $2 AND u.is_active = TRUE
+         AND u.id NOT IN (SELECT user_id FROM hr_stop_salary WHERE company_id = $2)`;
     const employeeParams = [m, req.user.company_id, y];
     let epIdx = 4;
     if (user_id)    { employeeSql += ` AND u.id = $${epIdx}`;          employeeParams.push(user_id);    epIdx++; }
     if (project_id) { employeeSql += ` AND ep.project_id = $${epIdx}`; employeeParams.push(project_id); epIdx++; }
     const employees = await query(employeeSql, employeeParams);
+
+    const stoppedRes = await query(
+      `SELECT u.name FROM hr_stop_salary ss JOIN users u ON u.id = ss.user_id WHERE ss.company_id = $1`,
+      [req.user.company_id]
+    );
+    const stoppedNames = stoppedRes.rows.map(r => r.name);
 
     if (!employees.rows.length) {
       return res.status(400).json({
@@ -287,6 +290,7 @@ router.post('/run', async (req, res) => {
       `SELECT u.id, u.name FROM users u
        LEFT JOIN employee_profiles ep ON ep.user_id = u.id
        WHERE u.company_id=$1 AND u.is_active=TRUE
+       AND u.id NOT IN (SELECT user_id FROM hr_stop_salary WHERE company_id=$1)
        ${user_id ? 'AND u.id=$2' : ''}
        ${project_id ? `AND ep.project_id=$${user_id ? 3 : 2}` : ''}`,
       [req.user.company_id, ...(user_id ? [user_id] : []), ...(project_id ? [project_id] : [])]
@@ -331,10 +335,28 @@ router.post('/run', async (req, res) => {
       );
       const a = att.rows[0];
       const paidDays = parseFloat(a.present || 0) + parseFloat(a.half_day || 0) * 0.5 + parseFloat(a.on_leave || 0);
-      const lopDays  = workDays - paidDays;
+
+      // Manual LOP adjustments (hr_lop_days) — 'lop'/'retrospective' add extra
+      // unpaid days beyond what attendance alone shows; 'reversal' cancels LOP
+      // back out (e.g. a regularization approved after the attendance baseline
+      // was already marked). These previously had no effect on payroll at all.
+      const manualLopRes = await query(
+        `SELECT type, COALESCE(SUM(lop_days),0) AS days FROM hr_lop_days
+          WHERE company_id=$1 AND user_id=$2 AND month=$3 AND year=$4
+          GROUP BY type`,
+        [req.user.company_id, emp.user_id, m, y]
+      );
+      let manualLopDelta = 0;
+      for (const r of manualLopRes.rows) {
+        const days = parseFloat(r.days || 0);
+        manualLopDelta += r.type === 'reversal' ? -days : days;
+      }
+
+      const lopDays = Math.max(0, workDays - paidDays + manualLopDelta);
+      const effectivePaidDays = Math.max(0, workDays - lopDays);
 
       // Pro-rate salary if LOP (cap at 1.0 — Sunday/holiday swipes can push paidDays > workDays)
-      const lopFactor = workDays > 0 ? Math.min(1, paidDays / workDays) : 1;
+      const lopFactor = workDays > 0 ? Math.min(1, effectivePaidDays / workDays) : 1;
       const basic = Math.round(parseFloat(emp.basic || 0) * lopFactor);
       const hra   = Math.round(parseFloat(emp.hra   || 0) * lopFactor);
       const conv  = Math.round(parseFloat(emp.conveyance || 0) * lopFactor);
@@ -400,7 +422,7 @@ router.post('/run', async (req, res) => {
            pf_employee=$14, pf_employer=$15, esi_employee=$16, esi_employer=$17, pt=$18,
            loan_deduction=$19, total_deductions=$20, net_pay=$21, status='draft'
          RETURNING *`,
-        [req.user.company_id, emp.user_id, m, y, workDays, paidDays, Math.max(0, lopDays),
+        [req.user.company_id, emp.user_id, m, y, workDays, effectivePaidDays, lopDays,
          basic, hra, conv, med, spec, gross,
          pf.emp, pf.er, esi.emp, esi.er, pt, loanDed,
          totalDed, netPay]
@@ -414,6 +436,8 @@ router.post('/run', async (req, res) => {
       month: m,
       year: y,
       ...(missingSalary.length ? { missing_salary_employees: missingSalary } : {}),
+      ...(stoppedNames.length ? { stopped_salary_employees: stoppedNames } : {}),
+      ...(ptSlabs.length === 0 ? { pt_warning: 'No PT slabs configured for this company — Professional Tax was not deducted for anyone this run. Configure PT slabs under HR Masters.' } : {}),
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

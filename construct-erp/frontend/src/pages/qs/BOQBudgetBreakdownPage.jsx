@@ -1,5 +1,6 @@
 // src/pages/qs/BOQBudgetBreakdownPage.jsx — Master-detail BOQ budget allocation
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useReactToPrint } from 'react-to-print';
 import { clsx } from 'clsx';
@@ -10,7 +11,7 @@ import {
   Bell, TrendingUp, TrendingDown, Activity, Building2,
 } from 'lucide-react';
 import {
-  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  AreaChart, Area, BarChart, Bar, ComposedChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
@@ -244,12 +245,14 @@ function ChapterBudgetCell({ value, onSave, saving }) {
   );
 }
 
-// ─── Editable plan cell (RA Bills Comparison — Plan RA bills grid) ───────────
-function RaPlanCell({ value, onSave, saving }) {
+// ─── Editable plan/actual cell (RA Bills Comparison grids) ───────────────────
+// Shared by both the Plan RA bills grid (amber) and the Actual Value grid
+// (emerald) — same click-to-edit behaviour, different accent + optional lock.
+function RaPlanCell({ value, onSave, saving, hoverClass = 'hover:bg-amber-100', locked = false, lockedTitle }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState('');
 
-  const open = () => { setVal(value > 0 ? String(Math.round(value)) : ''); setEditing(true); };
+  const open = () => { if (locked) return; setVal(value > 0 ? String(Math.round(value)) : ''); setEditing(true); };
   const commit = () => {
     const n = parseFloat(val);
     setEditing(false);
@@ -269,8 +272,9 @@ function RaPlanCell({ value, onSave, saving }) {
   );
 
   return (
-    <button onClick={open} disabled={saving}
-      className="w-full h-8 text-right text-xs px-1.5 rounded hover:bg-amber-100 transition-colors disabled:opacity-50">
+    <button onClick={open} disabled={saving || locked} title={locked ? lockedTitle : undefined}
+      className={clsx('w-full h-8 text-right text-xs px-1.5 rounded transition-colors disabled:opacity-50',
+        locked ? 'cursor-default' : hoverClass)}>
       {value > 0 ? Math.round(value).toLocaleString('en-IN') : <span className="text-slate-300 italic">—</span>}
     </button>
   );
@@ -281,7 +285,7 @@ function RaPlanCell({ value, onSave, saving }) {
 // fixed: RA1-RA9 mapped to July-March. Plan values are hand-entered per cell;
 // Actual values are computed server-side from real RA bills, assigned to
 // RA1..RA9 by chronological submission order (1st bill ever raised = RA1).
-function RaBillsComparisonTab({ chapterRows, months, planMap, actualMap, bills, onSaveCell, saving }) {
+function RaBillsComparisonTab({ chapterRows, months, planMap, actualMap, actualSourceMap = {}, bills, onSaveCell, saving, onSaveActualCell, savingActual }) {
   const inr0 = (v) => Math.round(v || 0).toLocaleString('en-IN');
 
   const planColTotals = months.map((_, i) =>
@@ -297,6 +301,24 @@ function RaBillsComparisonTab({ chapterRows, months, planMap, actualMap, bills, 
 
   const billByIndex = {};
   bills.forEach(b => { billByIndex[b.ra_index] = b; });
+
+  // Chart data — per-period Planned vs Actual, plus a cumulative S-curve
+  // against the total BOQ value so progress vs plan reads at a glance.
+  let planCum = 0, actualCum = 0;
+  const chartData = months.map((m, i) => {
+    planCum += planColTotals[i];
+    actualCum += actualColTotals[i];
+    return {
+      period: `RA${i + 1}`,
+      month: m,
+      planned: planColTotals[i],
+      actual: actualColTotals[i],
+      plannedCum: planCum,
+      actualCum: actualCum,
+    };
+  });
+  const lakh = (v) => `₹${(v / 100000).toFixed(v >= 1000000 ? 0 : 1)}L`;
+  const chartTooltip = (value, name) => [inr(value), name];
 
   const renderTable = ({ title, subtitle, cellClass, headClass, isActual }) => (
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
@@ -338,9 +360,17 @@ function RaBillsComparisonTab({ chapterRows, months, planMap, actualMap, bills, 
                   const raIdx = mi + 1;
                   if (isActual) {
                     const v = actualMap[`${c.key}::${raIdx}`] || 0;
+                    const fromBill = actualSourceMap[`${c.key}::${raIdx}`] === 'bill';
                     return (
-                      <td key={mi} className="px-2 py-1.5 text-right border border-slate-200 text-slate-600">
-                        {v > 0 ? inr0(v) : <span className="text-slate-300">—</span>}
+                      <td key={mi} className="p-0 border border-slate-200">
+                        <RaPlanCell
+                          value={v}
+                          saving={savingActual}
+                          hoverClass="hover:bg-emerald-100"
+                          locked={fromBill}
+                          lockedTitle={fromBill ? `From ${billByIndex[raIdx]?.bill_number || 'a submitted RA bill'} — edit the bill to change this` : undefined}
+                          onSave={(n) => onSaveActualCell(c.key, raIdx, n)}
+                        />
                       </td>
                     );
                   }
@@ -379,6 +409,43 @@ function RaBillsComparisonTab({ chapterRows, months, planMap, actualMap, bills, 
 
   return (
     <div className="space-y-5">
+      {/* ── Planned vs Actual chart — grouped bars per RA period + cumulative S-curve ── */}
+      {planBoqTotal > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm font-bold text-slate-800">RA Bills — Planned vs Actual</p>
+              <p className="text-xs text-slate-400">Bars: billed per RA period · Line: cumulative progress against BOQ value</p>
+            </div>
+            <div className="flex items-center gap-4 text-xs">
+              {[['Planned', '#F59E0B'], ['Actual', '#10B981'], ['Cumulative Planned', '#D97706'], ['Cumulative Actual', '#059669']].map(([l, c]) => (
+                <div key={l} className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-sm" style={{ background: c }} />
+                  <span className="text-slate-500">{l}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={320}>
+            <ComposedChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+              <XAxis dataKey="period" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={lakh} />
+              <Tooltip
+                formatter={chartTooltip}
+                labelFormatter={(label, payload) => payload?.[0]?.payload ? `${label} — ${payload[0].payload.month}` : label}
+              />
+              <ReferenceLine y={planBoqTotal} stroke="#94A3B8" strokeDasharray="4 4"
+                label={{ value: `BOQ Value ${lakh(planBoqTotal)}`, position: 'insideTopRight', fontSize: 10, fill: '#94A3B8' }} />
+              <Bar dataKey="planned" name="Planned" fill="#F59E0B" radius={[3, 3, 0, 0]} barSize={22} />
+              <Bar dataKey="actual" name="Actual" fill="#10B981" radius={[3, 3, 0, 0]} barSize={22} />
+              <Line type="monotone" dataKey="plannedCum" name="Cumulative Planned" stroke="#D97706" strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="actualCum" name="Cumulative Actual" stroke="#059669" strokeWidth={2} dot={{ r: 3 }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       {renderTable({
         title: 'RA Bills Comparison (Planned vs Actual)',
         subtitle: 'Click any month cell to enter the planned billing amount for that chapter — saved per project',
@@ -387,7 +454,7 @@ function RaBillsComparisonTab({ chapterRows, months, planMap, actualMap, bills, 
       })}
       {renderTable({
         title: 'Actual Value',
-        subtitle: 'Auto-computed from real RA bills, assigned to RA1-RA9 in the order they were submitted',
+        subtitle: 'Auto-filled from real RA bills where one exists (locked, greyed on hover) — click any other cell to enter the actual amount manually',
         headClass: 'bg-emerald-50',
         isActual: true,
       })}
@@ -1215,10 +1282,11 @@ function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-      <div className="px-5 py-3 bg-slate-100 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
+      <div className="px-5 py-3 flex items-center justify-between flex-wrap gap-2"
+        style={{ background: `linear-gradient(90deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)` }}>
         <div>
-          <h3 className="text-sm font-bold text-slate-700">Monthly Expenditure Analysis</h3>
-          <p className="text-[11px] text-slate-400">Period: {months.length > 0 ? `${fmtMonth(months[0])} – ${fmtMonth(months[months.length - 1])}` : '—'} · Total paid: {fmtAmt(grandTotal)}</p>
+          <h3 className="text-sm font-bold text-white">Monthly Expenditure Analysis</h3>
+          <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.65)' }}>Period: {months.length > 0 ? `${fmtMonth(months[0])} – ${fmtMonth(months[months.length - 1])}` : '—'} · Total paid: {fmtAmt(grandTotal)}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {/* View toggle */}
@@ -1250,35 +1318,35 @@ function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName
 
           {/* Animated stacked bar — months × cost heads */}
           <div className="rounded-2xl overflow-hidden"
-            style={{ background: 'linear-gradient(135deg,#0f172a 0%,#1e1b4b 60%,#0f172a 100%)',
-                     boxShadow: '0 24px 64px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06)' }}>
+            style={{ background: `linear-gradient(135deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)`,
+                     boxShadow: '0 12px 32px rgba(18,45,88,0.22), inset 0 1px 0 rgba(255,255,255,0.05)' }}>
             <div className="px-5 pt-4 pb-2 border-b border-white/10 flex items-center justify-between">
               <div>
                 <p className="text-sm font-bold text-white tracking-wide">Monthly Expenditure by Cost Head</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">{months.length} months · Grand total {fmtCrore(grandTotal)}</p>
+                <p className="text-[11px] text-blue-100/70 mt-0.5">{months.length} months · Grand total {fmtCrore(grandTotal)}</p>
               </div>
               <span className="text-[10px] px-2.5 py-1 rounded-full font-semibold"
-                style={{ background: 'rgba(129,140,248,0.15)', color: '#a5b4fc', border: '1px solid rgba(129,140,248,0.3)' }}>
+                style={{ background: 'rgba(255,255,255,0.12)', color: '#dbeafe', border: '1px solid rgba(255,255,255,0.2)' }}>
                 Animated · Stacked
               </span>
             </div>
-            <div className="p-4" style={{ filter: 'drop-shadow(0 8px 32px rgba(99,102,241,0.25))' }}>
+            <div className="p-4">
               <ResponsiveContainer width="100%" height={400}>
                 <BarChart data={stackedBarData} margin={{ top: 8, right: 24, left: 8, bottom: 24 }}
                   barSize={Math.max(12, Math.min(36, Math.floor(400 / (months.length || 1) - 6)))}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-                  <XAxis dataKey="month" tick={{ fill: '#94a3b8', fontSize: 10 }} tickLine={false}
-                    axisLine={{ stroke: 'rgba(255,255,255,0.08)' }} angle={months.length > 8 ? -35 : 0}
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                  <XAxis dataKey="month" tick={{ fill: '#cbd5e1', fontSize: 10 }} tickLine={false}
+                    axisLine={{ stroke: 'rgba(255,255,255,0.12)' }} angle={months.length > 8 ? -35 : 0}
                     textAnchor={months.length > 8 ? 'end' : 'middle'} interval={0} />
-                  <YAxis tickFormatter={fmtCrore} tick={{ fill: '#64748b', fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <YAxis tickFormatter={fmtCrore} tick={{ fill: '#93a4c3', fontSize: 10 }} tickLine={false} axisLine={false} />
                   <Tooltip
                     formatter={(v, n) => [fmtAmt(v), n]}
-                    contentStyle={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, fontSize: 11 }}
-                    labelStyle={{ color: '#e2e8f0', fontWeight: 700 }}
-                    cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                    contentStyle={{ background: Theme.navyDark, border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, fontSize: 11 }}
+                    labelStyle={{ color: '#f1f5f9', fontWeight: 700 }}
+                    cursor={{ fill: 'rgba(255,255,255,0.05)' }}
                   />
-                  <Legend wrapperStyle={{ paddingTop: 14, fontSize: 10.5, color: '#94a3b8' }}
-                    formatter={(v) => <span style={{ color: '#cbd5e1' }}>{v}</span>} />
+                  <Legend wrapperStyle={{ paddingTop: 14, fontSize: 10.5, color: '#cbd5e1' }}
+                    formatter={(v) => <span style={{ color: '#e2e8f0' }}>{v}</span>} />
                   {BOQ_COST_HEADS_ORDER.map((head, i) => (
                     <Bar key={head} dataKey={head} stackId="a" fill={HEAD_COLORS[i % HEAD_COLORS.length]}
                       isAnimationActive animationDuration={900} animationBegin={i * 50} animationEasing="ease-out"
@@ -1294,11 +1362,11 @@ function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName
 
             {/* Donut — cost head distribution */}
             <div className="rounded-2xl overflow-hidden"
-              style={{ background: 'linear-gradient(135deg,#0f172a 0%,#0c1a3a 100%)',
-                       boxShadow: '0 16px 48px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05)' }}>
+              style={{ background: `linear-gradient(135deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)`,
+                       boxShadow: '0 8px 24px rgba(18,45,88,0.18), inset 0 1px 0 rgba(255,255,255,0.05)' }}>
               <div className="px-4 pt-4 pb-2 border-b border-white/10">
                 <p className="text-sm font-bold text-white">Cost Head Distribution</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">Total spend breakdown across all cost heads</p>
+                <p className="text-[11px] text-blue-100/70 mt-0.5">Total spend breakdown across all cost heads</p>
               </div>
               <div className="flex flex-col items-center py-4">
                 <ResponsiveContainer width="100%" height={260}>
@@ -1308,22 +1376,21 @@ function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName
                       isAnimationActive animationBegin={0} animationDuration={1200} animationEasing="ease-out"
                       startAngle={90} endAngle={-270}>
                       {donutData.map((d, i) => (
-                        <Cell key={d.name} fill={d.color}
-                          style={{ filter: `drop-shadow(0 0 6px ${d.color}55)` }} />
+                        <Cell key={d.name} fill={d.color} />
                       ))}
                     </Pie>
                     <Tooltip formatter={(v, n) => [fmtAmt(v), n]}
-                      contentStyle={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, fontSize: 11 }}
-                      labelStyle={{ color: '#e2e8f0' }} />
+                      contentStyle={{ background: Theme.navyDark, border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, fontSize: 11 }}
+                      labelStyle={{ color: '#f1f5f9' }} />
                   </PieChart>
                 </ResponsiveContainer>
                 {/* Legend */}
                 <div className="px-4 pb-3 grid grid-cols-2 gap-x-4 gap-y-1.5 w-full">
                   {donutData.map(d => (
                     <div key={d.name} className="flex items-center gap-1.5 min-w-0">
-                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: d.color, boxShadow: `0 0 6px ${d.color}80` }} />
-                      <span className="text-[10px] text-slate-300 truncate">{d.name}</span>
-                      <span className="text-[10px] text-slate-500 ml-auto flex-shrink-0">{((d.value / grandTotal) * 100).toFixed(1)}%</span>
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: d.color }} />
+                      <span className="text-[10px] text-blue-50/80 truncate">{d.name}</span>
+                      <span className="text-[10px] text-blue-100/50 ml-auto flex-shrink-0">{((d.value / grandTotal) * 100).toFixed(1)}%</span>
                     </div>
                   ))}
                 </div>
@@ -1332,11 +1399,11 @@ function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName
 
             {/* Top-spending months horizontal bar */}
             <div className="rounded-2xl overflow-hidden"
-              style={{ background: 'linear-gradient(135deg,#0f172a 0%,#1a0e2e 100%)',
-                       boxShadow: '0 16px 48px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05)' }}>
+              style={{ background: `linear-gradient(135deg, ${Theme.navy} 0%, ${Theme.navyDark} 100%)`,
+                       boxShadow: '0 8px 24px rgba(18,45,88,0.18), inset 0 1px 0 rgba(255,255,255,0.05)' }}>
               <div className="px-4 pt-4 pb-2 border-b border-white/10">
                 <p className="text-sm font-bold text-white">Top Spending Months</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">Highest expenditure months (sorted)</p>
+                <p className="text-[11px] text-blue-100/70 mt-0.5">Highest expenditure months (sorted)</p>
               </div>
               <div className="p-4">
                 <div className="space-y-3 mt-1">
@@ -1346,15 +1413,14 @@ function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName
                     return (
                       <div key={d.month}>
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-[11px] font-semibold text-slate-300">{d.month}</span>
+                          <span className="text-[11px] font-semibold text-blue-50/80">{d.month}</span>
                           <span className="text-[11px] font-bold" style={{ color: barColor }}>{fmtCrore(d.total)}</span>
                         </div>
-                        <div className="h-5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                        <div className="h-5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
                           <div className="h-full rounded-full transition-all duration-1000"
                             style={{
                               width: `${pct}%`,
                               background: `linear-gradient(90deg, ${barColor}cc, ${barColor})`,
-                              boxShadow: `0 0 10px ${barColor}60`,
                               animation: `growBar 1s ease-out ${i * 80}ms both`,
                             }} />
                         </div>
@@ -1469,11 +1535,11 @@ function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName
         <table className="text-xs w-full min-w-max">
           <thead>
             <tr className="bg-[#0B2E59] text-white">
-              <th className="px-4 py-2.5 text-left sticky left-0 bg-[#0B2E59] z-10 min-w-[180px]">Cost Head</th>
+              <th className="px-4 py-2.5 text-left sticky left-0 bg-[#0B2E59] z-10 min-w-[180px] font-bold">Cost Head</th>
               {months.map(m => (
-                <th key={m} className="px-3 py-2.5 text-right min-w-[110px] font-medium">{fmtMonth(m)}</th>
+                <th key={m} className="px-3 py-2.5 text-right min-w-[110px] font-bold text-white">{fmtMonth(m)}</th>
               ))}
-              <th className="px-4 py-2.5 text-right min-w-[120px] font-bold bg-[#0D3870]">Total</th>
+              <th className="px-4 py-2.5 text-right min-w-[120px] font-bold bg-[#0D3870] text-white">Total</th>
             </tr>
           </thead>
           <tbody>
@@ -1511,6 +1577,234 @@ function CostHeadMonthlyTab({ projectId, projectName, projectAddress, clientName
         <BOQPrintFooter />
       </div>
       )}
+    </div>
+  );
+}
+
+// ─── Cost to Completion ───────────────────────────────────────────────────────
+const CTC_MANUAL_ROWS = {
+  advance_received: 'Advance received (Mobilization Advance, gross)',
+  blockwork_works: 'Blockwork Works',
+  plastering_works: 'Plastering Works',
+  waterproofing_works: 'Waterproofing Works',
+  misc_works: 'Misc',
+  gst_payable: 'GST Payable',
+  retention_money_recovered: 'Retention Money Recovered (RM)',
+  material_stock: 'Material Stock at Store',
+  other_projects_p3: 'Other Projects P3',
+  other_projects_tqs: 'Other Projects TQS',
+  bank_balance: 'Bank Balance',
+};
+
+// Where each auto-computed inflow figure comes from, surfaced as a tooltip so
+// the number is traceable back to its ERP source.
+const CTC_AUTO_NOTES = {
+  retention_money_recovered: 'Live from RA bills — retention held on certified/paid bills.',
+  material_stock: 'Live from Stores inventory — closing stock valued at rate.',
+  bank_balance: 'Live from Accounts — Bank Accounts control account (1010), scoped to this project only.',
+  other_projects_p3: 'Manual entry — cross-project fund allocation, no ERP source.',
+  other_projects_tqs: 'Manual entry — cross-project fund allocation, no ERP source.',
+};
+
+function CtcRow({ label, value, editable, editing, onStartEdit, onCancel, onSave, saving, bold, highlight, note, danger }) {
+  return (
+    <tr className={clsx('border-b border-slate-100', highlight && 'bg-emerald-50/50', danger && 'bg-rose-50/60')}>
+      <td className={clsx('px-4 py-2 text-right', danger ? 'font-bold text-rose-700' : 'text-slate-600', bold && !danger && 'font-bold text-slate-800')}>
+        <span className="inline-flex items-center gap-1">
+          {label}
+          {note && (
+            <span title={note} className="text-slate-300 cursor-help text-[10px]">ⓘ</span>
+          )}
+        </span>
+      </td>
+      <td className="px-4 py-2 text-right w-44">
+        {editing ? (
+          <div className="flex items-center justify-end gap-1">
+            <input autoFocus type="number" defaultValue={value}
+              onKeyDown={e => { if (e.key === 'Enter') onSave(parseFloat(e.target.value)); if (e.key === 'Escape') onCancel(); }}
+              onBlur={e => onSave(parseFloat(e.target.value))}
+              className="w-28 border border-violet-400 rounded-lg px-2 py-1 text-xs text-right focus:outline-none" />
+          </div>
+        ) : (
+          <button onClick={editable ? onStartEdit : undefined}
+            disabled={!editable || saving}
+            className={clsx('font-semibold tabular-nums',
+              danger ? 'text-rose-700'
+                : bold ? 'text-slate-900'
+                : editable ? 'text-blue-700 hover:underline underline-offset-2'
+                : 'text-slate-700')}>
+            ₹{Math.round(value || 0).toLocaleString('en-IN')}
+          </button>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function CostToCompletionTab({ projectId, projectName, contractValue }) {
+  const qc = useQueryClient();
+  const [editKey, setEditKey] = useState(null);
+
+  // This report's whole point is to reconcile against whatever's currently
+  // true in the ERP — the app-wide 15-minute staleTime (App.js QueryClient
+  // default) is the wrong tradeoff here, since real transactions entered
+  // elsewhere (a new SC bill, an RA bill certified, a TQS bill paid) would
+  // silently not show up on this tab for up to 15 minutes. Force it fresh.
+  const { data: ctc, isLoading } = useQuery({
+    queryKey: ['cost-to-completion', projectId],
+    queryFn: () => boqBudgetAPI.costToCompletion(projectId).then(r => r.data),
+    enabled: !!projectId,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+  });
+
+  const { data: summaryData } = useQuery({
+    queryKey: ['costhead-summary', projectId],
+    queryFn: () => boqBudgetAPI.costheadSummary(projectId).then(r => r.data),
+    enabled: !!projectId,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: (payload) => boqBudgetAPI.setCostToCompletion(projectId, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cost-to-completion', projectId] });
+      setEditKey(null);
+      toast.success('Saved');
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to save'),
+  });
+
+  if (isLoading || !ctc) return <div className="py-16 text-center text-slate-400 text-sm">Loading…</div>;
+
+  // Defensive fallbacks — a partial/errored response (e.g. one of the several
+  // sub-queries the backend aggregates failing for a specific project)
+  // previously crashed the whole tab with "Cannot read properties of
+  // undefined" instead of degrading gracefully.
+  const contractDetail = ctc.contract_detail || {};
+  const balanceWork   = ctc.balance_work   || {};
+  const liabilities   = ctc.liabilities    || {};
+  const inflow        = ctc.inflow        || {};
+  // Only these still accept typed input; everything else is computed live.
+  const manualFields  = ctc.manual_fields || ['other_projects_p3', 'other_projects_tqs'];
+
+  const rows = summaryData?.data || [];
+  const totalBudget = rows.filter(r => !r.derived).reduce((s, r) => s + r.budget, 0);
+  const totalActual = rows.filter(r => !r.derived).reduce((s, r) => s + r.actual, 0);
+  // Budget still available to finish the remaining work. When spend has
+  // already exceeded budget this goes negative — previously it was clamped to
+  // zero with Math.max, which silently swallowed the overrun and made an
+  // over-budget project read as if the remaining work were free. Now the
+  // clamp only governs the outflow contribution (future spend can't be
+  // negative) and the excess is surfaced as its own visible row.
+  const budgetRemaining        = totalBudget - totalActual;
+  const budgetedForBalanceWork = Math.max(budgetRemaining, 0);
+  const costOverrun            = Math.max(-budgetRemaining, 0);
+
+  const manual = (key) => contractDetail[key] ?? balanceWork[key] ?? liabilities[key] ?? inflow[key] ?? 0;
+  const commit = (key, val) => {
+    if (isNaN(val) || val < 0) { toast.error('Enter a valid amount'); return; }
+    saveMutation.mutate({ [key]: val });
+  };
+
+  const totalWorksToBeDone = ['blockwork_works', 'plastering_works', 'waterproofing_works', 'misc_works']
+    .reduce((s, k) => s + (balanceWork[k] || 0), 0);
+
+  const totalOutflow = budgetedForBalanceWork + (liabilities.sundry_creditors || 0) + (liabilities.advance_to_be_recovered || 0)
+    + (liabilities.retention_payable_subcontractor || 0) + (liabilities.gst_payable || 0);
+
+  const totalInflow = (inflow.ra_receivable || 0) + totalWorksToBeDone + (inflow.retention_money_recovered || 0)
+    + (inflow.material_stock || 0) + (inflow.other_projects_p3 || 0) + (inflow.other_projects_tqs || 0) + (inflow.bank_balance || 0);
+
+  const netPosition = totalInflow - totalOutflow;
+
+  const sectionHeader = (label, className) => (
+    <tr><td colSpan={2} className={clsx('px-4 py-2 font-bold text-white text-sm', className)}>{label}</td></tr>
+  );
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+      <div className="px-5 py-4 bg-gradient-to-r from-slate-800 to-slate-700">
+        <p className="text-white font-bold text-sm">{projectName} — Cost to Completion</p>
+        <p className="text-slate-300 text-[11px] mt-0.5">
+          Auto-computed live from ERP data — hover ⓘ on any row to see its source. Only the two
+          cross-project fund rows (blue, underlined) accept manual entry.
+          {ctc.updated_at && ` · last updated ${new Date(ctc.updated_at).toLocaleDateString('en-IN')}`}
+        </p>
+      </div>
+      <div className="max-w-2xl mx-auto py-5">
+        <table className="w-full text-sm">
+          <tbody>
+            {sectionHeader('Contract detail', 'bg-blue-900')}
+            <CtcRow label="Project Value" value={contractDetail.project_value} bold />
+            <CtcRow label={CTC_MANUAL_ROWS.advance_received} value={manual('advance_received')}
+              note="Live from Client Advance Requests — total of all receipt tranches recorded against this project." />
+            <CtcRow label="Cum running Invoice (RA) amount" value={contractDetail.ra_cumulative_amount}
+              note={`Sum of net_payable across ${contractDetail.ra_bill_count || 0} RA bill(s), including drafts.`} />
+
+            <tr><td colSpan={2} className="h-3" /></tr>
+            {sectionHeader('A. Balance work claim detail', 'bg-amber-600')}
+            {['blockwork_works', 'plastering_works', 'waterproofing_works', 'misc_works'].map(k => (
+              <CtcRow key={k} label={CTC_MANUAL_ROWS[k]} value={manual(k)}
+                note="Live from BOQ — chapter value for this trade, less what has already been billed against it." />
+            ))}
+            <CtcRow label="Total Works to Be Done" value={totalWorksToBeDone} bold highlight
+              note={`System check (Project Value − RA billed): ₹${Math.round(balanceWork.system_check_total || 0).toLocaleString('en-IN')}`} />
+
+            <tr><td colSpan={2} className="h-3" /></tr>
+            {sectionHeader('B. Liabilities - Payables', 'bg-slate-600')}
+            <CtcRow label="Budgeted cost for balance work completion (Execution A)" value={budgetedForBalanceWork}
+              note="Total Budget − Total Actual/Spent, live from Budget vs Actual. Floors at zero once the budget is fully consumed — any excess is shown on the row below." />
+            {costOverrun > 0 && (
+              <CtcRow danger
+                label="⚠ Cost overrun — budget already exceeded"
+                value={costOverrun}
+                note="Spend to date has passed the total budget by this much. Already-incurred money (so it is NOT added to Total Outflow, which would double-count it against Bank/Creditors) — but it means there is no budget left for the balance work, so the Net Position below is optimistic." />
+            )}
+            <CtcRow label="Sundry creditors" value={liabilities.sundry_creditors}
+              note="Unpaid bills for this project — material/vendor (TQS) plus subcontractor (SC), net of retention." />
+            <CtcRow label="Advance to be Recovered" value={liabilities.advance_to_be_recovered}
+              note="Mobilization advance minus what's already recovered against RA bills." />
+            <CtcRow label="Retention Payable - Subcontractor" value={liabilities.retention_payable_subcontractor}
+              note="SC bills' retention_amount not yet released." />
+            <CtcRow label={CTC_MANUAL_ROWS.gst_payable} value={manual('gst_payable')}
+              note="Live from RA bills — GST charged to the client across all non-rejected bills." />
+            <CtcRow label="Total Outflow" value={totalOutflow} bold highlight />
+
+            <tr><td colSpan={2} className="h-3" /></tr>
+            {sectionHeader('C. Inflow', 'bg-amber-600')}
+            <CtcRow label="RA receivable" value={inflow.ra_receivable}
+              note="Net of TDS and any amount already received against RA bills." />
+            <CtcRow label="Work Order Billable to Lanco" value={totalWorksToBeDone}
+              note="= Total Works to Be Done (Section A)." />
+            {['retention_money_recovered', 'material_stock', 'other_projects_p3', 'other_projects_tqs', 'bank_balance'].map(k => {
+              // Everything is auto-computed from live ERP data except the
+              // cross-project treasury allocations, which the ERP has no
+              // source for — the backend tells us which those are.
+              const isManual = manualFields.includes(k);
+              return (
+                <CtcRow key={k} label={CTC_MANUAL_ROWS[k]} value={manual(k)}
+                  editable={isManual}
+                  editing={editKey === k} onStartEdit={() => setEditKey(k)}
+                  onCancel={() => setEditKey(null)} onSave={(v) => commit(k, v)} saving={saveMutation.isPending}
+                  note={CTC_AUTO_NOTES[k]} />
+              );
+            })}
+            <CtcRow label="Total inflow (D)" value={totalInflow} bold highlight />
+
+            <tr><td colSpan={2} className="h-3" /></tr>
+            <tr className="bg-emerald-100 border-t-2 border-emerald-300">
+              <td className="px-4 py-3 text-right font-bold text-emerald-900 text-sm">Net Position (Inflow − Outflow)</td>
+              <td className="px-4 py-3 text-right font-bold text-emerald-900 text-base tabular-nums">
+                ₹{Math.round(netPosition).toLocaleString('en-IN')}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -1671,13 +1965,34 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
   const [editVal, setEditVal] = useState('');
   const [editingBoqHead, setEditingBoqHead] = useState(null);
   const [editBoqVal, setEditBoqVal] = useState('');
+  const [editingReceivedHead, setEditingReceivedHead] = useState(null);
+  const [editReceivedVal, setEditReceivedVal] = useState('');
+  const [editingPaidHead, setEditingPaidHead] = useState(null);
+  const [editPaidVal, setEditPaidVal] = useState('');
+  const [splitHead, setSplitHead] = useState(null);
   const [expandedHead, setExpandedHead] = useState(null);
   const [showBulk, setShowBulk] = useState(false);
   const [bulkText, setBulkText] = useState(DEFAULT_BULK_TEXT);
-  const [costheadView, setCostheadView] = useState('summary'); // 'summary' | 'monthly'
+  const [searchParams] = useSearchParams();
+  const [costheadView, setCostheadView] = useState('summary'); // 'summary' | 'monthly' | 'cost_to_completion'
   const [chSearch, setChSearch] = useState('');
   const [chFilter, setChFilter] = useState('all'); // all | over | near | nobudget
   const [chSort, setChSort] = useState({ key: null, dir: 'asc' });
+
+  // ?view= from the sidebar (Cost Control section): 'cost_to_completion' opens
+  // that tab directly; 'variance'/'forecast'/'profitability' all live inside
+  // Monthly Analysis (Cost Variance/Cash Forecast/Profitability Abstract are
+  // sections of that same tab, not separate tabs), so they map there too.
+  // Reacts to searchParams (not just the initial mount) — clicking between
+  // Cost Control sidebar links only changes the query string on this same
+  // route, so the component never remounts and a useState-only initial value
+  // would silently stop responding after the first load.
+  useEffect(() => {
+    const v = searchParams.get('view');
+    if (v === 'cost_to_completion') setCostheadView('cost_to_completion');
+    else if (['variance', 'forecast', 'profitability', 'monthly'].includes(v)) setCostheadView('monthly');
+    else if (!highlightCostHead && !initialChFilter) setCostheadView('summary');
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Jump-in from the Overview tab: focus a specific cost head or a filter (over/near/nobudget)
   useEffect(() => {
@@ -1740,6 +2055,32 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
     const n = parseFloat(editBoqVal);
     if (isNaN(n) || n < 0) { toast.error('Enter a valid amount'); return; }
     saveMutation.mutate({ cost_head, boq_amount: n });
+  };
+
+  // Manual Bills Received / Bills Paid — for cost heads with no natural
+  // transaction source (Supervision & Accommodation, EPF/PT & Insurance,
+  // etc. are internal payroll-type costs, never tagged on an RA/SC/TQS bill).
+  const saveReceivedPaidMutation = useMutation({
+    mutationFn: (payload) => boqBudgetAPI.setCostheadReceivedPaid(projectId, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['costhead-summary', projectId] });
+      setEditingReceivedHead(null);
+      setEditingPaidHead(null);
+      toast.success('Saved');
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to save'),
+  });
+
+  const commitReceived = (cost_head) => {
+    const n = parseFloat(editReceivedVal);
+    if (isNaN(n) || n < 0) { toast.error('Enter a valid amount'); return; }
+    saveReceivedPaidMutation.mutate({ cost_head, received_amount: n });
+  };
+
+  const commitPaid = (cost_head) => {
+    const n = parseFloat(editPaidVal);
+    if (isNaN(n) || n < 0) { toast.error('Enter a valid amount'); return; }
+    saveReceivedPaidMutation.mutate({ cost_head, paid_amount: n });
   };
 
   const rows = data || [];
@@ -1831,6 +2172,7 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
           {[
             { id: 'summary', label: 'Budget vs Actual' },
             { id: 'monthly', label: 'Monthly Analysis' },
+            { id: 'cost_to_completion', label: 'Cost to Completion' },
           ].map(t => (
             <button key={t.id} onClick={() => setCostheadView(t.id)}
               className={clsx('px-4 py-1.5 text-xs font-bold rounded-lg border transition',
@@ -1847,6 +2189,8 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
       </div>
 
       {costheadView === 'monthly' && <CostHeadMonthlyTab projectId={projectId} projectName={projectName} projectAddress={projectAddress} clientName={clientName} />}
+
+      {costheadView === 'cost_to_completion' && <CostToCompletionTab projectId={projectId} projectName={projectName} contractValue={contractValue} />}
 
       {costheadView === 'summary' && (
     <div className="space-y-3">
@@ -1988,6 +2332,7 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
             const overCritical = over && !contingencyCoversAll;
             const isContingency = r.cost_head === 'Contingency';
             const hasActual = r.actual > 0;
+            const hasSubitems = !!r.sub_items;
             const pctUsed = r.budget > 0 ? (r.actual / r.budget) * 100 : 0;
             const barStatus = pctUsed > 100 ? (overCovered ? 'amber' : 'rose') : pctUsed >= 85 ? 'amber' : 'emerald';
             return (
@@ -2010,6 +2355,13 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
                         </button>
                       )}
                       <span>{r.cost_head}</span>
+                      {hasSubitems && (
+                        <button onClick={() => setSplitHead(r.cost_head)}
+                          title="Enter/view the split-up for this cost head"
+                          className="ml-1 px-1.5 py-0.5 bg-violet-50 border border-violet-200 text-violet-600 text-[9px] font-bold rounded hover:bg-violet-100 flex-shrink-0">
+                          Split
+                        </button>
+                      )}
                     </div>
                   </td>
                   <td className="px-2 py-3.5">
@@ -2067,6 +2419,13 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
                       <span className="font-semibold text-emerald-700">
                         {r.received > 0 ? `₹${Math.round(r.received).toLocaleString('en-IN')}` : '—'}
                       </span>
+                    ) : hasSubitems ? (
+                      <button onClick={() => setSplitHead(r.cost_head)}
+                        className="font-semibold text-emerald-700 hover:text-violet-600 hover:underline underline-offset-2 transition-colors">
+                        {r.received > 0 ? `₹${Math.round(r.received).toLocaleString('en-IN')}` : (
+                          <span className="px-2 py-0.5 bg-violet-50 border border-violet-200 text-violet-600 text-[10px] font-bold rounded normal-case no-underline">+ Split</span>
+                        )}
+                      </button>
                     ) : r.received > 0 ? (
                       <button onClick={() => toggleExpand(r.cost_head, hasActual)}
                         className={clsx('font-semibold hover:underline underline-offset-2 transition-colors',
@@ -2074,8 +2433,23 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
                         ₹{Math.round(r.received).toLocaleString('en-IN')}
                         <span className="ml-1 text-[10px] opacity-60">{isExpanded ? '▲' : '▼'}</span>
                       </button>
+                    ) : editingReceivedHead === r.cost_head ? (
+                      <div className="flex items-center justify-end gap-1">
+                        <input autoFocus type="number" value={editReceivedVal}
+                          onChange={e => setEditReceivedVal(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') commitReceived(r.cost_head); if (e.key === 'Escape') setEditingReceivedHead(null); }}
+                          className="w-24 border border-indigo-400 rounded-lg px-2 py-1 text-xs text-right focus:outline-none"
+                        />
+                        <button onClick={() => commitReceived(r.cost_head)} disabled={saveReceivedPaidMutation.isPending}
+                          className="shrink-0 px-2 py-1 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-500 disabled:opacity-50">Save</button>
+                        <button onClick={() => setEditingReceivedHead(null)}
+                          className="shrink-0 px-2 py-1 bg-slate-100 text-slate-600 text-[10px] rounded-lg hover:bg-slate-200">✕</button>
+                      </div>
                     ) : (
-                      <span className="text-slate-300">—</span>
+                      <button onClick={() => { setEditReceivedVal(''); setEditingReceivedHead(r.cost_head); }}
+                        className="px-2 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-600 text-[10px] font-bold rounded hover:bg-indigo-100 opacity-0 group-hover:opacity-100 transition-opacity">
+                        + Add
+                      </button>
                     )}
                   </td>
                   <td className="px-4 py-3.5 text-right font-medium">
@@ -2091,6 +2465,13 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
                       <span className="font-semibold text-indigo-700">
                         {r.paid > 0 ? `₹${Math.round(r.paid).toLocaleString('en-IN')}` : '—'}
                       </span>
+                    ) : hasSubitems ? (
+                      <button onClick={() => setSplitHead(r.cost_head)}
+                        className="font-semibold text-indigo-700 hover:text-violet-600 hover:underline underline-offset-2 transition-colors">
+                        {r.paid > 0 ? `₹${Math.round(r.paid).toLocaleString('en-IN')}` : (
+                          <span className="px-2 py-0.5 bg-violet-50 border border-violet-200 text-violet-600 text-[10px] font-bold rounded normal-case no-underline">+ Split</span>
+                        )}
+                      </button>
                     ) : r.paid > 0 ? (
                       <div className="text-right">
                         <button onClick={() => toggleExpand(r.cost_head, hasActual)}
@@ -2108,8 +2489,23 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
                           <div className="text-[9px] text-amber-500 mt-0.5">Advance only — no bill yet</div>
                         )}
                       </div>
+                    ) : editingPaidHead === r.cost_head ? (
+                      <div className="flex items-center justify-end gap-1">
+                        <input autoFocus type="number" value={editPaidVal}
+                          onChange={e => setEditPaidVal(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') commitPaid(r.cost_head); if (e.key === 'Escape') setEditingPaidHead(null); }}
+                          className="w-24 border border-indigo-400 rounded-lg px-2 py-1 text-xs text-right focus:outline-none"
+                        />
+                        <button onClick={() => commitPaid(r.cost_head)} disabled={saveReceivedPaidMutation.isPending}
+                          className="shrink-0 px-2 py-1 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-500 disabled:opacity-50">Save</button>
+                        <button onClick={() => setEditingPaidHead(null)}
+                          className="shrink-0 px-2 py-1 bg-slate-100 text-slate-600 text-[10px] rounded-lg hover:bg-slate-200">✕</button>
+                      </div>
                     ) : (
-                      <span className="text-slate-300">—</span>
+                      <button onClick={() => { setEditPaidVal(''); setEditingPaidHead(r.cost_head); }}
+                        className="px-2 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-600 text-[10px] font-bold rounded hover:bg-indigo-100 opacity-0 group-hover:opacity-100 transition-opacity">
+                        + Add
+                      </button>
                     )}
                   </td>
                   <td className="px-4 py-3.5 text-right font-medium">
@@ -2201,6 +2597,147 @@ function CostHeadBudgetTab({ projectId, projectName, projectAddress, clientName,
       )}
 
       <ProfitabilityAbstract projectId={projectId} totalSpent={totalActual} />
+
+      {splitHead && (
+        <SubitemSplitModal projectId={projectId} costHead={splitHead} onClose={() => setSplitHead(null)} />
+      )}
+    </div>
+  );
+}
+
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtMonthLabel(ym) {
+  if (!ym) return '';
+  const [y, m] = ym.split('-');
+  return `${MONTH_NAMES[parseInt(m, 10) - 1]} ${y}`;
+}
+
+function SubitemSplitModal({ projectId, costHead, onClose }) {
+  const qc = useQueryClient();
+  const [editKey, setEditKey] = useState(null); // `${sub_item}:received` | `${sub_item}:paid`
+  const [editVal, setEditVal] = useState('');
+  const [month, setMonth] = useState(null); // null = let backend pick the latest month with data
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['costhead-subitems', projectId, costHead, month],
+    queryFn: () => boqBudgetAPI.costheadSubitems(projectId, costHead, month).then(r => r.data || {}),
+    enabled: !!projectId && !!costHead,
+  });
+
+  const rows = data?.data || [];
+  const resolvedMonth = month || data?.month || new Date().toISOString().slice(0, 7);
+  const availableMonths = data?.available_months || [];
+
+  const saveMutation = useMutation({
+    mutationFn: (payload) => boqBudgetAPI.setCostheadSubitem(projectId, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['costhead-subitems', projectId, costHead] });
+      qc.invalidateQueries({ queryKey: ['costhead-summary', projectId] });
+      qc.invalidateQueries({ queryKey: ['costhead-monthly', projectId] });
+      setEditKey(null);
+      toast.success('Saved');
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to save'),
+  });
+
+  const commit = (sub_item, field) => {
+    const n = parseFloat(editVal);
+    if (isNaN(n) || n < 0) { toast.error('Enter a valid amount'); return; }
+    saveMutation.mutate({ cost_head: costHead, sub_item, month: resolvedMonth, [field === 'received' ? 'received_amount' : 'paid_amount']: n });
+  };
+
+  const totalReceived = rows.reduce((s, r) => s + (r.received_amount || 0), 0);
+  const totalPaid = rows.reduce((s, r) => s + (r.paid_amount || 0), 0);
+
+  const Cell = ({ row, field }) => {
+    const key = `${row.sub_item}:${field}`;
+    const amount = field === 'received' ? row.received_amount : row.paid_amount;
+    if (editKey === key) {
+      return (
+        <div className="flex items-center justify-end gap-1">
+          <input autoFocus type="number" value={editVal}
+            onChange={e => setEditVal(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') commit(row.sub_item, field); if (e.key === 'Escape') setEditKey(null); }}
+            className="w-24 border border-violet-400 rounded-lg px-2 py-1 text-xs text-right focus:outline-none"
+          />
+          <button onClick={() => commit(row.sub_item, field)} disabled={saveMutation.isPending}
+            className="shrink-0 px-2 py-1 bg-violet-600 text-white text-[10px] font-bold rounded-lg hover:bg-violet-500 disabled:opacity-50">Save</button>
+          <button onClick={() => setEditKey(null)}
+            className="shrink-0 px-2 py-1 bg-slate-100 text-slate-600 text-[10px] rounded-lg hover:bg-slate-200">✕</button>
+        </div>
+      );
+    }
+    return (
+      <button onClick={() => { setEditVal(amount ? Math.round(amount).toString() : ''); setEditKey(key); }}
+        className="group/cell inline-flex items-center gap-1.5 font-semibold hover:text-violet-600">
+        {amount > 0 ? `₹${Math.round(amount).toLocaleString('en-IN')}` : <span className="text-slate-300 font-normal italic">Not set</span>}
+        <span className="text-[9px] text-violet-500 opacity-0 group-hover/cell:opacity-100">Edit</span>
+      </button>
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 bg-gradient-to-r from-violet-600 to-indigo-600 flex items-center justify-between">
+          <div>
+            <div className="text-white font-bold text-sm">{costHead} — Split-up</div>
+            <div className="text-violet-100 text-[11px]">Enter Bills Received / Paid for each sub-item</div>
+          </div>
+          <button onClick={onClose} className="text-white/80 hover:text-white text-lg leading-none">✕</button>
+        </div>
+        <div className="px-5 pt-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Month</span>
+            <input type="month" value={resolvedMonth}
+              onChange={e => setMonth(e.target.value)}
+              className="border border-slate-300 rounded-lg px-2 py-1 text-xs font-semibold text-slate-700 focus:outline-none focus:border-violet-400" />
+            <span className="text-xs text-slate-400">{fmtMonthLabel(resolvedMonth)}</span>
+          </div>
+          {availableMonths.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap justify-end">
+              {availableMonths.slice(0, 4).map(m => (
+                <button key={m} onClick={() => setMonth(m)}
+                  className={clsx('px-2 py-0.5 rounded text-[10px] font-bold border',
+                    m === resolvedMonth ? 'bg-violet-600 border-violet-600 text-white' : 'bg-violet-50 border-violet-200 text-violet-600 hover:bg-violet-100')}>
+                  {fmtMonthLabel(m)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="p-5 pt-3">
+          {isLoading ? (
+            <div className="text-center text-sm text-slate-400 py-8">Loading…</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[10px] uppercase tracking-wide text-slate-400 border-b border-slate-200">
+                  <th className="pb-2 font-semibold">Sub-item</th>
+                  <th className="pb-2 font-semibold text-right">Received</th>
+                  <th className="pb-2 font-semibold text-right">Paid</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(row => (
+                  <tr key={row.sub_item} className="border-b border-slate-100">
+                    <td className="py-2.5 text-slate-700 font-medium">{row.sub_item}</td>
+                    <td className="py-2.5 text-right"><Cell row={row} field="received" /></td>
+                    <td className="py-2.5 text-right"><Cell row={row} field="paid" /></td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="font-bold text-slate-800">
+                  <td className="pt-3">Total</td>
+                  <td className="pt-3 text-right text-emerald-700">₹{Math.round(totalReceived).toLocaleString('en-IN')}</td>
+                  <td className="pt-3 text-right text-indigo-700">₹{Math.round(totalPaid).toLocaleString('en-IN')}</td>
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -2435,6 +2972,23 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
     `,
   });
   const [view, setView] = useState(lockedView || 'breakdown'); // 'breakdown' | 'summary' | 'costhead' | 'ra_comparison'
+  const [outerSearchParams] = useSearchParams();
+  // The Cost Control sidebar links (Budget vs Actual/Cost Variance/Forecast/
+  // Profitability/Cost to Completion) all land on this same route with only
+  // ?view=<sub-tab> differing — that value is actually consumed one level
+  // down by CostHeadBudgetTab's own costheadView. This outer `view` state
+  // gates whether that component renders AT ALL (it only shows up when
+  // view==='costhead'), and it defaulted to 'breakdown' with no awareness of
+  // the URL — so every one of those links landed on the unrelated default
+  // Item-wise Breakdown tab instead. Reacts on every change (not just once),
+  // for the same reason costheadView needed a useEffect: React Router doesn't
+  // remount this page for a query-string-only navigation.
+  const COSTHEAD_SUBVIEWS = ['summary', 'monthly', 'variance', 'forecast', 'profitability', 'cost_to_completion', 'costhead'];
+  useEffect(() => {
+    if (lockedView) return;
+    const v = outerSearchParams.get('view');
+    if (v && COSTHEAD_SUBVIEWS.includes(v)) setView('costhead');
+  }, [outerSearchParams, lockedView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── RA Bills Comparison — Plan vs Actual, fixed 9 columns (RA1-RA9 / Jul-Mar) ──
   const RA_MONTHS = ['July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March'];
@@ -2458,15 +3012,31 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
     onError: (e) => toast.error(e?.response?.data?.error || 'Failed to save plan value'),
   });
 
+  const raActualCellMutation = useMutation({
+    mutationFn: ({ chapter_key, ra_index, actual_amount }) =>
+      boqBudgetAPI.setRaActualCell(projectId, { chapter_key, ra_index, actual_amount }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ra-actuals', projectId] }),
+    onError: (e) => toast.error(e?.response?.data?.error || 'Failed to save actual value'),
+  });
+
   const raPlanMap = useMemo(() => {
     const m = {};
     raPlanRows.forEach(r => { m[`${r.chapter_key}::${r.ra_index}`] = parseFloat(r.planned_amount) || 0; });
     return m;
   }, [raPlanRows]);
 
+  // source: 'bill' cells are computed from a real RA bill and locked —
+  // editing them here would be silently overwritten the next time the bill
+  // data reloads. 'manual' cells (or missing) are freely editable.
   const raActualMap = useMemo(() => {
     const m = {};
     (raActualsData?.actuals || []).forEach(r => { m[`${r.chapter_key}::${r.ra_index}`] = parseFloat(r.amount) || 0; });
+    return m;
+  }, [raActualsData]);
+
+  const raActualSourceMap = useMemo(() => {
+    const m = {};
+    (raActualsData?.actuals || []).forEach(r => { m[`${r.chapter_key}::${r.ra_index}`] = r.source || 'manual'; });
     return m;
   }, [raActualsData]);
 
@@ -2628,9 +3198,12 @@ export default function BOQBudgetBreakdownPage({ embedded = false, lockedView = 
                 months={RA_MONTHS}
                 planMap={raPlanMap}
                 actualMap={raActualMap}
+                actualSourceMap={raActualSourceMap}
                 bills={raActualsData?.bills || []}
                 onSaveCell={(chapter_key, ra_index, planned_amount) => raPlanCellMutation.mutate({ chapter_key, ra_index, planned_amount })}
                 saving={raPlanCellMutation.isPending}
+                onSaveActualCell={(chapter_key, ra_index, actual_amount) => raActualCellMutation.mutate({ chapter_key, ra_index, actual_amount })}
+                savingActual={raActualCellMutation.isPending}
               />
             )}
 

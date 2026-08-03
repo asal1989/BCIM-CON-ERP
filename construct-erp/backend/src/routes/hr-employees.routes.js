@@ -10,6 +10,13 @@ const { query } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
 const { uploadToSharePoint, deleteFromOneDrive } = require('../services/azureService');
 
+// System/tenant admin logins that are not real employees — hidden from the
+// general Employee List (they'd otherwise show as "NO HR PROFILE" cards or,
+// for it@bcim.in, a staff card with no actual attendance to track). Kept
+// as an explicit email list rather than a role/category rule so a future
+// legitimate super_admin (e.g. an owner/director) never gets swept in.
+const SYSTEM_ACCOUNT_EMAILS = ['admin@bcimengineering.onmicrosoft.com', 'it@bcim.in'];
+
 const SHAREPOINT_ENABLED = !!(
   process.env.ONEDRIVE_TENANT_ID &&
   process.env.ONEDRIVE_CLIENT_ID &&
@@ -242,6 +249,11 @@ router.get('/', async (req, res) => {
     let sql = `${employeeSelect} WHERE u.company_id = $1`;
     const params = [req.user.company_id];
     let idx = 2;
+
+    if (SYSTEM_ACCOUNT_EMAILS.length) {
+      sql += ` AND u.email != ALL($${idx}::text[])`;
+      params.push(SYSTEM_ACCOUNT_EMAILS); idx++;
+    }
 
     if (no_profile === 'true') {
       sql += ' AND ep.user_id IS NULL';
@@ -564,6 +576,12 @@ router.put('/:id', async (req, res) => {
       desigName = dr.rows[0]?.name || '';
     }
 
+    const prevStatusRes = await client.query(
+      `SELECT employment_status FROM employee_profiles WHERE user_id=$1 AND company_id=$2`,
+      [req.params.id, req.user.company_id]
+    );
+    const previousEmploymentStatus = prevStatusRes.rows[0]?.employment_status || null;
+
     // Guard: never let an HR employee-record edit silently downgrade a
     // super_admin. Editing it@bcim.in's (or any super_admin's) profile here
     // used to overwrite users.role with `role || 'viewer'`, stripping their
@@ -657,7 +675,7 @@ router.put('/:id', async (req, res) => {
 
     await syncExitToWorkerRoster(
       (sql, params) => client.query(sql, params),
-      req.params.id, req.user.company_id, employment_status
+      req.params.id, req.user.company_id, employment_status, previousEmploymentStatus
     );
 
     await addTimeline(
@@ -687,9 +705,34 @@ router.put('/:id', async (req, res) => {
 // showing up in the daily timesheet and every other attendance report.
 // Mirror any non-active employment_status onto both sc_workers and
 // users.is_active so one HR action fully retires the person.
-async function syncExitToWorkerRoster(runner, userId, companyId, employmentStatus) {
-  const isExited = employmentStatus && employmentStatus !== 'active';
-  if (!isExited) return;
+// 'inactive' is deliberately NOT an exit here. In this database it is an
+// import artifact, not a status anyone set on purpose: all 41 people carrying
+// it worked in the last 7 days, and none has a date_of_leaving. Treating it as
+// an exit silently deactivated 41 working labourers across Bahulaya Buildcast,
+// Habibur Rahaman and MD Faruk, emptying those contractors from the timesheet.
+// Only the statuses that actually mean "gone" propagate.
+const EXIT_STATUSES = ['resigned', 'terminated', 'absconded'];
+
+async function syncExitToWorkerRoster(runner, userId, companyId, employmentStatus, previousEmploymentStatus) {
+  if (!EXIT_STATUSES.includes(employmentStatus)) {
+    // Only reactivate when this save is specifically undoing a previous exit
+    // (e.g. an accidental "resigned" corrected back to "active"). Without
+    // this, users.is_active stayed FALSE forever after such a correction —
+    // the account was fully retired above, but nothing ever reversed that
+    // half of it, so the person kept showing "active" in the employee list
+    // while being invisible in every attendance query (which all require
+    // users.is_active = TRUE). Gating on the *previous* status (rather than
+    // reactivating any is_active=FALSE account on every save) avoids
+    // silently undoing an unrelated deliberate account disable done via the
+    // separate Users/admin page.
+    if (previousEmploymentStatus && EXIT_STATUSES.includes(previousEmploymentStatus)) {
+      await runner(
+        `UPDATE users SET is_active=TRUE WHERE id=$1 AND company_id=$2 AND is_active=FALSE`,
+        [userId, companyId]
+      );
+    }
+    return;
+  }
 
   const { rows } = await runner(
     `SELECT employee_code FROM users WHERE id=$1 AND company_id=$2`,
@@ -715,6 +758,11 @@ async function syncExitToWorkerRoster(runner, userId, companyId, employmentStatu
 router.patch('/:id/status', async (req, res) => {
   try {
     const { employment_status, date_of_leaving, leaving_reason, is_active } = req.body;
+    const prevStatusRes = await query(
+      `SELECT employment_status FROM employee_profiles WHERE user_id=$1 AND company_id=$2`,
+      [req.params.id, req.user.company_id]
+    );
+    const previousEmploymentStatus = prevStatusRes.rows[0]?.employment_status || null;
     await query(
       `UPDATE employee_profiles SET employment_status=$1, date_of_leaving=$2, leaving_reason=$3, updated_at=NOW()
        WHERE user_id=$4 AND company_id=$5`,
@@ -725,7 +773,7 @@ router.patch('/:id/status', async (req, res) => {
       await query(`UPDATE users SET is_active=$1 WHERE id=$2 AND company_id=$3`,
         [is_active, req.params.id, req.user.company_id]);
     }
-    await syncExitToWorkerRoster(query, req.params.id, req.user.company_id, employment_status);
+    await syncExitToWorkerRoster(query, req.params.id, req.user.company_id, employment_status, previousEmploymentStatus);
     await query(
       `INSERT INTO employee_timeline
        (user_id, company_id, event_type, title, description, event_date, created_by)

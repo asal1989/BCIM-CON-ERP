@@ -2,10 +2,11 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  ClipboardList, Plus, Search, Download, ChevronRight, X,
-  Calendar, MapPin, Activity, Package, CheckCircle2,
-  Clock, AlertTriangle, Zap, Trash2, Edit2, Flag,
-  GanttChartSquare, List, Upload, IndianRupee, Sparkles,
+  Plus, Search, Download, ChevronRight, ChevronDown, X,
+  Calendar, MapPin, Package, CheckCircle2,
+  Clock, PlayCircle, AlertTriangle, Flag, Filter, Settings, MoreVertical,
+  GanttChartSquare, Table2, Columns3, ChevronLeft, Maximize2, Upload,
+  IndianRupee, Sparkles, Trash2,
 } from 'lucide-react';
 import { planningAPI, planningP6API, projectAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
@@ -13,12 +14,17 @@ import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
 
+// ─────────────────────────────────────────────────────────────────────────
+// Status is stored as planned|in_progress|delayed|completed|cancelled;
+// displayed as Pending|In Progress|Delayed|Completed|Cancelled to match the
+// approved design (label only — no schema/API change).
+// ─────────────────────────────────────────────────────────────────────────
 const STATUS_CFG = {
-  planned:     { label: 'Planned',     color: 'bg-slate-50 text-slate-900 border-slate-200',   dot: 'bg-slate-400',   icon: Clock },
-  in_progress: { label: 'In Progress', color: 'bg-blue-50 text-blue-700 border-blue-200',      dot: 'bg-blue-500',    icon: Zap },
-  delayed:     { label: 'Delayed',     color: 'bg-red-50 text-red-700 border-red-200',         dot: 'bg-red-500',     icon: AlertTriangle },
-  completed:   { label: 'Completed',   color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', icon: CheckCircle2 },
-  cancelled:   { label: 'Cancelled',   color: 'bg-slate-100 text-slate-900 font-medium border-slate-200',  dot: 'bg-slate-300',   icon: X },
+  planned:     { label: 'Pending',     text: 'text-amber-700',   bg: 'bg-amber-50',   border: 'border-amber-200',   bar: 'bg-amber-400',   dot: 'bg-amber-500',   icon: Clock },
+  in_progress: { label: 'In Progress', text: 'text-blue-700',    bg: 'bg-blue-50',    border: 'border-blue-200',    bar: 'bg-blue-500',    dot: 'bg-blue-500',    icon: PlayCircle },
+  delayed:     { label: 'Delayed',     text: 'text-red-700',     bg: 'bg-red-50',     border: 'border-red-200',     bar: 'bg-red-500',     dot: 'bg-red-500',     icon: AlertTriangle },
+  completed:   { label: 'Completed',   text: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', bar: 'bg-emerald-500', dot: 'bg-emerald-500', icon: CheckCircle2 },
+  cancelled:   { label: 'Cancelled',   text: 'text-slate-500',   bg: 'bg-slate-100',  border: 'border-slate-200',   bar: 'bg-slate-300',   dot: 'bg-slate-400',   icon: X },
 };
 
 const TYPE_CFG = {
@@ -27,32 +33,89 @@ const TYPE_CFG = {
   civil:      'bg-amber-50 text-amber-700 border-amber-200',
   mechanical: 'bg-cyan-50 text-cyan-700 border-cyan-200',
   electrical: 'bg-yellow-50 text-yellow-700 border-yellow-200',
-  other:      'bg-slate-50 text-slate-900 border-slate-200',
+  other:      'bg-slate-50 text-slate-600 border-slate-200',
 };
 
 function StatusBadge({ status }) {
-  const cfg  = STATUS_CFG[status] || STATUS_CFG.planned;
-  const Icon = cfg.icon;
+  const cfg = STATUS_CFG[status] || STATUS_CFG.planned;
   return (
-    <span className={clsx('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border', cfg.color)}>
-      <Icon size={11} strokeWidth={2.5} /> {cfg.label}
+    <span className={clsx('inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium', cfg.bg, cfg.text)}>
+      {cfg.label}
     </span>
   );
+}
+
+function ProgressCell({ pct }) {
+  const p = Number(pct) || 0;
+  return (
+    <div className="flex items-center gap-2 w-28">
+      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+        <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(p, 100)}%` }} />
+      </div>
+      <span className="text-xs font-medium text-slate-600 w-8 text-right">{p}%</span>
+    </div>
+  );
+}
+
+// ── Group activities into a two-level tree keyed by `location` (the only
+// hierarchy field the schema actually has — e.g. "Tower A" / "Tower B") ────
+function groupByLocation(activities) {
+  const groups = {};
+  for (const a of activities) {
+    const key = a.location || 'Ungrouped';
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(a);
+  }
+  return Object.entries(groups).map(([label, items]) => {
+    const starts = items.map(i => dayjs(i.baseline_start_date));
+    const ends   = items.map(i => dayjs(i.baseline_end_date));
+    const avgProgress = items.length
+      ? Math.round(items.reduce((s, i) => s + (Number(i.progress_pct) || 0), 0) / items.length) : 0;
+    const groupStatus = items.every(i => i.status === 'completed') ? 'completed'
+      : items.some(i => i.status === 'delayed') ? 'delayed'
+      : items.some(i => i.status === 'in_progress') ? 'in_progress'
+      : 'planned';
+    return {
+      key: label, label, items,
+      start: starts.reduce((m, d) => d.isBefore(m) ? d : m, starts[0]),
+      end:   ends.reduce((m, d) => d.isAfter(m) ? d : m, ends[0]),
+      progress: avgProgress,
+      status: groupStatus,
+    };
+  });
+}
+
+// ── Timeline window helpers (week-column Gantt) ─────────────────────────
+const COL_WEEKS = 6;
+function startOfWeek(d) { const x = dayjs(d); return x.subtract((x.day() + 6) % 7, 'day').startOf('day'); }
+
+function buildWeeks(anchor) {
+  const weeks = [];
+  let cur = startOfWeek(anchor);
+  for (let i = 0; i < COL_WEEKS; i++) {
+    weeks.push({ start: cur, end: cur.add(6, 'day') });
+    cur = cur.add(7, 'day');
+  }
+  return weeks;
 }
 
 export default function ActivitiesPage() {
   const qc = useQueryClient();
   const { user } = useAuthStore();
   const [projectId, setProjectId]       = useState('');
+  const [view, setView]                 = useState('gantt'); // gantt | table | board
+  const [granularity, setGranularity]   = useState('week');  // day | week | month (display label only for now)
+  const [anchor, setAnchor]             = useState(() => startOfWeek(dayjs()));
+  const [collapsed, setCollapsed]       = useState({});
+  const [showAdd, setShowAdd]           = useState(false);
+  const [selected, setSelected]         = useState(null);
+  const [showFilter, setShowFilter]     = useState(false);
+  const [showMore, setShowMore]         = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch]             = useState('');
-  const [selected, setSelected]         = useState(null);
-  const [showAdd, setShowAdd]           = useState(false);
-  const [showProgress, setShowProgress] = useState(false);
-  const [viewMode, setViewMode]         = useState('list'); // 'list' | 'gantt'
   const [importing, setImporting]       = useState(false);
   const [showAutoMatch, setShowAutoMatch] = useState(false);
-  const importRef                       = useRef();
+  const importRef = useRef();
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -60,11 +123,15 @@ export default function ActivitiesPage() {
   });
 
   const { data: activities = [], isLoading } = useQuery({
-    queryKey: ['planning-activities', projectId, statusFilter],
-    queryFn: () => planningAPI.listActivities({
-      project_id: projectId || undefined,
-      status: statusFilter !== 'all' ? statusFilter : undefined,
-    }).then(r => r.data?.data ?? r.data ?? []).catch(() => []),
+    queryKey: ['planning-activities', projectId],
+    queryFn: () => planningAPI.listActivities({ project_id: projectId || undefined })
+      .then(r => r.data?.data ?? r.data ?? []).catch(() => []),
+    enabled: !!projectId,
+  });
+
+  const { data: milestones = [] } = useQuery({
+    queryKey: ['planning-milestones', projectId],
+    queryFn: () => planningAPI.listMilestones({ project_id: projectId }).then(r => r.data?.data ?? r.data ?? []).catch(() => []),
     enabled: !!projectId,
   });
 
@@ -75,52 +142,43 @@ export default function ActivitiesPage() {
   });
 
   const filtered = useMemo(() => {
-    if (!search) return activities;
-    const q = search.toLowerCase();
-    return activities.filter(a =>
-      a.activity_name?.toLowerCase().includes(q) ||
-      a.activity_code?.toLowerCase().includes(q) ||
-      a.location?.toLowerCase().includes(q)
-    );
-  }, [activities, search]);
+    let list = activities;
+    if (statusFilter !== 'all') list = list.filter(a => a.status === statusFilter);
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter(a =>
+        a.activity_name?.toLowerCase().includes(q) ||
+        a.activity_code?.toLowerCase().includes(q) ||
+        a.location?.toLowerCase().includes(q));
+    }
+    return list;
+  }, [activities, statusFilter, search]);
+
+  const groups = useMemo(() => groupByLocation(filtered), [filtered]);
+
+  // KPIs
+  const total      = activities.length;
+  const inProgress = activities.filter(a => a.status === 'in_progress').length;
+  const completed  = activities.filter(a => a.status === 'completed').length;
+  const pending     = activities.filter(a => a.status === 'planned').length;
+  const pct = n => total ? `${((n / total) * 100).toFixed(2)}% of total` : '0% of total';
 
   const deleteMut = useMutation({
     mutationFn: id => planningAPI.deleteActivity(id),
-    onSuccess: () => {
-      toast.success('Activity deleted');
-      qc.invalidateQueries({ queryKey: ['planning-activities'] });
-      setSelected(null);
-    },
+    onSuccess: () => { toast.success('Activity deleted'); qc.invalidateQueries({ queryKey: ['planning-activities'] }); setSelected(null); },
     onError: e => toast.error(e?.response?.data?.error || 'Delete failed'),
   });
 
   const syncBudgetMut = useMutation({
     mutationFn: () => planningP6API.syncBudgetFromBoq(projectId),
     onSuccess: (res) => {
-      const { updated, skipped_no_quantity, equal_split_count, chapters_not_found_in_boq } = res.data.data;
+      const { updated } = res.data.data;
       toast.success(`Budgets synced: ${updated} activities updated`);
-      if (equal_split_count > 0) {
-        toast(`${equal_split_count} activities got an equal split of their chapter's budget — no planned quantity was set to split proportionally`, { icon: 'ℹ️' });
-      }
-      if (skipped_no_quantity > 0) {
-        toast(`${skipped_no_quantity} tagged activities skipped — no planned quantity set`, { icon: '⚠️' });
-      }
-      if (chapters_not_found_in_boq?.length) {
-        toast(`Chapters not found in BOQ: ${chapters_not_found_in_boq.join(', ')}`, { icon: '⚠️' });
-      }
       qc.invalidateQueries({ queryKey: ['planning-activities'] });
-      qc.invalidateQueries({ queryKey: ['p6-dashboard'] });
     },
     onError: e => toast.error(e?.response?.data?.error || 'Sync failed'),
   });
 
-  const statusCounts = useMemo(() => {
-    const c = {};
-    activities.forEach(a => { c[a.status] = (c[a.status] || 0) + 1; });
-    return c;
-  }, [activities]);
-
-  // CSV Import handler
   const handleImport = async (e) => {
     const file = e.target.files?.[0]; if (!file) return;
     setImporting(true);
@@ -143,20 +201,48 @@ export default function ActivitiesPage() {
     } finally {
       setImporting(false);
       if (importRef.current) importRef.current.value = '';
+      setShowMore(false);
     }
   };
 
+  const toggleGroup = key => setCollapsed(c => ({ ...c, [key]: !c[key] }));
+
+  const weeks = useMemo(() => buildWeeks(anchor), [anchor]);
+  const rangeStart = weeks[0].start;
+  const rangeEnd   = weeks[weeks.length - 1].end;
+  const totalDays  = rangeEnd.diff(rangeStart, 'day') + 1;
+  const toPct   = d => Math.max(0, Math.min(100, (dayjs(d).diff(rangeStart, 'day') / totalDays) * 100));
+  const toWidth = (s, e) => Math.max(0.6, ((dayjs(e).diff(dayjs(s), 'day') + 1) / totalDays) * 100);
+  const todayPct = toPct(dayjs());
+  const showToday = dayjs().isAfter(rangeStart.subtract(1, 'day')) && dayjs().isBefore(rangeEnd.add(1, 'day'));
+
+  // Month header groups spanning the visible weeks
+  const monthGroups = useMemo(() => {
+    const out = [];
+    for (const w of weeks) {
+      const label = w.start.format('MMM YYYY');
+      const last = out[out.length - 1];
+      if (last && last.label === label) last.span += 1;
+      else out.push({ label, span: 1 });
+    }
+    return out;
+  }, [weeks]);
+
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto min-h-screen bg-[#f4f6f9]">
+    <div className="p-6 md:p-8 max-w-[1500px] mx-auto min-h-screen bg-[#f6f7fb]">
+
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-2">
+        <span>Planning</span>
+        <ChevronRight className="w-3 h-3" />
+        <span className="font-semibold text-slate-700">Schedule &amp; Activities</span>
+      </div>
 
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
-          <div className="flex items-center gap-2 text-xs text-slate-900 font-medium mb-1">
-            <ClipboardList className="w-3.5 h-3.5" /> Planning
-          </div>
-          <h1 className="text-2xl font-medium text-slate-900">Schedule & Activities</h1>
-          <p className="text-sm text-slate-900 font-medium mt-0.5">Activity-based project schedule management</p>
+          <h1 className="text-2xl font-bold text-slate-900">Schedule &amp; Activities</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Activity-based project schedule management</p>
         </div>
         <div className="flex items-center gap-2">
           <select
@@ -168,172 +254,192 @@ export default function ActivitiesPage() {
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           {projectId && (
-            <div className="flex items-center gap-2">
-              {/* List / Gantt toggle */}
-              <div className="flex bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
-                <button onClick={() => setViewMode('list')}
-                  className={clsx('flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors',
-                    viewMode==='list' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50')}>
-                  <List className="w-3.5 h-3.5" /> List
-                </button>
-                <button onClick={() => setViewMode('gantt')}
-                  className={clsx('flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors',
-                    viewMode==='gantt' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50')}>
-                  <GanttChartSquare className="w-3.5 h-3.5" /> Gantt
-                </button>
-              </div>
-              {/* Import CSV */}
-              <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
-              <button onClick={() => importRef.current?.click()} disabled={importing}
-                className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 bg-white text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 shadow-sm disabled:opacity-50">
-                <Upload className="w-4 h-4" /> {importing ? 'Importing…' : 'Import CSV'}
-              </button>
-              <button onClick={() => planningAPI.downloadActivityTemplate().then(r => {
-                const url = URL.createObjectURL(r.data);
-                const a = document.createElement('a'); a.href=url; a.download='activity-template.csv'; a.click();
-              })} className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 bg-white text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 shadow-sm">
-                <Download className="w-4 h-4" /> Template
-              </button>
-              <button
-                onClick={() => setShowAutoMatch(true)}
-                title="Suggest BOQ chapter links for activities that don't have one yet, based on name/keyword similarity"
-                className="flex items-center gap-1.5 px-3 py-2 border border-indigo-200 bg-indigo-50 text-indigo-700 text-sm font-medium rounded-lg hover:bg-indigo-100 shadow-sm"
-              >
-                <Sparkles className="w-4 h-4" /> Auto-Match BOQ
-              </button>
-              <button
-                onClick={() => syncBudgetMut.mutate()}
-                disabled={syncBudgetMut.isPending}
-                title="Pull budget_at_completion for chapter-tagged activities from BOQ Budget Breakdown chapter totals"
-                className="flex items-center gap-1.5 px-3 py-2 border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-medium rounded-lg hover:bg-emerald-100 shadow-sm disabled:opacity-50"
-              >
-                <IndianRupee className="w-4 h-4" /> {syncBudgetMut.isPending ? 'Syncing…' : 'Sync Budgets from BOQ'}
-              </button>
+            <>
               <button
                 onClick={() => setShowAdd(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-all shadow-sm"
+                className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-all shadow-sm"
               >
-                <Plus className="w-4 h-4" /> Add Activity
+                <Plus className="w-4 h-4" /> Create Activity
               </button>
-            </div>
+              <div className="relative">
+                <button onClick={() => setShowFilter(v => !v)}
+                  className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 shadow-sm">
+                  <Filter className="w-4 h-4" />
+                </button>
+                {showFilter && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-lg p-2 z-20">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-2 py-1">Status</p>
+                    {['all', 'planned', 'in_progress', 'delayed', 'completed'].map(s => (
+                      <button
+                        key={s}
+                        onClick={() => { setStatusFilter(s); setShowFilter(false); }}
+                        className={clsx('w-full text-left px-2 py-1.5 rounded-lg text-xs font-medium',
+                          statusFilter === s ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50')}
+                      >
+                        {s === 'all' ? 'All' : STATUS_CFG[s].label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button title="Settings" className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 shadow-sm">
+                <Settings className="w-4 h-4" />
+              </button>
+              <div className="relative">
+                <button onClick={() => setShowMore(v => !v)}
+                  className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50 shadow-sm">
+                  <MoreVertical className="w-4 h-4" />
+                </button>
+                {showMore && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-lg py-1.5 z-20">
+                    <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
+                    <button onClick={() => importRef.current?.click()} disabled={importing}
+                      className="w-full flex items-center gap-2 text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                      <Upload className="w-3.5 h-3.5" /> {importing ? 'Importing…' : 'Import CSV'}
+                    </button>
+                    <button onClick={() => { planningAPI.downloadActivityTemplate().then(r => {
+                      const url = URL.createObjectURL(r.data);
+                      const a = document.createElement('a'); a.href = url; a.download = 'activity-template.csv'; a.click();
+                    }); setShowMore(false); }}
+                      className="w-full flex items-center gap-2 text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                      <Download className="w-3.5 h-3.5" /> Download Template
+                    </button>
+                    <button onClick={() => { setShowAutoMatch(true); setShowMore(false); }}
+                      className="w-full flex items-center gap-2 text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                      <Sparkles className="w-3.5 h-3.5" /> Auto-Match BOQ
+                    </button>
+                    <button onClick={() => { syncBudgetMut.mutate(); setShowMore(false); }} disabled={syncBudgetMut.isPending}
+                      className="w-full flex items-center gap-2 text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                      <IndianRupee className="w-3.5 h-3.5" /> {syncBudgetMut.isPending ? 'Syncing…' : 'Sync Budgets from BOQ'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
       </div>
 
       {!projectId ? (
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-16 text-center">
-          <ClipboardList className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-900 font-medium font-medium">Select a project to view its activities</p>
+          <GanttChartSquare className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+          <p className="text-slate-500 font-medium">Select a project to view its schedule</p>
         </div>
       ) : (
         <>
+          {/* KPI Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-5">
+            <KpiCard icon={Calendar} color="indigo" label="Total Activities" value={total} sub="All Activities" />
+            <KpiCard icon={PlayCircle} color="blue" label="In Progress" value={inProgress} sub={pct(inProgress)} barPct={total ? (inProgress / total) * 100 : 0} />
+            <KpiCard icon={CheckCircle2} color="emerald" label="Completed" value={completed} sub={pct(completed)} barPct={total ? (completed / total) * 100 : 0} />
+            <KpiCard icon={Clock} color="amber" label="Pending" value={pending} sub={pct(pending)} barPct={total ? (pending / total) * 100 : 0} />
+            <KpiCard icon={Flag} color="purple" label="Milestones" value={milestones.length} sub="Key Milestones" />
+          </div>
+
           {/* Toolbar */}
-          <div className="bg-white border border-slate-200 rounded-xl p-3 mb-5 flex flex-wrap items-center gap-3 shadow-sm">
-            <div className="relative flex-1 min-w-48">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search activity name, code, location…"
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-sm outline-none focus:border-indigo-400"
-              />
-            </div>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {[['all', 'All'], ['planned', 'Planned'], ['in_progress', 'Active'], ['delayed', 'Delayed'], ['completed', 'Done']].map(([val, lbl]) => (
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-2.5 mb-4 flex flex-wrap items-center gap-3">
+            {/* View tabs */}
+            <div className="flex bg-slate-100 rounded-lg p-1 gap-0.5">
+              {[
+                ['gantt', 'Gantt View', GanttChartSquare],
+                ['table', 'Table View', Table2],
+                ['board', 'Board View', Columns3],
+              ].map(([val, label, Icon]) => (
                 <button
                   key={val}
-                  onClick={() => setStatusFilter(val)}
-                  className={clsx(
-                    'px-3 py-1.5 rounded-lg text-xs font-medium border transition-all',
-                    statusFilter === val
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'bg-white text-slate-900 font-medium border-slate-200 hover:border-indigo-300'
-                  )}
+                  onClick={() => setView(val)}
+                  className={clsx('flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all',
+                    view === val ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700')}
                 >
-                  {lbl}
-                  {val !== 'all' && statusCounts[val] ? <span className="ml-1 opacity-70">{statusCounts[val]}</span> : null}
+                  <Icon className="w-3.5 h-3.5" /> {label}
                 </button>
               ))}
             </div>
-            <span className="text-xs text-slate-900 font-medium ml-auto">{filtered.length} of {activities.length}</span>
+
+            {view === 'gantt' && (
+              <>
+                <div className="h-6 w-px bg-slate-200" />
+                <button onClick={() => setAnchor(startOfWeek(dayjs()))}
+                  className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                  Today
+                </button>
+                <button onClick={() => setAnchor(a => a.subtract(COL_WEEKS, 'week'))}
+                  className="w-8 h-8 flex items-center justify-center border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50">
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button onClick={() => setAnchor(a => a.add(COL_WEEKS, 'week'))}
+                  className="w-8 h-8 flex items-center justify-center border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50">
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+                <div className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-600">
+                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  {rangeStart.format('MMM D')} – {rangeEnd.format('MMM D, YYYY')}
+                </div>
+              </>
+            )}
+
+            <div className="ml-auto flex items-center gap-2">
+              {view === 'gantt' && (
+                <select value={granularity} onChange={e => setGranularity(e.target.value)}
+                  className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-600 outline-none">
+                  <option value="day">Day</option>
+                  <option value="week">Week</option>
+                  <option value="month">Month</option>
+                </select>
+              )}
+              <button onClick={() => {
+                const header = ['Location', 'Code', 'Activity', 'Start', 'End', 'Duration', 'Progress', 'Status'];
+                const csv = [header, ...filtered.map(a => [
+                  a.location || '', a.activity_code, a.activity_name,
+                  a.baseline_start_date, a.baseline_end_date, a.baseline_duration,
+                  `${a.progress_pct || 0}%`, STATUS_CFG[a.status]?.label || a.status,
+                ])].map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = 'schedule-export.csv'; a.click();
+              }}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                <Download className="w-3.5 h-3.5" /> Export
+              </button>
+              <button title="Fullscreen" className="w-8 h-8 flex items-center justify-center border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50">
+                <Maximize2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
 
-          {/* Gantt Chart View */}
-          {viewMode === 'gantt' && <GanttChart activities={filtered} onSelect={setSelected} />}
+          {/* Search (secondary row, table/board only) */}
+          {view !== 'gantt' && (
+            <div className="bg-white border border-slate-200 rounded-xl p-2.5 mb-4">
+              <div className="relative max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search activity name, code, location…"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-sm outline-none focus:border-indigo-400"
+                />
+              </div>
+            </div>
+          )}
 
-          {/* Table List View */}
-          {viewMode === 'list' && <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100">
-                    {['Code', 'Activity', 'Type', 'Baseline Dates', 'Duration', 'BOQ Chapter', 'Budget (BAC)', 'Progress', 'Status', ''].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-medium text-slate-900 font-medium uppercase tracking-wider whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {filtered.map(a => {
-                    const isOverdue = a.status !== 'completed' && dayjs(a.baseline_end_date).isBefore(dayjs());
-                    return (
-                      <tr key={a.id} onClick={() => setSelected(a)} className="cursor-pointer hover:bg-slate-50 transition-colors group">
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <span className="text-xs font-medium font-mono text-indigo-600 group-hover:underline">{a.activity_code}</span>
-                          {a.is_critical_path && <span className="ml-1.5 text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold">CP</span>}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="text-xs font-medium text-slate-900 font-medium max-w-52 truncate">{a.activity_name}</div>
-                          {a.location && <div className="text-xs text-slate-900 font-medium flex items-center gap-1 mt-0.5"><MapPin className="w-3 h-3" />{a.location}</div>}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <span className={clsx('text-xs px-2 py-0.5 rounded border font-medium capitalize', TYPE_CFG[a.activity_type] || TYPE_CFG.other)}>
-                            {a.activity_type || '—'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <div className="text-xs text-slate-900 font-medium">{dayjs(a.baseline_start_date).format('DD MMM')}</div>
-                          <div className={clsx('text-xs', isOverdue ? 'text-red-500 font-semibold' : 'text-slate-400')}>
-                            → {dayjs(a.baseline_end_date).format('DD MMM YY')}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-xs font-mono text-slate-700">{a.baseline_duration}d</td>
-                        <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                          <ChapterCell activity={a} chapters={boqChapters} />
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                          <BudgetCell activity={a} />
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap w-32">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                              <div
-                                className={clsx('h-full rounded-full', a.status === 'delayed' ? 'bg-red-500' : 'bg-indigo-500')}
-                                style={{ width: `${a.progress_pct || 0}%` }}
-                              />
-                            </div>
-                            <span className="text-xs text-slate-900 font-medium w-8 text-right">{a.progress_pct || 0}%</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={a.status} /></td>
-                        <td className="px-4 py-3 text-right">
-                          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 transition-colors" />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {filtered.length === 0 && (
-                    <tr><td colSpan={10} className="py-16 text-center">
-                      <Package className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-                      <p className="text-sm text-slate-400">No activities found</p>
-                    </td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50 text-xs text-slate-400">
-              {filtered.length} of {activities.length} activities
-            </div>
-          </div>}
+          {isLoading ? (
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-16 text-center text-sm text-slate-400">Loading schedule…</div>
+          ) : (
+            <>
+              {view === 'gantt' && (
+                <GanttPanel
+                  groups={groups} collapsed={collapsed} onToggle={toggleGroup}
+                  weeks={weeks} monthGroups={monthGroups} toPct={toPct} toWidth={toWidth}
+                  todayPct={todayPct} showToday={showToday} onSelect={setSelected}
+                />
+              )}
+              {view === 'table' && (
+                <TablePanel groups={groups} collapsed={collapsed} onToggle={toggleGroup}
+                  boqChapters={boqChapters} onSelect={setSelected} />
+              )}
+              {view === 'board' && <BoardPanel activities={filtered} onSelect={setSelected} />}
+            </>
+          )}
         </>
       )}
 
@@ -342,31 +448,301 @@ export default function ActivitiesPage() {
         <ActivityDetailPanel
           activity={selected}
           onClose={() => setSelected(null)}
-          onDelete={() => {
-            if (window.confirm('Delete this activity?')) deleteMut.mutate(selected.id);
-          }}
-          onProgressUpdate={() => { setShowProgress(true); }}
+          onDelete={() => { if (window.confirm('Delete this activity?')) deleteMut.mutate(selected.id); }}
           qc={qc}
         />
       )}
 
-      {/* Add Activity Modal */}
-      {showAdd && (
-        <AddActivityModal
-          projectId={projectId}
-          onClose={() => setShowAdd(false)}
-          qc={qc}
-        />
-      )}
+      {showAdd && <AddActivityModal projectId={projectId} onClose={() => setShowAdd(false)} qc={qc} />}
+      {showAutoMatch && <AutoMatchModal projectId={projectId} onClose={() => setShowAutoMatch(false)} qc={qc} />}
+    </div>
+  );
+}
 
-      {/* Auto-Match BOQ Chapters Modal */}
-      {showAutoMatch && (
-        <AutoMatchModal
-          projectId={projectId}
-          onClose={() => setShowAutoMatch(false)}
-          qc={qc}
-        />
+// ─── KPI Card — solid gradient tint per card, not a plain white box ───────
+const KPI_COLORS = {
+  indigo:  { grad: 'from-indigo-500 to-indigo-600',   iconBg: 'bg-white/20',   text: 'text-white',        sub: 'text-indigo-100',  bar: 'bg-white/30',  barFill: 'bg-white' },
+  blue:    { grad: 'from-blue-500 to-blue-600',       iconBg: 'bg-white/20',   text: 'text-white',        sub: 'text-blue-100',    bar: 'bg-white/30',  barFill: 'bg-white' },
+  emerald: { grad: 'from-emerald-500 to-emerald-600', iconBg: 'bg-white/20',   text: 'text-white',        sub: 'text-emerald-100', bar: 'bg-white/30',  barFill: 'bg-white' },
+  amber:   { grad: 'from-amber-400 to-amber-500',     iconBg: 'bg-white/25',   text: 'text-white',        sub: 'text-amber-50',    bar: 'bg-white/30',  barFill: 'bg-white' },
+  purple:  { grad: 'from-purple-500 to-purple-600',   iconBg: 'bg-white/20',   text: 'text-white',        sub: 'text-purple-100',  bar: 'bg-white/30',  barFill: 'bg-white' },
+};
+
+function KpiCard({ icon: Icon, color = 'indigo', label, value, sub, barPct }) {
+  const c = KPI_COLORS[color] || KPI_COLORS.indigo;
+  return (
+    <div className={clsx('rounded-xl shadow-sm p-4 bg-gradient-to-br', c.grad)}>
+      <div className={clsx('w-10 h-10 rounded-lg flex items-center justify-center mb-3', c.iconBg)}>
+        <Icon className={clsx('w-5 h-5', c.text)} />
+      </div>
+      <div className={clsx('text-2xl font-bold leading-tight', c.text)}>{value}</div>
+      <div className={clsx('text-xs font-semibold mt-1', c.text)}>{label}</div>
+      <div className={clsx('text-[11px] mt-0.5', c.sub)}>{sub}</div>
+      {barPct !== undefined && (
+        <div className={clsx('h-1 rounded-full overflow-hidden mt-2', c.bar)}>
+          <div className={clsx('h-full rounded-full', c.barFill)} style={{ width: `${barPct || 0}%` }} />
+        </div>
       )}
+    </div>
+  );
+}
+
+// ─── Gantt Panel (hierarchical, grouped by Tower/location) ────────────────
+function GanttPanel({ groups, collapsed, onToggle, weeks, monthGroups, toPct, toWidth, todayPct, showToday, onSelect }) {
+  if (!groups.length) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-16 text-center">
+        <GanttChartSquare className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+        <p className="text-slate-500 text-sm">No activities to display</p>
+      </div>
+    );
+  }
+
+  const ROW_H = 46;
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="flex">
+        {/* Left fixed panel */}
+        <div className="w-[560px] flex-shrink-0 border-r border-slate-100">
+          <div className="grid grid-cols-[90px_1fr_78px_78px_110px_90px] bg-slate-50 border-b border-slate-100 text-[10px] font-semibold uppercase tracking-wider text-slate-400" style={{ height: 56 }}>
+            <div className="flex items-center px-3">Activity ID</div>
+            <div className="flex items-center px-3">Activity Name</div>
+            <div className="flex items-center px-2">Start</div>
+            <div className="flex items-center px-2">End</div>
+            <div className="flex items-center px-2">Progress</div>
+            <div className="flex items-center px-2">Status</div>
+          </div>
+          <div className="overflow-y-auto" style={{ maxHeight: '60vh' }}>
+            {groups.map(g => (
+              <React.Fragment key={g.key}>
+                <div className="grid grid-cols-[90px_1fr_78px_78px_110px_90px] items-center border-b border-slate-50 bg-slate-50/60 cursor-pointer hover:bg-slate-100"
+                  style={{ height: ROW_H }} onClick={() => onToggle(g.key)}>
+                  <div className="px-3 flex items-center gap-1 text-xs font-mono text-slate-500">
+                    {collapsed[g.key] ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </div>
+                  <div className="px-3 text-xs font-bold text-slate-800 truncate">{g.label}</div>
+                  <div className="px-2 text-xs text-slate-500">{g.start.format('DD MMM')}</div>
+                  <div className="px-2 text-xs text-slate-500">{g.end.format('DD MMM')}</div>
+                  <div className="px-2"><ProgressCell pct={g.progress} /></div>
+                  <div className="px-2"><StatusBadge status={g.status} /></div>
+                </div>
+                {!collapsed[g.key] && g.items.map(a => (
+                  <div key={a.id} className="grid grid-cols-[90px_1fr_78px_78px_110px_90px] items-center border-b border-slate-50 cursor-pointer hover:bg-slate-50 group"
+                    style={{ height: ROW_H }} onClick={() => onSelect(a)}>
+                    <div className="px-3 text-xs font-mono text-indigo-600 group-hover:underline">{a.activity_code}</div>
+                    <div className="pl-6 pr-3 relative text-xs text-slate-700 truncate">
+                      <span className="absolute left-3 top-0 bottom-0 w-px bg-slate-200" />
+                      <span className="absolute left-3 top-1/2 w-2.5 h-px bg-slate-200" />
+                      {a.activity_name}
+                    </div>
+                    <div className="px-2 text-xs text-slate-500">{dayjs(a.baseline_start_date).format('DD MMM')}</div>
+                    <div className="px-2 text-xs text-slate-500">{dayjs(a.baseline_end_date).format('DD MMM')}</div>
+                    <div className="px-2"><ProgressCell pct={a.progress_pct} /></div>
+                    <div className="px-2"><StatusBadge status={a.status} /></div>
+                  </div>
+                ))}
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+
+        {/* Scrollable timeline */}
+        <div className="flex-1 overflow-x-auto">
+          <div style={{ minWidth: 900 }}>
+            {/* Month header */}
+            <div className="flex border-b border-slate-100" style={{ height: 28 }}>
+              {monthGroups.map((m, i) => (
+                <div key={i} className="flex items-center justify-center text-[11px] font-semibold text-slate-500 border-r border-slate-100"
+                  style={{ width: `${(m.span / weeks.length) * 100}%` }}>
+                  {m.label}
+                </div>
+              ))}
+            </div>
+            {/* Week header */}
+            <div className="flex border-b border-slate-100 relative bg-slate-50" style={{ height: 28 }}>
+              {weeks.map((w, i) => (
+                <div key={i} className="flex items-center justify-center text-[10px] font-medium text-slate-400 border-r border-slate-100"
+                  style={{ width: `${100 / weeks.length}%` }}>
+                  {w.start.format('DD MMM')} – {w.end.format('DD MMM')}
+                </div>
+              ))}
+              {showToday && (
+                <div className="absolute top-0 bottom-0" style={{ left: `${todayPct}%` }}>
+                  <span className="bg-indigo-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap -translate-x-1/2 block mt-0.5">Today</span>
+                </div>
+              )}
+            </div>
+
+            {/* Rows */}
+            <div className="relative">
+              {showToday && (
+                <div className="absolute top-0 bottom-0 w-px bg-indigo-300 z-10 pointer-events-none" style={{ left: `${todayPct}%` }} />
+              )}
+              {groups.map(g => (
+                <React.Fragment key={g.key}>
+                  <div className="relative border-b border-slate-50 bg-slate-50/60" style={{ height: ROW_H }}>
+                    <GanttBar start={g.start} end={g.end} pct={g.progress} status={g.status} toPct={toPct} toWidth={toWidth} bold />
+                  </div>
+                  {!collapsed[g.key] && g.items.map(a => (
+                    <div key={a.id} className="relative border-b border-slate-50 hover:bg-slate-50 cursor-pointer" style={{ height: ROW_H }} onClick={() => onSelect(a)}>
+                      <GanttBar start={a.baseline_start_date} end={a.baseline_end_date} pct={a.progress_pct} status={a.status} toPct={toPct} toWidth={toWidth} />
+                    </div>
+                  ))}
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap items-center gap-4 px-4 py-2.5 border-t border-slate-100 bg-slate-50 text-[11px]">
+        {['completed', 'in_progress', 'planned', 'delayed'].map(s => (
+          <div key={s} className="flex items-center gap-1.5">
+            <span className={clsx('w-2.5 h-2.5 rounded-full', STATUS_CFG[s].dot)} />
+            <span className="text-slate-500">{STATUS_CFG[s].label}</span>
+          </div>
+        ))}
+        <div className="flex items-center gap-1.5">
+          <Flag className="w-3 h-3 text-purple-500" />
+          <span className="text-slate-500">Milestone</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GanttBar({ start, end, pct, status, toPct, toWidth, bold }) {
+  const cfg = STATUS_CFG[status] || STATUS_CFG.planned;
+  const left = toPct(start);
+  const width = toWidth(start, end);
+  const p = Number(pct) || 0;
+  return (
+    <div
+      className={clsx('absolute top-1/2 -translate-y-1/2 rounded-md flex items-center justify-end px-1.5 shadow-sm', cfg.bar, bold ? 'h-6' : 'h-5')}
+      style={{ left: `${left}%`, width: `${width}%` }}
+      title={`${dayjs(start).format('DD MMM YYYY')} → ${dayjs(end).format('DD MMM YYYY')} · ${p}%`}
+    >
+      {p > 0 && <span className="text-[9px] font-bold text-white whitespace-nowrap">{p}%</span>}
+    </div>
+  );
+}
+
+// ─── Table Panel ────────────────────────────────────────────────────────
+function TablePanel({ groups, collapsed, onToggle, boqChapters, onSelect }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-slate-50 border-b border-slate-100">
+              {['Code', 'Activity', 'Type', 'Baseline Dates', 'Duration', 'BOQ Chapter', 'Budget (BAC)', 'Progress', 'Status', ''].map(h => (
+                <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-50">
+            {groups.map(g => (
+              <React.Fragment key={g.key}>
+                <tr className="bg-slate-50/60 cursor-pointer hover:bg-slate-100" onClick={() => onToggle(g.key)}>
+                  <td className="px-4 py-2.5" colSpan={2}>
+                    <div className="flex items-center gap-1.5 font-bold text-slate-800 text-xs">
+                      {collapsed[g.key] ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      {g.label}
+                    </div>
+                  </td>
+                  <td colSpan={4} />
+                  <td className="px-4 py-2.5"><ProgressCell pct={g.progress} /></td>
+                  <td className="px-4 py-2.5"><StatusBadge status={g.status} /></td>
+                  <td />
+                </tr>
+                {!collapsed[g.key] && g.items.map(a => {
+                  const isOverdue = a.status !== 'completed' && dayjs(a.baseline_end_date).isBefore(dayjs());
+                  return (
+                    <tr key={a.id} onClick={() => onSelect(a)} className="cursor-pointer hover:bg-slate-50 transition-colors group">
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className="text-xs font-mono text-indigo-600 group-hover:underline">{a.activity_code}</span>
+                        {a.is_critical_path && <span className="ml-1.5 text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold">CP</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="text-xs font-medium text-slate-800 max-w-52 truncate">{a.activity_name}</div>
+                        {a.location && <div className="text-xs text-slate-400 flex items-center gap-1 mt-0.5"><MapPin className="w-3 h-3" />{a.location}</div>}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={clsx('text-xs px-2 py-0.5 rounded border font-medium capitalize', TYPE_CFG[a.activity_type] || TYPE_CFG.other)}>
+                          {a.activity_type || '—'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="text-xs text-slate-700">{dayjs(a.baseline_start_date).format('DD MMM')}</div>
+                        <div className={clsx('text-xs', isOverdue ? 'text-red-500 font-semibold' : 'text-slate-400')}>
+                          → {dayjs(a.baseline_end_date).format('DD MMM YY')}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-xs font-mono text-slate-600">{a.baseline_duration}d</td>
+                      <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                        <ChapterCell activity={a} chapters={boqChapters} />
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                        <BudgetCell activity={a} />
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap w-32"><ProgressCell pct={a.progress_pct} /></td>
+                      <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={a.status} /></td>
+                      <td className="px-4 py-3 text-right">
+                        <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 transition-colors" />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </React.Fragment>
+            ))}
+            {groups.length === 0 && (
+              <tr><td colSpan={10} className="py-16 text-center">
+                <Package className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+                <p className="text-sm text-slate-400">No activities found</p>
+              </td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Board (Kanban) Panel ──────────────────────────────────────────────
+function BoardPanel({ activities, onSelect }) {
+  const cols = ['planned', 'in_progress', 'delayed', 'completed'];
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {cols.map(status => {
+        const cfg = STATUS_CFG[status];
+        const items = activities.filter(a => a.status === status);
+        return (
+          <div key={status} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+            <div className="flex items-center gap-2 mb-3 px-1">
+              <span className={clsx('w-2 h-2 rounded-full', cfg.dot)} />
+              <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{cfg.label}</span>
+              <span className="ml-auto text-xs font-semibold text-slate-400">{items.length}</span>
+            </div>
+            <div className="space-y-2 max-h-[65vh] overflow-y-auto">
+              {items.map(a => (
+                <div key={a.id} onClick={() => onSelect(a)}
+                  className="bg-white border border-slate-200 rounded-lg p-3 cursor-pointer hover:shadow-md hover:border-indigo-200 transition-all">
+                  <div className="text-xs font-mono text-indigo-600 mb-1">{a.activity_code}</div>
+                  <div className="text-xs font-semibold text-slate-800 mb-1.5">{a.activity_name}</div>
+                  {a.location && <div className="text-[10px] text-slate-400 flex items-center gap-1 mb-2"><MapPin className="w-2.5 h-2.5" />{a.location}</div>}
+                  <div className="text-[10px] text-slate-400 mb-2">
+                    {dayjs(a.baseline_start_date).format('DD MMM')} → {dayjs(a.baseline_end_date).format('DD MMM YY')}
+                  </div>
+                  <ProgressCell pct={a.progress_pct} />
+                </div>
+              ))}
+              {items.length === 0 && <div className="text-center text-[11px] text-slate-300 py-6">No activities</div>}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -375,7 +751,6 @@ export default function ActivitiesPage() {
 function ActivityDetailPanel({ activity: a, onClose, onDelete, qc }) {
   const [pct, setPct]         = useState(a.progress_pct || 0);
   const [status, setStatus]   = useState(a.status);
-  const [saving, setSaving]   = useState(false);
   const [bac, setBac]         = useState(a.budget_at_completion || '');
   const [pv, setPv]           = useState(a.planned_value || '');
   const [ev, setEv]           = useState(a.earned_value || '');
@@ -383,11 +758,7 @@ function ActivityDetailPanel({ activity: a, onClose, onDelete, qc }) {
 
   const progressMut = useMutation({
     mutationFn: d => planningAPI.updateProgress(a.id, d),
-    onSuccess: () => {
-      toast.success('Progress updated');
-      qc.invalidateQueries({ queryKey: ['planning-activities'] });
-      onClose();
-    },
+    onSuccess: () => { toast.success('Progress updated'); qc.invalidateQueries({ queryKey: ['planning-activities'] }); onClose(); },
     onError: e => toast.error(e?.response?.data?.error || 'Update failed'),
   });
 
@@ -402,17 +773,14 @@ function ActivityDetailPanel({ activity: a, onClose, onDelete, qc }) {
     onError: e => toast.error(e?.response?.data?.error || 'Update failed'),
   });
 
-  const cfg  = STATUS_CFG[a.status] || STATUS_CFG.planned;
-
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="flex-1 bg-black/30 backdrop-blur-sm" onClick={onClose} />
       <div className="w-full max-w-[560px] bg-white shadow-2xl flex flex-col h-full">
-
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
           <div>
             <div className="text-xs font-mono text-indigo-600 font-bold">{a.activity_code}</div>
-            <h2 className="text-base font-medium text-slate-900">{a.activity_name}</h2>
+            <h2 className="text-base font-bold text-slate-900">{a.activity_name}</h2>
           </div>
           <div className="flex items-center gap-2">
             <StatusBadge status={a.status} />
@@ -434,68 +802,45 @@ function ActivityDetailPanel({ activity: a, onClose, onDelete, qc }) {
 
           {a.description && (
             <div className="bg-slate-50 border border-slate-100 rounded-lg p-3">
-              <div className="text-[10px] font-medium text-slate-900 font-medium uppercase tracking-wider mb-1">Description</div>
+              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Description</div>
               <p className="text-sm text-slate-700">{a.description}</p>
             </div>
           )}
 
-          {/* Progress Update */}
           <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4">
-            <div className="text-xs font-medium text-indigo-700 mb-3">Update Progress</div>
+            <div className="text-xs font-semibold text-indigo-700 mb-3">Update Progress</div>
             <div className="space-y-3">
               <div>
                 <div className="flex justify-between text-xs mb-1.5">
                   <span className="text-slate-600">Progress</span>
-                  <span className="font-medium text-indigo-700">{pct}%</span>
+                  <span className="font-semibold text-indigo-700">{pct}%</span>
                 </div>
-                <input
-                  type="range" min={0} max={100} value={pct}
-                  onChange={e => setPct(Number(e.target.value))}
-                  className="w-full accent-indigo-600"
-                />
+                <input type="range" min={0} max={100} value={pct} onChange={e => setPct(Number(e.target.value))} className="w-full accent-indigo-600" />
               </div>
               <div>
-                <label className="text-xs font-medium text-slate-900 block mb-1">Status</label>
-                <select
-                  value={status}
-                  onChange={e => setStatus(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-indigo-400"
-                >
-                  {Object.entries(STATUS_CFG).map(([k, v]) => (
-                    <option key={k} value={k}>{v.label}</option>
-                  ))}
+                <label className="text-xs font-medium text-slate-500 block mb-1">Status</label>
+                <select value={status} onChange={e => setStatus(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-indigo-400">
+                  {Object.entries(STATUS_CFG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                 </select>
               </div>
-              <button
-                onClick={() => progressMut.mutate({ progress_pct: pct, status })}
-                disabled={progressMut.isPending}
-                className="w-full py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-              >
+              <button onClick={() => progressMut.mutate({ progress_pct: pct, status })} disabled={progressMut.isPending}
+                className="w-full py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50">
                 {progressMut.isPending ? 'Saving…' : 'Save Progress'}
               </button>
             </div>
           </div>
 
-          {/* Cost / EVM */}
           <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-4">
-            <div className="text-xs font-medium text-emerald-700 mb-1">Cost / EVM Values</div>
+            <div className="text-xs font-semibold text-emerald-700 mb-1">Cost / EVM Values</div>
             <p className="text-[10px] text-emerald-700/70 mb-3">
-              Feeds the P6 EVM Dashboard (SPI/CPI). For bulk entry across many activities, use
-              "Import CSV" with a budget_at_completion column instead.
+              Feeds the P6 EVM Dashboard (SPI/CPI). For bulk entry, use "Import CSV" with a budget_at_completion column.
             </p>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Budget at Completion (BAC)">
-                <input type="number" className="inp" placeholder="0" value={bac} onChange={e => setBac(e.target.value)} />
-              </Field>
-              <Field label="Planned Value (PV)">
-                <input type="number" className="inp" placeholder="0" value={pv} onChange={e => setPv(e.target.value)} />
-              </Field>
-              <Field label="Earned Value (EV)">
-                <input type="number" className="inp" placeholder="0" value={ev} onChange={e => setEv(e.target.value)} />
-              </Field>
-              <Field label="Actual Cost (AC)">
-                <input type="number" className="inp" placeholder="0" value={ac} onChange={e => setAc(e.target.value)} />
-              </Field>
+              <Field label="Budget at Completion (BAC)"><input type="number" className="inp" placeholder="0" value={bac} onChange={e => setBac(e.target.value)} /></Field>
+              <Field label="Planned Value (PV)"><input type="number" className="inp" placeholder="0" value={pv} onChange={e => setPv(e.target.value)} /></Field>
+              <Field label="Earned Value (EV)"><input type="number" className="inp" placeholder="0" value={ev} onChange={e => setEv(e.target.value)} /></Field>
+              <Field label="Actual Cost (AC)"><input type="number" className="inp" placeholder="0" value={ac} onChange={e => setAc(e.target.value)} /></Field>
             </div>
             <button
               onClick={() => costMut.mutate({
@@ -505,7 +850,7 @@ function ActivityDetailPanel({ activity: a, onClose, onDelete, qc }) {
                 actual_cost: ac === '' ? 0 : Number(ac),
               })}
               disabled={costMut.isPending}
-              className="w-full mt-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+              className="w-full mt-3 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-700 disabled:opacity-50"
             >
               {costMut.isPending ? 'Saving…' : 'Save Cost Values'}
             </button>
@@ -513,49 +858,31 @@ function ActivityDetailPanel({ activity: a, onClose, onDelete, qc }) {
         </div>
 
         <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 flex justify-between">
-          <button
-            onClick={onDelete}
-            className="flex items-center gap-1.5 px-3 py-2 text-red-600 text-xs font-medium hover:bg-red-50 rounded-lg transition-colors"
-          >
+          <button onClick={onDelete} className="flex items-center gap-1.5 px-3 py-2 text-red-600 text-xs font-semibold hover:bg-red-50 rounded-lg transition-colors">
             <Trash2 className="w-3.5 h-3.5" /> Delete
           </button>
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-900 hover:bg-slate-200 rounded-lg">Close</button>
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg">Close</button>
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Inline BOQ Chapter picker for the activities table ─────────────
-// Tags an activity to a BOQ chapter so "Sync Budgets from BOQ" can pull its
-// share of that chapter's budget (see planningP6API.syncBudgetFromBoq).
+// ─── Inline BOQ Chapter picker ──────────────────────────────────────
 function ChapterCell({ activity: a, chapters }) {
   const qc = useQueryClient();
-
   const mut = useMutation({
     mutationFn: chapterNo => planningP6API.setActivityChapter(a.id, chapterNo || null),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['planning-activities'] }),
     onError: e => toast.error(e?.response?.data?.error || 'Failed to save chapter'),
   });
-
   const selected = chapters.find(c => c.key === a.boq_chapter_no);
-
   return (
-    <select
-      value={a.boq_chapter_no || ''}
-      onChange={e => mut.mutate(e.target.value)}
-      disabled={mut.isPending}
-      className={clsx(
-        'text-xs border rounded-md px-2 py-1 outline-none max-w-40 disabled:opacity-50',
-        a.boq_chapter_no ? 'border-slate-200 text-slate-700' : 'border-dashed border-slate-300 text-slate-400 italic'
-      )}
-    >
+    <select value={a.boq_chapter_no || ''} onChange={e => mut.mutate(e.target.value)} disabled={mut.isPending}
+      className={clsx('text-xs border rounded-md px-2 py-1 outline-none max-w-40 disabled:opacity-50',
+        a.boq_chapter_no ? 'border-slate-200 text-slate-700' : 'border-dashed border-slate-300 text-slate-400 italic')}>
       <option value="">— None —</option>
-      {chapters.map(c => (
-        <option key={c.key} value={c.key}>
-          {c.chapter_no}{c.chapter_name ? ` — ${c.chapter_name}` : ''}
-        </option>
-      ))}
+      {chapters.map(c => <option key={c.key} value={c.key}>{c.chapter_no}{c.chapter_name ? ` — ${c.chapter_name}` : ''}</option>)}
       {a.boq_chapter_no && !selected && <option value={a.boq_chapter_no}>{a.boq_chapter_no} (not in BOQ)</option>}
     </select>
   );
@@ -567,17 +894,15 @@ const CONFIDENCE_CFG = {
   low:    { label: 'Low',    color: 'bg-slate-100 text-slate-500 border-slate-200' },
 };
 
-// ─── Auto-Match BOQ Chapters — preview suggested matches, review, apply ──
+// ─── Auto-Match BOQ Chapters Modal ──────────────────────────────────
 function AutoMatchModal({ projectId, onClose, qc }) {
-  const [checked, setChecked] = useState({}); // activity_id -> bool
-
+  const [checked, setChecked] = useState({});
   const { data, isLoading, isError } = useQuery({
     queryKey: ['auto-match-boq-chapters', projectId],
     queryFn: () => planningP6API.autoMatchBoqChapters(projectId).then(r => r.data?.data),
   });
   const matches = data?.matches ?? [];
 
-  // Default-select everything above "low" confidence once matches load.
   React.useEffect(() => {
     if (!matches.length) return;
     setChecked(prev => {
@@ -599,11 +924,8 @@ function AutoMatchModal({ projectId, onClose, qc }) {
   });
 
   const selectedCount = Object.values(checked).filter(Boolean).length;
-
   const handleApply = () => {
-    const selectedMatches = matches
-      .filter(m => checked[m.activity_id])
-      .map(m => ({ activity_id: m.activity_id, boq_chapter_key: m.boq_chapter_key }));
+    const selectedMatches = matches.filter(m => checked[m.activity_id]).map(m => ({ activity_id: m.activity_id, boq_chapter_key: m.boq_chapter_key }));
     if (!selectedMatches.length) { toast('Nothing selected', { icon: '⚠️' }); return; }
     applyMut.mutate(selectedMatches);
   };
@@ -613,36 +935,28 @@ function AutoMatchModal({ projectId, onClose, qc }) {
       <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[85vh] flex flex-col">
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
           <div>
-            <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-indigo-600" /> Auto-Match BOQ Chapters
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Suggested BOQ chapter links for activities with no chapter set yet, based on keyword overlap with chapter names and BOQ item text. Review before applying — nothing is saved until you click Apply.
-            </p>
+            <h3 className="font-bold text-slate-900 flex items-center gap-2"><Sparkles className="w-4 h-4 text-indigo-600" /> Auto-Match BOQ Chapters</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Suggested BOQ chapter links based on keyword overlap. Review before applying.</p>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-slate-200 rounded-md text-slate-400"><X className="w-4 h-4" /></button>
         </div>
-
         <div className="flex-1 overflow-y-auto px-5 py-3">
           {isLoading ? (
             <div className="py-16 text-center text-slate-400 text-sm">Scanning activities and BOQ chapters…</div>
           ) : isError ? (
             <div className="py-16 text-center text-red-500 text-sm">Failed to compute matches.</div>
           ) : matches.length === 0 ? (
-            <div className="py-16 text-center text-slate-400 text-sm">
-              No confident matches found. Every activity either already has a chapter, or none of the BOQ chapter
-              names/items shared enough keywords with the activity names — link those manually from the table.
-            </div>
+            <div className="py-16 text-center text-slate-400 text-sm">No confident matches found — link manually from the table.</div>
           ) : (
             <>
               <div className="text-xs text-slate-500 mb-2 flex items-center justify-between">
-                <span>{matches.length} suggested match{matches.length === 1 ? '' : 'es'} ({data.unmatched_activity_count} activities had no match at all)</span>
+                <span>{matches.length} suggested match{matches.length === 1 ? '' : 'es'}</span>
                 <span>{selectedCount} selected</span>
               </div>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs text-slate-400 border-b border-slate-100">
-                    <th className="py-1.5 pr-2 w-8"></th>
+                    <th className="py-1.5 pr-2 w-8" />
                     <th className="py-1.5 pr-2">Activity</th>
                     <th className="py-1.5 pr-2">Suggested Chapter</th>
                     <th className="py-1.5 pr-2">Confidence</th>
@@ -652,19 +966,14 @@ function AutoMatchModal({ projectId, onClose, qc }) {
                   {matches.map(m => (
                     <tr key={m.activity_id} className="border-b border-slate-50 hover:bg-slate-50">
                       <td className="py-1.5 pr-2">
-                        <input
-                          type="checkbox"
-                          checked={!!checked[m.activity_id]}
-                          onChange={e => setChecked(prev => ({ ...prev, [m.activity_id]: e.target.checked }))}
-                        />
+                        <input type="checkbox" checked={!!checked[m.activity_id]}
+                          onChange={e => setChecked(prev => ({ ...prev, [m.activity_id]: e.target.checked }))} />
                       </td>
                       <td className="py-1.5 pr-2">
                         <div className="text-slate-900">{m.activity_name}</div>
                         <div className="text-xs text-slate-400 font-mono">{m.activity_code}</div>
                       </td>
-                      <td className="py-1.5 pr-2 text-slate-700">
-                        {m.chapter_no}{m.chapter_name ? ` — ${m.chapter_name}` : ''}
-                      </td>
+                      <td className="py-1.5 pr-2 text-slate-700">{m.chapter_no}{m.chapter_name ? ` — ${m.chapter_name}` : ''}</td>
                       <td className="py-1.5 pr-2">
                         <span className={clsx('inline-flex px-2 py-0.5 rounded-md text-xs font-medium border', CONFIDENCE_CFG[m.confidence].color)}>
                           {CONFIDENCE_CFG[m.confidence].label}
@@ -677,14 +986,10 @@ function AutoMatchModal({ projectId, onClose, qc }) {
             </>
           )}
         </div>
-
         <div className="border-t border-slate-100 px-5 py-3 flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-900 hover:bg-slate-200 rounded-lg">Cancel</button>
-          <button
-            onClick={handleApply}
-            disabled={applyMut.isPending || matches.length === 0}
-            className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 shadow-sm"
-          >
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg">Cancel</button>
+          <button onClick={handleApply} disabled={applyMut.isPending || matches.length === 0}
+            className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 shadow-sm">
             {applyMut.isPending ? 'Applying…' : `Apply Selected (${selectedCount})`}
           </button>
         </div>
@@ -693,7 +998,7 @@ function AutoMatchModal({ projectId, onClose, qc }) {
   );
 }
 
-// ─── Inline-editable Budget (BAC) cell for the activities table ─────
+// ─── Inline-editable Budget (BAC) cell ─────────────────────────────
 function BudgetCell({ activity: a }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
@@ -701,19 +1006,10 @@ function BudgetCell({ activity: a }) {
 
   const mut = useMutation({
     mutationFn: bac => planningP6API.updateActivityEVM(a.id, {
-      budget_at_completion: bac,
-      planned_value: a.planned_value || 0,
-      earned_value: a.earned_value || 0,
-      actual_cost: a.actual_cost || 0,
+      budget_at_completion: bac, planned_value: a.planned_value || 0, earned_value: a.earned_value || 0, actual_cost: a.actual_cost || 0,
     }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['planning-activities'] });
-      qc.invalidateQueries({ queryKey: ['p6-dashboard'] });
-    },
-    onError: e => {
-      toast.error(e?.response?.data?.error || 'Failed to save budget');
-      setValue(a.budget_at_completion || '');
-    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['planning-activities'] }); qc.invalidateQueries({ queryKey: ['p6-dashboard'] }); },
+    onError: e => { toast.error(e?.response?.data?.error || 'Failed to save budget'); setValue(a.budget_at_completion || ''); },
   });
 
   const save = () => {
@@ -726,33 +1022,15 @@ function BudgetCell({ activity: a }) {
 
   if (editing) {
     return (
-      <input
-        type="number"
-        autoFocus
-        value={value}
-        onChange={e => setValue(e.target.value)}
-        onBlur={save}
-        onKeyDown={e => {
-          if (e.key === 'Enter') e.currentTarget.blur();
-          if (e.key === 'Escape') { setValue(a.budget_at_completion || ''); setEditing(false); }
-        }}
-        className="w-28 border border-indigo-300 rounded-md px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-indigo-400"
-      />
+      <input type="number" autoFocus value={value} onChange={e => setValue(e.target.value)} onBlur={save}
+        onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setValue(a.budget_at_completion || ''); setEditing(false); } }}
+        className="w-28 border border-indigo-300 rounded-md px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-indigo-400" />
     );
   }
-
   return (
-    <button
-      onClick={() => setEditing(true)}
-      disabled={mut.isPending}
-      className="text-xs px-2 py-1 rounded-md text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-50"
-      title="Click to edit budget"
-    >
-      {mut.isPending
-        ? 'Saving…'
-        : a.budget_at_completion > 0
-          ? `₹${Number(a.budget_at_completion).toLocaleString('en-IN')}`
-          : <span className="text-slate-400 italic">+ Add budget</span>}
+    <button onClick={() => setEditing(true)} disabled={mut.isPending}
+      className="text-xs px-2 py-1 rounded-md text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-50" title="Click to edit budget">
+      {mut.isPending ? 'Saving…' : a.budget_at_completion > 0 ? `₹${Number(a.budget_at_completion).toLocaleString('en-IN')}` : <span className="text-slate-400 italic">+ Add budget</span>}
     </button>
   );
 }
@@ -760,162 +1038,8 @@ function BudgetCell({ activity: a }) {
 function InfoCell({ label, value }) {
   return (
     <div className="bg-slate-50 border border-slate-100 rounded-lg p-3">
-      <div className="text-[10px] font-medium text-slate-900 font-medium uppercase tracking-wider mb-1">{label}</div>
+      <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">{label}</div>
       <div className="text-sm font-medium text-slate-800">{value}</div>
-    </div>
-  );
-}
-
-// ─── Gantt Chart Component ───────────────────────────────────────────
-function GanttChart({ activities, onSelect }) {
-  const today = dayjs();
-
-  if (!activities.length) {
-    return (
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-16 text-center">
-        <GanttChartSquare className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-        <p className="text-slate-500 text-sm">No activities to display on Gantt chart</p>
-      </div>
-    );
-  }
-
-  // Compute timeline range
-  const allDates = activities.flatMap(a => [
-    dayjs(a.baseline_start_date), dayjs(a.baseline_end_date)
-  ]);
-  const minDate = allDates.reduce((m, d) => d.isBefore(m) ? d : m, allDates[0]).startOf('month');
-  const maxDate = allDates.reduce((m, d) => d.isAfter(m) ? d : m, allDates[0]).endOf('month');
-  const totalDays = maxDate.diff(minDate, 'day') + 1;
-
-  const toPercent = (date) => {
-    const d = dayjs(date);
-    return Math.max(0, Math.min(100, (d.diff(minDate, 'day') / totalDays) * 100));
-  };
-  const toWidth = (start, end) => {
-    const s = dayjs(start), e = dayjs(end);
-    return Math.max(0.5, ((e.diff(s, 'day') + 1) / totalDays) * 100);
-  };
-
-  const todayPct = toPercent(today);
-
-  // Generate month headers
-  const months = [];
-  let cur = minDate.clone();
-  while (cur.isBefore(maxDate) || cur.isSame(maxDate, 'month')) {
-    const start = toPercent(cur.startOf('month'));
-    const end   = toPercent(cur.endOf('month').add(1, 'day'));
-    months.push({ label: cur.format('MMM YY'), left: start, width: end - start });
-    cur = cur.add(1, 'month');
-  }
-
-  const BAR_COLORS = {
-    planned:     'bg-slate-400',
-    in_progress: 'bg-indigo-500',
-    delayed:     'bg-red-500',
-    completed:   'bg-emerald-500',
-    cancelled:   'bg-slate-300',
-  };
-
-  const ACTUAL_COLORS = {
-    in_progress: 'bg-indigo-300',
-    completed:   'bg-emerald-300',
-    delayed:     'bg-red-300',
-  };
-
-  return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-      {/* Month headers */}
-      <div className="flex border-b border-slate-100 bg-slate-50">
-        <div className="w-56 flex-shrink-0 px-4 py-2 text-xs font-medium text-slate-500 border-r border-slate-200">Activity</div>
-        <div className="flex-1 relative h-8">
-          {months.map((m, i) => (
-            <div key={i} className="absolute top-0 h-full flex items-center border-r border-slate-200"
-              style={{ left: `${m.left}%`, width: `${m.width}%` }}>
-              <span className="text-[10px] font-medium text-slate-500 pl-1 truncate">{m.label}</span>
-            </div>
-          ))}
-          {/* Today line */}
-          {todayPct >= 0 && todayPct <= 100 && (
-            <div className="absolute top-0 bottom-0 w-0.5 bg-red-400 z-10"
-              style={{ left: `${todayPct}%` }}>
-              <span className="absolute -top-0.5 -translate-x-1/2 text-[9px] text-red-500 font-bold whitespace-nowrap">Today</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Activity rows */}
-      <div className="divide-y divide-slate-50 overflow-auto max-h-[60vh]">
-        {activities.map(a => {
-          const isCP = a.is_critical_path;
-          const barColor = isCP && a.status !== 'completed' ? 'bg-red-500' : (BAR_COLORS[a.status] || 'bg-slate-400');
-          const progress = parseFloat(a.progress_pct || 0);
-          const haActual = a.actual_start_date;
-
-          return (
-            <div key={a.id} className="flex items-center group hover:bg-slate-50 cursor-pointer"
-              onClick={() => onSelect(a)}>
-              {/* Activity name */}
-              <div className="w-56 flex-shrink-0 px-4 py-2.5 border-r border-slate-100">
-                <div className="flex items-center gap-1.5">
-                  {isCP && <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" title="Critical Path" />}
-                  <span className="text-xs font-mono text-indigo-600 flex-shrink-0">{a.activity_code}</span>
-                </div>
-                <div className="text-xs text-slate-700 truncate mt-0.5">{a.activity_name}</div>
-                <div className="text-[10px] text-slate-400">{a.baseline_duration}d · {a.progress_pct||0}%</div>
-              </div>
-
-              {/* Gantt bar area */}
-              <div className="flex-1 relative py-3 px-0 h-14">
-                {/* Today marker */}
-                {todayPct >= 0 && todayPct <= 100 && (
-                  <div className="absolute top-0 bottom-0 w-px bg-red-300 z-10 pointer-events-none"
-                    style={{ left: `${todayPct}%` }} />
-                )}
-
-                {/* Baseline bar */}
-                <div className={`absolute top-3 h-5 rounded-sm ${barColor} opacity-80`}
-                  style={{ left: `${toPercent(a.baseline_start_date)}%`, width: `${toWidth(a.baseline_start_date, a.baseline_end_date)}%` }}
-                  title={`Baseline: ${a.baseline_start_date} → ${a.baseline_end_date}`}>
-                  {/* Progress overlay */}
-                  {progress > 0 && (
-                    <div className="absolute inset-y-0 left-0 bg-white/30 rounded-sm"
-                      style={{ width: `${progress}%` }} />
-                  )}
-                </div>
-
-                {/* Actual bar (if started) */}
-                {haActual && a.actual_start_date && (
-                  <div className={`absolute top-8 h-2 rounded-sm ${ACTUAL_COLORS[a.status] || 'bg-slate-200'} opacity-60`}
-                    style={{
-                      left: `${toPercent(a.actual_start_date)}%`,
-                      width: `${toWidth(a.actual_start_date, a.actual_end_date || today.format('YYYY-MM-DD'))}%`
-                    }}
-                    title={`Actual: ${a.actual_start_date}${a.actual_end_date ? ` → ${a.actual_end_date}` : ' (in progress)'}`} />
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Legend */}
-      <div className="flex items-center gap-4 px-4 py-2.5 border-t border-slate-100 bg-slate-50 text-[10px]">
-        {[
-          { color:'bg-slate-400', label:'Planned' },
-          { color:'bg-indigo-500', label:'In Progress' },
-          { color:'bg-red-500', label:'Delayed / Critical Path' },
-          { color:'bg-emerald-500', label:'Completed' },
-        ].map(l => (
-          <div key={l.label} className="flex items-center gap-1">
-            <div className={`w-3 h-2 rounded-sm ${l.color}`} />
-            <span className="text-slate-500">{l.label}</span>
-          </div>
-        ))}
-        <div className="flex items-center gap-1 ml-2">
-          <div className="w-px h-3 bg-red-400" /><span className="text-slate-500">Today</span>
-        </div>
-      </div>
     </div>
   );
 }
@@ -927,16 +1051,11 @@ function AddActivityModal({ projectId, onClose, qc }) {
     activity_type: 'civil', baseline_start_date: '', baseline_end_date: '',
     is_critical_path: false, planned_quantity: '', measurement_unit: '',
   });
-
   const F = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const createMut = useMutation({
     mutationFn: d => planningAPI.createActivity(d),
-    onSuccess: () => {
-      toast.success('Activity created');
-      qc.invalidateQueries({ queryKey: ['planning-activities'] });
-      onClose();
-    },
+    onSuccess: () => { toast.success('Activity created'); qc.invalidateQueries({ queryKey: ['planning-activities'] }); onClose(); },
     onError: e => toast.error(e?.response?.data?.error || 'Failed to create'),
   });
 
@@ -951,21 +1070,21 @@ function AddActivityModal({ projectId, onClose, qc }) {
     <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-white w-full max-w-xl rounded-xl shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]">
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-          <h2 className="text-base font-medium text-slate-900">Add Activity</h2>
+          <h2 className="text-base font-bold text-slate-900">Create Activity</h2>
           <button onClick={onClose} className="p-1.5 hover:bg-slate-200 rounded-md text-slate-400"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-5 overflow-y-auto space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Activity Code *"><input className="inp" placeholder="e.g. FOUND-001" value={form.activity_code} onChange={e => F('activity_code', e.target.value)} /></Field>
+            <Field label="Activity Code *"><input className="inp" placeholder="e.g. A-F24" value={form.activity_code} onChange={e => F('activity_code', e.target.value)} /></Field>
             <Field label="Type">
               <select className="inp" value={form.activity_type} onChange={e => F('activity_type', e.target.value)}>
-                {['structural','finishing','civil','mechanical','electrical','landscaping','testing','commissioning','other'].map(t => (
+                {['structural', 'finishing', 'civil', 'mechanical', 'electrical', 'other'].map(t => (
                   <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
                 ))}
               </select>
             </Field>
-            <Field label="Activity Name *" cls="col-span-2"><input className="inp" placeholder="e.g. Foundation Excavation" value={form.activity_name} onChange={e => F('activity_name', e.target.value)} /></Field>
-            <Field label="Location"><input className="inp" placeholder="e.g. Block A, Zone 1" value={form.location} onChange={e => F('location', e.target.value)} /></Field>
+            <Field label="Activity Name *" cls="col-span-2"><input className="inp" placeholder="e.g. 24th Floor" value={form.activity_name} onChange={e => F('activity_name', e.target.value)} /></Field>
+            <Field label="Location"><input className="inp" placeholder="e.g. Tower A" value={form.location} onChange={e => F('location', e.target.value)} /></Field>
             <Field label="Unit"><input className="inp" placeholder="CUM, SQM, MT…" value={form.measurement_unit} onChange={e => F('measurement_unit', e.target.value)} /></Field>
             <Field label="Baseline Start *"><input type="date" className="inp" value={form.baseline_start_date} onChange={e => F('baseline_start_date', e.target.value)} /></Field>
             <Field label="Baseline End *"><input type="date" className="inp" value={form.baseline_end_date} onChange={e => F('baseline_end_date', e.target.value)} /></Field>
@@ -976,14 +1095,12 @@ function AddActivityModal({ projectId, onClose, qc }) {
                 <option value="true">Yes</option>
               </select>
             </Field>
-            <Field label="Description" cls="col-span-2">
-              <textarea className="inp" rows={2} placeholder="Optional notes…" value={form.description} onChange={e => F('description', e.target.value)} />
-            </Field>
+            <Field label="Description" cls="col-span-2"><textarea className="inp" rows={2} placeholder="Optional notes…" value={form.description} onChange={e => F('description', e.target.value)} /></Field>
           </div>
         </div>
         <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-900 hover:bg-slate-200 rounded-lg">Cancel</button>
-          <button onClick={handleSubmit} disabled={createMut.isPending} className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 shadow-sm">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg">Cancel</button>
+          <button onClick={handleSubmit} disabled={createMut.isPending} className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 shadow-sm">
             {createMut.isPending ? 'Saving…' : 'Create Activity'}
           </button>
         </div>
@@ -1001,7 +1118,6 @@ function Field({ label, children, cls = '' }) {
   );
 }
 
-// Inject input style
 if (typeof document !== 'undefined' && !document.getElementById('planning-styles')) {
   const s = document.createElement('style');
   s.id = 'planning-styles';

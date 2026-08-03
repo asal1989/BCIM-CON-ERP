@@ -19,7 +19,7 @@ const HR_ALL   = [...HR_ROLES, 'hr', 'manager', 'department_head'];
     end_time TIME NOT NULL,
     break_minutes INT DEFAULT 30,
     is_night_shift BOOLEAN DEFAULT FALSE,
-    grace_minutes INT DEFAULT 10,
+    grace_minutes INT DEFAULT 0,
     ot_after_minutes INT DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -28,7 +28,11 @@ const HR_ALL   = [...HR_ROLES, 'hr', 'manager', 'department_head'];
   await safe(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS break_minutes INT DEFAULT 30`);
   await safe(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS is_night_shift BOOLEAN DEFAULT FALSE`);
   await safe(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS ot_after_minutes INT DEFAULT 0`);
-  await safe(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS grace_minutes INT DEFAULT 10`);
+  await safe(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS grace_minutes INT DEFAULT 0`);
+  // 0=Sunday..6=Saturday. Previously the Shift Scheduler report hardcoded
+  // Sunday as everyone's weekly off regardless of their actual assigned
+  // shift — wrong for any shift with a different rest day.
+  await safe(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS weekly_off_day SMALLINT DEFAULT 0`);
   await safe(`CREATE TABLE IF NOT EXISTS hr_employee_shifts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL,
@@ -56,7 +60,7 @@ const HR_ALL   = [...HR_ROLES, 'hr', 'manager', 'department_head'];
   )`);
   // Add missing columns to existing tables (safe to run on every boot)
   await safe(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS code VARCHAR(20)`);
-  await safe(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS grace_minutes INT DEFAULT 10`);
+  await safe(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS grace_minutes INT DEFAULT 0`);
   await safe(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS ot_after_minutes INT DEFAULT 0`);
   await safe(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT TRUE`);
   await safe(`ALTER TABLE hr_employee_shifts ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id)`);
@@ -83,7 +87,7 @@ const ensureShiftColumns = async () => {
   await nc(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS break_minutes INT DEFAULT 30`);
   await nc(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS is_night_shift BOOLEAN DEFAULT FALSE`);
   await nc(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS ot_after_minutes INT DEFAULT 0`);
-  await nc(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS grace_minutes INT DEFAULT 10`);
+  await nc(`ALTER TABLE hr_shifts ADD COLUMN IF NOT EXISTS grace_minutes INT DEFAULT 0`);
   await nc(`UPDATE hr_shifts SET is_active=TRUE WHERE is_active IS NULL`);
 };
 let columnsEnsured = false;
@@ -97,8 +101,9 @@ router.get('/shifts', authorize(...HR_ALL), async (req, res) => {
       `SELECT id, company_id, name, shift_code AS code, start_time, end_time,
               COALESCE(break_minutes,30) AS break_minutes,
               COALESCE(is_night_shift,false) AS is_night_shift,
-              COALESCE(grace_minutes,10) AS grace_minutes,
+              COALESCE(grace_minutes,0) AS grace_minutes,
               COALESCE(ot_after_minutes,0) AS ot_after_minutes,
+              COALESCE(weekly_off_day,0) AS weekly_off_day,
               COALESCE(is_active,true) AS active, created_at
        FROM hr_shifts WHERE company_id=$1 ORDER BY name`,
       [req.user.company_id]
@@ -112,14 +117,16 @@ router.get('/shifts', authorize(...HR_ALL), async (req, res) => {
 router.post('/shifts', authorize(...HR_ROLES), async (req, res) => {
   try {
     await ensureOnce();
-    const { name, code, start_time, end_time, break_minutes, is_night_shift, grace_minutes, ot_after_minutes } = req.body;
+    const { name, code, start_time, end_time, break_minutes, is_night_shift, ot_after_minutes, weekly_off_day } = req.body;
     if (!name || !start_time || !end_time) return res.status(400).json({ error: 'name, start_time and end_time are required' });
+    // grace_minutes is hardcoded to 0 — no grace period, by policy. Late is
+    // measured from the exact shift start time regardless of what a caller sends.
     const { rows } = await query(
-      `INSERT INTO hr_shifts(company_id,name,shift_code,start_time,end_time,break_minutes,is_night_shift,grace_minutes,ot_after_minutes)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      `INSERT INTO hr_shifts(company_id,name,shift_code,start_time,end_time,break_minutes,is_night_shift,grace_minutes,ot_after_minutes,weekly_off_day)
+       VALUES($1,$2,$3,$4,$5,$6,$7,0,$8,$9) RETURNING *`,
       [req.user.company_id, name, code||null, start_time, end_time,
-       parseInt(break_minutes)||30, is_night_shift||false,
-       grace_minutes != null ? parseInt(grace_minutes) : 10, parseInt(ot_after_minutes)||0]
+       parseInt(break_minutes)||30, is_night_shift||false, parseInt(ot_after_minutes)||0,
+       weekly_off_day !== undefined ? parseInt(weekly_off_day) : 0]
     );
     res.json({ data: rows[0] });
   } catch (err) {
@@ -130,14 +137,15 @@ router.post('/shifts', authorize(...HR_ROLES), async (req, res) => {
 router.put('/shifts/:id', authorize(...HR_ROLES), async (req, res) => {
   try {
     await ensureOnce();
-    const { name, code, start_time, end_time, break_minutes, is_night_shift, grace_minutes, ot_after_minutes, active } = req.body;
+    const { name, code, start_time, end_time, break_minutes, is_night_shift, ot_after_minutes, active, weekly_off_day } = req.body;
+    // grace_minutes hardcoded to 0 — see note in POST /shifts above.
     const { rows } = await query(
-      `UPDATE hr_shifts SET name=$1,shift_code=$2,start_time=$3,end_time=$4,break_minutes=$5,is_night_shift=$6,grace_minutes=$7,ot_after_minutes=$8,is_active=$9
+      `UPDATE hr_shifts SET name=$1,shift_code=$2,start_time=$3,end_time=$4,break_minutes=$5,is_night_shift=$6,grace_minutes=0,ot_after_minutes=$7,is_active=$8,weekly_off_day=$9
        WHERE id=$10 AND company_id=$11 RETURNING *`,
       [name, code||null, start_time, end_time,
-       parseInt(break_minutes)||30, is_night_shift||false,
-       grace_minutes != null ? parseInt(grace_minutes) : 10, parseInt(ot_after_minutes)||0,
-       active!==false, req.params.id, req.user.company_id]
+       parseInt(break_minutes)||30, is_night_shift||false, parseInt(ot_after_minutes)||0,
+       active!==false, weekly_off_day !== undefined ? parseInt(weekly_off_day) : 0,
+       req.params.id, req.user.company_id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Shift not found' });
     res.json({ data: rows[0] });
@@ -161,6 +169,7 @@ router.get('/employee-shifts', authorize(...HR_ALL), async (req, res) => {
     const { employee_id } = req.query;
     const { rows } = await query(
       `SELECT es.*, s.name as shift_name, s.start_time, s.end_time,
+              COALESCE(s.weekly_off_day,0) as weekly_off_day,
               e.name as employee_name, e.employee_code as emp_code
        FROM hr_employee_shifts es
        JOIN hr_shifts s ON s.id=es.shift_id

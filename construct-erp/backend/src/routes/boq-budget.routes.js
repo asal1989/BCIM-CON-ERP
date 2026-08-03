@@ -43,6 +43,28 @@ runSchemaInit('ra_bill_chapter_plans', async () => {
   `);
 });
 
+// Actual Value cells are normally auto-computed from real ra_bills — but a
+// bill may not exist yet (progress billed informally, or the bill hasn't
+// been raised in the ERP), so a manual override lets QS enter the real
+// actual and have it stick even though no ra_bills row backs it. Where a
+// real bill DOES cover a cell, the bill-derived total still wins (see
+// GET /ra-actuals below) — manual entry only fills genuine gaps.
+runSchemaInit('ra_bill_chapter_actuals', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS ra_bill_chapter_actuals (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      chapter_key TEXT NOT NULL,
+      ra_index SMALLINT NOT NULL CHECK (ra_index BETWEEN 1 AND 9),
+      actual_amount NUMERIC(16,2) DEFAULT 0,
+      created_by UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (project_id, chapter_key, ra_index)
+    )
+  `);
+});
+
 runSchemaInit('project_costhead_budgets', async () => {
   await query(`
     CREATE TABLE IF NOT EXISTS project_costhead_budgets (
@@ -59,6 +81,106 @@ runSchemaInit('project_costhead_budgets', async () => {
   `);
   // Add boq_amount to existing tables (idempotent)
   await query(`ALTER TABLE project_costhead_budgets ADD COLUMN IF NOT EXISTS boq_amount NUMERIC(16,2) DEFAULT 0`).catch(() => {});
+});
+
+// A separately-named migration, not folded into the block above. That block's
+// name ('project_costhead_budgets') was already marked applied in
+// schema_migrations back when it only created the table — runSchemaInit runs
+// each name exactly once, ever, so appending these two ALTER TABLEs to the
+// same task body silently never ran on any database that existed before this
+// commit. Symptom: "column received_amount does not exist" on Budget Control.
+// New name = guaranteed to run once on every environment, however old.
+runSchemaInit('project_costhead_budgets_received_paid_cols', async () => {
+  // Manual Bills Received / Bills Paid entry for cost heads with no natural
+  // transaction source (e.g. Supervision & Accommodation, EPF/PT/Insurance —
+  // internal payroll-type costs, not vendor bills, so nothing in RA/SC/TQS
+  // ever tags them). Added on top of whatever real transaction data already
+  // exists for a head, so it never conflicts with heads like Sub Con that
+  // already derive real received/paid figures from actual bills.
+  await query(`ALTER TABLE project_costhead_budgets ADD COLUMN IF NOT EXISTS received_amount NUMERIC(16,2) DEFAULT 0`);
+  await query(`ALTER TABLE project_costhead_budgets ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(16,2) DEFAULT 0`);
+});
+
+// Some manually-entered cost heads (payroll-type costs with no natural bill
+// source) need their total broken into named sub-items — e.g. "Supervision &
+// Accommodation" split into Staff Salaries / Workers Salaries / Staff
+// Accommodation / Staff Mess, each entered separately. Where a cost head has
+// sub-items defined here, its Received/Paid figure on Budget Control is the
+// SUM of its sub-item rows instead of the flat project_costhead_budgets
+// received_amount/paid_amount columns (those stay in place for every other
+// manually-entered head).
+const COSTHEAD_SUBITEMS = {
+  'Supervision & Accommodation': ['Staff Salaries', 'Workers Salaries', 'Staff Accommodation', 'Staff Mess'],
+  'EPF, PT & Insurance': ['Staff PF', 'Workers PF', 'Staff PT', 'Labours PT'],
+};
+
+runSchemaInit('project_costhead_subitems', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS project_costhead_subitems (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      cost_head TEXT NOT NULL,
+      sub_item TEXT NOT NULL,
+      received_amount NUMERIC(16,2) DEFAULT 0,
+      paid_amount NUMERIC(16,2) DEFAULT 0,
+      created_by UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (project_id, cost_head, sub_item)
+    )
+  `);
+});
+
+// Sub-items are recurring monthly costs (salaries, PF — paid every month, not
+// a one-off), so they need a month dimension to show correctly in the
+// Monthly Forecast view. Adds entry_month and widens the uniqueness to
+// (project_id, cost_head, sub_item, entry_month) so each month gets its own
+// row instead of one lifetime total per sub-item.
+runSchemaInit('project_costhead_subitems_entry_month', async () => {
+  await query(`ALTER TABLE project_costhead_subitems ADD COLUMN IF NOT EXISTS entry_month TEXT`);
+  // Rows entered before month-tracking existed were the July 2026 figures,
+  // entered retroactively on Aug 1 — tag them to the month they're FOR, not
+  // the day they happened to be typed in.
+  await query(`UPDATE project_costhead_subitems SET entry_month = '2026-07' WHERE entry_month IS NULL`);
+  await query(`
+    DO $$
+    DECLARE cname text;
+    BEGIN
+      SELECT conname INTO cname FROM pg_constraint
+        WHERE conrelid = 'project_costhead_subitems'::regclass AND contype = 'u';
+      IF cname IS NOT NULL THEN
+        EXECUTE format('ALTER TABLE project_costhead_subitems DROP CONSTRAINT %I', cname);
+      END IF;
+    END $$;
+  `);
+  await query(`ALTER TABLE project_costhead_subitems ADD CONSTRAINT project_costhead_subitems_month_uniq UNIQUE (project_id, cost_head, sub_item, entry_month)`);
+});
+
+// "Cost to Completion" statement (Contract detail / Balance work claim /
+// Liabilities-Payables / Inflow) — a handful of figures the ERP has no other
+// source for (client mobilization advance, trade-wise balance work split,
+// GST payable, material stock, cross-project fund allocations, bank
+// balance). Everything else on that statement is computed live from
+// existing tables at request time — see GET /:project_id/cost-to-completion.
+runSchemaInit('project_cost_to_completion', async () => {
+  await query(`
+    CREATE TABLE IF NOT EXISTS project_cost_to_completion (
+      project_id UUID PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+      advance_received NUMERIC(16,2) DEFAULT 0,
+      blockwork_works NUMERIC(16,2) DEFAULT 0,
+      plastering_works NUMERIC(16,2) DEFAULT 0,
+      waterproofing_works NUMERIC(16,2) DEFAULT 0,
+      misc_works NUMERIC(16,2) DEFAULT 0,
+      gst_payable NUMERIC(16,2) DEFAULT 0,
+      retention_money_recovered NUMERIC(16,2) DEFAULT 0,
+      material_stock NUMERIC(16,2) DEFAULT 0,
+      other_projects_p3 NUMERIC(16,2) DEFAULT 0,
+      other_projects_tqs NUMERIC(16,2) DEFAULT 0,
+      bank_balance NUMERIC(16,2) DEFAULT 0,
+      updated_by UUID,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
 });
 
 router.use(authenticate);
@@ -705,7 +827,9 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
 
     // Saved budgets and manually-set BOQ allocations
     const budgets = await query(
-      `SELECT cost_head, budget_amount, COALESCE(boq_amount, 0) AS boq_amount FROM project_costhead_budgets WHERE project_id=$1`,
+      `SELECT cost_head, budget_amount, COALESCE(boq_amount, 0) AS boq_amount,
+              COALESCE(received_amount, 0) AS received_amount, COALESCE(paid_amount, 0) AS paid_amount
+       FROM project_costhead_budgets WHERE project_id=$1`,
       [project_id]
     );
 
@@ -996,9 +1120,61 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
 
     const budgetMap = {};
     const boqManualMap = {};
+    // Cost heads with sub-items (see COSTHEAD_SUBITEMS) get their Received/Paid
+    // from the sub-item rows instead of the flat manual columns above — skip
+    // the flat received_amount/paid_amount for those heads so they aren't
+    // double-counted alongside the sub-item sum applied below.
     for (const b of budgets.rows) {
       budgetMap[b.cost_head] = parseFloat(b.budget_amount || 0);
       boqManualMap[b.cost_head] = parseFloat(b.boq_amount || 0);
+      if (COSTHEAD_SUBITEMS[b.cost_head]) continue;
+      const manualReceived = parseFloat(b.received_amount || 0);
+      const manualPaid = parseFloat(b.paid_amount || 0);
+      if (manualReceived > 0) {
+        receivedMap[b.cost_head] = (receivedMap[b.cost_head] || 0) + manualReceived;
+        actualMap[b.cost_head] = (actualMap[b.cost_head] || 0) + manualReceived;
+      }
+      if (manualPaid > 0) {
+        paidMap[b.cost_head] = (paidMap[b.cost_head] || 0) + manualPaid;
+        paidInvoiceMap[b.cost_head] = (paidInvoiceMap[b.cost_head] || 0) + manualPaid;
+      }
+    }
+
+    // Sub-item breakdown for configured cost heads (Supervision & Accommodation,
+    // EPF/PT/Insurance) — sum each head's sub-items into its Received/Paid.
+    const subItemHeads = Object.keys(COSTHEAD_SUBITEMS);
+    const subItemsMap = {};
+    if (subItemHeads.length) {
+      // Summed across every month entered so far — Budget Control shows the
+      // life-to-date total; the Monthly Forecast view (costhead-monthly below)
+      // is what breaks this same data out month by month.
+      const subRows = await query(
+        `SELECT cost_head, sub_item, COALESCE(SUM(received_amount),0) AS received_amount, COALESCE(SUM(paid_amount),0) AS paid_amount
+         FROM project_costhead_subitems WHERE project_id=$1 AND cost_head = ANY($2::text[])
+         GROUP BY cost_head, sub_item`,
+        [project_id, subItemHeads]
+      );
+      for (const head of subItemHeads) {
+        const items = COSTHEAD_SUBITEMS[head].map(name => {
+          const row = subRows.rows.find(r => r.cost_head === head && r.sub_item === name);
+          return {
+            sub_item: name,
+            received_amount: row ? parseFloat(row.received_amount || 0) : 0,
+            paid_amount: row ? parseFloat(row.paid_amount || 0) : 0,
+          };
+        });
+        subItemsMap[head] = items;
+        const totalReceived = items.reduce((s, i) => s + i.received_amount, 0);
+        const totalPaid = items.reduce((s, i) => s + i.paid_amount, 0);
+        if (totalReceived > 0) {
+          receivedMap[head] = (receivedMap[head] || 0) + totalReceived;
+          actualMap[head] = (actualMap[head] || 0) + totalReceived;
+        }
+        if (totalPaid > 0) {
+          paidMap[head] = (paidMap[head] || 0) + totalPaid;
+          paidInvoiceMap[head] = (paidInvoiceMap[head] || 0) + totalPaid;
+        }
+      }
     }
 
     // Total BOQ value (contract value) — used for Contingency calculation
@@ -1082,6 +1258,7 @@ router.get('/:project_id/costhead-summary', async (req, res) => {
       balance: (budgetMap[head] || 0) - (actualMap[head] || 0),
       derived: DERIVED_HEADS.has(head),
       monthly_avg: parseFloat(((actualMap[head] || 0) / monthsElapsed).toFixed(2)),
+      sub_items: subItemsMap[head] || null,
     }));
 
     // Sort by BOQ_COST_HEADS order, then extras at end
@@ -1735,9 +1912,17 @@ router.get('/:project_id/costhead-monthly', async (req, res) => {
         GROUP BY 1`, [project_id]);
     } catch (_) {}
 
+    // Manual sub-item entries (Supervision & Accommodation, EPF/PT/Insurance) —
+    // recurring monthly costs, tagged to the month they're actually for.
+    const subM = await query(`
+      SELECT entry_month AS month, cost_head, SUM(received_amount) AS actual
+      FROM project_costhead_subitems
+      WHERE project_id=$1 AND entry_month IS NOT NULL AND received_amount > 0
+      GROUP BY entry_month, cost_head`, [project_id]);
+
     // Merge all sources into { [month]: { [cost_head]: amount } }
     const monthly = {};
-    for (const rows of [raM.rows, scM.rows, scPayM.rows, tqsM.rows, advM.rows, advTrkM.rows, btAdvM.rows, spcM.rows, storePCAdvM.rows]) {
+    for (const rows of [raM.rows, scM.rows, scPayM.rows, tqsM.rows, advM.rows, advTrkM.rows, btAdvM.rows, spcM.rows, storePCAdvM.rows, subM.rows]) {
       for (const r of rows) {
         if (!r.month || !r.cost_head) continue;
         if (!monthly[r.month]) monthly[r.month] = {};
@@ -1782,6 +1967,338 @@ router.put('/:project_id/costhead-budget', authorize(...BUDGET_WRITERS), async (
         updated_at    = NOW()
       RETURNING *`,
       [project_id, cost_head, bAmt, bBoq, req.user.id]
+    );
+    res.json({ data: r.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /boq-budget/:project_id/costhead-received-paid
+// Manual Bills Received / Bills Paid entry for a cost head — for heads with
+// no natural transaction source (see comment on the received_amount/
+// paid_amount columns above). Added on top of any real transaction-derived
+// figure the cost head might separately have.
+router.put('/:project_id/costhead-received-paid', authorize(...BUDGET_WRITERS), async (req, res) => {
+  try {
+    const { project_id } = req.params;
+    const { cost_head, received_amount, paid_amount } = req.body;
+    if (!cost_head) return res.status(400).json({ error: 'cost_head is required' });
+
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) return res.status(403).json({ error: 'Access denied' });
+
+    const rAmt = received_amount != null ? parseFloat(received_amount) || 0 : null;
+    const pAmt = paid_amount     != null ? parseFloat(paid_amount)     || 0 : null;
+    const r = await query(`
+      INSERT INTO project_costhead_budgets (project_id, cost_head, received_amount, paid_amount, created_by)
+      VALUES ($1, $2, COALESCE($3, 0), COALESCE($4, 0), $5)
+      ON CONFLICT (project_id, cost_head) DO UPDATE SET
+        received_amount = CASE WHEN $3 IS NOT NULL THEN $3 ELSE project_costhead_budgets.received_amount END,
+        paid_amount     = CASE WHEN $4 IS NOT NULL THEN $4 ELSE project_costhead_budgets.paid_amount     END,
+        updated_at      = NOW()
+      RETURNING *`,
+      [project_id, cost_head, rAmt, pAmt, req.user.id]
+    );
+    res.json({ data: r.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /boq-budget/:project_id/costhead-subitems?cost_head=Supervision+%26+Accommodation&month=2026-07
+// Returns the configured sub-items for a cost head for ONE month (0 for any
+// sub-item not entered that month). If month is omitted, defaults to the most
+// recent month that has data for this cost head, or the current month if none.
+router.get('/:project_id/costhead-subitems', async (req, res) => {
+  try {
+    const { project_id } = req.params;
+    const { cost_head, month } = req.query;
+    if (!cost_head) return res.status(400).json({ error: 'cost_head is required' });
+    if (!COSTHEAD_SUBITEMS[cost_head]) return res.status(400).json({ error: 'This cost head has no sub-items configured' });
+
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) return res.status(403).json({ error: 'Access denied' });
+
+    const monthsR = await query(
+      `SELECT DISTINCT entry_month FROM project_costhead_subitems
+       WHERE project_id=$1 AND cost_head=$2 AND entry_month IS NOT NULL ORDER BY entry_month DESC`,
+      [project_id, cost_head]
+    );
+    const availableMonths = monthsR.rows.map(r => r.entry_month);
+    const entryMonth = month || availableMonths[0] || new Date().toISOString().slice(0, 7);
+
+    const rows = await query(
+      `SELECT sub_item, COALESCE(received_amount,0) AS received_amount, COALESCE(paid_amount,0) AS paid_amount
+       FROM project_costhead_subitems WHERE project_id=$1 AND cost_head=$2 AND entry_month=$3`,
+      [project_id, cost_head, entryMonth]
+    );
+    const data = COSTHEAD_SUBITEMS[cost_head].map(name => {
+      const row = rows.rows.find(r => r.sub_item === name);
+      return {
+        sub_item: name,
+        received_amount: row ? parseFloat(row.received_amount || 0) : 0,
+        paid_amount: row ? parseFloat(row.paid_amount || 0) : 0,
+      };
+    });
+    res.json({ data, month: entryMonth, available_months: availableMonths });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /boq-budget/:project_id/costhead-subitems
+// Upsert Received/Paid for a single sub-item of a configured cost head, for
+// one specific month (defaults to the current month if not supplied).
+router.put('/:project_id/costhead-subitems', authorize(...BUDGET_WRITERS), async (req, res) => {
+  try {
+    const { project_id } = req.params;
+    const { cost_head, sub_item, received_amount, paid_amount, month } = req.body;
+    if (!cost_head || !sub_item) return res.status(400).json({ error: 'cost_head and sub_item are required' });
+    if (!COSTHEAD_SUBITEMS[cost_head]?.includes(sub_item)) {
+      return res.status(400).json({ error: 'Unknown sub_item for this cost head' });
+    }
+
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) return res.status(403).json({ error: 'Access denied' });
+
+    const entryMonth = /^\d{4}-\d{2}$/.test(month || '') ? month : new Date().toISOString().slice(0, 7);
+    const rAmt = received_amount != null ? parseFloat(received_amount) || 0 : null;
+    const pAmt = paid_amount     != null ? parseFloat(paid_amount)     || 0 : null;
+    const r = await query(`
+      INSERT INTO project_costhead_subitems (project_id, cost_head, sub_item, entry_month, received_amount, paid_amount, created_by)
+      VALUES ($1, $2, $3, $4, COALESCE($5, 0), COALESCE($6, 0), $7)
+      ON CONFLICT (project_id, cost_head, sub_item, entry_month) DO UPDATE SET
+        received_amount = CASE WHEN $5 IS NOT NULL THEN $5 ELSE project_costhead_subitems.received_amount END,
+        paid_amount     = CASE WHEN $6 IS NOT NULL THEN $6 ELSE project_costhead_subitems.paid_amount     END,
+        updated_at      = NOW()
+      RETURNING *`,
+      [project_id, cost_head, sub_item, entryMonth, rAmt, pAmt, req.user.id]
+    );
+    res.json({ data: r.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const CTC_MANUAL_FIELDS = [
+  'advance_received', 'blockwork_works', 'plastering_works', 'waterproofing_works', 'misc_works',
+  'gst_payable', 'retention_money_recovered', 'material_stock', 'other_projects_p3', 'other_projects_tqs', 'bank_balance',
+];
+
+// GET /boq-budget/:project_id/cost-to-completion
+// "Cost to Completion" statement: live-computed figures (project value, RA
+// billing, budgeted-cost-for-balance-work, sundry creditors, SC retention
+// payable, advance-to-be-recovered) plus manually-entered figures the ERP
+// has no other source for (client mobilization advance, trade-wise balance
+// work split, GST payable, material stock, cross-project funds, bank
+// balance) — stored in project_cost_to_completion.
+router.get('/:project_id/cost-to-completion', async (req, res) => {
+  try {
+    const { project_id } = req.params;
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) return res.status(403).json({ error: 'Access denied' });
+
+    const manualR = await query(`SELECT * FROM project_cost_to_completion WHERE project_id=$1`, [project_id]);
+    const manual = manualR.rows[0] || {};
+    const m = {};
+    for (const f of CTC_MANUAL_FIELDS) m[f] = parseFloat(manual[f] || 0);
+
+    // Project Value — total BOQ contract value
+    const boqTotalR = await query(
+      `SELECT COALESCE(SUM(quantity*rate),0) AS total FROM boq_items WHERE project_id=$1 AND is_active=true`,
+      [project_id]);
+    const projectValue = parseFloat(boqTotalR.rows[0].total);
+
+    // Cumulative running invoice (RA) amount — any RA bill not rejected,
+    // including draft, since this is a forward-looking planning statement,
+    // not a strict "already certified" figure.
+    const raR = await query(
+      `SELECT COALESCE(SUM(net_payable),0) AS total, COALESCE(SUM(client_tds_amount),0) AS tds, COALESCE(SUM(amount_received),0) AS received,
+              COALESCE(SUM(mobilization_advance_recovery),0) AS mob_recovery, COUNT(*) AS bill_count
+       FROM ra_bills WHERE project_id=$1 AND status <> 'rejected'`,
+      [project_id]);
+    const ra = raR.rows[0];
+    const raNetPayable = parseFloat(ra.total);
+    const raReceivable = Math.max(raNetPayable - parseFloat(ra.tds) - parseFloat(ra.received), 0);
+    const mobRecovered = parseFloat(ra.mob_recovery);
+
+    // Total Budget — "Budgeted cost for balance work completion" is derived
+    // client-side as (this total - Actual), since Actual requires the same
+    // full multi-source aggregation already computed by costhead-summary.
+    const budgetR = await query(`SELECT COALESCE(SUM(budget_amount),0) AS total FROM project_costhead_budgets WHERE project_id=$1`, [project_id]);
+
+    // Sundry creditors — everything received but not yet paid. Covers BOTH
+    // material/vendor bills (TQS) and subcontractor bills (SC): both are work
+    // already received and already counted as "actual spent", so both are
+    // genuine unpaid obligations. SC bills were previously omitted, which
+    // understated the figure (LANCO: ₹9.23 L shown vs ₹12.52 L actually owed).
+    //
+    // net_payable is already net of retention, and retention has its own
+    // "Retention Payable - Subcontractor" row, so this doesn't double-count it.
+    // Status filter matches the sibling SC retention query below.
+    const scSundryR = await query(
+      `SELECT COALESCE(SUM(GREATEST(COALESCE(net_payable,0) - COALESCE(paid_amount,0), 0)),0) AS outstanding
+         FROM sc_bills WHERE project_id=$1 AND status NOT IN ('draft','rejected')`,
+      [project_id]);
+
+    const sundryR = await query(`
+      SELECT COALESCE(SUM(GREATEST(COALESCE(b.total_amount,0) - COALESCE(u.tds_deduction,0) - COALESCE(u.other_deductions,0) - COALESCE(u.advance_recovered,0) - COALESCE(u.paid_amount,0), 0)),0) AS outstanding
+      FROM tqs_bills b LEFT JOIN tqs_bill_updates u ON u.bill_id=b.id
+      WHERE b.project_id=$1 AND b.is_deleted=FALSE`, [project_id]);
+
+    // Retention Payable - Subcontractor: SC retention held, not yet released
+    const scRetentionR = await query(
+      `SELECT COALESCE(SUM(retention_amount),0) AS total FROM sc_bills WHERE project_id=$1 AND status NOT IN ('draft','rejected')`,
+      [project_id]);
+
+    // ── Auto-computed figures (previously manual-entry) ─────────────────────
+    // Every value below now comes from live ERP data. Manual entry is kept
+    // ONLY for cross-project treasury figures the ERP genuinely cannot know
+    // (other_projects_p3 / other_projects_tqs).
+
+    // Client mobilization advance actually received — the Client Advance
+    // Requests module tracks this per project (requests → receipt tranches).
+    const advRecvR = await query(
+      `SELECT COALESCE(SUM(r.amount),0) AS total
+         FROM client_advance_receipts r
+         JOIN client_advance_requests car ON car.id = r.advance_id
+        WHERE car.project_id = $1`,
+      [project_id]);
+    const advanceReceived = parseFloat(advRecvR.rows[0].total);
+
+    // Trade-wise balance work = BOQ value per trade MINUS what's already been
+    // billed against those items. Trades are derived from the BOQ chapter
+    // name so this works for any project without extra configuration.
+    const tradeR = await query(`
+      SELECT
+        CASE
+          WHEN b.chapter_name ILIKE '%block%'      THEN 'blockwork_works'
+          WHEN b.chapter_name ILIKE '%plaster%'    THEN 'plastering_works'
+          WHEN b.chapter_name ILIKE '%waterproof%' THEN 'waterproofing_works'
+          ELSE 'misc_works'
+        END AS trade,
+        GREATEST(SUM(b.quantity*b.rate) - COALESCE(SUM(billed.amt),0), 0) AS balance
+      FROM boq_items b
+      LEFT JOIN LATERAL (
+        SELECT SUM(rbi.current_qty*rbi.rate) AS amt
+        FROM ra_bill_items rbi JOIN ra_bills rb ON rb.id = rbi.ra_bill_id
+        WHERE rbi.boq_item_id = b.id AND rb.status <> 'rejected'
+      ) billed ON TRUE
+      WHERE b.project_id = $1 AND b.is_active = true
+      GROUP BY 1`, [project_id]);
+    const trades = { blockwork_works: 0, plastering_works: 0, waterproofing_works: 0, misc_works: 0 };
+    for (const t of tradeR.rows) trades[t.trade] = parseFloat(t.balance || 0);
+
+    // GST payable — GST charged on RA bills raised to the client.
+    const gstR = await query(
+      `SELECT COALESCE(SUM(gst_amount),0) AS total FROM ra_bills WHERE project_id=$1 AND status <> 'rejected'`,
+      [project_id]);
+
+    // Bank balance — movements on the Bank Accounts control account (1010)
+    // attributable to THIS project. Journal entries carry project_id, so this
+    // is scoped rather than company-wide: an unscoped total let one project's
+    // overdrawn position bleed into another's statement (LANCO was showing
+    // ₹2.87 Cr instead of its own ₹3.40 Cr because a sibling project sat at
+    // −₹53 L), understating net position by that difference.
+    const bankR = await query(
+      `SELECT COALESCE(SUM(jl.debit) - SUM(jl.credit), 0) AS bal
+         FROM journal_entry_lines jl
+         JOIN chart_of_accounts coa ON coa.id = jl.account_id
+         JOIN journal_entries je ON je.id = jl.journal_entry_id
+        WHERE coa.code = '1010' AND je.company_id = $1 AND je.project_id = $2`,
+      [req.user.company_id, project_id]);
+
+    // Material stock lying at store, valued at rate. Wrapped defensively —
+    // stock schema varies across deployments and a missing column must not
+    // take down the whole statement.
+    let materialStock = 0;
+    try {
+      const stockR = await query(
+        `SELECT COALESCE(SUM(GREATEST(COALESCE(closing_stock,0),0) * COALESCE(unit_rate,0)),0) AS val
+           FROM inventory WHERE project_id=$1`, [project_id]);
+      materialStock = parseFloat(stockR.rows[0].val || 0);
+    } catch (_) { materialStock = 0; }
+
+    // Retention money recovered back from the client on RA bills.
+    const retRecoveredR = await query(
+      `SELECT COALESCE(SUM(retention_amount),0) AS total
+         FROM ra_bills WHERE project_id=$1 AND status IN ('certified','paid')`,
+      [project_id]);
+
+    res.json({
+      contract_detail: {
+        project_value: projectValue,
+        advance_received: advanceReceived,
+        ra_cumulative_amount: raNetPayable,
+        ra_bill_count: parseInt(ra.bill_count, 10),
+      },
+      balance_work: {
+        blockwork_works: trades.blockwork_works,
+        plastering_works: trades.plastering_works,
+        waterproofing_works: trades.waterproofing_works,
+        misc_works: trades.misc_works,
+        system_check_total: Math.max(projectValue - raNetPayable, 0),
+      },
+      liabilities: {
+        // Actual re-derived from Budget Control's cost-head totals happens
+        // client-side (it already fetches costhead-summary); this endpoint
+        // just needs the budget total here.
+        total_budget: parseFloat(budgetR.rows[0].total),
+        sundry_creditors: parseFloat(sundryR.rows[0].outstanding) + parseFloat(scSundryR.rows[0].outstanding),
+        advance_to_be_recovered: Math.max(advanceReceived - mobRecovered, 0),
+        retention_payable_subcontractor: parseFloat(scRetentionR.rows[0].total),
+        gst_payable: parseFloat(gstR.rows[0].total),
+      },
+      inflow: {
+        ra_receivable: raReceivable,
+        retention_money_recovered: parseFloat(retRecoveredR.rows[0].total),
+        material_stock: materialStock,
+        // No ERP source — cross-project treasury allocations stay manual.
+        other_projects_p3: m.other_projects_p3,
+        other_projects_tqs: m.other_projects_tqs,
+        bank_balance: parseFloat(bankR.rows[0].bal),
+      },
+      // Fields still accepting manual entry; everything else is auto-computed
+      // from live ERP data and rendered read-only.
+      manual_fields: ['other_projects_p3', 'other_projects_tqs'],
+      updated_at: manual.updated_at || null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /boq-budget/:project_id/cost-to-completion
+// Upserts any subset of the manual fields on the Cost to Completion statement.
+router.put('/:project_id/cost-to-completion', authorize(...BUDGET_WRITERS), async (req, res) => {
+  try {
+    const { project_id } = req.params;
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) return res.status(403).json({ error: 'Access denied' });
+
+    const updates = {};
+    for (const f of CTC_MANUAL_FIELDS) {
+      if (req.body[f] != null) updates[f] = parseFloat(req.body[f]) || 0;
+    }
+    if (!Object.keys(updates).length) return res.status(400).json({ error: 'No recognized fields provided' });
+
+    const cols = Object.keys(updates);
+    const insertCols = ['project_id', ...cols, 'updated_by'];
+    const insertVals = [project_id, ...cols.map(c => updates[c]), req.user.id];
+    const placeholders = insertVals.map((_, i) => `$${i + 1}`);
+    const updateSet = cols.map(c => `${c} = EXCLUDED.${c}`).join(', ');
+    const r = await query(`
+      INSERT INTO project_cost_to_completion (${insertCols.join(', ')})
+      VALUES (${placeholders.join(', ')})
+      ON CONFLICT (project_id) DO UPDATE SET ${updateSet}, updated_by = EXCLUDED.updated_by, updated_at = NOW()
+      RETURNING *`,
+      insertVals
     );
     res.json({ data: r.rows[0] });
   } catch (err) {
@@ -2051,6 +2568,11 @@ function buildChapterKeyer(allBoqItems) {
 router.get('/:project_id/ra-plan', async (req, res) => {
   try {
     const { project_id } = req.params;
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) {
+      return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
     const r = await query(
       `SELECT chapter_key, ra_index, planned_amount::text FROM ra_bill_chapter_plans WHERE project_id = $1`,
       [project_id]
@@ -2063,6 +2585,11 @@ router.get('/:project_id/ra-plan', async (req, res) => {
 router.put('/:project_id/ra-plan', authorize(...BUDGET_WRITERS), async (req, res) => {
   try {
     const { project_id } = req.params;
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) {
+      return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
     const { chapter_key, ra_index, planned_amount } = req.body;
     if (!chapter_key || !(ra_index >= 1 && ra_index <= 9)) {
       return res.status(400).json({ error: 'chapter_key and ra_index (1-9) are required' });
@@ -2084,6 +2611,11 @@ router.put('/:project_id/ra-plan', authorize(...BUDGET_WRITERS), async (req, res
 router.get('/:project_id/ra-actuals', async (req, res) => {
   try {
     const { project_id } = req.params;
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) {
+      return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
 
     const boqItemsRes = await query(
       `SELECT id, chapter_no, chapter_name FROM boq_items WHERE project_id = $1`,
@@ -2120,12 +2652,54 @@ router.get('/:project_id/ra-actuals', async (req, res) => {
       });
     }
 
+    // Every key present here at this point came from a real ra_bills row —
+    // tag it before overlaying manual overrides, so the frontend can lock
+    // those cells (a real bill always wins; manual entry only fills gaps).
+    const billCoveredKeys = new Set(Object.keys(actualsMap));
+
+    const overridesRes = await query(
+      `SELECT chapter_key, ra_index, actual_amount::text FROM ra_bill_chapter_actuals WHERE project_id = $1`,
+      [project_id]
+    );
+    overridesRes.rows.forEach(o => {
+      const mapKey = `${o.chapter_key}::${o.ra_index}`;
+      if (actualsMap[mapKey] === undefined) {
+        actualsMap[mapKey] = parseFloat(o.actual_amount) || 0;
+      }
+    });
+
     const actuals = Object.entries(actualsMap).map(([k, amount]) => {
       const [chapter_key, ra_index] = k.split('::');
-      return { chapter_key, ra_index: parseInt(ra_index, 10), amount };
+      return { chapter_key, ra_index: parseInt(ra_index, 10), amount, source: billCoveredKeys.has(k) ? 'bill' : 'manual' };
     });
 
     res.json({ data: { bills, actuals } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /:project_id/ra-actual — upsert a manual override for one cell
+// { chapter_key, ra_index, actual_amount }. Only takes effect where no real
+// RA bill already covers that chapter/period (see GET /ra-actuals above).
+router.put('/:project_id/ra-actual', authorize(...BUDGET_WRITERS), async (req, res) => {
+  try {
+    const { project_id } = req.params;
+    const proj = await query(`SELECT id FROM projects WHERE id=$1 AND company_id=$2`, [project_id, req.user.company_id]);
+    if (!proj.rows.length) return res.status(404).json({ error: 'Project not found' });
+    if (!userCanAccessProject(req, project_id)) {
+      return res.status(403).json({ error: 'You do not have access to this project.' });
+    }
+    const { chapter_key, ra_index, actual_amount } = req.body;
+    if (!chapter_key || !(ra_index >= 1 && ra_index <= 9)) {
+      return res.status(400).json({ error: 'chapter_key and ra_index (1-9) are required' });
+    }
+    await query(
+      `INSERT INTO ra_bill_chapter_actuals (project_id, chapter_key, ra_index, actual_amount, created_by)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (project_id, chapter_key, ra_index)
+       DO UPDATE SET actual_amount = EXCLUDED.actual_amount, updated_at = NOW()`,
+      [project_id, chapter_key, ra_index, parseFloat(actual_amount) || 0, req.user.id]
+    );
+    res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

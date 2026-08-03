@@ -1,6 +1,6 @@
 // src/components/copilot/CopilotPanel.jsx
-// Docked chat drawer for the Bill Tracker AI Copilot pilot. Structural
-// pattern copied from NotificationPanel.jsx (backdrop + absolute panel).
+// Docked chat drawer for the BCIM AI Copilot (Bill Tracker + HR Admin).
+// Structural pattern copied from NotificationPanel.jsx (backdrop + absolute panel).
 import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, X, Send, AlertTriangle, Mic, MicOff, Volume2, VolumeX, StopCircle } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -275,7 +275,7 @@ export default function CopilotPanel({ onClose, projectId }) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50 flex-shrink-0">
           <div className="flex items-center gap-2.5">
             <Sparkles className="w-4 h-4 text-indigo-500" />
-            <span className="text-sm font-bold text-slate-900">Bill Tracker Copilot</span>
+            <span className="text-sm font-bold text-slate-900">BCIM Copilot</span>
           </div>
           <div className="flex items-center gap-1">
             {speechSynthesisSupported && (
@@ -319,11 +319,12 @@ export default function CopilotPanel({ onClose, projectId }) {
               <div className="w-14 h-14 rounded-full bg-indigo-50 flex items-center justify-center">
                 <Sparkles className="w-7 h-7 text-indigo-400" />
               </div>
-              <div className="text-sm font-bold text-slate-700">Ask about Bill Tracker</div>
+              <div className="text-sm font-bold text-slate-700">Ask about Bill Tracker or HR Admin</div>
               <div className="text-[11px] text-slate-400 leading-relaxed">
                 e.g. "How many bills are pending in accounts?"<br />
                 "What's the AP aging for Project X?"<br />
-                "Show the vendor ledger for [vendor]"
+                "Who resigned last month?"<br />
+                "Show attendance summary for DQS Towers this week"
               </div>
             </div>
           )}
@@ -385,7 +386,7 @@ export default function CopilotPanel({ onClose, projectId }) {
             value={input}
             onChange={(e) => { voiceOriginRef.current = false; setInput(e.target.value); }}
             onKeyDown={handleKeyDown}
-            placeholder={listening ? 'Listening…' : 'Ask about vendor bills, cash flow, aging, deductions…'}
+            placeholder={listening ? 'Listening…' : 'Ask about bills, cash flow, employees, attendance, leave…'}
             rows={1}
             disabled={loading || listening}
             className="flex-1 resize-none rounded-xl border border-slate-200 px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 disabled:bg-slate-100"

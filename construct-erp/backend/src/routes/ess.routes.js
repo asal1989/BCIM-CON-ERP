@@ -117,11 +117,11 @@ async function notifyHR(subject, html) {
 // Change to [1,2,3,4,5] here (and in the approval loop below) for a 5-day week.
 const WORK_WEEK_DAYS = [1, 2, 3, 4, 5, 6];
 
-async function notifyEmployee(userId, companyId, subject, html) {
+async function notifyEmployee(userId, companyId, subject, html, category) {
   try {
     const { rows } = await query(`SELECT email FROM users WHERE id=$1 AND company_id=$2 AND email IS NOT NULL`, [userId, companyId]);
     if (!rows[0]?.email) return;
-    sendMail({ to: rows[0].email, subject, html }).catch(e => console.error('[ESS mail] Employee notify error:', e.message));
+    sendMail({ to: rows[0].email, subject, html, category }).catch(e => console.error('[ESS mail] Employee notify error:', e.message));
   } catch (e) { console.error('[ESS mail] notifyEmployee error:', e.message); }
 }
 
@@ -218,7 +218,8 @@ router.get('/summary', async (req, res) => {
          FROM notifications
          WHERE company_id = $1
            AND (user_id = $2 OR user_id IS NULL)
-           AND COALESCE(is_read, false) = false`,
+           AND COALESCE(is_read, false) = false
+           AND type IN ('leave_requested', 'leave_approved', 'leave_rejected')`,
         [companyId, userId]
       ).catch(() => ({ rows: [{ unread: 0 }] })),
     ]);
@@ -637,7 +638,8 @@ router.patch('/manager/leave-requests/:id/:action', requireManager, async (req, 
           ${leave.rejection_reason ? mailRow('Reason', leave.rejection_reason) : ''}
         </table>
         <p>View your leave history in the <a href="${ERP_URL}/ess-portal" style="color:#1e3a5f;font-weight:600">ESS Portal</a>.</p>`
-      )
+      ),
+      'leave'
     );
   } catch (err) {
     await client.query('ROLLBACK');
@@ -727,7 +729,8 @@ router.patch('/manager/attendance-corrections/:id/:action', requireManager, asyn
           ${correction.rejection_reason ? mailRow('Reason', correction.rejection_reason) : ''}
         </table>
         <p>View your attendance in the <a href="${ERP_URL}/ess-portal" style="color:#1e3a5f;font-weight:600">ESS Portal</a>.</p>`
-      )
+      ),
+      'regularization'
     );
   } catch (err) {
     await client.query('ROLLBACK');

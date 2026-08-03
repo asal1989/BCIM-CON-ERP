@@ -123,11 +123,14 @@ function EmpCard({ emp, onClick }) {
             )}
           </div>
         )}
-        <div className="flex items-center gap-1 text-xs text-gray-400">
+        <div className={`flex items-center gap-1 text-xs ${emp.employment_status !== 'active' && emp.date_of_leaving ? 'text-amber-600 font-medium' : 'text-gray-400'}`}
+          title={emp.employment_status !== 'active' && emp.date_of_leaving ? 'Last Working Date' : 'Date Joined'}>
           <Calendar className="w-3 h-3" />
-          {emp.date_of_joining
-            ? new Date(emp.date_of_joining).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
-            : '—'}
+          {emp.employment_status !== 'active' && emp.date_of_leaving
+            ? new Date(emp.date_of_leaving).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+            : emp.date_of_joining
+              ? new Date(emp.date_of_joining).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
+              : '—'}
         </div>
       </div>
 
@@ -199,7 +202,8 @@ export default function EmployeeListPage() {
     permanent:     allEmployees.filter(e => e.employment_type === 'permanent').length,
   }), [allEmployees]);
 
-  const activeFilters = [deptFilter, projectFilter, typeFilter, categoryFilter].filter(Boolean).length;
+  // projectFilter excluded — it's now its own always-visible control, not inside the "Filters" panel
+  const activeFilters = [deptFilter, typeFilter, categoryFilter].filter(Boolean).length;
 
   return (
     <div className="p-6 space-y-5" style={{ background: '#F8F9FA', minHeight: '100vh' }}>
@@ -339,6 +343,19 @@ export default function EmployeeListPage() {
             ))}
           </div>
 
+          {/* Project filter — always visible, not tucked behind "Filters" */}
+          <select
+            value={projectFilter}
+            onChange={e => setProjectFilter(e.target.value)}
+            className={`px-3 py-2.5 rounded-xl text-sm font-medium border transition-all focus:outline-none ${
+              projectFilter ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-gray-50 text-slate-900 border-gray-200'
+            }`}
+          >
+            <option value="">All Projects</option>
+            <option value="unassigned">Unassigned</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+
           {/* Filter button */}
           <button
             onClick={() => setShowFilters(p => !p)}
@@ -386,18 +403,6 @@ export default function EmployeeListPage() {
                   >
                     <option value="">All Departments</option>
                     {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-600 font-medium block mb-1">Project</label>
-                  <select
-                    value={projectFilter}
-                    onChange={e => setProjectFilter(e.target.value)}
-                    className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-indigo-400"
-                  >
-                    <option value="">All Projects</option>
-                    <option value="unassigned">Unassigned</option>
-                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
                 <div>
@@ -469,13 +474,14 @@ export default function EmployeeListPage() {
       {!isLoading && view === 'list' && (
         <motion.div {...fade(0.12)} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           {/* Header */}
-          <div className="grid grid-cols-12 px-5 py-3 bg-gray-50 border-b border-gray-100 text-xs font-medium text-slate-900 font-medium uppercase tracking-wide">
+          <div className="grid grid-cols-[repeat(14,minmax(0,1fr))] px-5 py-3 bg-gray-50 border-b border-gray-100 text-xs font-medium text-slate-900 font-medium uppercase tracking-wide">
             <div className="col-span-3">Employee</div>
             <div className="col-span-2">Department</div>
+            <div className="col-span-2">Project</div>
             <div className="col-span-2">Designation</div>
-            <div className="col-span-2">Type</div>
-            <div className="col-span-2">Joined</div>
-            <div className="col-span-1">Status</div>
+            <div className="col-span-1">Type</div>
+            <div className="col-span-2">{['resigned', 'terminated', 'absconded'].includes(statusFilter) ? 'Last Working Day' : 'Joined'}</div>
+            <div className="col-span-2">Status</div>
           </div>
 
           <div className="divide-y divide-gray-50">
@@ -488,7 +494,7 @@ export default function EmployeeListPage() {
                   key={emp.id}
                   onClick={() => navigate(emp.has_profile ? `/hr-admin/employees/${emp.id}` : `/hr-admin/employees/${emp.id}/edit`)}
                   whileHover={{ backgroundColor: '#F9FAFB' }}
-                  className="grid grid-cols-12 px-5 py-3.5 cursor-pointer items-center transition-colors"
+                  className="grid grid-cols-[repeat(14,minmax(0,1fr))] px-5 py-3.5 cursor-pointer items-center transition-colors"
                 >
                   {/* Name */}
                   <div className="col-span-3 flex items-center gap-3">
@@ -509,14 +515,24 @@ export default function EmployeeListPage() {
                       </div>
                     )}
                   </div>
+                  <div className="col-span-2 text-sm text-slate-900 truncate pr-3">{emp.project_name || 'Head Office'}</div>
                   <div className="col-span-2 text-sm text-slate-900 truncate pr-3">{emp.designation_name || emp.designation || '—'}</div>
-                  <div className="col-span-2">
+                  <div className="col-span-1">
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${type.bg} ${type.text}`}>{type.label}</span>
                   </div>
-                  <div className="col-span-2 text-sm text-gray-500">
-                    {emp.date_of_joining ? new Date(emp.date_of_joining).toLocaleDateString('en-IN') : '—'}
+                  <div className="col-span-2 text-sm">
+                    {emp.employment_status !== 'active' && emp.date_of_leaving ? (
+                      <div title="Last Working Date">
+                        <span className="text-amber-600 font-medium">{new Date(emp.date_of_leaving).toLocaleDateString('en-IN')}</span>
+                        <div className="text-[10px] text-gray-400">Last working day</div>
+                      </div>
+                    ) : (
+                      <span className="text-gray-500">
+                        {emp.date_of_joining ? new Date(emp.date_of_joining).toLocaleDateString('en-IN') : '—'}
+                      </span>
+                    )}
                   </div>
-                  <div className="col-span-1">
+                  <div className="col-span-2">
                     <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${status.bg} ${status.text}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
                       {status.label}

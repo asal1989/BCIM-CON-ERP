@@ -259,6 +259,7 @@ export const boqAPI = {
   update:  (id, d)  => api.put(`/boq/${id}`, d),
   delete:  (id)     => api.delete(`/boq/${id}`),
   import:  (data)   => api.post('/boq/import', data, { headers: { 'Content-Type': undefined } }),
+  copy:    (sourceProjectId, targetProjectId) => api.post('/boq/copy', { source_project_id: sourceProjectId, target_project_id: targetProjectId }),
 };
 
 export const boqBudgetAPI = {
@@ -268,6 +269,11 @@ export const boqBudgetAPI = {
   setChapterBudget:   (projectId, payload) => api.post(`/boq-budget/${projectId}/chapter-budget`, payload),
   costheadSummary:    (projectId)          => api.get(`/boq-budget/${projectId}/costhead-summary`),
   setCostheadBudget:  (projectId, payload) => api.put(`/boq-budget/${projectId}/costhead-budget`, payload),
+  setCostheadReceivedPaid: (projectId, payload) => api.put(`/boq-budget/${projectId}/costhead-received-paid`, payload),
+  costheadSubitems:    (projectId, costHead, month)  => api.get(`/boq-budget/${projectId}/costhead-subitems`, { params: { cost_head: costHead, month: month || undefined } }),
+  setCostheadSubitem:  (projectId, payload)   => api.put(`/boq-budget/${projectId}/costhead-subitems`, payload),
+  costToCompletion:    (projectId)            => api.get(`/boq-budget/${projectId}/cost-to-completion`),
+  setCostToCompletion: (projectId, payload)   => api.put(`/boq-budget/${projectId}/cost-to-completion`, payload),
   bulkCostheadBudget:  (projectId, entries)   => api.post(`/boq-budget/${projectId}/bulk-costhead-budget`, { entries }),
   costheadDrilldown:   (projectId, costHead, boqItemId, opts = {})  => api.get(`/boq-budget/${projectId}/costhead-drilldown`, { params: { cost_head: costHead, boq_item_id: boqItemId || undefined, chapter: opts.chapter || undefined, unlinked: opts.unlinked ? '1' : undefined } }),
   itemsDrilldown:      (projectId, itemIds, chapter) => api.get(`/boq-budget/${projectId}/items-drilldown`, { params: { item_ids: (itemIds || []).join(','), chapter: chapter || undefined } }),
@@ -277,6 +283,7 @@ export const boqBudgetAPI = {
   raPlan:              (projectId)            => api.get(`/boq-budget/${projectId}/ra-plan`),
   setRaPlanCell:       (projectId, payload)    => api.put(`/boq-budget/${projectId}/ra-plan`, payload),
   raActuals:           (projectId)             => api.get(`/boq-budget/${projectId}/ra-actuals`),
+  setRaActualCell:     (projectId, payload)    => api.put(`/boq-budget/${projectId}/ra-actual`, payload),
 };
 
 export const boqMappingAPI = {
@@ -309,8 +316,16 @@ export const measurementAPI = {
 
 export const raBillAPI = {
   list:          (params, config = {}) => api.get('/ra-bills', { ...config, params }),
+  summary:       (params) => api.get('/ra-bills/summary', { params }),
+  plannedVsActual: (params) => api.get('/ra-bills/planned-vs-actual', { params }),
+  billingPlan: {
+    list:   (projectId) => api.get('/ra-bills/billing-plan', { params: { project_id: projectId } }),
+    upsert: (d)          => api.put('/ra-bills/billing-plan', d),
+    remove: (id)         => api.delete(`/ra-bills/billing-plan/${id}`),
+  },
   get:           (id)     => api.get(`/ra-bills/${id}`),
   create:        (data)   => api.post('/ra-bills', data),
+  update:        (id, d)  => api.put(`/ra-bills/${id}`, d),
   verify:        (id)     => api.patch(`/ra-bills/${id}/verify`),
   approve:       (id, d)  => api.patch(`/ra-bills/${id}/approve`, d),
   reject:        (id, d)  => api.patch(`/ra-bills/${id}/reject`, d),
@@ -1982,6 +1997,10 @@ export const hrAttendanceAPI = {
   // it would silently replace the intentional null with the navbar's
   // currently-selected project on every send.
   timesheetReportTestEmail: (date, project_id, project_name, category) => api.post('/hr-admin/attendance/timesheet-report/test-email', { date, project_id, project_name, category }, { skipProjectInject: true }),
+  // super_admin only (enforced server-side too) — sends the report exactly as
+  // currently filtered on screen to a client-supplied recipient list.
+  timesheetReportSendToClient: (date, project_id, project_name, category, recipients) =>
+    api.post('/hr-admin/attendance/timesheet-report/send-to-client', { date, project_id, project_name, category, recipients }, { skipProjectInject: true }),
   timesheetReportConfigs: {
     list:    ()       => api.get('/hr-admin/attendance/timesheet-report/configs'),
     create:  (data)   => api.post('/hr-admin/attendance/timesheet-report/configs', data, { skipProjectInject: true }),

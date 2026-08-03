@@ -342,7 +342,14 @@ router.get('/ledger', async (req, res) => {
 
         UNION ALL
 
-        -- Subcontractor RA bill (sc_bills) — Credit = net payable owed to the SC
+        -- Subcontractor RA bill (sc_bills) — Credit = full invoice value (basic
+        -- + GST), owed to the SC before any deduction. TDS/retention/other
+        -- deductions are posted as their own Debit rows below (same pattern as
+        -- TQS bills) so the ledger shows what was deducted and why, instead of
+        -- silently netting straight to net_payable. Advance recovery gets no
+        -- separate row — the original advance is already debited via its own
+        -- "Advance Given" row elsewhere in this ledger; a second row here would
+        -- double-count it (same reasoning as TQS bills, see below).
         SELECT
           sb.bill_date,
           'SC Bill',
@@ -352,11 +359,11 @@ router.get('/ledger', async (req, res) => {
             || CASE WHEN wo.wo_number IS NOT NULL THEN ' | WO: ' || wo.wo_number ELSE '' END,
           p.name,
           NULL::numeric,
-          COALESCE(sb.net_payable, 0),
+          COALESCE(sb.gross_amount, 0) + COALESCE(sb.gst_amount, 0),
           sb.status,
           sb.id::text,
           'sc',
-          COALESCE(sb.net_payable, 0),
+          COALESCE(sb.gross_amount, 0) + COALESCE(sb.gst_amount, 0),
           sb.bill_date,
           wo.wo_number
         FROM sc_bills sb
@@ -366,6 +373,126 @@ router.get('/ledger', async (req, res) => {
         WHERE sb.company_id = $1
           AND LOWER(TRIM(sc.name)) = LOWER(TRIM($2))
           AND LOWER(COALESCE(sb.status, '')) <> 'rejected'
+          ${scProjectFilter}
+          ${scLedgerGate}
+
+        UNION ALL
+
+        -- SC TDS Deduction — Debit, reduces amount owed to the SC (goes to govt, not the SC)
+        SELECT
+          sb.bill_date,
+          'TDS Deduction',
+          sb.bill_number,
+          sb.bill_number,
+          'TDS Deducted on SC Bill: ' || sb.bill_number || ' (' || COALESCE(sb.tds_pct, 0) || '%)',
+          p.name,
+          sb.tds_amount,
+          NULL::numeric,
+          sb.status,
+          sb.id::text,
+          'sc',
+          NULL::numeric,
+          sb.bill_date,
+          wo.wo_number
+        FROM sc_bills sb
+        JOIN sc_subcontractors sc ON sc.id = sb.sc_id
+        LEFT JOIN sc_work_orders wo ON wo.id = sb.wo_id
+        LEFT JOIN projects p ON p.id = sb.project_id
+        WHERE sb.company_id = $1
+          AND LOWER(TRIM(sc.name)) = LOWER(TRIM($2))
+          AND LOWER(COALESCE(sb.status, '')) <> 'rejected'
+          AND COALESCE(sb.tds_amount, 0) > 0
+          ${scProjectFilter}
+          ${scLedgerGate}
+
+        UNION ALL
+
+        -- SC Retention Held — Debit, held back pending defect-liability release
+        SELECT
+          sb.bill_date,
+          'Retention Held',
+          sb.bill_number,
+          sb.bill_number,
+          'Retention Held on SC Bill: ' || sb.bill_number || ' (' || COALESCE(sb.retention_pct, 0) || '%)',
+          p.name,
+          sb.retention_amount,
+          NULL::numeric,
+          sb.status,
+          sb.id::text,
+          'sc',
+          NULL::numeric,
+          sb.bill_date,
+          wo.wo_number
+        FROM sc_bills sb
+        JOIN sc_subcontractors sc ON sc.id = sb.sc_id
+        LEFT JOIN sc_work_orders wo ON wo.id = sb.wo_id
+        LEFT JOIN projects p ON p.id = sb.project_id
+        WHERE sb.company_id = $1
+          AND LOWER(TRIM(sc.name)) = LOWER(TRIM($2))
+          AND LOWER(COALESCE(sb.status, '')) <> 'rejected'
+          AND COALESCE(sb.retention_amount, 0) > 0
+          ${scProjectFilter}
+          ${scLedgerGate}
+
+        UNION ALL
+
+        -- SC Other Deduction — Debit, any deduction not covered by TDS/retention
+        SELECT
+          sb.bill_date,
+          'Other Deduction',
+          sb.bill_number,
+          sb.bill_number,
+          'Deductions on SC Bill: ' || sb.bill_number,
+          p.name,
+          sb.other_deductions,
+          NULL::numeric,
+          sb.status,
+          sb.id::text,
+          'sc',
+          NULL::numeric,
+          sb.bill_date,
+          wo.wo_number
+        FROM sc_bills sb
+        JOIN sc_subcontractors sc ON sc.id = sb.sc_id
+        LEFT JOIN sc_work_orders wo ON wo.id = sb.wo_id
+        LEFT JOIN projects p ON p.id = sb.project_id
+        WHERE sb.company_id = $1
+          AND LOWER(TRIM(sc.name)) = LOWER(TRIM($2))
+          AND LOWER(COALESCE(sb.status, '')) <> 'rejected'
+          AND COALESCE(sb.other_deductions, 0) > 0
+          ${scProjectFilter}
+          ${scLedgerGate}
+
+        UNION ALL
+
+        -- SC Advance Recovery — Debit. Unlike TQS bills, this CANNOT be safely
+        -- omitted: the original advance may have come through sc_advances or
+        -- stores_pc_sc_advances, neither of which is unioned into this ledger
+        -- as an "Advance Given" row, so skipping this would overstate the
+        -- running balance owed to the subcontractor by the recovered amount.
+        SELECT
+          sb.bill_date,
+          'Advance Recovery',
+          sb.bill_number,
+          sb.bill_number,
+          'Advance Recovered on SC Bill: ' || sb.bill_number,
+          p.name,
+          sb.advance_recovery,
+          NULL::numeric,
+          sb.status,
+          sb.id::text,
+          'sc',
+          NULL::numeric,
+          sb.bill_date,
+          wo.wo_number
+        FROM sc_bills sb
+        JOIN sc_subcontractors sc ON sc.id = sb.sc_id
+        LEFT JOIN sc_work_orders wo ON wo.id = sb.wo_id
+        LEFT JOIN projects p ON p.id = sb.project_id
+        WHERE sb.company_id = $1
+          AND LOWER(TRIM(sc.name)) = LOWER(TRIM($2))
+          AND LOWER(COALESCE(sb.status, '')) <> 'rejected'
+          AND COALESCE(sb.advance_recovery, 0) > 0
           ${scProjectFilter}
           ${scLedgerGate}
 

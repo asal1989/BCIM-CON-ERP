@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import { hrAttendanceAPI, projectAPI } from '../../../api/client';
+import useAuthStore from '../../../store/authStore';
 import {
   Printer, Download, RefreshCw, Filter, ChevronRight, Search, X,
-  Users, Clock, AlertTriangle, Timer, CalendarDays, Building2, LayoutList, Rows3,
+  Users, Clock, AlertTriangle, Timer, CalendarDays, Building2, LayoutList, Rows3, Mail,
+  Settings, Trash2, Send, Plus, Power,
 } from 'lucide-react';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -316,10 +319,20 @@ const PRINT_CSS = `
 `;
 
 export default function TimesheetReportPage() {
+  const { user }                    = useAuthStore();
+  const isSuperAdmin                = String(user?.role || '').toLowerCase() === 'super_admin';
   const [date, setDate]             = useState(today());
   const [category, setCategory]     = useState('staff');
   const [projectFilter, setProject] = useState('');
   const [rows, setRows]             = useState([]);
+  const [showMailModal, setShowMail]= useState(false);
+  const [mailTo, setMailTo]         = useState('');
+  const [sending, setSending]       = useState(false);
+  const [showConfigsModal, setShowConfigs] = useState(false);
+  const [cfgProjectId, setCfgProjectId]     = useState('');
+  const [cfgCategory, setCfgCategory]       = useState('staff');
+  const [cfgRecipients, setCfgRecipients]   = useState('');
+  const [cfgSavingId, setCfgSavingId]       = useState(null); // id currently mid-action, or 'new'
   const [summary, setSummary]       = useState({ total:0, present:0, half:0, absent:0, leave:0 });
   const [meta, setMeta]             = useState({ companyName:'BCIM', projectName:'', projectCode:'', holidayName:null, isSunday:false });
   const [loading, setLoading]       = useState(false);
@@ -488,6 +501,68 @@ export default function TimesheetReportPage() {
   });
   const projects = projectsData?.data || [];
 
+  const { data: configsData, refetch: refetchConfigs } = useQuery({
+    queryKey: ['timesheet-report-configs'],
+    queryFn: () => hrAttendanceAPI.timesheetReportConfigs.list().then(r => r.data),
+    enabled: isSuperAdmin && showConfigsModal,
+  });
+  const configs = configsData?.data || [];
+
+  const resetCfgForm = () => { setCfgProjectId(''); setCfgCategory('staff'); setCfgRecipients(''); };
+
+  const handleCreateConfig = async () => {
+    if (!cfgRecipients.trim()) return toast.error('Enter at least one recipient email');
+    const proj = projects.find(p => p.id === cfgProjectId);
+    const projectName = cfgProjectId === 'HEAD_OFFICE' ? 'Head Office' : (proj?.name || 'All Projects');
+    setCfgSavingId('new');
+    try {
+      await hrAttendanceAPI.timesheetReportConfigs.create({
+        project_id: cfgProjectId || null,
+        project_name: projectName,
+        category: cfgCategory,
+        recipients: cfgRecipients.trim(),
+      });
+      toast.success('Recipient config added');
+      resetCfgForm();
+      refetchConfigs();
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to add config');
+    } finally { setCfgSavingId(null); }
+  };
+
+  const handleToggleConfig = async (cfg) => {
+    setCfgSavingId(cfg.id);
+    try {
+      await hrAttendanceAPI.timesheetReportConfigs.update(cfg.id, { enabled: !cfg.enabled });
+      refetchConfigs();
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to update');
+    } finally { setCfgSavingId(null); }
+  };
+
+  const handleDeleteConfig = async (cfg) => {
+    if (!window.confirm(`Remove the email config for ${cfg.project_name}?`)) return;
+    setCfgSavingId(cfg.id);
+    try {
+      await hrAttendanceAPI.timesheetReportConfigs.delete(cfg.id);
+      toast.success('Config removed');
+      refetchConfigs();
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to delete');
+    } finally { setCfgSavingId(null); }
+  };
+
+  const handleSendNowConfig = async (cfg) => {
+    setCfgSavingId(cfg.id);
+    try {
+      const res = await hrAttendanceAPI.timesheetReportConfigs.sendNow(cfg.id, date);
+      if (res.data?.ok) toast.success(`Sent to ${res.data.recipients?.join(', ') || cfg.recipients}`);
+      else toast.error(res.data?.reason || 'Send failed');
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Send failed');
+    } finally { setCfgSavingId(null); }
+  };
+
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
@@ -513,6 +588,25 @@ export default function TimesheetReportPage() {
   }, [date, category, projectFilter]);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleSendToClient = async () => {
+    if (!mailTo.trim()) return toast.error('Enter at least one recipient email');
+    setSending(true);
+    try {
+      const res = await hrAttendanceAPI.timesheetReportSendToClient(
+        date, projectFilter || undefined, meta.projectName || undefined, category, mailTo.trim()
+      );
+      if (res.data?.ok) {
+        toast.success(`Sent to ${res.data.recipients?.join(', ') || mailTo}`);
+        setShowMail(false);
+        setMailTo('');
+      } else {
+        toast.error(res.data?.reason || 'Send failed');
+      }
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Send failed');
+    } finally { setSending(false); }
+  };
 
   const handleExport = () => {
     const headers = ['S.No','EMP ID','Name','Designation','Department','Trade','Company','Project','P/A',
@@ -675,6 +769,16 @@ export default function TimesheetReportPage() {
             <button onClick={handleExport} style={ghostBtn}>
               <Download size={13}/> Export CSV
             </button>
+            {isSuperAdmin && (
+              <button onClick={() => setShowMail(true)} title="Email this report to a client" style={ghostBtn}>
+                <Mail size={13}/> Mail to Client
+              </button>
+            )}
+            {isSuperAdmin && (
+              <button onClick={() => setShowConfigs(true)} title="Manage saved recipient lists" style={ghostBtn}>
+                <Settings size={13}/> Recipients
+              </button>
+            )}
             <button onClick={() => window.print()} style={{
               display:'flex', alignItems:'center', gap:6,
               background:'#fff', color:T.navyMid, border:'none',
@@ -1321,6 +1425,162 @@ export default function TimesheetReportPage() {
         </div>
 
       </div>
+
+      {/* MAIL TO CLIENT MODAL */}
+      {showMailModal && (
+        <div className="no-print" style={{
+          position:'fixed', inset:0, background:'rgba(15,37,68,0.45)', zIndex:50,
+          display:'flex', alignItems:'center', justifyContent:'center', padding:16,
+        }} onClick={() => !sending && setShowMail(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background:T.surface, borderRadius:16, width:'100%', maxWidth:420,
+            padding:'22px 24px', boxShadow:'0 20px 60px rgba(15,37,68,0.35)',
+          }}>
+            <div style={{ display:'flex', alignItems:'center', gap:9, marginBottom:4 }}>
+              <Mail size={17} color={T.navyMid}/>
+              <h3 style={{ margin:0, fontSize:16, fontWeight:800, color:T.ink }}>Email Report to Client</h3>
+            </div>
+            <p style={{ fontSize:12, color:T.muted, margin:'6px 0 16px' }}>
+              Sends the {fmtDate(date)} timesheet ({meta.projectName || 'All Projects'}) as a PDF, right now.
+            </p>
+            <label style={{ fontSize:11, fontWeight:700, color:T.faint, textTransform:'uppercase', letterSpacing:0.5 }}>
+              Recipient email(s)
+            </label>
+            <input
+              type="text" value={mailTo} onChange={e => setMailTo(e.target.value)}
+              placeholder="client@example.com, another@example.com"
+              autoFocus
+              style={{ ...inputStyle, width:'100%', marginTop:6, marginBottom:18, boxSizing:'border-box' }}
+            />
+            <div style={{ display:'flex', gap:9, justifyContent:'flex-end' }}>
+              <button onClick={() => setShowMail(false)} disabled={sending} style={{
+                border:`1px solid ${T.hair}`, background:T.surface, color:T.body,
+                borderRadius:9, padding:'8px 16px', fontSize:12.5, fontWeight:700, cursor:'pointer',
+              }}>Cancel</button>
+              <button onClick={handleSendToClient} disabled={sending} style={{
+                border:'none', background:T.navyMid, color:'#fff',
+                borderRadius:9, padding:'8px 18px', fontSize:12.5, fontWeight:800, cursor:'pointer',
+                opacity: sending ? 0.7 : 1, display:'flex', alignItems:'center', gap:6,
+              }}>
+                <Mail size={13}/> {sending ? 'Sending…' : 'Send Now'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SAVED RECIPIENT CONFIGS MODAL */}
+      {showConfigsModal && (
+        <div className="no-print" style={{
+          position:'fixed', inset:0, background:'rgba(15,37,68,0.45)', zIndex:50,
+          display:'flex', alignItems:'center', justifyContent:'center', padding:16,
+        }} onClick={() => setShowConfigs(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background:T.surface, borderRadius:16, width:'100%', maxWidth:640,
+            maxHeight:'82vh', display:'flex', flexDirection:'column',
+            boxShadow:'0 20px 60px rgba(15,37,68,0.35)',
+          }}>
+            <div style={{ padding:'20px 24px 14px', borderBottom:`1px solid ${T.hair}` }}>
+              <div style={{ display:'flex', alignItems:'center', gap:9 }}>
+                <Settings size={17} color={T.navyMid}/>
+                <h3 style={{ margin:0, fontSize:16, fontWeight:800, color:T.ink }}>Saved Recipient Configs</h3>
+              </div>
+              <p style={{ fontSize:12, color:T.muted, margin:'6px 0 0' }}>
+                Each config auto-sends its own daily timesheet email at 09:30 AM to its recipient list.
+                Use Send Now to trigger one immediately for today's date.
+              </p>
+            </div>
+
+            <div style={{ overflowY:'auto', padding:'14px 24px', flex:1 }}>
+              {/* Add new config */}
+              <div style={{
+                display:'grid', gridTemplateColumns:'1fr 1fr', gap:9, marginBottom:10,
+                padding:'12px 14px', background:T.canvas, borderRadius:10, border:`1px solid ${T.hair}`,
+              }}>
+                <select value={cfgProjectId} onChange={e => setCfgProjectId(e.target.value)}
+                  style={{ ...inputStyle, gridColumn:'1 / 2' }}>
+                  <option value="">All Projects (combined)</option>
+                  <option value="HEAD_OFFICE">Head Office</option>
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+                <select value={cfgCategory} onChange={e => setCfgCategory(e.target.value)} style={inputStyle}>
+                  <option value="staff">BCIM Staff</option>
+                  <option value="labour">SC / Labour Workers</option>
+                  <option value="all">All Employees</option>
+                </select>
+                <input
+                  type="text" value={cfgRecipients} onChange={e => setCfgRecipients(e.target.value)}
+                  placeholder="client@example.com, another@example.com"
+                  style={{ ...inputStyle, gridColumn:'1 / 3' }}
+                />
+                <button onClick={handleCreateConfig} disabled={cfgSavingId === 'new'} style={{
+                  gridColumn:'1 / 3', border:'none', background:T.navyMid, color:'#fff',
+                  borderRadius:9, padding:'8px 14px', fontSize:12.5, fontWeight:800, cursor:'pointer',
+                  display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+                  opacity: cfgSavingId === 'new' ? 0.7 : 1,
+                }}>
+                  <Plus size={14}/> {cfgSavingId === 'new' ? 'Adding…' : 'Add Config'}
+                </button>
+              </div>
+
+              {/* Existing configs */}
+              {configs.length === 0 ? (
+                <div style={{ textAlign:'center', color:T.faint, fontSize:12.5, padding:'24px 0' }}>
+                  No saved recipient configs yet.
+                </div>
+              ) : configs.map(cfg => (
+                <div key={cfg.id} style={{
+                  display:'flex', alignItems:'center', gap:10, padding:'10px 12px',
+                  border:`1px solid ${T.hair}`, borderRadius:10, marginBottom:8,
+                  opacity: cfg.enabled ? 1 : 0.55,
+                }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12.5, fontWeight:700, color:T.ink, display:'flex', alignItems:'center', gap:7 }}>
+                      {cfg.project_name}
+                      <span style={{ fontSize:9.5, fontWeight:800, color:T.navyLift, background:'#EAF2FE',
+                        borderRadius:999, padding:'1px 8px', textTransform:'uppercase' }}>{cfg.category}</span>
+                      {!cfg.enabled && <span style={{ fontSize:9.5, fontWeight:800, color:T.absent }}>PAUSED</span>}
+                    </div>
+                    <div style={{ fontSize:11, color:T.muted, marginTop:2, whiteSpace:'nowrap',
+                      overflow:'hidden', textOverflow:'ellipsis' }} title={cfg.recipients}>
+                      {cfg.recipients}
+                    </div>
+                  </div>
+                  <button onClick={() => handleSendNowConfig(cfg)} disabled={cfgSavingId === cfg.id}
+                    title="Send now" style={{
+                      border:`1px solid ${T.hair}`, background:T.surface, color:T.navyMid,
+                      borderRadius:8, padding:6, cursor:'pointer', display:'flex',
+                    }}>
+                    <Send size={13}/>
+                  </button>
+                  <button onClick={() => handleToggleConfig(cfg)} disabled={cfgSavingId === cfg.id}
+                    title={cfg.enabled ? 'Pause' : 'Resume'} style={{
+                      border:`1px solid ${T.hair}`, background:T.surface,
+                      color: cfg.enabled ? T.present : T.faint,
+                      borderRadius:8, padding:6, cursor:'pointer', display:'flex',
+                    }}>
+                    <Power size={13}/>
+                  </button>
+                  <button onClick={() => handleDeleteConfig(cfg)} disabled={cfgSavingId === cfg.id}
+                    title="Remove" style={{
+                      border:`1px solid ${T.hair}`, background:T.surface, color:T.absent,
+                      borderRadius:8, padding:6, cursor:'pointer', display:'flex',
+                    }}>
+                    <Trash2 size={13}/>
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ padding:'12px 24px', borderTop:`1px solid ${T.hair}`, display:'flex', justifyContent:'flex-end' }}>
+              <button onClick={() => setShowConfigs(false)} style={{
+                border:`1px solid ${T.hair}`, background:T.surface, color:T.body,
+                borderRadius:9, padding:'8px 16px', fontSize:12.5, fontWeight:700, cursor:'pointer',
+              }}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
