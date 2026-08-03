@@ -859,6 +859,13 @@ export const payrollAPI = {
   pay:      (id)     => api.patch(`/payroll/${id}/pay`),
 };
 
+export const weatherAPI = {
+  overview: (project_id)                => api.get('/planning/weather/overview', { params: { project_id } }),
+  history:  (project_id, from, to)      => api.get('/planning/weather/history', { params: { project_id, from, to } }),
+  today:    (project_id)                => api.get('/planning/weather/today', { params: { project_id } }),
+  updateLocation: (data)                 => api.patch('/planning/weather/location', data),
+};
+
 export const planningAPI = {
   // DPR
   listDPRs:       (p)     => api.get('/planning/dpr', { params: p }),

@@ -16,7 +16,7 @@ import {
   Landmark, FileSignature, CircleSlash, ShieldCheck, Clock3, Lightbulb,
   Gavel, Target, Send, Coins, Replace, Link2, Wrench, Layers, MapPin, TrendingDown, FolderOpen, Calculator, UserRound,
   Cog, Fuel, Gauge, BarChart2, History, GitBranch, MinusCircle, FolderKanban, Sparkles, MessageSquare, Mail,
-  RefreshCw, Shuffle, Globe, Database
+  RefreshCw, Shuffle, Globe, Database, CloudSun
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import CommandPalette from './CommandPalette';
@@ -63,6 +63,7 @@ const navGroups = [
     { to: '/planning/delays',       icon: AlertTriangle,    label: 'Delay Analysis' },
     { to: '/planning/risks',        icon: ShieldCheck,      label: 'Risk Register' },
     { to: '/planning/mrp',          icon: Package,          label: 'Material Plan (MRP)' },
+    { to: '/planning/weather',      icon: CloudSun,         label: 'Site Weather' },
     { to: '/planning/engineer-log',  icon: ClipboardList,    label: 'Engineer Daily Log' },
     { to: '/planning/dpr-console',  icon: LayoutDashboard,  label: 'Daily Progress (DPR)' },
     { to: '/planning/reports',      icon: BarChart3,        label: 'Planning Reports' },
@@ -479,7 +480,7 @@ const NAV_SECTIONS = {
   'Planning': [
     { label: 'Dashboard',  paths: ['/planning','/planning/p6-dashboard'] },
     { label: 'Schedule',   paths: ['/planning/wbs','/planning/activities','/planning/milestones','/planning/look-ahead'] },
-    { label: 'Progress',   paths: ['/planning/engineer-log','/planning/dpr-console','/planning/progress','/planning/delays','/planning/reports'] },
+    { label: 'Progress',   paths: ['/planning/engineer-log','/planning/dpr-console','/planning/progress','/planning/delays','/planning/reports','/planning/weather'] },
     { label: 'P6',         paths: ['/planning/risks','/planning/mrp'] },
     { label: 'Documents',  paths: ['/planning/documents'] },
   ],
