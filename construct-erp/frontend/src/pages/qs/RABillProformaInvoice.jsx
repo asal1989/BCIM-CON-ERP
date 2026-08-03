@@ -46,6 +46,12 @@ const hcell = (extra = {}) => ({
   ...cell(), fontWeight: 'bold', textAlign: 'center', ...extra,
 });
 
+// The 10-column line-items grid is the widest thing on the page, so it gets
+// tighter padding and a smaller face than the rest of the document — this is
+// what kept the CGST/SGST columns from being pushed past the paper edge.
+const icell = (extra = {}) => cell({ padding: '3px 3px', fontSize: '8.5pt', ...extra });
+const ihcell = (extra = {}) => icell({ fontWeight: 'bold', textAlign: 'center', ...extra });
+
 const RABillProformaInvoice = forwardRef(({ data: b, proformaNo, proformaDate }, ref) => {
   if (!b) return null;
 
@@ -55,19 +61,24 @@ const RABillProformaInvoice = forwardRef(({ data: b, proformaNo, proformaDate },
   const sgst    = taxable * (gstRate / 2) / 100;
   const total   = taxable + cgst + sgst;
 
+  // 200mm, not the full 210mm of A4: the print stylesheet pairs this with a
+  // 5mm @page margin, so the document lands inside the printable area instead
+  // of butting against the paper edge (where the right-hand GST columns were
+  // getting clipped / pushed onto a second sheet).
   const page = {
     fontFamily: "'Book Antiqua','Palatino Linotype',Palatino,serif",
     fontSize: '10pt',
     color: '#000',
     background: '#fff',
-    padding: '8mm 10mm',
-    width: '210mm',
-    minHeight: '285mm',
+    padding: 0,
+    width: '200mm',
+    minHeight: '287mm',
     boxSizing: 'border-box',
+    margin: '0 auto',
   };
 
   return (
-    <div ref={ref} style={page}>
+    <div ref={ref} className="proforma-page" style={page}>
 
       {/* ── TITLE ── */}
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -81,7 +92,11 @@ const RABillProformaInvoice = forwardRef(({ data: b, proformaNo, proformaDate },
       </table>
 
       {/* ── COMPANY HEADER: Logo left | Details right ── */}
-      <table style={{ width: '100%', borderCollapse: 'collapse', borderLeft: B2, borderRight: B2, borderBottom: B2 }}>
+      <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', borderLeft: B2, borderRight: B2, borderBottom: B2 }}>
+        <colgroup>
+          <col style={{ width: '18%' }} />
+          <col style={{ width: '82%' }} />
+        </colgroup>
         <tbody>
           <tr>
             {/* Logo — rowSpan 5 */}
@@ -173,77 +188,84 @@ const RABillProformaInvoice = forwardRef(({ data: b, proformaNo, proformaDate },
 
       {/* ── LINE ITEMS TABLE ── */}
       <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', borderLeft: B2, borderRight: B2, borderBottom: B }}>
+        {/* Qty / Rate / Disc. only ever render an em-dash on a lump-sum RA bill,
+            so they give up width to the money columns, which carry nowrap values. */}
         <colgroup>
           <col style={{ width: '4%' }} />
-          <col style={{ width: '22%' }} />
+          <col style={{ width: '24%' }} />
           <col style={{ width: '8%' }} />
           <col style={{ width: '4%' }} />
-          <col style={{ width: '7%' }} />
-          <col style={{ width: '9%' }} />
-          <col style={{ width: '6%' }} />
-          <col style={{ width: '13%' }} />
-          <col style={{ width: '13.5%' }} />
-          <col style={{ width: '13.5%' }} />
+          <col style={{ width: '5%' }} />
+          <col style={{ width: '11%' }} />
+          <col style={{ width: '4%' }} />
+          <col style={{ width: '12%' }} />
+          <col style={{ width: '14%' }} />
+          <col style={{ width: '14%' }} />
         </colgroup>
         <thead>
           <tr>
-            <th style={{ ...hcell() }} rowSpan={2}>S.No</th>
-            <th style={{ ...hcell() }} rowSpan={2}>Description of Goods / Services</th>
-            <th style={{ ...hcell() }} rowSpan={2}>HSN Code</th>
-            <th style={{ ...hcell() }} rowSpan={2}>Qty</th>
-            <th style={{ ...hcell() }} rowSpan={2}>Rate</th>
-            <th style={{ ...hcell() }} rowSpan={2}>Total</th>
-            <th style={{ ...hcell() }} rowSpan={2}>Disc.</th>
-            <th style={{ ...hcell() }} rowSpan={2}>Taxable Value</th>
-            <th style={{ ...hcell() }} colSpan={2}>GST</th>
+            <th style={{ ...ihcell() }} rowSpan={2}>S.No</th>
+            <th style={{ ...ihcell() }} rowSpan={2}>Description of Goods / Services</th>
+            <th style={{ ...ihcell() }} rowSpan={2}>HSN Code</th>
+            <th style={{ ...ihcell() }} rowSpan={2}>Qty</th>
+            <th style={{ ...ihcell() }} rowSpan={2}>Rate</th>
+            <th style={{ ...ihcell() }} rowSpan={2}>Total</th>
+            <th style={{ ...ihcell() }} rowSpan={2}>Disc.</th>
+            <th style={{ ...ihcell() }} rowSpan={2}>Taxable Value</th>
+            <th style={{ ...ihcell() }} colSpan={2}>GST</th>
           </tr>
           <tr>
-            <th style={{ ...hcell() }}>CGST<br />{gstRate / 2}%</th>
-            <th style={{ ...hcell() }}>SGST<br />{gstRate / 2}%</th>
+            <th style={{ ...ihcell() }}>CGST<br />{gstRate / 2}%</th>
+            <th style={{ ...ihcell() }}>SGST<br />{gstRate / 2}%</th>
           </tr>
         </thead>
         <tbody>
           {/* Main line item */}
           <tr>
-            <td style={{ ...cell(), textAlign: 'center' }}>1</td>
-            <td style={{ ...cell() }}>
+            <td style={{ ...icell(), textAlign: 'center' }}>1</td>
+            <td style={{ ...icell() }}>
               CIVIL WORKS OF RESIDENTIAL BUILDINGS
-              <div style={{ fontSize: '9pt', color: '#222', marginTop: '2px' }}>
+              <div style={{ fontSize: '8pt', color: '#222', marginTop: '2px' }}>
                 {b.bill_number}{b.bill_period_from ? ` | Period: ${new Date(b.bill_period_from).toLocaleDateString('en-GB').replace(/\//g,'.')} to ${new Date(b.bill_period_to).toLocaleDateString('en-GB').replace(/\//g,'.')}` : ''}
               </div>
             </td>
-            <td style={{ ...cell(), textAlign: 'center' }}>995411</td>
-            <td style={{ ...cell(), textAlign: 'center' }}>—</td>
-            <td style={{ ...cell(), textAlign: 'center' }}>—</td>
-            <td style={{ ...cell(), textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt0(taxable)}</td>
-            <td style={{ ...cell(), textAlign: 'center' }}>—</td>
-            <td style={{ ...cell(), textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt0(taxable)}</td>
-            <td style={{ ...cell(), textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt(cgst)}</td>
-            <td style={{ ...cell(), textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt(sgst)}</td>
+            <td style={{ ...icell(), textAlign: 'center' }}>995411</td>
+            <td style={{ ...icell(), textAlign: 'center' }}>—</td>
+            <td style={{ ...icell(), textAlign: 'center' }}>—</td>
+            <td style={{ ...icell(), textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt0(taxable)}</td>
+            <td style={{ ...icell(), textAlign: 'center' }}>—</td>
+            <td style={{ ...icell(), textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt0(taxable)}</td>
+            <td style={{ ...icell(), textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt(cgst)}</td>
+            <td style={{ ...icell(), textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt(sgst)}</td>
           </tr>
           {/* Blank filler rows */}
           {[...Array(5)].map((_, i) => (
             <tr key={i}>
               {[...Array(10)].map((_, j) => (
-                <td key={j} style={{ ...cell(), height: '20px' }}>&nbsp;</td>
+                <td key={j} style={{ ...icell(), height: '18px' }}>&nbsp;</td>
               ))}
             </tr>
           ))}
           {/* Totals row */}
           <tr>
-            <td colSpan={7} style={{ ...hcell(), textAlign: 'right', borderTop: B2 }}>Total</td>
-            <td style={{ ...hcell(), textAlign: 'right', borderTop: B2, whiteSpace: 'nowrap' }}>{fmt0(taxable)}</td>
-            <td style={{ ...hcell(), textAlign: 'right', borderTop: B2, whiteSpace: 'nowrap' }}>{fmt(cgst)}</td>
-            <td style={{ ...hcell(), textAlign: 'right', borderTop: B2, whiteSpace: 'nowrap' }}>{fmt(sgst)}</td>
+            <td colSpan={7} style={{ ...ihcell(), textAlign: 'right', borderTop: B2 }}>Total</td>
+            <td style={{ ...ihcell(), textAlign: 'right', borderTop: B2, whiteSpace: 'nowrap' }}>{fmt0(taxable)}</td>
+            <td style={{ ...ihcell(), textAlign: 'right', borderTop: B2, whiteSpace: 'nowrap' }}>{fmt(cgst)}</td>
+            <td style={{ ...ihcell(), textAlign: 'right', borderTop: B2, whiteSpace: 'nowrap' }}>{fmt(sgst)}</td>
           </tr>
         </tbody>
       </table>
 
       {/* ── SUMMARY BOX ── */}
-      <table style={{ width: '100%', borderCollapse: 'collapse', borderLeft: B2, borderRight: B2, borderBottom: B }}>
+      <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', borderLeft: B2, borderRight: B2, borderBottom: B }}>
+        <colgroup>
+          <col style={{ width: '55%' }} />
+          <col style={{ width: '24%' }} />
+          <col style={{ width: '21%' }} />
+        </colgroup>
         <tbody>
           <tr>
-            <td rowSpan={3} style={{ ...cell(), width: '55%', verticalAlign: 'top', fontWeight: 'bold' }}>
+            <td rowSpan={3} style={{ ...cell(), verticalAlign: 'top', fontWeight: 'bold' }}>
               Invoice Total (In Words):<br />
               <span style={{ fontWeight: 'normal' }}>
                 Rupees {amountInWords(Math.round(total))} Only
@@ -264,10 +286,14 @@ const RABillProformaInvoice = forwardRef(({ data: b, proformaNo, proformaDate },
       </table>
 
       {/* ── FOOTER ── */}
-      <table style={{ width: '100%', borderCollapse: 'collapse', borderLeft: B2, borderRight: B2, borderBottom: B2 }}>
+      <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', borderLeft: B2, borderRight: B2, borderBottom: B2 }}>
+        <colgroup>
+          <col style={{ width: '60%' }} />
+          <col style={{ width: '40%' }} />
+        </colgroup>
         <tbody>
           <tr>
-            <td style={{ ...cell(), width: '60%', fontSize: '9.5pt', verticalAlign: 'top' }}>
+            <td style={{ ...cell(), fontSize: '9.5pt', verticalAlign: 'top' }}>
               <strong>Declaration:</strong> We declare that this invoice shows the actual price of the goods / services
               described and that all particulars are true and correct.
             </td>

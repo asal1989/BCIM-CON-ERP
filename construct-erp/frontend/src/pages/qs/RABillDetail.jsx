@@ -132,10 +132,24 @@ export default function RABillDetail() {
     pageStyle: A4_PAGE_STYLE,
   });
 
+  // The proforma is 200mm wide (not the full 210mm), so it gets a 5mm @page
+  // margin instead of the edge-to-edge one the tax invoice uses — 200 + 5 + 5
+  // = exactly A4, with nothing sitting in the printer's non-printable strip.
+  const PROFORMA_PAGE_STYLE = `
+    @page { size: A4 portrait; margin: 5mm; }
+    @media print {
+      html, body { margin: 0 !important; padding: 0 !important;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .proforma-page { width: 200mm !important; margin: 0 !important; }
+      .proforma-page table { page-break-inside: auto; }
+      .proforma-page tr { page-break-inside: avoid; }
+    }
+  `;
+
   const handleProformaPrint = useReactToPrint({
     contentRef: proformaRef,
     documentTitle: `Proforma_${proformaNo || b?.bill_number || 'export'}`,
-    pageStyle: A4_PAGE_STYLE,
+    pageStyle: PROFORMA_PAGE_STYLE,
   });
 
   const invalidate = () => {
