@@ -324,7 +324,7 @@ router.get('/:id', async (req, res) => {
 
     const itemRes = await query(
       `SELECT rbi.*, b.chapter_no, b.chapter_name, b.item_no, b.sr_no,
-              b.description, b.unit,
+              b.description, b.short_description, b.unit,
               b.quantity    AS boq_qty,
               b.rate        AS boq_rate,
               COALESCE(b.current_quantity, b.quantity) AS revised_boq_qty,

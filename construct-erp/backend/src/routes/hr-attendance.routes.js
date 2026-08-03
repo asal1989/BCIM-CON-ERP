@@ -146,6 +146,7 @@ router.get('/summary', async (req, res) => {
                                       AND EXTRACT(YEAR  FROM a.attendance_date) = $3
         WHERE u.company_id = $1
           AND u.is_active = TRUE
+          AND COALESCE(ep.employment_status, 'active') = 'active'
           ${deptFilter}
           ${projFilter}
         GROUP BY u.id, u.name, u.employee_code, ep.department_id, dep.name, u.department
@@ -180,6 +181,7 @@ router.get('/summary', async (req, res) => {
         LEFT JOIN employee_profiles ep ON ep.user_id = u.id
         LEFT JOIN hr_departments dep   ON dep.id = ep.department_id
         WHERE a.company_id=$1 AND a.attendance_date BETWEEN $2 AND $3
+          AND COALESCE(ep.employment_status, 'active') = 'active'
         ${staffProjFilter}
         GROUP BY dep.name ORDER BY dep.name
       `, staffParams),
@@ -337,6 +339,7 @@ router.get('/department-summary', async (req, res) => {
         LEFT JOIN employee_profiles ep ON ep.user_id = u.id
         LEFT JOIN hr_departments dep   ON dep.id = ep.department_id
         WHERE a.company_id=$1 AND a.attendance_date BETWEEN $2 AND $3
+          AND COALESCE(ep.employment_status, 'active') = 'active'
         ${staffProjFilter}
         GROUP BY dep.name ORDER BY dep.name
       `, staffParams),
@@ -401,7 +404,8 @@ router.post('/month-baseline', async (req, res) => {
       SELECT u.id
       FROM users u
       LEFT JOIN employee_profiles ep ON ep.user_id = u.id
-      WHERE u.company_id = $1 AND u.is_active = TRUE`;
+      WHERE u.company_id = $1 AND u.is_active = TRUE
+        AND COALESCE(ep.employment_status, 'active') = 'active'`;
     const employeeParams = [req.user.company_id];
 
     if (department_id) {
@@ -633,6 +637,7 @@ router.get('/timesheet-report', async (req, res) => {
                                      AND a.company_id = $1
       WHERE u.company_id = $1
         AND u.is_active = TRUE
+        AND COALESCE(ep.employment_status, 'active') = 'active'
         ${roleFilter}
         ${categoryFilter}
         ${deptFilter}
@@ -1085,6 +1090,7 @@ router.get('/monthly-report', async (req, res) => {
        AND a.attendance_date BETWEEN $2 AND $3
       WHERE u.company_id = $1
         AND u.is_active = TRUE
+        AND COALESCE(ep.employment_status, 'active') = 'active'
         ${categoryFilter}
         ${deptFilter}
         ${projFilter}

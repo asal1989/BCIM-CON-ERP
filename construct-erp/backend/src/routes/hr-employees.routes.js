@@ -551,6 +551,7 @@ router.put('/:id', async (req, res) => {
       bank_name, bank_account_number, bank_ifsc, permanent_address, current_address,
       emergency_contact_name, emergency_contact_phone, employment_type, employee_category,
       probation_end_date, notice_period_days, reporting_manager_id, work_location, project_id,
+      date_of_leaving, leaving_reason, employment_status,
     } = req.body;
 
     let deptName = '', desigName = '';
@@ -627,8 +628,9 @@ router.put('/:id', async (req, res) => {
         pan_number, aadhaar_number, uan_number, pf_account_number, esi_number,
         bank_name, bank_account_number, bank_ifsc, permanent_address, current_address,
         emergency_contact_name, emergency_contact_phone, employment_type, employee_category,
-        reporting_manager_id, work_location, project_id, probation_end_date, notice_period_days, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,NOW())
+        reporting_manager_id, work_location, project_id, probation_end_date, notice_period_days,
+        date_of_leaving, leaving_reason, employment_status, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,NOW())
        ON CONFLICT (user_id) DO UPDATE SET
          department_id=$3, designation_id=$4, date_of_joining=$5, date_of_birth=$6,
          gender=$7, father_name=$8, mother_name=$9, marital_status=$10, blood_group=$11,
@@ -637,7 +639,8 @@ router.put('/:id', async (req, res) => {
          bank_ifsc=$20, permanent_address=$21, current_address=$22,
          emergency_contact_name=$23, emergency_contact_phone=$24, employment_type=$25,
          employee_category=$26, reporting_manager_id=$27, work_location=$28,
-         project_id=$29, probation_end_date=$30, notice_period_days=$31, updated_at=NOW()`,
+         project_id=$29, probation_end_date=$30, notice_period_days=$31,
+         date_of_leaving=$32, leaving_reason=$33, employment_status=$34, updated_at=NOW()`,
       [req.params.id, req.user.company_id, department_id || null, designation_id || null,
        date_of_joining || null, date_of_birth || null, gender || null,
        father_name || null, mother_name || null, marital_status || null,
@@ -648,7 +651,13 @@ router.put('/:id', async (req, res) => {
        emergency_contact_name || null, emergency_contact_phone || null,
        employment_type || 'permanent', employee_category || 'staff',
        reporting_manager_id || null, work_location || null,
-       project_id || null, probation_end_date || null, notice_period_days || 30]
+       project_id || null, probation_end_date || null, notice_period_days || 30,
+       date_of_leaving || null, leaving_reason || null, employment_status || 'active']
+    );
+
+    await syncExitToWorkerRoster(
+      (sql, params) => client.query(sql, params),
+      req.params.id, req.user.company_id, employment_status
     );
 
     await addTimeline(
@@ -672,6 +681,34 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// Site workers exist twice: once in users/employee_profiles and again in
+// sc_workers (subcontractor roster). Marking someone resigned in HR only
+// touched the first, so the sc_workers copy kept status='active' and kept
+// showing up in the daily timesheet and every other attendance report.
+// Mirror any non-active employment_status onto both sc_workers and
+// users.is_active so one HR action fully retires the person.
+async function syncExitToWorkerRoster(runner, userId, companyId, employmentStatus) {
+  const isExited = employmentStatus && employmentStatus !== 'active';
+  if (!isExited) return;
+
+  const { rows } = await runner(
+    `SELECT employee_code FROM users WHERE id=$1 AND company_id=$2`,
+    [userId, companyId]
+  );
+  const code = rows[0]?.employee_code;
+  if (code) {
+    await runner(
+      `UPDATE sc_workers SET status='inactive'
+       WHERE company_id=$1 AND worker_code=$2 AND status='active'`,
+      [companyId, code]
+    );
+  }
+  await runner(
+    `UPDATE users SET is_active=FALSE WHERE id=$1 AND company_id=$2`,
+    [userId, companyId]
+  );
+}
+
 // ═══════════════════════════════════════════════════════════
 // UPDATE STATUS (exit / terminate etc)
 // ═══════════════════════════════════════════════════════════
@@ -688,6 +725,7 @@ router.patch('/:id/status', async (req, res) => {
       await query(`UPDATE users SET is_active=$1 WHERE id=$2 AND company_id=$3`,
         [is_active, req.params.id, req.user.company_id]);
     }
+    await syncExitToWorkerRoster(query, req.params.id, req.user.company_id, employment_status);
     await query(
       `INSERT INTO employee_timeline
        (user_id, company_id, event_type, title, description, event_date, created_by)

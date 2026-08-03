@@ -15,6 +15,7 @@ import useAuthStore from '../../store/authStore';
 import { clsx } from 'clsx';
 import dayjs from 'dayjs';
 import RABillPrintTemplate from './RABillPrintTemplate';
+import RABillClientTemplate from './RABillClientTemplate';
 import RABillTaxInvoice from './RABillTaxInvoice';
 import RABillProformaInvoice from './RABillProformaInvoice';
 import jsPDF from 'jspdf';
@@ -48,9 +49,10 @@ export default function RABillDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const printRef       = useRef();
-  const taxInvoiceRef  = useRef();
-  const proformaRef    = useRef();
+  const printRef        = useRef();
+  const clientBillRef   = useRef();
+  const taxInvoiceRef   = useRef();
+  const proformaRef     = useRef();
   const { user } = useAuthStore();
   const role = user?.role || '';
   const [showTaxModal,      setShowTaxModal]      = useState(false);
@@ -92,6 +94,18 @@ export default function RABillDetail() {
   const handlePrint = useReactToPrint({
     contentRef: printRef,
     documentTitle: `RA_Bill_${b?.bill_number || 'export'}`,
+  });
+
+  const handleClientBillPrint = useReactToPrint({
+    contentRef: clientBillRef,
+    documentTitle: `Client_RA_Bill_${b?.bill_number || 'export'}`,
+    pageStyle: `
+      @page { size: A4 portrait; margin: 12mm 10mm 14mm; }
+      @media print {
+        html, body { margin: 0 !important; padding: 0 !important;
+          -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      }
+    `,
   });
 
   // A4 edge-to-edge: the invoice templates are 210mm wide with their own internal
@@ -230,9 +244,14 @@ export default function RABillDetail() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button onClick={() => handleClientBillPrint()}
+            className="h-9 px-3 flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors text-[11px] font-medium"
+            title="Print Client RA Bill (Professional Format)">
+            <FileText size={14} /> Client Bill
+          </button>
           <button onClick={() => handlePrint()}
             className="w-9 h-9 flex items-center justify-center rounded-xl border border-[#e2e6ec] bg-white text-[#6a6f7d] hover:text-indigo-600 hover:border-indigo-200 transition-colors"
-            title="Print RA Bill">
+            title="Print QS Internal Bill">
             <Printer size={16} />
           </button>
           <button onClick={handleDownloadPDF}
@@ -588,9 +607,14 @@ export default function RABillDetail() {
         </div>
       </div>
 
-      {/* Print zone — RA Bill */}
+      {/* Print zone — QS Internal Bill */}
       <div className="ra-bill-print-zone">
         <RABillPrintTemplate ref={printRef} data={b} variations={variations} audit={audit} />
+      </div>
+
+      {/* Print zone — Client RA Bill (professional format) */}
+      <div className="ra-bill-print-zone">
+        <RABillClientTemplate ref={clientBillRef} data={b} />
       </div>
 
       <style>{`@media screen { .ra-bill-print-zone { display: none !important; } }`}</style>
