@@ -76,6 +76,11 @@ const ensureSchema = async () => {
     )`,
     `ALTER TABLE po_amendments ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES companies(id) ON DELETE CASCADE`,
     `ALTER TABLE po_amendments ADD COLUMN IF NOT EXISTS po_id UUID REFERENCES purchase_orders(id) ON DELETE CASCADE`,
+    // Mirrors wo_amendments.new_wo_id — po_id is the ORIGINAL PO being
+    // amended, new_po_id is the revised PO the /purchase-orders/:id/amend
+    // endpoint creates. Added so amendment tracking has the same shape as
+    // work orders; see po.routes.js's /:id/amend handler for where it's set.
+    `ALTER TABLE po_amendments ADD COLUMN IF NOT EXISTS new_po_id UUID REFERENCES purchase_orders(id) ON DELETE SET NULL`,
     `ALTER TABLE po_amendments ADD COLUMN IF NOT EXISTS vendor_id UUID REFERENCES vendors(id)`,
     `ALTER TABLE po_amendments ADD COLUMN IF NOT EXISTS amendment_no TEXT`,
     `ALTER TABLE po_amendments ADD COLUMN IF NOT EXISTS amendment_type TEXT`,
@@ -112,11 +117,17 @@ const syncAmendedPurchaseOrders = async (companyId) => {
   _syncDebounce.set(companyId, Date.now());
   await query(`
     INSERT INTO po_amendments (
-      company_id, po_id, vendor_id, amendment_no, amendment_type, description,
+      company_id, po_id, new_po_id, vendor_id, amendment_no, amendment_type, description,
       value_impact, impact_type, raised_by, amendment_date, status, created_by
     )
     SELECT
       p.company_id,
+      -- po_id must be the ORIGINAL PO (same convention as the /:id/amend
+      -- endpoint) — base.id is the previous version this LATERAL join
+      -- already resolves below; po.id (the amended PO itself) goes in
+      -- new_po_id instead. Falls back to po.id only in the unexpected case
+      -- no base match was found, so the FK constraint is never violated.
+      COALESCE(base.id, po.id),
       po.id,
       po.vendor_id,
       COALESCE(NULLIF(po.po_ref_no, ''), NULLIF(po.serial_no_formatted, ''), po.po_number) AS amendment_no,
@@ -155,7 +166,7 @@ const syncAmendedPurchaseOrders = async (companyId) => {
       AND NOT EXISTS (
         SELECT 1 FROM po_amendments a
         WHERE a.company_id = p.company_id
-          AND a.po_id = po.id
+          AND (a.new_po_id = po.id OR a.po_id = po.id)
       )
   `, [companyId]);
 };

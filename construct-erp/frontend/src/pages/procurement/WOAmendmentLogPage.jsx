@@ -6,7 +6,7 @@
 // and go through a pending → approved/rejected workflow. A simpler
 // "Log Other Change" ledger entry (no item revision, no new WO) remains
 // available for pure notes/date extensions.
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import dayjs from 'dayjs';
@@ -15,11 +15,12 @@ import {
   FileSignature, Search, FileText, Calendar, Building2, ExternalLink,
   Plus, X, RefreshCw, Filter, ClipboardList, CalendarDays, BadgeIndianRupee,
   TrendingUp, Trash2, CheckCircle2, XCircle, AlertTriangle, Send, Loader2,
-  ClipboardEdit,
+  ClipboardEdit, Printer,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { subcontractorAPI, projectAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
+import AmendmentComparisonPrintTemplate from './AmendmentComparisonPrintTemplate';
 
 const inr = v => Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
 const money = v => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -600,6 +601,32 @@ export default function WOAmendmentLogPage() {
     onError: err => toast.error(err?.response?.data?.error || 'Unable to reject'),
   });
 
+  // Previous-vs-amended comparison print — a hidden template is rendered
+  // once the data lands, then its innerHTML is pushed into a fresh print
+  // window (same "isolated window" approach WorkOrderPage's own Print
+  // button uses, so amendment prints look/behave consistently).
+  const printRef = useRef(null);
+  const [printData, setPrintData] = useState(null);
+  const printMut = useMutation({
+    mutationFn: newWoId => subcontractorAPI.woAmendmentComparison(newWoId).then(r => r.data.data),
+    onSuccess: data => setPrintData(data),
+    onError: err => toast.error(err?.response?.data?.error || 'Unable to load comparison'),
+  });
+  useEffect(() => {
+    if (!printData || !printRef.current) return;
+    const html = printRef.current.innerHTML;
+    const win = window.open('', '_blank', 'width=900,height=700');
+    if (win) {
+      win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Amendment Comparison</title>
+        <style>* { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
+        body { margin: 0; padding: 10mm; background: white; } table { border-collapse: collapse; width: 100%; }
+        @page { size: A4 landscape; margin: 0; }</style></head><body>${html}</body></html>`);
+      win.document.close();
+      setTimeout(() => { try { win.focus(); win.print(); win.close(); } catch (_) {} }, 500);
+    }
+    setPrintData(null);
+  }, [printData]);
+
   const amendments = useMemo(() => (amendmentQuery.data || []).map(row => ({
     ...row,
     status_view: row.status || 'approved',
@@ -804,6 +831,12 @@ export default function WOAmendmentLogPage() {
                         className="text-xs border border-indigo-200 text-indigo-700 rounded px-2 py-1 hover:bg-indigo-50 inline-flex items-center gap-1">
                         <ExternalLink className="w-3 h-3" /> View WO
                       </button>
+                      <button
+                        onClick={() => printMut.mutate(a.new_wo_id)}
+                        disabled={!a.new_wo_id || printMut.isPending}
+                        className="text-xs border border-slate-200 text-slate-600 rounded px-2 py-1 hover:bg-slate-100 disabled:opacity-50 inline-flex items-center gap-1">
+                        <Printer className="w-3 h-3" /> Print Comparison
+                      </button>
                       {a.status_view === 'pending' && canAmendWO(user) && (
                         <>
                           <button
@@ -884,6 +917,12 @@ export default function WOAmendmentLogPage() {
               <button onClick={() => setShowDetail(null)} className="px-4 py-2 text-sm border border-slate-200 rounded-lg hover:bg-slate-50">Close</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {printData && (
+        <div style={{ display: 'none' }}>
+          <AmendmentComparisonPrintTemplate ref={printRef} data={printData} />
         </div>
       )}
     </div>

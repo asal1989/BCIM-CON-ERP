@@ -1841,6 +1841,12 @@ export default function SCBillPreparation() {
   const { selectedProjectId } = useAuthStore();
   const [projectFilter, setProject]     = useState(selectedProjectId || '');
   const [statusFilter,  setStatus]      = useState('');
+  // Deep-link from the sidebar's "RA Bills (Subcontract)" / "Final Bills
+  // (Subcontract)" links (e.g. ?bill_type=ra) — read once via a lazy
+  // initializer so it works regardless of where useSearchParams() itself is
+  // declared in this component, and so typing in the filter afterwards
+  // doesn't get stomped by the URL on every render.
+  const [billTypeFilter, setBillType]   = useState(() => new URLSearchParams(window.location.search).get('bill_type') || '');
   useEffect(() => { setProject(selectedProjectId || ''); }, [selectedProjectId]);
   const [showForm,      setShowForm]    = useState(false);
   const [drawerBillId,  setDrawerBill]  = useState(null);
@@ -1888,10 +1894,14 @@ export default function SCBillPreparation() {
   });
 
   const filtered = useMemo(() => {
-    if (!search) return bills;
-    const q = search.toLowerCase();
-    return bills.filter(b => [b.bill_number,b.sc_name,b.wo_number,b.project_name].some(v=>v?.toLowerCase().includes(q)));
-  }, [bills, search]);
+    let result = bills;
+    if (billTypeFilter) result = result.filter(b => b.bill_type === billTypeFilter);
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter(b => [b.bill_number,b.sc_name,b.wo_number,b.project_name].some(v=>v?.toLowerCase().includes(q)));
+    }
+    return result;
+  }, [bills, search, billTypeFilter]);
 
   // KPI counts
   const kpi = useMemo(() => ({
@@ -1967,6 +1977,14 @@ export default function SCBillPreparation() {
             <option value="">All Status</option>
             {Object.entries(STATUS_META).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
+          <select value={billTypeFilter} onChange={e => setBillType(e.target.value)}
+            className="border border-slate-200 bg-white rounded-xl px-3 py-2 text-sm shadow-sm focus:outline-none">
+            <option value="">All Bill Types</option>
+            <option value="ra">RA Bill (Running Account)</option>
+            <option value="final">Final Bill</option>
+            <option value="advance">Advance Bill</option>
+            <option value="extra_item">Extra Item Bill</option>
+          </select>
           <button onClick={() => refetch()} className="p-2 border border-slate-200 bg-white rounded-xl hover:bg-slate-50 shadow-sm">
             <RefreshCw className="w-4 h-4 text-slate-500" />
           </button>
@@ -1982,8 +2000,8 @@ export default function SCBillPreparation() {
                 <Receipt className="w-8 h-8 text-slate-300" />
               </div>
               <p className="text-slate-500 font-semibold">No bills found</p>
-              <p className="text-xs text-slate-400 mt-1">{search||projectFilter||statusFilter ? 'Try adjusting filters' : 'Raise your first subcontractor bill'}</p>
-              {!search && !projectFilter && !statusFilter && (
+              <p className="text-xs text-slate-400 mt-1">{search||projectFilter||statusFilter||billTypeFilter ? 'Try adjusting filters' : 'Raise your first subcontractor bill'}</p>
+              {!search && !projectFilter && !statusFilter && !billTypeFilter && (
                 <button onClick={()=>setShowForm(true)}
                   className="mt-4 flex items-center gap-2 px-4 py-2 text-sm font-bold text-white rounded-xl mx-auto"
                   style={{ background:`linear-gradient(135deg, ${Theme.navyLight} 0%, ${Theme.navyDark} 100%)` }}>

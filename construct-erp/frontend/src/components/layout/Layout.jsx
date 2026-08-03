@@ -142,12 +142,17 @@ const navGroups = [
     { to: '/qs/variations',                     icon: ArrowLeftRight,  label: 'Variations' },
     { to: '/qs/ra-bills?type=tax-invoice',      icon: FileSignature,   label: 'Tax Invoices' },
 
-    // Subcontract Billing (existing TQS / Bill Tracker pages, cross-linked here)
+    // Subcontract Billing — these used to point at /tqs/bills and
+    // /tqs/deduction-register (Bill Tracker, gated by the "Bill Tracker"
+    // module), which don't understand bill types at all — every one of
+    // these 4 links landed on the same unfiltered page. Now pointing at the
+    // real Subcontractors-module pages, which do distinguish RA/Final bills
+    // and retention/recoveries tabs.
     { to: '/qs/work-orders',                    icon: Hammer,          label: 'Work Orders' },
-    { to: '/tqs/bills',                         icon: Receipt,         label: 'RA Bills (Subcontract)' },
-    { to: '/tqs/bills?type=final',              icon: ClipboardCheck,  label: 'Final Bills (Subcontract)' },
-    { to: '/tqs/deduction-register?type=retention',  icon: ShieldCheck, label: 'Retention (Subcontract)' },
-    { to: '/tqs/deduction-register?type=recoveries', icon: Coins,       label: 'Recoveries (Subcontract)' },
+    { to: '/sc/bill-preparation?bill_type=ra',    icon: Receipt,         label: 'RA Bills (Subcontract)' },
+    { to: '/sc/bill-preparation?bill_type=final', icon: ClipboardCheck,  label: 'Final Bills (Subcontract)' },
+    { to: '/sc/deductions?tab=retention',         icon: ShieldCheck,     label: 'Retention (Subcontract)' },
+    { to: '/sc/deductions?tab=materials',         icon: Coins,           label: 'Recoveries (Subcontract)' },
 
     // Cost Control — one screen; Budget vs Actual / Cost Variance / Forecast /
     // Profitability / Cost to Completion are all tabs inside it, not separate
@@ -551,7 +556,7 @@ const NAV_SECTIONS = {
     { label: 'BOQ Management',      paths: ['/qs/boq','/qs/variations?tab=amendments','/qs/boq-dashboard','/qs/boq?view=import','/qs/boq-mapping'] },
     { label: 'Quantity Survey',     paths: ['/qs/measurements?view=qto','/qs/measurements','/qs/measurements?view=jmr','/qs/material-recon?view=qty','/qs/measurements?view=executed'] },
     { label: 'Client Billing',      paths: ['/qs/ra-bills','/qs/ra-bills?type=interim','/qs/ra-bills?type=final','/qs/variations?type=extra','/qs/variations','/qs/ra-bills?type=tax-invoice'] },
-    { label: 'Subcontract Billing', paths: ['/qs/work-orders','/tqs/bills','/tqs/bills?type=final','/tqs/deduction-register?type=retention','/tqs/deduction-register?type=recoveries'] },
+    { label: 'Subcontract Billing', paths: ['/qs/work-orders','/sc/bill-preparation?bill_type=ra','/sc/bill-preparation?bill_type=final','/sc/deductions?tab=retention','/sc/deductions?tab=materials'] },
     { label: 'Cost Control',        paths: ['/qs/boq-budget-breakdown','/qs/boq-budget-breakdown?view=variance','/qs/boq-budget-breakdown?view=forecast','/qs/boq-budget-breakdown?view=profitability','/qs/boq-budget-breakdown?view=cost_to_completion'] },
     { label: 'Payments',            paths: ['/accounts/sales/customer-payments','/qs/ra-bills?type=certificate','/qs?focus=outstanding','/qs/retention-releases'] },
     { label: null,                  paths: ['/qs/material-recon'] },
