@@ -204,6 +204,7 @@ export const subcontractorAPI = {
   listWOAmendments:  (params) => api.get('/subcontractors/wo-amendments', { params }),
   woAmendmentContext:(id)     => api.get(`/subcontractors/work-orders/${id}/amendment-context`),
   submitWOAmendment: (id, d)  => api.post(`/subcontractors/work-orders/${id}/amend`, d),
+  woAmendmentComparison: (id) => api.get(`/subcontractors/work-orders/${id}/amendment-comparison`),
   patchWOAmendment:  (id, d)  => api.patch(`/subcontractors/wo-amendments/${id}`, d),
   approveWOAmendment:(id)     => api.patch(`/subcontractors/wo-amendments/${id}/approve`),
   rejectWOAmendment: (id)     => api.patch(`/subcontractors/wo-amendments/${id}/reject`),
@@ -499,6 +500,7 @@ export const poAPI = {
   bills:         (id)     => api.get(`/purchase-orders/${id}/bills`),
   amendmentContext: (id)      => api.get(`/purchase-orders/${id}/amendment-context`),
   submitAmendment:  (id, data) => api.post(`/purchase-orders/${id}/amend`, data),
+  amendmentComparison: (id)   => api.get(`/purchase-orders/${id}/amendment-comparison`),
   terminate: (id, reason) => api.patch(`/purchase-orders/${id}/terminate`, { reason }),
 };
 

@@ -340,7 +340,12 @@ router.post('/work-orders/:id/amend', authorize(...WO_AMEND_ROLES), async (req, 
           wo_id, new_wo_id, company_id, amendment_number, amendment_ref, amendment_type, description,
           amount_change, value_impact, impact_type, raised_by, amendment_date, status, revised_order_value, created_by
         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,CURRENT_DATE,'pending',$12,$13) RETURNING *`,
-        [newWoId, newWoId, req.user.company_id, amendNum, newRef, reason_code || 'Qty Change',
+        // wo_id must be the ORIGINAL WO being amended, not the new one —
+        // every other query in this file (amendment_number sequencing,
+        // amendment-history lookups by wo_id) expects that. This used to
+        // write newWoId into both columns, so amendments never linked back
+        // to what they amended.
+        [base.id, newWoId, req.user.company_id, amendNum, newRef, reason_code || 'Qty Change',
          reason_remarks || `Amendment ${newRef} of ${baseRef}`, diff, Math.abs(diff), impactType,
          raised_by || req.user.name, newTotal, req.user.id]
       );
@@ -349,6 +354,83 @@ router.post('/work-orders/:id/amend', authorize(...WO_AMEND_ROLES), async (req, 
     });
 
     res.status(201).json({ data: result });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// GET /work-orders/:id/amendment-comparison — "Previous vs Amended" line-item
+// table for the amendment print. :id is the AMENDED (new, "-A{n}") WO.
+// wo_amendments.wo_id/new_wo_id can't be relied on for old rows (fixed above,
+// but historical rows may predate the fix), so the previous version is found
+// the same way nextWoAmendSuffix does: by wo_number pattern, not by id link.
+// Items are matched by position (sequence_no) — the amendment UI edits an
+// existing item list in place rather than letting items be freely reordered,
+// so index-matching is safe and doesn't require a "Code No" column that
+// doesn't exist in work_order_items.
+router.get('/work-orders/:id/amendment-comparison', async (req, res) => {
+  try {
+    const curRes = await query(
+      `SELECT wo.*, v.name AS vendor_name, p.name AS project_name, p.project_code
+       FROM work_orders wo
+       JOIN projects p ON p.id = wo.project_id
+       LEFT JOIN vendors v ON v.id = wo.vendor_id
+       WHERE wo.id = $1 AND p.company_id = $2`,
+      [req.params.id, req.user.company_id]
+    );
+    const current = curRes.rows[0];
+    if (!current) return res.status(404).json({ error: 'Work Order not found' });
+
+    const baseRef = stripWoAmendSuffix(current.wo_number);
+    const m = String(current.wo_number || '').match(/-A(\d+)$/i);
+    const suffixNo = m ? parseInt(m[1], 10) : 0;
+    if (suffixNo === 0) {
+      return res.status(400).json({ error: 'This Work Order has no amendment to compare against.' });
+    }
+    const prevRef = suffixNo === 1 ? baseRef : `${baseRef}-A${suffixNo - 1}`;
+
+    const prevRes = await query(
+      `SELECT wo.* FROM work_orders wo
+       JOIN projects p ON p.id = wo.project_id
+       WHERE p.company_id = $1 AND UPPER(wo.wo_number) = UPPER($2)`,
+      [req.user.company_id, prevRef]
+    );
+    const previous = prevRes.rows[0];
+    if (!previous) return res.status(404).json({ error: `Previous version (${prevRef}) not found.` });
+
+    const [prevItems, curItems] = await Promise.all([
+      query(`SELECT * FROM work_order_items WHERE wo_id = $1 ORDER BY sequence_no NULLS LAST, id`, [previous.id]),
+      query(`SELECT * FROM work_order_items WHERE wo_id = $1 ORDER BY sequence_no NULLS LAST, id`, [current.id]),
+    ]);
+
+    const rowCount = Math.max(prevItems.rows.length, curItems.rows.length);
+    const items = [];
+    for (let i = 0; i < rowCount; i++) {
+      const p = prevItems.rows[i] || null;
+      const c = curItems.rows[i] || null;
+      items.push({
+        item_code: (c || p)?.item_code || null,
+        description: (c || p)?.description || '',
+        unit: (c || p)?.unit || '',
+        previous_qty: p ? parseFloat(p.quantity) : null,
+        previous_rate: p ? parseFloat(p.rate) : null,
+        previous_amount: p ? parseFloat(p.amount ?? p.quantity * p.rate) : null,
+        amended_qty: c ? parseFloat(c.quantity) : null,
+        amended_rate: c ? parseFloat(c.rate) : null,
+        amended_amount: c ? parseFloat(c.amount ?? c.quantity * c.rate) : null,
+      });
+    }
+
+    res.json({
+      data: {
+        document_type: 'work_order',
+        previous_ref: previous.wo_number,
+        amended_ref: current.wo_number,
+        project_name: current.project_name,
+        project_code: current.project_code,
+        vendor_name: current.vendor_name,
+        amendment_date: current.wo_date,
+        items,
+      },
+    });
   } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
 });
 

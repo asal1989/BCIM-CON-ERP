@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import {
@@ -17,12 +17,14 @@ import {
   Trash2,
   Send,
   Loader2,
+  Printer,
   X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
 import useAuthStore from '../../store/authStore';
 import { poAPI, vendorAPI, poAmendmentAPI } from '../../api/client';
+import AmendmentComparisonPrintTemplate from './AmendmentComparisonPrintTemplate';
 
 const REASON_OPTIONS = [
   'Quantity Revision',
@@ -584,6 +586,31 @@ export default function POAmendmentLogPage() {
     },
     onError: err => toast.error(err?.response?.data?.error || 'Unable to reject'),
   });
+
+  // Previous-vs-amended comparison print — only meaningful for amendments
+  // that revised line items (new_po_id set); a pure "Log Other Change" entry
+  // has no revised PO to compare against, so the backend 404s and we toast.
+  const printRef = useRef(null);
+  const [printData, setPrintData] = useState(null);
+  const printMut = useMutation({
+    mutationFn: newPoId => poAPI.amendmentComparison(newPoId).then(r => r.data.data),
+    onSuccess: data => setPrintData(data),
+    onError: err => toast.error(err?.response?.data?.error || 'Unable to load comparison'),
+  });
+  useEffect(() => {
+    if (!printData || !printRef.current) return;
+    const html = printRef.current.innerHTML;
+    const win = window.open('', '_blank', 'width=900,height=700');
+    if (win) {
+      win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Amendment Comparison</title>
+        <style>* { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
+        body { margin: 0; padding: 10mm; background: white; } table { border-collapse: collapse; width: 100%; }
+        @page { size: A4 landscape; margin: 0; }</style></head><body>${html}</body></html>`);
+      win.document.close();
+      setTimeout(() => { try { win.focus(); win.print(); win.close(); } catch (_) {} }, 500);
+    }
+    setPrintData(null);
+  }, [printData]);
   const deleteMut = useMutation({
     mutationFn: id => poAmendmentAPI.delete(id),
     onSuccess: () => {
@@ -850,6 +877,12 @@ export default function POAmendmentLogPage() {
                   </div>
                   <div className="flex gap-2 items-center" onClick={e => e.stopPropagation()}>
                     <button onClick={() => setShowDetail(a)} className="text-xs border border-slate-200 rounded px-2 py-1 hover:bg-slate-100">Details</button>
+                    <button
+                      onClick={() => printMut.mutate(a.new_po_id)}
+                      disabled={!a.new_po_id || printMut.isPending}
+                      className="text-xs border border-slate-200 text-slate-600 rounded px-2 py-1 hover:bg-slate-100 disabled:opacity-50 inline-flex items-center gap-1">
+                      <Printer className="w-3 h-3" /> Print Comparison
+                    </button>
                     {a.status_view === 'pending' && (
                       <>
                         <button
@@ -1061,6 +1094,12 @@ export default function POAmendmentLogPage() {
             qc.invalidateQueries({ queryKey: ['procurement-po-amendment-pos'] });
           }}
         />
+      )}
+
+      {printData && (
+        <div style={{ display: 'none' }}>
+          <AmendmentComparisonPrintTemplate ref={printRef} data={printData} />
+        </div>
       )}
     </div>
   );

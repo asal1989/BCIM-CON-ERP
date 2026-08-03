@@ -981,7 +981,22 @@ router.get('/lookup/pos', async (req, res) => {
     i = params.length + 1;
     if (vendor_id)    { sql += ` AND po.vendor_id  = $${i++}`; params.push(vendor_id); }
     else if (vendor_name) { sql += ` AND v.name ILIKE $${i++}`; params.push(vendor_name); }
-    sql += ` ORDER BY po.po_date DESC NULLS LAST LIMIT 500`;
+    // Same "latest amendment only" logic as /lookup/wos below — a PO
+    // amendment creates a brand-new purchase_orders row (ref suffixed
+    // "-A{n}"), so the pre-amendment original would otherwise still appear
+    // here as a stale, separately-billable entry.
+    sql = `
+      SELECT * FROM (
+        SELECT t.*,
+          COALESCE((REGEXP_MATCH(t.po_number, '-A([0-9]+)$', 'i'))[1]::int, 0) AS suffix_no,
+          MAX(COALESCE((REGEXP_MATCH(t.po_number, '-A([0-9]+)$', 'i'))[1]::int, 0))
+            OVER (PARTITION BY REGEXP_REPLACE(t.po_number, '-A[0-9]+$', '', 'i')) AS max_suffix_no
+        FROM (${sql}) t
+      ) ranked
+      WHERE ranked.suffix_no = ranked.max_suffix_no
+      ORDER BY po_date DESC NULLS LAST
+      LIMIT 500
+    `;
     const r = await query(sql, params);
     res.json({ data: r.rows });
   } catch (err) {
@@ -1070,7 +1085,24 @@ router.get('/lookup/wos', async (req, res) => {
     applyProjectScope(req, scopeConds, params, 'wo', project_id);
     if (scopeConds.length) sql += scopeConds.map(c => ` AND ${c}`).join('');
     i = params.length + 1;
-    sql += ` ORDER BY wo.start_date DESC NULLS LAST, wo.wo_number ASC LIMIT 500`;
+    // Every WO amendment creates a brand-new work_orders row (ref suffixed
+    // "-A{n}"), so an amended WO's original pre-amendment row would otherwise
+    // still show up here as a separate, stale, billable entry. Keep only the
+    // highest -A{n} per base ref (or the plain original if it was never
+    // amended) — this doesn't depend on wo_amendments.wo_id (which has its
+    // own bug, fixed separately) and works for any amendment chain length.
+    sql = `
+      SELECT * FROM (
+        SELECT t.*,
+          COALESCE((REGEXP_MATCH(t.wo_number, '-A([0-9]+)$', 'i'))[1]::int, 0) AS suffix_no,
+          MAX(COALESCE((REGEXP_MATCH(t.wo_number, '-A([0-9]+)$', 'i'))[1]::int, 0))
+            OVER (PARTITION BY REGEXP_REPLACE(t.wo_number, '-A[0-9]+$', '', 'i')) AS max_suffix_no
+        FROM (${sql}) t
+      ) ranked
+      WHERE ranked.suffix_no = ranked.max_suffix_no
+      ORDER BY wo_date DESC NULLS LAST, wo_number ASC
+      LIMIT 500
+    `;
     const r = await query(sql, params);
     res.json({ data: r.rows });
   } catch (err) {

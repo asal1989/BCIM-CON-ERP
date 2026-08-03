@@ -1075,10 +1075,12 @@ router.post('/:id/amend', async (req, res) => {
 
       const amendRes = await client.query(
         `INSERT INTO po_amendments (
-          company_id, po_id, vendor_id, amendment_no, amendment_type, description,
+          company_id, po_id, new_po_id, vendor_id, amendment_no, amendment_type, description,
           value_impact, impact_type, raised_by, amendment_date, status, created_by
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,CURRENT_DATE,'pending',$10) RETURNING *`,
-        [req.user.company_id, newPoId, base.vendor_id, amendmentNo, reason_code || 'Qty Change',
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CURRENT_DATE,'pending',$11) RETURNING *`,
+        // po_id is the ORIGINAL PO being amended (base.id), not the new one —
+        // this used to write newPoId into po_id, same bug as wo_amendments.
+        [req.user.company_id, base.id, newPoId, base.vendor_id, amendmentNo, reason_code || 'Qty Change',
          reason_remarks || `Amendment ${newRef} of ${baseRef}`, Math.abs(diff), impactType,
          raised_by || req.user.name, req.user.id]
       );
@@ -1087,6 +1089,82 @@ router.post('/:id/amend', async (req, res) => {
     });
 
     res.status(201).json({ data: result });
+  } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
+});
+
+// GET /purchase-orders/:id/amendment-comparison — "Previous vs Amended" line-item
+// table for the amendment print, mirroring /work-orders/:id/amend-comparison.
+// :id is the AMENDED (new, "-A{n}") PO. Previous version is found by po_number
+// pattern (same approach nextAmendSuffix uses), not by the po_amendments link,
+// so it works regardless of amendment-record data quality. Items matched by
+// position (sort_order) since po_items has no stable cross-revision id.
+router.get('/:id/amendment-comparison', async (req, res) => {
+  try {
+    const curRes = await query(
+      `SELECT po.*, v.name AS vendor_name, p.name AS project_name, p.project_code
+       FROM purchase_orders po
+       JOIN projects p ON p.id = po.project_id
+       LEFT JOIN vendors v ON v.id = po.vendor_id
+       WHERE po.id = $1 AND p.company_id = $2`,
+      [req.params.id, req.user.company_id]
+    );
+    const current = curRes.rows[0];
+    if (!current) return res.status(404).json({ error: 'Purchase Order not found' });
+
+    const curRef = current.po_ref_no || current.serial_no_formatted || current.po_number;
+    const baseRef = stripAmendSuffix(curRef);
+    const m = String(curRef || '').match(/-A(\d+)$/i);
+    const suffixNo = m ? parseInt(m[1], 10) : 0;
+    if (suffixNo === 0) {
+      return res.status(400).json({ error: 'This Purchase Order has no amendment to compare against.' });
+    }
+    const prevRef = suffixNo === 1 ? baseRef : `${baseRef}-A${suffixNo - 1}`;
+
+    const prevRes = await query(
+      `SELECT po.* FROM purchase_orders po
+       JOIN projects p ON p.id = po.project_id
+       WHERE p.company_id = $1
+         AND UPPER(COALESCE(NULLIF(po.po_ref_no,''), NULLIF(po.serial_no_formatted,''), po.po_number)) = UPPER($2)`,
+      [req.user.company_id, prevRef]
+    );
+    const previous = prevRes.rows[0];
+    if (!previous) return res.status(404).json({ error: `Previous version (${prevRef}) not found.` });
+
+    const [prevItems, curItems] = await Promise.all([
+      query(`SELECT * FROM po_items WHERE po_id = $1 ORDER BY sort_order NULLS LAST, id`, [previous.id]),
+      query(`SELECT * FROM po_items WHERE po_id = $1 ORDER BY sort_order NULLS LAST, id`, [current.id]),
+    ]);
+
+    const rowCount = Math.max(prevItems.rows.length, curItems.rows.length);
+    const items = [];
+    for (let i = 0; i < rowCount; i++) {
+      const p = prevItems.rows[i] || null;
+      const c = curItems.rows[i] || null;
+      items.push({
+        item_code: (c || p)?.item_code || (c || p)?.hsn_code || null,
+        description: (c || p)?.material_name || '',
+        unit: (c || p)?.unit || '',
+        previous_qty: p ? parseFloat(p.quantity) : null,
+        previous_rate: p ? parseFloat(p.rate) : null,
+        previous_amount: p ? parseFloat(p.quantity) * parseFloat(p.rate) : null,
+        amended_qty: c ? parseFloat(c.quantity) : null,
+        amended_rate: c ? parseFloat(c.rate) : null,
+        amended_amount: c ? parseFloat(c.quantity) * parseFloat(c.rate) : null,
+      });
+    }
+
+    res.json({
+      data: {
+        document_type: 'purchase_order',
+        previous_ref: previous.po_ref_no || previous.serial_no_formatted || previous.po_number,
+        amended_ref: curRef,
+        project_name: current.project_name,
+        project_code: current.project_code,
+        vendor_name: current.vendor_name,
+        amendment_date: current.po_date,
+        items,
+      },
+    });
   } catch (err) { res.status(err.statusCode || 500).json({ error: err.message }); }
 });
 
