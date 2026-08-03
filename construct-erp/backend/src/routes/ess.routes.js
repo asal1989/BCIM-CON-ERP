@@ -47,6 +47,19 @@ runSchemaInit('notifications-add-company-id-v1', async () => {
   await query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES companies(id)`);
 });
 
+// employee_documents (created by hr-employees.routes.js) never had company_id,
+// but the ESS /documents GET/POST routes below filter and insert on it —
+// every call was throwing "column company_id does not exist" (500), which is
+// why the native app's Documents tab couldn't load. Backfill existing rows
+// from the uploader's company via users.company_id.
+runSchemaInit('employee-documents-add-company-id-v1', async () => {
+  await query(`ALTER TABLE employee_documents ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES companies(id)`);
+  await query(`
+    UPDATE employee_documents ed SET company_id = u.company_id
+    FROM users u WHERE ed.user_id = u.id AND ed.company_id IS NULL
+  `);
+});
+
 runSchemaInit('ess-mobile', async () => {
   await query(`
     CREATE TABLE IF NOT EXISTS hr_attendance_correction_requests (
@@ -977,10 +990,10 @@ router.post('/documents', upload.single('file'), async (req, res) => {
     const fileUrl = `/uploads/hr-docs/${req.file.filename}`;
 
     const { rows } = await query(
-      `INSERT INTO employee_documents (user_id, doc_type, doc_name, file_url, uploaded_by)
-       VALUES ($1,$2,$3,$4,$5)
+      `INSERT INTO employee_documents (user_id, company_id, doc_type, doc_name, file_url, uploaded_by)
+       VALUES ($1,$2,$3,$4,$5,$6)
        RETURNING *`,
-      [ownUser(req), doc_type, doc_name || req.file?.originalname || doc_type, fileUrl, ownUser(req)]
+      [ownUser(req), ownCompany(req), doc_type, doc_name || req.file?.originalname || doc_type, fileUrl, ownUser(req)]
     );
     await query(
       `INSERT INTO employee_timeline
@@ -1304,6 +1317,66 @@ router.get('/colleagues', async (req, res) => {
 });
 
 // Feed — posts + kudos with author, reaction summary, comment count, my reaction
+// Birthdays & work anniversaries for the Engage tab — deliberately a
+// separate, low-sensitivity route from /team-today (which is HR-gated
+// because it also exposes who's on leave today). This only returns name +
+// day/month (no birth year) and name + years-of-service, for every active
+// employee in the company, visible to any authenticated ESS user — the same
+// kind of thing a physical office notice board would show.
+router.get('/engage/celebrations', async (req, res) => {
+  try {
+    const companyId = ownCompany(req);
+    const windowDays = Math.min(parseInt(req.query.days, 10) || 30, 90);
+
+    const birthdays = await query(
+      `SELECT u.name,
+              EXTRACT(MONTH FROM ep.date_of_birth)::int AS month,
+              EXTRACT(DAY   FROM ep.date_of_birth)::int AS day,
+              (
+                (DATE_TRUNC('year', CURRENT_DATE) + (EXTRACT(DOY FROM ep.date_of_birth) - 1) * INTERVAL '1 day')::date
+                - CURRENT_DATE
+                + CASE WHEN (DATE_TRUNC('year', CURRENT_DATE) + (EXTRACT(DOY FROM ep.date_of_birth) - 1) * INTERVAL '1 day')::date < CURRENT_DATE
+                       THEN 365 ELSE 0 END
+              ) AS days_away
+         FROM employee_profiles ep
+         JOIN users u ON u.id = ep.user_id
+        WHERE u.company_id = $1 AND u.is_active = true AND ep.date_of_birth IS NOT NULL
+        ORDER BY days_away ASC
+        LIMIT 50`,
+      [companyId]
+    ).catch(() => ({ rows: [] }));
+
+    const anniversaries = await query(
+      `SELECT u.name,
+              EXTRACT(MONTH FROM ep.date_of_joining)::int AS month,
+              EXTRACT(DAY   FROM ep.date_of_joining)::int AS day,
+              (EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM ep.date_of_joining))::int AS years,
+              (
+                (DATE_TRUNC('year', CURRENT_DATE) + (EXTRACT(DOY FROM ep.date_of_joining) - 1) * INTERVAL '1 day')::date
+                - CURRENT_DATE
+                + CASE WHEN (DATE_TRUNC('year', CURRENT_DATE) + (EXTRACT(DOY FROM ep.date_of_joining) - 1) * INTERVAL '1 day')::date < CURRENT_DATE
+                       THEN 365 ELSE 0 END
+              ) AS days_away
+         FROM employee_profiles ep
+         JOIN users u ON u.id = ep.user_id
+        WHERE u.company_id = $1 AND u.is_active = true AND ep.date_of_joining IS NOT NULL
+          AND EXTRACT(YEAR FROM CURRENT_DATE) > EXTRACT(YEAR FROM ep.date_of_joining)
+        ORDER BY days_away ASC
+        LIMIT 50`,
+      [companyId]
+    ).catch(() => ({ rows: [] }));
+
+    res.json({
+      data: {
+        birthdays: birthdays.rows.filter(r => r.days_away <= windowDays),
+        anniversaries: anniversaries.rows.filter(r => r.days_away <= windowDays),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/engage', async (req, res) => {
   try {
     const { type } = req.query;
