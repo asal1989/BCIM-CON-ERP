@@ -7,11 +7,12 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const { query } = require('../config/database');
-const { userCanAccessProject } = require('../middleware/projectScope');
+const { loadProjectScope, userCanAccessProject } = require('../middleware/projectScope');
 const weather = require('../services/weather.service');
 
 const router = express.Router();
 router.use(authenticate);
+router.use(loadProjectScope);
 
 /* ── Auto-migrate ──────────────────────────────────────────────────────── */
 (async () => {
