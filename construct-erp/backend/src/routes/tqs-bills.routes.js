@@ -3295,12 +3295,15 @@ router.post('/bulk-stores-update', requireTqsStageAccess('stores'), async (req, 
       { key: 'sent_to_ho_date', label: 'Sent to HO Date' },
     ]);
 
+    // Store receipt details can be recorded on a bill at any stage (the
+    // single-bill Stores tab is not stage-gated either), so don't filter by
+    // workflow_status here — just confirm the bills belong to this company.
     const eligible = await query(`
-      SELECT id FROM tqs_bills
-      WHERE id = ANY($1::uuid[]) AND company_id = $2 AND workflow_status = 'stores' AND is_deleted = FALSE
+      SELECT id, workflow_status FROM tqs_bills
+      WHERE id = ANY($1::uuid[]) AND company_id = $2 AND is_deleted = FALSE
     `, [bill_ids, req.user.company_id]);
     const ids = eligible.rows.map(r => r.id);
-    if (!ids.length) return res.status(400).json({ error: 'None of the selected bills are at the Stores stage.' });
+    if (!ids.length) return res.status(400).json({ error: 'None of the selected bills could be found.' });
     for (const id of ids) await getAccessibleBill(req, id);
 
     await query(`
@@ -3310,16 +3313,24 @@ router.post('/bulk-stores-update', requireTqsStageAccess('stores'), async (req, 
       WHERE bill_id = ANY($8::uuid[])
     `, [store_recv_date, dc_number, vehicle_number, inspection_status, received_by, sent_to_ho_date, store_remarks, ids]);
 
-    await query(`UPDATE tqs_bills SET workflow_status='document_controller', updated_at=NOW() WHERE id = ANY($1::uuid[])`, [ids]);
+    // Only move bills forward. A bill already past this point (QS, accounts,
+    // paid…) keeps its stage — bulk editing dates must never drag it backwards.
+    const advanced = await query(`
+      UPDATE tqs_bills SET workflow_status='document_controller', updated_at=NOW()
+      WHERE id = ANY($1::uuid[]) AND workflow_status IN ('pending', 'stores')
+      RETURNING id
+    `, [ids]);
+    const advancedIds = new Set(advanced.rows.map(r => r.id));
 
     for (const id of ids) {
       await logHistory(id, 'stores', `Stores receipt updated (bulk)${sent_to_ho_date ? `, sent to HO: ${sent_to_ho_date}` : ''}`, req.user.id);
-      await logHistory(id, 'system', 'Moved to Document Controller', req.user.id);
+      if (advancedIds.has(id)) await logHistory(id, 'system', 'Moved to Document Controller', req.user.id);
     }
 
     res.json({
-      message: `${ids.length} bill(s) updated and forwarded to Document Controller`,
+      message: `${ids.length} bill(s) updated${advancedIds.size ? `, ${advancedIds.size} forwarded to Document Controller` : ''}`,
       updated: ids.length,
+      advanced: advancedIds.size,
       skipped: bill_ids.length - ids.length,
     });
   } catch (err) {
@@ -3342,12 +3353,13 @@ router.post('/bulk-document-control-update', requireTqsStageAccess('document_con
       { key: 'handed_over_qs_date', label: 'Date Handed Over to QS' },
     ]);
 
+    // As with Stores, HO/QS handover dates can be recorded at any stage.
     const eligible = await query(`
-      SELECT id FROM tqs_bills
-      WHERE id = ANY($1::uuid[]) AND company_id = $2 AND workflow_status = 'document_controller' AND is_deleted = FALSE
+      SELECT id, workflow_status FROM tqs_bills
+      WHERE id = ANY($1::uuid[]) AND company_id = $2 AND is_deleted = FALSE
     `, [bill_ids, req.user.company_id]);
     const ids = eligible.rows.map(r => r.id);
-    if (!ids.length) return res.status(400).json({ error: 'None of the selected bills are at the Document Controller stage.' });
+    if (!ids.length) return res.status(400).json({ error: 'None of the selected bills could be found.' });
     for (const id of ids) await getAccessibleBill(req, id);
 
     await query(`
@@ -3359,16 +3371,23 @@ router.post('/bulk-document-control-update', requireTqsStageAccess('document_con
       WHERE bill_id = ANY($4::uuid[])
     `, [ho_received_date || null, handed_over_qs_date || null, document_controller_remarks || null, ids]);
 
-    await query(`UPDATE tqs_bills SET workflow_status='qs', updated_at=NOW() WHERE id = ANY($1::uuid[])`, [ids]);
+    // Forward-only: never pull a bill already at QS or beyond back to QS.
+    const advanced = await query(`
+      UPDATE tqs_bills SET workflow_status='qs', updated_at=NOW()
+      WHERE id = ANY($1::uuid[]) AND workflow_status IN ('pending', 'stores', 'document_controller')
+      RETURNING id
+    `, [ids]);
+    const advancedIds = new Set(advanced.rows.map(r => r.id));
 
     for (const id of ids) {
       await logHistory(id, 'document_controller', `Document Controller updated (bulk), HO received: ${ho_received_date}, handed over to QS: ${handed_over_qs_date}`, req.user.id);
-      await logHistory(id, 'system', 'Moved to QS for Certification', req.user.id);
+      if (advancedIds.has(id)) await logHistory(id, 'system', 'Moved to QS for Certification', req.user.id);
     }
 
     res.json({
-      message: `${ids.length} bill(s) updated and moved to QS`,
+      message: `${ids.length} bill(s) updated${advancedIds.size ? `, ${advancedIds.size} moved to QS` : ''}`,
       updated: ids.length,
+      advanced: advancedIds.size,
       skipped: bill_ids.length - ids.length,
     });
   } catch (err) {

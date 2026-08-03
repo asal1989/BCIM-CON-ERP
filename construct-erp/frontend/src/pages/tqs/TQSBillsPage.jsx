@@ -1605,14 +1605,21 @@ function BulkStoresUpdateModal({ projectId, onClose }) {
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const { data: bills = [], isLoading } = useQuery({
+  const [billSearch, setBillSearch] = useState('');
+
+  // Store receipt details are editable on a bill at any stage, so list them
+  // all rather than only those parked at the 'stores' workflow status.
+  const { data: allBills = [], isLoading } = useQuery({
     queryKey: ['tqs-bills-bulk-stores', projectId],
-    queryFn: () => tqsBillsAPI.list({ project_id: projectId || undefined, status: 'stores' }).then(r => r.data?.data ?? r.data ?? []),
+    queryFn: () => tqsBillsAPI.list({ project_id: projectId || undefined }).then(r => r.data?.data ?? r.data ?? []),
   });
 
-  useEffect(() => {
-    setSelected(Object.fromEntries(bills.map(b => [b.id, true])));
-  }, [bills.map(b => b.id).join(',')]);
+  const bills = allBills.filter(b => {
+    if (!billSearch.trim()) return true;
+    const q = billSearch.toLowerCase();
+    return [b.sl_number, b.vendor_name, b.inv_number, b.po_number]
+      .some(v => String(v || '').toLowerCase().includes(q));
+  });
 
   const mut = useMutation({
     mutationFn: (data) => tqsBillsAPI.bulkUpdateStores(data),
@@ -1644,9 +1651,9 @@ function BulkStoresUpdateModal({ projectId, onClose }) {
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-3">
           {isLoading ? (
-            <div className="py-16 text-center text-slate-400 text-sm">Loading bills at Stores stage…</div>
-          ) : bills.length === 0 ? (
-            <div className="py-16 text-center text-slate-400 text-sm">No bills are currently at the Stores stage.</div>
+            <div className="py-16 text-center text-slate-400 text-sm">Loading bills…</div>
+          ) : allBills.length === 0 ? (
+            <div className="py-16 text-center text-slate-400 text-sm">No bills found for this project.</div>
           ) : (
             <>
               <div className="grid grid-cols-2 gap-3 mb-4">
@@ -1679,16 +1686,22 @@ function BulkStoresUpdateModal({ projectId, onClose }) {
                 <textarea rows={2} value={form.store_remarks} onChange={e => set('store_remarks', e.target.value)}
                   className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm outline-none focus:border-indigo-400" />
               </div>
+              <div className="mb-2">
+                <input value={billSearch} onChange={e => setBillSearch(e.target.value)}
+                  placeholder="Search bill no., vendor, invoice or PO…"
+                  className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm outline-none focus:border-indigo-400" />
+              </div>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs text-slate-400 border-b border-slate-100">
                     <th className="py-1.5 pr-2 w-8">
-                      <input type="checkbox" checked={selectedIds.length === bills.length}
-                        onChange={e => setSelected(Object.fromEntries(bills.map(b => [b.id, e.target.checked])))} />
+                      <input type="checkbox" checked={bills.length > 0 && bills.every(b => selected[b.id])}
+                        onChange={e => setSelected(prev => ({ ...prev, ...Object.fromEntries(bills.map(b => [b.id, e.target.checked])) }))} />
                     </th>
                     <th className="py-1.5 pr-2">Bill No.</th>
                     <th className="py-1.5 pr-2">Vendor</th>
                     <th className="py-1.5 pr-2">Invoice No.</th>
+                    <th className="py-1.5 pr-2">Stage</th>
                     <th className="py-1.5 pr-2 text-right">Amount</th>
                   </tr>
                 </thead>
@@ -1702,6 +1715,7 @@ function BulkStoresUpdateModal({ projectId, onClose }) {
                       <td className="py-1.5 pr-2 text-slate-800 font-mono text-xs">{b.sl_number}</td>
                       <td className="py-1.5 pr-2 text-slate-700">{b.vendor_name}</td>
                       <td className="py-1.5 pr-2 text-slate-500">{b.inv_number}</td>
+                      <td className="py-1.5 pr-2 text-xs text-slate-500 capitalize">{String(b.workflow_status || '').replace(/_/g, ' ')}</td>
                       <td className="py-1.5 pr-2 text-right font-medium">₹{Number(b.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     </tr>
                   ))}
@@ -1710,15 +1724,20 @@ function BulkStoresUpdateModal({ projectId, onClose }) {
             </>
           )}
         </div>
-        <div className="border-t border-slate-100 px-5 py-3 flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Close</button>
-          <button
-            onClick={handleSubmit}
-            disabled={mut.isPending || bills.length === 0}
-            className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 shadow-sm"
-          >
-            {mut.isPending ? 'Updating…' : `Update ${selectedIds.length} Bill${selectedIds.length === 1 ? '' : 's'}`}
-          </button>
+        <div className="border-t border-slate-100 px-5 py-3 flex items-center justify-between gap-2">
+          <span className="text-xs text-slate-500">
+            Bills already past Document Controller keep their current stage — only dates are updated.
+          </span>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Close</button>
+            <button
+              onClick={handleSubmit}
+              disabled={mut.isPending || selectedIds.length === 0}
+              className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 shadow-sm"
+            >
+              {mut.isPending ? 'Updating…' : `Update ${selectedIds.length} Bill${selectedIds.length === 1 ? '' : 's'}`}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1734,14 +1753,20 @@ function BulkDocControlUpdateModal({ projectId, onClose }) {
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const { data: bills = [], isLoading } = useQuery({
+  const [billSearch, setBillSearch] = useState('');
+
+  // HO / QS handover dates are editable at any stage — list every bill.
+  const { data: allBills = [], isLoading } = useQuery({
     queryKey: ['tqs-bills-bulk-dc', projectId],
-    queryFn: () => tqsBillsAPI.list({ project_id: projectId || undefined, status: 'document_controller' }).then(r => r.data?.data ?? r.data ?? []),
+    queryFn: () => tqsBillsAPI.list({ project_id: projectId || undefined }).then(r => r.data?.data ?? r.data ?? []),
   });
 
-  useEffect(() => {
-    setSelected(Object.fromEntries(bills.map(b => [b.id, true])));
-  }, [bills.map(b => b.id).join(',')]);
+  const bills = allBills.filter(b => {
+    if (!billSearch.trim()) return true;
+    const q = billSearch.toLowerCase();
+    return [b.sl_number, b.vendor_name, b.inv_number, b.po_number]
+      .some(v => String(v || '').toLowerCase().includes(q));
+  });
 
   const mut = useMutation({
     mutationFn: (data) => tqsBillsAPI.bulkUpdateDocumentControl(data),
@@ -1773,9 +1798,9 @@ function BulkDocControlUpdateModal({ projectId, onClose }) {
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-3">
           {isLoading ? (
-            <div className="py-16 text-center text-slate-400 text-sm">Loading bills at Document Controller stage…</div>
-          ) : bills.length === 0 ? (
-            <div className="py-16 text-center text-slate-400 text-sm">No bills are currently at the Document Controller stage.</div>
+            <div className="py-16 text-center text-slate-400 text-sm">Loading bills…</div>
+          ) : allBills.length === 0 ? (
+            <div className="py-16 text-center text-slate-400 text-sm">No bills found for this project.</div>
           ) : (
             <>
               <div className="grid grid-cols-2 gap-3 mb-4">
@@ -1795,16 +1820,22 @@ function BulkDocControlUpdateModal({ projectId, onClose }) {
                 <textarea rows={2} value={form.document_controller_remarks} onChange={e => set('document_controller_remarks', e.target.value)}
                   className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm outline-none focus:border-indigo-400" />
               </div>
+              <div className="mb-2">
+                <input value={billSearch} onChange={e => setBillSearch(e.target.value)}
+                  placeholder="Search bill no., vendor, invoice or PO…"
+                  className="w-full border border-slate-200 rounded-md px-2 py-1.5 text-sm outline-none focus:border-indigo-400" />
+              </div>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs text-slate-400 border-b border-slate-100">
                     <th className="py-1.5 pr-2 w-8">
-                      <input type="checkbox" checked={selectedIds.length === bills.length}
-                        onChange={e => setSelected(Object.fromEntries(bills.map(b => [b.id, e.target.checked])))} />
+                      <input type="checkbox" checked={bills.length > 0 && bills.every(b => selected[b.id])}
+                        onChange={e => setSelected(prev => ({ ...prev, ...Object.fromEntries(bills.map(b => [b.id, e.target.checked])) }))} />
                     </th>
                     <th className="py-1.5 pr-2">Bill No.</th>
                     <th className="py-1.5 pr-2">Vendor</th>
                     <th className="py-1.5 pr-2">Invoice No.</th>
+                    <th className="py-1.5 pr-2">Stage</th>
                     <th className="py-1.5 pr-2 text-right">Amount</th>
                   </tr>
                 </thead>
@@ -1818,6 +1849,7 @@ function BulkDocControlUpdateModal({ projectId, onClose }) {
                       <td className="py-1.5 pr-2 text-slate-800 font-mono text-xs">{b.sl_number}</td>
                       <td className="py-1.5 pr-2 text-slate-700">{b.vendor_name}</td>
                       <td className="py-1.5 pr-2 text-slate-500">{b.inv_number}</td>
+                      <td className="py-1.5 pr-2 text-xs text-slate-500 capitalize">{String(b.workflow_status || '').replace(/_/g, ' ')}</td>
                       <td className="py-1.5 pr-2 text-right font-medium">₹{Number(b.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     </tr>
                   ))}
@@ -1826,15 +1858,20 @@ function BulkDocControlUpdateModal({ projectId, onClose }) {
             </>
           )}
         </div>
-        <div className="border-t border-slate-100 px-5 py-3 flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Close</button>
-          <button
-            onClick={handleSubmit}
-            disabled={mut.isPending || bills.length === 0}
-            className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 shadow-sm"
-          >
-            {mut.isPending ? 'Updating…' : `Update ${selectedIds.length} Bill${selectedIds.length === 1 ? '' : 's'}`}
-          </button>
+        <div className="border-t border-slate-100 px-5 py-3 flex items-center justify-between gap-2">
+          <span className="text-xs text-slate-500">
+            Bills already at QS or beyond keep their current stage — only dates are updated.
+          </span>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Close</button>
+            <button
+              onClick={handleSubmit}
+              disabled={mut.isPending || selectedIds.length === 0}
+              className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 shadow-sm"
+            >
+              {mut.isPending ? 'Updating…' : `Update ${selectedIds.length} Bill${selectedIds.length === 1 ? '' : 's'}`}
+            </button>
+          </div>
         </div>
       </div>
     </div>
