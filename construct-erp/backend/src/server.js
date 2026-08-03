@@ -87,6 +87,7 @@ const mrsRoutes = require('./routes/mrs.routes');
 const minRoutes = require('./routes/min.routes');
 const mtrRoutes = require('./routes/material-transfer.routes');
 const engineerLogRoutes = require('./routes/engineer-log.routes');
+const weatherRoutes = require('./routes/weather.routes');
 const bookingRoutes = require('./routes/booking.routes');
 const reportRoutes = require('./routes/report.routes');
 const uploadRoutes        = require('./routes/upload.routes');
@@ -488,6 +489,7 @@ app.use(`${API}/stores/min`, minRoutes);
 app.use(`${API}/stores/mtr`, mtrRoutes);
 app.use(`${API}/stores-reports`, storesReportsRoutes);
 app.use(`${API}/engineer-logs`, engineerLogRoutes);
+app.use(`${API}/planning/weather`, weatherRoutes);
 
 // CRM
 app.use(`${API}/bookings`, bookingRoutes);

@@ -7,7 +7,7 @@ import { z } from 'zod';
 import {
   Eye, EyeOff, Lock, Mail, AlertCircle, ArrowRight,
   ClipboardList, FileText, Package, Users, HardHat, ShieldCheck,
-  Building2, TrendingUp, Search, MapPin, Loader2, LogOut,
+  Building2, Search, MapPin, Loader2, LogOut,
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
@@ -26,12 +26,6 @@ const MODULES = [
   { icon: Users,         label: 'HR, Payroll & Attendance'    },
   { icon: HardHat,       label: 'Site Execution & Quality'    },
   { icon: ShieldCheck,   label: 'Compliance & Reporting'      },
-];
-
-const STATS = [
-  { icon: Building2,   label: 'Projects',         target: 24,   suffix: '+' },
-  { icon: FileText,    label: 'Bills Processed',  target: 335,  suffix: '+' },
-  { icon: TrendingUp,  label: 'Crores Managed',   target: 42,   suffix: 'Cr+' },
 ];
 
 const ESS_MODULES = [
@@ -66,38 +60,6 @@ const PARTICLES = [
   [88, 7,  3,    8,  0.25],
   [45, 16, 1.8,  9,  0.35],
 ];
-
-// Animated counter hook
-function useCountUp(target, duration = 1400, startDelay = 600) {
-  const [val, setVal] = useState(0);
-  useEffect(() => {
-    const t = setTimeout(() => {
-      const steps = 40;
-      const inc   = target / steps;
-      let cur     = 0;
-      const id    = setInterval(() => {
-        cur += inc;
-        if (cur >= target) { setVal(target); clearInterval(id); }
-        else setVal(Math.floor(cur));
-      }, duration / steps);
-      return () => clearInterval(id);
-    }, startDelay);
-    return () => clearTimeout(t);
-  }, [target, duration, startDelay]);
-  return val;
-}
-
-function StatCard({ stat, delay }) {
-  const val = useCountUp(stat.target, 1400, 600 + delay);
-  const Icon = stat.icon;
-  return (
-    <div className="lp-stat" style={{ animationDelay: `${0.9 + delay / 1000}s` }}>
-      <div className="lp-stat-icon"><Icon size={14} /></div>
-      <div className="lp-stat-val">{val}{stat.suffix}</div>
-      <div className="lp-stat-label">{stat.label}</div>
-    </div>
-  );
-}
 
 export default function LoginPage() {
   const [showPass,     setShowPass]     = useState(false);
@@ -866,15 +828,6 @@ export default function LoginPage() {
                 </div>
               ))}
             </div>
-
-            {/* Stats — ERP only; not relevant to the employee-facing ESS portal */}
-            {!ess && (
-              <div className="lp-stats">
-                {STATS.map((stat, idx) => (
-                  <StatCard key={stat.label} stat={stat} delay={idx * 150} />
-                ))}
-              </div>
-            )}
 
           </div>
         </CursorSpotlight>

@@ -214,6 +214,7 @@ const P6Dashboard           = lazy(() => import('./pages/planning/P6Dashboard'))
 const WBSEditorPage         = lazy(() => import('./pages/planning/WBSEditorPage'));
 const RiskRegisterPage      = lazy(() => import('./pages/planning/RiskRegisterPage'));
 const MRPPage               = lazy(() => import('./pages/planning/MRPPage'));
+const SiteWeatherPage       = lazy(() => import('./pages/planning/SiteWeatherPage'));
 const PlantDashboard      = lazy(() => import('./pages/plant/PlantDashboard'));
 const PlantMasters        = lazy(() => import('./pages/plant/PlantMasters'));
 const PlantTransfers      = lazy(() => import('./pages/plant/PlantTransfers'));
@@ -994,6 +995,7 @@ export default function App() {
                 <Route path="planning/wbs"          element={<RequireAnyModule modules={['Planning','Projects']}><WBSEditorPage /></RequireAnyModule>} />
                 <Route path="planning/risks"        element={<RequireModule module="Planning"><RiskRegisterPage /></RequireModule>} />
                 <Route path="planning/mrp"          element={<RequireModule module="Planning"><MRPPage /></RequireModule>} />
+                <Route path="planning/weather"       element={<RequireModule module="Planning"><SiteWeatherPage /></RequireModule>} />
 
                 {/* HSE */}
                 <Route path="hse" element={<RequireModule module="HSE & Safety"><HSEDashboard /></RequireModule>} />
