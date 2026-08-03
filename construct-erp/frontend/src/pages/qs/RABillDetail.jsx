@@ -79,6 +79,12 @@ export default function RABillDetail() {
     return () => window.removeEventListener('resize', calc);
   }, []);
   const A4_W = 794, A4_H = 1123; // px at 96dpi
+  // The proforma template itself renders at 200mm (not the full 210mm A4_W),
+  // so its on-screen preview wrapper needs the matching narrower width —
+  // otherwise it renders correctly but sits inside a wider box, showing a
+  // stray gap that reads as "not aligned" (this doesn't affect the actual
+  // print, which uses the component's own width regardless of the preview).
+  const PROFORMA_W = 756; // 200mm at 96dpi
 
   // Backend now wraps detail in { data: {...} }
   const { data: b, isLoading } = useQuery({
@@ -677,8 +683,8 @@ export default function RABillDetail() {
             </div>
           </div>
           <div className="flex-1 overflow-auto flex justify-center py-6 px-4">
-            <div style={{ width: A4_W * previewScale, height: A4_H * previewScale }}>
-              <div style={{ width: A4_W, transform: `scale(${previewScale})`, transformOrigin: 'top left', boxShadow: '0 4px 32px rgba(0,0,0,0.18)', background: '#fff' }}>
+            <div style={{ width: PROFORMA_W * previewScale, height: A4_H * previewScale }}>
+              <div style={{ width: PROFORMA_W, transform: `scale(${previewScale})`, transformOrigin: 'top left', boxShadow: '0 4px 32px rgba(0,0,0,0.18)', background: '#fff' }}>
                 <RABillProformaInvoice ref={proformaRef} data={b} proformaNo={proformaNo} proformaDate={proformaDate} />
               </div>
             </div>
