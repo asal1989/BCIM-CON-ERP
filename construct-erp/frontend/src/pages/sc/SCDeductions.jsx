@@ -1,5 +1,6 @@
 // src/pages/sc/SCDeductions.jsx — Advances, Material Recovery & Retention Management
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { scAPI, projectAPI } from '../../api/client';
 import useAuthStore from '../../store/authStore';
@@ -206,7 +207,11 @@ function RetentionReleaseForm({ wos, retSummary, onClose }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function SCDeductions() {
   const qc = useQueryClient();
-  const [activeTab, setTab]  = useState('advances');
+  const [searchParams] = useSearchParams();
+  // Deep-link from the sidebar's "Retention (Subcontract)" / "Recoveries
+  // (Subcontract)" links, e.g. /sc/deductions?tab=retention.
+  const initialTab = TABS.some(t => t.k === searchParams.get('tab')) ? searchParams.get('tab') : 'advances';
+  const [activeTab, setTab]  = useState(initialTab);
   const { selectedProjectId } = useAuthStore();
   const [projFilt,  setProj] = useState(selectedProjectId || '');
   useEffect(() => { setProj(selectedProjectId || ''); }, [selectedProjectId]);
