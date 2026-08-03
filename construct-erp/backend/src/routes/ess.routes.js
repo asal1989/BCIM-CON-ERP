@@ -218,7 +218,8 @@ router.get('/summary', async (req, res) => {
          FROM notifications
          WHERE company_id = $1
            AND (user_id = $2 OR user_id IS NULL)
-           AND COALESCE(is_read, false) = false`,
+           AND COALESCE(is_read, false) = false
+           AND type IN ('leave_requested', 'leave_approved', 'leave_rejected')`,
         [companyId, userId]
       ).catch(() => ({ rows: [{ unread: 0 }] })),
     ]);
