@@ -175,7 +175,7 @@ router.post('/erp-daily-report', async (req, res) => {
     <table style="width:100%;border-collapse:collapse;border-bottom:1px solid #e2e8f0;background:#fff">
       <tr>
         ${stat('SC Bills Raised', scBills.rows[0].cnt > 0 ? `${scBills.rows[0].cnt} <span style="font-size:13px;color:#64748b">· ₹${inr(scBills.rows[0].total)}</span>` : '—')}
-        ${stat('TQS Bills', tqsBills.rows[0].cnt > 0 ? `${tqsBills.rows[0].cnt} <span style="font-size:13px;color:#64748b">· ₹${inr(tqsBills.rows[0].total)}</span>` : '—')}
+        ${stat('Vendor Bills', tqsBills.rows[0].cnt > 0 ? `${tqsBills.rows[0].cnt} <span style="font-size:13px;color:#64748b">· ₹${inr(tqsBills.rows[0].total)}</span>` : '—')}
         ${stat('MRS Raised', mrsList.rows[0].cnt || '—')}
         ${stat('POs Created', poList.rows[0].cnt > 0 ? `${poList.rows[0].cnt} <span style="font-size:13px;color:#64748b">· ₹${inr(poList.rows[0].total)}</span>` : '—')}
         ${stat('Petty Cash', pettyCash.rows[0].cnt > 0 ? `${pettyCash.rows[0].cnt} <span style="font-size:13px;color:#64748b">· ₹${inr(pettyCash.rows[0].total)}</span>` : '—')}
