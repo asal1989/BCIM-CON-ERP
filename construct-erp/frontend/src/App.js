@@ -1,4 +1,4 @@
-// src/App.js
+﻿// src/App.js
 import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, QueryCache } from '@tanstack/react-query';
@@ -283,25 +283,25 @@ const QSReportsPage        = lazy(() => import('./pages/qs/ReportsPage'));
 const BillingReportsPage    = lazy(() => import('./pages/billing/BillingReportsPage'));
 const DocumentsPage             = lazy(() => import('./pages/documents/DocumentsPage'));
 const FinanceIntelligencePage   = lazy(() => import('./pages/finance/FinanceIntelligencePage'));
-const TQSDashboardPage      = lazy(() => import('./pages/tqs/TQSDashboardPage'));
+const BillTrackerDashboardPage      = lazy(() => import('./pages/tqs/BillTrackerDashboardPage'));
 
-const TQSBillsPage          = lazy(() => import('./pages/tqs/TQSBillsPage'));
-const TQSBillNewPage        = lazy(() => import('./pages/tqs/TQSBillNewPage'));
-const TQSBillDetailPage     = lazy(() => import('./pages/tqs/TQSBillDetailPage'));
-const TQSPaymentCertPrint   = lazy(() => import('./pages/tqs/TQSPaymentCertPrint'));
-const TQSMaterialTrackerPage    = lazy(() => import('./pages/tqs/TQSMaterialTrackerPage'));
-const TQSConcreteTrackerPage    = lazy(() => import('./pages/tqs/TQSConcreteTrackerPage'));
-const TQSReportsPage        = lazy(() => import('./pages/tqs/TQSReportsPage'));
-const TQSAnalyticsPage      = lazy(() => import('./pages/tqs/TQSAnalyticsPage'));
-const TQSTransmittalPage    = lazy(() => import('./pages/tqs/TQSTransmittalPage'));
+const BillTrackerBillsPage          = lazy(() => import('./pages/tqs/BillTrackerBillsPage'));
+const BillTrackerBillNewPage        = lazy(() => import('./pages/tqs/BillTrackerBillNewPage'));
+const BillTrackerBillDetailPage     = lazy(() => import('./pages/tqs/BillTrackerBillDetailPage'));
+const BillTrackerPaymentCertPrint   = lazy(() => import('./pages/tqs/BillTrackerPaymentCertPrint'));
+const BillTrackerMaterialTrackerPage    = lazy(() => import('./pages/tqs/BillTrackerMaterialTrackerPage'));
+const BillTrackerConcreteTrackerPage    = lazy(() => import('./pages/tqs/BillTrackerConcreteTrackerPage'));
+const BillTrackerReportsPage        = lazy(() => import('./pages/tqs/BillTrackerReportsPage'));
+const BillTrackerAnalyticsPage      = lazy(() => import('./pages/tqs/BillTrackerAnalyticsPage'));
+const BillTrackerTransmittalPage    = lazy(() => import('./pages/tqs/BillTrackerTransmittalPage'));
 const LiabilityRegisterPage    = lazy(() => import('./pages/tqs/LiabilityRegisterPage'));
 const ProcurementAdvanceTrackerPage       = lazy(() => import('./pages/procurement/ProcurementAdvanceTrackerPage'));
 const ProcurementAdvanceVoucherDetailPage = lazy(() => import('./pages/procurement/ProcurementAdvanceVoucherDetailPage'));
 const ProcurementAdvanceVoucherPrint      = lazy(() => import('./pages/procurement/ProcurementAdvanceVoucherPrint'));
-const TQSDeductionRegisterPage       = lazy(() => import('./pages/tqs/TQSDeductionRegisterPage'));
-const TQSSubcontractorBillRegisterPage = lazy(() => import('./pages/tqs/TQSSubcontractorBillRegisterPage'));
-const TQSCashFlowPage                = lazy(() => import('./pages/tqs/TQSCashFlowPage'));
-const TQSCostReportPage              = lazy(() => import('./pages/tqs/TQSCostReportPage'));
+const BillTrackerDeductionRegisterPage       = lazy(() => import('./pages/tqs/BillTrackerDeductionRegisterPage'));
+const BillTrackerSubcontractorBillRegisterPage = lazy(() => import('./pages/tqs/BillTrackerSubcontractorBillRegisterPage'));
+const BillTrackerCashFlowPage                = lazy(() => import('./pages/tqs/BillTrackerCashFlowPage'));
+const BillTrackerCostReportPage              = lazy(() => import('./pages/tqs/BillTrackerCostReportPage'));
 const QSRABillPrint            = lazy(() => import('./pages/tqs/QSRABillPrint'));
 const QAQCReportsPage       = lazy(() => import('./pages/quality/QAQCReportsPage'));
 const ERPChatPage           = lazy(() => import('./pages/ERPChat'));
@@ -672,7 +672,7 @@ export default function App() {
               <Route path="/vendor-rfq/:token" element={<VendorRFQPortalPage />} />
 
               {/* Print pages — ProtectedRoute but NO Layout sidebar */}
-              <Route path="/tqs/bills/:id/payment-cert"    element={<ProtectedRoute><TQSPaymentCertPrint /></ProtectedRoute>} />
+              <Route path="/tqs/bills/:id/payment-cert"    element={<ProtectedRoute><BillTrackerPaymentCertPrint /></ProtectedRoute>} />
               <Route path="/tqs/bills/:id/ra-abstract"      element={<ProtectedRoute><QSRABillPrint /></ProtectedRoute>} />
 
               {/* Private — All ERP module routes now under ProtectedRoute */}
@@ -1096,25 +1096,25 @@ export default function App() {
                 <Route path="tender-management/documents"     element={<RequireModule module="Tender Management"><DocumentsPage /></RequireModule>} />
 
                 {/* Bill Tracker */}
-                <Route path="tqs"                      element={<RequireModule module="Bill Tracker"><TQSDashboardPage /></RequireModule>} />
+                <Route path="tqs"                      element={<RequireModule module="Bill Tracker"><BillTrackerDashboardPage /></RequireModule>} />
                 <Route path="bills/tracker"            element={<RequireModule module="Bill Tracker"><BillsTrackerPage /></RequireModule>} />
-                <Route path="tqs/bills"                element={<RequireModule module="Bill Tracker"><TQSBillsPage /></RequireModule>} />
+                <Route path="tqs/bills"                element={<RequireModule module="Bill Tracker"><BillTrackerBillsPage /></RequireModule>} />
                 <Route path="tqs/bills/new"            element={<Navigate to="/tqs/bills" replace />} />
-                <Route path="tqs/bills/:id"            element={<RequireModule module="Bill Tracker"><TQSBillDetailPage /></RequireModule>} />
-                <Route path="tqs/material-tracker"     element={<RequireModule module="Bill Tracker"><TQSMaterialTrackerPage /></RequireModule>} />
-                <Route path="tqs/concrete-tracker"    element={<RequireModule module="Bill Tracker"><TQSConcreteTrackerPage /></RequireModule>} />
-                <Route path="tqs/reports"              element={<RequireModule module="Bill Tracker"><TQSReportsPage /></RequireModule>} />
-                <Route path="tqs/analytics"            element={<RequireModule module="Bill Tracker"><TQSAnalyticsPage /></RequireModule>} />
+                <Route path="tqs/bills/:id"            element={<RequireModule module="Bill Tracker"><BillTrackerBillDetailPage /></RequireModule>} />
+                <Route path="tqs/material-tracker"     element={<RequireModule module="Bill Tracker"><BillTrackerMaterialTrackerPage /></RequireModule>} />
+                <Route path="tqs/concrete-tracker"    element={<RequireModule module="Bill Tracker"><BillTrackerConcreteTrackerPage /></RequireModule>} />
+                <Route path="tqs/reports"              element={<RequireModule module="Bill Tracker"><BillTrackerReportsPage /></RequireModule>} />
+                <Route path="tqs/analytics"            element={<RequireModule module="Bill Tracker"><BillTrackerAnalyticsPage /></RequireModule>} />
                 <Route path="tqs/vendors"              element={<RequireModule module="Bill Tracker"><Navigate to="/procurement/vendors" replace /></RequireModule>} />
-                <Route path="tqs/transmittal"          element={<RequireModule module="Bill Tracker"><TQSTransmittalPage /></RequireModule>} />
+                <Route path="tqs/transmittal"          element={<RequireModule module="Bill Tracker"><BillTrackerTransmittalPage /></RequireModule>} />
                 <Route path="tqs/liability-register"   element={<RequireModule module="Bill Tracker"><LiabilityRegisterPage /></RequireModule>} />
                 <Route path="procurement/advance-tracker"      element={<RequireModule module="Bill Tracker"><ProcurementAdvanceTrackerPage /></RequireModule>} />
                 <Route path="procurement/advances/:id"         element={<RequireModule module="Bill Tracker"><ProcurementAdvanceVoucherDetailPage /></RequireModule>} />
                 <Route path="procurement/advances/:id/print"   element={<ProcurementAdvanceVoucherPrint />} />
-                <Route path="tqs/deduction-register"   element={<RequireModule module="Bill Tracker"><TQSDeductionRegisterPage /></RequireModule>} />
-                <Route path="tqs/wo-bill-register"     element={<RequireModule module="Bill Tracker"><TQSSubcontractorBillRegisterPage /></RequireModule>} />
-                <Route path="tqs/cash-flow"            element={<RequireModule module="Bill Tracker"><TQSCashFlowPage /></RequireModule>} />
-                <Route path="tqs/cost-report"          element={<RequireModule module="Bill Tracker"><TQSCostReportPage /></RequireModule>} />
+                <Route path="tqs/deduction-register"   element={<RequireModule module="Bill Tracker"><BillTrackerDeductionRegisterPage /></RequireModule>} />
+                <Route path="tqs/wo-bill-register"     element={<RequireModule module="Bill Tracker"><BillTrackerSubcontractorBillRegisterPage /></RequireModule>} />
+                <Route path="tqs/cash-flow"            element={<RequireModule module="Bill Tracker"><BillTrackerCashFlowPage /></RequireModule>} />
+                <Route path="tqs/cost-report"          element={<RequireModule module="Bill Tracker"><BillTrackerCostReportPage /></RequireModule>} />
                 <Route path="tqs/vendor-certifications"     element={<RequireModule module="Bill Tracker"><VendorQSCertificationPage /></RequireModule>} />
                 <Route path="tqs/vendor-certifications/:id" element={<RequireModule module="Bill Tracker"><VendorQSCertificationDetailPage /></RequireModule>} />
 
