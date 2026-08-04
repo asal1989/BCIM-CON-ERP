@@ -15,6 +15,7 @@ const { BOQ_COST_HEADS } = require('../constants/boqCostHeads');
 const { uploadToOneDrive, isConfigured } = require('../services/onedrive.service');
 const { scBillScopeForRole } = require('../constants/scBillApprovalStages');
 const { pushScBillToTracker } = require('../services/scBillToTracker.service');
+const { postAutoJournalStandalone } = require('../services/journalAutoPost');
 
 // Does this user's role own the bill's current approval stage? admin/super_admin
 // always may act; everyone else must actually be the assigned stage owner —
@@ -1705,6 +1706,54 @@ router.patch('/bills/:id/approve', authorize('super_admin','admin','project_mana
         await pushScBillToTracker(b.id, req.user.id);
       } catch(trackerErr) {
         console.error('Bill Tracker auto-add failed:', trackerErr.message);
+      }
+
+      // ── Auto-post Journal Voucher — SC bills never posted to the GL before,
+      // so Chart of Accounts silently excluded the largest cost category on
+      // most projects (Budget Control counts SC bills; the books didn't).
+      // Same shape as TQS bills' auto_tqs_bill posting: Dr Subcontractor
+      // Expense + Dr Input GST, Cr Accounts Payable (net of TDS/retention)
+      // + Cr TDS + Cr Retention. Advance/material recovery and penalties are
+      // NOT separately posted here (same limitation TQS bills have) — those
+      // clear against their own already-posted entries elsewhere.
+      try {
+        const scName = await query(`SELECT name FROM sc_subcontractors WHERE id=$1`, [b.sc_id]);
+        const vendorName = scName.rows[0]?.name || 'Subcontractor';
+        const gross     = parseFloat(b.gross_amount || 0);
+        const gst       = parseFloat(b.gst_amount || 0);
+        const tds       = parseFloat(b.tds_amount || 0);
+        const retention = parseFloat(b.retention_amount || 0);
+        const apCredit  = gross + gst - tds - retention;
+        const ref       = b.bill_number;
+
+        if (gross > 0) {
+          await query(
+            `DELETE FROM journal_entries WHERE company_id = $1 AND source = 'auto_sc_bill' AND reference = $2`,
+            [CID(req), ref]
+          ).catch(() => {});
+
+          const lines = [
+            { code: '5100', debit: gross, description: `Subcontractor — ${vendorName} ${ref}` },
+          ];
+          if (gst > 0)       lines.push({ code: '1300', debit: gst, description: `Input GST / ITC — ${ref}` });
+          lines.push({ code: '2000', credit: apCredit, description: `Payable to ${vendorName} — ${ref}` });
+          if (tds > 0)       lines.push({ code: '2200', credit: tds, description: `TDS deducted — ${ref}` });
+          if (retention > 0) lines.push({ code: '2300', credit: retention, description: `Retention withheld — ${ref}` });
+
+          await postAutoJournalStandalone({
+            companyId: CID(req),
+            userId:    req.user.id,
+            entryDate: b.bill_date || new Date().toISOString().slice(0, 10),
+            projectId: b.project_id || null,
+            reference: ref,
+            narration: `SC bill approved — ${vendorName} (${ref})`,
+            source:    'auto_sc_bill',
+            lines,
+          });
+        }
+      } catch (jvErr) {
+        // Best-effort: never block bill approval over JV posting.
+        console.error('SC bill auto-JV failed:', jvErr.message);
       }
     }
 
