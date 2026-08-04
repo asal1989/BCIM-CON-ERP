@@ -66,7 +66,7 @@ router.post('/transfer', async (req, res) => {
        VALUES ($1, $2, $3, 'main', 0, $4)
        ON CONFLICT (project_id, material_name, site_location)
        DO UPDATE SET closing_stock = inventory.closing_stock + $4, last_updated = NOW()`,
-      [to_project_id, material_name, unit, quantity]
+      [to_project_id, material_name, unit || 'Nos', quantity]
     );
     res.json({ message: `Transferred ${quantity} ${unit} of ${material_name}` });
   } catch (err) {

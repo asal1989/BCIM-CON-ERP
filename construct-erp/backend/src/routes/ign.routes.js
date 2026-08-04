@@ -913,7 +913,7 @@ router.patch('/:id/approve', async (req, res) => {
                unit_rate     = CASE WHEN $6 > 0 THEN $6 ELSE inventory.unit_rate END,
                last_updated  = NOW()
              RETURNING id`,
-            [ign.project_id, it.material_name, it.unit, ign.site_location || 'main', qtyForInventory, itemRate]
+            [ign.project_id, it.material_name, it.unit || 'Nos', ign.site_location || 'main', qtyForInventory, itemRate]
           );
           inventoryId = inv.rows[0].id;
           await client.query(
@@ -931,7 +931,7 @@ router.patch('/:id/approve', async (req, res) => {
                unit_rate = CASE WHEN $5 > 0 THEN $5 ELSE inventory.unit_rate END,
                last_updated = NOW()
              RETURNING id`,
-            [ign.project_id, it.material_name, it.unit, ign.site_location || 'main', itemRate]
+            [ign.project_id, it.material_name, it.unit || 'Nos', ign.site_location || 'main', itemRate]
           );
           inventoryId = inv.rows[0].id;
         }

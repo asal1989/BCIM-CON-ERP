@@ -538,7 +538,7 @@ router.patch('/:id/approve-qc', async (req, res) => {
                unit_rate     = CASE WHEN $6 > 0 THEN $6 ELSE inventory.unit_rate END,
                last_updated  = NOW()
              RETURNING id`,
-            [grn.project_id, it.material_name, it.unit, grn.site_location || 'main', parseFloat(it.quantity_received), itemRate]
+            [grn.project_id, it.material_name, it.unit || 'Nos', grn.site_location || 'main', parseFloat(it.quantity_received), itemRate]
           );
           inventoryId = inv.rows[0].id;
           await client.query(
@@ -556,7 +556,7 @@ router.patch('/:id/approve-qc', async (req, res) => {
                unit_rate = CASE WHEN $5 > 0 THEN $5 ELSE inventory.unit_rate END,
                last_updated = NOW()
              RETURNING id`,
-            [grn.project_id, it.material_name, it.unit, grn.site_location || 'main', itemRate]
+            [grn.project_id, it.material_name, it.unit || 'Nos', grn.site_location || 'main', itemRate]
           );
           inventoryId = inv.rows[0].id;
         }

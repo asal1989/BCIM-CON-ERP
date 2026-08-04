@@ -663,7 +663,7 @@ router.post('/', async (req, res) => {
       `INSERT INTO inventory (project_id, material_name, category, major_head, dc_idc, remarks, unit, opening_stock, closing_stock, last_updated)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, NOW())
        RETURNING id, material_name, category, major_head, dc_idc, remarks, unit, opening_stock, closing_stock`,
-      [project_id, material_name.trim(), (category || '').trim() || null, (major_head || '').trim() || null, (dc_idc || '').trim() || null, (remarks || '').trim() || null, (unit || '').trim() || null, parseFloat(opening_stock) || 0]
+      [project_id, material_name.trim(), (category || '').trim() || null, (major_head || '').trim() || null, (dc_idc || '').trim() || null, (remarks || '').trim() || null, (unit || '').trim() || 'Nos', parseFloat(opening_stock) || 0]
     );
     res.status(201).json({ data: result.rows[0] });
   } catch (err) {
