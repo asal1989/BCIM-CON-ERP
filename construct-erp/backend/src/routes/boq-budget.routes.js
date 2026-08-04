@@ -1436,7 +1436,7 @@ router.get('/:project_id/costhead-drilldown', async (req, res) => {
         SELECT tb.inv_number AS reference, COALESCE(tb.inv_date, tb.created_at) AS date,
                li.item_name AS description,
                li.basic_amount + COALESCE(li.cgst_amt,0) + COALESCE(li.sgst_amt,0) + COALESCE(li.igst_amt,0) AS amount,
-               'TQS Bill' AS source
+               'Vendor Bill' AS source
         FROM tqs_bill_line_items li
         JOIN tqs_bills tb ON tb.id = li.bill_id
         LEFT JOIN po_items pi ON pi.id = li.po_item_id
@@ -1544,7 +1544,7 @@ router.get('/:project_id/items-drilldown', async (req, res) => {
         SELECT tb.inv_number AS reference, COALESCE(tb.inv_date, tb.created_at) AS date,
                li.item_name AS description, li.cost_head,
                li.basic_amount + COALESCE(li.cgst_amt,0) + COALESCE(li.sgst_amt,0) + COALESCE(li.igst_amt,0) AS amount,
-               'TQS Bill' AS source
+               'Vendor Bill' AS source
         FROM tqs_bill_line_items li
         JOIN tqs_bills tb ON tb.id = li.bill_id
         LEFT JOIN po_items pi ON pi.id = li.po_item_id
@@ -1585,7 +1585,7 @@ router.get('/:project_id/items-drilldown', async (req, res) => {
       SELECT tb.inv_number AS reference, COALESCE(tb.inv_date, tb.created_at) AS date,
              li.item_name AS description, li.cost_head,
              li.basic_amount + COALESCE(li.cgst_amt,0) + COALESCE(li.sgst_amt,0) + COALESCE(li.igst_amt,0) AS amount,
-             'TQS Bill' AS source
+             'Vendor Bill' AS source
       FROM tqs_bill_line_items li
       JOIN tqs_bills tb ON tb.id = li.bill_id
       WHERE tb.project_id=$1 AND tb.is_deleted = FALSE AND li.boq_item_id = ANY($2::uuid[])
@@ -1778,7 +1778,7 @@ router.get('/:project_id/prorated-pool', async (req, res) => {
     // TQS bill line items tagged only to a cost head, never a specific BOQ item
     const tqs = await query(`
       SELECT tb.inv_number AS reference, COALESCE(tb.inv_date, tb.created_at) AS date,
-             li.item_name AS description, li.basic_amount AS amount, 'TQS Bill' AS source
+             li.item_name AS description, li.basic_amount AS amount, 'Vendor Bill' AS source
       FROM tqs_bill_line_items li
       JOIN tqs_bills tb ON tb.id = li.bill_id
       WHERE tb.project_id=$1 AND tb.is_deleted = FALSE

@@ -641,7 +641,7 @@ function CostHeadDrilldownInline({ projectId, costHead, boqItemId, chapter, unli
     'Stores PC Advance':'bg-purple-50 text-purple-700 border border-purple-200',
     'Advance Tracker':  'bg-amber-50 text-amber-700 border border-amber-200',
     'Bill Tracker Advance': 'bg-cyan-50 text-cyan-700 border border-cyan-200',
-    'TQS Bill':         'bg-sky-50 text-sky-700 border border-sky-200',
+    'Vendor Bill':      'bg-sky-50 text-sky-700 border border-sky-200',
     'RA Bill':          'bg-teal-50 text-teal-700 border border-teal-200',
     'Petty Cash':       'bg-orange-50 text-orange-700 border border-orange-200',
     'Purchase Order':   'bg-rose-50 text-rose-700 border border-rose-200',
@@ -1029,7 +1029,7 @@ function CostHeadDrilldown({ projectId, costHead }) {
     'Stores PC Advance':'bg-purple-50 text-purple-700 border border-purple-200',
     'Advance Tracker':  'bg-amber-50 text-amber-700 border border-amber-200',
     'Bill Tracker Advance': 'bg-cyan-50 text-cyan-700 border border-cyan-200',
-    'TQS Bill':         'bg-sky-50 text-sky-700 border border-sky-200',
+    'Vendor Bill':      'bg-sky-50 text-sky-700 border border-sky-200',
     'RA Bill':          'bg-teal-50 text-teal-700 border border-teal-200',
     'Petty Cash':       'bg-orange-50 text-orange-700 border border-orange-200',
     'Purchase Order':   'bg-rose-50 text-rose-700 border border-rose-200',
@@ -1066,7 +1066,7 @@ function CostHeadDrilldown({ projectId, costHead }) {
         <div className="flex items-center gap-2 text-xs text-slate-400 italic">
           <AlertCircle className="w-3.5 h-3.5" />
           No transactions found for <strong className="not-italic text-slate-500">{costHead}</strong>.
-          Amount may come from a source not yet linked to drilldown (check SC module, TQS bills, or advance tracker).
+          Amount may come from a source not yet linked to drilldown (check SC module, vendor bills, or advance tracker).
         </div>
       </td>
     </tr>
@@ -1765,7 +1765,7 @@ function CostToCompletionTab({ projectId, projectName, contractValue }) {
                 note="Spend to date has passed the total budget by this much. Already-incurred money (so it is NOT added to Total Outflow, which would double-count it against Bank/Creditors) — but it means there is no budget left for the balance work, so the Net Position below is optimistic." />
             )}
             <CtcRow label="Sundry creditors" value={liabilities.sundry_creditors}
-              note="Unpaid bills for this project — material/vendor (TQS) plus subcontractor (SC), net of retention." />
+              note="Unpaid bills for this project — Vendor Bills plus subcontractor (SC), net of retention." />
             <CtcRow label="Advance to be Recovered" value={liabilities.advance_to_be_recovered}
               note="Mobilization advance minus what's already recovered against RA bills." />
             <CtcRow label="Retention Payable - Subcontractor" value={liabilities.retention_payable_subcontractor}
