@@ -505,7 +505,64 @@ function IncentiveEditModal({ employee, salary, onClose, onSave, saving }) {
   );
 }
 
-function RowActionsMenu({ sal, emp, onView, onMess, onReversal, onAccommodation, onIncentive }) {
+function AccommodationAllowanceEditModal({ employee, salary, onClose, onSave, saving }) {
+  const [amount, setAmount] = useState(String(salary?.accommodation_allowance ?? 0));
+  const newGross = (Number(salary?.gross_monthly)||0) - (Number(salary?.accommodation_allowance)||0) + (Number(amount)||0);
+  const newNet = newGross - (Number(salary?.employee_pf)||0) - (Number(salary?.pt_deduction)||0)
+    - (Number(salary?.mess_deduction)||0) - (Number(salary?.accommodation_deduction)||0)
+    + (Number(salary?.basic_reversal)||0) + (Number(salary?.incentive)||0);
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+      <motion.div initial={{opacity:0,scale:0.97}} animate={{opacity:1,scale:1}} transition={{duration:0.2}}
+        className="w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100">
+        <div className="px-6 py-4 flex items-center justify-between"
+          style={{background:`linear-gradient(135deg,#0A1F5C,#1e3a8a)`}}>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center">
+              <Home className="w-4 h-4 text-white"/>
+            </div>
+            <div>
+              <p className="font-black text-white text-sm">Accommodation Allowance</p>
+              <p className="text-white/55 text-xs">{employee.name}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-lg bg-white/15 hover:bg-white/25 flex items-center justify-center">
+            <X className="w-4 h-4 text-white"/>
+          </button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="text-xs font-black text-gray-600 uppercase tracking-wide block mb-1.5">
+              Accommodation Allowance (₹) — monthly earning
+            </label>
+            <input type="number" value={amount} onChange={e=>setAmount(e.target.value)}
+              min="0" autoFocus
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-2xl font-black text-gray-900 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 transition-all"
+              placeholder="0"/>
+            <p className="text-xs text-gray-400 mt-1.5">
+              Previous: ₹{fmt(salary?.accommodation_allowance || 0)} &nbsp;|&nbsp;
+              Gross Monthly after this change: ₹{fmt(newGross)} &nbsp;|&nbsp;
+              Net Pay after this change: ₹{fmt(newNet)}
+            </p>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button onClick={onClose}
+              className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-bold transition-colors">
+              Cancel
+            </button>
+            <button onClick={()=>onSave(Number(amount)||0)} disabled={saving}
+              className="flex-1 py-2.5 text-white rounded-xl text-sm font-black disabled:opacity-50 transition-opacity"
+              style={{background:`linear-gradient(135deg,#2563EB,#0A1F5C)`}}>
+              {saving?'Saving…':'Save'}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function RowActionsMenu({ sal, emp, onView, onMess, onReversal, onAccommodation, onIncentive, onAccommodationAllowance }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -524,6 +581,10 @@ function RowActionsMenu({ sal, emp, onView, onMess, onReversal, onAccommodation,
           <button onClick={() => { onMess(); setOpen(false); }}
             className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm font-bold text-gray-700 hover:bg-blue-50 transition-colors">
             <Utensils className="w-3.5 h-3.5 text-gray-400" /> Edit Mess Deduction
+          </button>
+          <button onClick={() => { onAccommodationAllowance(); setOpen(false); }}
+            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm font-bold text-gray-700 hover:bg-blue-50 transition-colors">
+            <Home className="w-3.5 h-3.5 text-gray-400" /> Edit Accommodation Allowance
           </button>
           <button onClick={() => { onAccommodation(); setOpen(false); }}
             className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm font-bold text-gray-700 hover:bg-blue-50 transition-colors">
@@ -618,6 +679,7 @@ export default function EmployeeSalaryPage() {
   const [reversalEdit, setReversalEdit] = useState(null); // { employee, salary }
   const [accommodationEdit, setAccommodationEdit] = useState(null); // { employee, salary }
   const [incentiveEdit, setIncentiveEdit] = useState(null); // { employee, salary }
+  const [accommodationAllowanceEdit, setAccommodationAllowanceEdit] = useState(null); // { employee, salary }
   const [importResult, setImportResult] = useState(null); // { total, imported, skipped }
   const importInputRef = useRef(null);
 
@@ -719,6 +781,12 @@ export default function EmployeeSalaryPage() {
     mutationFn:({id, incentive})=>hrSalaryAPI.updateIncentive(id, { incentive }),
     onSuccess:()=>{ toast.success('Incentive updated'); setIncentiveEdit(null); qc.invalidateQueries({queryKey:['hr-employee-salaries']}); },
     onError:(e)=>toast.error(e.response?.data?.error||'Failed to update incentive'),
+  });
+
+  const accommodationAllowanceMut = useMutation({
+    mutationFn:({id, accommodation_allowance})=>hrSalaryAPI.updateAccommodationAllowance(id, { accommodation_allowance }),
+    onSuccess:()=>{ toast.success('Accommodation allowance updated'); setAccommodationAllowanceEdit(null); qc.invalidateQueries({queryKey:['hr-employee-salaries']}); },
+    onError:(e)=>toast.error(e.response?.data?.error||'Failed to update accommodation allowance'),
   });
 
   const importMut = useMutation({
@@ -908,6 +976,7 @@ export default function EmployeeSalaryPage() {
                           onReversal={()=>setReversalEdit({employee:emp,salary:sal})}
                           onAccommodation={()=>setAccommodationEdit({employee:emp,salary:sal})}
                           onIncentive={()=>setIncentiveEdit({employee:emp,salary:sal})}
+                          onAccommodationAllowance={()=>setAccommodationAllowanceEdit({employee:emp,salary:sal})}
                         />
                       </div>
                     </td>
@@ -999,6 +1068,16 @@ export default function EmployeeSalaryPage() {
           saving={incentiveMut.isPending}
           onClose={()=>setIncentiveEdit(null)}
           onSave={(amount)=>incentiveMut.mutate({id:incentiveEdit.salary.id, incentive:amount})}
+        />
+      )}
+
+      {accommodationAllowanceEdit && (
+        <AccommodationAllowanceEditModal
+          employee={accommodationAllowanceEdit.employee}
+          salary={accommodationAllowanceEdit.salary}
+          saving={accommodationAllowanceMut.isPending}
+          onClose={()=>setAccommodationAllowanceEdit(null)}
+          onSave={(amount)=>accommodationAllowanceMut.mutate({id:accommodationAllowanceEdit.salary.id, accommodation_allowance:amount})}
         />
       )}
 

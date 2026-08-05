@@ -354,6 +354,42 @@ router.put('/structures/:id', async (req, res) => {
 // EMPLOYEE SALARY ASSIGNMENT
 // ═══════════════════════════════════════════════════════════
 
+// PATCH /:id/accommodation-allowance — direct edit for this one earning
+// component. Unlike mess/accommodation deduction, this is an EARNING that
+// feeds gross_monthly, so changing it must adjust gross_monthly by the same
+// delta (not just recompute net pay against the old gross). Added because
+// the Edit Employee Salary modal only ever displayed this value read-only —
+// there was no way to correct it directly, which is exactly what's needed
+// since accommodation allowance is individually negotiated per employee and
+// does not follow the CTC formula (see calculateCTCBreakup's header comment).
+router.patch('/employee-salaries/:id/accommodation-allowance', async (req, res) => {
+  try {
+    const { accommodation_allowance } = req.body;
+    if (accommodation_allowance === undefined || accommodation_allowance === null) {
+      return res.status(400).json({ error: 'accommodation_allowance is required' });
+    }
+    const newVal = parseFloat(accommodation_allowance) || 0;
+    const existing = await query(
+      `SELECT accommodation_allowance, gross_monthly FROM hr_employee_salaries WHERE id=$1`,
+      [req.params.id]
+    );
+    if (!existing.rows.length) return res.status(404).json({ error: 'Salary record not found' });
+    const delta = newVal - parseFloat(existing.rows[0].accommodation_allowance || 0);
+    const { rows } = await query(
+      `UPDATE hr_employee_salaries
+          SET accommodation_allowance = $1,
+              gross_monthly = COALESCE(gross_monthly,0) + $2,
+              net_pay_monthly = (COALESCE(gross_monthly,0) + $2) - COALESCE(employee_pf,0) - COALESCE(pt_deduction,0)
+                - COALESCE(mess_deduction,0) - COALESCE(accommodation_deduction,0)
+                + COALESCE(basic_reversal,0) + COALESCE(incentive,0)
+        WHERE id = $3
+        RETURNING id, accommodation_allowance, gross_monthly, net_pay_monthly`,
+      [newVal, delta, req.params.id]
+    );
+    res.json({ data: rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // PATCH /:id/mess-deduction — update mess deduction on an existing salary record
 router.patch('/employee-salaries/:id/mess-deduction', async (req, res) => {
   try {

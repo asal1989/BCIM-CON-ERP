@@ -2050,6 +2050,7 @@ export const hrSalaryAPI = {
   updateBasicReversal:(id, d)  => api.patch(`/hr-admin/salary/employee-salaries/${id}/basic-reversal`, d),
   updateAccommodationDeduction: (id, d) => api.patch(`/hr-admin/salary/employee-salaries/${id}/accommodation-deduction`, d),
   updateIncentive:    (id, d)  => api.patch(`/hr-admin/salary/employee-salaries/${id}/incentive`, d),
+  updateAccommodationAllowance: (id, d) => api.patch(`/hr-admin/salary/employee-salaries/${id}/accommodation-allowance`, d),
   importSalaries:     (file)   => {
     const fd = new FormData();
     fd.append('file', file);
