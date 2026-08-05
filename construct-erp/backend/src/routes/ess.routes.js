@@ -103,6 +103,9 @@ function workingDays(fromDate, toDate, halfDay) {
 
 const fmtDate = (d) => d ? String(d).slice(0, 10) : '';
 const ERP_URL = (process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || 'https://erp.bcim.in').replace(/\/$/, '');
+// ESS portal links go to the employee-facing HR subdomain, not the main ERP
+// one — same app, same route, friendlier domain for staff.
+const ESS_URL = (process.env.ESS_PORTAL_URL || 'https://bcimhr.bcim.in').replace(/\/$/, '');
 
 function mailHeader(title) {
   return `<div style="background:#1e3a5f;padding:18px 28px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">${title}</h2></div>`;
@@ -374,7 +377,7 @@ router.post('/attendance/corrections', async (req, res) => {
           ${mailRow('Out Time', requested_out_time || '—')}
           ${mailRow('Reason', reason)}
         </table>
-        <p>Please review and action this request in the <a href="${ERP_URL}/ess-portal" style="color:#1e3a5f;font-weight:600">ESS Manager Desk</a>.</p>`
+        <p>Please review and action this request in the <a href="${ESS_URL}/ess" style="color:#1e3a5f;font-weight:600">ESS Manager Desk</a>.</p>`
       )
     );
   } catch (err) {
@@ -494,7 +497,7 @@ router.post('/leave/requests', async (req, res) => {
           ${mailRow('Days', half_day ? '0.5 (Half Day)' : days)}
           ${mailRow('Reason', reason || '—')}
         </table>
-        <p>Please review and action this request in the <a href="${ERP_URL}/ess-portal" style="color:#1e3a5f;font-weight:600">ESS Manager Desk</a>.</p>`
+        <p>Please review and action this request in the <a href="${ESS_URL}/ess" style="color:#1e3a5f;font-weight:600">ESS Manager Desk</a>.</p>`
       )
     );
   } catch (err) {
@@ -725,7 +728,7 @@ router.patch('/manager/leave-requests/:id/:action', requireManager, async (req, 
           ${mailRow('Status', statusBadge(action === 'approve' ? 'approved' : 'rejected'))}
           ${leave.rejection_reason ? mailRow('Reason', leave.rejection_reason) : ''}
         </table>
-        <p>View your leave history in the <a href="${ERP_URL}/ess-portal" style="color:#1e3a5f;font-weight:600">ESS Portal</a>.</p>`
+        <p>View your leave history in the <a href="${ESS_URL}/ess" style="color:#1e3a5f;font-weight:600">ESS Portal</a>.</p>`
       ),
       'leave'
     );
@@ -816,7 +819,7 @@ router.patch('/manager/attendance-corrections/:id/:action', requireManager, asyn
           ${mailRow('Status', statusBadge(action === 'approve' ? 'approved' : 'rejected'))}
           ${correction.rejection_reason ? mailRow('Reason', correction.rejection_reason) : ''}
         </table>
-        <p>View your attendance in the <a href="${ERP_URL}/ess-portal" style="color:#1e3a5f;font-weight:600">ESS Portal</a>.</p>`
+        <p>View your attendance in the <a href="${ESS_URL}/ess" style="color:#1e3a5f;font-weight:600">ESS Portal</a>.</p>`
       ),
       'regularization'
     );
@@ -841,7 +844,7 @@ router.patch('/manager/attendance-corrections/:id/:action', requireManager, asyn
             ${mailRow('Out Time', correction.requested_out_time || '—')}
             ${mailRow('Approved By', req.user.name || req.user.email)}
           </table>
-          <p>View attendance records in the <a href="${ERP_URL}/ess-portal" style="color:#1e3a5f;font-weight:600">ESS Portal</a>.</p>`
+          <p>View attendance records in the <a href="${ESS_URL}/ess" style="color:#1e3a5f;font-weight:600">ESS Portal</a>.</p>`
         )
       );
     }

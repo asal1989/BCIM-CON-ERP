@@ -10,6 +10,8 @@ const { query } = require('../config/database');
 const { sendMail } = require('../services/mail.service');
 
 const ERP_URL = process.env.API_BASE_URL || 'https://erp.bcim.in';
+// ESS portal links go to the employee-facing HR subdomain, not the main ERP one.
+const ESS_URL = (process.env.ESS_PORTAL_URL || 'https://bcimhr.bcim.in').replace(/\/$/, '');
 // Daily late-arrival sweep — 11:00 AM IST by default, after morning punches
 // have synced from the biometric devices. Override with env vars.
 const DEFAULT_CRON = '0 11 * * *';
@@ -162,7 +164,7 @@ function buildLateEmail({ employeeName, employeeCode, date, checkInTime, lateMin
       <table cellpadding="0" cellspacing="0" style="margin-bottom:28px">
         <tr>
           <td style="background:#1e3a8a;border-radius:6px">
-            <a href="${ERP_URL}/ess"
+            <a href="${ESS_URL}/ess"
                style="display:inline-block;color:#ffffff;padding:12px 28px;text-decoration:none;font-weight:700;font-size:13px;letter-spacing:0.3px">
               View My Attendance &rarr;
             </a>
@@ -223,7 +225,7 @@ function buildLateEmail({ employeeName, employeeCode, date, checkInTime, lateMin
     '',
     'Please ensure punctuality. If you have a valid reason, submit an Attendance Regularization request via ESS portal.',
     '',
-    `ESS Portal: ${ERP_URL}/ess`,
+    `ESS Portal: ${ESS_URL}/ess`,
     '',
     'Regards,',
     'HR Department',
