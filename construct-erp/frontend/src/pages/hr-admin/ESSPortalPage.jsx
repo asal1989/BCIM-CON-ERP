@@ -2565,6 +2565,25 @@ function ManagerDeskTab() {
   const correctionAction = useMutation({ mutationFn: ({ id, action, rejection_reason }) => essAPI.managerCorrectionAction(id, action, rejection_reason ? { rejection_reason } : {}), onSuccess: refresh, onError: (e) => toast.error(e?.response?.data?.error || 'Action failed') });
   const evaluationAction = useMutation({ mutationFn: ({ id, action, rejection_reason }) => essAPI.managerEvaluationAction(id, action, rejection_reason ? { rejection_reason } : {}), onSuccess: refresh, onError: (e) => toast.error(e?.response?.data?.error || 'Action failed') });
 
+  // Bulk-approve selected attendance corrections — the backend action endpoint
+  // is per-id, so this just fires the same approve mutation for every checked row.
+  const [selectedCorr, setSelectedCorr] = useState({});
+  const toggleCorr = (id) => setSelectedCorr(prev => ({ ...prev, [id]: !prev[id] }));
+  const bulkApproveCorr = useMutation({
+    mutationFn: async (ids) => {
+      const results = await Promise.allSettled(ids.map(id => essAPI.managerCorrectionAction(id, 'approve', {})));
+      const failed = results.filter(r => r.status === 'rejected').length;
+      return { total: ids.length, failed };
+    },
+    onSuccess: ({ total, failed }) => {
+      if (failed) toast.error(`${total - failed} approved, ${failed} failed`);
+      else toast.success(`${total} correction${total === 1 ? '' : 's'} approved`);
+      setSelectedCorr({});
+      refresh();
+    },
+    onError: () => toast.error('Bulk approve failed'),
+  });
+
   const [rejectModal, setRejectModal] = useState({ open: false, type: null, id: null });
   const [rejectReason, setRejectReason] = useState('');
 
@@ -2662,10 +2681,31 @@ function ManagerDeskTab() {
       </div>
 
       <div style={{ ...GCA, padding:20 }}>
-        <span style={STA}>Attendance Corrections</span>
-        <p style={{ fontSize:11.5, color:'#64748B', marginBottom:14 }}>Pending attendance corrections from your team</p>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:4 }}>
+          <div>
+            <span style={STA}>Attendance Corrections</span>
+            <p style={{ fontSize:11.5, color:'#64748B' }}>Pending attendance corrections from your team</p>
+          </div>
+          {Object.values(selectedCorr).some(Boolean) && (
+            <button
+              onClick={() => bulkApproveCorr.mutate(Object.keys(selectedCorr).filter(id => selectedCorr[id]))}
+              disabled={bulkApproveCorr.isPending}
+              style={{ background:'#059669', color:'#fff', border:'none', borderRadius:8, padding:'7px 16px', fontSize:12.5, fontWeight:700, cursor:'pointer', opacity:bulkApproveCorr.isPending?0.6:1 }}
+            >
+              {bulkApproveCorr.isPending ? 'Approving…' : `Bulk Approve (${Object.values(selectedCorr).filter(Boolean).length})`}
+            </button>
+          )}
+        </div>
         <Table
           columns={[
+            { key: 'select', label: (
+                <input type="checkbox"
+                  checked={(corrections.data||[]).length > 0 && (corrections.data||[]).every(r => selectedCorr[r.id])}
+                  onChange={e => {
+                    const all = e.target.checked;
+                    setSelectedCorr(Object.fromEntries((corrections.data||[]).map(r => [r.id, all])));
+                  }} />
+              ), render: r => <input type="checkbox" checked={!!selectedCorr[r.id]} onChange={() => toggleCorr(r.id)} /> },
             { key: 'employee_name',    label: 'Employee' },
             { key: 'attendance_date',  label: 'Date',    render: r => String(r.attendance_date||'').slice(0,10) },
             { key: 'requested_status', label: 'Status'   },
