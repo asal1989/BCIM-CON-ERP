@@ -140,12 +140,12 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4">
       <motion.div initial={{opacity:0,scale:0.97}} animate={{opacity:1,scale:1}} transition={{duration:0.2}}
-        className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100">
+        className="w-full h-full sm:h-auto sm:max-w-5xl bg-white sm:rounded-2xl shadow-2xl overflow-hidden border border-gray-100 flex flex-col">
 
         {/* Modal Header */}
-        <div className="relative px-6 py-5 flex items-center justify-between"
+        <div className="relative px-6 py-5 flex items-center justify-between flex-shrink-0"
           style={{background:`linear-gradient(135deg,#0A1F5C,#1e3a8a)`}}>
           <div className="absolute top-0 right-0 w-48 h-48 rounded-full opacity-[0.07]"
             style={{background:'radial-gradient(circle,#fff,transparent 70%)',transform:'translate(25%,-25%)'}}/>
@@ -160,7 +160,7 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
           </button>
         </div>
 
-        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[65vh] overflow-y-auto">
+        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 overflow-y-auto">
           <div>
             <label className={lbl}>Employee</label>
             <select value={form.user_id} onChange={e=>update('user_id',e.target.value)} className={inp}
@@ -273,7 +273,7 @@ function SalaryModal({ employees, structures, onClose, onSave, saving, calculate
           </div>
         </div>
 
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3">
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3 flex-shrink-0">
           <div className="text-sm">
             <span className="text-gray-500">Gross Monthly: </span>
             <strong className="text-gray-900">₹{fmt(breakup?.gross_monthly)}</strong>
