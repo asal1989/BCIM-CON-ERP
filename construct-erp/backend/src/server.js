@@ -296,18 +296,33 @@ const isAllowedOrigin = (origin) => {
 // ============================================
 
 // Security headers
-// CSP is disabled: the React SPA uses Vite's type="module" crossorigin scripts
-// which need 'unsafe-inline' or a nonce-based CSP — not worth the complexity for
-// an internal ERP. All other Helmet protections (HSTS, X-Frame, etc.) stay on.
+// The app is always reached over HTTPS in production (Railway terminates TLS
+// at its edge and forwards plain HTTP internally — `trust proxy` above makes
+// Express aware of the real client scheme via X-Forwarded-Proto), so
+// HTTPS-only protections are safe to enable. CSP is scoped to exactly what
+// index.html actually loads (self + Google Fonts + one static inline
+// bootstrap script) — 'unsafe-inline' is kept only for that one script and
+// for Tailwind's runtime style injection, but connect-src is locked to
+// 'self' so an XSS payload can't fetch() session data out to a third-party
+// domain even if it manages to run.
 app.use(helmet({
-  // App runs on HTTP (not HTTPS) — disable headers that only work on HTTPS
-  // and cause browser console warnings on plain HTTP origins
-  crossOriginResourcePolicy:    { policy: 'cross-origin' },
-  contentSecurityPolicy:        false,  // React/Vite scripts need this off
-  crossOriginOpenerPolicy:      false,  // requires HTTPS — ignore on HTTP
-  crossOriginEmbedderPolicy:    false,  // requires HTTPS — ignore on HTTP
-  originAgentCluster:           false,  // suppresses "site-keyed agent cluster" warning
-  strictTransportSecurity:      false,  // HSTS only applies to HTTPS
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:  ["'self'"],
+      scriptSrc:   ["'self'", "'unsafe-inline'"],
+      styleSrc:    ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc:     ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      imgSrc:      ["'self'", 'data:', 'blob:', 'https://api.qrserver.com'],
+      connectSrc:  ["'self'"],
+      objectSrc:   ["'none'"],
+      baseUri:     ["'self'"],
+      frameAncestors: ["'self'"],
+    },
+  },
+  crossOriginOpenerPolicy:   { policy: 'same-origin' },
+  crossOriginEmbedderPolicy: false, // would block Google Fonts cross-origin loads
+  strictTransportSecurity:   { maxAge: 15552000, includeSubDomains: true },
 }));
 
 // CORS

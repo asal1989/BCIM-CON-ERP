@@ -8,6 +8,7 @@ const XLSX = require('xlsx');
 const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { runSchemaInit } = require('../utils/schemaInit');
+const { logAudit } = require('../utils/auditLog');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -370,8 +371,9 @@ router.patch('/employee-salaries/:id/accommodation-allowance', async (req, res) 
     }
     const newVal = parseFloat(accommodation_allowance) || 0;
     const existing = await query(
-      `SELECT accommodation_allowance, gross_monthly FROM hr_employee_salaries WHERE id=$1`,
-      [req.params.id]
+      `SELECT es.accommodation_allowance, es.gross_monthly FROM hr_employee_salaries es
+         JOIN users u ON u.id = es.user_id WHERE es.id=$1 AND u.company_id=$2`,
+      [req.params.id, req.user.company_id]
     );
     if (!existing.rows.length) return res.status(404).json({ error: 'Salary record not found' });
     const delta = newVal - parseFloat(existing.rows[0].accommodation_allowance || 0);
@@ -386,6 +388,7 @@ router.patch('/employee-salaries/:id/accommodation-allowance', async (req, res) 
         RETURNING id, accommodation_allowance, gross_monthly, net_pay_monthly`,
       [newVal, delta, req.params.id]
     );
+    logAudit(req, { action: 'update', tableName: 'hr_employee_salaries', recordId: req.params.id, oldValues: { accommodation_allowance: existing.rows[0].accommodation_allowance }, newValues: { accommodation_allowance: newVal } });
     res.json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -398,15 +401,17 @@ router.patch('/employee-salaries/:id/mess-deduction', async (req, res) => {
       return res.status(400).json({ error: 'mess_deduction is required' });
     }
     const { rows } = await query(
-      `UPDATE hr_employee_salaries
+      `UPDATE hr_employee_salaries es
           SET mess_deduction = $1,
               net_pay_monthly = gross_monthly - COALESCE(employee_pf,0) - COALESCE(pt_deduction,0)
                 - $1 - COALESCE(accommodation_deduction,0) + COALESCE(basic_reversal,0) + COALESCE(incentive,0)
-        WHERE id = $2
-        RETURNING id, mess_deduction, net_pay_monthly`,
-      [parseFloat(mess_deduction) || 0, req.params.id]
+        FROM users u
+        WHERE es.id = $2 AND es.user_id = u.id AND u.company_id = $3
+        RETURNING es.id, es.mess_deduction, es.net_pay_monthly`,
+      [parseFloat(mess_deduction) || 0, req.params.id, req.user.company_id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Salary record not found' });
+    logAudit(req, { action: 'update', tableName: 'hr_employee_salaries', recordId: req.params.id, newValues: { mess_deduction: rows[0].mess_deduction } });
     res.json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -421,15 +426,17 @@ router.patch('/employee-salaries/:id/basic-reversal', async (req, res) => {
       return res.status(400).json({ error: 'basic_reversal is required' });
     }
     const { rows } = await query(
-      `UPDATE hr_employee_salaries
+      `UPDATE hr_employee_salaries es
           SET basic_reversal = $1,
               net_pay_monthly = gross_monthly - COALESCE(employee_pf,0) - COALESCE(pt_deduction,0)
                 - COALESCE(mess_deduction,0) - COALESCE(accommodation_deduction,0) + $1 + COALESCE(incentive,0)
-        WHERE id = $2
-        RETURNING id, basic_reversal, net_pay_monthly`,
-      [parseFloat(basic_reversal) || 0, req.params.id]
+        FROM users u
+        WHERE es.id = $2 AND es.user_id = u.id AND u.company_id = $3
+        RETURNING es.id, es.basic_reversal, es.net_pay_monthly`,
+      [parseFloat(basic_reversal) || 0, req.params.id, req.user.company_id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Salary record not found' });
+    logAudit(req, { action: 'update', tableName: 'hr_employee_salaries', recordId: req.params.id, newValues: { basic_reversal: rows[0].basic_reversal } });
     res.json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -442,15 +449,17 @@ router.patch('/employee-salaries/:id/accommodation-deduction', async (req, res) 
       return res.status(400).json({ error: 'accommodation_deduction is required' });
     }
     const { rows } = await query(
-      `UPDATE hr_employee_salaries
+      `UPDATE hr_employee_salaries es
           SET accommodation_deduction = $1,
               net_pay_monthly = gross_monthly - COALESCE(employee_pf,0) - COALESCE(pt_deduction,0)
                 - COALESCE(mess_deduction,0) - $1 + COALESCE(basic_reversal,0) + COALESCE(incentive,0)
-        WHERE id = $2
-        RETURNING id, accommodation_deduction, net_pay_monthly`,
-      [parseFloat(accommodation_deduction) || 0, req.params.id]
+        FROM users u
+        WHERE es.id = $2 AND es.user_id = u.id AND u.company_id = $3
+        RETURNING es.id, es.accommodation_deduction, es.net_pay_monthly`,
+      [parseFloat(accommodation_deduction) || 0, req.params.id, req.user.company_id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Salary record not found' });
+    logAudit(req, { action: 'update', tableName: 'hr_employee_salaries', recordId: req.params.id, newValues: { accommodation_deduction: rows[0].accommodation_deduction } });
     res.json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -466,16 +475,18 @@ router.patch('/employee-salaries/:id/incentive', async (req, res) => {
       return res.status(400).json({ error: 'incentive is required' });
     }
     const { rows } = await query(
-      `UPDATE hr_employee_salaries
+      `UPDATE hr_employee_salaries es
           SET incentive = $1,
               net_pay_monthly = gross_monthly - COALESCE(employee_pf,0) - COALESCE(pt_deduction,0)
                 - COALESCE(mess_deduction,0) - COALESCE(accommodation_deduction,0)
                 + COALESCE(basic_reversal,0) + $1
-        WHERE id = $2
-        RETURNING id, incentive, net_pay_monthly`,
-      [parseFloat(incentive) || 0, req.params.id]
+        FROM users u
+        WHERE es.id = $2 AND es.user_id = u.id AND u.company_id = $3
+        RETURNING es.id, es.incentive, es.net_pay_monthly`,
+      [parseFloat(incentive) || 0, req.params.id, req.user.company_id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Salary record not found' });
+    logAudit(req, { action: 'update', tableName: 'hr_employee_salaries', recordId: req.params.id, newValues: { incentive: rows[0].incentive } });
     res.json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -527,6 +538,9 @@ router.post('/employee-salaries', async (req, res) => {
       incentive, edli, epf_admin, basic_reversal,
     } = req.body;
 
+    const userCheck = await query('SELECT id FROM users WHERE id = $1 AND company_id = $2', [user_id, req.user.company_id]);
+    if (!userCheck.rows.length) return res.status(404).json({ error: 'Employee not found' });
+
     // Close any salary record that overlaps the new effective_from. Set its
     // effective_to to the day BEFORE the new record starts, so there is never
     // more than one salary in force on any given date. Using `effective_from <= $1`
@@ -565,6 +579,7 @@ router.post('/employee-salaries', async (req, res) => {
        employer_pf || 0, employee_pf || 0, gratuity || 0, pt_deduction || 0, net_pay_monthly || 0, mess_deduction || 0,
        incentive || 0, edli || 0, epf_admin || 0, basic_reversal || 0]
     );
+    logAudit(req, { action: 'create', tableName: 'hr_employee_salaries', recordId: rows[0].id, newValues: { user_id, ctc_annual, gross_monthly, net_pay_monthly, effective_from } });
     res.status(201).json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -605,6 +620,11 @@ router.put('/employee-salaries/:id', async (req, res) => {
        v('mess_deduction'), v('incentive'), v('edli'), v('epf_admin'), v('basic_reversal'),
        req.params.id]
     );
+    logAudit(req, {
+      action: 'update', tableName: 'hr_employee_salaries', recordId: req.params.id,
+      oldValues: { ctc_annual: p.ctc_annual, gross_monthly: p.gross_monthly, net_pay_monthly: p.net_pay_monthly, pt_deduction: p.pt_deduction, mess_deduction: p.mess_deduction, accommodation_deduction: p.accommodation_deduction, basic_reversal: p.basic_reversal, incentive: p.incentive },
+      newValues: { ctc_annual: rows[0].ctc_annual, gross_monthly: rows[0].gross_monthly, net_pay_monthly: rows[0].net_pay_monthly, pt_deduction: rows[0].pt_deduction, mess_deduction: rows[0].mess_deduction, accommodation_deduction: rows[0].accommodation_deduction, basic_reversal: rows[0].basic_reversal, incentive: rows[0].incentive },
+    });
     res.json({ data: rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

@@ -40,6 +40,38 @@ const ensurePasswordResetSchema = async () => {
 const hashResetToken    = (token) => crypto.createHash('sha256').update(token).digest('hex');
 const hashRefreshToken  = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
+// Per-account brute-force guard. Deliberately keyed by account (not by IP —
+// this is a small office ERP where many staff share one public IP, and an
+// IP-based limiter caused false lockouts, so it was removed entirely). This
+// throttles credential-stuffing against a single account without penalizing
+// everyone else behind the same router.
+const LOGIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_ATTEMPT_MAX = 8;
+const loginAttempts = new Map(); // email -> { count, firstAttemptAt }
+setInterval(() => {
+  const cutoff = Date.now() - LOGIN_ATTEMPT_WINDOW_MS;
+  for (const [key, v] of loginAttempts) if (v.firstAttemptAt < cutoff) loginAttempts.delete(key);
+}, LOGIN_ATTEMPT_WINDOW_MS).unref();
+
+function checkLoginThrottle(email) {
+  const rec = loginAttempts.get(email);
+  if (!rec) return null;
+  if (Date.now() - rec.firstAttemptAt > LOGIN_ATTEMPT_WINDOW_MS) { loginAttempts.delete(email); return null; }
+  if (rec.count >= LOGIN_ATTEMPT_MAX) {
+    return Math.ceil((rec.firstAttemptAt + LOGIN_ATTEMPT_WINDOW_MS - Date.now()) / 1000);
+  }
+  return null;
+}
+function recordFailedLogin(email) {
+  const rec = loginAttempts.get(email);
+  if (!rec || Date.now() - rec.firstAttemptAt > LOGIN_ATTEMPT_WINDOW_MS) {
+    loginAttempts.set(email, { count: 1, firstAttemptAt: Date.now() });
+  } else {
+    rec.count++;
+  }
+}
+function clearLoginThrottle(email) { loginAttempts.delete(email); }
+
 const getResetBaseUrl = () => (
   process.env.PUBLIC_FRONTEND_URL ||
   process.env.FRONTEND_URL ||
@@ -99,7 +131,12 @@ const register = async (req, res) => {
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-const normalizedEmail = (email || '').trim().toLowerCase();
+    const normalizedEmail = (email || '').trim().toLowerCase();
+
+    const retryAfterSec = checkLoginThrottle(normalizedEmail);
+    if (retryAfterSec) {
+      return res.status(429).json({ error: `Too many failed attempts for this account. Try again in ${Math.ceil(retryAfterSec / 60)} minute(s).` });
+    }
 
     const result = await query(
       `SELECT u.id, u.name, u.email, u.role, u.designation, u.signature_url, u.password_hash, u.is_active,
@@ -117,12 +154,13 @@ const normalizedEmail = (email || '').trim().toLowerCase();
     );
 
     const user = result.rows[0];
-    if (!user) return res.status(401).json({ error: 'Invalid email or password.' });
+    if (!user) { recordFailedLogin(normalizedEmail); return res.status(401).json({ error: 'Invalid email or password.' }); }
     if (!user.is_active) return res.status(401).json({ error: 'Account deactivated.' });
     user.role = canonicalizeRole(user.role);
 
     const validPassword = await bcrypt.compare(password, user.password_hash);
-    if (!validPassword) return res.status(401).json({ error: 'Invalid email or password.' });
+    if (!validPassword) { recordFailedLogin(normalizedEmail); return res.status(401).json({ error: 'Invalid email or password.' }); }
+    clearLoginThrottle(normalizedEmail);
 
     // Update last login
     await query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);

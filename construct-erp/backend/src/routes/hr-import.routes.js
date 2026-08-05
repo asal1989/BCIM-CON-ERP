@@ -356,7 +356,7 @@ router.post('/employees', upload.single('file'), async (req, res) => {
           const client = await pool.connect();
           try {
             await client.query('BEGIN');
-            const defaultPwd = await bcrypt.hash(empCode, 8); // cost 8 — fast for bulk import
+            const defaultPwd = await bcrypt.hash(empCode, 10);
             // Use placeholder email if none provided (users.email is NOT NULL UNIQUE)
             const userEmail = email || `${empCode.toLowerCase().replace(/\s+/g,'.')}@hr.local`;
 
