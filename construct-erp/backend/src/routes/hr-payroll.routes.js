@@ -124,13 +124,15 @@ function calcPT(gross, month, applicable, ptSlabs) {
   if (!applicable) return 0;
   if (!ptSlabs || !ptSlabs.length) return 0;
   const g = parseFloat(gross);
-  // slabs are [{min_salary, max_salary, pt_amount, feb_amount}] ordered by min_salary ASC
+  // slabs are [{salary_from, salary_to, pt_amount}] ordered by salary_from ASC —
+  // matches the hr_pt_slabs schema actually created in hr-salary.routes.js.
+  // There is no per-February override column, so PT is flat across all months.
   const slab = ptSlabs.find(s =>
-    g > parseFloat(s.min_salary) &&
-    (s.max_salary === null || g <= parseFloat(s.max_salary))
+    g > parseFloat(s.salary_from) &&
+    (s.salary_to === null || g <= parseFloat(s.salary_to))
   );
   if (!slab) return 0;
-  return month === 2 ? parseFloat(slab.feb_amount || slab.pt_amount) : parseFloat(slab.pt_amount);
+  return parseFloat(slab.pt_amount);
 }
 
 // Working days in a month (Mon–Sat)
@@ -291,8 +293,8 @@ router.post('/run', async (req, res) => {
 
     // Load company PT slabs once for the run
     const ptSlabsResult = await query(
-      `SELECT min_salary, max_salary, pt_amount, feb_amount FROM hr_pt_slabs
-       WHERE company_id=$1 ORDER BY min_salary ASC`,
+      `SELECT salary_from, salary_to, pt_amount FROM hr_pt_slabs
+       WHERE company_id=$1 AND active=TRUE ORDER BY salary_from ASC`,
       [req.user.company_id]
     );
     const ptSlabs = ptSlabsResult.rows;
