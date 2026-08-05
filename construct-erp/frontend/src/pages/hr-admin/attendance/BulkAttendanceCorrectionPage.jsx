@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { AlertTriangle, Users, Calendar, Search, CheckSquare, Square, ShieldAlert } from 'lucide-react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { hrEmployeesAPI, hrAttendanceAPI } from '../../../api/client';
+import { hrEmployeesAPI, hrAttendanceAPI, projectAPI } from '../../../api/client';
 import toast from 'react-hot-toast';
 
 const STATUS_OPTIONS = [
@@ -22,6 +22,7 @@ const STATUS_OPTIONS = [
 export default function BulkAttendanceCorrectionPage() {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [deptFilter, setDeptFilter] = useState('');
+  const [projectFilter, setProjectFilter] = useState('');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState({});
   const [status, setStatus] = useState('present');
@@ -35,6 +36,11 @@ export default function BulkAttendanceCorrectionPage() {
     queryFn: () => hrEmployeesAPI.list().then(r => r.data?.data || []),
   });
 
+  const { data: projects = [] } = useQuery({
+    queryKey: ['hr-bulk-corr-projects'],
+    queryFn: () => projectAPI.list().then(r => r.data?.data || []),
+  });
+
   const active = useMemo(
     () => employees.filter(e => e.is_active && !['resigned', 'terminated', 'absconded'].includes(e.employment_status)),
     [employees]
@@ -45,14 +51,27 @@ export default function BulkAttendanceCorrectionPage() {
     [active]
   );
 
+  // Project list scoped to only the projects that actually have employees
+  // assigned, plus an explicit "Unassigned" bucket — a full project master
+  // list would mostly show empty results here.
+  const projectOptions = useMemo(() => {
+    const idsWithStaff = new Set(active.map(e => e.project_id).filter(Boolean));
+    const hasUnassigned = active.some(e => !e.project_id);
+    const opts = projects.filter(p => idsWithStaff.has(p.id)).map(p => ({ id: p.id, label: p.name }));
+    if (hasUnassigned) opts.push({ id: 'unassigned', label: 'Unassigned' });
+    return opts;
+  }, [projects, active]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return active.filter(e => {
       if (deptFilter && e.department_name !== deptFilter) return false;
+      if (projectFilter === 'unassigned' && e.project_id) return false;
+      if (projectFilter && projectFilter !== 'unassigned' && e.project_id !== projectFilter) return false;
       if (!q) return true;
       return [e.name, e.employee_code, e.email].some(v => String(v || '').toLowerCase().includes(q));
     });
-  }, [active, deptFilter, search]);
+  }, [active, deptFilter, projectFilter, search]);
 
   const selectedIds = Object.keys(selected).filter(id => selected[id]);
   const toggle = (id) => setSelected(prev => ({ ...prev, [id]: !prev[id] }));
@@ -162,6 +181,11 @@ export default function BulkAttendanceCorrectionPage() {
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, code, email…"
                 className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-indigo-400" />
             </div>
+            <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400">
+              <option value="">All Projects</option>
+              {projectOptions.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </select>
             <select value={deptFilter} onChange={e => setDeptFilter(e.target.value)}
               className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400">
               <option value="">All Departments</option>
@@ -185,7 +209,7 @@ export default function BulkAttendanceCorrectionPage() {
                   <input type="checkbox" checked={!!selected[e.id]} onChange={() => toggle(e.id)} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-800 truncate">{e.name}</p>
-                    <p className="text-xs text-slate-400">{e.employee_code || '—'} · {e.department_name || 'No department'}</p>
+                    <p className="text-xs text-slate-400">{e.employee_code || '—'} · {e.department_name || 'No department'}{e.project_name ? ` · ${e.project_name}` : ''}</p>
                   </div>
                 </label>
               ))}
