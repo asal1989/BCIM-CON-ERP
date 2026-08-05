@@ -13,7 +13,7 @@
     "@tanstack/react-table": "^8.11.3",
     "axios": "^1.6.5",
     "clsx": "^2.1.1",
-    "dayjs": "^1.11.10",
+    "dayjs": "^1.11.21",
     "dompurify": "^3.4.12",
     "echarts": "^6.1.0",
     "echarts-gl": "^2.1.0",
